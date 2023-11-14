@@ -1,0 +1,131 @@
+# postAI — Version Plan
+
+This file is the shared planning board for the game. **Henrik: add your ideas and suggestions in the section at the bottom (or anywhere) and push — everything here gets read when the next version is planned.**
+
+Versioning: 0.01 increments (v0.32, v0.33, ...). The game is pushed after every sizeable change so the latest build is always on `main`.
+
+## Working together without clashing (David + Henrik)
+
+We're both pushing to `main`, so a few conventions keep merges painless:
+
+1. **`git fetch` and check `origin/main` at the START of a session**, not just before pushing. Most wasted effort comes from building something the other already shipped.
+2. **New self-contained systems get their own file** with a tiny integration surface, rather than growing the shared hub files. Established feature-file owners:
+   - `src/game/lore.js` — **David** (the hidden story: fragments, Archive, corpus). Grow the story by editing the `FRAGMENTS` array; the four integration hooks are already wired and shouldn't need changing.
+   - `src/game/animals.js`, `birds.js`, `robots.js` — creature/machine AI (agent-authored; either of us edits, keep changes surgical).
+   - `src/engine/sound.js` — synthesized audio.
+3. **The genuine friction points are the hub files** everyone appends to: `src/main.js` (wiring), `src/engine/renderer.js` (draw dispatch + item icons), `src/game/player.js` (input handling), `src/game/items.js` (registry), `index.html` (help). Edits here are usually append-only so conflicts stay trivial — but keep them small and localized, and pull first.
+4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
+5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
+
+## Where we are (v0.79)
+
+### v0.79 — factory depth + spawn fixes, textured vent, railgun ammo, whiter chevron
+
+- **Factory no longer has trees/machines drawn over it.** The 8×8 object was sorted by its origin corner (very low depth), so anything with a higher tile-depth painted over the block. It now sorts by its **centre** (`obj.x+fw/2 + obj.y+fh/2`), which occludes what's behind it while still letting things genuinely in front (south/east) draw on top.
+- **Dispatched machines spawn beside the factory, not inside it.** The dispatch point (`factoryCy`) moved from the solid centre to just south of the footprint (`y + fh + 1.5`), so W1/W3/W4 seat on open ground rather than stuck in the block. Verified a W4 spawns outside the footprint on non-solid ground.
+- **Grubby vent.** The roof vent's orange glow now has the metal texture drawn over it (clipped to the ellipse, 0.4 alpha) so it isn't a clean flat oval.
+- **More railgun ammo** — its cache now bundles 14 batteries (was 4).
+- **Chevron whiter** — `rgba(200,200,200,0.55)`.
+
+### v0.78 — destructible 8×8 factory + AI key, 24h deadline, electro-gun sips, raven perch fix, jumpable crates
+
+- **The W-factory is now a big 8×8 destructible structure.** Placed on a clear 8×8 grassy area (main.js), all 64 footprint tiles point at the one object (solid across the whole thing). `drawWfactory` renders it as a tall extruded prism faced with the `decor-train.jpg` texture (`FACTORY_TEXTURE`), with a pulsing vent and a **damage bar centred above it when you're within 14 tiles**. Hitting it in melee (`useHands` → `hitFactory` → `damageFactory`) or catching it in a bomb blast chews its `hp` (160); when it gives, the footprint is flattened to a walkable, scorched heap and it drops an **AI key** (new `ai_key` item) plus salvage. All the factory's dispatch/repair code now fires from its centre and stops once it's `destroyed` (`factoryLive()`).
+- **SKYLINK deadline back to 24 hours** (`DEADLINE_DAYS` 0.5 → 1.0) — there's more to do in a run now.
+- **Electro-gun sips its cell**: `fractionalAmmo` 0.05 — each shot accumulates 5% and only spends a whole battery when the fraction tips over one (`player.ammoFrac`), so a battery lasts ~20 fuse shots and the pocket count stays integer. (Replaces the v0.77 built-in reserve.)
+- **Ravens only perch on big, grown trees** (`isBigTree`: variants 0–2, `grow > 0.75`) — landing on a small/dead/sapling left the bird floating above the sprite.
+- **Crates are jumpable** — `box` is now `climbable` (climbHeight 1), so you can step or hop onto/over one; still searchable from beside it.
+- **Facing chevron** is greyer and less opaque (`rgba(150,150,150,0.45)`).
+
+### v0.77 — electro-gun reserve, aged cars, chevron aim, bomb→weapon autoload, tabbed help, plan pruned
+
+- **Electro-gun built-in ammo.** It drained shared pocket batteries far too fast. Guns can now carry a `builtIn` reserve (electro-gun: 40 fuse shots) tracked per-gun on `player.gunAmmo`, used before it ever touches pocket cells.
+- **Cars look weathered.** `drawCar` now composites every car (not just wrecks) through the offscreen and dusts a faint grime texture (`photo-unsorted-2.jpg`/`EDGE_TEXTURE`, 0.16 alpha, source-atop) over its own pixels, so they read as years-old rather than showroom-fresh. Smashed cars still get the heavier husk + rust pass on top.
+- **Facing indicator is a directional chevron**, rotated to the screen-space aim, replacing the plain grey dot.
+- **Throwing a bomb auto-arms your best weapon.** `dropBomb` → `autoEquipBestWeapon()` brings the highest-`power` tool/gun from pockets (then backpack) straight to hand, so you're not left empty-handed; spare bombs stay in pockets.
+- **Tabbed help modal.** The help panel is now Controls / Survival / Animals / Machines tabs (a sticky tab bar; JS toggles `.helpPanel` blocks by `data-panel`, with Survival split into two blocks that toggle together around the machines section).
+- **Plan pruned.** Collapsed the v0.45–v0.69 per-version changelog (it duplicated git + the README table) and removed already-shipped backlog items; refreshed the near-term list with the agreed 8×8-factory / OB-terminal-language / W5 directions.
+
+### v0.76 — shields + forcefield, bigger-tree wood, hand-height tools, softer car shadow
+
+- **Shields and a forcefield.** Three new held items (`items.js`): `shield` (absorbs a laser from the front), `mirror_shield` (reflects it back for `REFLECT_DAMAGE`), and `forcefield` (a battery-powered green shell that stops everything, all-round). `Player.blockRangedShot(sx,sy)` decides absorb/reflect/none by facing; the W4 and W2 fire sites consult it before dealing laser damage (and take the reflected hit). `Player.takeDamage` short-circuits entirely while the forcefield is up, so it also stops melee. Forcefield burns `FORCEFIELD_MAX` (60s) per battery, auto-pulling a fresh cell when one runs dry (mirrors the Wi-Fi block). Bubble drawn in `drawPlayer`; shield/forcefield icons in `drawItemIcon`; all three seeded into caches (shield common-ish, mirror rarer, forcefield a single rare find). Verified: reflect only from the front, forcefield blocks any direction and zeroes incoming damage.
+- **Bigger trees drop more wood.** Wood yield is now per tree variant (`[4,4,3,1,2]` for big/big/medium/small/dead), scaled by `grow` for saplings, instead of a flat 2.
+- **In-hand tool at hand height.** The held-item anchor moved down (`by-16` → `by-10`) so it reads as held in the hands, not floating at the shoulder.
+- **Softer car shadow.** Replaced the hard flat oval with a radial-gradient ellipse hugging the car's footprint; it's cosmetic only (collision is the tight 2x2), so you can walk across it.
+
+### v0.75 — smashed-car grime, tighter car collision, smaller tools, fainter boundary
+
+- **Smashed cars look ruined, not just dim.** The offscreen husk tint now also paints a faint metallic grime texture (`misc-ring-bottoms.jpg` → `CAR_RUIN_TEXTURE`) over the car's own pixels (source-atop) at 0.32 alpha, so a wreck reads as burnt/rusted.
+- **Tighter car collision.** Cars were a 3x2/2x3 solid footprint whose iso width (~160px) was wider than the 147px sprite, so you were stopped a step short of the visible car (the "janky edge detection"). Footprint is now a tight 2x2 (128px) that the sprite slightly overhangs, so you stop when you touch the car body.
+- **In-hand tools no longer oversized.** The held-item icon scale was still tuned for the old larger character; dropped from ~0.85 to ~0.55 to suit the v0.67 smaller sprite.
+- **Boundary blocks fainter.** `EDGE_ROCK_ALPHA` 0.5 → 0.38.
+
+### v0.74 — real car sprites, wall-top texture, softer boundary
+
+- **Abandoned cars are real sprites now.** Replaced the procedural hull with 3/4-view PNGs (`assets/textures/cars/`, from `_tmp/cars`): Chevrolet Bel Air, Rolls-Royce Phantom in blue/red/white, a police car, and an ambulance — each in the four iso-diagonal facings (SE/SW/NE/NW). Worldgen stamps a random `carModel`/`carDir` per car; `CAR_SPRITES`/`CAR_MODEL_KEYS`/`CAR_DIR_KEYS` in textures.js; `Renderer.drawCar` blits the sprite (old procedural draw kept as `drawCarProcedural` fallback until the image loads). A smashed car is darkened to a burnt husk via the offscreen source-atop tint.
+- **Wall tops textured.** A stone/brick wall's top face now gets the same wall texture as its sides but at low opacity (0.22), so it reads as the same material yet a distinct top-lit surface rather than a flat cap. Untextured walls keep the plain fill.
+- **Boundary blocks more transparent.** `EDGE_ROCK_ALPHA` 0.7 → 0.5, so a block between you and the camera is easier to see through.
+
+### v0.73 — gravel boundary texture, water droids gated to water
+
+- **Boundary blocks re-textured.** They were faced with the road texture and read as just more road. Now faced with a dark crushed-gravel/asphalt photo (`photo-unsorted-2.jpg`, new `EDGE_TEXTURE` in textures.js) so the map edge reads as rock, clearly distinct from the roads inside the map. Still semi-transparent and depth-sorted as in v0.72.
+- **Water droids can only hit you in the water.** `updateWaterDroids` gated the fire/damage on `player.swimming || floorAt(player) is water/stream`. Step onto dry land or a bridge and a W2's shots can't reach you — though it keeps tracking you and you can still shoot it from the bank. (They fire on the whole squad's wave otherwise unchanged.)
+
+### v0.72 — render fixes: held-item depth, boundary blocks, swimming head
+
+- **BUG FIX: the held item floated over the character's head when facing away.** The tool/gun was always painted after the body. It's now drawn before the body when the facing points "back" (`player.facing.x + player.facing.y < 0`, i.e. behind the torso in screen depth) and after when it points toward the camera. Extracted to `drawHeldItem`.
+- **Boundary edge blocks reworked.** They're now (a) faced with the `floor-road.jpg` texture, (b) drawn semi-transparent (`EDGE_ROCK_ALPHA` 0.7) so a block between you and the camera lets you show through, and (c) pushed into the depth-sorted drawables (with tile depth) instead of a flat pre-pass — which fixes the "south edge looks weird" bug, where front (south/east) blocks were being painted over by the grass behind them. Only the on-screen out-of-bounds strip is collected, so mid-map it's free.
+- **Swimming uses the real character sprite.** Instead of a drawn skin-tone blob, the swim view now clips the top half (head + shoulders) of the current-facing idle frame at the water line, with the existing ripples — matching the on-land look.
+
+> **Still open from this batch (larger, staged next):** shield weapons (standard absorbs a laser, mirror reflects it), a battery-powered green **forcefield**, the **8×8 factory** (train-textured, damage bar, drops an AI key), a **W5 tree-planting bot**, and the big one — **OB terminals** you can access to type ML-style code fragments seeded in the lore (SLEEP / REPEL / CRASH / HACK, plus the Portal-choir easter egg), a mini functional language the player actually learns to hack machines. The terminal + language is its own design project.
+
+### v0.71 — SKYLINK reprieve, rock map edges, tree variety + chop feedback, CPU culling
+
+- **Felling a tower during the SKYLINK purge shuts it down.** SKYLINK was unwinnable once it started. Now, if `player.skylinkActive` and you topple an obelisk that isn't the winning blow, the laser web collapses (`skylinkActive = false`) and the tower is flagged `needsRebuild`; the factory rushes a W3 to it (`updateW3` now also targets destroyed+`needsRebuild` towers and, on reaching one, raises it: `destroyed=false`, re-solidifies the tile). SKYLINK only re-lights once nothing is flagged (the activation guard gained `&& !obeliskObjs.some(o => o.needsRebuild)`). Topple towers faster than they're rebuilt and you can still win outright mid-purge.
+- **The map edge is a wall of grey rock, not black void.** A new unclamped `rawVisibleRange` + `drawEdgeRock` fill every on-screen out-of-bounds tile with a raised stone block (`EDGE_ROCK_H` 52). Only the visible strip near an edge is drawn, so mid-map it costs nothing.
+- **CPU: distance culling for a bigger map.** Robots and animals more than ~40 tiles from the player now skip their AI entirely (they're off-screen and can't affect the player) and resume when the player returns. Crucially the robots' O(n²) `separateRobots` pass now runs only over the near-player subset, so hundreds of machines on a large map cost the same as a handful. Friendlies (which follow you) are never culled. This is the groundwork that makes the planned 4× map affordable.
+- **Tree variety + chop feedback.** `TREE_SPRITES` gained a small (variant 3) and a bare/dead (variant 4) cut-out; `worldgen`'s new `treeVariant()` sprinkles them in rarely (≈9% small, ≈6% dead) among the full trees. A chopped tree shows a green→red damage bar above it (`treeDamageBar`, `maxHp` stamped on first chop). Chopping swings faster now (`TREE_CHOP_SPEEDUP` 0.55 of the normal cooldown).
+
+### v0.70 — hand-drawn trees, block-top movement polish
+
+- **Real tree art.** Trees were procedural circles/triangles; they now blit from a copied CC0 "Premium Trees" sheet (`assets/textures/trees.png`, the No-Outline set David dropped into `assets/textures/Shadow/`). No files were sliced — each `variant` (0/1/2) is a source-rect (`TREE_SPRITES` in textures.js, bounds measured off the sheet's alpha) drawn with `drawImage`, scaled by the existing `grow` value and carrying its own baked shadow. `Renderer.drawTree` keeps the procedural version as a fallback until the sheet loads.
+- **Slower, steadier walk on block tops.** On a climbable ledge the walk speed is cut to `BLOCK_WALK_MULT` (0.6) — the footprint is small and full pace made edges twitchy to line up.
+- **Walk off a block to drop down.** Stepping off the edge of a block onto lower ground now seeds `z` with the height lost (rendered at 32px/unit vs a level's 16px, hence ×0.5) and lets the existing jump/gravity integrator carry you down, so you fall smoothly and keep walking instead of snapping down.
+
+### v0.45 – v0.69
+
+Detailed per-version notes for these were pruned (they duplicated git history and the README version-history table). See the **Version history** table in `README.md` and the annotated git tags (`git show vX.YZ`) for anything older than v0.70.
+
+## Planned / backlog
+
+**Near term (agreed direction)**
+- **8×8 factory + AI key.** Make the W-factory a big 8×8 structure (train-textured), with a damage bar shown when you're near, that takes many hits to destroy and drops an **AI key** on death. Sets up the "why" for the OB terminals below.
+- **OB terminals + a mini ML-style language (the big creative one).** An accessible screen on obelisks where you type short functional-style code fragments seeded in the lore: `SLEEP`, `REPEL`, `CRASH` (needs a hex code from `HACK`), plus a Portal-choir easter egg (robots line up, sing, deactivate). A small language the player genuinely learns to hack machines. Needs its own design pass (grammar, verb set, how HACK→CRASH chains, gating codes behind not-getting-hit).
+- **W5 tree-planting bot.** An occasional, always-one-in-the-world drone that slowly plants baby trees. (Not yet implemented.)
+- Mobile phone + RON texts.
+- "Scary approach drone" telegraph for an incoming hunter (from the original design).
+- Friendly-robot orders: currently follow + (T2) tree-felling; add "collect wood/loot and bring it back", guard mode, and a way to see your robots on the minimap.
+- Visual pass on the machines art (obelisks, crates, robots) and hollows.
+- Limping animation + WOUNDED tag when health is low (the slowdown exists; it needs a visual cue).
+- Persist minimap fog/exploration across reloads (map knowledge should survive death, like skills).
+- **File size**: `renderer.js` (2150+ lines), `player.js` (1380), `robots.js` (1000), `main.js` (900) are all getting long from steady feature accretion. Worth a split before they get much bigger — candidates: pull renderer.js's HUD/modal drawing (dashboard, backpack, skills, weapons chart, death cert) into its own `ui.js`; split player.js's weapon-fire logic (fire/pierceShot/coneShot/burnObelisk) into a `combat.js` mixin or module; robots.js could separate the AI update functions (updateT1/T2/W1/W3/W4) from the drawing code. Not urgent — nothing is currently hard to find or edit — but flagged here since it was asked about directly (2026-07-06) and will only get harder to justify skipping the longer we wait.
+
+**Systems from the original design not yet built**
+- Wounds by type (scratch/bite/gore) with bandages and infection; venom is in, the rest is not.
+- Clothing and protection (layers, bite/claw/venom resistance, mobility trade-offs).
+- Cooking (raw meat is risky food, fire attracts things at night).
+- Scent/noise stealth model (gunshots should attract everything).
+- Save/load of the full world state (localStorage), seed selection on a title screen.
+- More animals from the design: stags with shockwave antlers, wolves that track scent, bears, the panther.
+- Weather (rain masks sound), Field Journal that fills in animal tells as you learn them.
+
+## Henrik's suggestions
+
+*(add ideas below this line)*
+
+- **Awareness meter feeding an escalation event.** Ravens already flush and shriek when they spot the player (existing mechanic) and obelisks already plan to report player-closeness to nearby robots (v0.34). Chain these into a single rising "AI awareness" value — normal ambient patrol most of the time, but crossing a threshold (too many sightings, too close for too long, a raven that reaches an obelisk) flips the game into a short, hard escalation sequence: robots converge fast, and more are paradropped or flown in overhead. Telegraph the drop itself — a growing drone hum, something visible crossing the sky — so the player gets a beat to brace or run before it lands.
+- **Escalation should feel like a different game for its duration** — brutal, punishing, retry-friendly pacing (Flappy Bird / Getting Over It register) rather than the calmer scavenge-and-avoid pace of normal play. Short, intense, and over quickly either way (survive it or die and respawn), not a sustained new difficulty floor.
+- **Hacking parts as the resource for the already-planned obelisk destruction mechanic.** A new rare salvage type alongside batteries/scrap/ammo, dropped mostly by destroyed robots and reprogramming failures, that accumulates toward disabling a specific obelisk. Gives "quiet the machines in this area" a concrete collectible goal rather than an abstract endgame trigger.
+- **Firearms as loud, high-value, high-risk tools against robots specifically** — guns already yield less salvage than melee/mining a fused wreck (per v0.33), which is a good lever: keep gunfire mechanically tempting against a hunting robot wave but expensive in loot, and (tying into the planned scent/noise model) loud enough to draw in more attention, so using guns during an escalation event is a real trade-off, not a free upgrade.
+- **Ravens should be robots, not wildlife.** Recast the existing "bird" as a small flying drone/scout machine rather than an animal — same flush-and-shriek spotting behaviour, but now it's mechanically the AI's own eyes in the sky, wired directly into the awareness-meter idea above (a scout drone spotting you *is* the alert reaching the obelisk, not a metaphor for it). Also gives a reason for a drone to be shootable/knockable-out-of-the-sky for scrap, and frees up "ravens" as an actual wild animal slot later if wanted.
+- **Weeping angel robot (T3).** A machine that only moves while unobserved — freezes solid the instant it's on-screen or in the player's sight cone, closes the distance the moment you look away or turn your back. Pairs naturally with the mouse-facing/sight-cone idea below: its whole threat depends on the game actually tracking what the player can and can't currently see.
+- **Sight cone with peripheral indistinctness.** Render things outside the player's facing cone (now driven by the mouse, so this is cheap to compute) as dimmer/blurrier/desaturated — true peripheral vision rather than full-fidelity 360° awareness. Raises the stakes on facing choices (aiming at one threat leaves you genuinely worse at spotting another) and is the mechanical backbone a T3 weeping-angel robot would need to be fair rather than cheap.
