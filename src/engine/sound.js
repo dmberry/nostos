@@ -5,6 +5,19 @@
 // is safe to import anywhere, including node. Every public method is a
 // guarded no-op until unlocked, and try/catch wrapped so a misbehaving
 // audio stack can never crash the game.
+//
+// One deliberate exception to "nothing is fetched": the background music
+// also offers real audio files (assets/audio/*) as alternatives to the
+// synthesised piano bed, cycled together with the synth mode via the same
+// M-key toggle — see "ambient music" below.
+
+import { CHOIR_NOTES, CHOIR_DURATION } from './choir-notes.js';
+
+// The background music is just the synth bed, or off — the M key toggles
+// between those two. Found-tape music no longer lives here: tapes are played
+// on the walkman (see playTape/stopTape and player.js), so "only synth unless
+// the player starts a tape" falls out naturally.
+const MUSIC_MODES = ['synth', 'off'];
 
 const MASTER_GAIN = 0.3;
 const PLAY_DEBOUNCE_MS = 70;   // per-name minimum interval for play()
@@ -20,13 +33,32 @@ function now() {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();
 }
 
+// Settings persisted across sessions — volume and music choice, with room to
+// grow (the Settings tab in the help modal is built to take more controls
+// later without restructuring this). Read/written as one small JSON blob.
+const SETTINGS_KEY = 'postai-settings';
+function loadSettings() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
+    return s && typeof s === 'object' ? s : {};
+  } catch (e) { return {}; }
+}
+function saveSettings(patch) {
+  try {
+    const s = loadSettings();
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...s, ...patch }));
+  } catch (e) { /* storage unavailable */ }
+}
+
 class Sound {
   constructor() {
     // Nothing here may touch AudioContext: construction must be safe in
-    // environments without audio (node, tests, headless).
+    // environments without audio (node, tests, headless). Reading
+    // localStorage is fine though, so settings are known before unlock().
+    const saved = loadSettings();
     this.ctx = null;
     this.master = null;
-    this._muted = false;
+    this._volume = typeof saved.volume === 'number' ? Math.max(0, Math.min(1, saved.volume)) : 1;
     this._last = new Map();          // debounce timestamps by key
     this._ambience = { night: false, dusk: false, wind: 1, robotNear: false };
     this._droneGain = null;
@@ -34,9 +66,22 @@ class Sound {
     this._brown = null;              // shared brown-noise buffer (wind)
     this._windGain = null;
     this._cricketGain = null;
-    this._musicGain = null;          // fade bus: on/off (P) and combat tension both ramp this
-    this._musicOn = true;            // toggled by P
+    this._cricketSinging = false;    // crickets sing in bouts, not continuously
+    this._cricketTimer = null;
+    this._musicGain = null;          // synth-piano fade bus: mode and combat tension both ramp this
+    // One of MUSIC_MODES; cycled by the M key or set directly from the
+    // Settings tab. Defaults to the sparse synth-piano bed — the found
+    // tapes are now the player's to start via the walkman, so they're no
+    // longer forced on at boot. A saved session choice still wins.
+    this._musicMode = MUSIC_MODES.includes(saved.musicMode) ? saved.musicMode : 'synth';
     this._musicTense = false;        // true while fighting or being hunted
+    // The walkman tape player: one <audio> through its own gain, a playlist,
+    // and a flag. While a tape plays it overrides the synth bed.
+    this._tapeEl = null;
+    this._tapeGain = null;
+    this._tapeList = [];
+    this._tapeIdx = 0;
+    this._tapePlaying = false;
   }
 
   // ---- lifecycle -------------------------------------------------------
@@ -58,7 +103,7 @@ class Sound {
       this.ctx = ctx;
 
       this.master = ctx.createGain();
-      this.master.gain.value = this._muted ? 0 : MASTER_GAIN;
+      this.master.gain.value = MASTER_GAIN * this._volume;
       this.master.connect(ctx.destination);
 
       this._noise = this._makeNoise(1, false);
@@ -67,25 +112,29 @@ class Sound {
       this._buildCrickets();
       this._buildDrone();
       this._applyAmbience(0.1); // snap quickly to whatever was requested
+      this._scheduleCrickets(); // begin the intermittent-bout timer if it's dusk
       this._startMusic();
     } catch (e) {
       this.ctx = null; // audio is optional; never let it take the game down
     }
   }
 
-  setMuted(m) {
-    this._muted = !!m;
+  // Master volume, 0..1. Persisted across sessions (Settings tab). 0 is
+  // effectively mute — no separate mute flag, one continuous control.
+  setVolume(v) {
+    this._volume = Math.max(0, Math.min(1, v));
+    saveSettings({ volume: this._volume });
     try {
       if (!this.ctx) return;
       const t = this.ctx.currentTime;
       this.master.gain.cancelScheduledValues(t);
       this.master.gain.setValueAtTime(this.master.gain.value, t);
-      this.master.gain.linearRampToValueAtTime(this._muted ? 0 : MASTER_GAIN, t + 0.05);
+      this.master.gain.linearRampToValueAtTime(MASTER_GAIN * this._volume, t + 0.05);
     } catch (e) { /* ignore */ }
   }
 
-  get muted() {
-    return this._muted;
+  get volume() {
+    return this._volume;
   }
 
   // ---- one-shot effects ------------------------------------------------
@@ -214,6 +263,7 @@ class Sound {
       if (robotNear !== undefined) this._ambience.robotNear = !!robotNear;
       if (!this.ctx) return;
       this._applyAmbience(AMBIENCE_FADE);
+      if (dusk !== undefined) this._scheduleCrickets(); // (re)start or stop the bout timer
     } catch (e) { /* ignore */ }
   }
 
@@ -239,10 +289,44 @@ class Sound {
       param.linearRampToValueAtTime(target, t + fade);
     };
     ramp(this._windGain.gain, WIND_GAIN * this._ambience.wind);
-    // Crickets sing only at dusk (late afternoon into early evening), and
-    // fall silent when a machine is near — they're scared of them.
-    const crickets = this._ambience.dusk && !this._ambience.robotNear ? CRICKET_GAIN : 0;
-    ramp(this._cricketGain.gain, crickets);
+    this._applyCricketGain(fade);
+  }
+
+  // The cricket layer's actual gain: audible only at dusk, with no machine
+  // near, AND during an "on" bout (see _scheduleCrickets) — so they come and
+  // go in spells rather than droning the whole evening.
+  _applyCricketGain(fade = AMBIENCE_FADE) {
+    if (!this.ctx || !this._cricketGain) return;
+    const t = this.ctx.currentTime;
+    const on = this._ambience.dusk && !this._ambience.robotNear && this._cricketSinging;
+    const g = this._cricketGain.gain;
+    g.cancelScheduledValues(t);
+    g.setValueAtTime(g.value, t);
+    g.linearRampToValueAtTime(on ? CRICKET_GAIN : 0, t + fade);
+  }
+
+  // Gate the crickets into intermittent bouts: while it's dusk, flip between
+  // short singing spells and longer silences on a self-rescheduling timer, so
+  // the layer is quiet more often than not instead of on the whole time. Stops
+  // (and silences) outside dusk. robotNear is handled by _applyCricketGain, so
+  // the timer keeps its rhythm even while a machine passes.
+  _scheduleCrickets() {
+    if (this._cricketTimer) { clearTimeout(this._cricketTimer); this._cricketTimer = null; }
+    if (!this.ctx || !this._ambience.dusk) {
+      this._cricketSinging = false;
+      this._applyCricketGain();
+      return;
+    }
+    const tick = () => {
+      this._cricketSinging = !this._cricketSinging;
+      this._applyCricketGain();
+      const secs = this._cricketSinging ? 5 + Math.random() * 8 : 12 + Math.random() * 20;
+      this._cricketTimer = setTimeout(tick, secs * 1000);
+    };
+    // Ease in with a short initial silence so dusk doesn't slam the crickets on.
+    this._cricketSinging = false;
+    this._applyCricketGain();
+    this._cricketTimer = setTimeout(tick, (3 + Math.random() * 6) * 1000);
   }
 
   // Quiet mechanical drone: two barely-detuned low sawtooths through a
@@ -348,7 +432,7 @@ class Sound {
 
   // A haunting, sparse solo-piano bed: single notes from a low minor scale,
   // played softly at long random intervals — this is ambience, not a tune.
-  // Routed through its own gain bus so both the P toggle and combat/hunted
+  // Routed through its own gain bus so both the music mode and combat/hunted
   // tension can fade it independently of everything else. Scheduling itself
   // (via setTimeout) keeps running even while muted/tense; only the bus gain
   // and an early-out in _playPianoNote actually silence it, so there's
@@ -377,7 +461,7 @@ class Sound {
   }
 
   _playPianoNote() {
-    if (!this.ctx || !this._musicOn || this._musicTense) return;
+    if (!this.ctx || this._musicMode !== 'synth' || this._tapePlaying) return; // a tape overrides the bed
     const scale = this._pianoScale();
     const freq = scale[Math.floor(Math.random() * scale.length)] * (Math.random() < 0.25 ? 0.5 : 1);
     const t = this.ctx.currentTime + 0.05;
@@ -389,38 +473,161 @@ class Sound {
     this._tone({ when: t, dur: dur * 0.35, type: 'sine', freq: freq * 1.5, gain: 0.01, attack: 0.01, bus: this._musicGain });
   }
 
-  // 'P' toggles the music on/off entirely. Returns the new state.
+  // ---- walkman tape playback --------------------------------------------
+  // A cassette side is a list of track URLs. Played on one <audio> routed
+  // through its own gain into the master bus; a single-track side loops the
+  // element, a multi-track side advances on `ended` and loops at the end.
+  // While a tape plays it overrides the synth bed (see _applyMusicGain).
+  _ensureTapeEl() {
+    if (this._tapeEl || typeof Audio === 'undefined' || !this.ctx) return;
+    try {
+      const el = new Audio();
+      el.preload = 'auto';
+      el.addEventListener('ended', () => {
+        if (!this._tapePlaying || this._tapeList.length <= 1) return;
+        this._tapeIdx = (this._tapeIdx + 1) % this._tapeList.length;
+        el.src = encodeURI(this._tapeList[this._tapeIdx]);
+        el.play().catch(() => {});
+      });
+      const src = this.ctx.createMediaElementSource(el);
+      const gain = this.ctx.createGain();
+      gain.gain.value = 0;
+      src.connect(gain);
+      gain.connect(this.master);
+      this._tapeEl = el;
+      this._tapeGain = gain;
+    } catch (e) { /* audio must never crash the game */ }
+  }
+
+  playTape(urls) {
+    this.unlock();
+    if (!Array.isArray(urls) || !urls.length) return;
+    this._ensureTapeEl();
+    if (!this._tapeEl) return;
+    this._tapeList = urls.slice();
+    this._tapeIdx = 0;
+    this._tapePlaying = true;
+    this._tapeEl.loop = urls.length === 1; // single track loops itself; a multi-track side loops via `ended`
+    try {
+      this._tapeEl.src = encodeURI(urls[0]);
+      this._tapeEl.currentTime = 0;
+      this._tapeEl.play().catch(() => {});
+    } catch (e) { /* ignore */ }
+    this._applyMusicGain(0.8);
+  }
+
+  stopTape() {
+    this._tapePlaying = false;
+    if (this._tapeEl) { try { this._tapeEl.pause(); } catch (e) { /* ignore */ } }
+    this._applyMusicGain(0.8); // the synth bed fades back up if it's the current mode
+  }
+
+  // The M key toggles the background music (synth <-> off). Tapes are the
+  // walkman's job, so they're not in this cycle. Returns the new mode.
   toggleMusic() {
-    this._musicOn = !this._musicOn;
+    return this.setMusicMode(MUSIC_MODES[(MUSIC_MODES.indexOf(this._musicMode) + 1) % MUSIC_MODES.length]);
+  }
+
+  // Set the background mode directly (Settings tab). Persisted, so the choice
+  // survives a reload. Ignores anything that isn't a real mode.
+  setMusicMode(mode) {
+    if (!MUSIC_MODES.includes(mode)) return this._musicMode;
+    this._musicMode = mode;
+    saveSettings({ musicMode: mode });
     this._applyMusicGain();
-    return this._musicOn;
+    return this._musicMode;
   }
 
   get musicOn() {
-    return this._musicOn;
+    return this._musicMode !== 'off';
+  }
+
+  get musicMode() {
+    return this._musicMode;
   }
 
   // Called every frame from the game loop: true while fighting or being
-  // actively hunted. Fades the music out (not an abrupt cut) so it only
-  // ever plays in calm moments, and eases back in once the threat passes.
+  // actively hunted. Used to duck the music to silence during a fight;
+  // dropped that (music now plays straight through combat instead of
+  // cutting out every time something attacks) but kept the tracking in
+  // case a subtler effect — a slight dip rather than a full mute — is
+  // wanted later.
   setMusicTension(active) {
-    const tense = !!active;
-    if (tense === this._musicTense) return;
-    this._musicTense = tense;
-    this._applyMusicGain();
+    this._musicTense = !!active;
   }
 
   _applyMusicGain(fade = 2.5) {
-    if (!this.ctx || !this._musicGain) return;
-    const target = (this._musicOn && !this._musicTense) ? 1 : 0;
+    if (!this.ctx) return;
     const t = this.ctx.currentTime;
-    const g = this._musicGain.gain;
-    g.cancelScheduledValues(t);
-    g.setValueAtTime(g.value, t);
-    g.linearRampToValueAtTime(target, t + fade);
+    const ramp = (param, target) => {
+      param.cancelScheduledValues(t);
+      param.setValueAtTime(param.value, t);
+      param.linearRampToValueAtTime(target, t + fade);
+    };
+    // The tape overrides the synth: while a tape plays, the tape bus is up and
+    // the synth bed is down regardless of mode; otherwise the synth follows
+    // the mode.
+    if (this._tapeGain) ramp(this._tapeGain.gain, this._tapePlaying ? 1 : 0);
+    if (this._musicGain) ramp(this._musicGain.gain, (this._musicMode === 'synth' && !this._tapePlaying) ? 1 : 0);
   }
 
   // ---- synthesis helpers -------------------------------------------------
+
+  // The robot choir (RON-ML `sing`): schedules the opening of Dowland's
+  // "Flow My Tears" as soft synth voices. Records the start time (both audio
+  // and wall clock) so the robots' red lights can be flashed in time — see
+  // choirElapsed() and the flash sync in main.js. Returns the piece length.
+  playChoir() {
+    // The wall clock drives the robots' light-flash, so set it up front —
+    // the visual choir must run even if audio is muted or hasn't unlocked.
+    this._choirWall = now() + 200; // wall-clock ms when the first note sounds
+    try {
+      this.unlock();
+      if (!this.ctx) return CHOIR_DURATION;
+      const ctx = this.ctx;
+      const t0 = ctx.currentTime + 0.2;
+      this._choirStart = t0;
+      // A dedicated bus so the choir sits above the ambient bed. Kept on the
+      // instance so setChoirVolume can fade it with the player's distance from
+      // the singers — walk away and the singing quietens.
+      const bus = ctx.createGain();
+      bus.gain.value = 0.85;
+      bus.connect(this.master);
+      this._choirBus = bus;
+      this._choirLevel = 0.85;
+      for (const [t, d, m] of CHOIR_NOTES) {
+        const when = t0 + t;
+        const freq = 440 * Math.pow(2, (m - 69) / 12);
+        const dur = Math.max(0.28, d);
+        // A soft vocal-ish voice: a triangle body low-passed for warmth, plus a
+        // quiet sine octave, slow attack/release, gentle detune for a choral
+        // shimmer so the many overlapping notes read as voices, not an organ.
+        this._tone({ when, dur, type: 'triangle', freq: freq * (1 + (m % 3 - 1) * 0.002), gain: 0.07, attack: 0.06, filter: 'lowpass', filterFreq: 1500, bus });
+        this._tone({ when, dur, type: 'sine', freq: freq * 2, gain: 0.018, attack: 0.09, bus });
+      }
+      return CHOIR_DURATION;
+    } catch (e) { return CHOIR_DURATION; }
+  }
+
+  // Seconds since the choir began (for flash sync), or -1 if it isn't singing.
+  choirElapsed() {
+    if (!this._choirWall) return -1;
+    const e = (now() - this._choirWall) / 1000;
+    return (e >= 0 && e <= CHOIR_DURATION + 0.5) ? e : -1;
+  }
+
+  // Fade the choir toward `level` (0..1) — main calls this each frame with a
+  // distance falloff so the singing gets quieter as you walk away from it.
+  setChoirVolume(level) {
+    try {
+      if (!this.ctx || !this._choirBus) return;
+      const target = 0.85 * Math.max(0, Math.min(1, level));
+      // Only ramp when it's actually moved, so we don't spam the param.
+      if (Math.abs(target - (this._choirLevel ?? target)) < 0.01) return;
+      this._choirLevel = target;
+      this._choirBus.gain.setTargetAtTime(target, this.ctx.currentTime, 0.15);
+    } catch (e) { /* audio is optional */ }
+  }
 
   // Shared output stage: gain envelope into the given bus (master by
   // default). Linear attack to the peak, then an exponential decay to

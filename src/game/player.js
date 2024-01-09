@@ -11,6 +11,10 @@ const WOUNDED_AT = 20;     // health threshold for the hobble
 const WOUNDED_SPRINT_DRAIN = 2.5; // wounded sprinting burns stamina this much faster
 const RADIUS = 0.28;      // collision radius in tiles
 const REACH = 0.9;        // how far ahead the player can use a tool
+const CHIP_FRAGMENTS_PER_CHIP = 8; // fragments shed by machines to craft one chip
+const SCRAP_PER_SWORD = 10; // scrap beaten into a robot sword
+const KNOCKBACK_DIST = 0.5; // tiles a melee hit shoves an animal/robot back
+const KNOCKBACK_STUN = 0.4; // seconds it's frozen (no move, no attack) after
 const TREE_HP = 4;        // penknife swings to fell a tree
 const TREE_CHOP_SPEEDUP = 0.55; // chop cooldown vs a normal swing: faster axe work
 const WOOD_PER_TREE = 2;
@@ -19,7 +23,7 @@ const PICKUP_RANGE = 0.55;
 const STAMINA_MAX = 100;
 const SPRINT_DRAIN = 9;   // stamina per second while sprinting
 const STAMINA_REGEN = 12; // per second when not sprinting
-const HEALTH_REGEN = 0.5; // per second while fed and unpoisoned
+const HEALTH_REGEN = 1.5; // per second while fed and unpoisoned
 const VENOM_DRAIN = 2;    // health per second while poisoned
 
 const FOOD_MAX = 100;
@@ -46,7 +50,24 @@ const SWIM_HEALTH_DRAIN = 1.2; // health/sec: swimming a river is exhausting
 const SCORE = { tree: 1, animal: 3, robot: 10, wreck: 2, cache: 2, book: 5, fragment: 5 };
 
 // Item kinds that can occupy the hands slot.
-const HOLDABLE = new Set(['tool', 'gun', 'gadget', 'bomb']);
+const HOLDABLE = new Set(['tool', 'gun', 'gadget', 'bomb', 'map', 'spray']);
+const UBIK_SPRAYS = 20; // charges in a Ubik can before it runs dry
+// Every so often the can does something stranger than settle a patch of
+// reality — a beat of PKD's Ubik itself leaking through: a chapter-heading
+// ad, a flicker of an older world underneath this one, something.
+const UBIK_WEIRD_CHANCE = 0.28;
+// Spraying the same spot again (within this radius) tops up that patch
+// instead of laying a new one on top of it; three sprays there opens a
+// portal instead of just brightening the ground.
+const UBIK_MERGE_RANGE = 1.5;
+const UBIK_PORTAL_SPRAYS = 3;
+const UBIK_ADS = [
+  'INSTANT UBIK. Poor sleep? Try new, improved Ubik, safe when taken as directed.',
+  'Ubik. Comes in a spray can, extra fine mist. Safe when used as directed.',
+  'Friends, this is Ubik talking. I am the word that never wears out.',
+  'For a limited time only, Ubik reaches everywhere, even where you have not yet been.',
+  'Ubik. Guaranteed, or double your money back. Void on Tuesdays.',
+];
 
 // Empty-handed is still a weapon, just a bad one: a stand-in "tool" so bare
 // fists flow through the exact same melee path as a real one (target
@@ -81,7 +102,24 @@ export class Player {
     this.vz = 0;
     this.doubleJumped = false; // a second, mid-air jump: reaches block tops
     this.forcefieldCharge = 0; // seconds of forcefield left in the current cell
-    this.ammoFrac = {};        // accumulated fractional ammo per gun (e.g. electro-gun sips 5%/shot)
+    this.forcefieldArmed = false; // toggled by clicking the forcefield in any slot
+    this.compassArmed = false; // toggled by clicking the electro-compass in any slot
+    this.ronmlKeys = new Set(); // node ids RON-ML's `hack` has cracked open this session
+    this.ammoFrac = {};        // accumulated fractional ammo per gun
+    this.electroCharge = (ITEMS.electrogun && ITEMS.electrogun.internalMax) || 4; // electro-gun's self-charging internal cell
+    this.terminalSafe = false;  // true while jacked into an obelisk terminal (invisible to machines)
+    this.ubikSprays = UBIK_SPRAYS; // charges left in the Ubik can (set on pickup below too)
+    this.ubikFlickerT = 0; // seconds left of the "old world showing through" flicker on spray
+    this.ubikFlickerX = 0; this.ubikFlickerY = 0; // world pos the flicker is centred on
+    this._ubikTeleportCooldown = 0; // seconds before another portal can fire (main.js)
+    this.ubikHiccupT = 0; this.ubikHiccupKind = null; // brief discolor/lean/twist while standing in a patch
+
+    // Adaptive-difficulty telemetry: a rough, cheap read on whether this is a
+    // player still finding their feet — tracked purely from movement, no
+    // combat outcomes needed (so it works even before a first fight). See
+    // threatEase() below for how it's turned into an actual easing factor.
+    this.distanceTraveled = 0; // tiles attempted-moved since this run began
+    this.playSeconds = 0;      // real seconds since this run began
     this.facing = { x: 0, y: 1 };
     this.moving = false;
     this.sprinting = false;
@@ -99,6 +137,13 @@ export class Player {
     this.pockets = [null, null, null, null]; // {item, qty} or null
     this.backpack = null;                    // {slots: [16], weapon} once found; dropped on death
     this.selectedPocket = null;              // 0-3 (pockets), 'bw' (backpack weapon), or null
+    // The walkman, worn on a carry strap: its own dashboard slot that only
+    // takes kind:'tape' items. You start with one cassette already in it —
+    // stopped; clicking it cycles side A -> side B -> stopped (equipSlot).
+    // The side is deliberately NOT persisted: every session starts with the
+    // tape stopped, so the saved music setting isn't fought over on load.
+    this.walkman = { item: 'tape_1', qty: 1 }; // meme / compilation (see items.js TAPES)
+    this.walkmanSide = null;                 // 'A', 'B', or null (stopped)
     this.swingTimer = 0;
     this.hurtTimer = 0;   // brief red flash after taking damage
     this.message = null;  // {text, ttl} transient HUD line
@@ -182,9 +227,57 @@ export class Player {
     return false;
   }
 
+  // Total count of a named item across hand, pockets, and backpack.
+  countItem(key) {
+    let n = 0;
+    if (this.hands === key) n += 1;
+    for (const s of this.pockets) if (s && s.item === key) n += s.qty;
+    if (this.backpack) {
+      if (this.backpack.weapon === key) n += 1;
+      for (const s of this.backpack.slots) if (s && s.item === key) n += s.qty;
+    }
+    return n;
+  }
+
   // Can the OB-gun be crafted right now? (Stun-gun + electro-gun + Wi-Fi block.)
   canCraftObGun() {
     return this.hasItem('stungun') && this.hasItem('electrogun') && this.hasItem('wifiblock');
+  }
+
+  // Eight chip fragments (shed by destroyed machines) assemble into a whole
+  // access chip.
+  canCraftChip() {
+    return this.countItem('chip_fragment') >= CHIP_FRAGMENTS_PER_CHIP;
+  }
+
+  craftChip() {
+    if (!this.canCraftChip()) { this.say(`You need ${CHIP_FRAGMENTS_PER_CHIP} chip fragments; you have ${this.countItem('chip_fragment')}.`); return false; }
+    for (let n = 0; n < CHIP_FRAGMENTS_PER_CHIP; n++) this.removeItem('chip_fragment');
+    const stored = this.stow('chip', 1);
+    if (stored <= 0) { this.say('No room to assemble the chip — free a slot first.');
+      // put the fragments back so the craft isn't a silent loss
+      for (let n = 0; n < CHIP_FRAGMENTS_PER_CHIP; n++) this.stow('chip_fragment', 1);
+      return false;
+    }
+    sfx.play('zap');
+    this.say('Eight fragments lock together into a working access chip.');
+    return true;
+  }
+
+  // Ten scrap beaten into a robot sword — a heavy anti-machine melee blade.
+  canCraftSword() {
+    return this.countItem('scrap') >= SCRAP_PER_SWORD && !this.hasItem('robot_sword');
+  }
+
+  craftSword() {
+    if (!this.canCraftSword()) { this.say(`You need ${SCRAP_PER_SWORD} scrap; you have ${this.countItem('scrap')}.`); return false; }
+    for (let n = 0; n < SCRAP_PER_SWORD; n++) this.removeItem('scrap');
+    if (this.hands && this.hands !== 'robot_sword') this.stow(this.hands, 1);
+    this.hands = 'robot_sword';
+    this.discoverWeapon('robot_sword');
+    sfx.play('zap');
+    this.say('You beat ten scrap into a robot sword. It bites the machines hard.');
+    return true;
   }
 
   // Eight distinct numbered circuit boards (from destroyed obelisks) build a
@@ -234,6 +327,23 @@ export class Player {
     (map.sparks ??= []).push({ x, y, ttl: 0.3, max: 0.3 });
   }
 
+  // A bright burst — several sparks scattered around a point (electro-gun kills).
+  sparkBurst(map, x, y) {
+    const off = [[0, 0], [0.4, 0.1], [-0.3, 0.2], [0.2, -0.3], [-0.25, -0.2]];
+    for (const [ox, oy] of off) (map.sparks ??= []).push({ x: x + ox, y: y + oy, ttl: 0.35, max: 0.35 });
+  }
+
+  // Startle nearby animals into fleeing (e.g. the electro-gun's crackle). Sets
+  // a scared timer that updateAnimals turns into a run away from the player.
+  scareAnimals(animals, range) {
+    for (const a of (animals || [])) {
+      if (a.dead) continue;
+      if (Math.hypot(a.x - this.x, a.y - this.y) > range) continue;
+      a.scaredT = Math.max(a.scaredT || 0, 3);
+      if (a.type === 'dog') { a.fleeTimer = Math.max(a.fleeTimer || 0, 3); a.aggro = false; }
+    }
+  }
+
   // How far a beam actually reaches along the facing direction before a
   // solid object (wall, tree, rock, wreck) cuts it short. Never further
   // than maxRange.
@@ -255,6 +365,7 @@ export class Player {
     if (slot.kind === 'bw') return this.backpack && this.backpack.weapon ? { item: this.backpack.weapon, qty: 1 } : null;
     if (slot.kind === 'pocket') return this.pockets[slot.i] || null;
     if (slot.kind === 'bpstore') return this.backpack ? (this.backpack.slots[slot.i] || null) : null;
+    if (slot.kind === 'walkman') return this.walkman || null;
     return null;
   }
 
@@ -263,6 +374,13 @@ export class Player {
     if (slot.kind === 'bw') { if (!this.backpack) return false; this.backpack.weapon = val ? val.item : null; return true; }
     if (slot.kind === 'pocket') { this.pockets[slot.i] = val; return true; }
     if (slot.kind === 'bpstore') { if (!this.backpack) return false; this.backpack.slots[slot.i] = val; return true; }
+    if (slot.kind === 'walkman') {
+      // Any change of tape stops playback — the new one starts stopped and
+      // wants a click, same as a real deck after a swap.
+      this.walkman = val || null;
+      if (this.walkmanSide) { this.walkmanSide = null; sfx.stopTape(); } // back to the ambient bed
+      return true;
+    }
     return false;
   }
 
@@ -281,6 +399,10 @@ export class Player {
       this.say("Can't swap that into the hand.");
       return;
     }
+    if (to.kind === 'walkman' && ITEMS[a.item].kind !== 'tape') {
+      this.say('Only a cassette fits the walkman.');
+      return;
+    }
     this.setSlot(to, a);
     this.setSlot(from, b || null);
     this.say(`Moved ${ITEMS[a.item].name.toLowerCase()}.`);
@@ -289,8 +411,49 @@ export class Player {
   // Equip / stow via a clicked dashboard or backpack slot. Clicking a pocket
   // (or the spare-weapon slot) swaps it with the hands slot; clicking the
   // hands slot puts the held item away; clicking a backpack storage slot
-  // takes a weapon from it into the hand.
+  // takes a weapon from it into the hand. The forcefield and electro-compass
+  // are the exception: clicking either in any slot just arms/disarms it in
+  // place — you never need to hold them, since they work the moment they're
+  // carried and armed.
   equipSlot(slot) {
+    // The walkman is a deck, not a stow slot: a click on the tape in it
+    // cycles play side A -> flip to side B -> stop, driving the same music
+    // system as the M key (which still works, and simply overrides this).
+    if (slot.kind === 'walkman') {
+      if (!this.walkman) { this.say('The walkman is empty. A cassette would fit.'); return; }
+      const def = ITEMS[this.walkman.item];
+      if (this.walkmanSide === 'A') {
+        this.walkmanSide = 'B';
+        sfx.playTape(def.sideB.tracks);
+        this.say(`You flip the tape over. Side B — "${def.sideB.label}".`);
+      } else if (this.walkmanSide === 'B') {
+        this.walkmanSide = null;
+        sfx.stopTape(); // back to the ambient synth bed
+        this.say('The walkman clunks to a stop.');
+      } else {
+        this.walkmanSide = 'A';
+        sfx.playTape(def.sideA.tracks);
+        this.say(`The spools catch and turn. Side A — "${def.sideA.label}".`);
+      }
+      return;
+    }
+    const held = this.getSlot(slot);
+    if (held && held.item === 'forcefield') {
+      this.forcefieldArmed = !this.forcefieldArmed;
+      this.say(this.forcefieldArmed ? 'Forcefield armed — it will power up once it has a battery.' : 'Forcefield disarmed.');
+      return;
+    }
+    if (held && held.item === 'compass') {
+      this.compassArmed = !this.compassArmed;
+      this.say(this.compassArmed ? 'Compass armed — the chevrons will home on anything notable nearby.' : 'Compass disarmed.');
+      return;
+    }
+    // Clicking a printed map (in any slot) just unfolds it — no need to move
+    // it to the hand first.
+    if (held && held.item === 'printed_map') {
+      if (this.onReadMap) this.onReadMap(); else this.say('You unfold the map.');
+      return;
+    }
     if (slot.kind === 'pocket') { this.selectedPocket = slot.i; this.swapHands(); return; }
     if (slot.kind === 'bw') { this.selectedPocket = 'bw'; this.swapHands(); return; }
     if (slot.kind === 'hands') {
@@ -321,6 +484,21 @@ export class Player {
   update(dt, input, map, animals = [], robots = [], mouseWorld = null) {
     this.swingTimer = Math.max(0, this.swingTimer - dt);
     this.hurtTimer = Math.max(0, this.hurtTimer - dt);
+    if (this.ubikFlickerT > 0) this.ubikFlickerT = Math.max(0, this.ubikFlickerT - dt);
+    if (this._ubikTeleportCooldown > 0) this._ubikTeleportCooldown = Math.max(0, this._ubikTeleportCooldown - dt);
+    // Standing in a brightened Ubik patch, reality hiccups every so often —
+    // a brief discolour, lean, or twist, like the ground hasn't quite
+    // decided it's real yet. Purely cosmetic; renderer.js reads
+    // ubikHiccupT/Kind. Rolled here (not in the renderer) so the effect
+    // persists smoothly across frames instead of re-rolling every draw.
+    if (this.ubikHiccupT > 0) this.ubikHiccupT = Math.max(0, this.ubikHiccupT - dt);
+    else if (map.ubikPatches && map.ubikPatches.some((p) => Math.hypot(p.x - this.x, p.y - this.y) < (p.r || 3))) {
+      if (Math.random() < dt * 0.35) {
+        this.ubikHiccupT = 0.25 + Math.random() * 0.2;
+        this.ubikHiccupKind = ['discolor', 'lean', 'twist'][Math.floor(Math.random() * 3)];
+      }
+    }
+    this.playSeconds += dt;
     if (this.message) {
       this.message.ttl -= dt;
       if (this.message.ttl <= 0) this.message = null;
@@ -329,6 +507,8 @@ export class Player {
 
     // Face the cursor at all times, independent of movement direction —
     // lets the player strafe while keeping a weapon trained on a target.
+    // Also remembered so a thrown bomb can land where you're actually aiming.
+    this.aimWorld = mouseWorld || this.aimWorld;
     if (mouseWorld) {
       const fx = mouseWorld.x - this.x, fy = mouseWorld.y - this.y;
       const flen = Math.hypot(fx, fy);
@@ -384,6 +564,7 @@ export class Player {
       const effBefore = map.effectiveHeightAt ? map.effectiveHeightAt(Math.floor(this.x), Math.floor(this.y)) : 0;
       const hBefore = map.heightAt ? map.heightAt(Math.floor(this.x), Math.floor(this.y)) : 0;
       if (this.z === 0 && effBefore > hBefore) speed *= BLOCK_WALK_MULT;
+      this.distanceTraveled += speed * dt;
       this.moveAxis(dir.x * speed * dt, 0, map);
       this.moveAxis(0, dir.y * speed * dt, map);
       const effAfter = map.effectiveHeightAt ? map.effectiveHeightAt(Math.floor(this.x), Math.floor(this.y)) : 0;
@@ -459,13 +640,18 @@ export class Player {
         this.say('Your Wi-Fi block is flat. It needs a battery.');
       }
     }
-    this.invisibleToRobots = this.ownsWifiBlock() && this.wifiPower > 0;
-    this._wifiOn = this.invisibleToRobots;
+    // Jacked into an obelisk terminal (with a chip), the obelisk shields you —
+    // the machines lose you entirely, same as a live Wi-Fi block.
+    this.invisibleToRobots = (this.ownsWifiBlock() && this.wifiPower > 0) || this.terminalSafe;
+    this._wifiOn = this.ownsWifiBlock() && this.wifiPower > 0;
 
-    // Forcefield: only up while it's the item in your hands. It burns its
-    // charge; when a cell runs out it pulls a fresh battery from your kit, and
-    // with none left the field drops until you feed it one.
-    if (this.hands === 'forcefield') {
+    // Forcefield: armed by clicking it in whatever slot it's carried in (hand,
+    // pocket, or backpack — no need to hold it). While armed and carried it
+    // burns its charge; when a cell runs out it pulls a fresh battery from
+    // your kit, and with none left the field drops until you feed it one.
+    // Losing the item entirely disarms it so a freshly found one starts off.
+    if (!this.hasItem('forcefield')) this.forcefieldArmed = false;
+    if (this.hasItem('forcefield') && this.forcefieldArmed) {
       if (this.forcefieldCharge > 0) {
         this.forcefieldCharge = Math.max(0, this.forcefieldCharge - FORCEFIELD_DRAIN * dt);
       } else if (this.consumeBattery()) {
@@ -479,6 +665,17 @@ export class Player {
       this._ffOn = false;
     }
 
+    // Electro-compass: armed the same way — click it in whatever slot it's
+    // carried in. Stays armed (chevrons on) until you drop the item entirely.
+    if (!this.hasItem('compass')) this.compassArmed = false;
+
+    // Electro-gun solar trickle: while you carry it (hand, pocket, or pack)
+    // its internal cell slowly refills, so it comes back to life on its own.
+    if (this.hasItem('electrogun')) {
+      const eg = ITEMS.electrogun;
+      this.electroCharge = Math.min(eg.internalMax, this.electroCharge + eg.chargeRate * dt);
+    }
+
     if (input.usePressed()) this.useHands(map, animals, robots);
     if (input.eatPressed()) this.eat();
     if (input.readPressed()) this.read(robots);
@@ -488,6 +685,20 @@ export class Player {
     if (input.swapPressed()) this.swapHands();
     if (input.dropPressed()) this.drop(map);
     this.pickupNearby(map);
+  }
+
+  // Drop a specific slot's whole contents on the ground ahead (used by
+  // dragging an item off the inventory panel to get rid of it). Lands beyond
+  // pickup range so it doesn't walk straight back into your kit.
+  dropSlot(slot, map) {
+    const s = this.getSlot(slot);
+    if (!s) return false;
+    const dropX = this.x + this.facing.x * (PICKUP_RANGE + 0.4);
+    const dropY = this.y + this.facing.y * (PICKUP_RANGE + 0.4);
+    map.groundItems.push(this.giDrop(s.item, s.qty, dropX, dropY));
+    this.setSlot(slot, null);
+    this.say(`You drop the ${ITEMS[s.item].name.toLowerCase()}.`);
+    return true;
   }
 
   // F drops the selected pocket's contents, or the held tool/gun if no
@@ -557,6 +768,17 @@ export class Player {
       return;
     }
     const heldItem = this.hands;
+    if (slot && slot.qty > 1) {
+      // A stack (e.g. several bombs): take just one into the hand and leave the
+      // rest in the pocket — the hand slot holds a single item, so moving the
+      // whole slot would silently lose the surplus. Any previously-held item is
+      // stowed into free space rather than overwriting the stack.
+      this.hands = slot.item;
+      slot.qty -= 1;
+      if (heldItem) this.stow(heldItem, 1);
+      this.say(`You ready a ${ITEMS[this.hands].name.toLowerCase()}.`);
+      return;
+    }
     this.hands = slot ? slot.item : null;
     this.pockets[i] = heldItem ? { item: heldItem, qty: 1 } : null;
     this.say(this.hands ? `You ready the ${ITEMS[this.hands].name.toLowerCase()}.` : 'You put your weapon away.');
@@ -567,6 +789,11 @@ export class Player {
   read(robots = []) {
     const bot = robots.find((r) => !r.dead && !r.fused && r.drained
       && Math.hypot(r.x - this.x, r.y - this.y) < 1.3);
+    if (bot && bot.hardened) {
+      // Fortress guards (M6) are hardened: their orders can't be rewritten.
+      this.say('Its firmware is sealed — a fortress guard takes no new orders. Scrap it or leave it.');
+      return;
+    }
     if (bot) {
       let batterySlots = this.pockets;
       let i = this.pockets.findIndex((s) => s && s.item === 'battery');
@@ -614,6 +841,15 @@ export class Player {
   // spot rather than pocketing it.
   learnFromBook(itemKey) {
     const def = ITEMS[itemKey];
+    // The RON-ML manual and its torn pages teach the console language, not a
+    // survival skill — just show their text and count as a little knowledge.
+    if (def.manual) {
+      this.gainXp('knowledge', def.tip ? 3 : 8);
+      this.readManuals ??= new Set();
+      if (!this.readManuals.has(itemKey)) { this.addScore(SCORE.book); this.readManuals.add(itemKey); }
+      this.say(`You read ${def.name}. ${def.text}`);
+      return;
+    }
     if (this.skills.has(def.skill)) {
       this.gainXp('knowledge', 2); // re-reading still teaches a little
       this.say(`You have already read ${def.name}.`);
@@ -679,17 +915,20 @@ export class Player {
     // Defensive gear is passive — a shield blocks by being held and facing the
     // shot, a forcefield by simply being up. Using it just searches a cache
     // ahead if there is one, otherwise does nothing.
-    if (tool.kind === 'shield' || tool.kind === 'forcefield') {
+    if (tool.kind === 'shield' || tool.kind === 'forcefield' || tool.kind === 'compass' || tool.kind === 'map') {
       if (facingBox) this.openBox(obj, map);
+      else if (tool.kind === 'compass') this.say('The compass needle swings, seeking.');
       else if (tool.kind === 'shield') this.say('You raise the shield.');
+      else if (tool.kind === 'map') { if (this.onReadMap) this.onReadMap(); else this.say('You unfold the map.'); }
       return;
     }
 
-    if (tool.kind === 'gun' || tool.kind === 'gadget' || tool.kind === 'bomb') {
+    if (tool.kind === 'gun' || tool.kind === 'gadget' || tool.kind === 'bomb' || tool.kind === 'spray') {
       if (facingBox) { this.openBox(obj, map); return; }
       if (tool.kind === 'gun') this.fire(tool, map, animals, robots);
       else if (tool.kind === 'gadget') this.useGadget(tool);
       else if (tool.kind === 'bomb') this.dropBomb(tool, map);
+      else if (tool.kind === 'spray') this.sprayUbik(map);
       return;
     }
     if (this.stamina < tool.staminaCost) {
@@ -744,6 +983,15 @@ export class Player {
       const bonus = this.xpLevel('melee');
       target.hp -= (isRobot ? (tool.robotDamage ?? 1) : (tool.animalDamage ?? 3)) + bonus;
       target.hurt = true; // modules read this (pack flee, boar enrage, robot aggro)
+      // A solid blow shoves it back and rattles it for a beat (frozen, no
+      // attack) — otherwise it just stands there trading hits nose-to-nose,
+      // landing its own attack the instant yours lands and out-damaging you
+      // even though you struck first.
+      const kd = best > 1e-4 ? best : 1;
+      const kx = target.x + ((target.x - this.x) / kd) * KNOCKBACK_DIST;
+      const ky = target.y + ((target.y - this.y) / kd) * KNOCKBACK_DIST;
+      if (!map.isSolid(Math.floor(kx), Math.floor(ky))) { target.x = kx; target.y = ky; }
+      target.knockT = KNOCKBACK_STUN;
       this.gainXp('melee', target.hp <= 0 ? 5 : 1);
       if (isRobot) {
         this.sparkAt(map, target.x, target.y);
@@ -772,6 +1020,10 @@ export class Player {
     // The W-factory: hammer at its 8x8 hull. Many blows bring it down and it
     // drops an AI key.
     if (obj && obj.type === 'wfactory') { this.hitFactory(obj, map, tool); return; }
+
+    // The fortress red uplink: hammer it down to cut Adamantine off from the
+    // overworld SKYLINK (the fortress controller watches obj.destroyed).
+    if (obj && obj.type === 'uplink') { this.hitUplink(obj, map, tool); return; }
 
     // Shovel: dig a pit in the open ground ahead. A steep pit (height -2)
     // is a trap — a wheeled T1 rolls in and can't climb out, and you can
@@ -838,14 +1090,22 @@ export class Player {
   dropBomb(tool, map) {
     this.swingTimer = 0.4;
     map.bombs = map.bombs || [];
-    // Thrown, not just dropped: it lands a real distance out, in an arc —
-    // like an actual lobbed grenade it clears a wall or a low block in its
-    // path rather than stopping dead at the first one. Only pulled back if
-    // the landing spot itself would be inside solid geometry.
+    // Thrown, not just dropped: it lands where you're aiming, out to a real
+    // distance, in an arc — like an actual lobbed grenade it clears a wall or
+    // a low block in its path rather than stopping dead at the first one. You
+    // aim by pointing: it lands on the tile under the cursor, capped at the
+    // throw range, so a nearby click drops it close and a far one throws it
+    // full distance. Only pulled back if the landing spot is inside solid
+    // geometry.
     const THROW_RANGE = tool.throwRange ?? 4.5;
-    let bx = this.x + this.facing.x * THROW_RANGE, by = this.y + this.facing.y * THROW_RANGE;
+    let dist = THROW_RANGE;
+    if (this.aimWorld) {
+      const dd = Math.hypot(this.aimWorld.x - this.x, this.aimWorld.y - this.y);
+      dist = Math.max(0.6, Math.min(dd, THROW_RANGE));
+    }
+    let bx = this.x + this.facing.x * dist, by = this.y + this.facing.y * dist;
     if (map.isSolid(Math.floor(bx), Math.floor(by))) {
-      for (let d = THROW_RANGE - 0.5; d > 0.5; d -= 0.5) {
+      for (let d = dist - 0.5; d > 0.5; d -= 0.5) {
         const tx = this.x + this.facing.x * d, ty = this.y + this.facing.y * d;
         if (!map.isSolid(Math.floor(tx), Math.floor(ty))) { bx = tx; by = ty; break; }
       }
@@ -909,6 +1169,56 @@ export class Player {
     this.say('You slot a fresh cell into the block. The machines lose your signal.');
   }
 
+  // Spray the can of Ubik: lays down a lasting patch of "realness" a little
+  // ahead of you where the ground and everything on it reads brighter, warmer,
+  // more solid — as if a thin fake had been dissolved off the top. Twenty
+  // sprays to a can, tracked on the player; then it hisses dry. Sometimes
+  // (UBIK_WEIRD_CHANCE) the can does something odder than that — a beat of
+  // the old novel's paranoia leaking through: a stray chapter-ad, a flicker
+  // of an older world underneath (renderer.js reads player.ubikFlickerT/X/Y).
+  // Spraying the same spot three times over doesn't just brighten it harder
+  // — it tears all the way through and opens a portal (see map.ubikPatches'
+  // `portal`/`sprayCount` fields, linked up in main.js).
+  sprayUbik(map) {
+    this.swingTimer = 0.5;
+    if (this.ubikSprays == null) this.ubikSprays = UBIK_SPRAYS;
+    if (this.ubikSprays <= 0) {
+      sfx.play('pickup');
+      this.say('The can hisses, empty. Whatever was in it, there is no more of it.');
+      return;
+    }
+    this.ubikSprays -= 1;
+    const px = this.x + this.facing.x * 1.2, py = this.y + this.facing.y * 1.2;
+    const patches = (map.ubikPatches ??= []);
+    let patch = patches.find((p) => !p.portal && Math.hypot(p.x - px, p.y - py) < UBIK_MERGE_RANGE);
+    if (!patch) {
+      patch = { x: px, y: py, r: 3.2, t: 0, sprayCount: 0 };
+      patches.push(patch);
+    }
+    patch.sprayCount += 1;
+    patch.t = 0; // topping up a patch renews its life
+    patch.x = px; patch.y = py; // recentre slightly toward the latest spray
+    sfx.play('zap');
+    this.ubikFlickerT = 0.35; // a half-beat of the old world showing through before Ubik wins
+    this.ubikFlickerX = px; this.ubikFlickerY = py; // where to localise it (renderer.js)
+    const left = this.ubikSprays;
+    if (patch.sprayCount >= UBIK_PORTAL_SPRAYS && !patch.portal) {
+      patch.portal = true;
+      patch.r = 1.5; // a doorway-sized tear, not a bus-sized one (renderer.js stretches it into a tall oval)
+      sfx.play('charge');
+      this.say('The ground doesn\'t just brighten this time — it tears, and holds open. A portal.');
+      return;
+    }
+    if (Math.random() < UBIK_WEIRD_CHANCE) {
+      const ad = UBIK_ADS[Math.floor(Math.random() * UBIK_ADS.length)];
+      this.say(ad);
+    } else {
+      this.say(left > 0
+        ? `A fine mist settles, and the world here comes true — colours, edges, weight. ${left} spray${left === 1 ? '' : 's'} left.`
+        : 'The last of it drifts down and holds. The can is spent now, and lighter than it should be.');
+    }
+  }
+
   // True if a Wi-Fi block is anywhere on the player: in hand, a pocket, or
   // the backpack. It works wherever it is carried.
   ownsWifiBlock() {
@@ -931,6 +1241,28 @@ export class Player {
     if (take(this.pockets)) return true;
     if (this.backpack && take(this.backpack.slots)) return true;
     return false;
+  }
+
+  // Cheap, continuously-reassessed read on whether this is still a beginner
+  // finding their feet, so robots can go easy on them until they do. Judged
+  // purely from movement pace (tiles covered per second since the run
+  // began) rather than combat outcomes, so it works from second one, before
+  // any fight has happened. A player who is slow and hesitant early on
+  // reads as "aimless" — low pace. Self-limiting on two fronts: pace
+  // recovers immediately once the player starts moving with intent, and the
+  // easing switches off entirely once EASE_WINDOW has elapsed regardless of
+  // pace, so a genuinely slow/careful player doesn't get a permanently
+  // trivial game. Returns a multiplier in [EASE_MIN, 1] to scale detection
+  // range and damage down by.
+  threatEase() {
+    const EASE_WINDOW = 180;   // seconds; easing only applies in the opening minutes
+    const EASE_MIN = 0.55;     // floor multiplier while clearly still learning
+    const PACE_FLOOR = 0.55;   // tiles/sec below which movement reads as aimless
+    if (this.playSeconds >= EASE_WINDOW) return 1;
+    const pace = this.distanceTraveled / Math.max(1, this.playSeconds);
+    if (pace >= PACE_FLOOR) return 1;
+    const t = pace / PACE_FLOOR; // 0 (motionless) .. 1 (at the floor)
+    return EASE_MIN + (1 - EASE_MIN) * t;
   }
 
   robotNear(robots, range = 22) {
@@ -971,6 +1303,24 @@ export class Player {
   }
 
   // A melee blow on the W-factory hull.
+  // Hammer the red uplink mast down. Fewer blows than the factory; when it
+  // gives, clear its tile and mark it destroyed for the fortress to react to.
+  hitUplink(obj, map, tool) {
+    if (obj.destroyed) { this.say('The uplink is already wrecked.'); return; }
+    this.swingTimer = tool.swingCooldown || 0.5;
+    this.stamina = Math.max(0, this.stamina - (tool.staminaCost ?? 0));
+    sfx.play('chop');
+    this.sparkAt(map, obj.x + 0.5, obj.y + 0.5);
+    obj.shake = 0.2;
+    obj.hp = (obj.hp ?? obj.maxHp ?? 90) - ((tool.robotDamage ?? 1) + this.xpLevel('melee'));
+    if (obj.hp > 0) return;
+    obj.destroyed = true;
+    if (map.objectGrid[obj.y * map.w + obj.x] === obj) map.objectGrid[obj.y * map.w + obj.x] = null;
+    for (let s = 0; s < 6; s++) this.sparkAt(map, obj.x + 0.5 + (s - 3) * 0.15, obj.y + 0.5);
+    map.groundItems.push({ item: 'scrap', qty: 4, x: obj.x + 0.5, y: obj.y + 0.5 });
+    this.addScore(30);
+  }
+
   hitFactory(obj, map, tool) {
     if (obj.destroyed) { this.say('The factory is already a smoking ruin.'); return; }
     this.swingTimer = tool.swingCooldown || 0.5;
@@ -1058,7 +1408,16 @@ export class Player {
     for (const l of drops) map.groundItems.push({ ...l, x: this.x, y: this.y });
     this.addScore(SCORE.cache);
     sfx.play('pickup');
-    this.say(`You prise open the cache: ${drops.map((l) => ITEMS[l.item].name.toLowerCase()).join(', ')}.`);
+    if (obj.starterCache) {
+      // A one-off note left with the welcome kit rather than a full lore
+      // fragment: it doesn't need tracking or re-reading, just to be seen once.
+      this.say('A note, pinned inside the lid: "Whoever finds this — pack, shield, '
+        + 'something that shoots, something to eat. Don\'t go out there empty-handed. '
+        + 'Learn the towers before you learn to run from them. Good luck." '
+        + `Inside: ${drops.map((l) => ITEMS[l.item].name.toLowerCase()).join(', ')}.`);
+    } else {
+      this.say(`You prise open the cache: ${drops.map((l) => ITEMS[l.item].name.toLowerCase()).join(', ')}.`);
+    }
   }
 
   // Set fire to the nearest obelisk in range and roughly in front. Five hits
@@ -1088,7 +1447,14 @@ export class Player {
     slots[i].qty -= 1; if (slots[i].qty <= 0) slots[i] = null;
     this.swingTimer = tool.swingCooldown;
     sfx.play('zap');
-    ob.obDamage = (ob.obDamage || 0) + 1;
+    this.damageObelisk(ob, map, 1);
+  }
+
+  // Land `amount` burns on an obelisk: scorch/shrink it, report the attack up
+  // the network (a W4 is dispatched), and fell it once it reaches five. Shared
+  // by the OB-gun (`burnObelisk`) and the electro-gun's arc.
+  damageObelisk(ob, map, amount = 1) {
+    ob.obDamage = (ob.obDamage || 0) + amount;
     ob.burning = 3; // seconds of visible flame, ticked by the renderer/main
     // Every attack on an obelisk is reported up the network: the W-factory
     // answers by dispatching a W4 hunter-killer after you (main throttles
@@ -1098,16 +1464,7 @@ export class Player {
       ob.destroyed = true;
       // The heap is walkable now, so the salvage on it can be collected.
       map.objectGrid[ob.y * map.w + ob.x] = null;
-      this.addScore(20);
-      // A heap of salvage where the tower stood, including the one numbered
-      // circuit board this obelisk was assigned (1-8, guaranteed spread
-      // across the world's towers) — collect all eight to build a wave gun.
-      const num = ob.circuitNum || (1 + Math.floor(Math.random() * 8));
-      map.groundItems.push({ item: 'circuit', qty: 1, num, x: ob.x + 0.5, y: ob.y + 0.5 });
-      map.groundItems.push({ item: 'battery', qty: 4, x: ob.x + 0.5, y: ob.y + 0.5 });
-      map.groundItems.push({ item: 'scrap', qty: 3, x: ob.x + 0.5, y: ob.y + 0.5 });
-      if (ob.code) this.killLog.push(ob.code);
-      if (this.onObeliskDestroyed) this.onObeliskDestroyed(ob);
+      this.spillObeliskSalvage(ob, map);
       this.say(`Obelisk ${ob.code || ''} buckles and comes down in a shower of sparks and circuitry.`);
     } else {
       this.say(`The obelisk catches fire. ${5 - ob.obDamage} more should finish it.`);
@@ -1147,15 +1504,26 @@ export class Player {
         if (Math.hypot(ob.x + 0.5 - b.x, ob.y + 0.5 - b.y) > b.radius) continue;
         ob.destroyed = true;
         map.objectGrid[ob.y * map.w + ob.x] = null;
-        this.addScore(20);
-        const num = ob.circuitNum || (1 + Math.floor(Math.random() * 8));
-        map.groundItems.push({ item: 'circuit', qty: 1, num, x: ob.x + 0.5, y: ob.y + 0.5 });
-        map.groundItems.push({ item: 'battery', qty: 4, x: ob.x + 0.5, y: ob.y + 0.5 });
-        map.groundItems.push({ item: 'scrap', qty: 3, x: ob.x + 0.5, y: ob.y + 0.5 });
-        if (ob.code) this.killLog.push(ob.code);
-        if (this.onObeliskDestroyed) this.onObeliskDestroyed(ob);
+        this.spillObeliskSalvage(ob, map);
       }
     }
+  }
+
+  // The heap of salvage a physically-destroyed obelisk leaves behind: its one
+  // numbered circuit board (1-8, guaranteed spread across the towers — collect
+  // all eight for a wave gun), batteries, scrap, and — always — an access chip,
+  // so felling any tower hands you the means to jack into the others. Shared by
+  // the OB-gun and the insane bomb. (Not called by RON-ML `crash`, which only
+  // knocks a tower dark temporarily and leaves nothing behind.)
+  spillObeliskSalvage(ob, map) {
+    this.addScore(20);
+    const num = ob.circuitNum || (1 + Math.floor(Math.random() * 8));
+    map.groundItems.push({ item: 'circuit', qty: 1, num, x: ob.x + 0.5, y: ob.y + 0.5 });
+    map.groundItems.push({ item: 'battery', qty: 4, x: ob.x + 0.5, y: ob.y + 0.5 });
+    map.groundItems.push({ item: 'scrap', qty: 3, x: ob.x + 0.5, y: ob.y + 0.5 });
+    map.groundItems.push({ item: 'chip', qty: 1, x: ob.x + 0.3, y: ob.y + 0.7 });
+    if (ob.code) this.killLog.push(ob.code);
+    if (this.onObeliskDestroyed) this.onObeliskDestroyed(ob);
   }
 
   // A piercing beam: cuts a straight line from the muzzle out to `range` and
@@ -1172,7 +1540,7 @@ export class Player {
     // The beam stops dead at the first solid object in its path — it
     // doesn't cut through walls to hit whatever's cowering behind one.
     const maxAlong = this.beamRange(map, rng);
-    let zombified = false;
+    let wiped = false;
     // Everything within a narrow corridor ahead, up to the beam's actual
     // (possibly wall-shortened) reach, gets hit.
     const hit = (e, robot) => {
@@ -1182,13 +1550,15 @@ export class Player {
       if (along < 0 || along > maxAlong) return;
       const perp = Math.abs(dx * -this.facing.y + dy * this.facing.x);
       if (perp > 0.8) return;
-      // The OB-gun's own beam doesn't kill a machine outright — it corrupts
-      // it into a zombie, immune to everything but a bow or the wave gun.
-      // W1s are already the AI's own revenge squad, dispatched hostile from
-      // the moment they're deployed — they can't be corrupted any further.
-      if (robot && tool.effect === 'burn' && !e.zombie && e.type !== 'w1') {
-        e.zombie = true; e.hurt = true; zombified = true;
+      // The beam that fells towers doesn't wound a mere machine — it wipes
+      // it out where it stands, whatever the class (the old corrupt-into-a-
+      // zombie behaviour is gone; existing zombies still fall to it too).
+      if (robot && tool.effect === 'burn') {
+        e.hp = 0; e.hurt = true; wiped = true;
+        e.scrapPenalty = true; // gunfire ruins the salvage, this most of all
         this.sparkAt(map, e.x, e.y);
+        this.gainXp('guns', 2);
+        this.addScore(SCORE.robot);
         return;
       }
       if (robot && zombieImmune(e, tool)) return;
@@ -1204,8 +1574,8 @@ export class Player {
     // A long tracer to the end of the beam (or the wall that stopped it).
     map.projectiles = map.projectiles || [];
     map.projectiles.push({ x0: this.x + this.facing.x * 0.4, y0: this.y + this.facing.y * 0.4, x1: this.x + this.facing.x * maxAlong, y1: this.y + this.facing.y * maxAlong, prog: 0, kind: 'fuse' });
-    this.say(zombified
-      ? "The beam doesn't kill the machine — it corrupts it into a lurching husk. Only a bow or the wave gun will finish it now."
+    this.say(wiped
+      ? 'The beam takes the machine apart where it stands.'
       : 'The beam cuts a line clean through them.');
   }
 
@@ -1277,36 +1647,63 @@ export class Player {
     if (tool.animalDamage != null) for (const a of animals) consider(a, false);
     for (const r of robots) consider(r, true);
 
-    // Ammo comes from the pockets first, then the backpack — no need to
-    // manually shuffle rounds forward before a fight. Consumed whether or not
-    // there's a target in range: pulling the trigger with nothing in your
-    // sights still wastes the round rather than refusing to fire.
-    let ammoSlots = this.pockets;
-    let i = this.pockets.findIndex((s) => s && s.item === tool.ammoType);
-    if (i < 0 && this.backpack) {
-      i = this.backpack.slots.findIndex((s) => s && s.item === tool.ammoType);
-      ammoSlots = this.backpack.slots;
-    }
-    if (i < 0) {
-      this.say(`The ${tool.name.toLowerCase()} is dead weight without ${ITEMS[tool.ammoType].name.toLowerCase()}.`);
-      return;
-    }
-    // A weapon that only sips its cell (the electro-gun, 5% per shot) spends a
-    // whole battery only once the accumulated fraction tips over one; the
-    // pocket count stays a clean integer.
-    if (tool.fractionalAmmo) {
-      this.ammoFrac[tool.key] = (this.ammoFrac[tool.key] || 0) + tool.fractionalAmmo;
-      if (this.ammoFrac[tool.key] >= 1) {
-        this.ammoFrac[tool.key] -= 1;
-        ammoSlots[i].qty -= 1;
-        if (ammoSlots[i].qty <= 0) ammoSlots[i] = null;
+    // The electro-gun's arc bites obelisks too — a slower way to fell a tower
+    // than the OB-gun, but it works. If one's in front and no closer than any
+    // machine, it takes the shot instead.
+    let obTarget = null;
+    if (tool.effect === 'fuse') {
+      const ob = this.obeliskInFront(map, range);
+      if (ob) {
+        const od = Math.hypot(ob.x + 0.5 - this.x, ob.y + 0.5 - this.y);
+        if (od <= best) obTarget = ob;
       }
+    }
+
+    // The electro-gun runs off its own self-charging cell — no pocket ammo.
+    // When the cell's too low it just needs a moment to trickle back up.
+    if (tool.selfCharge) {
+      if (this.electroCharge < tool.shotCost) {
+        this.say('The electro-gun hums, near flat — give its cell a moment to recharge.');
+        return;
+      }
+      this.electroCharge -= tool.shotCost;
+      // Firing near wildlife spooks it: the crackle sends animals bolting.
+      this.scareAnimals(animals, 7);
     } else {
+      // Other guns draw ammo from the pockets first, then the backpack — no
+      // need to manually shuffle rounds forward. Consumed whether or not
+      // there's a target in range: pulling the trigger with nothing in your
+      // sights still wastes the round rather than refusing to fire.
+      let ammoSlots = this.pockets;
+      let i = this.pockets.findIndex((s) => s && s.item === tool.ammoType);
+      if (i < 0 && this.backpack) {
+        i = this.backpack.slots.findIndex((s) => s && s.item === tool.ammoType);
+        ammoSlots = this.backpack.slots;
+      }
+      if (i < 0) {
+        this.say(`The ${tool.name.toLowerCase()} is dead weight without ${ITEMS[tool.ammoType].name.toLowerCase()}.`);
+        return;
+      }
       ammoSlots[i].qty -= 1;
       if (ammoSlots[i].qty <= 0) ammoSlots[i] = null;
     }
     this.swingTimer = tool.swingCooldown;
     this.stamina = Math.max(0, this.stamina - (tool.staminaCost ?? 0));
+
+    // Obelisk in the arc's path (electro-gun only): the bolt flies to it and
+    // scorches it, same as an OB-gun burn but from the electro-gun's cell.
+    if (obTarget) {
+      const bx = obTarget.x + 0.5, by = obTarget.y + 0.5;
+      map.projectiles = map.projectiles || [];
+      map.projectiles.push({
+        x0: this.x + this.facing.x * 0.4, y0: this.y + this.facing.y * 0.4,
+        x1: bx, y1: by, prog: 0, kind: 'fuse',
+      });
+      sfx.play('zap');
+      this.sparkBurst(map, bx, by);
+      this.damageObelisk(obTarget, map, 1);
+      return;
+    }
 
     // A visible round travels from the muzzle to the target (cosmetic; the
     // hit itself is instant). Electric guns fire a cyan/violet bolt. With no
@@ -1337,11 +1734,15 @@ export class Player {
       this.say('The stun bolt drops the machine cold. It will not stay down forever.');
     } else if (tool.effect === 'fuse') {
       sfx.play('zap');
-      target.fused = true;
-      target.mineCharges = 3;
-      target.disabledT = 0;
-      this.sparkAt(map, target.x, target.y);
-      this.say('The machine fuses solid: blackened, dead, and full of parts.');
+      // A full charge destroys the machine outright — a clean kill (no scrap
+      // penalty), so it drops its full salvage on the robots module's next
+      // tick, chip fragment and all.
+      target.hp = 0;
+      target.hurt = true;
+      target.scrapPenalty = false;
+      this.sparkBurst(map, target.x, target.y);
+      this.addScore(SCORE.robot);
+      this.say('The machine convulses in a storm of sparks and dies where it stands.');
     } else if (isRobot) {
       sfx.play('shot');
       target.scrapPenalty = true; // gunfire mangles the salvage
@@ -1430,31 +1831,70 @@ export class Player {
   }
 
   forcefieldActive() {
-    return this.hands === 'forcefield' && this.forcefieldCharge > 0;
+    return this.hasItem('forcefield') && this.forcefieldArmed && this.forcefieldCharge > 0;
   }
 
-  // A laser is on its way from (sx,sy). Returns how it's stopped, if at all:
-  //  'reflect' — a mirror shield facing the shooter throws it back
-  //  'absorb'  — a plain shield facing the shooter, or the forcefield, eats it
-  //  null      — nothing stops it; it lands
-  // A shield only covers the front, so it's no help against a shot from
-  // behind; the forcefield is all-round.
-  blockRangedShot(sx, sy) {
-    if (this.forcefieldActive()) return 'absorb';
-    const held = this.hands && ITEMS[this.hands];
-    if (held && held.kind === 'shield') {
-      const dx = sx - this.x, dy = sy - this.y;
-      const d = Math.hypot(dx, dy) || 1;
-      if ((dx / d) * this.facing.x + (dy / d) * this.facing.y > SHIELD_FRONT) {
-        return held.reflect ? 'reflect' : 'absorb';
-      }
+  // While the electro-compass is armed and carried, the facing chevron
+  // becomes a cluster of pointers — one per category of notable thing,
+  // each to the nearest of its kind, colour-coded: factory (blue), obelisk
+  // (green), a dropped backpack (yellow), a dropped OB-gun (orange). The AI
+  // mainframe (red) will slot in here once it exists. Returns an array of
+  // {x, y, color}, one entry per category that has something to point at.
+  compassTargets() {
+    const map = this.map;
+    if (!map) return [];
+    const nearest = {}; // color -> {x,y,d}
+    const consider = (x, y, color) => {
+      const d = Math.hypot(x - this.x, y - this.y);
+      if (!nearest[color] || d < nearest[color].d) nearest[color] = { x, y, d };
+    };
+    for (const o of map.objects) {
+      if (o.type === 'wfactory' && !o.destroyed) consider(o.x + (o.fw || 1) / 2, o.y + (o.fh || 1) / 2, '#4f8fe0');
+      else if (o.type === 'obelisk' && !o.destroyed) consider(o.x + 0.5, o.y + 0.5, '#4fe07a');
     }
+    for (const gi of (map.groundItems || [])) {
+      if (gi.item === 'backpack') consider(gi.x, gi.y, '#e6d24a');
+      else if (gi.item === 'obgun') consider(gi.x, gi.y, '#e0842f');
+    }
+    return Object.entries(nearest).map(([color, t]) => ({ x: t.x, y: t.y, color }));
+  }
+
+  // A laser is on its way. Returns how it's stopped, if at all:
+  //  'reflect' — a mirror shield throws it back, destroying the shooter
+  //  'absorb'  — a plain shield or the forcefield eats it
+  //  null      — nothing stops it; it lands
+  // Shields work while simply CARRIED (hand, pocket, or pack) — they're a
+  // worn deflector, not something you have to hold up and aim — and cover you
+  // from any direction. The mirror shield takes priority over the plain one.
+  blockRangedShot() {
+    if (this.forcefieldActive()) return 'absorb';
+    if (this.hasItem('mirror_shield')) return 'reflect';
+    if (this.hasItem('shield')) return 'absorb';
     return null;
+  }
+
+  // True if a carried shield/forcefield is currently shielding you — used to
+  // draw the protective glow even when the item isn't in hand.
+  shielded() {
+    return this.forcefieldActive() || this.hasItem('mirror_shield') || this.hasItem('shield');
+  }
+
+  // True when standing (not mid-jump) on top of a raised block — its
+  // effective height sits above the bare terrain height there.
+  onBlockTop() {
+    const m = this.map;
+    if (!m || !m.effectiveHeightAt || !m.heightAt || this.z > 0) return false;
+    const fx = Math.floor(this.x), fy = Math.floor(this.y);
+    return m.effectiveHeightAt(fx, fy) > m.heightAt(fx, fy);
   }
 
   takeDamage(amount, source) {
     // The forcefield stops everything — shot or blow — while it's up.
     if (this.forcefieldActive()) { this.hurtTimer = 0.12; return; }
+    // Up on a block top, ground enemies can't reach you — melee, bites, and
+    // lasers all fall short. (A bomb blast still catches you; flying machines,
+    // to come, will too.) So they keep trying in vain while you're safe up high.
+    if (source !== 'the blast' && this.onBlockTop()) return;
     this.health -= amount;
     this.hurtTimer = 0.35;
     if (source === 'viper') sfx.play('hiss');
@@ -1473,7 +1913,7 @@ export class Player {
     this._ended = true;
     this.deaths = (this.deaths || 0) + 1;
     this.deathCert = {
-      name: this.name, cause: 'SKYLINK-9000 coming online',
+      name: this.name, gender: this.gender, cause: 'SKYLINK-9000 coming online',
       score: this.score, skills: [...this.skills], deaths: this.deaths, skylink: true,
     };
     if (this.onDeath) this.onDeath();
@@ -1488,7 +1928,7 @@ export class Player {
     // is cumulative and survives; deaths count up. main shows it as a modal.
     this.deaths = (this.deaths || 0) + 1;
     this.deathCert = {
-      name: this.name, cause, score: this.score,
+      name: this.name, gender: this.gender, cause, score: this.score,
       skills: [...this.skills], deaths: this.deaths,
     };
     if (this.onDeath) this.onDeath();

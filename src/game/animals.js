@@ -1,4 +1,5 @@
 import { makeRng } from './rng.js';
+import { ANIMAL_SPRITE_SETS } from '../engine/textures.js';
 
 // Wild animals: feral dogs, boars, and vipers. Each has a signature power,
 // a readable tell before it acts, and a counter the player can learn.
@@ -14,8 +15,15 @@ const ANIMAL_ACTIVE_RANGE = 40; // tiles: beyond this from the player, an animal
 const DOG_HP = 12;
 const DOG_WANDER_SPEED = 1.2;   // tiles per second
 const DOG_CHASE_SPEED = 4.2;
-const DOG_AGGRO_RANGE = 7;      // pack aggros when player this close
 const DOG_DEAGGRO_RANGE = 10;   // pack gives up beyond this
+// A pack no longer aggros just because the player wandered within sight —
+// they're a hazard to provoke, not a tripwire. Getting hit still routs the
+// whole pack (below, unchanged). Otherwise a pack only turns hostile if the
+// player lingers in its personal space: DOG_ANNOY_RANGE is "in its face",
+// and it takes DOG_ANNOY_TIME seconds of that before patience runs out —
+// a passing brush doesn't count, only crowding it.
+const DOG_ANNOY_RANGE = 2.6;
+const DOG_ANNOY_TIME = 1.4;
 const DOG_BITE_RANGE = 0.9;
 const DOG_BITE_DAMAGE = 5;
 const DOG_BITE_COOLDOWN = 1.2;  // seconds between bites
@@ -42,15 +50,31 @@ const VIPER_STRIKE_DAMAGE = 3;
 const VIPER_STRIKE_COOLDOWN = 0.5;
 const VIPER_VENOM_SECONDS = 6;
 
+// Deer: a test case for a purely placid animal — no power, no tell, no
+// attack. Grazes until the player gets close, then runs; never turns to
+// fight. Sprite-only (no procedural fallback art, since this is a test of
+// the sprite pipeline on a second species, not a design commitment).
+const DEER_HP = 15;
+const DEER_WANDER_SPEED = 0.9;
+const DEER_FLEE_SPEED = 5.2;
+const DEER_FLEE_RANGE = 6;      // notices the player and reacts within this
+const DEER_PANIC_RANGE = 3;     // inside this it always bolts, no freeze roll
+const DEER_FREEZE_CHANCE = 0.15; // per second, while alert but not panicking: real deer freeze more than they run
+const DEER_FREEZE_TIME = [0.8, 1.6]; // [min, max] seconds held on a natural freeze
+const DEER_STUCK_TIME = 0.3;    // seconds of near-zero progress before it gives up shoving into an obstacle
+const DEER_STUCK_FREEZE_TIME = [1.5, 2.5]; // held longer when cornered — matches "freezes when there's no exit"
+
 // Spawn counts and placement.
 const DOG_PACKS = 3;
 const DOG_PACK_SIZE = 3;
 const BOAR_COUNT = 6;
 const VIPER_COUNT = 10;
+const DEER_COUNT = 5;
 const DOG_NEAR_FEATURE = 4;     // grass within this of a road/building
 const PACK_MIN_GAP = 8;         // tiles between pack centres
 const BOAR_MIN_GAP = 4;
 const VIPER_MIN_GAP = 3;
+const DEER_MIN_GAP = 5;
 
 // ---- Spawning -------------------------------------------------------------
 
@@ -72,6 +96,8 @@ function baseAnimal(type, x, y, hp, rng) {
     wanderTarget: null,
     wanderTimer: 0,
     animT: rng() * 10, // desync idle animation between individuals
+    moving: false,     // set true for a frame whenever moveToward actually moves it
+    walkPhase: rng() * Math.PI * 2, // desync walk cycle between individuals
   };
 }
 
@@ -181,6 +207,14 @@ export function spawnAnimals(map, seed, avoid) {
     animals.push(viper);
   }
 
+  // Deer on forest edges, same candidate tiles as boars.
+  for (const [x, y] of pickSpots(boarTiles, DEER_COUNT, DEER_MIN_GAP, rng)) {
+    const deer = baseAnimal('deer', x, y, DEER_HP, rng);
+    deer.freezeTimer = 0; // tell: renderer shows the idle pose (not walk) while > 0
+    deer.stuckTimer = 0;  // internal: tracks failed-progress time towards the current flee direction
+    animals.push(deer);
+  }
+
   return animals;
 }
 
@@ -227,6 +261,11 @@ function moveToward(a, tx, ty, speed, dt, map) {
   const moved = Math.hypot(a.x - ox, a.y - oy);
   if (moved > 1e-6) {
     a.facing = { x: (a.x - ox) / moved, y: (a.y - oy) / moved };
+    a.moving = true;
+    // Phase advances with distance covered (not just dt), so a fast chase
+    // cycles legs visibly faster than an idle amble — same idea as the
+    // player's walkPhase, driven here by tiles moved instead of speed.
+    a.walkPhase = (a.walkPhase + moved * 6) % (Math.PI * 2);
   }
   return moved;
 }
@@ -274,13 +313,16 @@ export function updateAnimals(dt, animals, player, map) {
     a.lastHp = a.hp;
   }
 
-  // Pack-level signals: which packs have a hurt member, which can see the player.
+  // Pack-level signals: which packs have a hurt member, which have had their
+  // patience worn out by the player crowding them.
   const hurtPacks = new Set();
   const aggroPacks = new Set();
   for (const a of animals) {
     if (a.dead || a.type !== 'dog') continue;
     if (a.justHurt) hurtPacks.add(a.packId);
-    if (distTo(a, player) < DOG_AGGRO_RANGE) aggroPacks.add(a.packId);
+    const crowded = distTo(a, player) < DOG_ANNOY_RANGE;
+    a.annoyT = crowded ? Math.min(DOG_ANNOY_TIME, (a.annoyT || 0) + dt) : Math.max(0, (a.annoyT || 0) - dt * 2);
+    if (a.annoyT >= DOG_ANNOY_TIME) aggroPacks.add(a.packId);
   }
 
   for (const a of animals) {
@@ -290,10 +332,74 @@ export function updateAnimals(dt, animals, player, map) {
     // keeps a big map cheap (only nearby wildlife thinks each frame).
     if (distTo(a, player) > ANIMAL_ACTIVE_RANGE) continue;
     a.animT += dt;
+    a.moving = false; // moveToward sets this true below if it actually steps this frame
+    // Knocked back by a solid hit: frozen (no movement, no attack) for a
+    // beat, same as the shove the player's strike just gave it — stops it
+    // trading blows nose-to-nose the instant it's been hit.
+    if (a.knockT > 0) {
+      a.knockT -= dt;
+      a.justHurt = false;
+      continue;
+    }
+    // Startled (e.g. by the electro-gun's crackle): bolt straight away from
+    // the player, overriding normal behaviour, until the scare wears off.
+    if (a.scaredT > 0) {
+      a.scaredT -= dt;
+      const d = distTo(a, player);
+      const ax = d > 1e-6 ? (a.x - player.x) / d : 1;
+      const ay = d > 1e-6 ? (a.y - player.y) / d : 0;
+      moveToward(a, a.x + ax * 3, a.y + ay * 3, DOG_CHASE_SPEED, dt, map);
+      a.justHurt = false;
+      continue;
+    }
     if (a.type === 'dog') updateDog(a, dt, player, map, hurtPacks, aggroPacks);
     else if (a.type === 'boar') updateBoar(a, dt, player, map);
     else if (a.type === 'viper') updateViper(a, dt, player, map);
+    else if (a.type === 'deer') updateDeer(a, dt, player, map);
     a.justHurt = false;
+  }
+}
+
+// Placid: grazes (wander), bolts on sight of the player, never fights back.
+function updateDeer(a, dt, player, map) {
+  a.freezeTimer = Math.max(0, a.freezeTimer - dt);
+  const d = distTo(a, player);
+
+  if (d >= DEER_FLEE_RANGE) {
+    a.stuckTimer = 0;
+    wander(a, DEER_WANDER_SPEED, dt, map);
+    return;
+  }
+
+  if (a.freezeTimer > 0) return; // held still — no movement, no re-roll
+
+  // Natural alert-freeze: real deer hold rather than bolt more often than
+  // not, unless the player is right on top of them. Rolled once per frame
+  // scaled by dt so the expected freeze rate stays ~DEER_FREEZE_CHANCE/sec
+  // regardless of frame rate.
+  if (d > DEER_PANIC_RANGE && a.rng() < DEER_FREEZE_CHANCE * dt) {
+    a.freezeTimer = DEER_FREEZE_TIME[0] + a.rng() * (DEER_FREEZE_TIME[1] - DEER_FREEZE_TIME[0]);
+    return;
+  }
+
+  const away = d > 1e-6
+    ? { x: (a.x - player.x) / d, y: (a.y - player.y) / d }
+    : { x: 1, y: 0 };
+  const moved = moveToward(a, a.x + away.x * 2, a.y + away.y * 2, DEER_FLEE_SPEED, dt, map);
+
+  // Cornered: the direct-away line is blocked (wall, water, tree cluster)
+  // and shoving into it every frame reads as jittering in place. Give up
+  // on that line and freeze instead — matches real deer holding still when
+  // there's no clear bolt line, rather than a scripted animal thrashing at
+  // an obstacle in plain sight.
+  if (moved < 0.01) {
+    a.stuckTimer += dt;
+    if (a.stuckTimer > DEER_STUCK_TIME) {
+      a.freezeTimer = DEER_STUCK_FREEZE_TIME[0] + a.rng() * (DEER_STUCK_FREEZE_TIME[1] - DEER_STUCK_FREEZE_TIME[0]);
+      a.stuckTimer = 0;
+    }
+  } else {
+    a.stuckTimer = 0;
   }
 }
 
@@ -436,15 +542,144 @@ function updateViper(a, dt, player, map) {
 
 // ---- Drawing --------------------------------------------------------------
 
-// Placeholder art in code, matching the renderer's style: shadow ellipse at
-// the feet, simple shapes at tile scale. worldToScreen is the projection
-// function from engine/iso.js, passed in so this module stays engine-free.
+// Viper is still placeholder art in code: shadow ellipse at the feet,
+// simple shapes at tile scale. Dog and boar draw real Kenney "Cube Pets"
+// models (see ANIMAL_SPRITE_SETS in engine/textures.js, pre-rendered
+// offline via tools/pet-render.html into 8 screen-facing directions x
+// idle/walk frames) — boar uses 'hog', the closest match in the pack,
+// there being no literal boar model — falling back to the old procedural
+// shape until the image has loaded. Deer is sprite-only (see
+// drawDeerSprite): a placid test case for the sprite pipeline, so it has
+// no procedural fallback art and simply doesn't draw for the one frame
+// before its images finish loading. worldToScreen is the projection
+// function from engine/iso.js, passed in so most of this module stays
+// engine-free; the sprite path is the one exception, importing directly
+// from textures.js.
 export function drawAnimal(ctx, animal, worldToScreen) {
   if (animal.dead) return;
   const c = worldToScreen(animal.x, animal.y);
-  if (animal.type === 'dog') drawDog(ctx, animal, c, worldToScreen);
-  else if (animal.type === 'boar') drawBoar(ctx, animal, c, worldToScreen);
-  else if (animal.type === 'viper') drawViper(ctx, animal, c);
+  if (animal.type === 'dog') {
+    if (!drawDogSprite(ctx, animal, c)) drawDog(ctx, animal, c, worldToScreen);
+  } else if (animal.type === 'boar') {
+    if (!drawBoarSprite(ctx, animal, c)) drawBoar(ctx, animal, c, worldToScreen);
+  } else if (animal.type === 'viper') drawViper(ctx, animal, c);
+  else if (animal.type === 'deer') drawDeerSprite(ctx, animal, c);
+}
+
+// Kenney normalises every Cube Pets model to a similar bounding cube
+// regardless of the real animal's size (confirmed by comparing rendered
+// bee/elephant output at the same camera framing — near-identical), so
+// species can't share one draw scale; each gets its own fudge factor here,
+// eyeballed relative to the dog. All values below are half the first pass
+// (dog/hog were found reading too big in-game and halved; the rest of the
+// table was calibrated off that same too-big dog baseline, so halved to
+// match rather than left inconsistent). dog, boar (as hog), and deer are
+// wired into gameplay; the rest are rendered and ready in
+// assets/textures/animals/ for whenever a viper substitute or further
+// species are picked.
+const ANIMAL_SPRITE_SCALE = {
+  dog: 0.21, bee: 0.115, caterpillar: 0.095, chick: 0.115, crab: 0.115, fish: 0.13,
+  bunny: 0.16, beaver: 0.16, cat: 0.18, koala: 0.18, penguin: 0.18, parrot: 0.13,
+  fox: 0.195, monkey: 0.195, pig: 0.24, hog: 0.26, panda: 0.275, deer: 0.29,
+  lion: 0.305, tiger: 0.325, cow: 0.355, polar: 0.355, giraffe: 0.45, elephant: 0.515,
+};
+
+const ANIMAL_COMPASS_DIRS = ['E', 'SE', 'S', 'SW', 'W', 'NW', 'N', 'NE'];
+const ANIMAL_DIR_THETA = { E: 0, SE: 45, S: 90, SW: 135, W: 180, NW: 225, N: 270, NE: 315 };
+// Same facing-vector -> screen-compass-direction mapping as
+// renderer.js:facingToCompassDir, duplicated here rather than imported so
+// this module doesn't reach into the renderer for one helper.
+function facingToCompassDir(facing) {
+  const sx = facing.y - facing.x, sy = facing.x + facing.y;
+  let theta = Math.atan2(sy, sx) * 180 / Math.PI;
+  if (theta < 0) theta += 360;
+  let best = 'S', bestDiff = Infinity;
+  for (const dir of ANIMAL_COMPASS_DIRS) {
+    const diff = Math.min(Math.abs(theta - ANIMAL_DIR_THETA[dir]), 360 - Math.abs(theta - ANIMAL_DIR_THETA[dir]));
+    if (diff < bestDiff) { bestDiff = diff; best = dir; }
+  }
+  return best;
+}
+
+// Picks the idle frame or the appropriate walk-cycle frame for this
+// direction, same indexing scheme as renderer.js:drawPlayerSprite.
+function pickAnimalFrame(set, dir, a) {
+  if (a.moving) {
+    const frames = set.walk[dir];
+    const idx = Math.floor((a.walkPhase / (Math.PI * 2)) * frames.length) % frames.length;
+    return frames[idx];
+  }
+  return set.idle[dir];
+}
+
+// Returns false (drawing nothing) if the sprite for this facing hasn't
+// finished loading yet, so the caller can fall back to the procedural shape
+// instead of an invisible dog.
+function drawDogSprite(ctx, a, c) {
+  const set = ANIMAL_SPRITE_SETS.dog;
+  const dir = facingToCompassDir(a.facing);
+  const sprite = set && pickAnimalFrame(set, dir, a);
+  if (!sprite || !sprite.complete || !sprite.naturalWidth) return false;
+  const scale = ANIMAL_SPRITE_SCALE.dog;
+  const dw = sprite.naturalWidth * scale, dh = sprite.naturalHeight * scale;
+
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.beginPath();
+  ctx.ellipse(c.x, c.y, dw * 0.32, dw * 0.14, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Wolf-grey coat instead of the raw hog-brown dog asset. 'color' blend
+  // (unlike boar's 'multiply') preserves the destination's own luminosity
+  // and only replaces hue/saturation, so it can't crush the sprite to
+  // black the way the boar tint first did — a neutral grey source desaturates
+  // toward grey while keeping the model's own shading. Left at less than
+  // full alpha so a little of the original warm brown undertone still
+  // shows through, then a light 'screen' pass lifts it a touch paler
+  // towards white. Mirrors boar's destination-in mask to keep the sprite's
+  // transparent margin intact.
+  const off = animalTintScratch(sprite.naturalWidth, sprite.naturalHeight);
+  off.ctx.clearRect(0, 0, off.canvas.width, off.canvas.height);
+  off.ctx.drawImage(sprite, 0, 0);
+  off.ctx.globalCompositeOperation = 'color';
+  off.ctx.fillStyle = 'rgba(150,155,160,0.75)';
+  off.ctx.fillRect(0, 0, off.canvas.width, off.canvas.height);
+  off.ctx.globalCompositeOperation = 'screen';
+  off.ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  off.ctx.fillRect(0, 0, off.canvas.width, off.canvas.height);
+  off.ctx.globalCompositeOperation = 'destination-in';
+  off.ctx.drawImage(sprite, 0, 0);
+  off.ctx.globalCompositeOperation = 'source-over';
+  ctx.drawImage(off.canvas, c.x - dw / 2, c.y - dh + dh * 0.16, dw, dh);
+
+  if (a.aggro) {
+    // Tell: barking, white "!" above the head.
+    ctx.font = 'bold 14px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText('!', c.x, c.y - dh - 4);
+    ctx.textAlign = 'left';
+  }
+  return true;
+}
+
+// Simplest possible sprite draw: shadow + image, no fallback and no tell —
+// deer is a placid test case for the sprite pipeline on a second species,
+// not a design commitment, so it just doesn't draw for the one frame
+// before its images finish loading.
+function drawDeerSprite(ctx, a, c) {
+  const set = ANIMAL_SPRITE_SETS.deer;
+  const dir = facingToCompassDir(a.facing);
+  const sprite = set && pickAnimalFrame(set, dir, a);
+  if (!sprite || !sprite.complete || !sprite.naturalWidth) return;
+  const scale = ANIMAL_SPRITE_SCALE.deer;
+  const dw = sprite.naturalWidth * scale, dh = sprite.naturalHeight * scale;
+
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.beginPath();
+  ctx.ellipse(c.x, c.y, dw * 0.32, dw * 0.14, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.drawImage(sprite, c.x - dw / 2, c.y - dh + dh * 0.16, dw, dh);
 }
 
 function drawDog(ctx, a, c, worldToScreen) {
@@ -482,6 +717,92 @@ function drawDog(ctx, a, c, worldToScreen) {
     ctx.fillText('!', c.x, c.y - 24);
     ctx.textAlign = 'left';
   }
+}
+
+// One reusable offscreen canvas for compositing colourize tints (boar's
+// black, dog's grey, boar's telegraph-flash) onto a sprite before drawing —
+// same compositing trick as renderer.js:tintScratch, duplicated locally
+// for the same reason facingToCompassDir is (this module stays out of the
+// renderer/engine). Shared by both since only one tint is ever composited
+// at a time within a single draw call.
+let _animalTintCanvas = null;
+function animalTintScratch(w, h) {
+  if (!_animalTintCanvas) _animalTintCanvas = document.createElement('canvas');
+  if (_animalTintCanvas.width !== w || _animalTintCanvas.height !== h) {
+    _animalTintCanvas.width = w;
+    _animalTintCanvas.height = h;
+  }
+  return { canvas: _animalTintCanvas, ctx: _animalTintCanvas.getContext('2d') };
+}
+
+// Returns false (drawing nothing) if the sprite for this facing hasn't
+// finished loading yet, so the caller can fall back to the procedural shape
+// instead of an invisible boar. Uses 'hog', the closest model in the Cube
+// Pets pack — there's no literal boar.
+function drawBoarSprite(ctx, a, c) {
+  const set = ANIMAL_SPRITE_SETS.hog;
+  const dir = facingToCompassDir(a.facing);
+  const sprite = set && pickAnimalFrame(set, dir, a);
+  if (!sprite || !sprite.complete || !sprite.naturalWidth) return false;
+  const telegraphing = a.state === 'telegraph';
+  // Tell: shakes in place while telegraphing (matches the old procedural art).
+  const shake = telegraphing ? Math.sin(a.animT * 45) * 2 : 0;
+  const scale = ANIMAL_SPRITE_SCALE.hog;
+  const dw = sprite.naturalWidth * scale, dh = sprite.naturalHeight * scale;
+  const dx = c.x + shake - dw / 2, dy = c.y - dh + dh * 0.16;
+
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.beginPath();
+  ctx.ellipse(c.x, c.y, dw * 0.36, dw * 0.16, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // hog's stock colouring is the same warm brown as dog, which read as
+  // near-identical creatures at a glance. Always darken the boar a shade
+  // towards black (a 'multiply' pass keeps the model's own shading/
+  // highlights instead of flattening it to a silhouette) so it's a
+  // distinct "wild boar" colour rather than the raw hog asset. Kept
+  // deliberately light (low alpha, mid-grey rather than near-black tint
+  // colour) — a first pass at rgba(40,35,32,0.85) crushed it to a near-
+  // solid black shape instead of a tint. Unlike 'source-atop', 'multiply'
+  // isn't confined to the destination's existing alpha — a fillRect under
+  // it darkens the WHOLE canvas rectangle, including the sprite's
+  // transparent margin, turning it into an opaque dark square. So the
+  // multiply fill is followed by a 'destination-in' redraw of the original
+  // sprite, which multiplies the alpha channel back down to the sprite's
+  // own silhouette and restores the transparent margin.
+  const off = animalTintScratch(sprite.naturalWidth, sprite.naturalHeight);
+  off.ctx.clearRect(0, 0, off.canvas.width, off.canvas.height);
+  off.ctx.drawImage(sprite, 0, 0);
+  off.ctx.globalCompositeOperation = 'multiply';
+  off.ctx.fillStyle = 'rgba(90,85,80,0.4)';
+  off.ctx.fillRect(0, 0, off.canvas.width, off.canvas.height);
+  off.ctx.globalCompositeOperation = 'destination-in';
+  off.ctx.drawImage(sprite, 0, 0);
+  off.ctx.globalCompositeOperation = 'source-over';
+
+  // Tell: flashes reddish while telegraphing (same cadence as the old art),
+  // layered on top of the black tint via 'source-atop' so only the sprite's
+  // own pixels (not the transparent margin) pick up the flash colour.
+  const flash = telegraphing && Math.sin(a.animT * 20) > 0;
+  if (flash) {
+    off.ctx.globalCompositeOperation = 'source-atop';
+    off.ctx.fillStyle = 'rgba(200,40,30,0.55)';
+    off.ctx.fillRect(0, 0, off.canvas.width, off.canvas.height);
+    off.ctx.globalCompositeOperation = 'source-over';
+  }
+  ctx.drawImage(off.canvas, dx, dy, dw, dh);
+
+  if (a.state === 'stun') {
+    // Tell: dizzy dots circling above the head.
+    ctx.fillStyle = 'rgba(220,220,220,0.9)';
+    for (let i = 0; i < 3; i++) {
+      const ang = a.animT * 6 + (i * Math.PI * 2) / 3;
+      ctx.beginPath();
+      ctx.arc(c.x + Math.cos(ang) * 8, c.y - dh - 4 + Math.sin(ang) * 3, 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  return true;
 }
 
 function drawBoar(ctx, a, c, worldToScreen) {

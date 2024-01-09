@@ -4,13 +4,32 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>postAI</title>
+<meta name="description" content="An isometric survival game set in a world run by machines. Salvage, hack the towers, and slip through the tears into the underworld.">
+<!-- Link-preview / share card (Open Graph + Twitter). Rendered by iMessage,
+     WhatsApp, Slack, Discord, X, etc. og:url and og:image MUST be absolute for
+     crawlers to fetch them, so they point at the live host (Vercel). Update
+     the host below if the deployment URL changes. -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="postAI">
+<meta property="og:title" content="postAI">
+<meta property="og:description" content="An isometric survival game set in a world run by machines. Salvage, hack the towers, and slip through the tears into the underworld.">
+<meta property="og:url" content="https://post-ai-mu.vercel.app/">
+<meta property="og:image" content="https://post-ai-mu.vercel.app/assets/share-card.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="postAI — an isometric ruined town with a green EXIT door">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="postAI">
+<meta name="twitter:description" content="An isometric survival game set in a world run by machines.">
+<meta name="twitter:image" content="https://post-ai-mu.vercel.app/assets/share-card.jpg">
 <style>
   html, body { margin: 0; padding: 0; height: 100%; background: #0b0e0a; overflow: hidden; }
   #game { display: block; width: 100vw; height: 100vh; }
   #hint {
-    position: fixed; left: 12px; bottom: 88px;
+    position: fixed; right: 12px; bottom: 88px;
     color: #cfd8c3; font: 13px/1.4 system-ui, sans-serif;
     opacity: 0.75; pointer-events: none; text-shadow: 0 1px 2px #000;
+    text-align: right;
   }
   #helpBtn {
     position: fixed; top: 10px; left: 70px;
@@ -20,6 +39,37 @@
     font: bold 14px/22px system-ui, sans-serif; text-align: center;
     cursor: pointer; user-select: none;
   }
+  #aboutBtn {
+    position: fixed; top: 10px; left: 100px;
+    width: 24px; height: 24px; border-radius: 12px;
+    background: rgba(207,216,195,0.15); color: #cfd8c3;
+    border: 1px solid rgba(207,216,195,0.4);
+    font: italic bold 13px/22px Georgia, serif; text-align: center;
+    cursor: pointer; user-select: none;
+  }
+  #about {
+    display: none; position: fixed; inset: 0;
+    background: rgba(5,7,4,0.75); z-index: 10;
+  }
+  #about .panel {
+    max-width: 460px; max-height: 82vh; overflow-y: auto;
+    margin: 8vh auto 0; padding: 22px 28px;
+    background: #141a10; border: 1px solid rgba(207,216,195,0.35);
+    border-radius: 6px; color: #cfd8c3;
+    font: 14px/1.55 system-ui, sans-serif;
+  }
+  #about h1 { font-size: 18px; margin: 0 0 4px; }
+  #about .meta { color: #9db284; font-size: 12px; margin: 0 0 16px; }
+  #about h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: #9db284; margin: 16px 0 6px; }
+  #about p { margin: 4px 0; }
+  #about ul.tapes { list-style: none; margin: 6px 0; padding: 0; }
+  #about ul.tapes li { margin: 0 0 8px; padding: 6px 10px; border-left: 2px solid rgba(157,178,132,0.5);
+    background: rgba(207,216,195,0.05); font-size: 13px; line-height: 1.4; }
+  #about ul.tapes li b { color: #e8e0d0; }
+  #about ul.tapes li i { color: #b7c2a8; font-style: italic; }
+  #about .foot { margin-top: 18px; padding-top: 12px; border-top: 1px solid rgba(207,216,195,0.2);
+    color: #6b7a5e; font-size: 11px; }
   #help {
     display: none; position: fixed; inset: 0;
     background: rgba(5,7,4,0.75); z-index: 10;
@@ -49,6 +99,111 @@
   #help .helpTab.active { background: rgba(157,178,132,0.28); color: #e8e0d0; border-color: rgba(157,178,132,0.6); }
   #help .helpPanel { display: none; }
   #help .helpPanel.active { display: block; }
+  #help .settingsRow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  #help .settingsRow input[type="range"] { width: 220px; accent-color: #9db284; }
+  #help .musicChoice label { display: inline-flex; align-items: center; gap: 5px;
+    color: #cfd8c3; font-size: 13px; margin-right: 4px; cursor: pointer; }
+  #help .musicChoice input[type="radio"] { accent-color: #9db284; flex: 0 0 auto; width: 14px; height: 14px; margin: 0; }
+  #help #volumeLabel { color: #9db284; font: 12px ui-monospace, monospace; min-width: 38px; }
+  /* Obelisk terminal — a VT220-ish green CRT. */
+  #obterminal { display: none; position: fixed; inset: 0; z-index: 20;
+    background: rgba(0,0,0,0.72); align-items: center; justify-content: center; }
+  #obterminal .crt {
+    width: min(680px, 88vw); height: min(460px, 76vh);
+    background: #04120a; border: 14px solid #15150f; border-radius: 20px;
+    box-shadow: 0 0 0 2px #000, inset 0 0 70px rgba(0,0,0,0.9), inset 0 0 130px rgba(40,255,120,0.07);
+    padding: 24px 28px; position: relative; overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  #obterminal .crt::after { content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(rgba(0,0,0,0) 0, rgba(0,0,0,0) 2px, rgba(0,0,0,0.22) 3px, rgba(0,0,0,0.22) 4px); }
+  #obterminal-body { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  #obterminal-screen { flex: 1; min-height: 0; overflow-y: auto; margin: 0 0 8px; padding-right: 4px;
+    color: #4fe07a; white-space: pre-wrap;
+    font: 15px/1.55 ui-monospace, 'Courier New', monospace; text-shadow: 0 0 4px rgba(80,230,130,0.7); }
+  #obterminal-inputrow { display: flex; align-items: baseline; flex-shrink: 0; position: relative; }
+  /* Autocomplete ghost: the typed prefix is transparent (spacer), the
+     suggested suffix is faded green. Only shown once the manual's been read. */
+  #obterminal-ghost { position: absolute; top: 0; left: 0; pointer-events: none;
+    white-space: pre; font: 15px ui-monospace, 'Courier New', monospace;
+    color: rgba(130,225,160,0.32); text-shadow: 0 0 4px rgba(80,230,130,0.35); }
+  #obterminal-ghost .typed { color: transparent; }
+  #obterminal-prompt { color: #4fe07a; margin-right: 6px;
+    font: 15px ui-monospace, 'Courier New', monospace; text-shadow: 0 0 4px rgba(80,230,130,0.7); }
+  #obterminal-input { flex: 1; background: transparent; border: none; outline: none;
+    color: #9dffb8; font: 15px ui-monospace, 'Courier New', monospace; text-shadow: 0 0 4px rgba(80,230,130,0.7); caret-color: #4fe07a; }
+  #obterminal .crt-hint { position: absolute; bottom: 12px; right: 20px;
+    color: rgba(80,230,130,0.4); font: 11px ui-monospace, monospace; }
+  #obterminal-connect { display: none; color: #4fe07a; font: 14px ui-monospace, monospace;
+    text-shadow: 0 0 4px rgba(80,230,130,0.7); }
+  #obterminal-connect .connect-label { margin-bottom: 12px; letter-spacing: 0.1em; }
+  #obterminal-connect .connect-track { height: 16px; border: 1px solid rgba(80,230,130,0.5);
+    background: rgba(80,230,130,0.06); }
+  #obterminal-bar { height: 100%; width: 0%; background: rgba(80,230,130,0.55);
+    box-shadow: 0 0 8px rgba(80,230,130,0.6); transition: none; }
+  /* RON-ML map readout — a green schematic of the AI's territory. */
+  #ronmap { display: none; position: fixed; inset: 0; z-index: 22;
+    background: rgba(0,0,0,0.82); align-items: center; justify-content: center; }
+  #ronmap .crt { width: min(560px, 92vw); background: #04120a;
+    border: 14px solid #15150f; border-radius: 20px; padding: 18px 20px 14px;
+    box-shadow: 0 0 0 2px #000, inset 0 0 60px rgba(0,0,0,0.9), inset 0 0 120px rgba(40,255,120,0.07);
+    position: relative; }
+  #ronmap .crt::after { content: ''; position: absolute; inset: 0; pointer-events: none; border-radius: 8px;
+    background: repeating-linear-gradient(rgba(0,0,0,0) 0, rgba(0,0,0,0) 2px, rgba(0,0,0,0.18) 3px, rgba(0,0,0,0.18) 4px); }
+  #ronmap-title { color: #4fe07a; font: 13px ui-monospace, monospace; letter-spacing: 0.08em;
+    text-shadow: 0 0 4px rgba(80,230,130,0.7); margin-bottom: 8px; }
+  #ronmap-canvas { display: block; width: 100%; image-rendering: pixelated; background: #061a0e;
+    border: 1px solid rgba(80,230,130,0.35); }
+  #ronmap-legend { color: rgba(120,230,160,0.85); font: 11px ui-monospace, monospace; margin-top: 8px;
+    display: flex; flex-wrap: wrap; gap: 4px 16px; }
+  #ronmap-legend b { font-weight: 700; }
+  #ronmap .crt-hint { color: rgba(80,230,130,0.45); font: 11px ui-monospace, monospace; margin-top: 6px; text-align: right; }
+  /* Notepad — a real paper notebook you flip through (not a console dump),
+     collecting any lore fragment flagged worth keeping (not just RON-ML),
+     opened by the `notes` command or the N key. Deliberately NOT green-CRT
+     styled, so it reads as your own scrawled reference rather than the
+     machine's. */
+  #ronnotebook { display: none; position: fixed; inset: 0; z-index: 23;
+    background: rgba(0,0,0,0.72); align-items: center; justify-content: center; }
+  #ronnotebook .page { width: min(520px, 90vw); min-height: min(420px, 70vh); max-height: 80vh;
+    background: #ece3c8; border-radius: 4px 10px 10px 4px; padding: 26px 30px 18px 42px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.55), inset 6px 0 10px -6px rgba(0,0,0,0.35);
+    position: relative; display: flex; flex-direction: column;
+    background-image: repeating-linear-gradient(rgba(60,90,140,0) 0 27px, rgba(60,90,140,0.14) 27px 28px);
+    background-position: 0 34px; }
+  #ronnotebook .page::before { content: ''; position: absolute; left: 16px; top: 0; bottom: 0; width: 2px;
+    background: rgba(190,60,60,0.35); } /* the margin rule */
+  #ronnotebook .spine { position: absolute; left: 0; top: 10px; bottom: 10px; width: 8px;
+    background: repeating-linear-gradient(180deg, #8a6f3c 0 10px, #6f5730 10px 12px); border-radius: 3px 0 0 3px; }
+  #ronnotebook-title { font: 700 15px/1.3 'Courier New', monospace; color: #2a2418; letter-spacing: 0.02em;
+    border-bottom: 1px dashed rgba(40,30,10,0.35); padding-bottom: 8px; margin-bottom: 10px; }
+  #ronnotebook-body { flex: 1; min-height: 0; overflow-y: auto; font: 14px/28px 'Courier New', monospace;
+    color: #2f2a1c; white-space: pre-wrap; }
+  #ronnotebook-empty { font: italic 14px/1.5 Georgia, serif; color: #6b6350; }
+  #ronnotebook-footer { display: flex; align-items: center; justify-content: space-between;
+    margin-top: 10px; padding-top: 8px; border-top: 1px dashed rgba(40,30,10,0.35); }
+  #ronnotebook-page-label { font: 12px ui-monospace, monospace; color: #6b6350; }
+  .nb-btn { font: 700 13px ui-monospace, monospace; color: #2a2418; background: rgba(40,30,10,0.08);
+    border: 1px solid rgba(40,30,10,0.3); border-radius: 4px; padding: 5px 12px; cursor: pointer; }
+  .nb-btn:hover { background: rgba(40,30,10,0.16); }
+  .nb-btn:disabled { opacity: 0.35; cursor: default; background: transparent; }
+  #ronnotebook .nb-hint { position: absolute; bottom: -22px; right: 4px;
+    color: rgba(230,225,205,0.65); font: 11px ui-monospace, monospace; }
+  /* AI OS — the machine's own console, unreadable and alive. */
+  #aios { display: none; position: fixed; inset: 0; z-index: 21;
+    background: rgba(0,0,0,0.8); align-items: center; justify-content: center; }
+  #aios .aios-crt { width: min(700px, 90vw); height: min(480px, 78vh);
+    background: #10040e; border: 14px solid #15150f; border-radius: 20px;
+    box-shadow: 0 0 0 2px #000, inset 0 0 90px rgba(0,0,0,0.92), inset 0 0 140px rgba(255,40,140,0.08);
+    padding: 24px 26px; position: relative; overflow: hidden; }
+  #aios .aios-crt::after { content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(rgba(0,0,0,0) 0, rgba(0,0,0,0) 2px, rgba(0,0,0,0.28) 3px, rgba(0,0,0,0.28) 4px); }
+  #aios-header { color: #ff3d8b; font: bold 12px ui-monospace, monospace; letter-spacing: 0.08em;
+    text-shadow: 0 0 6px rgba(255,60,140,0.8); margin-bottom: 10px; }
+  #aios-screen { margin: 0; color: #e04fb0; white-space: pre; overflow: hidden;
+    font: 13px/1.15 ui-monospace, 'Courier New', monospace; text-shadow: 0 0 4px rgba(224,80,180,0.6); opacity: 0.85; }
+  #aios .crt-hint { position: absolute; bottom: 12px; right: 20px;
+    color: rgba(224,80,180,0.45); font: 11px ui-monospace, monospace; }
   #help h2:first-child { margin-top: 4px; }
   #help .meta { color: #8a9878; font-size: 12px; }
   #help table { border-collapse: collapse; width: 100%; }
@@ -82,8 +237,36 @@
 </head>
 <body>
 <canvas id="game"></canvas>
-<div id="hint">WASD / arrows to move &middot; mouse to aim &middot; Shift to sprint &middot; Space to jump &middot; E / / / left click to use held tool &middot; Q to eat &middot; Z zoom &middot; H for help</div>
+<div id="hint">Press H for help</div>
 <div id="helpBtn" title="Help (H)">?</div>
+<div id="aboutBtn" title="About">i</div>
+<div id="about">
+  <div class="panel">
+    <h1>postAI</h1>
+    <p class="meta">An isometric survival game &middot; by David and Henrik</p>
+
+    <h2>Coding</h2>
+    <p>David and Henrik, vibecoding 2026.</p>
+
+    <h2>Music &amp; cassettes</h2>
+    <p>The soundtrack is a set of <b>cassette tapes</b> you find and play on the walkman. Each has an A and a B side:</p>
+    <ul class="tapes">
+      <li><b>meme &mdash; <i>compilation</i></b><br>A: resonance &nbsp;&middot;&nbsp; B: eliza, slip</li>
+      <li><b>meme &mdash; <i>maieutics</i></b><br>A: maieutics 1&ndash;2 &nbsp;&middot;&nbsp; B: maieutics 3</li>
+      <li><b>WARD &mdash; <i>bare stanhope</i></b><br>A: five &nbsp;&middot;&nbsp; B: glock</li>
+    </ul>
+    <p class="meta">The WARD tape waits in a yellow box where you land in the underworld; the others turn up out in the ruins. In-game music otherwise is a quiet synth bed (<kbd>M</kbd> to toggle).</p>
+
+    <h2>Ideas &amp; influences</h2>
+    <p><b>Ubik</b> and its reality-spray, after Philip K. Dick.</p>
+    <p>The <b>underworld</b> a torn Ubik spray opens onto, after the <b>Backrooms</b> and the liminal-spaces genre.</p>
+    <p>The console language's name and the older machine intelligence found in the ruins, after Robin Milner's <b>ML</b> and Joseph Weizenbaum's <b>ELIZA</b>/<b>SLIP</b>.</p>
+    <p>"Vector theory" and the Magnifica Humanitas fragments draw on David's own writing (stunlaw).</p>
+    <p>Character and animal art: Kenney (kenney.nl), CC0.</p>
+
+    <div class="foot">v1.29 &middot; github.com/dmberry/postAI</div>
+  </div>
+</div>
 <div id="help">
   <div class="panel">
     <h1>postAI</h1>
@@ -94,6 +277,7 @@
       <button class="helpTab" data-panel="survival" type="button">Survival</button>
       <button class="helpTab" data-panel="animals" type="button">Animals</button>
       <button class="helpTab" data-panel="machines" type="button">Machines</button>
+      <button class="helpTab" data-panel="settings" type="button">Settings</button>
     </div>
 
     <div class="helpPanel active" data-panel="controls">
@@ -122,12 +306,17 @@
     <h3>Combat &amp; tools</h3>
     <table>
       <tr><td><kbd>E</kbd> / <kbd>/</kbd> / left click</td><td>Use the held tool: swing, fire, dig, chop, throw a bomb</td></tr>
+      <tr><td>Aim a bomb</td><td>A held bomb lands on the tile under the cursor, out to its throw range — click close to drop it near, farther to lob it out</td></tr>
       <tr><td><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd></td><td>Select a pocket slot</td></tr>
       <tr><td><kbd>5</kbd></td><td>Select the backpack's spare-weapon slot (if you have one)</td></tr>
       <tr><td><kbd>G</kbd></td><td>Swap the held weapon with the selected pocket</td></tr>
       <tr><td><kbd>F</kbd></td><td>Drop the selected pocket's contents (or the held tool)</td></tr>
       <tr><td>Click a slot</td><td>Equip it straight away (click the hands slot to stow whatever's held)</td></tr>
-      <tr><td>Drag a slot</td><td>Move or swap items between pockets, hands, and backpack storage</td></tr>
+      <tr><td>Drag a slot</td><td>Move or swap items between pockets, hands, and backpack storage; with the pack open (<kbd>I</kbd>), drag an item off onto empty space to drop it on the ground</td></tr>
+      <tr><td>Click the forcefield</td><td>Arm or disarm it in place, wherever it's carried — no need to hold it</td></tr>
+      <tr><td>Click the electro-compass</td><td>Arm or disarm it in place — stays on until you drop it</td></tr>
+      <tr><td>Click the pack badge</td><td>Opens the full backpack panel (same as <kbd>I</kbd>)</td></tr>
+      <tr><td><kbd>Enter</kbd> (in a terminal)</td><td>Runs the typed RON-ML command; <kbd>&uarr;</kbd>/<kbd>&darr;</kbd> recall previous commands</td></tr>
       <tr><td><kbd>R</kbd></td><td>Reprogram a drained (battery-flat) robot standing next to you — costs a battery; otherwise reads the first book in your pockets</td></tr>
       <tr><td><kbd>C</kbd></td><td>Craft (OB-gun, or a wave gun once you have eight circuit boards)</td></tr>
     </table>
@@ -135,7 +324,8 @@
     <h3>Survival</h3>
     <table>
       <tr><td><kbd>Q</kbd></td><td>Eat the first edible thing in your pockets</td></tr>
-      <tr><td><kbd>B</kbd></td><td>Rest ten minutes, restoring health (not while hurt-free, on cooldown, or something's hunting you)</td></tr>
+      <tr><td><kbd>B</kbd></td><td>Lie down and rest: the screen dims, the clock spins on, and health returns (not while hurt-free, on cooldown, or something's hunting you)</td></tr>
+      <tr><td>Dropped loot</td><td>Items left on the ground decay over time — perishables fast, salvage slower, dropped weapons slowest; they flicker as they're about to go. A few irreplaceable things never vanish. Grab what you want before it's gone</td></tr>
     </table>
 
     <h3>Menus &amp; info</h3>
@@ -143,7 +333,7 @@
       <tr><td><kbd>I</kbd></td><td>Backpack</td></tr>
       <tr><td><kbd>K</kbd></td><td>Skills &amp; knowledge</td></tr>
       <tr><td><kbd>V</kbd></td><td>Armoury — every weapon found so far, with a power rating</td></tr>
-      <tr><td><kbd>J</kbd></td><td>Archive (scroll with the wheel or up/down keys)</td></tr>
+      <tr><td><kbd>J</kbd></td><td>Scrapbook (scroll with the wheel or up/down keys)</td></tr>
       <tr><td><kbd>H</kbd></td><td>Toggle this help</td></tr>
       <tr><td>Click away</td><td>Closes whichever of the above is open, same as clicking outside this panel</td></tr>
     </table>
@@ -151,8 +341,9 @@
     <h3>System</h3>
     <table>
       <tr><td><kbd>P</kbd></td><td>Pause the game</td></tr>
-      <tr><td><kbd>M</kbd></td><td>Toggle the ambient music</td></tr>
-      <tr><td><kbd>N</kbd></td><td>Start a new game (asks first — wipes saved progress)</td></tr>
+      <tr><td><kbd>M</kbd></td><td>Cycle the music: three found tapes, the old piano bed, or off</td></tr>
+      <tr><td><kbd>N</kbd></td><td>Open the notepad — any pages you've found worth keeping, no terminal needed</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>N</kbd></td><td>Start a new game (asks first — wipes saved progress; a bare N no longer does this)</td></tr>
       <tr><td><kbd>S</kbd></td><td>On the Certificate of Death: copy it to the clipboard as an image (or click the Copy button)</td></tr>
     </table>
     </div><!-- /controls -->
@@ -190,21 +381,26 @@
     <div class="machineGallery" id="machineGallery">
       <div class="machineChip"><img id="gal-t1" alt="T1"><span><b>T1</b>wheeled hunter</span></div>
       <div class="machineChip"><img id="gal-t2" alt="T2"><span><b>T2</b>biped stalker</span></div>
+      <div class="machineChip"><img id="gal-t3" alt="T3"><span><b>T3</b>ambush sniper</span></div>
       <div class="machineChip"><img id="gal-w1" alt="W1"><span><b>W1</b>revenge squad</span></div>
       <div class="machineChip"><img id="gal-w2" alt="W2"><span><b>W2</b>water droid</span></div>
       <div class="machineChip"><img id="gal-w3" alt="W3"><span><b>W3</b>repair drone</span></div>
       <div class="machineChip"><img id="gal-w4" alt="W4"><span><b>W4</b>laser hunter</span></div>
+      <div class="machineChip"><img id="gal-w5" alt="W5"><span><b>W5</b>gardener drone</span></div>
     </div>
     <table>
       <tr><td>T1</td><td>A wheeled hunter, faster than your walk. It cannot climb: put any rise between you, or lure it into a hollow and it is trapped for good. Sprinting outruns it.</td></tr>
       <tr><td>T2</td><td>A biped stalker that walks exactly at your pace and does not tire. Sprint to break away, or stand and fight.</td></tr>
+      <tr><td>T3</td><td>Rare, and unlike a T1/T2 it never chases: it nests beside a tree near its tower and waits, unnoticed, until it actually gets a clear shot. Then its twin eyes fire an orange dual laser volley — roughly double a W4's bolt — before going quiet again for a long recovery. Get in close and it'll only back off enough to keep the shot lined up; at point-blank range it claws instead.</td></tr>
     </table>
-    <p>Every hunting machine — T1, T2, W1, W4 — genuinely needs to <b>see</b> you: break its line of sight behind a wall or a hill for a few seconds straight and it gives up the chase and wanders off, only re-noticing you later if you wander back within range. Hiding is a real tactic, not just running far enough.</p>
-    <p>Whatever is in your hand can be swung at them, even nothing at all — bare fists land a weak hit, a proper tool or blade lands a much harder one. Your penknife barely scratches them. <b>RON</b> — a resistance calling itself Reality or Nothing, whether or not it's still out there — hid weapons in crates inside the buildings: search them (<kbd>E</kbd>) for crowbars, bats, machetes, and if you are lucky the guns: a <b>stun-gun</b> (drops a machine cold for a while), an <b>electro-gun</b> (fuses one into a wreck you can mine for scrap), a <b>pistol</b> or a <b>shotgun</b> (holes in anything, but gunfire ruins the salvage). Guns are dead weight without <b>batteries, ammo, or shells</b>, hidden in the same crates. None of them shoot through a wall — a solid object blocks a shot exactly like it blocks a step. Pulling the trigger with nothing in your sights still fires — and still spends the round.</p>
-    <p>On defence, the crates sometimes hide <b>shields</b>. Hold a <b>riot shield</b> and a laser coming at your front is absorbed; a rarer <b>mirror shield</b> throws it straight back at the machine that fired it. A shield only guards the way you're facing, and holding one means no weapon in that hand. Rarest of all is the <b>forcefield</b>: hold it and a green energy shell wraps right around you that nothing — shot or blow, from any direction — can get through. It runs hot, burning a battery a minute and pulling a fresh one from your kit when a cell dies; with none left, the field drops.</p>
+    <p>Every hunting machine — T1, T2, T3, W1, W4 — genuinely needs to <b>see</b> you: break its line of sight behind a wall or a hill for a few seconds straight and it gives up the chase and wanders off, only re-noticing you later if you wander back within range. Hiding is a real tactic, not just running far enough. The <b>T3</b> takes this furthest: unlike the others it never notices you by proximity alone, only by an actual clear line of sight, so staying out of its sight lines in the first place is the whole game against it.</p>
+    <p>Whatever is in your hand can be swung at them, even nothing at all — bare fists land a weak hit, a proper tool or blade lands a much harder one. Your penknife barely scratches them. <b>RON</b> — a resistance calling itself Reality or Nothing, whether or not it's still out there — hid weapons in crates inside the buildings: search them (<kbd>E</kbd>) for crowbars, bats, machetes, and if you are lucky the guns: a <b>stun-gun</b> (drops a machine cold for a while), an <b>electro-gun</b> (destroys a machine outright in a shower of sparks, scares off nearby animals, and its arc even scorches <b>obelisks</b> — a slower way to fell a tower than the OB-gun, but it works; its internal cell slowly self-charges while carried, so it never stays flat for long), a <b>pistol</b> or a <b>shotgun</b> (holes in anything, but gunfire ruins the salvage). Guns are dead weight without <b>batteries, ammo, or shells</b>, hidden in the same crates. None of them shoot through a wall — a solid object blocks a shot exactly like it blocks a step. Pulling the trigger with nothing in your sights still fires — and still spends the round.</p>
+    <p>On defence, the crates sometimes hide <b>shields</b>. Just <b>carrying</b> one protects you — no need to hold it, and a faint deflector ring shows around you while it's up. A <b>riot shield</b> absorbs a laser from any direction; a rarer <b>mirror shield</b> throws it straight back to <b>destroy the machine that fired it</b>. Rarest of all is the <b>forcefield</b> — but it's the one exception that needs a deliberate switch: <b>click it</b> in whichever slot it's sitting in (hand, pocket, or pack) to <b>arm</b> it. Once armed and carried, a green energy shell wraps right around you that nothing — shot or blow — can get through, burning a battery a minute and pulling a fresh one from your kit when a cell dies; with none left, the field drops until you feed it one. Click it again any time to disarm it and stop the drain.</p>
     <p>Every machine runs on a battery: hunting drains it and they crawl home to their obelisk to recharge. One that gets stuck runs flat where it stands. A flat machine can be <b>reprogrammed</b> (<kbd>R</kbd>, costs a battery) — it turns friendly, follows you, and a friendly T2 fells trees for you — or, if you'd rather just be rid of it, it can be <b>destroyed</b> like any other kill: it can't fight back while flat, and it still drops scrap.</p>
-    <p>The obelisks <b>can</b> be brought down. Carry a stun-gun, an electro-gun and a Wi-Fi block together and you're prompted to build an <b>OB-gun</b> (<kbd>C</kbd>): five burns topple a tower into a heap of circuit boards, batteries and scrap. A rare <b>insane bomb</b> can level one on its own. Every tower is assigned one of eight circuit numbers when the world is built, so toppling every obelisk always gets you a complete set of one to eight — collect them and you can build a <b>wave gun</b> (<kbd>C</kbd>), which fans laser fire through a whole crowd at once. <b>Bring down every obelisk on the map and you win</b> — the AI is defeated before SKYLINK ever wakes. Run out the countdown first and it wakes instead: every surviving tower lights up and links to its neighbours in a web of bright blue lasers, and the factory throws wave after wave of W4s at you. But it isn't hopeless — <b>topple a tower while SKYLINK is blazing and the whole web collapses</b>, shutting the purge down for a reprieve, until a <b>repair drone</b> reaches the wreck and raises the tower again. Keep knocking towers down faster than they can be rebuilt and you can still win outright, even during the purge.</p>
-    <p>Careful with the OB-gun's beam, though: fired at a robot rather than a tower, it doesn't kill — it corrupts the machine into a <b>zombie</b>, marked by a sickly green glow. A zombie shrugs off every weapon in the game except the <b>bow</b> and the <b>wave gun</b>; anything else just bounces off. W1 hunters (below) are already the AI's own revenge squad and can't be corrupted this way — the beam just damages them like anything else.</p>
+    <p>The obelisks <b>can</b> be brought down. Carry a stun-gun, an electro-gun and a Wi-Fi block together and you're prompted to build an <b>OB-gun</b> (<kbd>C</kbd>): five burns topple a tower into a heap of circuit boards, batteries, scrap, and an <b>access chip</b> — every tower you fell always leaves a chip, so bringing one down hands you the means to jack into the others. A rare <b>insane bomb</b> can level one on its own (and it, too, drops the chip). Every tower is assigned one of eight circuit numbers when the world is built, so toppling every obelisk always gets you a complete set of one to eight — collect them and you can build a <b>wave gun</b> (<kbd>C</kbd>), which fans laser fire through a whole crowd at once. <b>Bring down every obelisk on the map and you win</b> — the AI is defeated before SKYLINK ever wakes. Run out the countdown first and it wakes instead: every surviving tower lights up and links to its neighbours in a web of bright blue lasers, and the factory throws wave after wave of W4s at you. But it isn't hopeless — <b>topple a tower while SKYLINK is blazing and the whole web collapses</b>, shutting the purge down for a reprieve, until a <b>repair drone</b> reaches the wreck and raises the tower again. Keep knocking towers down faster than they can be rebuilt and you can still win outright, even during the purge.</p>
+    <p>Each obelisk has a small green <b>terminal screen</b> on it. Walk up and <b>click the screen itself</b> to jack in — but you need an <b>access chip</b> to do anything. You get chips two ways: felling any obelisk always drops one, and every machine you destroy sheds a <b>chip fragment</b> — collect eight and press <kbd>C</kbd> to assemble a whole chip. Carry a chip (you don't have to hold it) and clicking opens a channel: a connect bar runs, then a live console prompt, and while you're logged in the obelisk <b>hides you from the machines</b>. Click a terminal with no chip and you get the AI's own console instead — a wall of moving data you can't use. Carry the <b>electro-compass</b> and <b>click it</b> to arm it — it stays armed until you drop it. Once armed, your aim marker becomes a small cluster of needles, one for each nearest thing worth finding, colour-coded: blue for the factory, green for an obelisk, yellow for a dropped backpack, orange for a dropped OB-gun.</p>
+    <p>The console at the terminal runs <b>RON-ML</b> — a tiny language the resistance left scattered through the ruins as runnable scraps, half command and half operator's note. Type <code>scan</code> to list the obelisks on the wire, <code>scan |&gt; nearest</code> to pipe that straight to the closest one. The easy way in needs no key at all: <code>loop node</code> pins an infinite loop into it, freezing the node and its garrison where they stand (its light burns white-hot and it starts smoking) until a repair drone eventually works the loop back out. With an <b>AI key</b> (dropped by a destroyed W-factory) you can go further: <code>hack node</code> hands you that node's own key, and only with that key does <code>crash node key</code> knock it properly dark for a while (a repair drone will eventually raise it again — this too is a tactic, not a substitute for actually toppling a tower). <code>let k = hack OB-XXXX in crash OB-XXXX k</code> is the whole two-step spelled out; the fragments you find teach it one idea at a time — and each one that teaches a real command copies itself into your <b>notepad</b> — a general page-collector, not just for RON-ML: type <code>notes</code> at a terminal, or just press <kbd>N</kbd> anywhere, to open it as a real page you flip through (&larr; / &rarr; or the on-screen buttons), not a wall of console text. <code>sleep 30</code> and <code>repel</code> (both need the key too) buy you a quiet minute nearby; <code>rewind 3</code> (also needs the key, and only before SKYLINK actually comes online) claws hours back off the deadline clock. Type <code>help</code> at the terminal for the full command list (or <code>help crash</code> for detail on one). Find and read <b>the RON-DOS Operator's Manual</b> (a book in a cache, with torn pages scattered about) and the console starts <b>autocompleting</b> verbs for you — faded ghost text you accept with <kbd>Tab</kbd> (or <kbd>&rarr;</kbd> at the end of the line, if your browser keeps Tab for itself). <code>map</code> pulls up a schematic of the AI's whole territory — every obelisk and machine, the factory, and the <b>mainframe</b> you're hunting for, so you have a heading to strike out toward. <code>print</code> runs off a <b>physical copy</b> that drops at your feet: pick it up and just <b>click it in your inventory</b> (or hold it and press <kbd>E</kbd>) to unfold the same map anywhere, away from a terminal. Get something wrong and the terminal tells you what to try instead — it's built to teach, not to gatekeep. There's also a secret word, never spelled out anywhere — find it and the terminal will drop you straight back into the world to watch what it does.</p>
+    <p>The OB-gun's beam is just as final against a machine as against a tower: any robot caught in the line is <b>wiped out on the spot</b>, whatever its class — though, like any gunfire, it ruins most of the salvage. The limit is ammunition: every burn spends a battery, and batteries are better saved for the towers themselves.</p>
     <p>Somewhere on the map sits a <b>W-factory</b>: a huge 8×8 foundry where everything mechanical that isn't an obelisk-side T1/T2 is actually built, not at the towers. You can bring it down — hammer its hull with a weapon (a damage bar shows over it when you're close) or catch it in a bomb blast; after many blows it collapses into a walkable heap and drops an <b>AI key</b>, a way into one AI's mainframe (more use for that to come). Kill the factory and its waves and repair drones stop. Topple a tower and the factory dispatches a <b>revenge squad of W1 hunters</b>, tougher and faster than a T2, but strictly melee — a hit needs one standing right on top of you, not just nearby. W1s attack in real waves — each one closes in and strikes, then falls back to regroup, then closes in again — and a squad spreads out to surround you rather than piling onto one spot. They track a position <b>triangulated from the obelisk network</b>, refreshed every few seconds rather than live, so even a jammed Wi-Fi block only slows them down, not stops them. The factory also fields fresh W1 waves on its own clock, an unarmed <b>W3 repair drone</b> whenever a damaged tower is left standing, and a <b>W4 laser hunter-killer</b> — unlike a W1 it never closes to melee, holding its range and firing on you instead, both the instant you attack an obelisk and, independently, every half hour of game time.</p>
     <p>Out on the water, <b>W2 droids</b> hover in squads just above the river. Idle, they drift; but come near them and the whole squad turns and fires on you in waves. Their shots only reach you <b>while you're in the water</b> though — stay on dry land or a bridge and you can pick the squad off from the bank in safety.</p>
     <p>Weapon strikes on any machine now throw a shower of <b>sparks</b> on impact.</p>
@@ -216,11 +412,86 @@
 
     <h2>The world</h2>
     <p>A river divides the map; the bridges are the only crossings. Streams can be waded, slowly. Away from the towns the ground gets properly rugged — steep, tall hills and deep hollows, not just gentle rises — and high ground costs stamina to climb. Rubble and rocks can be climbed too, one step up like any other rise, and walked across the top of once you're up there — building walls stay solid, so a town or a house is still a real boundary, not just another slope. Somewhere in the ruins, the story of what happened here is waiting to be found. Sprayed slogans turn up here and there on the walls — some anti-machine, some signed by RON — and abandoned cars sit dead on the roads where the grid failed them.</p>
+
+    <h2>Ubik &amp; the tear</h2>
+    <p>A battered can of <b>Ubik</b> turns up somewhere in the ruins. Each spray brightens a patch of ground and everything on it, warmer and more real, fading back after a while — and any hunting machine that wanders into the bright patch loses its mind for as long as it lingers, spinning and juddering and swinging at whatever other machine strays close instead of hunting you. Spray the <b>same spot three times</b> and it does something else: it tears clean through, and holds open. Step into the tear and you fall out of the world entirely, into the <b>underworld</b> — a vast, humming, fluorescent-lit sprawl: huge rooms of every size scattered across an endless sea of worn yellow floor, joined by road-worn corridors, furniture stacked around at random, the odd room washed a wrong baby-blue, strip-lights flickering overhead. Something pale wanders the far rooms; it only comes for you if it actually sees you. The way back is a <b>plain door</b> set in the wall of the room you arrive in — walk up to it to leave. It being such an ordinary door down here is the unsettling part. Wander deeper, toward the thing and the cassette left in the farthest room, at your own risk; keep your eyes on it and it can't reach you.</p>
+
+    <h2>Walkman</h2>
+    <p>You carry a <b>walkman</b> on a strap — its slot sits on the dashboard. It takes <b>cassette tapes</b>; you start with one (meme's "compilation"), and more turn up out in the ruins and down in the underworld. <b>Click the tape</b> in the walkman to play it: once for side A, again to flip to side B, again to stop. Each side can hold more than one track and loops round. The reels turn while it plays and the artist and track drift slowly across the little screen below. The game's own music is just a quiet synth bed (or off, toggled with <kbd>M</kbd>) — the only way to hear the tapes is to start one on the walkman.</p>
     </div><!-- /survival (part 2) -->
+
+    <div class="helpPanel" data-panel="settings">
+    <h2>Volume</h2>
+    <p class="settingsRow">
+      <input type="range" id="volumeSlider" min="0" max="100" value="100">
+      <span id="volumeLabel">100%</span>
+    </p>
+
+    <h2>Music</h2>
+    <p class="settingsRow musicChoice">
+      <label><input type="radio" name="musicMode" value="synth"> piano bed</label>
+      <label><input type="radio" name="musicMode" value="off"> off</label>
+    </p>
+    <p class="meta">Same as pressing <kbd>M</kbd>. Found tapes play on the <b>walkman</b> on the dashboard, not here.</p>
+    </div><!-- /settings -->
 
     <p class="meta">Press <kbd>H</kbd> or click anywhere outside this panel to close.</p>
   </div>
 </div>
-<script type="module" src="src/main.js"></script>
+<div id="obterminal">
+  <div class="crt">
+    <div id="obterminal-connect">
+      <div class="connect-label">OPENING CHANNEL...</div>
+      <div class="connect-track"><div id="obterminal-bar"></div></div>
+    </div>
+    <div id="obterminal-body">
+      <pre id="obterminal-screen"></pre>
+      <div id="obterminal-inputrow"><span id="obterminal-prompt">&gt;</span><input id="obterminal-input" type="text" autocomplete="off" spellcheck="false"><span id="obterminal-ghost"></span></div>
+    </div>
+    <div class="crt-hint">click outside to disconnect</div>
+  </div>
+</div>
+<div id="aios">
+  <div class="crt aios-crt">
+    <div class="aios-header" id="aios-header">SKYLINK CORE  //  ACCESS DENIED  //  NO KEY</div>
+    <pre id="aios-screen"></pre>
+    <div class="crt-hint">no access chip · click outside to back out</div>
+  </div>
+</div>
+<div id="ronmap">
+  <div class="crt">
+    <div id="ronmap-title">SKYLINK TERRITORY MAP</div>
+    <canvas id="ronmap-canvas" width="512" height="512"></canvas>
+    <div id="ronmap-legend">
+      <span><b style="color:#4fe07a">■</b> obelisk</span>
+      <span><b style="color:#e0552f">■</b> machine</span>
+      <span><b style="color:#e0b53a">■</b> factory</span>
+      <span><b style="color:#ff3d8b">✦</b> mainframe</span>
+      <span><b style="color:#67d6ff">◉</b> you</span>
+    </div>
+    <div class="crt-hint">click outside to close</div>
+  </div>
+</div>
+<div id="ronnotebook">
+  <div class="page">
+    <div class="spine"></div>
+    <div id="ronnotebook-title">NOTEPAD</div>
+    <div id="ronnotebook-body"></div>
+    <div id="ronnotebook-footer">
+      <button class="nb-btn" id="ronnotebook-prev" type="button">&larr; prev</button>
+      <span id="ronnotebook-page-label"></span>
+      <button class="nb-btn" id="ronnotebook-next" type="button">next &rarr;</button>
+    </div>
+    <div class="nb-hint">&larr; &rarr; to flip &middot; click outside to close</div>
+  </div>
+</div>
+<script type="module">
+  // On a phone, don't load the game at all — show the Walkman gate instead
+  // (see mobile-gate.js). On desktop, show the title screen (same component in
+  // 'title' mode); it boots the game on Start / Continue.
+  import { isMobile, initMobileGate, initTitleScreen } from './src/game/mobile-gate.js';
+  if (isMobile()) initMobileGate();
+  else initTitleScreen();
+</script>
 </body>
 </html>

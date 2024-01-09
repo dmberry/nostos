@@ -7,7 +7,7 @@ const TRACKED = new Set([
   'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
   'ShiftLeft', 'ShiftRight',
   'KeyE', 'Slash', 'Space', 'KeyQ', 'KeyH', 'KeyR', 'KeyG', 'KeyF', 'KeyI', 'KeyP', 'KeyZ', 'KeyJ',
-  'KeyK', 'KeyC', 'KeyM', 'KeyV', 'KeyN', 'KeyB',
+  'KeyK', 'KeyC', 'KeyM', 'KeyV', 'KeyN', 'KeyB', 'BracketRight',
   'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5',
 ]);
 
@@ -35,7 +35,13 @@ export class Input {
       const tag = e.target && e.target.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       if (TRACKED.has(e.code)) {
-        if (!e.repeat && !this.down.has(e.code)) this.pressed.add(e.code);
+        if (!e.repeat && !this.down.has(e.code)) {
+          this.pressed.add(e.code);
+          // N alone opens the notepad; only Ctrl/Cmd+N starts a new game
+          // (which wipes the run) — split here so a bare N can never trigger
+          // the destructive action by accident.
+          if (e.code === 'KeyN') this._keyNCtrl = e.ctrlKey || e.metaKey;
+        }
         this.down.add(e.code);
         e.preventDefault();
       }
@@ -221,7 +227,27 @@ export class Input {
     return this.consumePress('KeyV');
   }
 
+  // Show/hide the corner minimap ( ] ).
+  minimapTogglePressed() {
+    return this.consumePress('BracketRight');
+  }
+
+  // Ctrl/Cmd+N only — a bare N is notesPressed() below, so a stray tap can
+  // never wipe the run.
   newGamePressed() {
-    return this.consumePress('KeyN');
+    if (this.pressed.has('KeyN') && this._keyNCtrl) {
+      this.pressed.delete('KeyN');
+      return true;
+    }
+    return false;
+  }
+
+  // Bare N opens the notepad directly, no terminal needed.
+  notesPressed() {
+    if (this.pressed.has('KeyN') && !this._keyNCtrl) {
+      this.pressed.delete('KeyN');
+      return true;
+    }
+    return false;
   }
 }

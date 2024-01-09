@@ -35,6 +35,15 @@ export class DayNight {
     this.elapsed += (gameMinutes / 60) * (this.dayLength / 24);
   }
 
+  // RON-ML `rewind`: the inverse of advance — claws elapsed game *hours*
+  // back out of the clock, pushing the SKYLINK deadline further off.
+  // Clamped at `elapsed <= 0` (can't rewind before the run started), which
+  // in turn naturally caps hoursLeft() at a full DEADLINE_DAYS*24 — no need
+  // for a separate ceiling here.
+  rewind(gameHours) {
+    this.elapsed = Math.max(0, this.elapsed - (gameHours / 24) * this.dayLength);
+  }
+
   // Total game hours since day 1, 00:00.
   get totalHours() {
     return this.startHour + (this.elapsed / this.dayLength) * 24;

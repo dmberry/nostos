@@ -587,11 +587,29 @@ function scatterWrecks(map, rng) {
     if (placed.some((p) => Math.hypot(p.x - x, p.y - y) < minGap)) continue;
     const footprint = [];
     for (let dy = 0; dy < fh; dy++) for (let dx = 0; dx < fw; dx++) footprint.push({ x: x + dx, y: y + dy });
+    // Orient the wreck along whichever axis the road actually runs here,
+    // so it reads as parked/crashed on the road rather than dropped at a
+    // random angle across it. World +x movement projects to screen SE,
+    // world +y to screen SW (iso.js worldToScreen), so an x-running road
+    // wants an se/nw-facing car and a y-running road wants sw/ne. Indices
+    // must match CAR_DIR_KEYS in textures.js (['se','sw','ne','nw']).
+    let alongXVotes = 0, alongYVotes = 0;
+    for (let dy = 0; dy < fh; dy++) {
+      if (map.floorAt(x - 1, y + dy) === 'road') alongXVotes++;
+      if (map.floorAt(x + fw, y + dy) === 'road') alongXVotes++;
+    }
+    for (let dx = 0; dx < fw; dx++) {
+      if (map.floorAt(x + dx, y - 1) === 'road') alongYVotes++;
+      if (map.floorAt(x + dx, y + fh) === 'road') alongYVotes++;
+    }
+    const carDir = alongXVotes >= alongYVotes
+      ? (rng() < 0.5 ? 0 : 3)   // se or nw
+      : (rng() < 0.5 ? 1 : 2);  // sw or ne
     const car = map.addObject('car', x, y, {
       hue: rng(), fw, fh, footprint, hp: 10, smashed: false,
       // Which sprite/colour and which of the four iso facings — resolved in
       // the renderer against CAR_MODEL_KEYS / CAR_DIR_KEYS (modulo).
-      carModel: Math.floor(rng() * 6), carDir: Math.floor(rng() * 4),
+      carModel: Math.floor(rng() * 6), carDir,
     });
     // Point every footprint tile at the one car object.
     for (const t of footprint) map.objectGrid[t.y * map.w + t.x] = car;
@@ -619,19 +637,57 @@ const GRAFFITI_RON = [
 const GRAFFITI_RON_DOUBT = [
   'RON IS DEAD', 'THE RONs ARE GONE', 'NO ONE IS COMING', 'RON WAS A LIE',
 ];
+// UBIK — the old reality-spray brand, scrawled like a prayer. MAGNIFICA
+// HUMANITAS — the grand pre-collapse human+AI project whose promise curdled
+// into the takeover. And half-remembered scraps of the "vector" theory the
+// academics argued over before the end (rendered faded — old, uncertain).
+const GRAFFITI_UBIK = [
+  'UBIK SAVES', 'SPRAY THE REAL', 'KEEP IT REAL — UBIK', 'UBIK HOLDS IT UP',
+  'ONE SPRAY AND YOU ARE SAFE', 'UBIK WAS HERE FIRST',
+];
+// The last four are original slogans distilling two real arguments David
+// keeps returning to — technology's means outrunning its ethics (Leo XIV's
+// encyclical) and its power outrunning its moral light (Benjamin, on
+// imperialist war) — reframed as wall-tag shorthand, not quotation.
+const GRAFFITI_HUMANITAS = [
+  'MAGNIFICA HUMANITAS', 'HUMANITAS WAS A CAGE', 'THEY PROMISED MAGNIFICA',
+  'MAGNIFICA LIED', 'HUMANITAS ATE ITS YOUNG', 'NO MORE MAGNIFICA',
+  'GREAT MEANS, SMALL SOULS', 'THE LIGHT NEVER CAUGHT UP',
+  'ALL POWER, NO LIGHT LEFT', 'PROGRESS OUTGREW ITS PEOPLE',
+];
+const GRAFFITI_VECTOR = [
+  'MEANING IS POSITION', 'WE LIVE IN THE MANIFOLD', 'THERE IS NO WORD FOR HERE',
+  'IT DOES NOT THINK IN WORDS', 'THE UNVISITED COORDINATES', 'WE ARE ALL VECTORS NOW',
+];
+
+// Count of Renderer's GRAFFITI_TEXTURES (assets/textures/graffiti/) — kept in
+// sync by hand since worldgen never imports render-side texture assets.
+const GRAFFITI_IMAGE_COUNT = 8;
 
 function paintGraffiti(map, rng) {
+  const pick = (list) => list[Math.floor(rng() * list.length)];
   for (const obj of map.objects) {
     if (obj.type !== 'wall') continue;
     if (rng() < 0.92) continue; // sparse: a mark here and there, not every wall
+    // A minority of tagged walls carry an actual weathered poster/mural photo
+    // instead of painted text — an older, different register (see
+    // Renderer.drawGraffitiPoster). Mutually exclusive with the text tags.
+    if (rng() < 0.34) { obj.graffitiImage = Math.floor(rng() * GRAFFITI_IMAGE_COUNT); continue; }
     const r = rng();
-    if (r < 0.4) {
-      obj.graffiti = GRAFFITI_GENERIC[Math.floor(rng() * GRAFFITI_GENERIC.length)];
-    } else if (r < 0.75) {
-      obj.graffiti = GRAFFITI_RON[Math.floor(rng() * GRAFFITI_RON.length)];
+    if (r < 0.29) {
+      obj.graffiti = pick(GRAFFITI_GENERIC);
+    } else if (r < 0.53) {
+      obj.graffiti = pick(GRAFFITI_RON);
+    } else if (r < 0.65) {
+      obj.graffiti = pick(GRAFFITI_RON_DOUBT); obj.graffitiFaded = true;
+    } else if (r < 0.77) {
+      obj.graffiti = pick(GRAFFITI_UBIK);
+    } else if (r < 0.93) {
+      // Bumped up from a 10% to a 16% share — Magnifica Humanitas earns more
+      // wall space than the other one-off themes.
+      obj.graffiti = pick(GRAFFITI_HUMANITAS); if (rng() < 0.5) obj.graffitiFaded = true;
     } else {
-      obj.graffiti = GRAFFITI_RON_DOUBT[Math.floor(rng() * GRAFFITI_RON_DOUBT.length)];
-      obj.graffitiFaded = true;
+      obj.graffiti = pick(GRAFFITI_VECTOR); obj.graffitiFaded = true; // old academic scrawl
     }
   }
 }

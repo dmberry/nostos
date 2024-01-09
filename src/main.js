@@ -8,13 +8,30 @@ import { makeRng } from './game/rng.js';
 import { DayNight } from './game/daynight.js';
 import { Minimap } from './game/minimap.js';
 import { spawnBirds, updateBirds } from './game/birds.js';
-import { spawnRobots, updateRobots, spawnW1s, spawnW3, spawnW4, drawRobot } from './game/robots.js';
+import { spawnRobots, updateRobots, spawnW1s, spawnW3, spawnW4, spawnW5, spawnM6, drawRobot } from './game/robots.js';
 import { resolveBodyOverlaps } from './game/collision.js';
 import { spawnWaterDroids, updateWaterDroids, drawWaterDroid } from './game/waterdroids.js';
-import { Lore } from './game/lore.js';
+import { Lore, FRAGMENTS } from './game/lore.js';
 import { ITEMS } from './game/items.js';
 import { sfx } from './engine/sound.js';
 import { worldToScreen } from './engine/iso.js';
+import { runRonml } from './game/ronml.js';
+import { createFortress } from './game/fortress.js';
+import { createUnderworldPocket, spawnUnderworldCreature, updateUnderworldCreatures } from './game/underworld.js';
+import { CHOIR_NOTES, CHOIR_DURATION } from './engine/choir-notes.js';
+
+// Note onsets split into four pitch registers, so each singing machine can be
+// put on a different vocal "part" and its red light flashes to that part's
+// notes — a choir of out-of-step blinking lights (see the flash sync in the
+// update loop and Robots.sensorStyle).
+const CHOIR_REGISTERS = (() => {
+  const bands = [[], [], [], []];
+  const lo = 45, span = (72 - 45) / 4;
+  for (const [t, , m] of CHOIR_NOTES) {
+    bands[Math.max(0, Math.min(3, Math.floor((m - lo) / span)))].push(t);
+  }
+  return bands.map((a) => a.sort((x, y) => x - y));
+})();
 
 // Each new game gets its own random seed, persisted so a continuing run
 // (autosave) always regenerates the same map. Without this every playthrough
@@ -31,14 +48,15 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '0.79';
+const VERSION = '1.29';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
 const input = new Input(window, canvas);
-const { map, spawn } = buildWorld(WORLD_SEED);
+let { map, spawn } = buildWorld(WORLD_SEED);
+const overworldMap = map; // stable handle: `map` gets reassigned to the underworld pocket and back
 const player = new Player(spawn.x, spawn.y);
-player.map = map; // for death drops when damage comes from animals
+player.map = map; // for death drops when damage comes from animals (kept in sync on underworld enter/exit)
 const animals = spawnAnimals(map, WORLD_SEED, { x: spawn.x, y: spawn.y, r: 12 });
 
 // Scatter loot: torches and tinned food in building interiors (night and
@@ -56,7 +74,11 @@ const animals = spawnAnimals(map, WORLD_SEED, { x: spawn.x, y: spawn.y, r: 12 })
   const drop = (list, item, qty) => {
     if (!list.length) return;
     const [x, y] = list[Math.floor(rng() * list.length)];
-    map.groundItems.push({ item, qty, x: x + 0.5, y: y + 0.5 });
+    // keep: true — world-placed loot never decays. Only things that appear
+    // during play (combat drops, items you drop, loot spilled from an opened
+    // box) run the decay timer, so the world isn't stripped bare before you
+    // reach it, and a cache still holds its prize whenever you find it.
+    map.groundItems.push({ item, qty, x: x + 0.5, y: y + 0.5, keep: true });
   };
   for (let i = 0; i < 12; i++) drop(boards, 'torch', 1);
   for (let i = 0; i < 14; i++) drop(boards, 'tin', 1);
@@ -66,6 +88,32 @@ const animals = spawnAnimals(map, WORLD_SEED, { x: spawn.x, y: spawn.y, r: 12 })
   for (const b of books) drop(boards, b, 1);
   // A single backpack, somewhere in the ruins.
   drop(boards, 'backpack', 1);
+  // A few more spare backpacks dropped out in the forests, where they're
+  // easier to stumble on than deep in the ruins: open grass tiles that sit
+  // next to a tree (so they read as "in the woods", not on bare meadow).
+  const forestGrass = [];
+  for (let y = 1; y < map.h - 1; y++) {
+    for (let x = 1; x < map.w - 1; x++) {
+      if (map.floorAt(x, y) !== 'grass' || map.objectAt(x, y)) continue;
+      let nearTree = false;
+      for (let dy = -1; dy <= 1 && !nearTree; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const o = map.objectAt(x + dx, y + dy);
+          if (o && o.type === 'tree') { nearTree = true; break; }
+        }
+      }
+      if (nearTree) forestGrass.push([x, y]);
+    }
+  }
+  for (let i = 0; i < 4; i++) drop(forestGrass, 'backpack', 1);
+  // Torn pages of the RON-ML manual, scattered — mostly in the ruins, a couple
+  // out in the woods — as loose scraps that echo the bound manual in the caches.
+  for (let i = 0; i < 4; i++) drop(boards, 'ronml_page', 1);
+  for (let i = 0; i < 2; i++) drop(forestGrass, 'ronml_page', 1);
+  // A found cassette left in the ruins for the walkman: meme's "maieutics".
+  // (The player starts with the meme compilation; the WARD tape is down in
+  // the underworld.) More tapes can be seeded here as they're added.
+  drop(boards, 'tape_2', 1); // meme / maieutics
 }
 
 // The AIs control the landscape: black obelisk towers dot the wilds (their
@@ -97,6 +145,57 @@ const obelisks = [];
         inner.push([x, y]);
       }
     }
+  }
+  // Group interior tiles by connected board region — one per house/room in
+  // practice, since a doorway gap always breaks the 4-connectivity between
+  // buildings — so no single building can be flooded with every cache in
+  // reach: capped at BOXES_PER_HOUSE below.
+  const BOXES_PER_HOUSE = 5;
+  const houseOf = new Map(); // "x,y" -> house index
+  {
+    const innerSet = new Set(inner.map(([x, y]) => `${x},${y}`));
+    let houseId = 0;
+    for (const [sx, sy] of inner) {
+      const key0 = `${sx},${sy}`;
+      if (houseOf.has(key0)) continue;
+      const stack = [[sx, sy]];
+      houseOf.set(key0, houseId);
+      while (stack.length) {
+        const [cx, cy] = stack.pop();
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nk = `${cx + dx},${cy + dy}`;
+          if (innerSet.has(nk) && !houseOf.has(nk)) {
+            houseOf.set(nk, houseId);
+            stack.push([cx + dx, cy + dy]);
+          }
+        }
+      }
+      houseId++;
+    }
+  }
+  const houseBoxCount = new Map(); // house index -> boxes placed so far
+  const bumpHouse = (x, y) => {
+    const h = houseOf.get(`${x},${y}`);
+    houseBoxCount.set(h, (houseBoxCount.get(h) || 0) + 1);
+  };
+  const houseFull = (x, y) => (houseBoxCount.get(houseOf.get(`${x},${y}`)) || 0) >= BOXES_PER_HOUSE;
+  // A hand-picked "welcome kit": the resistance building nearest spawn gets
+  // a backpack, a shield, a decent ranged weapon and some food together in
+  // one box, so a new run's very first find is worth a detour for. It's the
+  // one box the renderer nudges a beginner toward with a pulsing glow (see
+  // drawBox / Player.threatEase) — the glow fades on its own once the
+  // player no longer reads as a beginner.
+  if (inner.length) {
+    inner.sort((a, b) => Math.hypot(a[0] - spawn.x, a[1] - spawn.y) - Math.hypot(b[0] - spawn.x, b[1] - spawn.y));
+    const [sx, sy] = inner.shift();
+    bumpHouse(sx, sy);
+    const starterLoot = [
+      { item: 'backpack', qty: 1 },
+      { item: 'shield', qty: 1 },
+      { item: 'shotgun', qty: 1 }, { item: 'shells', qty: 8 },
+      { item: 'tin', qty: 2 }, { item: 'berries', qty: 3 },
+    ];
+    map.addObject('box', sx, sy, { loot: starterLoot, opened: false, starterCache: true });
   }
   // Each cache holds a list of drops. The first few are guaranteed so every
   // run can find the key anti-machine gear; the rest roll on a table.
@@ -136,6 +235,14 @@ const obelisks = [];
     [{ item: 'shield', qty: 1 }],
     [{ item: 'mirror_shield', qty: 1 }, { item: 'battery', qty: 2 }],
     [{ item: 'forcefield', qty: 1 }, { item: 'battery', qty: 4 }],
+    // A navigation aid: the electro-compass.
+    [{ item: 'compass', qty: 1 }],
+    // The access chip: your interface into the obelisk terminals.
+    [{ item: 'chip', qty: 1 }],
+    // The RON-ML manual: teaches the terminal console language.
+    [{ item: 'book_ronml', qty: 1 }],
+    // A single battered can of Ubik, somewhere in the ruins.
+    [{ item: 'ubik', qty: 1 }],
   ];
   const rollLoot = () => {
     const r = rng();
@@ -163,9 +270,24 @@ const obelisks = [];
   // over to roll on the random table.
   const boxCount = Math.max(20, guaranteed.length + 9);
   for (let i = 0; i < boxCount && inner.length; i++) {
-    const [x, y] = inner.splice(Math.floor(rng() * inner.length), 1)[0];
+    // Pick uniformly among tiles whose house hasn't hit BOXES_PER_HOUSE yet;
+    // stop placing early if every remaining house is already full.
+    const eligible = [];
+    for (let k = 0; k < inner.length; k++) if (!houseFull(inner[k][0], inner[k][1])) eligible.push(k);
+    if (!eligible.length) break;
+    const pick = eligible[Math.floor(rng() * eligible.length)];
+    const [x, y] = inner.splice(pick, 1)[0];
+    bumpHouse(x, y);
     const loot = i < guaranteed.length ? guaranteed[i] : rollLoot();
     map.addObject('box', x, y, { loot, opened: false });
+  }
+  // A chip is the only way into a terminal, so the world must always contain
+  // one in a box — even if interior tiles ran short before the chip's
+  // guaranteed cache (late in the list) was placed. Backstop it here.
+  const boxes = map.objects.filter((o) => o.type === 'box');
+  if (boxes.length && !boxes.some((b) => (b.loot || []).some((l) => l.item === 'chip'))) {
+    const b = boxes[Math.floor(rng() * boxes.length)];
+    (b.loot ??= []).push({ item: 'chip', qty: 1 });
   }
 }
 
@@ -210,6 +332,16 @@ const factoryCx = () => wfactory.x + (wfactory.fw || 1) / 2;
 const factoryCy = () => wfactory.y + (wfactory.fh || 1) + 1.5;
 
 const robots = spawnRobots(map, WORLD_SEED, obelisks, { x: spawn.x, y: spawn.y, r: 14 });
+// A couple of gardener drones already out wandering the world at the start, at
+// random spots away from the remote factory, so you actually come across one
+// early instead of it only ever spawning at the (distant) factory. The factory
+// clock below keeps roughly this many topped up over time.
+for (let placed = 0, tries = 0; placed < 2 && tries < 120; tries++) {
+  const gx = 6 + Math.floor(Math.random() * (map.w - 12));
+  const gy = 6 + Math.floor(Math.random() * (map.h - 12));
+  const g = spawnW5(map, (WORLD_SEED ^ (0x5ad + placed * 131)) >>> 0, gx, gy);
+  if (g) { robots.push(g); placed++; }
+}
 const waterdroids = spawnWaterDroids(map, WORLD_SEED);
 // The tower objects themselves (for alert/blink state): {x,y} plus the
 // alert level cannot live on the plain {x,y} obelisks list, since that's
@@ -233,8 +365,43 @@ for (const ob of obeliskObjs) {
   obeliskObjs.forEach((ob, i) => { ob.circuitNum = nums[i]; });
 }
 
+// Adamantine's fortress — the first of the four AIs. Grown as a sealed annex
+// onto the south edge of the map (all overworld spawning above has already
+// happened on the 128x128 grid, so the annex stays clean). Reached only by
+// hacking the boundary gate terminal in RON-ML. `mainframe` points at the core
+// so the existing map overlay marks it; `fortress` owns the gate/door logic.
+const fortress = createFortress(map, WORLD_SEED, spawn);
+const mainframe = fortress.core; // { x, y } of the core, for the RON-ML map star
+// The quad's standing patrol: five M6 guards (3 sentinels + 2 marksmen).
+robots.push(...fortress.spawnGuards(spawnM6));
+// "Red starlink": when the fortress breach reaches the world (alarm + uplink
+// intact), every overworld obelisk flares red (its `stirred` flag forces the
+// alert glow, HUD untouched) and the W-factory throws a W4 toward the doorway.
+// `calm` clears the flare when the fortress stands down or the uplink is cut.
+const worldStir = {
+  stir() {
+    for (const o of obeliskObjs) if (!o.destroyed) o.stirred = true;
+    if (factoryLive()) {
+      const w4 = spawnW4(map, Math.floor(Math.random() * 0x7fffffff), factoryCx(), factoryCy());
+      if (w4) { robots.push(w4); }
+    }
+    player.say('Red light runs the length of the SKYLINK — the whole network knows where you are.');
+  },
+  calm() {
+    for (const o of obeliskObjs) o.stirred = false;
+  },
+};
+
 // Character persona and learned skills persist across sessions and deaths.
 const SAVE_KEY = 'postai-character';
+// Name and gender live in their own durable key, separate from the run save.
+// Dying or starting a New Game wipes score/skills/inventory (fullReset below)
+// but should not make you re-pick who you are — that identity outlives runs.
+const IDENTITY_KEY = 'postai-identity';
+try {
+  const identity = JSON.parse(localStorage.getItem(IDENTITY_KEY) || 'null');
+  if (identity) player.setPersona(identity.name || player.name, identity.gender || player.gender);
+} catch { /* corrupt: keep the default persona */ }
 let hadExistingSave = false;
 try {
   const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
@@ -258,6 +425,23 @@ try {
       }
       if (Array.isArray(st.pockets)) player.pockets = st.pockets;
       if (st.backpack) player.backpack = st.backpack;
+      if (st.walkman !== undefined) player.walkman = st.walkman; // null = tape moved out, respected across reload
+    }
+    // Guard against stale item keys carried over from a save written by an
+    // earlier build — e.g. the pre-v1.15 tape keys (tape_ward / tape_meme),
+    // renamed to tape_1..3 when tapes became data-driven. An orphaned key
+    // resolves to an undefined item def, and the HUD renderer dereferences it
+    // every frame (drawCassette, pocket labels), so a single dead key hard-
+    // crashes the whole render loop before textures even finish loading. Drop
+    // anything the current ITEMS table no longer knows about.
+    const validStack = (s) => (s && ITEMS[s.item]) ? s : null;
+    player.pockets = (Array.isArray(player.pockets) ? player.pockets : []).map(validStack);
+    while (player.pockets.length < 4) player.pockets.push(null);
+    if (player.hands && !ITEMS[player.hands]) player.hands = null;
+    if (player.walkman && !ITEMS[player.walkman.item]) { player.walkman = { item: 'tape_1', qty: 1 }; player.walkmanSide = null; }
+    if (player.backpack) {
+      if (player.backpack.weapon && !ITEMS[player.backpack.weapon]) player.backpack.weapon = null;
+      if (Array.isArray(player.backpack.slots)) player.backpack.slots = player.backpack.slots.map(validStack);
     }
   }
 } catch { /* corrupt save: start fresh */ }
@@ -285,9 +469,10 @@ const persist = () => {
       state: {
         health: player.health, stamina: player.stamina, food: player.food, venom: player.venom,
         wifiPower: player.wifiPower, x: player.x, y: player.y, hands: player.hands,
-        pockets: player.pockets, backpack: player.backpack,
+        pockets: player.pockets, backpack: player.backpack, walkman: player.walkman,
       },
     }));
+    localStorage.setItem(IDENTITY_KEY, JSON.stringify({ name: player.name, gender: player.gender }));
   } catch { /* storage unavailable */ }
 };
 player.onSkillLearned = persist;
@@ -372,7 +557,7 @@ function renderMachineIcon(type) {
   }
   return off.toDataURL('image/png');
 }
-for (const type of ['t1', 't2', 'w1', 'w2', 'w3', 'w4']) {
+for (const type of ['t1', 't2', 't3', 'w1', 'w2', 'w3', 'w4', 'w5']) {
   const img = document.getElementById(`gal-${type}`);
   if (img) img.src = renderMachineIcon(type);
 }
@@ -381,6 +566,7 @@ const lore = new Lore(map, WORLD_SEED);
 
 const dayNight = new DayNight();
 const minimap = new Minimap(map);
+let showMinimap = true; // toggled with the ] key
 const birds = spawnBirds(map, WORLD_SEED);
 let lastObjectCount = map.objects.length;
 
@@ -395,6 +581,52 @@ window.addEventListener('pointerdown', unlockAudio, { once: true });
 map.projectiles = []; // in-flight gun rounds (cosmetic tracers)
 map.bombs = [];       // dropped ticking bombs
 map.explosions = [];  // active fire clouds (visual)
+const UBIK_PATCH_LIFE = 75; // seconds a sprayed patch stays brightened before fading back
+const UBIK_PORTAL_LIFE = 260; // portals hold much longer than a plain patch before fading
+const UBIK_TELEPORT_RANGE = 0.9; // how close to a linked portal's centre triggers a jump
+const UBIK_TELEPORT_COOLDOWN = 1.5; // seconds before another jump can fire (stops instant ping-pong)
+
+// The underworld: a Ubik tear no longer links to another overworld spot —
+// it drops you into a single shared liminal pocket instead (see
+// game/underworld.js). Built lazily on first entry, then kept for the rest
+// of the session; entering/exiting swaps the outer `map` binding itself,
+// which every system (player.update, updateRobots, renderer.draw, ...) reads
+// fresh each call, so no other wiring is needed beyond keeping `player.map`
+// and `window.__game.map` in sync.
+let underworld = null;
+let inUnderworld = false;
+let overworldReturn = null;
+let uwCreatures = [];
+let uwAmbienceClock = 0, uwAmbienceNext = 8 + Math.random() * 10;
+
+function enterUnderworld() {
+  if (!underworld) {
+    underworld = createUnderworldPocket((WORLD_SEED ^ 0x0b1c) >>> 0);
+    uwCreatures = [spawnUnderworldCreature((WORLD_SEED ^ 0x1e57) >>> 0, underworld.creatureX, underworld.creatureY)];
+  }
+  overworldReturn = { x: player.x, y: player.y };
+  map = underworld.map;
+  player.map = map;
+  window.__game.map = map;
+  player.x = underworld.spawnX;
+  player.y = underworld.spawnY;
+  camera.snap(player.x, player.y);
+  inUnderworld = true;
+  sfx.setDrone(0.8);
+  player.say('The tear swallows you. The air in here is wrong — flat, yellow, humming.');
+}
+
+function exitUnderworld() {
+  map = overworldMap;
+  player.map = map;
+  window.__game.map = map;
+  player.x = overworldReturn.x;
+  player.y = overworldReturn.y;
+  camera.snap(player.x, player.y);
+  inUnderworld = false;
+  sfx.setDrone(0);
+  player.say('You come up through the tear. Ordinary daylight, ordinary weight. You are back.');
+}
 
 // Fog of war: the minimap only shows where you have been.
 map.explored = new Uint8Array(map.w * map.h);
@@ -414,7 +646,7 @@ function revealAround(px, py) {
 }
 
 // Debug handle for inspecting live state from the console.
-window.__game = { player, map, camera, animals, birds, robots, waterdroids, obelisks, obeliskObjs, wfactory, dayNight, lore, input, renderer };
+window.__game = { player, map, camera, animals, birds, robots, waterdroids, obelisks, obeliskObjs, wfactory, dayNight, lore, input, renderer, fortress };
 
 function resize() {
   renderer.resize(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1);
@@ -443,6 +675,15 @@ const toggleHelp = (force) => {
 };
 document.getElementById('helpBtn').addEventListener('click', () => toggleHelp(true));
 helpEl.addEventListener('click', (e) => { if (e.target === helpEl) toggleHelp(false); });
+
+// About modal: the i button opens, clicking the backdrop closes.
+const aboutEl = document.getElementById('about');
+const toggleAbout = (force) => {
+  const show = force != null ? force : aboutEl.style.display !== 'block';
+  aboutEl.style.display = show ? 'block' : 'none';
+};
+document.getElementById('aboutBtn').addEventListener('click', () => toggleAbout(true));
+aboutEl.addEventListener('click', (e) => { if (e.target === aboutEl) toggleAbout(false); });
 // Tabbed help: clicking a tab shows its panel(s) and hides the rest. Several
 // panels can share a data-panel name (Survival is split around the machine
 // section), so all matching panels toggle together.
@@ -452,8 +693,481 @@ for (const btn of helpEl.querySelectorAll('.helpTab')) {
     for (const b of helpEl.querySelectorAll('.helpTab')) b.classList.toggle('active', b === btn);
     for (const p of helpEl.querySelectorAll('.helpPanel')) p.classList.toggle('active', p.dataset.panel === name);
     helpEl.querySelector('.panel').scrollTop = 0;
+    if (name === 'settings') syncSettingsPanel();
   });
 }
+
+// Settings tab: volume slider and direct music-track choice, both backed by
+// sfx (which persists them itself — see Sound.setVolume/setMusicMode). The
+// panel's inputs are synced to the live state each time the tab is opened,
+// since either can also change elsewhere (M key for music; nothing else
+// touches volume yet, but the pattern's ready for when something does).
+const volumeSlider = document.getElementById('volumeSlider');
+const volumeLabel = document.getElementById('volumeLabel');
+volumeSlider.addEventListener('input', () => {
+  const v = Number(volumeSlider.value) / 100;
+  sfx.setVolume(v);
+  volumeLabel.textContent = `${volumeSlider.value}%`;
+});
+for (const radio of helpEl.querySelectorAll('input[name="musicMode"]')) {
+  radio.addEventListener('change', () => { if (radio.checked) sfx.setMusicMode(radio.value); });
+}
+function syncSettingsPanel() {
+  const pct = Math.round(sfx.volume * 100);
+  volumeSlider.value = pct;
+  volumeLabel.textContent = `${pct}%`;
+  const current = helpEl.querySelector(`input[name="musicMode"][value="${sfx.musicMode}"]`);
+  if (current) current.checked = true;
+}
+
+// Obelisk terminal. With an access chip carried, clicking an obelisk opens a
+// channel (a progress bar) into a live RON-ML REPL — and while you're jacked
+// in the obelisk hides you from the machines. Without a chip you instead see
+// the AI's own OS: alive with data, and unusable. See docs/ob-terminal-language.md
+// for the language design.
+const OB_TERMINAL_RANGE = 4.5;
+const RONML_ROBOT_RANGE = 20;   // sleep/repel/sing reach this far from the player
+const REPEL_DURATION = 60;      // seconds `repel`-ed machines flee for
+const SING_DURATION = 4.5;      // seconds the choir lines up before powering down
+const obTermEl = document.getElementById('obterminal');
+const obTermScreen = document.getElementById('obterminal-screen');
+const obTermConnect = document.getElementById('obterminal-connect');
+const obTermBar = document.getElementById('obterminal-bar');
+const obTermInput = document.getElementById('obterminal-input');
+const obTermGhost = document.getElementById('obterminal-ghost');
+const aiosEl = document.getElementById('aios');
+const aiosScreen = document.getElementById('aios-screen');
+const aiosHeader = document.getElementById('aios-header');
+
+let replLog = [];
+let replHistory = [];
+let replHistoryIdx = -1;
+const REPL_MAX_LINES = 300;
+
+function replPrint(...lines) {
+  replLog.push(...lines);
+  if (replLog.length > REPL_MAX_LINES) replLog = replLog.slice(replLog.length - REPL_MAX_LINES);
+  obTermScreen.textContent = replLog.join('\n');
+  obTermScreen.scrollTop = obTermScreen.scrollHeight;
+}
+
+// Builds a fresh ctx object each command: primitives read/mutate the live
+// world (map, robots, obeliskObjs, player) through these hooks, and never
+// touch game state directly — ronml.js only handles language mechanics.
+function ronmlCtx() {
+  const findObelisk = (id) => obeliskObjs.find((o) => o.code === id && !o.destroyed);
+  const nearby = (r) => !r.dead && !r.friendly && !r.fused
+    && Math.hypot(r.x - player.x, r.y - player.y) <= RONML_ROBOT_RANGE;
+  return {
+    listObelisks: () => obeliskObjs.filter((o) => !o.destroyed).map((o) => o.code),
+    distanceToNode: (id) => {
+      const o = findObelisk(id);
+      return o ? Math.hypot(o.x + 0.5 - player.x, o.y + 0.5 - player.y) : Infinity;
+    },
+    nodeExists: (id) => !!findObelisk(id),
+    requireAiKey: (verb) => { if (!player.hasItem('ai_key')) throw new Error(`${verb} needs an AI key`); },
+    recordHack: (id) => player.ronmlKeys.add(id),
+    heldKeys: () => player.ronmlKeys,
+    crashNode: (id) => {
+      const o = findObelisk(id);
+      if (!o) return;
+      o.destroyed = true;
+      o.needsRebuild = true; // temporary — this is a hack, not a physical fell
+      map.objectGrid[o.y * map.w + o.x] = null;
+      if (player.skylinkActive) player.skylinkActive = false;
+      if (factoryLive() && !robots.some((r) => r.type === 'w3' && !r.dead)) {
+        const drone = spawnW3(map, Math.floor(Math.random() * 0x7fffffff), factoryCx(), factoryCy());
+        if (drone) robots.push(drone);
+      }
+      player.say(`${id} goes dark. A repair drone is already inbound to raise it.`);
+    },
+    nodeFrozen: (id) => { const o = findObelisk(id); return !!(o && o.frozen); },
+    // RON-ML `loop`: the easy hack. No AI key, no hack/crash two-step —
+    // pins the node itself and any T1/T2 garrisoned near it in place until
+    // a repair drone works the loop back out (updateW3, robots.js). Robots
+    // are tagged `frozenByOb` so the drone can find exactly who to release
+    // without recomputing a proximity radius.
+    loopNode: (id) => {
+      const o = findObelisk(id);
+      if (!o) return;
+      o.frozen = true;
+      o.frozenT = 0;
+      let count = 0;
+      for (const r of robots) {
+        if (r.dead || r.fused || r.friendly) continue;
+        if ((r.type === 't1' || r.type === 't2') && r.home
+          && Math.hypot(r.home.x - (o.x + 0.5), r.home.y - (o.y + 0.5)) < 10) {
+          r.frozen = true;
+          r.frozenByOb = o;
+          count++;
+        }
+      }
+      if (factoryLive() && !robots.some((r) => r.type === 'w3' && !r.dead)) {
+        const drone = spawnW3(map, Math.floor(Math.random() * 0x7fffffff), factoryCx(), factoryCy());
+        if (drone) robots.push(drone);
+      }
+      player.say(`${id} pins itself in a loop that never returns. Its light flares white-hot${count ? ' and its garrison seizes up mid-stride' : ''} — only a repair drone can talk it down now.`);
+    },
+    sleepNearby: (mins) => {
+      const secs = Math.max(1, mins);
+      for (const r of robots) if (nearby(r)) r.disabledT = Math.max(r.disabledT || 0, secs);
+      player.say('The local machines idle. The yard goes quiet for a spell.');
+    },
+    skylinkActive: () => !!player.skylinkActive,
+    rewindClock: (hours) => {
+      dayNight.rewind(Math.max(0, hours));
+      player.say(`The deadline clock stutters and loses ${Math.max(0, hours)} hour${Math.max(0, hours) === 1 ? '' : 's'}. SKYLINK waits a little longer.`);
+    },
+    repelNearby: () => {
+      for (const r of robots) if (nearby(r)) { r.repelledT = REPEL_DURATION; r.aggro = false; }
+      player.say('Targeting flips. Anything nearby turns tail and runs.');
+    },
+    sing: () => {
+      const eligible = (r) => !r.dead && !r.drained && !r.friendly && !r.fused;
+      const targets = robots.filter((r) => nearby(r) && eligible(r));
+      if (!targets.length && !robots.some(eligible)) { player.say('Nothing anywhere to sing to.'); return; }
+      // A choir wants a full section — if too few are in earshot, summon the
+      // nearest others from across the map to come and join (they walk in to
+      // the formation), so the piece is never a lonely solo.
+      const CHOIR_TARGET = 6;
+      if (targets.length < CHOIR_TARGET) {
+        const more = robots.filter((r) => eligible(r) && !targets.includes(r))
+          .sort((a, b) => Math.hypot(a.x - player.x, a.y - player.y) - Math.hypot(b.x - player.x, b.y - player.y))
+          .slice(0, CHOIR_TARGET - targets.length);
+        for (const r of more) targets.push(r);
+      }
+      const perp = { x: -player.facing.y, y: player.facing.x };
+      targets.forEach((r, i) => {
+        const spread = (i - (targets.length - 1) / 2) * 1.6;
+        r.singing = true;
+        r.aggro = false;
+        r.choirT = CHOIR_DURATION; // sing for the whole piece
+        r.choirVoice = i;          // which vocal part its light flashes to
+        r.choirFlash = 0;
+        r.choirX = player.x + player.facing.x * 4 + perp.x * spread;
+        r.choirY = player.y + player.facing.y * 4 + perp.y * spread;
+      });
+      sfx.playChoir(); // Dowland's "Flow My Tears", the machines' voices
+      player.say('Machines stop dead, turn, and line up — and more come marching in from across the fields to join them. Then, impossibly, they begin to sing.');
+      closeObTerminal(); // drop out of the terminal so you can actually watch it
+    },
+    showMap: () => { openRonMap(); },
+    printMap: () => {
+      // Run off a physical copy that drops at your feet to be picked up and
+      // carried — a map you can unfold later, away from any terminal.
+      map.groundItems.push({ item: 'printed_map', qty: 1, x: player.x, y: player.y + 0.3 });
+      player.say('The terminal chatters and spits out a printed map. It lands at your feet.');
+    },
+    unlockGate: () => {
+      // RON-ML `unlock`, run at the fortress gate terminal: the fortress vets
+      // proximity + AI key and drops the fortress key on success.
+      player.say(fortress.hack(player).msg);
+    },
+    // `notes`: opens the browsable notebook (see openNotebook below) rather
+    // than dumping text into the console — Tab-to-autocomplete is one thing,
+    // but reading a wall of scrollback is another, and browsers don't let a
+    // page reserve Tab reliably anyway.
+    showNotepad: () => { openNotebook(); },
+  };
+}
+
+// The RON-ML `map` command: a green schematic of this AI's territory drawn
+// onto the #ronmap canvas — every obelisk (with code), every live machine,
+// the W-factory, the mainframe you're hunting, and you. Overlaid on top of
+// the terminal; clicking outside closes it back to the console.
+const ronmapEl = document.getElementById('ronmap');
+const ronmapCanvas = document.getElementById('ronmap-canvas');
+function openRonMap() {
+  const cv = ronmapCanvas, g = cv.getContext('2d');
+  const W = cv.width, H = cv.height;
+  const sx = (wx) => (wx / map.w) * W;
+  const sy = (wy) => (wy / map.h) * H;
+  g.fillStyle = '#061a0e'; g.fillRect(0, 0, W, H);
+  // Faint grid.
+  g.strokeStyle = 'rgba(80,230,130,0.10)'; g.lineWidth = 1;
+  for (let i = 1; i < 8; i++) {
+    g.beginPath(); g.moveTo((i / 8) * W, 0); g.lineTo((i / 8) * W, H); g.stroke();
+    g.beginPath(); g.moveTo(0, (i / 8) * H); g.lineTo(W, (i / 8) * H); g.stroke();
+  }
+  // Live machines (small red dots).
+  g.fillStyle = '#e0552f';
+  for (const r of robots) {
+    if (r.dead || r.fused || r.friendly) continue;
+    g.beginPath(); g.arc(sx(r.x), sy(r.y), 2.5, 0, Math.PI * 2); g.fill();
+  }
+  // Obelisks (green squares + code), destroyed ones hollow.
+  g.font = '9px ui-monospace, monospace';
+  for (const o of obeliskObjs) {
+    const x = sx(o.x + 0.5), y = sy(o.y + 0.5);
+    if (o.destroyed) {
+      g.strokeStyle = 'rgba(80,230,130,0.4)'; g.lineWidth = 1.2;
+      g.strokeRect(x - 3, y - 3, 6, 6);
+    } else {
+      g.fillStyle = '#4fe07a'; g.fillRect(x - 3.5, y - 3.5, 7, 7);
+      g.fillStyle = 'rgba(150,240,180,0.8)';
+      g.fillText(o.code || '', x + 6, y + 3);
+    }
+  }
+  // The W-factory (amber diamond).
+  if (factoryLive()) {
+    const x = sx(factoryCx()), y = sy(wfactory.y + (wfactory.fh || 1) / 2);
+    g.fillStyle = '#e0b53a';
+    g.beginPath(); g.moveTo(x, y - 6); g.lineTo(x + 6, y); g.lineTo(x, y + 6); g.lineTo(x - 6, y); g.closePath(); g.fill();
+  }
+  // Adamantine's fortress: the grand doorway (cyan) you hack in through the
+  // boundary, and the mainframe core (magenta star) deep inside it.
+  {
+    const m = fortress.markers();
+    // The gate in the rampart.
+    const gx = sx(m.gate.x), gy = sy(m.gate.y);
+    g.fillStyle = m.gate.open ? '#67d6ff' : m.gate.hacked ? '#5ae08c' : '#7fe0ff';
+    g.fillRect(gx - 4, gy - 4, 8, 8);
+    g.fillStyle = 'rgba(127,224,255,0.9)';
+    g.fillText(m.gate.open ? 'GATE (OPEN)' : 'GATE', gx + 8, gy + 3);
+    // The core.
+    const x = sx(mainframe.x), y = sy(mainframe.y);
+    g.fillStyle = '#ff3d8b';
+    g.beginPath();
+    for (let k = 0; k < 5; k++) {
+      const a = -Math.PI / 2 + k * (Math.PI * 4 / 5);
+      const px = x + Math.cos(a) * 8, py = y + Math.sin(a) * 8;
+      k === 0 ? g.moveTo(px, py) : g.lineTo(px, py);
+    }
+    g.closePath(); g.fill();
+    g.fillStyle = 'rgba(255,120,180,0.9)'; g.fillText(`${m.core.ai.toUpperCase()} CORE`, x + 10, y + 3);
+  }
+  // You (cyan ring).
+  {
+    const x = sx(player.x), y = sy(player.y);
+    g.strokeStyle = '#67d6ff'; g.lineWidth = 2;
+    g.beginPath(); g.arc(x, y, 5, 0, Math.PI * 2); g.stroke();
+    g.fillStyle = '#67d6ff'; g.beginPath(); g.arc(x, y, 1.6, 0, Math.PI * 2); g.fill();
+  }
+  ronmapEl.style.display = 'flex';
+}
+function closeRonMap() { ronmapEl.style.display = 'none'; }
+ronmapEl.addEventListener('click', (e) => { if (e.target === ronmapEl) closeRonMap(); });
+// Using a held printed map (kind 'map') unfolds the same overlay anywhere.
+player.onReadMap = openRonMap;
+
+// The Notepad (`notes`, or press N anywhere): a real paper page you flip
+// through with whatever lore fragments were flagged worth keeping (lore.js,
+// `notepad: true`) — not RON-ML-specific, just the pages worth flipping back
+// to (language fragments, found transcripts, whatever else earns the flag),
+// one per page, in the order you found them — easier to read than a console
+// dump, and doesn't depend on Tab (browsers reserve it for focus, so it was
+// never reliable as an in-page shortcut anyway).
+const notebookEl = document.getElementById('ronnotebook');
+const notebookTitleEl = document.getElementById('ronnotebook-title');
+const notebookBodyEl = document.getElementById('ronnotebook-body');
+const notebookPageLabelEl = document.getElementById('ronnotebook-page-label');
+const notebookPrevBtn = document.getElementById('ronnotebook-prev');
+const notebookNextBtn = document.getElementById('ronnotebook-next');
+let notebookEntries = [];
+let notebookIdx = 0;
+function renderNotebookPage() {
+  if (!notebookEntries.length) {
+    notebookTitleEl.textContent = 'NOTEPAD';
+    notebookBodyEl.innerHTML = '<span id="ronnotebook-empty">Nothing yet. Pages worth keeping are ' +
+      'scattered through the ruins — walk over one to read it, and it copies itself in here.</span>';
+    notebookPageLabelEl.textContent = '0 / 0';
+    notebookPrevBtn.disabled = true;
+    notebookNextBtn.disabled = true;
+    return;
+  }
+  const f = notebookEntries[notebookIdx];
+  notebookTitleEl.textContent = f.title;
+  notebookBodyEl.textContent = f.text;
+  notebookPageLabelEl.textContent = `${notebookIdx + 1} / ${notebookEntries.length}`;
+  notebookPrevBtn.disabled = notebookIdx <= 0;
+  notebookNextBtn.disabled = notebookIdx >= notebookEntries.length - 1;
+}
+function notebookPrev() { if (notebookIdx > 0) { notebookIdx--; renderNotebookPage(); } }
+function notebookNext() { if (notebookIdx < notebookEntries.length - 1) { notebookIdx++; renderNotebookPage(); } }
+function openNotebook() {
+  notebookEntries = FRAGMENTS.filter((f) => f.notepad && lore.found.has(f.id));
+  notebookIdx = 0;
+  renderNotebookPage();
+  notebookEl.style.display = 'flex';
+}
+function closeNotebook() { notebookEl.style.display = 'none'; }
+notebookEl.addEventListener('click', (e) => { if (e.target === notebookEl) closeNotebook(); });
+notebookPrevBtn.addEventListener('click', notebookPrev);
+notebookNextBtn.addEventListener('click', notebookNext);
+// Capture-phase on window, ahead of both the still-focused terminal input's
+// own key handling and the game's WASD/arrow movement listener, so paging
+// the notebook can never leak an arrow key into a text caret or a step.
+window.addEventListener('keydown', (e) => {
+  if (notebookEl.style.display !== 'flex') return;
+  if (e.key === 'ArrowLeft') notebookPrev();
+  else if (e.key === 'ArrowRight') notebookNext();
+  else if (e.key === 'Escape') closeNotebook();
+  e.preventDefault();
+  e.stopImmediatePropagation();
+}, true);
+
+function replRun(line) {
+  replPrint(`> ${line}`);
+  const result = runRonml(line, ronmlCtx());
+  replPrint(result.text);
+  replHistory.push(line);
+  replHistoryIdx = replHistory.length;
+}
+
+function openObTerminal(ob) {
+  if (!player.hasItem('chip')) { openAiOs(ob); return; }
+  // Chip present: jack in. Go invisible, then run the connect progress bar.
+  player.terminalSafe = true;
+  obTermEl.style.display = 'flex';
+  obTermScreen.parentElement.style.display = 'none';
+  obTermConnect.style.display = 'block';
+  obTermBar.style.width = '0%';
+  player.say(`Access chip accepted. Opening a channel into ${ob.code || 'the node'} — you drop off their sensors.`);
+  const start = performance.now(), DURATION = 1600;
+  const step = (now) => {
+    if (obTermEl.style.display === 'none') return; // closed early
+    const p = Math.min(1, (now - start) / DURATION);
+    obTermBar.style.width = (p * 100).toFixed(0) + '%';
+    if (p < 1) { requestAnimationFrame(step); return; }
+    obTermConnect.style.display = 'none';
+    obTermScreen.parentElement.style.display = 'flex';
+    replLog = [];
+    replHistory = [];
+    replHistoryIdx = -1;
+    replPrint(
+      'SKYLINK NODE TERMINAL  v2.20',
+      'RON-DOS 4.11  (c) Reality Or Nothing',
+      '',
+      `> node ............ ${ob.code || 'OB-????'}`,
+      `> circuit id ...... ${ob.circuitNum != null ? '#' + ob.circuitNum : 'sealed'}`,
+      '> chip ............ ACCEPTED',
+      '> shield .......... you are hidden while jacked in',
+      '> access .......... GRANTED',
+      '',
+      'RON-ML console ready. try: scan   (type help for commands)',
+      '_',
+    );
+    obTermInput.value = '';
+    obTermGhost.textContent = '';
+    obTermInput.focus();
+  };
+  requestAnimationFrame(step);
+}
+
+// The fortress gate terminal reuses the same RON-ML console, minus the chip
+// gate and connect bar. You type `unlock` here (needs an AI key) to hack the
+// grand doorway; it drops a fortress key that then swings the door open.
+function openGateTerminal() {
+  player.terminalSafe = true;
+  obTermEl.style.display = 'flex';
+  obTermScreen.parentElement.style.display = 'flex';
+  obTermConnect.style.display = 'none';
+  replLog = [];
+  replHistory = [];
+  replHistoryIdx = -1;
+  const keyed = player.hasItem('ai_key');
+  replPrint(
+    `${fortress.AI_NAME.toUpperCase()} — OUTER GATE TERMINAL`,
+    'RON-DOS 4.11  (c) Reality Or Nothing',
+    '',
+    `> gate ............ ${fortress.terminal.obj.code}`,
+    `> rampart ......... ${fortress.open ? 'OPEN' : fortress.hacked ? 'UNLOCKED' : 'SEALED'}`,
+    `> ai key .......... ${keyed ? 'DETECTED' : 'NOT HELD (unlock will fail)'}`,
+    '',
+    'The doorway is bolted from within. type: unlock   (type help for commands)',
+    '_',
+  );
+  obTermInput.value = '';
+  obTermGhost.textContent = '';
+  obTermInput.focus();
+}
+function closeObTerminal() { obTermEl.style.display = 'none'; obTermGhost.textContent = ''; obTermInput.blur(); player.terminalSafe = false; }
+obTermEl.addEventListener('click', (e) => { if (e.target === obTermEl) closeObTerminal(); });
+// Autocomplete: once you've read the RON-DOS manual (book_ronml), the console
+// suggests the rest of a verb as faded ghost text you can accept with Tab.
+// (sing stays out of the list — it's a secret.) Purely a convenience the book
+// unlocks; you can always type the whole thing by hand.
+const RONML_VERBS = ['scan', 'nearest', 'keys', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'map', 'print', 'unlock', 'notes', 'help', 'let'];
+const escapeHtml = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+function ronmlCompletion(value) {
+  if (!player.readManuals || !player.readManuals.has('book_ronml')) return '';
+  const m = value.match(/([A-Za-z]+)$/); // the alphabetic token at the caret
+  if (!m) return '';
+  const tok = m[1];
+  const hit = RONML_VERBS.find((v) => v.length > tok.length && v.startsWith(tok));
+  return hit ? hit.slice(tok.length) : '';
+}
+function updateGhost() {
+  const suffix = ronmlCompletion(obTermInput.value);
+  if (!suffix) { obTermGhost.textContent = ''; return; }
+  obTermGhost.style.left = obTermInput.offsetLeft + 'px';
+  obTermGhost.innerHTML = `<span class="typed">${escapeHtml(obTermInput.value)}</span>${escapeHtml(suffix)}`;
+}
+obTermInput.addEventListener('input', updateGhost);
+obTermInput.addEventListener('keydown', (e) => {
+  // Tab is a browser-reserved key in a lot of setups (it moves focus off the
+  // page before our handler ever sees it, preventDefault or not) — so Right
+  // Arrow at the very end of the line also accepts the ghost suggestion, a
+  // reliable fallback that never conflicts with normal caret movement.
+  if (e.key === 'Tab' || (e.key === 'ArrowRight' && obTermInput.selectionStart === obTermInput.value.length
+    && obTermInput.selectionEnd === obTermInput.value.length)) {
+    const suffix = ronmlCompletion(obTermInput.value);
+    if (suffix) { obTermInput.value += suffix; updateGhost(); e.preventDefault(); e.stopPropagation(); }
+    else if (e.key === 'Tab') { e.preventDefault(); e.stopPropagation(); }
+    return;
+  }
+  if (e.key === 'Enter') {
+    const line = obTermInput.value.trim();
+    obTermInput.value = '';
+    obTermGhost.textContent = '';
+    if (line) replRun(line);
+  } else if (e.key === 'ArrowUp') {
+    if (replHistory.length) {
+      replHistoryIdx = Math.max(0, replHistoryIdx - 1);
+      obTermInput.value = replHistory[replHistoryIdx] || '';
+    }
+    updateGhost();
+    e.preventDefault();
+  } else if (e.key === 'ArrowDown') {
+    if (replHistory.length) {
+      replHistoryIdx = Math.min(replHistory.length, replHistoryIdx + 1);
+      obTermInput.value = replHistory[replHistoryIdx] || '';
+    }
+    updateGhost();
+    e.preventDefault();
+  }
+  e.stopPropagation();
+});
+
+// The AI's own console (no chip): a wall of restless, unreadable data.
+const AIOS_GLYPHS = '0123456789ABCDEF▒▓█░■▢≡§¤◢◣∴∷';
+let aiosRAF = null;
+function openAiOs(ob) {
+  aiosHeader.textContent = `SKYLINK CORE  //  NODE ${ob.code || '????'}  //  ACCESS DENIED  //  NO KEY`;
+  aiosEl.style.display = 'flex';
+  player.say('No chip. The obelisk throws up the AI’s own console instead — a wall of moving data you can’t read.');
+  const cols = 60, rows = 26;
+  const t0 = performance.now();
+  const frame = (now) => {
+    if (aiosEl.style.display === 'none') { aiosRAF = null; return; }
+    const phase = (now - t0) / 1000;
+    let out = '';
+    for (let r = 0; r < rows; r++) {
+      let line = '';
+      for (let cX = 0; cX < cols; cX++) {
+        const wave = Math.abs(Math.sin(r * 0.7 + cX * 0.35 + phase * 2.5));
+        const n = Math.floor((wave * AIOS_GLYPHS.length + Math.random() * 4)) % AIOS_GLYPHS.length;
+        line += (Math.random() < 0.06) ? ' ' : AIOS_GLYPHS[n];
+      }
+      out += line + '\n';
+    }
+    aiosScreen.textContent = out;
+    aiosRAF = requestAnimationFrame(frame);
+  };
+  aiosRAF = requestAnimationFrame(frame);
+}
+function closeAiOs() { aiosEl.style.display = 'none'; if (aiosRAF) cancelAnimationFrame(aiosRAF); aiosRAF = null; }
+aiosEl.addEventListener('click', (e) => { if (e.target === aiosEl) closeAiOs(); });
 
 // The control hint is only for new players: fade it out after two minutes
 // of play so it stops cluttering the screen once the controls have sunk in.
@@ -461,18 +1175,58 @@ const hintEl = document.getElementById('hint');
 const HINT_LIFETIME = 120; // seconds of played time
 let playTime = 0;
 
-// Backpack view: I toggles a read-only panel (drawn by the renderer). It's
-// read-only because the pockets/backpack split is already automatic —
-// there's nothing to drag between them.
+// Backpack view: I toggles the full panel (drawn by the renderer), which
+// exposes the backpack's own storage/weapon slots for dragging — the
+// dashboard's pockets and hands slot are always draggable, panel or not
+// (see the drag/drop handling below).
 let showBackpack = false;
 let showSkills = false;
 let showWeapons = false;
 let paused = false;  // P: freezes movement, AI, clocks, and timers
 let sleepCooldown = 0; // B: real-seconds before another rest is allowed
+let resting = null;  // B rest animation in progress: { t } real-seconds elapsed
 const SLEEP_MINUTES = 10;   // game-clock minutes skipped per rest
 const SLEEP_HEAL = 35;      // health restored per rest
 const SLEEP_COOLDOWN_S = 90; // real seconds before resting again
 const SLEEP_SAFE_RANGE = 12; // no hostile robot allowed within this many tiles
+const REST_DURATION = 4.6;  // real seconds the rest animation runs
+const REST_CLOCK_MULT = 5;  // the clock visibly spins this much faster while resting
+// Screen-dim envelope over a rest: fade in over the first fifth, hold, fade
+// back out over the last fifth, peaking at a soft 0.72 (never full black).
+const restDim = (t) => {
+  const p = Math.max(0, Math.min(1, t / REST_DURATION));
+  const env = p < 0.2 ? p / 0.2 : p > 0.8 ? (1 - p) / 0.2 : 1;
+  return 0.72 * env;
+};
+// How long (real seconds) a dropped item survives on the ground before it
+// decays, keyed by item. Perishables rot fast; common salvage lingers a bit;
+// prizes stay a long while. Anything not listed falls back to a per-kind
+// default in groundLifetime(). Real time: a full day is 480s (~20s per game
+// hour), so 100s ≈ 5 game hours.
+const GROUND_ITEM_FADE = 8; // seconds of fade/flicker before an item vanishes
+const GROUND_LIFETIME = {
+  meat: 40, berries: 55, wood: 90,
+  scrap: 100, chip_fragment: 110,
+  tin: 150, ammo: 150, shells: 150, arrow: 150,
+  battery: 190,
+  chip: 320, printed_map: 260, obgun: 360,
+  // Things that never decay: a backpack is too valuable to lose to a timer,
+  // and the progression-critical uniques (the only Wi-Fi block, the AI key
+  // which can't be remade, and the numbered circuit boards whose towers are
+  // already felled) would soft-lock the OB-gun / wave-gun paths if they went.
+  backpack: Infinity, wifiblock: Infinity, ai_key: Infinity, circuit: Infinity,
+};
+const GROUND_LIFETIME_DEFAULT = 160; // materials/consumables not listed above
+// Held gear left on the ground (weapons, tools, gadgets, shields, bombs, the
+// compass) lingers longest — you might mean to come back for it.
+const GROUND_GEAR_KINDS = new Set(['tool', 'gun', 'gadget', 'bomb', 'shield', 'forcefield', 'compass', 'map']);
+function groundLifetime(item) {
+  if (item in GROUND_LIFETIME) return GROUND_LIFETIME[item];
+  const kind = ITEMS[item] && ITEMS[item].kind;
+  if (GROUND_GEAR_KINDS.has(kind)) return 320;
+  return GROUND_LIFETIME_DEFAULT;
+}
+
 let detail = null;   // right-click inspection tooltip {text, x, y, ttl}
 let drag = null;     // in-progress pointer drag {from: slotDescriptor}
 const PROJECTILE_SPEED = 16; // tiles/sec for gun tracers
@@ -502,7 +1256,7 @@ player.onObeliskDestroyed = (ob) => {
   if (obeliskObjs.every((o) => o.destroyed) && !player._ended) {
     player._ended = true;
     player.addScore(100);
-    player.deathCert = { name: player.name, cause: 'nothing — you won', score: player.score, skills: [...player.skills], deaths: player.deaths || 0, victory: true };
+    player.deathCert = { name: player.name, gender: player.gender, cause: 'nothing — you won', score: player.score, skills: [...player.skills], deaths: player.deaths || 0, victory: true };
     persist();
     return;
   }
@@ -582,6 +1336,7 @@ let regrowClock = 0;
 let ronResupplyClock = 0, ronResupplyNext = 90 + Math.random() * 60;
 let wFactoryClock = 0, wFactoryNext = 60 + Math.random() * 60;
 let wFactoryW1Clock = 0, wFactoryW1Next = 100 + Math.random() * 80;
+let wFactoryW5Clock = 0, wFactoryW5Next = 30 + Math.random() * 40;
 let lastW4GameHour = dayNight.totalHours; // ticks a W4 every 30 game-minutes, not real time
 
 // SKYLINK's final purge: once the clock runs out, every obelisk lights up
@@ -612,21 +1367,45 @@ function update(dt) {
   // freezes while paused. Help/backpack/skills/weapons and unpausing itself
   // still work above this line.
   if (paused) return;
+
+  // Resting (from B): the world holds still while the character lies down, the
+  // screen dims, and the clock visibly spins faster (REST_CLOCK_MULT) so you
+  // see time pass. Health trickles back over the animation, then you wake.
+  if (resting) {
+    resting.t += dt;
+    dayNight.update(dt * REST_CLOCK_MULT);
+    player.health = Math.min(player.maxHealth, player.health + (SLEEP_HEAL / REST_DURATION) * dt);
+    if (resting.t >= REST_DURATION) {
+      resting = null;
+      player.resting = false;
+      sleepCooldown = SLEEP_COOLDOWN_S;
+      player.say('You wake, a little stronger.');
+      persist();
+    }
+    return; // everything else — movement, AI, other clocks — is frozen while resting
+  }
+
   if (input.newGamePressed()) {
     if (window.confirm('Start a new game? This erases your saved progress.')) {
       fullReset();
       return;
     }
   }
+  // N alone opens the notepad directly — no need to be jacked into a
+  // terminal just to read back what you've already learned.
+  if (input.notesPressed()) openNotebook();
   if (input.craftPressed()) {
     if (player.canCraftWaveGun()) player.craftWaveGun(map);
     else if (player.canCraftObGun()) player.craftObGun(map);
+    else if (player.canCraftChip()) player.craftChip();
+    else if (player.canCraftSword()) player.craftSword();
   }
   if (input.zoomTogglePressed()) camera.toggleZoom();
+  if (input.minimapTogglePressed()) { showMinimap = !showMinimap; player.say(showMinimap ? 'Minimap on.' : 'Minimap off.'); }
   lore.update(dt, player, input);
   if (input.musicTogglePressed()) {
-    const on = sfx.toggleMusic();
-    player.say(on ? 'Music on.' : 'Music off.');
+    const mode = sfx.toggleMusic();
+    player.say(mode === 'synth' ? 'Music: the piano bed.' : 'Music off.');
   }
   // Rest (B): skips the clock forward 10 game-minutes and restores some
   // health, so long as nothing hostile is close enough to make that a bad
@@ -641,11 +1420,11 @@ function update(dt) {
       && Math.hypot(r.x - player.x, r.y - player.y) < SLEEP_SAFE_RANGE)) {
       player.say("Too dangerous to rest with something hunting you.");
     } else {
-      dayNight.advance(SLEEP_MINUTES);
-      player.health = Math.min(player.maxHealth, player.health + SLEEP_HEAL);
-      sleepCooldown = SLEEP_COOLDOWN_S;
-      player.say(`You rest for ${SLEEP_MINUTES} minutes. Some strength returns.`);
-      persist();
+      // Begin the rest animation rather than healing instantly (see the
+      // resting block above). The cooldown is set when it completes.
+      resting = { t: 0 };
+      player.resting = true;
+      player.say('You lie down to rest a while...');
     }
   }
   if (hintEl.style.display !== 'none') {
@@ -721,8 +1500,35 @@ function update(dt) {
     const slot = renderer.slotAt(press.x, press.y);
     if (slot) {
       input.consumeClick();
-      if (player.getSlot(slot)) drag = { from: slot };
+      if (slot.kind === 'packbadge') showBackpack = true; // click the badge to open the full panel
+      else if (player.getSlot(slot)) drag = { from: slot };
       else player.equipSlot(slot); // empty hands slot: stow whatever's held
+    }
+  }
+  // Click an obelisk's terminal to open its screen — if you're close enough to
+  // reach it. Checked after the HUD slots (so a slot click wins) and before
+  // the in-world tool use (consuming the click here stops it swinging).
+  const obPress = input.clickPos();
+  if (obPress && renderer.obeliskAt) {
+    const w = camera.toWorld(obPress.x, obPress.y, renderer.w, renderer.h);
+    const ws = worldToScreen(w.x, w.y);
+    const ob = renderer.obeliskAt(ws.x, ws.y);
+    if (ob) {
+      input.consumeClick();
+      if (Math.hypot(ob.x + 0.5 - player.x, ob.y + 0.5 - player.y) <= OB_TERMINAL_RANGE) openObTerminal(ob);
+      else player.say('Too far from the obelisk to reach its terminal.');
+    }
+  }
+  // Click the fortress gate terminal (kiosk beside the grand doorway) to open
+  // its hack console, if you're standing close enough to reach it.
+  const gPress = input.clickPos();
+  if (gPress) {
+    const w = camera.toWorld(gPress.x, gPress.y, renderer.w, renderer.h);
+    const t = fortress.terminal;
+    if (Math.hypot(w.x - (t.x + 0.5), w.y - (t.y + 0.5)) <= 1.2) {
+      input.consumeClick();
+      if (fortress.nearTerminal(player.x, player.y, 2.6)) openGateTerminal();
+      else player.say('Too far from the gate terminal to reach it.');
     }
   }
   const up = input.consumeUp();
@@ -732,10 +1538,43 @@ function update(dt) {
       player.equipSlot(drag.from); // released on the source: treat as a click
     } else if (target) {
       player.moveItem(drag.from, target);
+    } else {
+      // Released away from any slot — pocket, hands, or (with the backpack
+      // panel open) backpack storage — drag it off to drop it on the ground.
+      // Not gated on the panel being open: a genuine drag always lands well
+      // outside the small source slot, so it doesn't get mistaken for the
+      // release-on-source click case above.
+      player.dropSlot(drag.from, map);
     }
     drag = null;
   } else if (!input.mouseHeld) {
     drag = null; // released outside any slot: cancel the drag
+  }
+
+  // The underworld runs its own much smaller update: the player, the one
+  // lurking creature, the camera, and the way back up — everything else in
+  // this function (obelisks, the W-factory, animals, day/night, RON resupply,
+  // lore terminals...) belongs to the overworld and simply holds still while
+  // you're not there to see it.
+  if (inUnderworld) {
+    player.update(dt, input, map, [], [], mouseWorld);
+    updateUnderworldCreatures(dt, uwCreatures, player, map);
+    camera.follow(player.x, player.y, dt);
+    if (player._ubikTeleportCooldown > 0) player._ubikTeleportCooldown -= dt;
+    // The exit is a plain door set in the wall — approach it (it's solid, so
+    // you stand a tile off) and you step back out into the real world.
+    else if (Math.hypot(player.x - underworld.exitX, player.y - underworld.exitY) < 1.7) {
+      exitUnderworld();
+      player._ubikTeleportCooldown = UBIK_TELEPORT_COOLDOWN;
+      sfx.play('zap');
+    }
+    uwAmbienceClock += dt;
+    if (uwAmbienceClock > uwAmbienceNext) {
+      uwAmbienceClock = 0;
+      uwAmbienceNext = 8 + Math.random() * 14;
+      sfx.play(Math.random() < 0.5 ? 'shriek' : 'hiss');
+    }
+    return;
   }
 
   // Weapons target robots and water droids alike (a combined foe list, only
@@ -749,6 +1588,24 @@ function update(dt) {
     p.prog += (PROJECTILE_SPEED * dt) / dist;
   }
   if (map.projectiles.length) map.projectiles = map.projectiles.filter((p) => p.prog < 1);
+
+  // Dropped items decay off the ground so the world doesn't silt up with
+  // salvage — perishables (meat, berries) go fast, common scrap/materials
+  // slower, and real prizes (weapons, keys, chips, a backpack) linger a good
+  // long while. Aged centrally here rather than at the ~20 push sites; each
+  // item's `age` ticks up and it fades/flickers (gi.fade, drawn by the
+  // renderer) over its last few seconds before it's culled. Items flagged
+  // `keep` (world-placed loot) never age — only stuff dropped during play does,
+  // so the world isn't stripped bare before you find it.
+  if (map.groundItems && map.groundItems.length) {
+    for (const gi of map.groundItems) {
+      if (gi.keep) { gi.fade = 1; continue; }
+      gi.age = (gi.age || 0) + dt;
+      const life = groundLifetime(gi.item);
+      gi.fade = life === Infinity ? 1 : Math.min(1, (life - gi.age) / GROUND_ITEM_FADE);
+    }
+    map.groundItems = map.groundItems.filter((gi) => gi.keep || gi.age < groundLifetime(gi.item));
+  }
 
   // Timed bombs: tick fuses, then detonate — a fire cloud that hurts every
   // living thing in its radius (the player included), and an insane bomb
@@ -767,6 +1624,32 @@ function update(dt) {
   if (map.sparks && map.sparks.length) {
     for (const s of map.sparks) s.ttl -= dt;
     map.sparks = map.sparks.filter((s) => s.ttl > 0);
+  }
+  // Ubik's brightening is a temporary win, not a permanent one: each patch
+  // ages and fades back to the ordinary, decayed world over UBIK_PATCH_LIFE
+  // (portals hold much longer, UBIK_PORTAL_LIFE), rather than lifting a spot
+  // of ground forever. A portal no longer links to another overworld spot —
+  // every tear is a way down into the one shared underworld pocket instead
+  // (see game/underworld.js and enterUnderworld() above).
+  if (map.ubikPatches && map.ubikPatches.length) {
+    for (const p of map.ubikPatches) p.t += dt;
+    map.ubikPatches = map.ubikPatches.filter((p) => p.t < (p.portal ? UBIK_PORTAL_LIFE : UBIK_PATCH_LIFE));
+    const portals = map.ubikPatches.filter((p) => p.portal);
+    if (player._ubikTeleportCooldown <= 0) {
+      for (const p of portals) {
+        if (Math.hypot(p.x - player.x, p.y - player.y) > UBIK_TELEPORT_RANGE) continue;
+        enterUnderworld();
+        player._ubikTeleportCooldown = UBIK_TELEPORT_COOLDOWN;
+        sfx.play('zap');
+        // Crucial: `map` is now the underworld pocket. Bail out of the rest
+        // of this (overworld) update tick — revealAround, obelisks, the
+        // factory, animals etc. all assume the overworld map and would run
+        // against the wrong one this frame (revealAround in particular reads
+        // map.explored, which the pocket doesn't have). Next frame the
+        // inUnderworld branch at the top takes over cleanly.
+        return;
+      }
+    }
   }
 
   // RON resupply: every couple of minutes, one already-emptied cache gets
@@ -794,11 +1677,27 @@ function update(dt) {
     if (wFactoryClock > wFactoryNext) {
       wFactoryClock = 0;
       wFactoryNext = 60 + Math.random() * 60;
-      const anyDamaged = obeliskObjs.some((o) => (!o.destroyed && o.obDamage > 0) || o.needsRebuild);
+      const anyDamaged = obeliskObjs.some((o) => (!o.destroyed && o.obDamage > 0) || o.needsRebuild || o.frozen);
       const w3Active = robots.some((r) => r.type === 'w3' && !r.dead);
       if (anyDamaged && !w3Active) {
         const drone = spawnW3(map, Math.floor(Math.random() * 0x7fffffff), factoryCx(), factoryCy());
         if (drone) { robots.push(drone); player.say('A repair drone whirs out of the W-factory.'); }
+      }
+    }
+    // A W5 gardener drone: no trigger, no urgency — the factory just keeps
+    // roughly one out in the world at all times, unconditional on anything
+    // else happening. Kill the factory and it stops being replaced, same as
+    // every other machine here, but the ambient forest-regrowth timer in
+    // its own block below keeps ticking regardless — this is a visible
+    // companion to that, not the whole mechanism.
+    wFactoryW5Clock += dt;
+    if (wFactoryW5Clock > wFactoryW5Next) {
+      wFactoryW5Clock = 0;
+      wFactoryW5Next = 30 + Math.random() * 40;
+      const w5Count = robots.reduce((n, r) => n + (r.type === 'w5' && !r.dead ? 1 : 0), 0);
+      if (w5Count < 2) {
+        const gardener = spawnW5(map, Math.floor(Math.random() * 0x7fffffff), factoryCx(), factoryCy());
+        if (gardener) { robots.push(gardener); player.say('A small drone trundles out of the W-factory, unhurried.'); }
       }
     }
     wFactoryW1Clock += dt;
@@ -848,8 +1747,32 @@ function update(dt) {
   updateAnimals(dt, animals, player, map);
   updateBirds(dt, birds, animals, player, map);
   updateRobots(dt, robots, player, map);
+  // Choir light-flash sync: while the piece plays, each singing machine's red
+  // light pulses to the notes of its assigned vocal part, so the row of them
+  // blinks out of step like a choir. (r.choirFlash is read by sensorStyle.)
+  const choirT = sfx.choirElapsed();
+  if (choirT >= 0) {
+    let nearestSinger = Infinity;
+    for (const r of robots) {
+      if (!r.singing) continue;
+      const band = CHOIR_REGISTERS[(r.choirVoice || 0) % 4];
+      let last = -1;
+      for (let i = band.length - 1; i >= 0; i--) { if (band[i] <= choirT) { last = band[i]; break; } }
+      r.choirFlash = last >= 0 ? Math.max(0, 1 - (choirT - last) / 0.4) : 0;
+      nearestSinger = Math.min(nearestSinger, Math.hypot(r.x - player.x, r.y - player.y));
+    }
+    // Walk away and the singing quietens: full within ~6 tiles, fading to a
+    // faint distant hush by ~22 tiles.
+    const vol = nearestSinger === Infinity ? 0 : Math.max(0.05, Math.min(1, 1 - (nearestSinger - 6) / 16));
+    sfx.setChoirVolume(vol);
+  }
   resolveBodyOverlaps(player, animals, robots);
   map.updateShakes(dt);
+  // Fortress: swings the doorway, lights the maze way-out, and runs the breach
+  // alarm. On alarm (with the uplink intact) `stir` rouses the overworld — the
+  // obelisks flare red and the W-factory sends a W4 toward the doorway; `calm`
+  // unwinds it when the fortress stands down or the uplink is cut.
+  fortress.update(dt, player, robots, worldStir);
   dayNight.update(dt);
   // Time's up: SKYLINK-9000 comes online. Every obelisk lights up and links
   // to every other in a web of lasers, and the factory throws wave after
@@ -957,6 +1880,7 @@ function update(dt) {
   // tower — a report of closeness, never an exact position.
   for (const ob of obeliskObjs) {
     if (ob.burning > 0) ob.burning -= dt; // OB-gun flame timer, ticked for the renderer
+    if (ob.frozen) ob.frozenT = (ob.frozenT || 0) + dt; // CPU-burn age for the renderer's smoke ramp
     if (ob.destroyed) continue;
     const d = Math.hypot(ob.x + 0.5 - player.x, ob.y + 0.5 - player.y);
     if (d < 9) {
@@ -1002,15 +1926,19 @@ function frame(now) {
 
   if (now - lastRenderTime >= MIN_RENDER_MS) {
     lastRenderTime = now;
-    renderer.draw(camera, map, player, animals, {
+    renderer.draw(camera, map, player, inUnderworld ? [] : animals, {
       fps,
       version: VERSION,
-      light: dayNight.light(),
+      // Fluorescent-lit down there regardless of the overworld's clock — the
+      // underworld veil (below) carries the mood instead of day/night darkness.
+      light: inUnderworld ? 1 : dayNight.light(),
       timeLabel: dayNight.countdownLabel,
-      minimap,
-      birds,
-      robots,
-      waterdroids,
+      minimap: (inUnderworld || !showMinimap) ? null : minimap,
+      birds: inUnderworld ? [] : birds,
+      robots: inUnderworld ? [] : robots,
+      waterdroids: inUnderworld ? [] : waterdroids,
+      underworld: inUnderworld,
+      uwCreatures: inUnderworld ? uwCreatures : [],
       lore,
       torch: player.pockets.some((s) => s && s.item === 'torch'),
       showBackpack,
@@ -1019,12 +1947,19 @@ function frame(now) {
       deathCert: player.deathCert,
       showSkills,
       showWeapons,
-      craftPrompt: (player.canCraftObGun() && player.hands !== 'obgun') || (player.canCraftWaveGun() && player.hands !== 'wavegun'),
+      craftPrompt: (player.canCraftObGun() && player.hands !== 'obgun') || (player.canCraftWaveGun() && player.hands !== 'wavegun') || player.canCraftChip() || player.canCraftSword(),
       craftWaveGun: player.canCraftWaveGun() && player.hands !== 'wavegun',
+      craftChip: player.canCraftChip() && !player.canCraftWaveGun() && !(player.canCraftObGun() && player.hands !== 'obgun'),
+      craftSword: player.canCraftSword() && !player.canCraftChip() && !player.canCraftWaveGun() && !(player.canCraftObGun() && player.hands !== 'obgun'),
       skylinkActive: player.skylinkActive && !player._ended,
       skylinkTimer,
       obeliskObjs,
       paused,
+      rest: resting ? { dim: restDim(resting.t) } : null,
+      ubikFlicker: player.ubikFlickerT || 0,
+      ubikFlickerX: player.ubikFlickerX || player.x,
+      ubikFlickerY: player.ubikFlickerY || player.y,
+      musicMode: sfx.musicMode, // the walkman's reels spin only while its side is what's actually playing
     });
     frameCount += 1;
   }

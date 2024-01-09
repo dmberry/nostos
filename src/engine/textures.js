@@ -35,8 +35,7 @@ function loadDownscaled(path, size = 64) {
 const T = 'assets/textures/';
 
 // Keyed by FLOORS type (tiles.js). Types not listed here keep their flat
-// colour fill (sand, tallgrass2) — no matching photo texture was worth
-// forcing.
+// colour fill (tallgrass2) — no matching photo texture was worth forcing.
 export const FLOOR_TEXTURES = {
   grass: loadDownscaled(T + 'floor-grass.jpg'),
   tallgrass: loadDownscaled(T + 'floor-grass.jpg'),
@@ -46,6 +45,12 @@ export const FLOOR_TEXTURES = {
   road: loadDownscaled(T + 'floor-road.jpg'),
   boards: loadDownscaled(T + 'floor-boards.png'),
   bridge: loadDownscaled(T + 'floor-boards.png'),
+  sand: loadDownscaled(T + 'wall-pebbledash.png'),
+  // Adamantine's fortress decks: riveted metal panels for the corridors/maze,
+  // paving for the open quad, and a darker panel for the inner sanctum.
+  panel: loadDownscaled(T + 'panel-metal-1.jpg'),
+  quad: loadDownscaled(T + 'floor-pavingstone.jpg'),
+  sanctum: loadDownscaled(T + 'panel-metal-2.jpg'),
 };
 
 // A sparse dirt-patch variant scattered thinly through grass tiles for
@@ -57,7 +62,26 @@ export const GRASS_PATCH_TEXTURE = loadDownscaled(T + 'floor-secret.jpg');
 export const WALL_TEXTURES = {
   stone: loadDownscaled(T + 'wall-stone.jpg'),
   brick: loadDownscaled(T + 'wall-brick.jpg'),
+  // Fortress ramparts (riveted metal) and the inner charcoal maze (dark stone).
+  metal: loadDownscaled(T + 'panel-metal-2.jpg'),
+  darkstone: loadDownscaled(T + 'wall-darkstone-alt.png'),
+  // Adamantine's inner maze: darker "AI" wall designs, mixed for variety —
+  // riveted panels, an iron grate, and a louvred vent.
+  aiwall: loadDownscaled(T + 'AI-texture/metal_06.jpg'),
+  aigrate: loadDownscaled(T + 'AI-texture/grating_10.jpg'),
+  aivent: loadDownscaled(T + 'AI-texture/grating_05.jpg'),
 };
+
+// Real photographic street-art/flyer photos (assets/textures/graffiti/), used
+// as a rare, older register of wall-marking — an actual weathered poster
+// stuck to a wall, distinct from the painted RON/UBIK/vector text tags.
+// worldgen.js's paintGraffiti flags a wall with `graffitiImage` (an index
+// into this array, kept in sync by count); Renderer.drawGraffitiPoster reads
+// it. Downscaled like every other photo texture (see loadDownscaled above).
+export const GRAFFITI_TEXTURES = [
+  'graffiti_01.jpg', 'graffiti_02.jpg', 'graffiti_12.jpg', 'graffiti_19.jpg',
+  'graffiti_21.jpg', 'graffiti_30.jpg', 'graffiti_33.jpg', 'sign_08.jpg',
+].map((f) => loadDownscaled(T + 'graffiti/' + f, 96));
 
 // Hand-drawn tree art (a copy of the CC0 "Premium Trees" sheet dropped in at
 // assets/textures/Shadow/). One transparent 512x224 sheet; each TREE_SPRITE
@@ -123,3 +147,30 @@ export const CHARACTER_SPRITE_SETS = {
   u: maleSet, // Neve reuses Adam's set — no distinct "other" skin rendered yet.
 };
 export const CHAR_COMPASS_DIRS = CHAR_DIRS;
+
+// Directional animal renders sourced from Kenney's CC0 "Cube Pets" pack
+// (assets/textures/animals/), pre-rendered offline via tools/pet-render.html
+// into 8 screen-facing directions x idle (1 frame) + walk (4-frame cycle)
+// per species — same shape as CHARACTER_SPRITE_SETS above, since the models
+// turned out to be rigged with matching clip names across the whole pack
+// (checked via gltf.animations, having wrongly assumed "static" at first).
+// Kenney normalises every model to a similar bounding cube regardless of
+// the real animal's size, so these are NOT drawn at a shared scale — see
+// ANIMAL_SPRITE_SCALE in animals.js for the per-species fudge factor
+// applied at draw time.
+const A = T + 'animals/';
+function loadAnimalSet(species) {
+  const set = { idle: {}, walk: {} };
+  for (const dir of CHAR_DIRS) {
+    set.idle[dir] = load(`${A}${species}_idle0_${dir}.png`);
+    set.walk[dir] = [0, 1, 2, 3].map(i => load(`${A}${species}_walk${i}_${dir}.png`));
+  }
+  return set;
+}
+export const ANIMAL_SPECIES = [
+  'beaver', 'bee', 'bunny', 'cat', 'caterpillar', 'chick', 'cow', 'crab',
+  'deer', 'dog', 'elephant', 'fish', 'fox', 'giraffe', 'hog', 'koala',
+  'lion', 'monkey', 'panda', 'parrot', 'penguin', 'pig', 'polar', 'tiger',
+];
+export const ANIMAL_SPRITE_SETS = {};
+for (const species of ANIMAL_SPECIES) ANIMAL_SPRITE_SETS[species] = loadAnimalSet(species);
