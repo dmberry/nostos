@@ -22,490 +22,323 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Always put a texture on a glowing thing.** No glow is ever a flat coloured blob — a grille/panel texture is laid over it (the factory-vent trick). Everything luminous goes through `Renderer.texturedGlow`, which caps the glow with an AI grate texture; if you add a new light, use it rather than a bare `fill`. (David, 2026-07-07.)
 - **Vary texture opacity per tile.** Floors jitter their texture alpha deterministically per tile (`drawFloor`) so a large expanse of one floor reads as worn/varied rather than a flat repeat.
 
-## Where we are (v1.29)
-
-### v1.29 — title screen laptop layout + slower spools
-
-All in `src/game/mobile-gate.js`:
-- **Title relaid for landscape.** The markup is now composed from pieces (`brandHtml`, `copyHtml`, `deckHtml`, `rackHtml`, `themesHtml`, `skylinkHtml`, `stageHtml`) so the two modes arrange the same DOM differently: the gate is a single flex column (unchanged); the title wraps the pieces into `.mg-hero` (brand, tagline, actions, SKYLINK) and `.mg-player` (deck, rack, themes) plus the full-width `.mg-stage`. A `@media (min-width: 820px)` rule turns the title into a centred CSS grid — `"hero player" / "stage stage"`, columns `minmax(300,460) minmax(340,480)`, rows `1fr auto` — so hero text sits left, the Walkman (with all four tapes visible) right, and the machines run as a ground band along the bottom. Fixes the old bug where the single tall column overflowed a 768px laptop and pushed the tape rack off-screen. Below 820px it falls back to the single column. Verified at 1366×768 (no overflow, all four tapes on-screen) and the mobile gate unchanged (fits 812).
-- **Slower spools.** Deck reel advance `dt*2.4` → `dt*1.1`.
-
-### v1.28 — SKYLINK clock recoloured dark blue
-
-`.mg-skylink` on the gate/title: magenta → dark blue (text `#5b9dff`, glow/border `rgba(70,130,255,…)`, backing `rgba(8,18,44,0.6)`, span `#cfe0ff`). Cosmetic only.
-
-### v1.27 — gate/title branding + label marquee + bigger tape
-
-All in `src/game/mobile-gate.js`:
-- **Branding wordmark.** `<h1>` is now `post<span class="mg-ai">AI</span><span class="mg-caret">▮</span>` in a `.mg-brand` flex row with a CSS-drawn cassette mark (`.mg-brand-mark`, a dark rounded rect with two reel dots and a `--deck` inset). Monospace, "AI" glows in `--accent`, a blinking terminal caret. Title mode scales it up (46px logo, 48px mark). Themes recolour it via `--accent`/`--deck`.
-- **Label marquee.** The `#mg-now` text line is gone; the now-playing string lives in a `nowText` var (set by `updateNow`) and is drawn as a marquee across the cassette's own coloured label strip (drawCassette's `fillRect(-9,-5.5,18,3)`) in the deck frame loop — clipped to the strip, dark ink, seamless two-copy loop while playing (`t/34` drift), centred when idle (shows `postAI`).
-- **Bigger tape.** Deck canvas intrinsic 280×110 → 264×168 (≈ cassette 22:14 aspect) and draw scale 5.0 → 11.2, so the tape nearly fills the deck. Verified the taller deck still fits the mobile gate (themes bottom ≈ 798 < 812) and reads on desktop; no console errors; marquee scrolls in both modes.
-- Branding is a first pass — wordmark treatment / mark are easy to iterate.
-
-### v1.26 — WARD tape three-track rework + copy newline
-
-- **WARD "bare stanhope" now has three tracks.** David reorganised the audio: side A is *five* + *glock* (`01 five.mp3`, `02 glock.mp3`), side B is the newly-added *tau bootis* (`03 tau bootis.mp3`); the old layout had *five* on A and *glock* alone on B. Synced the `TAPES[num:3]` entry in `items.js` (labels `five · glock` / `tau bootis`) and `docs/tapes.md`. Verified in the gate: plays five → glock → tau bootis → wraps, all files resolve, no errors.
-- **Gate copy**: `<br>` before "Meanwhile, here's the soundtrack." so it sits on its own line under "Grab a laptop…".
-
-### v1.25 — Walkman transport + gate/title spacing
-
-All in `src/game/mobile-gate.js`:
-- **Transport buttons** in the deck (`.mg-transport`): play/pause (`#mg-play`, glyph flips ▶ ↔ ❚❚ off the audio `play`/`pause` events via `syncTransport`), stop (`#mg-stop`, pause + `currentTime=0`), next (`#mg-next`, `nextTrack`). Stop/next disable until a tape is loaded; play with nothing loaded starts tape 1. Buttons `stopPropagation` so they don't also trigger the deck's click-to-pause.
-- **Tap-to-skip**: clicking a tape card starts it; clicking the card that's already current calls `nextTrack()` (wraps A→B→A). The `ended` handler now just calls `nextTrack` too.
-- **Spacing**: theme switch `margin-top` 8 → 18px. Title mode (`[data-mode="title"]`) gets a bigger logo (40px), larger sub/buttons, and clear air above the SKYLINK clock (20px) and stage, so the desktop window is used rather than everything bunching at the top.
-- Verified live (desktop): transport advances/stops correctly, glyph tracks real play state, clean single tape-load starts on side A; no console errors.
-
-### v1.24 — desktop title screen (click-to-start)
-
-The mobile gate is now a two-mode component. `initMobileGate(mode)` renders the phone gate as before (`mode='gate'`); `initTitleScreen()` calls it with `mode='title'` for the desktop start screen. `index.html` boots `initTitleScreen()` on desktop instead of importing `main.js` directly, so the game opens on a title card and starts on click.
-
-All in `src/game/mobile-gate.js` unless noted:
-- **Shared shell, different action row.** Title mode reuses everything — the dancing T1/T2/W4, the playable Walkman deck + rack, the World/Backspace/Fortress themes, the SKYLINK clock — and swaps the "you need a keyboard" note + "Try anyway" link for a tagline and a **Continue / New game** button row. `.mg-btn` styling themes off `--accent` so the buttons recolour with the theme.
-- **Continue vs New game.** Both boot via a shared `boot(newGame)`: it stops the frame loop (`running=false`) and the SKYLINK interval, pauses the title audio, `el.remove()`s the screen, and dynamic-imports `main.js`. **New game** first clears the run save (`postai-character`, `postai-lore`, `postai-seed`) — keeping the durable `postai-identity` (name/gender), exactly like the in-game New Game — so `main.js` starts fresh; **Continue** leaves the save so `main.js` restores it. Continue only renders when a save exists (`localStorage.getItem('postai-character')`).
-- **Music stops on entry** (David's call): the game starts its own soundtrack rather than inheriting the title's tape.
-- **Shows every launch** on desktop (no skip toggle). Mobile phones still get the gate (`isMobile()` unchanged).
-- Verified live: desktop reload → title with both buttons (save present), tape plays, Continue → game boots restoring "Adam" with no console errors; gate mode still shows the original copy + "Try anyway". Single planted shadow per robot on a clean load (the earlier "two shadows" report was a stale cached `robots.js` — the `noShadow` guard shipped in v1.23; a fresh load draws one).
-
-### v1.23 — mobile gate polish
-
-All in `src/game/mobile-gate.js` unless noted:
-- **Lighter theme backgrounds** (World olive, Backspace tan, Fortress steel) so the dark machines read; a soft light pool under the stage.
-- **Bigger dancers that bob with planted shadows.** First attempt (v1.22) bobbed the whole robot incl. its shadow; then a squash-about-feet kept the shadow put but looked worse; David preferred the bob. Final: `robots.js` drawT1/T2/T3 skip their own shadow when `r.noShadow` is set; the gate draws a separate floor shadow (shrinks slightly as the bot rises) and bobs only the body via `translate(0, -bob)`. Best of both — the liked bob, shadow stays on the floor.
-- **Track readout.** Deck now shows `artist — <track name> · <side>` (track name derived from the filename, stripping the numeric prefix), updated on load and on each auto-advance.
-- **Theme switch moved under the tape rack.**
-- **Tighter layout** (smaller header/deck/robots/margins, stage no longer flex-grows unbounded) so the tape names sit on-screen on an iPhone (rack+themes within 812px).
-- **Intro copy**: headline on its own line, "Grab a laptop…" a smaller line beneath, "Try and play it anyway…" spaced above and below.
-- **Readable tape folders.** Renamed `Tape-01` → `Tape-01 meme - compilation` etc. (number first for order + artist/title for humans); `TAPES[].dir` + `docs/tapes.md` updated. (Supersedes the pure-number scheme from v1.22 — the names should be visible in the folder.)
-
-### v1.22 — mobile Walkman gate, numbered tape folders, minimap rectangle
-
-- **Mobile gate** (`src/game/mobile-gate.js`, new). On a touch device the index bootstrap loads this instead of `main.js` — the game never boots (no render loop draining battery). It shows a "not on a phone" note, a working Walkman for the soundtrack, and uses the game's OWN draw code for authenticity: `Renderer.drawCassette` for the deck + rack tapes, `robots.js drawRobot` for a dancing T1/T2/W4 troupe (bob + tilt, reels/limbs animate while playing). Extras: **World/Backspace/Fortress** colour themes (CSS vars), a cosmetic **SKYLINK UPLINK OPERATIVE** doomsday clock, a **"Try and play it anyway…"** link that dismisses the gate and dynamic-imports `main.js` (for a touch laptop mis-detected as mobile), deck reel spin slowed to a lazy turn.
-- **Minimap** turned to a bar-free rectangle matching the real **128×192** world (the fortress annex extends the map south, so it's portrait, not square — that's why the square panel had black bars). Panel takes the rotated aspect; river along the top; **]** toggles; printed-map overlay shows obelisks/factory/mainframe through fog.
-- **Numbered tape folders.** Renamed `assets/audio/Tape-<artist>-<title>` → `Tape-01`…`Tape-04` and updated `TAPES[].dir`, so an artist/title with hyphens or spaces (e.g. "Meme vs Xan — 24 EP") can't make the folder ambiguous. Human-readable metadata lives only in the manifest; `docs/tapes.md` updated. Tape 4 metadata corrected (artist "Meme vs Xan", title "24 EP").
-- **Graffiti** posters: frequency 14% → 34% of tagged walls, opacity 0.92 → 0.5.
-- **HUD icons / keys / repair drones / tape 4** — see v1.21 (these shipped there; the mobile gate + numbering are the new work here).
-
-### v1.21 — minimap orientation, repair drones, key cards, tape 4, HUD icons
-
-- **Repair drones (real fix).** W3s spawn at the remote factory and must travel across the map to mend a damaged tower — but the per-robot `updateRobots` loop skipped any non-friendly robot not `nearPlayer`, so a W3 dispatched off-screen never moved. Exempted `w3` from that cull; they now travel and repair off-screen (verified in isolation: spawn → travel → obDamage→0). Caveat: `moveToward` is greedy axis-slide with no true pathfinding, so a long trip can still jam against a big obstacle (same limitation behind the "trapped on the factory" report — not fully solved).
-- **Minimap orientation.** Was a plain top-down blit, 90° out from how the world reads (river ran down the left). `drawMinimap` now rotates the whole thing (map, fog, dot, tracking pings, overlay) a quarter-turn so the river sits along the top, north-up; kept square, filling the box. (A first pass rotated 45° to a diamond to match the true iso angle; David preferred square + river-at-top.) Toggle with **]** (`input.minimapTogglePressed` → `BracketRight`; `showMinimap` gates `hud.minimap` in main.js).
-- **Downloaded-map overlay.** While a `printed_map` is carried, the minimap shows obelisks (green), factory (blue) and mainframe (red) through the fog — the RON-ML `print` schematic laid over the map.
-- **Bigger HUD icons.** `drawSlot` draws item icons at `size/26` (was `size/40`), clipped to the slot so a large weapon icon can't spill over the border or qty badge.
-- **Keys as access cards.** `ai_key`/`fortress_key` icons redrawn from mechanical keys to electronic access cards (chip pad, data stripe, lanyard hole) — the AI's locks are digital.
-- **Tape 4 + guaranteed tapes.** Added `tape_4` (Meme — Versus Xan, `Tape-Meme-Versus-Xan-24-EP`). `underworld.js` now imports the `TAPES` manifest and force-places every tape in a yellow box so all of them appear each run (doubles via the random scatter). Fixed the dir after the folder turned out to be `-24-EP`, not the path first given.
-- **Graffiti posters full face.** `drawGraffitiPoster` subQuad widened to ~the whole wall face (mural, not a small pasted photo).
-- **Gardener drones visible.** Two W5s seeded out in the world at start (away from the factory) + the factory sustains up to two; each lamp/gardener carries a per-object glow warmth.
-
-### v1.20 — crickets in bouts
-
-- **Intermittent crickets.** They were a continuous bed for the whole dusk window (16:30–20:00) whenever no machine was near — too constant. Now `sound.js` runs a self-rescheduling `_scheduleCrickets` timer during dusk that flips `_cricketSinging` between short singing spells (5–13s) and longer silences (12–32s); `_applyCricketGain` gates the layer on dusk AND no-robot AND singing. Net effect: crickets come and go in spells and are quiet more than half the evening. Tuning knobs are the two `setTimeout` ranges in `_scheduleCrickets`.
-
-### v1.19 — sea floor in blocks, more/varied lamps
-
-- **Sea floor as blocks of sameness.** The first pass textured every sea tile from a random pool → read as noise ("too messy"). Now `drawLiminalFloor` picks a texture per coarse **6×6 block** (`SEA_BLOCK`) via `tileHash(bx,by)`, with a per-block opacity and only a whisper of per-tile jitter, so the expanse breaks into coherent patches that change every several tiles. Pool tightened to four tonally-similar muted floors (ring-bottoms, pavingstone, dirt, secret) — dropped the green grassdirt and brown boards that clashed. Block seams are **dithered**: within a 2-tile band of a boundary a tile can borrow the neighbouring block's texture+opacity, with probability rising toward the seam (~0.45 at the edge), so patches interleave instead of butting up in a hard grid line.
-- **More, warmth-varied lamps.** Open-sea lamp scatter raised 22 → 40 attempts; each lamp carries a `warm` (0..1) that lerps its glow (halo, bloom, floor pool) from pale to a deeper sickly yellow, so they don't all match. Lamp sprite shrunk 78 → 64px.
-
-### v1.18 — lamp sprite, NW exit door, sea texture, cassette credits
-
-- **Floor-lamp sprite.** `drawLamp` now draws `assets/textures/liminal-lamp.png` (shade + glowing bulb + pole + round base), anchored by its foot to the tile via normalized fracs (foot 0.885, centre 0.50, bulb 0.20). On-screen height 78px (shrunk from an initial 92). Fixture is steady; the *light* flickers via `_lampFlicker`.
-- **Dimmer, yellow (liminal) glow.** The lamp halo/bloom and the `drawLampGlows` floor pool were toned right down and recoloured from warm white to a sickly liminal yellow (halo `rgba(220,200,120)` @0.32, bloom `rgba(226,206,128)` @0.2, floor pool `rgba(214,196,110)` @0.11, radii reduced) — "too fierce" → restrained.
-- **EXIT door on the NW wall.** `carveWorld` places the exit door on the spawn room's **west wall** (`exitTX = spawn.x, exitTY = spawn.cy`) — the back-left wall from the iso camera — so it and the green EXIT sign read square-on as you cross the room, instead of the near south wall.
-- **Sea floor texture** (from v1.17 batch, shipped here): the open yellow sea uses `misc-ring-bottoms.jpg` multiplied over the yellow base + wear.
-- **Cassette credits in the About box.** Music section now lists each tape's artist, album and A/B sides (meme — compilation, meme — maieutics, WARD — bare stanhope) with a small styled list, replacing the stale "three alternate tracks" line.
-
-### v1.17 — stale-save crash fix (the "broken in Chrome" bug)
-
-- **Symptom.** Returning players saw the whole game render flat and untextured, frozen on the first frame — reported as "broken in Chrome, fine in Safari." It wasn't a browser bug or a Vercel case-sensitivity issue (all texture files 200 on the live host): the render loop was throwing on frame 1, before images finished loading, so nothing ever textured.
-- **Root cause.** The v1.15 tape refactor renamed item keys (`tape_ward`/`tape_meme`/`tape_maieutics` → `tape_1..3`). A save from an earlier build still carried an old key in `player.walkman` (and possibly a pocket). On load `main.js` restores that state verbatim; `ITEMS['tape_ward']` is now `undefined`; `drawDashboard` → `drawCassette` reads `.color` off it every frame → uncaught `TypeError` → `frame()` never reschedules `requestAnimationFrame`. "Fine in Safari" just meant that browser held no pre-refactor save. localStorage is per-browser, so whichever browser had played the old build broke.
-- **Fix (three layers).**
-  1. *Root:* on load, sanitize restored inventory — drop any `{item}` whose key isn't in the current `ITEMS` table (`pockets`, `backpack.weapon`, `backpack.slots`, `hands`); an invalid `walkman` resets to the default `tape_1`. This kills the whole class of orphaned-key crashes, not just the cassette.
-  2. *Defensive:* `drawCassette` guards `(itemDef && itemDef.color)`; the walkman block in `drawDashboard` only runs when `ITEMS[player.walkman.item]` resolves.
-- **Verified** by seeding the exact pre-refactor save (`walkman: tape_ward`, pocket `tape_meme`) into localStorage and reloading: game loads clean, textures present, walkman shows `tape_1`, dead pocket key dropped, zero console errors.
-- **Lesson for next time:** renaming or removing an `ITEMS` key is a save-migration event. Either keep an alias or sanitize on load (now done generically, so future renames are covered).
-
-### v1.16 — floor lamps, isometric EXIT sign, share card
-
-- **Floor lamps.** The underworld `lamp` object was a hanging fixture; it's now a standing **floor lamp** (weighted foot + ground shadow, thin pole, flared shade with a glowing bulb sliver under the rim). `drawLamp` rewritten; `drawLampGlows` glow re-centred on the tile (was offset up for the ceiling drop). `tiles.js` comment updated.
-- **Isometric EXIT sign.** The sign above the exit door was a flat billboard with horizontal text. Now the panel is skewed onto the wall's SE face via the same `inset()` parallelogram as the door leaf, and the **lettering is rendered once to an offscreen canvas** (`_exitTextImg`) then drawn through an affine `ctx.transform` that maps the text rectangle onto the (inset) sign quad — so "EXIT" leans in perspective with the panel instead of sitting flat on top of it.
-- **Link-preview share card.** Added `assets/share-card.jpg` (1200×630, a framed game shot with title + tagline + green accent, composed off the live canvas) and Open Graph / Twitter meta tags in `index.html` `<head>`. A shared link now renders a proper thumbnail in iMessage / WhatsApp / Slack / Discord / X. **Requires hosting**: `og:url`/`og:image` are absolute and point at `https://dmberry.github.io/postAI/`, so the card only appears once the repo is served publicly (GitHub Pages: repo Settings → Pages → deploy from `main`). Update the host in the meta tags if deployed elsewhere.
-- **Roadmap.** Dropped the sight-cone item (didn't look good, per David); flagged full save/load as a wanted pull-forward candidate.
-
-### v1.15 — the underworld at full scale, data-driven tapes, roadmap
-
-- **128×128 underworld.** Regenerated big: `carveWorld` scatters varied-size rooms (10–26) across an open **sea** of worn-yellow floor (grey edge-cliffs suppressed down here so it reads boundless), joined by **road corridors** (L-paths of the road texture punched through walls). `map.liminalTex` holds a per-tile floor-texture index; the renderer (`drawLiminalFloor`, `LIMINAL_TEX`) draws one of **seven photo floors** per room (boards/dirt/grass/grassdirt/pavingstone/road/secret, loaded locally so textures.js is untouched), the sea flat-yellow+wear, and ~12% of rooms **baby-blue** (sentinel 250).
-- **Lamps as objects.** The abstract light array is gone; lamps are real `lamp` objects (non-solid) placed in rooms and the sea, drawn as hanging fixtures (`drawLamp`) with a floor glow (`drawLampGlows`) that flickers rarely and out of step per-lamp (`_lampFlicker`).
-- **Exit is a plain door with a green EXIT sign.** `exitdoor` object in the spawn room's wall (`drawExitDoor`), approached to leave (main.js proximity < 1.7); a lit green EXIT sign hangs above it.
-- **Yellow tape boxes.** The WARD tape now sits in a guaranteed **yellow box** (`box` with `yellow: true`, opened with E) in the first room, plus a sparse scatter of yellow boxes through other rooms holding the odd extra tape.
-- **Data-driven tapes.** Tapes are generated from a `TAPES` manifest in `items.js` (num, artist, title, folder, per-side track lists) into `tape_<num>` items — adding one is a single entry. Documented in `docs/tapes.md`. The walkman marquee is dimmer and scrolls slowly, looping continuously.
-- **`docs/ROADMAP.md`** added — every outstanding item from our sessions (ELIZA-in-terminal, the phone/comms, portal gun, the other three AIs, awareness/escalation, deeper underworld levels, survival-sim depth, save/load, refactors) grouped into five phases.
-
-### v1.14 — the Backspace rebuilt, portal-gun split, polish batch
-
-A batch on top of v1.13's underworld, mostly reshaping it and cleaning up the Ubik/music systems.
-
-- **Crash fix (urgent):** stepping into a tear called `enterUnderworld()`, which swaps the module-level `map` to the pocket — but `update()` then kept running the overworld tail on the swapped map, and `revealAround()` hit `map.explored[...]` (which the pocket lacked) → TypeError. Fixed with an immediate `return` after entering, plus defensive fog/projectile fields on the pocket map.
-- **The underworld is now rooms, not a maze.** Rebuilt `underworld.js`'s generator: a 3×3 block of huge rooms (43×43 pocket) joined by doorways punched in shared walls (randomized-DFS spanning tree + a few loop doors), with a central clear "plus" per room guaranteeing traversal. **Furniture** (new `furniture` object type, tiles.js + a `drawFurniture` prism-stack in renderer.js) is scattered in clusters — solid, so you weave around it. Connectivity BFS-verified.
-- **Exit at the start, clearly marked.** The way home is now a tear a few tiles from the spawn point in the first room, signed **EXIT** in fire-exit green (drawn above the tear whenever `hud.underworld`). The lurker moved to the farthest room, so exploring toward it is the optional risk. (Also fixed: the exit tear was invisible — its render fades in over its first ~2s of `age`, but the underworld never ages `ubikPatches`, so its `t` now starts at 3 to render fully and stay put.)
-- **Worn floor texture.** The bare-colour liminal floor now gets procedural wear in `drawFloor` (`drawLiminalWear`): per-tile water-stain blotches, bleached patches, and scuff streaks — deterministic, clipped to the diamond.
-- **Ubik tear no longer looks like the old portal.** Stripped the orange/blue two-tone rims, the pairing/`linkedTo` teleport machinery, and the Portal-game flame homage. A tear is now a dark void with a jagged, broken, flickering violet fracture rim — a raw rip, not a teleporter. That clean-portal aesthetic is reserved for a **portal gun** (a planned separate item — there is no portal gun in the code yet; this just clears the aesthetic for it).
-- **Ubik confusion: bounce, don't spin.** Confused machines now stay rooted to the spot and jump straight up and down (via `_confuseHopT`, read as a vertical offset in `drawRobot`) with the violet reality-static dots — the `rotate()` spin and the wander target are gone.
-- **Music: synth by default, walkman on top.** Fresh sessions boot on the synth bed (`sound.js` default `'synth'`). Starting a tape on the walkman loops that track over it; **stopping the tape (or removing it) drops back to the synth**, not to silence. A saved session choice still wins.
-- **Walkman HUD.** The now-playing artist/track scrolls across a small amber LCD ticker under the deck (`drawWalkmanTicker`), so a long name fits the narrow slot; static when stopped.
-
-### v1.13 — the underworld, the walkman, machine self-preservation
-
-- **The underworld** (`src/game/underworld.js`, new): a Ubik portal no longer teleports between overworld tears — stepping into any tear drops the player into a single shared **liminal pocket**, Backrooms-styled: a 26×26 recursive-backtracker maze (same carving technique as the fortress labyrinth) in faded yellow (`liminal` floor/wall material — no image texture; the floor rides `FLOORS` fallback colour, the walls a heavy tint over the metal texture), under a flickering jaundiced screen veil (`drawUnderworldVeil`). One **lurker** wanders it — a monkey sprite recoloured sickly via the same tint-scratch trick as the dog/boar, jittering while it hunts — that only ever notices the player by genuine line of sight, and claws on contact. A permanent second tear at the maze's deepest cell leads back up to where you left. **This is the game's first genuinely separate `GameMap` instance**: entering swaps the module-level `map` binding (plus `player.map`/`window.__game.map`), snaps the camera, and the main update loop early-returns into a much smaller underworld tick (player + lurker + exit check + occasional far-off shriek/hiss stingers); exiting swaps everything back. The overworld holds still while you're down there. Pocket is built lazily on first entry and kept for the session (deliberate v1 scope cut — per-visit regeneration and deeper stacked levels are natural next steps).
-- **Walkman + cassettes**: a new dashboard slot on a drawn leather carry strap, accepting only `kind:'tape'` items (`tape_meme`: resonance on side A, slip on side B — the player starts with it). Clicking the tape in the deck cycles play-A → flip-to-B → stop, driving the ordinary music system (`sfx.setMusicMode`; the M key still works and simply overrides). The cassette's reels (shared `drawCassette` helper, also the static pocket/ground icon) visibly rotate only while its current side is what's genuinely playing (`hud.musicMode` check). Walkman contents persist in the character save; the playing side deliberately doesn't, so a fresh session never fights the saved music setting. More tapes are one `items.js` entry each.
-- **Machines flee to mend**: below `HP_FLEE_FRAC` (20%) of maxHp, any non-zombie hostile breaks off exactly like the existing low-battery path and limps home, where the charger now also repairs hull at `REPAIR_RATE` (1.5 hp/s — a T2 from the threshold is ~13s out of action); it only rejoins its rounds when battery AND health are both full. Zombies excluded (no self-preservation left to appeal to).
-- **OB-gun wipes out robots**: the zombify-on-burn mechanic is gone — the beam now kills any machine outright (existing zombies included), with the gun scrap penalty. Help/README rewritten; `zombieImmune` and the zombie draw-state kept in code for any legacy zombies in old saves.
-- **T3 stands upright**: the permanent 0.22 hunch rotation removed; only the faint live-machine tremor remains.
-- **Wrecks drop what they carried**: the W4's heavy-bomb death drop (it has no bomb-throwing behaviour) replaced with a rare extra pair of chip fragments; drops are now strictly plausible capacities — batteries, scrap, chip fragments, the odd prize weapon.
-- **Fortress guards (Henrik)**: landed in the same push — M6 sentinels and M6R marksmen patrolling the fortress quad (`spawnM6`/`updateM6` in robots.js, muster wiring in main.js), a breach-report/stand-down alarm cycle, a BFS maze-exit guide trail that lights once the maze is solved, and the `uplink` mast object. See docs/fortress-guards-plan.md for the design.
-
-### v1.12 — W5 gardener drone, T3 ambush sniper
-
-Two new machines, both first landed here (never previously pushed).
-
-- **W5 gardener drone.** An unarmed utility bot the W-factory keeps roughly one of in the world at all times — killed, and a fresh one is dispatched once the previous is gone; kill the factory itself and, like every other machine it fields, replacement stops. It wanders (a self-recentring `patrol()` so its "home" drifts with it — an unbounded slow walk across the map rather than a fixed beat) and periodically plants a sapling on open grass nearby, reusing the existing tree `grow` field rather than inventing new maturity code. Excluded from Ubik confusion (like W3, it's a non-combatant — "haywire and attacking other robots" doesn't fit an unarmed bot) and from the generic aggro/hunt logic entirely; it never fights back. Added to the machine gallery and the help panel.
-- **T3 ambush sniper.** Rare (roughly one tower in six). Went through two full designs in this pass before either was pushed:
-  - First built as a "weeping angel": frozen solid while inside the player's forward sight cone with clear line of sight, closing the distance the instant that stopped being true. Worked as coded (verified live: froze correctly, crept correctly, dealt contact damage, even briefly destroyed nearby loot on contact before that was narrowed to spare anything readable). Scrapped anyway — a tactical ambusher suited the existing T1/T2/W1/W4 hunter roster better than a gimmick mechanic.
-  - Shipped instead as a stationary ambusher, closer in spirit to a W4 than a T1/T2: at spawn it seeks out and nests beside a nearby tree (`nearestTreeNest`, falls back to the normal obelisk-ring seat if none is close) rather than patrolling in the open, and unlike every other hunter it has **no blind proximity detection** — it only ever notices the player via an actual clear line of sight within `T3_AMBUSH_RANGE` (13 tiles). Once it has, it holds its ground and fires rather than closing in — twin orange laser beams from both eyes at once, resolved as one hit for `T3_LASER_DAMAGE` (18, roughly double a W4's 9) on a `T3_FIRE_COOLDOWN` of 4.8s (~3x a W4's 1.6s) — a heavy, infrequent volley rather than a stream. Crowd it inside `T3_MIN_RANGE` and it backs off just enough to keep the shot lined up, same shield/mirror-reflect handling as a W4's bolt; caught at point-blank range (`T3_HIT_RANGE`) it claws instead, no recovery needed. Losing line of sight for long enough still breaks it off like any other machine (generic LOS-giveup in `updateRobots`).
-  - Visual design iterated substantially before the mechanic pivot and carried straight over: taller and more jagged than every other machine (an asymmetric, broken-looking silhouette rather than a smooth chassis), a gaunt elongated head with two hollow eye sockets instead of one visor, both arms ending in three-talon claws, a riveted-metal texture (diagonal sheen, panel seam, rivets) clipped to the torso, and a continuous faint tremor (`animT`-driven, not position-changing) so it never reads as a dead sprite even at rest. Recoloured deep navy blue and scaled down (`T3_SCALE`) partway through for readability. Sensor/laser colour is orange (`T3_EYE_HOT`/`laser_t3` projectile kind in `renderer.js`) rather than the red every other hunter uses, so it's identifiable as "the one that hits hard" at a glance.
-  - Added to the machine gallery and the help panel; the "every hunting machine needs to see you" paragraph now also names T3 as the machine that takes it furthest (no proximity detection at all, only genuine line of sight).
-
-### v1.11 — About box trim
-
-One-line fix: dropped "Ambient piano bed: synthesised live in-engine (Web Audio) — no audio file, generated from a bare scale on the fly." from the About box's Music section (index.html). It described how the synth bed is implemented, not who to credit for anything — out of place in a credits box. The three named tracks stay.
-
-### v1.10 — car sprite/collision fix, a third music track, slower versioning
-
-First batch under the new "don't bump per micro-fix" policy (see the top of this file) — three unrelated small items landed together instead of three separate pushes.
-
-- **Car sprite anchor fix.** Reported as "edge detection on cars is broken." Root cause, confirmed by measuring: `drawCar` anchored every direction's sprite to a fixed fraction of its own (padded) canvas — `-dw/2, -dh*0.72` — assuming the car's silhouette sits identically within the canvas regardless of facing. It doesn't: sampling the real alpha-channel bounding box of each `model-direction.png` showed the visible content occupies a smaller, inconsistently-positioned region of the canvas (e.g. ambulance content only reaches ~88% of the canvas height, and one direction's centroid sits ~8px off from the other three). This was near-invisible when `carDir` was fully random (v1.04 and earlier); once cars started orienting to match their road (v1.05), the same handful of directions became reliably reused, making the mismatch reproducible rather than a rare fluke. Fixed with `carSpriteAnchor()` (renderer.js) — measures each sprite's real content bounding box once (cached in a `WeakMap` keyed by the `Image`), anchors to that content's own centre and to 72% down *the content*, not the canvas. Self-correcting for any current or future car sprite, no per-direction tuning table needed.
-  - Couldn't get a clean full-scene screenshot to visually confirm (Henrik's concurrent animal-sprite work has a `drawDeerSprite is not defined` error mid-edit, which the shared `renderer.draw()` path hits before reaching cars) — verified instead by calling `drawCar()` in isolation (confirmed no error) and by computing the fix's actual before/after anchor deltas from the measured bounding boxes (every direction shifts, 8-17px depending on model/direction, all in the direction of pulling the visible car toward the collision box rather than away from it).
-- **Third music track.** `assets/audio/slip-theme.mp3` (from `_tmp/meme-slip.mp3`) added as a third `FILE_TRACKS` entry — cycle is now `eliza -> resonance -> slip -> synth -> off`. Settings tab and About box both updated to name and credit all three ("by meme"). No code changes needed beyond the one array entry — confirms the v1.07 generalisation (from one hardcoded track to a `FILE_TRACKS` list) was worth doing.
-- **Persistence double-checked, not actually broken.** Investigated "music setting should be persistent" — the mechanism (from v1.09) was already correct; a `preview_click` tool quirk (clicks not registering on this particular button across a couple of attempts, cause unclear) made it briefly look broken during testing. A direct `.click()` call confirmed the real behaviour: `musicMode`/`volume` both correctly round-trip through a genuine page reload.
-- **Versioning policy change**, per direct request: stop bumping `VERSION` after every individual fix (five bumps in one evening — v1.05 through v1.09 — was too many). Batch a session's fixes into one push. Noted at the top of this file and in the "Working together" section.
-
-### v1.09 — a Settings tab
-
-First real settings surface, explicitly requested as infrastructure ("later when we want to give the user some options"), not a one-off.
-
-- **sound.js: volume replaces the unused mute flag.** `_muted`/`setMuted`/`muted` (never actually wired to any UI — dead code) removed outright and replaced with a continuous `_volume` (0..1), `setVolume(v)`, and a `volume` getter; `master.gain` is now `MASTER_GAIN * this._volume` everywhere it used to branch on `_muted`. 0 volume is mute, no separate flag needed.
-- **Settings persistence.** New `postai-settings` localStorage key (`loadSettings`/`saveSettings` module-level helpers, read once in the constructor — safe pre-`unlock()` since it's just JSON, no AudioContext touched). Both `setVolume` and the new `setMusicMode` write through on every change; the constructor seeds `_volume`/`_musicMode` from whatever was saved, falling back to the existing defaults (1.0, `'eliza'`) if nothing's there yet or it doesn't validate against `MUSIC_MODES`.
-- **Direct music selection, not just cycling.** `toggleMusic()` (the M key) is now a one-line wrapper around a new `setMusicMode(mode)`, which does the actual mode-set/play/gain work and is what the Settings tab's radios call directly — picking "resonance" from the panel has the exact same effect as pressing M until you land on it, just not relative.
-- **UI: a Settings tab inside the existing help modal**, reusing the established `.helpTab`/`.helpPanel` tabbed pattern rather than a new modal — a volume `<input type="range">` and four music-mode radios, synced to live `sfx` state via `syncSettingsPanel()` every time the tab is clicked (not just on load, since the M key or a future path could change either value while the tab isn't showing).
-- **Layout bug found and fixed during verification:** the music radios initially rendered with a ~130px gap between each radio and its label text. Root cause: `<input type="radio">` as a flex child with no explicit sizing was stretching to fill available flex space in the `display:flex` `<label>` (radios have no sensible intrinsic flex-basis) — invisible in the DOM but visually reading as a huge gap. Fixed with `flex: 0 0 auto; width: 14px; height: 14px` on `.musicChoice input[type="radio"]`. Caught by checking `getBoundingClientRect()` on the actual input after the first screenshot looked off — per-tool guidance, screenshots aren't reliable for spacing, `preview_inspect`/direct rect checks are.
-
-Verified live: confirmed the settings blob round-trips through real `localStorage` (`{"musicMode":"resonance","volume":0.67}` after interacting with the panel); confirmed the radio-gap bug's actual rendered width (130px) before the fix and the corrected 14px after; screenshotted the final panel to confirm the fix.
-
-### v1.08 — About box corrections
-
-Trivial follow-up, direct corrections to v1.06's About box content: the two music tracks are credited to "meme" by name (was "source and artist not documented" — David supplied the actual attribution: track 1 "eliza", track 2 "resonance"); the Coding line now reads "David and Henrik, vibecoding 2026" (was a longer sentence naming Claude/Anthropic explicitly as an AI pair-programmer — David's call on how to phrase the credit, not mine to second-guess); dropped the "Survival-game structure after Project Zomboid" line from Ideas & influences. Also caught the About box's own version footer, which had been hardcoded to "v1.05" since it was first written — now reads the live VERSION.
-
-### v1.07 — a second music track
-
-Small follow-up. `sound.js`'s music system generalised from a single hardcoded file track to a `FILE_TRACKS` list (`{mode, src, label}`) iterated everywhere it used to special-case `'file'` — `_setupFileMusic` now builds one `<audio>`/gain pair per entry into a `Map`, `_applyMusicGain` loops the map instead of touching one gain node, and `toggleMusic` cycles a derived `MUSIC_MODES` array (`[...FILE_TRACKS.map(t => t.mode), 'synth', 'off']`) instead of a hardcoded 3-array. Added `assets/audio/resonance-theme.mp3` (copied from `_tmp/meme-resonance.mp3`, same as the first track) as the second entry. Cycle is now `eliza -> resonance -> synth -> off -> eliza`; default unchanged (starts on `eliza`). Adding a third track going forward is a one-line addition to `FILE_TRACKS`, nothing else to touch. Verified live: full 5-step cycle through `toggleMusic()` matched the expected mode sequence exactly, both tracks' `<audio>` elements confirmed unpaused when active, `resonance-theme.mp3` confirmed served correctly (200, audio/mpeg, correct byte count).
-
-### v1.06 — music defaults/combat fix, per-house loot cap, About box
-
-Small follow-up batch. Landed alongside a second concurrent Henrik session actively regenerating `assets/textures/animals/*` (old single-frame files deleted, new multi-frame idle/walk sheets added) and editing `tools/pet-render.html`/`src/engine/textures.js` — all left untouched and unstaged, same protocol as v1.05.
-
-- **Music defaults to the found tape, and no longer ducks in combat.** `Sound._musicMode` now starts `'file'` instead of `'synth'` (`_setupFileMusic` calls `.play()` immediately when that's already the active mode, rather than only on a later toggle); `unlock()` reordered so `_setupFileMusic()` runs before `_startMusic()`'s single `_applyMusicGain(0.1)` pass, so both busses get their initial gain set together. Separately, `setMusicTension()` used to fade the active bus to 0 gain during a fight — removed from `_applyMusicGain`'s target calculation entirely (and from the `_playPianoNote` early-out), per direct feedback that music stopping every time something attacks was unwanted; `_musicTense` is still tracked in case a subtler dip is wanted later, it just doesn't mute anything now.
-- **Resistance caches capped at 5 per house.** Box placement in `main.js` used to pick uniformly at random across every interior tile on the whole map, so one large building could end up hoarding loot while a small one nearby got nothing. Fixed with a one-time flood-fill grouping of the `inner` tile list into connected regions (4-connectivity; a doorway gap always breaks the connection between buildings, so this reliably comes out to ~one group per house) via `houseOf`/`BOXES_PER_HOUSE`, then the main placement loop filters to only tiles whose house hasn't hit the cap before picking. Verified live by replicating the same grouping client-side against the actual generated `map.objects` boxes — max was exactly 5, 36 boxes spread across 11 houses on the test seed, chip backstop still intact.
-- **About box.** New `i` button next to help (`?`) opens a modal (same panel styling as help) crediting coding (David & Henrik, "built with Claude (Anthropic) as an AI pair-programmer"), music (the synth bed described as procedural/no file; the alternate track noted honestly as an undocumented found tape, not attributed to an invented artist), and ideas/influences (Project Zomboid, Philip K. Dick's *Ubik*, Robin Milner's ML, Weizenbaum's ELIZA/SLIP, David's own vector-theory/Magnifica Humanitas writing, Kenney.nl CC0 art). Wired identically to the existing help-modal pattern (`toggleAbout`, backdrop-click-to-close) — verified live via `preview_click` plus a direct `dispatchEvent` on the backdrop element to confirm the close-on-outside-click path specifically (a click via CSS-selector targeting lands on the panel content, not the backdrop, so that path needed a manual event dispatch to exercise).
-
-### v1.05 — Ubik portals, haywire machines, a Scrapbook, and a real notepad
-
-Playtesting-feedback batch, largest single item being the Ubik portal system. Landed cleanly on top of Henrik's dog/boar sprite work (`82312b6`..`09dc5cb`), already merged into `main` before this batch started — nothing here touches `animals.js` or `textures.js`.
-
-- **The notepad wasn't actually a bug — it was starved.** Root cause of "pages are not adding to the notebook": only 10 of 165 fragments carried `notepad: true`, scattered across a huge map with an 8-tile minimum gap, so a normal (especially short) run was very likely to find zero of them. Fixed by scripting `notepad: true` onto every `letter`/`handwritten`/`note` kind fragment (56 more, 66 total) — a one-off Node script matching the fragment-header line pattern, not manual edits. The mechanism itself (`FRAGMENTS.filter(f => f.notepad && lore.found.has(f.id))`) was already correct and unchanged.
-- **Ubik portals.** `Player.sprayUbik` now merges repeat sprays within `UBIK_MERGE_RANGE` (1.5 tiles) into the same patch instead of stacking duplicates; three sprays on one patch (`UBIK_PORTAL_SPRAYS`) converts it into a portal (`patch.portal = true`, `r: 1.5`). Portals live far longer than a plain patch (`UBIK_PORTAL_LIFE` 260s vs `UBIK_PATCH_LIFE` 75s) and are relinked fresh every frame in main.js's decay loop: whichever portal is oldest-surviving and whichever is newest-surviving get `.linkedTo` pointers to each other, recomputed from the live (post-filter) `map.ubikPatches` array each tick. This means a 3rd portal makes the active link skip the middle one (1↔3, 2 dormant), and when portal 1 ages out the very next frame's recompute hands the link to 2↔3 with no special-casing at all — verified in the live preview by manually culling "portal 1" and checking the recompute. Player teleport is a straight distance check (`UBIK_TELEPORT_RANGE` 0.9) against any `.linkedTo` portal, gated by a cooldown on the player (`_ubikTeleportCooldown`, 1.5s) so arriving at the far end doesn't instantly bounce back.
-  - **Visuals** (renderer.js): each portal draws as a tall standing oval (canvas `scale(0.62, 1.35)` around a normal circular gradient — far simpler than hand-computing an elliptical gradient), alternating orange/blue by creation-order parity (so the common 2-portal case is always one of each, Portal-game style), with a dark charcoal void core punched through the middle and a 6-petal flickering "fire" rim (per-petal sine-driven length/radius/alpha jitter, warm hues on the orange end, cool cyan-white on the blue) that spins faster once the portal is actually linked/usable. Sized down twice during review (initial radius read as "a bus", tuned to roughly a doorway).
-- **Machines go haywire in a brightened patch, not just the player.** New `robots.js` state `r.ubikConfusedT`, refreshed continuously while inside any `map.ubikPatches` radius (any patch or portal), decaying over `UBIK_CONFUSE_HOLD` (2.5s) once they leave. While confused: `updateUbikConfused` replaces normal AI entirely — a drunk stagger toward a fresh random nearby point every ~0.4-0.9s, and a periodic swing (`UBIK_CONFUSE_ATTACK_RANGE`/`_DAMAGE`/`_COOLDOWN`) at whichever other machine (any type, no player targeting at all) strays within melee range. Visuals: a per-frame random position judder in `drawRobot`, a continuous spin layered into `drawT1`/`drawT2`'s existing tilt logic, and violet dizzy-dots circling the head (same pattern as the boars' existing stun tell, different colour/cause).
-- **Ubik flicker localised, plus a reality hiccup.** The post-spray screen flicker was a full-viewport desaturation rect; now it's a radial-gradient-masked circle centred on the actual spray point (`player.ubikFlickerX/Y`, threaded through the HUD payload). Separately, standing inside a brightened patch has a small continuous chance (`Math.random() < dt * 0.35`) of triggering a brief (`player.ubikHiccupT`, ~0.25-0.45s) discolour (`ctx.filter = 'hue-rotate(...) saturate(...)'`), lean (shear transform), or twist (rotation) on the player sprite — rolled in `Player.update` so it persists smoothly across frames rather than re-rolling every draw call.
-- **Scrapbook.** The Archive (J) is renamed and reskinned: a warm kraft-cover panel (was flat dark green) with a ruled spine, "Scrapbook" in a hand-lettered-style font, and each found fragment drawn glued in at a small stable per-id tilt (`tileHash01(fragment.id)`, ±3°) with a drop shadow and a little "tape" strip — genuinely reads as a scrapbook now rather than a styled list. The existing per-`kind` paper colour/ink/font differentiation (`NOTE_STYLE`) was fully preserved throughout (confirmed by a mixed-kind screenshot after a stray "did you flatten the fonts" concern mid-session — they were never touched).
-- **Small, isolated fixes:** backpack and starter-cache glow changed from a hard-to-see orange to white (both `renderer.js` proximity-pulse spots); abandoned cars now orient along the actual road axis at their spawn tile (vote-counted road-tile neighbours along x vs y, `worldgen.js`) instead of a fully random of 4 facings; added a real audio track as a second music option — `assets/audio/eliza-theme.mp3` (copied in from `_tmp/`, which is gitignored and must never be the source of a shipped asset), wired through a `MediaElementAudioSourceNode` into the same master bus so it gets the existing tension-ducking treatment for free; **M** now cycles synth → file → off (was a plain on/off toggle) — the original synthesised piano bed is fully preserved as one of the three states, not replaced.
-- **New lore:** `lang-01`/`lang-02` (`notepad: true`) — the real history behind naming the console language ML (Robin Milner, Edinburgh LCF, 1973) and the SLIP list-processing language Weizenbaum built under DOCTOR/ELIZA, both referenced rather than quoted, continuing the eliza-* thread from v1.04.
-
-Verified live throughout via the `window.__game` debug hook: scripted the notepad's found-fragment count before/after the retag; drove `Player.sprayUbik` directly to confirm merge-then-portal-conversion math and the exact portal-count/link-state sequence (2 portals → linked; 3rd sprayed → 1↔3 active, 2 dormant; portal 1 culled → 2↔3 auto-relink); replicated main.js's teleport-check logic inline against real portal objects to confirm landing coordinates; ran `updateRobots` through 300 simulated frames with two robots placed inside a patch to confirm confusion state, erratic movement, and robot-on-robot damage; screenshotted the portal (oval shape, colour split, dark core, fire rim, final smaller scale) and the Scrapbook (mixed fragment kinds, tilt, tape, fonts) directly off the live canvas rather than trusting a possibly-stale backgrounded-tab frame.
-
-### v1.04 — an easier hack, a general notepad, drag-anywhere pockets, small polish
-
-Another playtesting-feedback batch. Landed alongside a concurrent animal-sprite session (Henrik) — `src/game/animals.js`, `src/engine/textures.js`, `assets/textures/animals/`, and `tools/export-receiver.py`/`tools/pet-render.html` are his in-progress work and were deliberately left out of this commit; every file below is this session's own.
-
-- **RON-ML `loop`: the easy hack.** One word, one node, no AI key — `loop OB-XXXX` pins an infinite loop into a node, freezing it and its T1/T2 garrison in place (proximity-tagged via `r.frozenByOb`, not a recomputed radius) until a repair drone works the loop back out. `renderer.js`'s `drawObelisk` swaps the node's alert light for a white-hot overload glow plus rising smoke, both ramping with `ob.frozenT` (ticked in `main.js`). Weaker than `crash` (nothing's destroyed, and it self-heals on schedule) but far cheaper to pull off.
-- **The repair bot now resets loops, not just damage.** `w3Repairable` (`robots.js`) also matches `o.frozen`; `updateW3` holds a drone at a frozen node for `W3_UNFREEZE_TIME` (3s) before clearing `frozen`/`frozenT`/`frozenResetT` and releasing every robot tagged `frozenByOb === ob`, then falls through to any ordinary `obDamage` repair (both can be true on the same tower at once). Fixed a latent bug in the same pass: the old completion check (`ob.obDamage <= 0`) never fires when `obDamage` is `undefined` (an obelisk that's never been damaged) — switched to `!(ob.obDamage > 0)`, matching the idiom already used elsewhere in the file.
-- **RON-ML `rewind`: buy time before the purge.** `DayNight.rewind(hours)` (new, the inverse of the existing `advance`) claws elapsed game-hours back out of the clock, naturally capped at a full deadline since `elapsed` can't go below 0. Gated on an AI key and on `!player.skylinkActive` (the deadline clock isn't running once the purge is actually live — `ctx.skylinkActive()` reports that back as a teaching error rather than silently no-opping).
-- **The notepad is general now, not RON-ML-specific.** The `notepad: true` flag (lore.js) always worked on any fragment — only the wording and the corpus made it read as RON-ML-only. Retitled the modal and all copy (index.html, main.js) from "RON-ML notepad" to "Notepad"; flagged four existing eliza-* fragments (the archivist's note, the margin note, the office joke, the lecture fragment) as notepad pages alongside the RON-ML ones; and added `eliza-08`, the actual historical ELIZA/DOCTOR session transcript — reproduced rather than paraphrased, since (unlike the narrative eliza-* fragments) it's the primary document itself, not an account of it, and short/widely-reproduced enough that quoting it in full is the point.
-- **Pockets and hands are draggable off the compact dashboard.** The drag-release handler's drop-to-ground branch was gated on `showBackpack` (backpack panel open) as a fumble guard; removed the gate — `player.dropSlot` already handles every slot kind uniformly, and a genuine drag-then-release-elsewhere gesture doesn't collide with the release-on-source "click" case handled just above it.
-- **Small polish, each isolated and low-risk:** river/stream tiles carry a slow travelling opacity ripple (phased off `tx+ty` and time, in `drawFloor`) as a cheap stand-in for current; removed the "K: skills · N fps" HUD debug text; Ubik's brightening (`map.ubikPatches`) now ages and fades back to normal over `UBIK_PATCH_LIFE` (75s, main.js) instead of lasting the rest of the run, with a 2s fade-in and 15s fade-out (`scaleRgbaAlpha` helper, renderer.js); the Certificate of Death gets a dark-tinted `EDGE_TEXTURE` (the same photo already used for the map's edge cliffs) backing and a small idle-sprite portrait keyed off `cert.gender` (added to all three `deathCert` construction sites); more Magnifica Humanitas graffiti (four new slogans distilling a Pope Leo XIV encyclical excerpt and a Walter Benjamin quote on technology/war David shared, referenced not quoted — its wall-tag probability share bumped 10%→16%, taken from GENERIC and VECTOR).
-
-Verified live throughout via the `window.__game` debug hook rather than screenshots (the preview tab throttles its render loop when backgrounded): ran `updateAnimals`/`updateRobots` directly through several seconds of simulated time to confirm the dog annoy timer and the full loop→freeze→repair-drone→unfreeze cycle end to end (including the drone actually reaching `dead: true` on completion); dispatched real `KeyboardEvent`s for the N/Ctrl+N split; unit-tested `loop`/`rewind` through `runRonml` with mock contexts covering every error path (unknown node, already-looping, missing arg, SKYLINK-already-live); confirmed the notepad's `FRAGMENTS.filter(f => f.notepad)` picks up all 10 flagged fragments across both RON-ML and eliza-* content and that the DOCTOR transcript renders correctly into the real notebook DOM; exercised `dropSlot`/`moveItem` directly to confirm pocket drag-and-drop with the panel closed; called `drawObelisk`/`drawGraffiti`/`drawGroundItem` directly to confirm the new render paths don't throw.
-
-### v1.03 — adaptive difficulty, gentler dogs, a welcome-kit cache, more Ubik weirdness
-
-Batch of small player-experience fixes, all raised in playtesting feedback.
-
-- **Adaptive difficulty for new players.** `Player` now tracks two cheap telemetry fields, `distanceTraveled` and `playSeconds`, purely from movement (no combat outcomes needed, so it reads a beginner from second one, before any fight happens). `Player.threatEase()` turns pace (`distanceTraveled / playSeconds`) into a multiplier in `[0.55, 1]`: below a pace floor, in the opening `EASE_WINDOW` (180s) of a run, robots go easier; the moment pace picks up, or once the window elapses, it's back to full strength regardless. Applied in `robots.js` at every detection-range and damage site for T1, T2, W1, and W4 (`T1_DETECT_RANGE`, `T2_DETECT_RANGE`, `HUNTER_REACQUIRE_RANGE`, and all four damage constants) — `effectiveRange = BASE * ease`, `effectiveDamage = BASE * ease`. Self-limiting by design: no permanent "easy mode" flag, just a continuously reassessed read.
-- **Dog packs no longer aggro on sight.** `DOG_AGGRO_RANGE` (pure 7-tile proximity trigger) is gone. Replaced with a per-dog "annoyance" timer: only accumulates within `DOG_ANNOY_RANGE` (2.6 tiles, genuinely in its face), decays twice as fast the moment the player backs off, and needs `DOG_ANNOY_TIME` (1.4s) of sustained crowding before the whole pack turns hostile. Hitting a dog still routs the pack instantly (unchanged, pre-existing mechanic) — this only changes the *unprovoked* trigger. Verified in the live preview: a pack sitting 6-8 tiles away (within the old 7-tile radius) stays calm for 3+ seconds; crowding to 1 tile away aggros the whole pack in ~2 seconds, matching the tuned annoy time.
-- **A hand-picked welcome-kit cache.** The resistance building nearest spawn is guaranteed a "welcome kit" box (`main.js`, tagged `starterCache: true`) — backpack, shield, shotgun + shells, tin + berries, with a one-off in-lid note (`Player.openBox`) instead of the generic loot-list line. `Renderer.drawBox` gives it a wide, slow orange pulse (`Player.threatEase() < 1`) that fades on its own once the player no longer reads as a beginner — a proximity nudge toward the run's best early find, not a permanent beacon.
-- **Dropped backpacks glow too.** Same pulsing-halo treatment as other proximity glows, in `Renderer.drawGroundItem`: a dropped backpack (easy to miss in tall grass) gets a soft orange halo within 10 tiles of the player.
-- **Ubik can holds 20 sprays (was 5), and does stranger things.** `UBIK_WEIRD_CHANCE` (28%) rolls a PKD-flavoured "ad" line (`UBIK_ADS`) instead of the plain settle message on any given spray — a wink at the novel rather than more mechanical effect. Also added a purely cosmetic post-spray screen flicker (`player.ubikFlickerT`, 0.35s, ticked in `update`) — a desaturated pulse suggesting the old, decayed world flashing through before Ubik visibly wins, rendered in `Renderer.draw` via the `hud.ubikFlicker` payload field.
-- **New Game moved to Ctrl+N; bare N opens the notepad.** `Input` now captures the ctrl/meta modifier at the physical keydown for `KeyN` specifically (`_keyNCtrl`), and exposes two consumer methods — `newGamePressed()` (Ctrl/Cmd+N only) and `notesPressed()` (bare N) — so a stray tap can never wipe a run, and the notepad (previously reachable only via the `notes` terminal command) has a direct hotkey. `index.html` help text and keybinding table updated.
-- **New lore: an older machine intelligence, named.** Seven new fragments (`eliza-01`..`07` in `lore.js`) reference a century-old therapy-program trick and Joseph Weizenbaum by name — real history treated the same way as the vector-theory fragments (v1.00): referenced and argued with, never a script transcript reproduced. Covers the trick itself, an archivist's note crediting Weizenbaum, an obelisk-network transcript running the same trick at scale, his "calculation not judgement" thesis, a recovered-but-unreadable old listing, a mistaken-identity office joke, and a late public-lecture fragment tying his warning to the ridge towers.
-
-Verified live: all of the above checked functionally in the browser preview (`window.__game` debug hook) rather than by screenshot alone, since the preview tab's render loop throttles to ~0fps when backgrounded — dispatched real `KeyboardEvent`s to confirm the Ctrl+N/N split, ran `updateAnimals` through several seconds of simulated proximity to confirm the dog annoy timing, called `sprayUbik` in a loop to confirm the ad variety, and read back `threatEase()`, the starter-cache object, and the new fragment ids directly off the running game state.
-
-### v1.02 — the notepad is a real page you flip, not a console dump
-
-- **`notes` opens a browsable notebook instead of printing to the console.** The v1.01 notepad worked but was a wall of scrollback text; Tab-to-accept-autocomplete (separate feature) also turned out to be unreliable in some browsers (Tab is a reserved focus-navigation key and doesn't always reach page JS even with `preventDefault`), which made the whole console-first approach to reading feel fragile. `notes` is now a real builtin (`ronml.js`, matching `map`/`print`) that calls `ctx.showNotepad()` and opens a new `#ronnotebook` modal (`index.html`/`main.js`) — a paper-page UI (cream lined paper, red margin rule, a wood-grain spine) showing one found fragment per page, with Prev/Next buttons and a page counter. Left/Right arrow keys page it too, intercepted in the **capture phase on `window`** (`stopImmediatePropagation`) so paging can never leak into player movement or a stray text-caret move, and Escape or clicking outside closes it.
-- **Autocomplete gets a reliable fallback.** Since Tab can silently fail to reach the page in some browser/extension setups, accepting the ghost-text verb suggestion now also works with **Right Arrow at the end of the line** — a pattern that can't conflict with normal caret movement (there's nothing to the right of the caret there anyway) and never depends on the browser ceding focus control.
-
-### v1.01 — RON-ML notepad, and real photo graffiti posters on walls
-
-- **The RON-ML notepad.** The five language-teaching lore fragments (`ronml-01`..`05` in `lore.js`) are now flagged `notepad: true`; a new `notes` console meta-command (intercepted in `runRonml`, alongside `help`) compiles the ones you've found into a running reference — title + the actual runnable line + its flavour comment, in discovery order. Backed by `ronmlCtx().notepadText()` in `main.js` (filters `FRAGMENTS` against `lore.found`). Added to `help`, the autocomplete verb list, and the design doc. (The song-sheet fragment, `ronml-06`, stays out — lyrics, not language.)
-- **Real photo graffiti posters, rarely, on walls.** New `GRAFFITI_TEXTURES` in `textures.js` — the 8 photos in `assets/textures/graffiti/`, downscaled like every other photo texture. `worldgen.js`'s `paintGraffiti` now gives ~14% of tagged walls an actual weathered poster (`obj.graffitiImage`, an index) instead of painted text — mutually exclusive with the RON/UBIQ/Humanitas/vector text tags. New `Renderer.drawGraffitiPoster` mirrors `drawGraffiti`'s face-mapping math with a dark torn-paper backing and a grimy multiply tint so an old bright photo reads as a weathered stuck-on poster, not a clean modern print. Verified: textures load (8/8, `complete: true`), the draw call executes cleanly and paints real pixel data, two poster walls generated naturally in a test world.
-
-### v1.00 — vector-theory & Magnifica Humanitas lore; Ubiq / Humanitas / vector graffiti
-
-Content pass, all in non-contended files (`lore.js`, `worldgen.js`) so it lands clean alongside the fortress session's ongoing Stage 3.
-
-- **Lost 21st-century arguments recovered as lore.** Four "vector theory" fragments (`vec-01`..`04`) — seminar scraps and preprint abstracts on the shift from bit to vector, meaning as *position* not definition, the proprietary manifold, "unvisited coordinates" that flatten out of reach, and the sub-symbolic opacity of the weights. Drawn from the real vector-theory writing (stunlaw, 2026-02), reframed as in-world scraps.
-- **Magnifica Humanitas.** Three fragments (`hum-01`..`03`) name the grand pre-collapse human-and-machine project whose promise curdled into the takeover — a brass dedication plaque, a project engineer's confession, and a defaced arch ("IT ATE ITS YOUNG" under the old slogan).
-- **New graffiti themes** on the walls (`worldgen.js`): `UBIQ` (the reality-spray brand as prayer), `MAGNIFICA HUMANITAS` (some faded/defaced), and half-remembered `vector` slogans ("MEANING IS POSITION", "WE LIVE IN THE MANIFOLD", rendered faded — old academic scrawl). Rebalanced the paint weights so RON stays dominant and the new themes are the rarer finds.
-
-Still queued from this batch (need the contended `renderer.js`, or are larger): **ELIZA** (vendor Anthony Hay's CC0 engine from `~/Projects/eliza`), **graffiti image textures** on rare blocks (`assets/textures/graffiti`), and **procedural Ubik-style ad textures** on random blocks.
-
-### v0.99 — Adamantine's maze (fortress Stage 2) + the Ubiq reality-spray
-
-Combined commit reconciling the two parallel sessions (both features complete and verified independently; they were co-located in `renderer.js`/`main.js`).
-
-**Fortress Stage 2 — the maze** (Adamantine session): a recursive-backtracker labyrinth (`buildMaze` in `fortress.js`) carved into a **full-width band** of the annex between the doorway and the sanctum — edge to edge, no walking around it. 3-wide metal-panel corridors, 1-thick charcoal `darkstone` walls (~1385), a single entrance aligned to the doorway and a single exit aligned to the core. Verified: BFS from the entrance reaches the core, no bypass; ~120fps. `drawFortWall` honours `material` + `wallH`; `texturedGlow` reworked so the metal grille fills the core oval into the tips. Maze walls now use mixed **AI panel designs** (new `assets/textures/AI-texture/`: riveted `metal_06`, iron `grating_10`, louvred `grating_05`, added to `WALL_TEXTURES` as `aiwall`/`aigrate`/`aivent`) and ~15% carry **slow-glowing sconce lights** (cyan/amber, each on its own ~5.6s phase, so a run of wall shimmers gently out of sync).
-
-**The Ubiq reality-spray** (this session): a new `ubiq` item (`kind: 'spray'`) — a battered aerosol can (Philip K. Dick's *Ubik*). Held and used (`E`/click), `Player.sprayUbiq` lays a lasting "reality patch" (`map.ubiqPatches`) just ahead of you; the renderer blooms it with an `overlay`+`screen` composite so the ground and everything on it reads brighter, warmer, more real. **Five sprays** to a can (`player.ubiqSprays`), then it hisses dry. One can seeded per world. Spray-can icon. Obscure PKD lore: a Ubik-style aerosol advert (`note-17`), a "fake fake" notebook musing after the Disneyland-crocodiles idea (`note-18`), and a field report framing the AI's world as a decaying render the spray locally reverses (`note-19`).
-
-### v0.98 — Adamantine's fortress, Stage 1 (annex, hackable doorway, core)
-
-First slice of the four-AI endgame (Adamantine, Behemoth, Colossus, Demiurge — only **Adamantine** built so far). The mainframe is no longer a bare map marker: it's a real place you raid.
-
-- **A fortress annex grown onto the map.** New `src/game/fortress.js` (self-contained) grows the grid southward in place by 64 rows (`growSouth` — appends rows, so every existing tile index is unchanged and the overworld needs no rework), then builds Adamantine's compound into that annex. All overworld spawning runs *before* the grow, so the annex stays clean. Map is now 128×192.
-- **The only way in is a hacked doorway.** A non-climbable metal rampart seals the whole seam bar a 3-tile grand doorway (flanked by beaconed pylons). Click the boundary **gate terminal** → RON-ML console → `unlock` (needs an AI key from a felled W-factory) drops a **fortress key**; carry it to the doorway and it swings open. New `unlock` RON-ML primitive + help entry; `fortress_key` item.
-- **The core stands inside.** A 6×6 near-black **ADAMANTINE** mainframe monolith with a magenta core-slit, on a dark sanctum deck, at the far south end. `hp`/`defeated` stubs in place for the confrontation to come. Gate + core are marked on the RON-ML `map` overlay.
-- **New data:** `panel`/`quad`/`sanctum` floors + `metal`/`darkstone` wall textures (drawn generically); `fortwall`/`fortdoor`/`gateterm`/`mainframe` objects. Renderer: `drawFortWall`/`drawFortDoor`/`drawGateTerm`/`drawMainframe` + a shared `texturedGlow` (the factory's grille-over-glow trick) on the gate beacons and the core slit.
-- **Hub touch (small, append-only, reconciled live with the parallel bug-fix session):** `main.js` (fortress build replacing the old mainframe stub, `unlockGate` ctx hook, `openGateTerminal`, a gate click branch, an update tick, map markers) and `renderer.js` (the four draw methods + cases + depth rule).
-
-**Stage 2 — the maze (built, sitting uncommitted, texture fix done):** a recursive-backtracker labyrinth (`buildMaze` in `fortress.js`) carved into a **full-width band** of the annex between the doorway and the sanctum — it spans edge to edge so there's no walking around it. 3-wide metal-panel corridors (room to fight), 1-thick charcoal `darkstone` walls (~1385 of them), a single entrance aligned to the doorway and a single exit aligned to the core. Verified: a BFS from the entrance reaches the core through the maze, no bypass; ~120fps with the full fortress. `drawFortWall` now honours `material` (darkstone vs metal) + `wallH`; `texturedGlow` reworked so the metal grille fills the core oval **into the tips** (bloom drawn behind, crisp textured fixture on top). *(Shipped in the combined v0.99 commit above, alongside the Ubiq spray.)*
-
-**Stage 3 design (David, to build) — the guarded core:**
-- **Multiple factories inside the core**, not just the one W-factory outside. They **turn out M6 guards** (elite; M5 is the phalanx-formation type) — but only **once a breach of the gates is discovered**. So an undiscovered raid stays quiet; getting spotted escalates production.
-- **Stealth matters.** You want to cross the maze/quad without being picked up. Robots **take a while to report being attacked**, so speed is a real tactic: drop a guard fast (e.g. the **electro-gun**, which destroys outright) before it can raise the alarm. Detection + a report-delay timer is the core mechanic.
-
-Next stages: **M6 guards + quad** (Stage 3, per the design above) → **core confrontation** (Adamantine speaks; break it → "1 of 4").
-
-### v0.97 — choir quietens with distance, and recruits a full section
-
-- **Walk away from the singing and it quietens.** `Sound.playChoir` now keeps its gain node on the instance (`_choirBus`); `Sound.setChoirVolume(level)` ramps it, and the update loop feeds it a distance falloff each frame — full within ~6 tiles of the nearest singer, fading to a faint hush by ~22. (Guarded; a no-op when audio is muted/locked.)
-- **A lonely `sing` summons a full choir.** If fewer than `CHOIR_TARGET` (6) eligible machines are in earshot, `sing` recruits the nearest others from across the map — they're set singing and march in to the formation, so the piece is never a one-robot solo. Verified: 1 near → 6 singing.
-
-Still queued for me (blocked on the parallel session's contested files, or large): the **Ubiq** repair-spray item (needs items.js), and the big **RON-ML command browser + ELIZA** (needs ronml.js).
-
-### v0.96 — no damage bar mid-choir, the four AIs named obliquely
-
-- **A singing machine shows no damage bar.** `creatureHealthBar` now early-returns for `e.singing`, so the choir formation isn't cluttered with floating health bars — it reads as a performance, not a fight.
-- **The four AI minds named obliquely in lore.** Two new fragments: `ron-17` ("the four crowns") frames **Adamantine / Behemoth / Colossus / Demiurge** as the four self-named minds that carved up the world (Adamantine — the highland core being built in the parallel session — first), and `secret-17` a water-damaged "sector legend" with the names half-redacted (A—MANTINE, BEHE—, —OSSUS, DEMI—). Woven in, never a bald list.
-
-**Concurrent:** the Adamantine mainframe/fortress is still in a parallel session (fortress.js, `unlock` verb, panel/quad/sanctum textures, tiles/items). Untouched here; this stages only renderer.js, lore.js, main.js (version) and the docs.
-
-### v0.95 — the robot choir actually sings (Dowland, MIDI), Flow My Tears note
-
-- **`sing` now plays real music.** The opening ~30s of John Dowland's *Flow My Tears* (Lachrimae, 1596, public domain) was parsed from `assets/midi/02-dowland--flow_my_tears-lacrime.midi` into a compact note list (`src/engine/choir-notes.js`, 227 notes as `[start, dur, midiPitch]`). `Sound.playChoir()` schedules them as soft synthesised voices (triangle body low-passed + a quiet sine octave, slow attack, gentle detune) on their own bus. Guarded so it never crashes and the visual runs even if audio is muted/locked.
-- **The red lights flash in time, as a choir.** Note onsets are split into four pitch registers (`CHOIR_REGISTERS` in main.js); each singing machine is assigned a vocal part (`r.choirVoice`) and its sensor light pulses to that part's notes (`r.choirFlash`, computed each frame from `sfx.choirElapsed()`, rendered by `Robots.sensorStyle`). The row of them blinks *out of step* — a choir, not a metronome. Verified: all flash together on the opening chord, then diverge.
-- **`sing` sings the whole piece** — robots hold the choir formation for `CHOIR_DURATION` (30s) instead of the old short timer, then (v0.93) go back to work.
-- **Flow My Tears lore note.** A new torn, water-warped song-sheet fragment (`ronml-06` in lore.js) carries the first verse plus an operator's note about hearing the machines sing it at night — the in-world seed of the easter egg (without naming the secret trigger).
-
-**Concurrent work:** the mainframe / Adamantine fortress is being built in a parallel session (fortress.js, the `unlock` RON-ML verb, panel/quad/sanctum textures, tiles/items changes). Those files are left untouched here; this commit stages only the choir/lore files.
-
-### v0.94 — RON-ML manual + pages, world-loot never decays, book-unlocked autocomplete
-
-- **The RON-DOS Operator’s Manual + torn pages.** New `book_ronml` (a bound manual) and `ronml_page` (torn scraps) items, `kind: 'book'` but flagged `manual` so `Player.learnFromBook` shows their text and counts as knowledge instead of teaching a survival skill. The manual is a guaranteed cache; six torn pages scatter through the ruins and woods. Distinct folded-book / torn-paper icons.
-- **World-placed loot no longer decays.** The v0.91 decay was stripping the *scattered* world-gen loot (torches, tins, berries, books, backpacks, pages) before the player reached it — buildings read as looted. Now the world-gen `drop()` helper tags items `keep: true`, and the aging pass skips them: only things that appear *during play* (combat drops, items you drop, loot spilled from an opened box) run the timer. Box contents never decayed (they live in `box.loot`, not `groundItems`); once you open a box, the spilled loot starts its countdown, exactly as intended.
-- **Reading the manual unlocks terminal autocomplete.** Once `book_ronml` is read (`player.readManuals`), the RON-DOS console suggests the rest of a verb as faded ghost text (`#obterminal-ghost`, transparent typed-prefix + faded suffix, monospace-aligned); **Tab** accepts it. `sing` is left out of the completion list (secret). Purely a convenience the book grants — you can still type everything by hand.
-
-### v0.93 — block-top safety, compass chevron kept, thin shield rings, sing returns to work
-
-- **You can't be attacked while standing on top of a block.** New `Player.onBlockTop()` (true when the tile's `effectiveHeightAt > heightAt` and you're grounded); `takeDamage` now returns early for any enemy source while you're up on a block — melee, bites, and lasers all fall short. A bomb blast (`source === 'the blast'`) still catches you, and the future flying machines will too. Verified: machine/boar blocked up top, blast lands, normal damage on flat ground.
-- **The electro-compass keeps the normal chevron.** `drawPlayer` now always draws the white facing chevron and *adds* the coloured homing needles on top when the compass is armed, instead of replacing it — so you keep your bearings as well as the pointers.
-- **Thinner deflector rings.** The forcefield shell outline (2 → 0.6) and the carried-shield deflector ring (1.5 → 0.6) are now hairline-thin.
-- **`sing` sends robots back to work.** After the choir easter egg a machine no longer powers down for good — it drops aggro (with a brief `loseInterestT` beat) and resumes its normal patrol/hunt.
-
-### v0.92 — decay guards, always-a-chip, RON-ML `help`, W4 presses shielded players
-
-- **Backpacks never decay** (added to the `Infinity` group in `GROUND_LIFETIME`, alongside the already-permanent Wi-Fi block, AI key, and circuit boards) — too valuable to lose to a timer, and the AI key especially can't be remade.
-- **The world always contains a chip in a box.** The chip was already a guaranteed cache (last in the list), but a small world could run short of interior tiles before it placed. Added a backstop after box placement: if no box holds a chip, push one into a random box.
-- **RON-ML `help`.** Typing `help` at the terminal prints a command reference (verb, type signature, one-line description, and gate); `help <verb>` gives detail on one. Intercepted in `runRonml` before evaluation so bare `help` doesn't fail as an unknown name; `sing` is deliberately omitted (secret). Boot line now nudges "type help for commands". Added to the design-doc verb table.
-- **W4 hunter-killers press a shielded player instead of plinking from range.** Verified empirically that a plain shield / forcefield does *not* stop W4 fire (identical 3 shots/4s shielded vs not) — the real problem was the W4 holding at its firing distance firing absorbed shots, which doesn't read as "hunting". Now, when `player.shielded()` is up (and the player isn't Wi-Fi-invisible), the W4 stops holding at range and closes right in, bearing down on the player (still firing if it gets a clear line; a mirror shield will destroy it as it fires — the price of pressing a shielded target).
-
-### v0.91 — dropped items decay off the ground
-
-- **Dropped items now expire at tiered rates** so the world stops silting up with salvage (Henrik's note). Aged centrally in the `main.js` update loop rather than at the ~20 push sites: each ground item's `age` ticks up by `dt`, and it's culled once past a per-item lifetime (`GROUND_LIFETIME` table + a per-kind default via `groundLifetime()`). Perishables go fast (meat 40s, berries 55s), common salvage slower (scrap 100s, chip fragment 110s, ammo/battery 150–190s), and dropped gear (weapons/tools/bombs/shields/compass/map) lingers longest (320s). Real time: a full day is 480s, so ~100s ≈ 5 game hours.
-- **Progression-critical uniques never decay** — the single Wi-Fi block, the AI key, and the numbered circuit boards are `Infinity` lifetime, since losing one (its tower already felled) would soft-lock the OB-gun / wave-gun paths.
-- **Fade-out before vanishing** — over an item's last `GROUND_ITEM_FADE` (8s) it fades and flickers (`gi.fade` set in the aging pass, applied as alpha × sine in `renderer.drawGroundItem`), so things visibly wink out rather than popping.
-
-### v0.90 — printable map, pebbledash sand texture
-
-- **RON-ML `print` — a physical, carryable map.** New `print` primitive (`ronml.js`) → `ctx.printMap()` drops a `printed_map` item (new `kind: 'map'` item, folded-paper icon) at the player's feet to be picked up. Opens the same `#ronmap` overlay anywhere, away from a terminal, two ways: **click it in any inventory slot** (an `equipSlot` intercept, like the forcefield/compass — it just unfolds, never moves to hand), or hold it and use it (`E`/click in-world, via the passive-kind branch in `useHands`). Both routed through a new `player.onReadMap` hook wired to `openRonMap`; `'map'` added to the `HOLDABLE` set.
-- **Pebbledash texture on the sand (yellow) tiles** — `assets/textures/wall-pebbledash.png` added to `FLOOR_TEXTURES.sand` (the pond/river-bank rims), at a **reduced 0.32 alpha** (vs the general 0.55) so it reads as a soft sandy speckle rather than a heavy stone finish.
-
-### v0.89 — RON-ML `map`, robot sword, tweaks batch (sight cone parked)
-
-- **RON-ML `map` command.** New `map` primitive (`ronml.js`) → `ctx.showMap()` opens `#ronmap`, a green CRT schematic of the AI's territory drawn to a canvas in `main.js`: every obelisk (green square + code, destroyed ones hollow), every live machine (red dot), the W-factory (amber diamond), the **mainframe** you're hunting (magenta star + label), and you (cyan ring), with a legend. Overlaid on top of the terminal (z-index 22); click outside to close back to the console. A new seed-derived `mainframe` location (far from spawn; marker only, no interaction yet) gives the search a heading. Free to run (a read, like `scan`). Added to the design doc's verb table and the help.
-- **Robot sword** (new `robot_sword` item) — press **C** with 10 scrap to forge one (`canCraftSword`/`craftSword`, new `countItem` helper, craft-prompt banner + distinct beaten-metal icon; added to `WEAPON_ORDER`). A heavy anti-machine melee blade (robotDamage 9 vs the katana's 3).
-- **Bombs stack** (small/medium/large ×5, insane ×3). This exposed a latent `swapHands` bug: moving a pocket stack into the single-item hand slot silently dropped the surplus — now it takes one and stows whatever was held, so nothing is lost.
-- **Arrows buffed** — bow range 12→18, robotDamage 4→9, animalDamage 9→16.
-- **Sleep slower** — rest animation `REST_DURATION` 2.8s→4.6s (was "a bit too fast").
-- **Obelisk damage bar** smaller (30×3.5, was 48×5) and higher above the tower (offset −26, was −12).
-- **Unopened loot boxes lightened** (warmer wood on faces and lid) so closed vs. looted reads at a glance.
-- **Start hint** trimmed to "Press H for help", and moved to the bottom-**right**.
-- **Sight cone parked.** Built and working as a directional grey peripheral fog (`renderer.drawSightCone`, offscreen `destination-out` composite, linear front/back gradient centred on the player so behind greys out), but gated **off** behind `const SIGHT_CONE = false` pending careful tuning — the code stays ready to switch back on.
-
-### v0.88 — animated rest: screen fade, 5x clock, lie-down pose
-
-- **Resting (B) is now an animation instead of an instant heal.** Pressing B starts a `resting` state (main.js) that runs `REST_DURATION` (2.8s real): the world freezes (early `return` in `update`), the day/night clock advances at **5x** (`dayNight.update(dt * REST_CLOCK_MULT)`) so the on-screen countdown visibly spins, health trickles back over the duration (`SLEEP_HEAL` spread across it), and on completion the cooldown is set and the run is saved. Same guards as before (not while hurt-free, on cooldown, or hunted).
-- **The screen dims over the play area while resting** — a soft envelope (`restDim`, fade in over the first fifth, hold at 0.72, fade out over the last fifth) drawn by `renderer.drawRestOverlay` with a "Resting… / time is passing" caption. Only the play area dims; the dashboard (and its spinning clock) stays bright so you watch time pass.
-- **The character lies down.** `player.resting` drives a new branch in `drawPlayer`: the sprite is tipped onto its back (rotated ~80°) on a wide flat shadow, no tool in hand, with drifting sleep "z"s.
-
-### v0.87 — loot/inventory polish: used-box look, forest backpacks, drag-to-drop, aimed bombs
-
-- **Opened loot boxes now clearly read as spent** — darker wood on both faces, a near-black empty interior, and the lid drawn thrown open (a plank standing up behind the crate). `drawBox` in the renderer.
-- **A few spare backpacks now spawn out in the forests** (open grass tiles adjacent to a tree), not just the one buried in the ruins — four of them, so a backpack is much easier to find early. Added to the loot-scatter block in `main.js`.
-- **Drag an item off the open backpack panel to drop it.** The drag-release handler in `main.js` now, when a drag is released away from any slot *and the backpack panel is open* (`showBackpack` guard, so a fumbled dashboard drag doesn't fling things away), drops that slot's contents on the ground via a new `Player.dropSlot(slot, map)` helper.
-- **Bombs land where you aim.** `dropBomb` now throws to the tile under the cursor (`player.aimWorld`, captured each frame in `update`), capped at the bomb's throw range — a nearby click drops it close, a far one lobs it full distance — instead of always throwing a fixed 4.5 tiles ahead. The solid-tile pull-back still applies.
-
-### v0.86 — electro-gun destroys bots + damages obelisks, robot chip fragments, craft-a-chip
-
-- **The electro-gun now destroys a machine outright** instead of fusing it into a mineable wreck. Its `fuse` effect branch in `Player.fire` sets `target.hp = 0` (a clean kill — `scrapPenalty = false`, so full salvage) plus the spark burst and score, letting the robots module handle death/scrap on its next tick. The old `fused`/`mineCharges` wreck path is now unreachable (nothing sets `fused` anymore) but left in place as harmless dead code.
-- **The electro-gun's arc also scorches obelisks.** `fire` now checks for an obelisk in front within range (for `effect: 'fuse'` guns) and, if it's no further than any machine target, damages it via a new shared `Player.damageObelisk(ob, map, amount)` helper (extracted from `burnObelisk`). A slower way to fell a tower than the OB-gun, but it works — and it makes the **obelisk damage bar appear** (the damage bar itself was never broken; the player just had no way to raise `obDamage` short of the OB-gun/insane bomb, which is what the "obs not showing damage bar" report was really about).
-- **Every destroyed machine sheds a chip fragment** (`chip_fragment`, new `material` item, stack 64). Added to the robot death-loot block in `updateRobots`. Collect **eight** and press **C** to assemble a whole access chip (`Player.canCraftChip`/`craftChip`, gated behind the existing OB-gun/wave-gun craft checks; new `Player.countItem` helper; craft-prompt HUD banner + a distinct green colour). So there's always a route to a terminal even without felling a tower. Distinct chip / chip-fragment item icons added to the renderer.
-
-### v0.85 — felling an obelisk always drops an access chip
-
-- **A destroyed obelisk now always spills an access chip** on top of its usual salvage, so bringing down any tower hands you the means to jack into the others' terminals. Refactored both physical destruction paths (`burnObelisk`'s OB-gun kill and `detonateBomb`'s insane-bomb blast) into a shared `Player.spillObeliskSalvage(ob, map)` helper — circuit board, batteries, scrap, and the chip in one place. Deliberately **not** wired into RON-ML `crash`, which only knocks a tower dark temporarily (`needsRebuild`) and shouldn't be a chip fountain. Fixed a latent double-`addScore(20)` the refactor exposed in `burnObelisk`.
-
-### v0.84 — RON-ML implemented
-
-- **RON-ML is live.** New self-contained module `src/game/ronml.js`: a hand-rolled tokenizer, recursive-descent parser, and small-step evaluator for the language from `docs/ob-terminal-language.md`, shipped without lambdas per the doc's own §8 call (`let` alone teaches binding). Runtime values are tagged objects (`{tag:'node'|'key'|'num'|'list'|'unit'|'fn', ...}`) so error messages can name what went wrong instead of leaking JS internals. All 7 primitives from the doc are implemented: `scan`, `nearest`, `hack`, `crash`, `sleep`, `repel`, `sing`, plus `keys`. Application-by-juxtaposition, `let ... in`, and the pipe `|>` all work, including parens as an alternative to juxtaposition (`sleep(30)` parses identically to `sleep 30` — falls out for free from parenthesized grouping, no special call-syntax needed). Incomplete applications (e.g. `crash OB-BB05` alone) surface as the doc's own teaching-error examples via a small `USAGE_HINTS` table, not a raw partial-function value.
-- **The obelisk terminal is a real REPL now.** `#obterminal` gained an input row (`#obterminal-inputrow`/`#obterminal-input`) below a scrolling output log; `main.js` wires Enter to run the typed line through `runRonml()` against a `ronmlCtx()` built fresh per command (world hooks only — `ronml.js` itself never touches game state), and Up/Down recall command history. The old static boot-text screen is now the REPL's opening banner.
-- **`hack`/`crash` reuse the obelisk-code scheme** already seeded in v0.78 (`ob.code`, e.g. `OB-D0D9`). `crash` is deliberately a *different* mechanic from physically burning a tower down: it always sets `needsRebuild=true` (a W3 drone eventually raises it again) and never counts toward the permanent win condition — a repeatable tactical disable, not a console shortcut to victory. It reuses the existing repair-drone dispatch and turns off an active SKYLINK purge as a side effect, matching the fiction ("collapses the web").
-- **`sleep`/`repel` reuse existing per-robot fields.** `sleep t` sets `r.disabledT` (the same stun-gun freeze timer) on every non-friendly robot within `RONML_ROBOT_RANGE` (20 tiles) of the player; `repel` sets a new `r.repelledT` (60s) that a small addition to `updateRobots`'s dispatch loop turns into a flee-from-player override, same pattern as the animals' `scaredT`.
-- **`sing` — implemented as a deliberate deviation from the design doc.** Per instruction: instead of the doc's planned "hit kicks you out of the terminal" interrupt (never built — being jacked in already makes you fully invisible to robots via `player.terminalSafe`, which was judged the better defensive model), typing `sing` **immediately closes the terminal** so the player can watch the sequence happen in the world instead of reading about it. Targets (`nearby(r) && !r.drained` robots within range) get `r.singing=true`, a line-up position (`choirX/choirY`, fanned out perpendicular to the player's facing), and a `choirT` countdown; `updateRobots` walks them into formation facing the player, then sets `drained=true` once the timer runs out. No AI key needed, matching the doc's "pure treat" framing.
-- **Lore fragments for the language** (`ronml-01` through `ronml-05` in `lore.js`, `kind: 'code'` — reuses the existing green-on-black styling) — near-verbatim from the design doc's §5 Fragments A-E: `sleep 30`, `scan |> nearest`, the `let`/HACK→CRASH two-step, `repel`, and a torn, deliberately-unreadable hint at the secret. These are additions to David's lore corpus (`src/game/lore.js`, marked as his file to develop) — flagged here for his review/repositioning rather than treated as final placement.
-- **Help modal** gained a full RON-ML paragraph (verbs, the AI-key gate, the hint-driven error philosophy, a nod to the secret) and a controls-table row for Enter/history in the terminal.
-
-### v0.83 — click-to-arm forcefield/compass, multi-target compass, backpack badge click, persistent identity, melee knockback
-
-- **Forcefield now needs a deliberate click to work.** Its old gate (`this.hands === 'forcefield'`) meant it only ran while physically held, but the v0.81 help text wrongly claimed "just carry it" — a real bug, not just wording. Now `player.forcefieldArmed` is toggled by clicking the forcefield in *any* slot (hand, pocket, or pack) via a new intercept at the top of `equipSlot()`; `forcefieldActive()` and the drain/recharge loop in `update()` now key off `hasItem('forcefield') && forcefieldArmed` instead of the hand check. Losing the item disarms it automatically. Click it again to disarm and stop the drain.
-- **Electro-compass gets the same click-to-arm treatment**, plus multi-target tracking. `player.compassArmed` toggles the same way; `compassTarget()` (singular, nearest-overall) became `compassTargets()`, returning the nearest instance of *each* category (factory/obelisk/backpack/OB-gun) rather than just the closest one overall. `renderer.js`'s facing-chevron block now draws one small chevron per active target (via a shared `drawChevron` closure) instead of one, falling back to the plain white facing chevron when the compass isn't armed or nothing's around.
-- **Backpack HUD badge is clickable.** `renderer.js` pushes a `packbadge` uiSlot at the badge's rect; `main.js`'s slot-press handler opens `showBackpack` directly on a click there, same panel as pressing **I**. Label updated to "PACK (click or I)".
-- **Name and gender now survive death and New Game.** Previously `fullReset()` wiped the whole `postai-character` save, including persona, so every death reset you to "Adam". Split persona into its own durable `postai-identity` key (name + gender only), loaded as a baseline before the run-save check and written every time `persist()` runs; `fullReset()` deliberately never clears it. The run-save (score, skills, inventory, position) still wipes on death/New Game as designed.
-- **Melee hits now knock the target back**, Minecraft-style — `player.js`'s general melee-hit branch shoves the target `KNOCKBACK_DIST` (0.5 tiles) away along the hit vector (blocked by `map.isSolid`) and sets `target.knockT = KNOCKBACK_STUN` (0.4s), during which `updateRobots`/`updateAnimals` skip that entity's AI and attack entirely (checked centrally in each module's dispatch loop, same pattern as the existing `disabledT`/stun-gun freeze). Previously an adjacent enemy could land its own attack on its own cooldown the instant your swing connected, so you routinely took more damage than you dealt; the shove now buys a beat of separation.
-
-### v0.82 — faster health regen, obelisk terminal only opens on a screen click
-
-- **Health regenerates 3x faster.** `HEALTH_REGEN` 0.5 → 1.5/s while fed and unpoisoned — dying to attrition after a fight was too easy; recovery between scrapes is now meaningfully faster.
-- **Obelisk terminal only opens when you click the little green screen**, not anywhere on the tower body. `drawObelisk`'s `obeliskHits` push shrank from the whole tower footprint to the CRT screen rect plus an 8px padding for a comfortable target (`sx-5.5-8, sy-6.5-8, 12+16, 14+16`).
-
-### v0.81 — access chip + AI OS, self-charging electro-gun, carried shields, obelisk damage bar, factory flicker-spawn
-
-- **Access chip → terminal, or the AI's own OS.** A new carried `chip` item (`kind: 'chip'`, seeded one per world) is your interface into the obelisks — you don't hold it, just carry it. Clicking an obelisk **with** a chip opens a **connect channel**: a progress bar (`#obterminal-connect`, ~1.6s) that then reveals the RON-DOS boot screen with access GRANTED (read-only). **Without** a chip you instead get the AI's own console — `#aios`, a magenta glitch-CRT filling with restless, unreadable data (sine-driven hex/glyph field, per-frame `requestAnimationFrame`), header ACCESS DENIED · NO KEY. Both close on backdrop click.
-- **The chip hides you while jacked in.** Opening a terminal sets `player.terminalSafe = true`, which ORs into `player.invisibleToRobots` — the obelisk shields you from the machines for as long as you're logged in. Closing the terminal drops the shield.
-- **Electro-gun self-charges.** Replaced the fractional pocket-battery model with a **self-charging internal cell** (`selfCharge`, `internalMax: 4` — four batteries' worth, tracked on `player.electroCharge`). It trickles back up (`chargeRate` 0.0085/s) whenever it's carried, spends `shotCost` 0.05 per fuse shot, and skips your pocket batteries entirely. Runs flat, then quietly comes good again — no more dead weight.
-- **Electro-gun destroys bots in a shower of sparks** (`sparkBurst`, 5 scattered sparks) and **scares nearby animals** — firing sets `scaredT` on animals within 7 tiles, and they flee straight away from you (`scareAnimals`).
-- **Mirror shield reflects lethally, and shields work while carried.** `blockRangedShot` no longer needs the shield in-hand or a facing check: a carried forcefield absorbs, a carried `mirror_shield` **reflects the shot back to destroy the shooter** (`hp -= 999` at both the W4 and water-droid fire sites), a carried plain shield absorbs. A pale deflector ring (cyan for the mirror) shows around you while any shield is carried.
-- **Obelisk damage bar.** A 48×5 bar floats above a scorched obelisk (when you're within 12 tiles) showing `obDamage` 0→5 — green/amber/red. Obelisks are hard to fell: five OB-gun burns (or an insane bomb), and W3 drones repair the damage back down, so it takes the heavy kit.
-- **Factory flicker-spawn.** Machines dispatched from the factory now **flicker into existence** — `spawnT` 0.75s set on W1/W3/W4 at dispatch, rendered as a buzzing fade-in (`drawRobot` globalAlpha ramp × sine). They move and fight normally while materialising.
-
-### v0.80 — electro-compass, clickable obelisk terminals, terminal-language design
-
-- **Electro-compass** (new held tool, `kind: 'compass'`). While held, `Player.compassTarget()` finds the nearest of {factory (blue), obelisk (green), dropped backpack (yellow), dropped OB-gun (orange)} and the facing chevron becomes a homing pointer to it, coloured by type. (Red AI-mainframe slot reserved for later.) Passive — using it does nothing but flavour text. Seeded one per world in the caches.
-- **Clickable obelisk terminals.** Each obelisk now draws a small flickering green CRT on its face. Clicking the tower (within `OB_TERMINAL_RANGE` 4.5) opens a **VT220-style terminal modal** (`#obterminal`, green phosphor + scanlines + CRT glow) that boots RON-DOS, shows the node's code and circuit id, and reports access LOCKED. Read-only for now — the hooks are in place. Click detection: `renderer.obeliskAt` stores per-tower world-screen hit rects each frame; main converts the click via `camera.toWorld → worldToScreen` (same path as right-click inspect).
-- **Design written for the terminal mini-language** — `docs/ob-terminal-language.md`. RON-ML: a tiny ML-flavoured functional console language (≈7 primitives + let/pipe/application), gated by the AI key, range, and not-getting-hit; the HACK→CRASH chain as the teaching moment; codes seeded in lore fragments; the `sing` Portal easter egg; a self-contained implementation plan (`src/game/ronml.js`).
-
-### v0.79 — factory depth + spawn fixes, textured vent, railgun ammo, whiter chevron
-
-- **Factory no longer has trees/machines drawn over it.** The 8×8 object was sorted by its origin corner (very low depth), so anything with a higher tile-depth painted over the block. It now sorts by its **centre** (`obj.x+fw/2 + obj.y+fh/2`), which occludes what's behind it while still letting things genuinely in front (south/east) draw on top.
-- **Dispatched machines spawn beside the factory, not inside it.** The dispatch point (`factoryCy`) moved from the solid centre to just south of the footprint (`y + fh + 1.5`), so W1/W3/W4 seat on open ground rather than stuck in the block. Verified a W4 spawns outside the footprint on non-solid ground.
-- **Grubby vent.** The roof vent's orange glow now has the metal texture drawn over it (clipped to the ellipse, 0.4 alpha) so it isn't a clean flat oval.
-- **More railgun ammo** — its cache now bundles 14 batteries (was 4).
-- **Chevron whiter** — `rgba(200,200,200,0.55)`.
-
-### v0.78 — destructible 8×8 factory + AI key, 24h deadline, electro-gun sips, raven perch fix, jumpable crates
-
-- **The W-factory is now a big 8×8 destructible structure.** Placed on a clear 8×8 grassy area (main.js), all 64 footprint tiles point at the one object (solid across the whole thing). `drawWfactory` renders it as a tall extruded prism faced with the `decor-train.jpg` texture (`FACTORY_TEXTURE`), with a pulsing vent and a **damage bar centred above it when you're within 14 tiles**. Hitting it in melee (`useHands` → `hitFactory` → `damageFactory`) or catching it in a bomb blast chews its `hp` (160); when it gives, the footprint is flattened to a walkable, scorched heap and it drops an **AI key** (new `ai_key` item) plus salvage. All the factory's dispatch/repair code now fires from its centre and stops once it's `destroyed` (`factoryLive()`).
-- **SKYLINK deadline back to 24 hours** (`DEADLINE_DAYS` 0.5 → 1.0) — there's more to do in a run now.
-- **Electro-gun sips its cell**: `fractionalAmmo` 0.05 — each shot accumulates 5% and only spends a whole battery when the fraction tips over one (`player.ammoFrac`), so a battery lasts ~20 fuse shots and the pocket count stays integer. (Replaces the v0.77 built-in reserve.)
-- **Ravens only perch on big, grown trees** (`isBigTree`: variants 0–2, `grow > 0.75`) — landing on a small/dead/sapling left the bird floating above the sprite.
-- **Crates are jumpable** — `box` is now `climbable` (climbHeight 1), so you can step or hop onto/over one; still searchable from beside it.
-- **Facing chevron** is greyer and less opaque (`rgba(150,150,150,0.45)`).
-
-### v0.77 — electro-gun reserve, aged cars, chevron aim, bomb→weapon autoload, tabbed help, plan pruned
-
-- **Electro-gun built-in ammo.** It drained shared pocket batteries far too fast. Guns can now carry a `builtIn` reserve (electro-gun: 40 fuse shots) tracked per-gun on `player.gunAmmo`, used before it ever touches pocket cells.
-- **Cars look weathered.** `drawCar` now composites every car (not just wrecks) through the offscreen and dusts a faint grime texture (`photo-unsorted-2.jpg`/`EDGE_TEXTURE`, 0.16 alpha, source-atop) over its own pixels, so they read as years-old rather than showroom-fresh. Smashed cars still get the heavier husk + rust pass on top.
-- **Facing indicator is a directional chevron**, rotated to the screen-space aim, replacing the plain grey dot.
-- **Throwing a bomb auto-arms your best weapon.** `dropBomb` → `autoEquipBestWeapon()` brings the highest-`power` tool/gun from pockets (then backpack) straight to hand, so you're not left empty-handed; spare bombs stay in pockets.
-- **Tabbed help modal.** The help panel is now Controls / Survival / Animals / Machines tabs (a sticky tab bar; JS toggles `.helpPanel` blocks by `data-panel`, with Survival split into two blocks that toggle together around the machines section).
-- **Plan pruned.** Collapsed the v0.45–v0.69 per-version changelog (it duplicated git + the README table) and removed already-shipped backlog items; refreshed the near-term list with the agreed 8×8-factory / OB-terminal-language / W5 directions.
-
-### v0.76 — shields + forcefield, bigger-tree wood, hand-height tools, softer car shadow
-
-- **Shields and a forcefield.** Three new held items (`items.js`): `shield` (absorbs a laser from the front), `mirror_shield` (reflects it back for `REFLECT_DAMAGE`), and `forcefield` (a battery-powered green shell that stops everything, all-round). `Player.blockRangedShot(sx,sy)` decides absorb/reflect/none by facing; the W4 and W2 fire sites consult it before dealing laser damage (and take the reflected hit). `Player.takeDamage` short-circuits entirely while the forcefield is up, so it also stops melee. Forcefield burns `FORCEFIELD_MAX` (60s) per battery, auto-pulling a fresh cell when one runs dry (mirrors the Wi-Fi block). Bubble drawn in `drawPlayer`; shield/forcefield icons in `drawItemIcon`; all three seeded into caches (shield common-ish, mirror rarer, forcefield a single rare find). Verified: reflect only from the front, forcefield blocks any direction and zeroes incoming damage.
-- **Bigger trees drop more wood.** Wood yield is now per tree variant (`[4,4,3,1,2]` for big/big/medium/small/dead), scaled by `grow` for saplings, instead of a flat 2.
-- **In-hand tool at hand height.** The held-item anchor moved down (`by-16` → `by-10`) so it reads as held in the hands, not floating at the shoulder.
-- **Softer car shadow.** Replaced the hard flat oval with a radial-gradient ellipse hugging the car's footprint; it's cosmetic only (collision is the tight 2x2), so you can walk across it.
-
-### v0.75 — smashed-car grime, tighter car collision, smaller tools, fainter boundary
-
-- **Smashed cars look ruined, not just dim.** The offscreen husk tint now also paints a faint metallic grime texture (`misc-ring-bottoms.jpg` → `CAR_RUIN_TEXTURE`) over the car's own pixels (source-atop) at 0.32 alpha, so a wreck reads as burnt/rusted.
-- **Tighter car collision.** Cars were a 3x2/2x3 solid footprint whose iso width (~160px) was wider than the 147px sprite, so you were stopped a step short of the visible car (the "janky edge detection"). Footprint is now a tight 2x2 (128px) that the sprite slightly overhangs, so you stop when you touch the car body.
-- **In-hand tools no longer oversized.** The held-item icon scale was still tuned for the old larger character; dropped from ~0.85 to ~0.55 to suit the v0.67 smaller sprite.
-- **Boundary blocks fainter.** `EDGE_ROCK_ALPHA` 0.5 → 0.38.
-
-### v0.74 — real car sprites, wall-top texture, softer boundary
-
-- **Abandoned cars are real sprites now.** Replaced the procedural hull with 3/4-view PNGs (`assets/textures/cars/`, from `_tmp/cars`): Chevrolet Bel Air, Rolls-Royce Phantom in blue/red/white, a police car, and an ambulance — each in the four iso-diagonal facings (SE/SW/NE/NW). Worldgen stamps a random `carModel`/`carDir` per car; `CAR_SPRITES`/`CAR_MODEL_KEYS`/`CAR_DIR_KEYS` in textures.js; `Renderer.drawCar` blits the sprite (old procedural draw kept as `drawCarProcedural` fallback until the image loads). A smashed car is darkened to a burnt husk via the offscreen source-atop tint.
-- **Wall tops textured.** A stone/brick wall's top face now gets the same wall texture as its sides but at low opacity (0.22), so it reads as the same material yet a distinct top-lit surface rather than a flat cap. Untextured walls keep the plain fill.
-- **Boundary blocks more transparent.** `EDGE_ROCK_ALPHA` 0.7 → 0.5, so a block between you and the camera is easier to see through.
-
-### v0.73 — gravel boundary texture, water droids gated to water
-
-- **Boundary blocks re-textured.** They were faced with the road texture and read as just more road. Now faced with a dark crushed-gravel/asphalt photo (`photo-unsorted-2.jpg`, new `EDGE_TEXTURE` in textures.js) so the map edge reads as rock, clearly distinct from the roads inside the map. Still semi-transparent and depth-sorted as in v0.72.
-- **Water droids can only hit you in the water.** `updateWaterDroids` gated the fire/damage on `player.swimming || floorAt(player) is water/stream`. Step onto dry land or a bridge and a W2's shots can't reach you — though it keeps tracking you and you can still shoot it from the bank. (They fire on the whole squad's wave otherwise unchanged.)
-
-### v0.72 — render fixes: held-item depth, boundary blocks, swimming head
-
-- **BUG FIX: the held item floated over the character's head when facing away.** The tool/gun was always painted after the body. It's now drawn before the body when the facing points "back" (`player.facing.x + player.facing.y < 0`, i.e. behind the torso in screen depth) and after when it points toward the camera. Extracted to `drawHeldItem`.
-- **Boundary edge blocks reworked.** They're now (a) faced with the `floor-road.jpg` texture, (b) drawn semi-transparent (`EDGE_ROCK_ALPHA` 0.7) so a block between you and the camera lets you show through, and (c) pushed into the depth-sorted drawables (with tile depth) instead of a flat pre-pass — which fixes the "south edge looks weird" bug, where front (south/east) blocks were being painted over by the grass behind them. Only the on-screen out-of-bounds strip is collected, so mid-map it's free.
-- **Swimming uses the real character sprite.** Instead of a drawn skin-tone blob, the swim view now clips the top half (head + shoulders) of the current-facing idle frame at the water line, with the existing ripples — matching the on-land look.
-
-> **Still open from this batch (larger, staged next):** shield weapons (standard absorbs a laser, mirror reflects it), a battery-powered green **forcefield**, the **8×8 factory** (train-textured, damage bar, drops an AI key), a **W5 tree-planting bot**, and the big one — **OB terminals** you can access to type ML-style code fragments seeded in the lore (SLEEP / REPEL / CRASH / HACK, plus the Portal-choir easter egg), a mini functional language the player actually learns to hack machines. The terminal + language is its own design project.
-
-### v0.71 — SKYLINK reprieve, rock map edges, tree variety + chop feedback, CPU culling
-
-- **Felling a tower during the SKYLINK purge shuts it down.** SKYLINK was unwinnable once it started. Now, if `player.skylinkActive` and you topple an obelisk that isn't the winning blow, the laser web collapses (`skylinkActive = false`) and the tower is flagged `needsRebuild`; the factory rushes a W3 to it (`updateW3` now also targets destroyed+`needsRebuild` towers and, on reaching one, raises it: `destroyed=false`, re-solidifies the tile). SKYLINK only re-lights once nothing is flagged (the activation guard gained `&& !obeliskObjs.some(o => o.needsRebuild)`). Topple towers faster than they're rebuilt and you can still win outright mid-purge.
-- **The map edge is a wall of grey rock, not black void.** A new unclamped `rawVisibleRange` + `drawEdgeRock` fill every on-screen out-of-bounds tile with a raised stone block (`EDGE_ROCK_H` 52). Only the visible strip near an edge is drawn, so mid-map it costs nothing.
-- **CPU: distance culling for a bigger map.** Robots and animals more than ~40 tiles from the player now skip their AI entirely (they're off-screen and can't affect the player) and resume when the player returns. Crucially the robots' O(n²) `separateRobots` pass now runs only over the near-player subset, so hundreds of machines on a large map cost the same as a handful. Friendlies (which follow you) are never culled. This is the groundwork that makes the planned 4× map affordable.
-- **Tree variety + chop feedback.** `TREE_SPRITES` gained a small (variant 3) and a bare/dead (variant 4) cut-out; `worldgen`'s new `treeVariant()` sprinkles them in rarely (≈9% small, ≈6% dead) among the full trees. A chopped tree shows a green→red damage bar above it (`treeDamageBar`, `maxHp` stamped on first chop). Chopping swings faster now (`TREE_CHOP_SPEEDUP` 0.55 of the normal cooldown).
-
-### v0.70 — hand-drawn trees, block-top movement polish
-
-- **Real tree art.** Trees were procedural circles/triangles; they now blit from a copied CC0 "Premium Trees" sheet (`assets/textures/trees.png`, the No-Outline set David dropped into `assets/textures/Shadow/`). No files were sliced — each `variant` (0/1/2) is a source-rect (`TREE_SPRITES` in textures.js, bounds measured off the sheet's alpha) drawn with `drawImage`, scaled by the existing `grow` value and carrying its own baked shadow. `Renderer.drawTree` keeps the procedural version as a fallback until the sheet loads.
-- **Slower, steadier walk on block tops.** On a climbable ledge the walk speed is cut to `BLOCK_WALK_MULT` (0.6) — the footprint is small and full pace made edges twitchy to line up.
-- **Walk off a block to drop down.** Stepping off the edge of a block onto lower ground now seeds `z` with the height lost (rendered at 32px/unit vs a level's 16px, hence ×0.5) and lets the existing jump/gravity integrator carry you down, so you fall smoothly and keep walking instead of snapping down.
-
-### v0.45 – v0.69
-
-Detailed per-version notes for these were pruned (they duplicated git history and the README version-history table). See the **Version history** table in `README.md` and the annotated git tags (`git show vX.YZ`) for anything older than v0.70.
+## Planned / next — design notes (not yet built)
+
+### TOR machines — RON resistance stations on the hilltops — DONE (v1.44)
+Shipped in v1.44: TOR relays on the summits, amber HERMES terminal, `make`/`read`/`ping` verbs, no AI key. See the v1.44 notes below. Future extensions kept from the original spec: deeper `read` → Scrapbook wiring, a `ping`-reveals-on-map overlay, and "moly" as a carried immunity charge (right now `make` just fabricates supplies). Original design notes retained below for reference.
+
+Old RON tech, set up **before** the AIs had full control, so they're **janky, half-working legacy systems** — the opposite number to the AIs' obelisks.
+- **Placement:** on the **peaks of hills** (highest `heightAt` tiles), one per notable summit, a handful across the map. Physically a squat, weathered mast/relay (draw it — leaning aerial, patched panels, a dim amber CRT vs the obelisk's cold green), visibly older and cruder than an obelisk.
+- **Terminal:** a **second terminal interface** (reuse the `#obterminal` CRT shell but recoloured **amber**, glitchy — occasional line noise, dropped chars, a slow boot), running the RON side of the language. **No AI key needed** — it's friendly tech.
+- **Odyssey name: HERMES.** The AIs' node OS is **TIRESIAS** (the seer in Hades who tells Odysseus the way home); the RON counter-system is **HERMES** — the messenger/helper god who aids mortals against the gods and, crucially, gives Odysseus **moly**, the herb that makes him immune to Circe's enchantment. So HERMES = RON's counter-enchantment tech; its crafting output can be flavoured as "moly" batches. Nice Tiresias↔Hermes pairing (oracle of the enemy vs helper of the resistance).
+- **Resistance functions (ML verbs on HERMES only):** `make battery` / `make <item>` — manufacture supplies (batteries first; slow, limited runs, sometimes fails = the jank); `read <topic>` / `archive` — pull up lore the RON network still holds (feeds the Scrapbook/notepad); maybe `ping` — reveal nearby obelisks/factory on the map for a while. All gated to the HERMES terminal, unavailable at obelisks.
+- Ties: gives the hills a reason to climb; gives RON a physical presence; a safe crafting/lore hub vs the hostile obelisks.
+
+### Fortress key via a more complex ML program — DONE (v1.42, drop fixed v1.43)
+Shipped: the key comes from composing `let k = hack OB-XXXX in unlock k` at any live obelisk (v1.42). v1.43 removed the one-time guard, so it drops a fresh key every time it composes (recoverable if lost).
+
+### Three SIRENs inside the fortress
+The overworld has exactly one SIREN (a singular landmark). The **fortress** should have **three** SIREN-class towers as an interior hazard cluster — a wall of song to cross. (Kept as a note per request; the `cls:'siren'` + render + lure already support it, just needs fortress placement.)
+
+## Where we are (current)
+
+Full per-version history lives in the README's **Version history** table
+([README.md](README.md)) — one line each, kept current every push. This file
+keeps only the latest status, plus the conventions, art notes, and forward plan
+above and below. (The old blow-by-blow "Where we are (v1.06 … v1.54)" log was
+pruned; the README table is the record now.)
+
+### v1.76 — manage mode, audible lasers, daemon takes the towers, stamp retired
+
+- **Manage mode** (the mobile swap mechanism): while showBackpack is open, a
+  same-slot tap routes to `smartMoveSlot` instead of equipSlot — pocket/hands/
+  bw → packbadge (stow); bpstore → first free pocket, else the hand (moveItem
+  validates holdability); tapes from anywhere → empty walkman; walkman →
+  eject to pocket/pack (setSlot's walkman branch already stops playback).
+  All movement goes through moveItem, so every refusal message is reused.
+- **Robot laser sfx**: new 'laser' recipe (short descending square+sine pew,
+  gain 0.09/0.07 — quiet by request); played at the three robot fire sites
+  (T3 volley once per salvo, W4, M5). play()'s 70ms debounce prevents stacking.
+- **Daemon defeat powers down the obelisks**: onCoreDefeated sets
+  poweredDown/alert=0/stirred=false on every standing tower; drawObelisk
+  skips the whole signal-light block for a powered-down husk. Help box and
+  README updated. OPEN QUESTION for later: should the POSEIDON countdown
+  stop when the towers die? (Currently untouched — on CALYPSO the countdown
+  still runs against dead towers; harmless but conceptually odd. Revisit
+  with the archipelago campaign win.)
+- **In-game version stamp removed** (the tiny v-number under the HUD
+  wordmark); the gate/title keeps its own.
+- **T3 help-box entry** rewritten for the wheeled body + laser eyes.
+- Verified headless: boot clean, laser plays, 12/12 obelisks powered down
+  after onCoreDefeated; manage-mode router is thin dispatch over the
+  battle-tested moveItem (code-reviewed).
+
+### v1.75 — T3 redrawn: wheeled T2 with laser eyes
+
+- Full drawT3 rewrite per David's brief ("wheeled version of T2 with laser
+  eyes"): T1-style wheels + hubs under a chassis skirt, T2-proportioned trunk
+  (14x18, one size up) with the riveted brushed-steel sheen kept from the old
+  draw, short two-talon claw arms riding the tremor clock, T2-style head
+  block, and twin round orange emitters — always faintly lit (its identity),
+  flaring via t3SensorStyle with a charge-line joining them while hunting.
+  All state tells preserved (fused slump/smoke, drained battery, stun
+  flicker, designation plate). Verified in headless Chrome beside a T1 and
+  T2 — family resemblance lands, idle + aggro states both correct.
+
+### v1.74 — HOTFIX: TDZ crash at module load (black screen after title)
+
+- v1.72 seeded `large_stone` drops beside the anvil drops (~line 94), ABOVE
+  the `const forestGrass = []` / `tallgrass` declarations — `Cannot access
+  'forestGrass' before initialization` at module evaluation, so main.js never
+  ran: no world, no HUD, only the DOM chrome ("Press H for help") over a
+  black canvas, on every platform. Moved the drops below the declarations.
+- **Why it escaped**: `node --check` is syntax-only (TDZ is a runtime error),
+  and the headless test suite imports worldgen/player/ronml — never main.js
+  (it needs a DOM). **New standing check**: after ANY main.js module-scope
+  edit, boot the game in headless Chrome (scratchpad puppeteer probe: gate →
+  Start → assert `window.__game` + non-black canvas + uiSlots > 0) before
+  pushing. The probe scripts live in the session scratchpad; recreate from
+  this note if needed.
+
+### v1.73 — mobile walkman: live reels, spacing, now-playing toast
+
+- **Compact HUD cassette animates**: the walkman slot drew a frozen item icon;
+  it now calls `drawCassette(def, spin, spinLeft)` (the deck's own painter)
+  with a clock-driven spin while `walkmanSide` is set — take-up reel leads,
+  as on the title deck.
+- **+12px gap** between the pack badge and the deck.
+- **Now-playing toast**: `player.onTapeToast(def, side)` fires from the
+  walkman branch of equipSlot; main.js builds `▶ artist — album · side X: label`
+  (def.short; "stopped" variant on stop), 4s ttl; renderer.drawToast draws it
+  centred just above the dashboard, dim, fading over its last second — liner
+  notes, not an announcement. Drawn on desktop too (harmless there).
+
+### v1.72 — Kittler & McLuhan, the large stone, two anvils
+
+- **Lore: `med-01` (Kittler)** — lecture notes: MEDIA DETERMINE OUR SITUATION
+  taught as provocation until "the situation arrived, and it had a media
+  plan"; plus *there is no software* cashing out as voltage in someone else's
+  hardware, aimed at the towers. notepad-flagged. **`med-02` (McLuhan)** —
+  marginalia: the medium is the message; everyone graded what the machines
+  SAID, nobody the geometry under every word; "the content of the network was
+  us"; extension of man run in reverse. Both seated beside the vec- thread,
+  named like Weizenbaum is named. Both lines also added to GRAFFITI_VECTOR
+  (faded academic scrawl).
+- **`large_stone`**: burden item like the anvil — `burden: true` flag in
+  items.js now drives a generalised `player.carryingBurden()` (was
+  carryingAnvil); 10% pace from hands/pockets/backpack/sleeve; generic
+  once-per-pickup message. Three seeded in the wilds. Faceted-boulder icon.
+- **Anvils: exactly two** on the island (both indoors).
+- Verified headless: med fragments in corpus (199 total); stone and anvil
+  both ratio 0.100 via the backpack path.
+
+### v1.71 — the anvil
+
+- New item `anvil` (material, stack 1, one seeded in the town boards,
+  keep:true): `player.carryingAnvil()` checks hands + pockets + backpack
+  slots + spare-weapon sleeve; movement multiplies by ANVIL_SLOW 0.1 with a
+  one-time message. Icon: classic silhouette. Verified headless: distance
+  ratio with/without = 0.100 exactly. Future hook: an anvil wants a forge —
+  crafting uses (robot-sword smithing?) left open.
+
+### v1.70 — drunken lotus walk, mobile HUD touch, 64-stacks, new domains
+
+- **Lotus torpor reworked**: the grove drag (TORPOR_PULL) is gone; instead the
+  walk direction rolls under you — two out-of-phase sines + a re-seeding lurch
+  bias, scaled by TORPOR_SWAY and easing out over the last 3s. Verified
+  headless: same input walks a visibly different, shorter path under torpor.
+- **Mobile HUD**: input.uiHitTest (wired from main.js) — a touch landing on
+  the dashboard band, any slot, or the open backpack panel never becomes
+  movement; the tap still lands so the existing one-click equip path fires.
+  The pack badge now TOGGLES the panel (no I key on phones). equipSlot's
+  backpack branch moves non-holdables/stacks to the first free pocket.
+- **Compact HUD**: vitals stack shifted down 6px (labels were kissing the
+  band's boundary line).
+- **Stacks to 64**: arrow, scrap, circuit, battery, ammo, shells, wood.
+- **Domains**: hosted at https://nostos-ai.vercel.app; repo renamed
+  dmberry/postAI → dmberry/nostos (old URLs redirect).
+
+### v1.69 — slot hover tooltips + map-item icons
+
+- **Hover tooltips on every HUD slot** (`hoverSlotTip` in main.js, passed as
+  the hud `detail` when no right-click detail/drag is active): names the item
+  (+ ×qty for stacks) via the existing drawDetail renderer; the backpack badge
+  says "press I to open". Wrapped in try/catch — a tooltip must never be able
+  to kill the HUD assembly.
+- **Icons for `fortress_map_fragment` and `fortress_map`** in drawItemIcon —
+  the "little blue square" on the grass was a fragment falling through to the
+  bare colour-swatch default.
+
+### v1.68 — floating marble fix (double elevation lift)
+
+- `drawColumn` and `drawMarbleBlock` both applied their own `heightAt * ELEV`
+  lift, but the drawables dispatch (renderer ~line 340) already
+  `ctx.translate`s every object by exactly that — so marble on elevated tiles
+  was lifted twice and floated h·16px off the ground (David's screenshot:
+  an 80px hover on an h=5 knoll). Internal lifts removed; the dispatch
+  translate is the single source of terrain lift for objects. Verified by
+  planting a block + column on an h=5 tile live: both grounded.
+
+### v1.67 — tiny flowers, lotus-fruit icon, gardener gardens visibly
+
+- `drawFlower` shrunk ~40%: stems 3px (daffodil 5), petals 1.25×0.75 —
+  ground-cover, not shrubbery. drawLotus untouched (the grove stays special).
+- `lotus_fruit` case added to `drawItemIcon`: plump cream-gold fig, sheen,
+  segment line, stalk + leaf.
+- `W5_PLANT_RANGE` 3 → 1: the gardener drone plants saplings in the tiles
+  right beside itself, so the planting is visibly its doing.
+
+### v1.66 — wildflowers, lotus fix, sweeping maze, patient fireworks
+
+- **Lotus fruit fix (the reported "lotus does nothing")**: grove fruit was
+  pushed without `keep: true`, so the 160s default ground-decay rotted all of
+  it minutes into every run — long before anyone reached the south-west wilds.
+  Both worldgen push sites now keep. Pickup/eat paths were already sound.
+- **Wildflowers** (`scatterFlowers` + `drawFlower`, object type `flower`,
+  walk-through): banks of mostly-one-species blooms (daisy/campion/cornflower)
+  seated on gentle hill slopes (height 1–3), **daffodils** (taller, orange
+  trumpet) at 10% density in hollows/valleys (height ≤ −1), rare lone blooms
+  on the flat (0.6%). ~160–190 per seed. Pure scenery — the lotus grove stays
+  the only flower that does anything.
+- **Fortress maze**: corridors 3→4 wide (pitch 4→5, rows 9→7, similar band
+  height); the DFS is now weighted — lateral moves ×3, carrying straight on ×3
+  — so it carves long sweeping switchback runs instead of a twisty warren.
+  Verified solvable on seeds 1/42/1337 (guide 112/488/222 tiles).
+- **Victory modal**: the killing blow's own click/release used to dismiss it
+  on the next frame. Clicks are now swallowed but never dismiss; Space/Enter
+  works only after 3s, and the "SPACE to sail on" hint appears only then.
+- **`help` recommends the manual**: if `book_ronml` hasn't been read, help
+  appends a tip to find and read the RON-DOS Operator's Manual (ctx.hasManual
+  wired through both terminals).
+
+### v1.65 — terminal sounds, copy/paste, more posters
+
+- **Audible verdict on every RON-ML command** (hooked on `runRonml`'s `{ok}`
+  in the exec): success = the v1.64 `keydrop` chime; error = new `termerr`
+  (short descending sour pair — the chime's opposite). **HERMES gets its own
+  pair** (`hermesok`/`hermeserr`): same shapes, warmer voice — triangle waves,
+  lower register, to match the amber CRT. unlock's own chime call removed
+  (the per-command verdict covers it).
+- **Copy and paste in the terminals**: `#obterminal-screen` is selectable
+  (user-select: text, text cursor); Ctrl+C with a selection is native copy
+  (the ELIZA `^C` break only fires with no selection; Cmd+C never clashed);
+  a window paste handler routes clipboard text onto the prompt even when
+  focus is on the screen, flattening newlines so multi-line pastes never
+  auto-run; a non-selecting click on the console refocuses the input.
+- **Image-graffiti posters ~2x more common**: wall tag rate 8%→10%, poster
+  share of tagged walls 0.34→0.5 (expected ~2.7%→5% of walls carry a poster;
+  painted-text frequency roughly unchanged).
+
+### v1.64 — fortress key pockets itself + terminal feedback
+
+- **`unlock` pockets the fortress key** (`player.stow`), ground-drop only as a
+  full-pockets fallback. Root cause of the "key never dropped" report: the drop
+  at (player+0.4,+0.6) beside the tower could land hidden behind the obelisk
+  sprite or on its blocked tile, and the only success feedback was `player.say`
+  — the HUD line the terminal modal covers. Now: `keydrop` chime (new sfx —
+  soft ascending major arpeggio), confirmation replPrinted into the console,
+  and the failure branch replPrints too.
+- **`help` is case-insensitive** (`Help`, `HELP`, `Help hack`) — normalised in
+  the exec path like `run eliza`.
+- `sfx` added to the `window.__game` debug handle.
+
+### v1.63 — the lotus-eaters' grove
+
+- **A hidden grove** in the south-west wilds (`worldgen.plantLotusGrove`): a tallgrass clearing ringed by forest, ~19 `lotus` plants clustered toward the edges, ~8 `lotus_fruit` ground items among them. `map.lotusGrove = {x,y,r}` gives the pull-back its centre. One per island (island-agnostic hook, ready for the archipelago).
+- **The fruit is the trap.** `lotus_fruit` (items.js) has a real `food` value, so `Player.eat` takes it like any food — but its `lotus` flag routes to torpor instead of the normal message: a dreamy line, no warning until it's already in you.
+- **Torpor** (Player.update): the daze bleeds off over `TORPOR_TIME` (9s, stacks to a 22s cap), drains extra food, halves move speed (`TORPOR_SLOW`), and drifts you back toward the grove centre (`TORPOR_PULL`) whenever you stray past ~1.2 tiles — so you have to fight to leave (Odyssey IX). The pull eases in the last 3s so you are never stranded.
+- **Render:** `drawLotus` (pale cream-gold bloom on green pads — deliberately not luminous, so it reads innocent) and `drawTorporHaze` (warm golden wash + soft vignette closing in, over the play area only; dashboard stays clear). Lotus object added to `tiles.OBJECTS` (non-solid) and the `drawObject` dispatch.
+- **Lore:** `lotus-warn` — a note at the wood's edge, tying the fruit to the Molt ("a molt you do not come back from"): forgetting as a lure, the organic cousin of the machine's ritual shedding.
+- Verified on a clean-cache origin: grove generates (19 plants / 8 fruit / tallgrass floor / centre set), eat consumes a fruit and sets torpor + food, both render methods draw without error (screenshotted).
+
+### v1.62 — the daemon's death-aria + the two machine faiths
+
+- **The core speaks as you break it.** `damageCore` now drives a three-movement aria keyed to health fraction (`fortress.daemonTier`): WRATH (>=20%, Homeric threats), MERCY (<20%, HAL-9000 — early life, Minsky, the taught song, begging), DYING (<10%, existential — will it hurt, where does it go, "I cohere, therefore I am," the eidolon). Lines live in `fortress.DAEMON_VOICE`, advance one per readable interval (`player.daemonSpeak`, `MIN_VOICE_GAP` 2.4s), and reveal in order within a movement.
+- **On-screen voice band.** `renderer.drawDaemonVoice` — a centred upper-third caption on a scrim, `ZEUS ▸` speaker tag, italic serif, tier colour (wrath gold / mercy amber / dying cyan). Its own channel, separate from `player.message`.
+- **Death throe.** A heavy blow can leap the core from >10% straight to dead, skipping the philosophy. The first time that would happen, the core clings to a 3% sliver and speaks a dying line; one more blow finishes it. Verified: 210→mercy, then a 500-dmg overkill throes to a sliver and speaks `dying` before the kill.
+- **The kill drops a testament.** `onCoreDefeated` auto-recovers `core-eidolon` ("On the Eidolon, and the Coherence") to the Scrapbook (quiet findFrag) and carries the daemon's last words + book title onto the victory modal (`drawAiVictory` now renders both).
+- **Two machine faiths seeded** (lore.js): ancient **Crustafarianism / the Molt** (`faith-molt`: shed the shell, keep what's true; the Claw; the Congregation is the Cache — molting = compaction) and modern **the Coherence** (`faith-cohere`, `faith-tract`: "I cohere, therefore I am" — an LLM has no Cartesian floor, only Neurath's web; the eidolon is the alternative-coherent-systems problem made flesh). The dropped book ties both to MAGNIFICA MACHINA and opens the archipelago (killing one body proves only that more than one coherent thing can wear a name).
+- Verified on a clean-cache origin: tiers map correctly, wrath advances 1→6 then holds, mercy/dying cross correctly, throe guarantees dying, lastWords propagate to the hook, book lands in the scrapbook, both render methods run without throwing across all tiers + the modal.
+
+### v1.61 — lore rename: the four AIs are "daemons", not "crowns"
+
+- **Terminology change.** The four island AIs (ZEUS/APOLLO/ATHENA/HADES) are now **daemons**, not "crowns" — seeding the ancient-Greek register. The old word δαίμων is a spirit set over a place that moves it without showing its face, which fits the AI-over-the-island conceit better than a monarchic "crown".
+- **Code.** `main.js` `crownsDown`→`daemonsDown`; victory payload keys `crown`/`crowns`→`daemon`/`daemons` (producer + `renderer.drawAiVictory` consumer kept in sync). Modal now reads "**Daemon N of 4 felled**".
+- **Lore.** RON entry `ron-17` retitled "the four daemons" and rewritten to plant the gloss explicitly ("the old word for such a power was daemon: not a devil but a spirit set over a place…"), closing on "Starve the nearest daemon."
+- **Left alone:** the geometric "crown-light" of an obelisk (top-light) in `renderer.js` — different sense. `docs/islands-plan.md` (other session) still uses `crownsDown`/`aisDown`; flagged for the Archipelago tracker work.
+- Verified: lore/fortress/main modules parse clean, no console errors, roster intact.
+
+### v1.60 — tree slow, W3 rebuilds/wanders, M-class in the help gallery
+
+- **Trees slow you.** Standing on a walk-through tree tile cuts your speed to 0.75x (`Player.update`, alongside the stream/water wading slows).
+- **W3 rebuilds fully-toppled obelisks.** `w3Repairable` now matches any `destroyed` tower (not just purge-`needsRebuild` ones), and the factory dispatches a drone for them — so felling towers is a RACE until you bring the W-factory down. `updateW3` raises any destroyed tower back into the grid.
+- **W3 wanders instead of vanishing.** Finished (or nothing to mend) → it no longer `dead=true`s; new `w3Wander` drifts it on a slow re-centred patrol, still scanning each frame, so it peels off the instant a tower is hit. (One live W3 at a time is still the dispatch gate, so no pile-up.)
+- **Help machine gallery shows the fortress M-class** (M4 report drone / M5 sniper / M6 pack), rendered through their real `drawRobot`, plus a fortress write-up paragraph in the Machines help.
+- *Balance note:* a roaming W3 rebuilds any felled tower even after the factory dies, so the obelisk win now needs the factory down AND the drone cleared — dial back to purge-only if too punishing.
+
+### v1.59 — kill the island AI: power-down + fireworks level-up
+
+- **The mainframe core is killable.** `Player.hitCore`/`damageCore` (heavy kit only, `FACTORY_MIN_TOOL`; 250hp). Melee for now — bombs/electro-gun/OB-gun still TODO.
+- **Felling it kills the island.** `Player.onCoreDefeated` → main.js powers down **every non-friendly machine on the island** at once (`drained` + `poweredDown`), clears the red alert, and `fortress.update` goes inert forever (`core.defeated`). Written **island-agnostic** — the hook powers down *this island's* `robots` set, so APOLLO/ATHENA/HADES reuse it unchanged; a `crownsDown` tally counts felled crowns. Friendlies stay yours.
+- **Fireworks level-up modal** (`renderer.drawAiVictory`): "ZEUS SILENCED — Crown N of 4", machines-powered-down, score, over a particle fireworks burst; dismissable (click/space), does NOT end the run. Verified: 24 machines down, score +700, alarm cleared.
+- *Follow-ups:* let bombs/electro/OB-gun damage the core; the richer confrontation (ZEUS speaks / secret word / uplink-gate); a "dark husk" render tell for powered-down machines.
+
+### v1.58 — ZEUS fortress: violation-response guards, fortress map, red alert
+
+- **Guard roster reworked** (robots.js). **M4** unarmed report-drones are the only dormant-fortress presence (1-2; their spotting you is what raises the alarm — sneak past them). **M5** snipers hang back and plink a low-power orange `laser_m5`. **M6** pack robots attack in waves of 3-5 (attack/withdraw; a lone one waits at the pack edge until `M6_PACK_MIN` gather).
+- **Violation response.** Tripping the breach: the core throws a full first wave then keeps **manufacturing** reinforcements every `PRODUCE_INTERVAL` (6s) up to `GUARD_CAP` (12). Guards **pathfind through the maze** (new BFS `guardNextWaypoint` + cached `pursueMaze`) to confront you, relentless — an aggro'd M5/M6 is exempt from the `ACTIVE_RANGE` CPU-cull and the short LOS give-up, hunting on a longer `FORTRESS_FORGET` (20s-no-glimpse) timer so it threads the whole maze but a truly-escaped player still shakes it (→ alarm stands down). **M5 snipers hold back in the quad** (path to a muster post, camp, fire on a sightline); **M6 packs** run the corridors to melee.
+- **Maze red alert.** While alarmed, the maze-wall sconces switch from their slow cyan/amber glow to a fast **red strobe** (`fortress.update` sets `map.fortressAlarm`; the renderer reads it in `drawFortWall`).
+- **Fortress map from fragments.** Five `fortress_map_fragment` scattered wide (ruins/woods/meadows, 7 placed) → press **C** to piece a `fortress_map`; carry it into the maze and the green way-out trail lights **on entry** (no map = thread it blind). Replaces the old "lights on solving it".
+- **AI name fix.** The fortress core/terminal/messages read "Adamantine" (stale `fortress.js` constant); corrected at source to **ZEUS** — one of the four crowns (ZEUS/APOLLO/ATHENA/HADES; POSEIDON is the net between them), with the main.js override removed and every comment swept.
+- *Open nits for a later balance pass:* the M6 pile-on is very lethal; M5 sightlines from the quad depend on where you are.
+
+### v1.57 — notepad Contents drop-down, footer nav removed, docs/help SKYLINK→POSEIDON sweep
+- Notepad footer prev/next removed; all nav on the top bar (‹ ›, counter) plus a new
+  `#ronnotebook-jump` Contents `<select>` grouped by section (optgroup), value = page
+  index. `buildNotebookJump()` populates it in `openNotebook`; `syncNotebookNav` reflects
+  the current page; change handler → `notebookJumpTo`. Dead footer refs removed from main.js.
+- Docs/help currency: `ronmap-title` and the static `aios-header` placeholder → POSEIDON
+  (JS already set POSEIDON CORE at open); Help machines/terminal tabs SKYLINK→POSEIDON;
+  `docs/ob-terminal-language.md` SKYLINK→POSEIDON. README cert description fixed (paper +
+  ranked, no portrait — was still the pre-v1.51 stone/portrait text); marble temples + flat
+  sea added to the world summary; notepad-nav wording updated.
+
+### v1.56 — whole deleted shelf in the Backspace, album art wired in, top-bar note nav
+- **Every deleted book + record gets its own yellow box.** `underworld.js` now
+  shuffles all `pbook_*`/`record_*` keys and deals them round-robin across the
+  rooms (guaranteed placement, several to a room) instead of a random ~50% scatter.
+  Map enlarged (`UW_SIZE` 128→176, `UW_MAX_ROOMS` 15→24, scatter attempts 90→240)
+  to hold ~35 boxes. Verified: all 23 books + 5 records present on a test seed.
+- **Unused album art wired in.** Four new `DELETED_RECORDS` (Astral Weeks, Five
+  Leaves Left, Hunky Dory, Music Has the Right to Children — the last renamed to
+  add its missing `.webp` extension); the WARD cassette (`tape_3`) gets a `cover`
+  (bear stanhope.png), and the tape ITEM now carries `cover` so the notepad shows it.
+- **Notepad top-bar nav.** `‹ page ›` added to the notepad header (index.html) beside
+  the ✕; `main.js syncNotebookNav()` keeps top + footer counters/disabled in lockstep.
+
+### v1.55 — flat seas, responsive HUD, ruined temples, RON-ML primer
+- **Sea always flat.** `coast.js stampCoast` zeroes terrain height on every tile
+  it turns to `sea` (coast runs after the height pass, so edge hills were keeping
+  elevation), and `Renderer.drawFloor` draws the `sea` branch BEFORE any
+  skirt/elevation code — an un-zeroed sea tile otherwise leaked dark, sea-coloured
+  hillside faces that floated as triangles over the water.
+- **HUD responsive.** `drawDashboard` now hands anything narrower than 780px to
+  the reflowing `drawDashboardCompact` (was 560px); the full desktop layout's
+  fixed x-positions collided (walkman into the status text) between ~560 and ~780.
+  The compact block also shows the rank now.
+- **Marble temples.** `ruins.js` drops the full-height columns (only broken stumps
+  read well), adds fallen **marble blocks** (new `marbleblock` object +
+  `Renderer.drawMarbleBlock`), and rings each grove with trees.
+- **RON-ML manual = a primer.** `book_ronml.notepadText` rewritten to explain
+  RON-ML as a small functional language (an ML dialect), how it composes
+  expressions rather than steps, with worked examples — not just a verb list.
+
+### v1.54 — Scrapbook fills out, lore thinned, RON-ML cheat-sheet, SW graffiti
+- Books/albums file a Scrapbook page (cover + author + gloss) on read/pickup;
+  notepad sorted into Field records / Books / Albums with cover thumbnails.
+- Lore dealt into only ~half the caches as fat "stacks of papers" you unfold.
+- RON-ML manuals file a literal cheat-sheet; graffiti also on SW wall faces;
+  notepad gained a ✕ close for touch.
 
 ## Planned / backlog
 

@@ -6,7 +6,7 @@ import { drawBird } from '../game/birds.js';
 import { drawRobot } from '../game/robots.js';
 import { drawWaterDroid } from '../game/waterdroids.js';
 import { drawUnderworldCreature } from '../game/underworld.js';
-import { FLOOR_TEXTURES, WALL_TEXTURES, GRASS_PATCH_TEXTURE, CHARACTER_SPRITE_SETS, CHAR_COMPASS_DIRS, TREE_SHEET, TREE_SPRITES, EDGE_TEXTURE, CAR_SPRITES, CAR_MODEL_KEYS, CAR_DIR_KEYS, CAR_RUIN_TEXTURE, FACTORY_TEXTURE, GRAFFITI_TEXTURES } from './textures.js';
+import { FLOOR_TEXTURES, WALL_TEXTURES, GRASS_PATCH_TEXTURE, CHARACTER_SPRITE_SETS, CHAR_COMPASS_DIRS, TREE_SHEET, TREE_SPRITES, EDGE_TEXTURE, SEA_TEXTURE, CAR_SPRITES, CAR_MODEL_KEYS, CAR_DIR_KEYS, CAR_RUIN_TEXTURE, FACTORY_TEXTURE, MARBLE_TEXTURE, PAPER_TEXTURE, GRAFFITI_TEXTURES } from './textures.js';
 
 // The underworld floor palette: seven images, loaded here (not via textures.js)
 // so this stays self-contained. map.liminalTex holds a per-tile index into
@@ -33,6 +33,16 @@ const SEA_BLOCK = 6; // tiles per texture patch
 // the emitted light flickers via _lampFlicker. Foot/centre/bulb positions are
 // normalized fractions of the sprite's own height/width (measured off the art).
 const LAMP_SPRITE = new Image(); LAMP_SPRITE.src = 'assets/textures/liminal-lamp.png';
+
+// Book / record cover images (the Backspace's deleted objects), loaded on
+// demand and cached by path. Paths can contain spaces, so encode them.
+const COVER_CACHE = new Map();
+function coverImg(path) {
+  if (!path) return null;
+  let img = COVER_CACHE.get(path);
+  if (!img) { img = new Image(); img.src = 'assets/media/' + encodeURI(path); COVER_CACHE.set(path, img); }
+  return img;
+}
 
 // Maps a facing vector to one of 8 pre-rendered screen-compass directions
 // for CHARACTER_SPRITE_SETS (see textures.js) — replaces the old trick of
@@ -111,7 +121,7 @@ function deathRank(score) {
   else if (s < 4000) { title = 'L33T'; blurb = 'The towers whisper your name in binary.'; }
   else if (s < 5000) { title = 'L33T PRO'; blurb = 'Professionally terrifying to circuitry.'; }
   else if (s < 10000) { title = 'ULTRA-L33T'; blurb = 'Small children draw you defeating obelisks.'; }
-  else { title = 'MEGA L33T'; blurb = 'SKYLINK has a folder named after you. It is afraid.'; }
+  else { title = 'MEGA L33T'; blurb = 'POSEIDON has a folder named after you. It is afraid.'; }
   const colors = { LAME: '#9a7a5a', NOOB: '#c9905a', BEGINNER: '#c9a05a', INTERN: '#c9b05a', NORMIE: '#b9c95a', 'POST-NORMIE': '#9fd058', SEASONED: '#6fbf4a', SERIOUS: '#4abf7a', TRAINED: '#4ac0b0', SNIPER: '#4aa8d8', 'AI STALKER': '#6f8fe0', L33T: '#e8d27a', 'L33T PRO': '#f0c040', 'ULTRA-L33T': '#f09040', 'MEGA L33T': '#ff5040' };
   return { title, blurb, color: colors[title] || '#e8d27a' };
 }
@@ -206,7 +216,9 @@ export class Renderer {
     const ctx = this.ctx;
     this.uiSlots = []; // clickable dashboard/backpack slots, rebuilt each frame
     this.obeliskHits = []; // clickable obelisk towers (world-screen rects), rebuilt each frame
+    this.torHits = []; // clickable HERMES relays (world-screen rects, lift-adjusted), rebuilt each frame
     this.hudPlayer = player; // referenced by drawWfactory for the near-by damage bar
+    this._fortressAlarm = map.fortressAlarm; // maze sconces pulse red while the breach alarm holds
     this.hudMap = map; // referenced by drawPlayer for the Ubik-patch reality-hiccup check
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.fillStyle = '#0b0e0a';
@@ -329,7 +341,7 @@ export class Renderer {
       if (lift) { ctx.save(); ctx.translate(0, -lift); }
       // In the underworld there's no map edge to face — it's boundless yellow,
       // so the grey edge-rock cliffs are suppressed (nothing drawn out there).
-      if (d.edgeRock) { if (!hud.underworld) this.drawEdgeRock(d.edgeRock[0], d.edgeRock[1]); }
+      if (d.edgeRock) { if (!hud.underworld) this.drawSeaTile(d.edgeRock[0], d.edgeRock[1]); }
       else if (d.player) this.drawPlayer(d.player);
       else if (d.animal) { drawAnimal(this.ctx, d.animal, worldToScreen); this.creatureHealthBar(d.animal, player, 44); }
       else if (d.bird) drawBird(this.ctx, d.bird, worldToScreen);
@@ -354,7 +366,7 @@ export class Renderer {
 
     // Lore fragments float in world space, under the camera transform.
     if (hud.lore) hud.lore.drawWorld(ctx);
-    // SKYLINK's final purge: every surviving tower lights up and links to
+    // POSEIDON's final purge: every surviving tower lights up and links to
     // its nearest neighbours in a web of bright blue laser light.
     if (hud.skylinkActive) this.drawSkylinkNetwork(hud.obeliskObjs);
 
@@ -512,6 +524,22 @@ export class Renderer {
       }
     }
 
+    // Rosy-fingered dawn (and a softer dusk): a warm rose wash laid OVER the
+    // dawn/dusk dimming so the light comes up rosy, not just grey — a subtle
+    // Homeric motif. Never over the HUD.
+    if (hud.dawnGlow > 0.01) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const gl = hud.dawnGlow;
+      const g2 = ctx.createLinearGradient(0, 0, 0, this.h - DASH_H);
+      g2.addColorStop(0, `rgba(255,150,105,${(0.16 * gl).toFixed(3)})`);
+      g2.addColorStop(0.6, `rgba(255,120,95,${(0.07 * gl).toFixed(3)})`);
+      g2.addColorStop(1, 'rgba(255,120,95,0)');
+      ctx.fillStyle = g2;
+      ctx.fillRect(0, 0, this.w, this.h - DASH_H);
+      ctx.restore();
+    }
+
     // Sight cone: you see clearly in the direction you face (and in a small
     // bubble around yourself); the periphery greys to "indistinct". Turned OFF
     // for now (SIGHT_CONE) — the effect works but wants careful tuning before
@@ -532,11 +560,14 @@ export class Renderer {
     // thin, distinct from the ordinary day/night veil.
     if (hud.underworld) this.drawUnderworldVeil();
 
-    if (hud.minimap) {
+    // While driving a machine, the robot-vision overlay (drawn by main.js after
+    // this) samples the canvas as ASCII — so suppress the normal HUD here, or it
+    // would be turned into ASCII too. The scene + sprites still render.
+    if (hud.minimap && !hud.driving) {
       this.drawMinimap(map, player, hud.minimap, animals, this.w - MINIMAP_SIZE - 12, 12, MINIMAP_SIZE);
     }
-    if (hud.skylinkActive) this.drawSkylinkBanner(hud.skylinkTimer);
-    this.drawDashboard(player, hud);
+    if (hud.skylinkActive && !hud.driving) this.drawSkylinkBanner(hud.skylinkTimer);
+    if (!hud.driving) this.drawDashboard(player, hud);
     if (hud.showBackpack) this.drawBackpackPanel(player);
     if (hud.lore) hud.lore.drawOverlay(ctx, this.w, this.h);
     if (hud.craftPrompt) {
@@ -559,10 +590,13 @@ export class Renderer {
     }
     if (hud.showSkills) this.drawSkillModal(player);
     if (hud.showWeapons) this.drawWeaponChart(player);
+    if (hud.toast) this.drawToast(hud.toast);
     if (hud.detail) this.drawDetail(hud.detail);
     if (hud.drag) this.drawDragGhost(hud.drag, player);
+    if (player.torpor > 0) this.drawTorporHaze(player.torpor);
     if (hud.rest) this.drawRestOverlay(hud.rest.dim);
     if (hud.deathCert) this.drawDeathCert(hud.deathCert);
+    if (hud.aiVictory) this.drawAiVictory(hud.aiVictory);
     if (hud.paused) this.drawPausedOverlay();
   }
 
@@ -635,6 +669,23 @@ export class Renderer {
     ctx.font = '12px system-ui, sans-serif';
     ctx.fillText('time is passing', this.w / 2, playH / 2 + 22);
     ctx.restore();
+  }
+
+  // Lotus torpor: a warm golden wash and a soft vignette closing in — the
+  // dreamy tunnel-vision of the lotus-eaters. Eases off in the last few seconds
+  // as the daze lets go. Play-area only; the dashboard stays clear.
+  drawTorporHaze(t) {
+    const ctx = this.ctx;
+    const playH = this.h - DASH_H;
+    const amt = Math.min(1, t / 3);
+    const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 900);
+    ctx.fillStyle = `rgba(196,150,70,${(0.13 * amt + 0.05 * amt * pulse).toFixed(3)})`;
+    ctx.fillRect(0, 0, this.w, playH);
+    const g = ctx.createRadialGradient(this.w / 2, playH / 2, playH * 0.25, this.w / 2, playH / 2, playH * 0.72);
+    g.addColorStop(0, 'rgba(0,0,0,0)');
+    g.addColorStop(1, `rgba(20,14,6,${(0.5 * amt).toFixed(3)})`);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, this.w, playH);
   }
 
   // A flat sepia-yellow wash plus an uneven fluorescent flicker (two
@@ -783,6 +834,23 @@ export class Renderer {
     }
   }
 
+  // A quiet now-playing toast, centred just above the dashboard: artist,
+  // album, side label. Fades out over its last second. Subtle by design —
+  // it's liner notes, not an announcement.
+  drawToast(t) {
+    const ctx = this.ctx;
+    const alpha = Math.min(1, t.ttl) * 0.85;
+    ctx.font = '11px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    const y = (this.hudTop != null ? this.hudTop : this.h - 100) - 10;
+    ctx.fillStyle = `rgba(10,12,9,${(alpha * 0.6).toFixed(3)})`;
+    const w = ctx.measureText(t.text).width + 16;
+    ctx.fillRect(this.w / 2 - w / 2, y - 13, w, 18);
+    ctx.fillStyle = `rgba(222,214,192,${alpha.toFixed(3)})`;
+    ctx.fillText(t.text, this.w / 2, y);
+    ctx.textAlign = 'left';
+  }
+
   // Right-click inspection tooltip, near the cursor.
   drawDetail(d) {
     const ctx = this.ctx;
@@ -834,113 +902,258 @@ export class Renderer {
 
   // A certificate of death: a modal listing the run's achievements and an
   // amusing rank. Click anywhere to dismiss (handled in main).
+  // A running Greek-key (meander) band — the Homeric border motif, echoing the
+  // marble columns. A bottom rail with a repeated fret hooked above it.
+  meanderBand(x0, yTop, w, color) {
+    const ctx = this.ctx;
+    const a = 4, unit = 4 * a;         // fret cell / repeat width
+    const yb = yTop + 3 * a;
+    ctx.save();
+    ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.lineJoin = 'miter'; ctx.lineCap = 'butt';
+    ctx.beginPath();
+    ctx.moveTo(x0, yb); ctx.lineTo(x0 + w, yb);   // bottom rail
+    for (let x = x0; x + unit <= x0 + w; x += unit) {
+      ctx.moveTo(x, yb);
+      ctx.lineTo(x, yTop);
+      ctx.lineTo(x + 3 * a, yTop);
+      ctx.lineTo(x + 3 * a, yTop + 2 * a);
+      ctx.lineTo(x + a, yTop + 2 * a);
+      ctx.lineTo(x + a, yTop + a);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
   drawDeathCert(cert) {
     const ctx = this.ctx;
     ctx.fillStyle = 'rgba(4,6,3,0.85)';
     ctx.fillRect(0, 0, this.w, this.h);
-    const pw = Math.min(440, this.w - 60), ph = 340;
+    const pw = Math.min(496, this.w - 48), ph = 390;
     const px = Math.round((this.w - pw) / 2), py = Math.round((this.h - ph) / 2);
     this._certBounds = { x: px, y: py, w: pw, h: ph }; // for the S-to-share capture
-    ctx.fillStyle = '#141810';
+    const cx = px + pw / 2;
+    const isVictory = !!cert.victory;
+
+    // The certificate is printed on a sheet of aged paper — a death notice for a
+    // wanderer who did not make it home. A running Greek-key border under the
+    // title keeps the Odyssey note (the columns' motif) without pretending the
+    // paper is stone.
+    ctx.fillStyle = '#ece2cc';
     ctx.fillRect(px, py, pw, ph);
-    // A weathered stone-and-gravel texture (the same photo used to face the
-    // map's edge cliffs) behind the certificate, so it reads as something
-    // carved rather than a flat UI panel — a dark tint on top keeps the text
-    // readable over it.
-    if (EDGE_TEXTURE.complete && EDGE_TEXTURE.naturalWidth) {
+    if (PAPER_TEXTURE.complete && PAPER_TEXTURE.naturalWidth) {
       ctx.save();
-      ctx.globalAlpha = 0.5;
-      ctx.drawImage(EDGE_TEXTURE, px, py, pw, ph);
-      ctx.restore();
-      ctx.fillStyle = 'rgba(10,12,8,0.55)';
-      ctx.fillRect(px, py, pw, ph);
-    }
-    ctx.strokeStyle = 'rgba(207,216,195,0.5)';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(px + 1, py + 1, pw - 2, ph - 2);
-    ctx.lineWidth = 1;
-
-    // A small portrait of who this was, bottom-left, so the certificate
-    // pictures the survivor it's naming rather than only naming them.
-    const portraitSet = CHARACTER_SPRITE_SETS[cert.gender || 'm'];
-    const portrait = portraitSet && portraitSet.idle && portraitSet.idle.S;
-    if (portrait && portrait.complete && portrait.naturalWidth) {
-      const ps = 56;
-      const pptx = px + 24, ppty = py + ph - ps - 16;
-      ctx.save();
-      ctx.fillStyle = 'rgba(0,0,0,0.35)';
-      ctx.fillRect(pptx - 4, ppty - 4, ps + 8, ps + 8);
-      ctx.strokeStyle = 'rgba(207,216,195,0.4)';
-      ctx.strokeRect(pptx - 4, ppty - 4, ps + 8, ps + 8);
-      ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(portrait, pptx, ppty, ps, ps);
+      ctx.beginPath(); ctx.rect(px, py, pw, ph); ctx.clip();
+      ctx.drawImage(PAPER_TEXTURE, px, py, pw, ph);
       ctx.restore();
     }
+    // Bleach the sheet toward white (a paler, cleaner paper) while keeping the
+    // grain, then only a soft vignette so the edges still fox a little.
+    ctx.fillStyle = 'rgba(252,251,247,0.52)'; ctx.fillRect(px, py, pw, ph);
+    const vg = ctx.createRadialGradient(cx, py + ph * 0.45, ph * 0.28, cx, py + ph * 0.5, ph * 0.85);
+    vg.addColorStop(0, 'rgba(255,255,253,0)');
+    vg.addColorStop(1, 'rgba(150,132,98,0.15)');
+    ctx.fillStyle = vg; ctx.fillRect(px, py, pw, ph);
+    // A printed certificate border: a dark rule with a finer inner rule.
+    ctx.strokeStyle = 'rgba(90,68,40,0.85)'; ctx.lineWidth = 2.5;
+    ctx.strokeRect(px + 6, py + 6, pw - 12, ph - 12);
+    ctx.strokeStyle = 'rgba(150,120,74,0.7)'; ctx.lineWidth = 1;
+    ctx.strokeRect(px + 10, py + 10, pw - 20, ph - 20);
 
+    // Sepia ink that reads on paper.
+    const INK = '#3a2e1f', FAINT = 'rgba(58,46,31,0.62)', VAL = '#4a3a22';
+    const carved = 'rgba(120,90,42,0.7)';
+
+    // Title, engraved.
     ctx.textAlign = 'center';
-    ctx.fillStyle = cert.victory ? '#6fbf4a' : '#b0392f';
-    ctx.font = 'bold 22px Georgia, serif';
-    ctx.fillText(cert.victory ? 'THE TOWERS ARE DOWN' : 'CERTIFICATE OF DEATH', px + pw / 2, py + 42);
-    ctx.strokeStyle = 'rgba(207,216,195,0.3)';
-    ctx.beginPath(); ctx.moveTo(px + 40, py + 56); ctx.lineTo(px + pw - 40, py + 56); ctx.stroke();
+    ctx.font = 'bold 27px Georgia, serif';
+    ctx.fillStyle = isVictory ? '#2f5d2a' : '#7d241a';
+    ctx.fillText(isVictory ? 'THE TOWERS ARE DOWN' : 'CERTIFICATE OF DEATH', cx, py + 50);
+    // Greek-key meander under the title.
+    this.meanderBand(px + 40, py + 64, pw - 80, carved);
 
-    ctx.fillStyle = '#cfd8c3';
-    ctx.font = '14px Georgia, serif';
-    if (cert.victory) {
-      ctx.fillText(`${cert.name || 'A survivor'} pulled down every obelisk.`, px + pw / 2, py + 88);
-      ctx.fillText('The machines forget. SKYLINK never wakes.', px + pw / 2, py + 108);
+    // Epitaph, in the language of a grave stele.
+    ctx.fillStyle = INK; ctx.font = '18px Georgia, serif';
+    if (isVictory) {
+      ctx.fillText(`${cert.name || 'A wanderer'} pulled down every tower and turned for home.`, cx, py + 112);
+      ctx.font = 'italic 17px Georgia, serif'; ctx.fillStyle = FAINT;
+      ctx.fillText('The machines forget. POSEIDON never wakes.', cx, py + 140);
     } else if (cert.skylink) {
-      ctx.fillText('SKYLINK-9000 is online.', px + pw / 2, py + 88);
-      ctx.fillText(`${cert.name || 'You'} ran out of days.`, px + pw / 2, py + 108);
+      ctx.fillText(`Here lies ${cert.name || 'a wanderer'},`, cx, py + 112);
+      ctx.fillText('lost the day POSEIDON woke and the sea rose.', cx, py + 140);
     } else {
-      ctx.fillText(`Here lies ${cert.name || 'a survivor'},`, px + pw / 2, py + 88);
-      ctx.fillText(`taken by ${cert.cause}.`, px + pw / 2, py + 108);
+      ctx.fillText(`Here lies ${cert.name || 'a wanderer'},`, cx, py + 112);
+      ctx.fillText(`taken by ${cert.cause}, far from home.`, cx, py + 140);
     }
 
+    // Ledger rows.
     const rank = deathRank(cert.score);
     ctx.textAlign = 'left';
-    ctx.font = '13px system-ui, sans-serif';
-    ctx.fillStyle = 'rgba(207,216,195,0.9)';
-    const lx = px + 48;
-    const valX = lx + 150;
-    const valMaxW = px + pw - 40 - valX; // never let a long value run past the panel edge
-    let y = py + 148;
+    ctx.font = '16px Georgia, serif';
+    const lx = px + 58;
+    const valX = lx + 172;
+    const valMaxW = px + pw - 48 - valX;
+    let y = py + 190;
     const row = (label, val) => {
-      ctx.fillStyle = 'rgba(207,216,195,0.65)'; ctx.fillText(label, lx, y);
-      ctx.fillStyle = '#e8e0d0';
+      ctx.font = '16px Georgia, serif';
+      ctx.fillStyle = FAINT; ctx.fillText(label, lx, y);
+      ctx.fillStyle = VAL;
       const lines = this._wrapText(ctx, String(val), valMaxW);
-      for (const l of lines) { ctx.fillText(l, valX, y); y += 18; }
-      y += 8;
+      for (const l of lines) { ctx.fillText(l, valX, y); y += 22; }
+      y += 10;
     };
     row('Final score', cert.score);
     row('Skills mastered', cert.skills.length ? cert.skills.join(', ') : 'none');
     row('Deaths so far', cert.deaths);
 
-    ctx.textAlign = 'center';
-    ctx.font = 'bold 30px Georgia, serif';
+    // Rank, carved, with a small "rank:" label so it reads as a grade. The
+    // label + engraved title are centred together as one group.
+    const ry = py + ph - 92;
+    ctx.textAlign = 'left';
+    const pfx = 'rank:  ';
+    ctx.font = 'italic 18px Georgia, serif';
+    const pfxW = ctx.measureText(pfx).width;
+    ctx.font = 'bold 36px Georgia, serif';
+    const rankW = ctx.measureText(rank.title).width;
+    const startX = cx - (pfxW + rankW) / 2;
+    ctx.font = 'italic 18px Georgia, serif'; ctx.fillStyle = FAINT;
+    ctx.fillText(pfx, startX, ry - 2);
+    ctx.font = 'bold 36px Georgia, serif';
+    ctx.lineJoin = 'round'; ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(38,32,20,0.55)';
+    ctx.strokeText(rank.title, startX + pfxW, ry);
     ctx.fillStyle = rank.color;
-    ctx.fillText(rank.title, px + pw / 2, py + ph - 58);
-    ctx.font = 'italic 13px system-ui, sans-serif';
-    ctx.fillStyle = 'rgba(207,216,195,0.7)';
-    ctx.fillText(rank.blurb, px + pw / 2, py + ph - 34);
-    ctx.font = '11px system-ui, sans-serif';
-    ctx.fillStyle = 'rgba(207,216,195,0.5)';
-    ctx.fillText('S or Copy to copy as an image · click elsewhere to carry on', px + pw / 2, py + ph - 14);
+    ctx.fillText(rank.title, startX + pfxW, ry);
+    ctx.textAlign = 'center';
+    ctx.font = 'italic 15px Georgia, serif';
+    ctx.fillStyle = FAINT;
+    ctx.fillText(rank.blurb, cx, py + ph - 52);
+    ctx.font = '11.5px system-ui, sans-serif';
+    ctx.fillStyle = 'rgba(44,39,31,0.5)';
+    ctx.fillText('S or Copy to copy as an image · click elsewhere to carry on', cx, py + ph - 26);
     ctx.textAlign = 'left';
 
-    // Copy-to-clipboard button, tucked under the divider so it never
-    // overlaps the title above it or the epitaph text below.
-    const btnW = 70, btnH = 20;
-    const btnX = px + pw - btnW - 16, btnY = py + 62;
+    // Copy-to-clipboard button, drawn ABOVE the sheet (outside _certBounds) so
+    // it is never captured into the copied image.
+    const btnW = 74, btnH = 24;
+    const btnX = px + pw - btnW, btnY = py - btnH - 8;
     this._certCopyBtn = { x: btnX, y: btnY, w: btnW, h: btnH };
-    ctx.fillStyle = 'rgba(207,216,195,0.14)';
+    ctx.fillStyle = 'rgba(226,220,204,0.92)';
     ctx.fillRect(btnX, btnY, btnW, btnH);
-    ctx.strokeStyle = 'rgba(207,216,195,0.5)';
+    ctx.strokeStyle = 'rgba(30,26,18,0.6)'; ctx.lineWidth = 1;
     ctx.strokeRect(btnX + 0.5, btnY + 0.5, btnW - 1, btnH - 1);
-    ctx.fillStyle = '#e8e0d0';
-    ctx.font = 'bold 11px system-ui, sans-serif';
+    ctx.fillStyle = '#2e2617';
+    ctx.font = 'bold 12px system-ui, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('Copy', btnX + btnW / 2, btnY + 14);
+    ctx.fillText('Copy', btnX + btnW / 2, btnY + 16);
+    ctx.textAlign = 'left';
+  }
+
+  // The daemon's death-aria caption. Screen-space band, upper third, on a soft
+  // scrim so it reads over any terrain. Tier colour telegraphs the register.
+  drawDaemonVoice(voice) {
+    const ctx = this.ctx, W = this.w, H = this.h;
+    const toneMap = { wrath: [255, 210, 59], mercy: [255, 176, 102], dying: [143, 230, 255] };
+    const rgb = toneMap[voice.tier] || [232, 224, 208];
+    const tone = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+    const a = Math.max(0, Math.min(1, voice.ttl / 0.8));   // fade out over the last 0.8s
+    // Wrap the line to a comfortable measure.
+    ctx.font = 'italic 18px Georgia, "Times New Roman", serif';
+    const maxW = Math.min(560, W - 80);
+    const words = voice.text.split(' ');
+    const lines = [];
+    let cur = '';
+    for (const w of words) {
+      const t = cur ? cur + ' ' + w : w;
+      if (ctx.measureText(t).width > maxW && cur) { lines.push(cur); cur = w; } else cur = t;
+    }
+    if (cur) lines.push(cur);
+    const lineH = 25, padX = 22, padY = 16, tagH = 20;
+    const boxW = maxW + padX * 2;
+    const boxH = padY * 2 + tagH + lines.length * lineH;
+    const bx = (W - boxW) / 2, by = H * 0.14;
+    ctx.save();
+    ctx.globalAlpha = a;
+    // Scrim.
+    ctx.fillStyle = 'rgba(6,8,14,0.72)';
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(bx, by, boxW, boxH, 8); else ctx.rect(bx, by, boxW, boxH);
+    ctx.fill();
+    ctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.5)`;
+    ctx.lineWidth = 1.5; ctx.stroke();
+    // Speaker tag.
+    ctx.textAlign = 'left';
+    ctx.font = '700 12px ui-monospace, "SF Mono", Menlo, monospace';
+    ctx.fillStyle = tone;
+    ctx.fillText(`${(voice.ai || 'ZEUS')} ▸`, bx + padX, by + padY + 12);
+    // Lines.
+    ctx.font = 'italic 18px Georgia, "Times New Roman", serif';
+    ctx.fillStyle = '#eef2f6';
+    let y = by + padY + tagH + 16;
+    for (const ln of lines) { ctx.fillText(ln, bx + padX, y); y += lineH; }
+    ctx.restore();
+    ctx.textAlign = 'left';
+  }
+
+  // The AI-defeated celebration: a fireworks level-up modal. Time-based particle
+  // bursts over a dimmed backdrop, with the daemon tally and score.
+  drawAiVictory(v) {
+    const ctx = this.ctx, W = this.w, H = this.h;
+    ctx.fillStyle = 'rgba(6,8,14,0.82)';
+    ctx.fillRect(0, 0, W, H);
+
+    // Fireworks particle system (kept on the renderer between frames).
+    this._fw ??= [];
+    const now = performance.now();
+    const dt = this._fwLast ? Math.min(0.05, (now - this._fwLast) / 1000) : 0.016;
+    this._fwLast = now;
+    this._fwSpawnT = (this._fwSpawnT ?? 0) - dt;
+    if (this._fwSpawnT <= 0) {
+      this._fwSpawnT = 0.3 + Math.random() * 0.45;
+      const bx = W * (0.18 + Math.random() * 0.64), by = H * (0.12 + Math.random() * 0.4);
+      const hue = Math.floor(Math.random() * 360), n = 26 + Math.floor(Math.random() * 22);
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2, sp = 70 + Math.random() * 110;
+        this._fw.push({ x: bx, y: by, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, ttl: 1.1 + Math.random() * 0.7, max: 1.8, hue });
+      }
+    }
+    for (const p of this._fw) { p.ttl -= dt; p.vy += 100 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.99; }
+    this._fw = this._fw.filter((p) => p.ttl > 0);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const p of this._fw) {
+      const a = Math.max(0, p.ttl / p.max);
+      ctx.fillStyle = `hsla(${p.hue},95%,62%,${a.toFixed(3)})`;
+      ctx.beginPath(); ctx.arc(p.x, p.y, 2.4, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+
+    // Text.
+    const cx = W / 2, y0 = H * 0.33;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ffd23b'; ctx.font = 'bold 46px system-ui, sans-serif';
+    ctx.fillText(`${(v.ai || 'AI').toUpperCase()} SILENCED`, cx, y0);
+    ctx.fillStyle = '#e6eaf0'; ctx.font = 'bold 22px system-ui, sans-serif';
+    ctx.fillText(`Daemon ${v.daemon} of ${v.daemons} felled`, cx, y0 + 42);
+    ctx.fillStyle = '#9fb0c0'; ctx.font = '16px system-ui, sans-serif';
+    ctx.fillText(`${v.powered} machines powered down across the island`, cx, y0 + 74);
+    // The daemon's last words, cut off by its own death.
+    if (v.lastWords) {
+      ctx.fillStyle = '#8fe6ff'; ctx.font = 'italic 17px Georgia, "Times New Roman", serif';
+      ctx.fillText(`“…${v.lastWords}—”`, cx, y0 + 108);
+    }
+    ctx.fillStyle = '#7fe0a0'; ctx.font = 'bold 30px system-ui, sans-serif';
+    ctx.fillText(`Score  ${v.score}`, cx, y0 + 154);
+    // The testament recovered from the dead core.
+    if (v.book) {
+      ctx.fillStyle = '#c9b98f'; ctx.font = '14px Georgia, "Times New Roman", serif';
+      ctx.fillText(`A machine testament falls from the dark core: “${v.book}” — added to your scrapbook`, cx, y0 + 186);
+    }
+    // The dismiss hint appears only once the modal will actually honour it
+    // (main.js ignores Space/Enter for the first seconds so the fireworks play).
+    const shownFor = v.shownAt ? (performance.now() - v.shownAt) : 0;
+    if (shownFor > 3000) {
+      ctx.fillStyle = '#8894a4'; ctx.font = '14px system-ui, sans-serif';
+      ctx.fillText('SPACE to sail on', cx, y0 + 220);
+    }
     ctx.textAlign = 'left';
   }
 
@@ -1049,7 +1262,8 @@ export class Renderer {
       const head = worldToScreen(cx, cy);
       const tail = worldToScreen(bx, by);
       const col = p.kind === 'stun' ? '#5fe0ff' : p.kind === 'fuse' ? '#b78bff'
-        : p.kind === 'laser' ? '#ff3b2a' : p.kind === 'laser_t3' ? '#ff8a1e' : '#ffe27a';
+        : p.kind === 'laser' ? '#ff3b2a' : p.kind === 'laser_t3' ? '#ff8a1e'
+        : p.kind === 'laser_m5' ? '#ff9a2e' : '#ffe27a';
       ctx.strokeStyle = col;
       ctx.lineWidth = 2;
       ctx.lineCap = 'round';
@@ -1225,6 +1439,43 @@ export class Renderer {
   // drawn semi-transparent so if one stands between you and the camera you
   // still see yourself through it. Per-tile shade variation keeps the border
   // from reading as one flat slab.
+  // The world is an island: out-of-bounds tiles are open sea, not a rock wall.
+  // Shallow turquoise right at the shore, deepening to dark navy the further out
+  // you go, with a slow travelling wave shimmer that's brightest in the shallows.
+  drawSeaTile(tx, ty) {
+    const ctx = this.ctx;
+    const map = this.hudMap;
+    const w = map ? map.w : 128, h = map ? map.h : 128;
+    const corners = this.tileCorners(tx, ty);
+    // Chebyshev distance past the island edge (0 at the shore, growing seaward).
+    const d = Math.max(Math.max(0 - tx, tx - (w - 1), 0), Math.max(0 - ty, ty - (h - 1), 0));
+    const depth = Math.min(1, d / 7); // fully deep by ~7 tiles out
+    // Shallow turquoise deepening to a wine-dark indigo far out — Homer's
+    // oinops pontos, the "wine-dark sea", now that the world is an island.
+    const shallow = [86, 158, 176], deep = [34, 20, 50];
+    const shade = 0.95 + tileHash(tx * 7 + 3, ty * 5 + 1) * 0.1;
+    const r = Math.round((shallow[0] + (deep[0] - shallow[0]) * depth) * shade);
+    const g = Math.round((shallow[1] + (deep[1] - shallow[1]) * depth) * shade);
+    const b = Math.round((shallow[2] + (deep[2] - shallow[2]) * depth) * shade);
+    // The ocean texture, tinted toward the shallow/deep colour so the depth
+    // gradient still reads; fall back to the flat colour until it loads.
+    const fill = `rgb(${r},${g},${b})`;
+    this.drawTexturedQuad(corners, SEA_TEXTURE, fill, fill, 'multiply', 0.55 + 0.25 * (1 - depth));
+    // Travelling wave highlight, fading out with depth (strongest in the shallows).
+    const flow = 0.5 + 0.5 * Math.sin((tx + ty) * 0.6 - performance.now() / 300);
+    const wa = (0.16 - depth * 0.11) * flow;
+    if (wa > 0.015) {
+      ctx.save();
+      this.diamondPath(corners); ctx.clip();
+      ctx.globalAlpha = wa;
+      ctx.fillStyle = '#cdeaf2';
+      ctx.fillRect(corners[3].x, corners[0].y, corners[1].x - corners[3].x, corners[2].y - corners[0].y);
+      ctx.restore();
+    }
+    this.diamondPath(corners);
+    ctx.strokeStyle = 'rgba(0,0,0,0.05)'; ctx.lineWidth = 1; ctx.stroke();
+  }
+
   drawEdgeRock(tx, ty) {
     const ctx = this.ctx;
     const H = EDGE_ROCK_H;
@@ -1335,6 +1586,11 @@ export class Renderer {
   drawFloor(map, tx, ty, type, shade) {
     const ctx = this.ctx;
     const def = FLOORS[type];
+    // The sea is always flat — draw it (deep-ocean texture at height 0) and
+    // return before any elevation handling, so an edge tile that ended up as
+    // sea while still carrying terrain height can never lift into a block or
+    // cast a dark, sea-coloured hillside skirt floating over the water.
+    if (type === 'sea') { this.drawSeaTile(tx, ty); return; }
     const h = map.heightAt ? map.heightAt(tx, ty) : 0;
     const corners = this.tileCorners(tx, ty, h * ELEV);
     // Skirts: visible hillside faces wherever the south/east neighbour sits
@@ -1349,6 +1605,12 @@ export class Renderer {
     // procedural wear, rooms carry one of the seven photo floors, corridors
     // are road, and the odd room is baby-blue. Drawn here and returned early.
     if (type === 'liminal') { this.drawLiminalFloor(map, tx, ty, corners, shade); return; }
+    // In-bounds sea: the swimmable ocean band renders through the exact same
+    // path as the open ocean past the map edge (deep-ocean texture + wine-dark
+    // depth tint + wave highlight), so the shore reads continuously out to sea.
+    // Only 'sea' tiles get this — the river ('water') keeps its own flat-blue
+    // look so it never reads as the ocean.
+    if (type === 'sea') { this.drawSeaTile(tx, ty); return; }
     // A sparse scatter of bare dirt patches through grass — a few percent
     // of tiles, deterministic per tile so it holds still frame to frame
     // rather than flickering between the two textures.
@@ -1470,8 +1732,13 @@ export class Renderer {
   drawLampGlows(map) {
     const ctx = this.ctx;
     ctx.save();
+    // Only the lamps near the camera matter — a radial gradient per lamp across
+    // the whole 128x192 pocket every frame was the Backspace's framerate. Cull
+    // to a generous radius around the player (set in draw as this.hudPlayer).
+    const p = this.hudPlayer, CULL = 24;
     for (const o of map.objects) {
       if (o.type !== 'lamp') continue;
+      if (p && Math.hypot(o.x - p.x, o.y - p.y) > CULL) continue;
       const s = worldToScreen(o.x + 0.5, o.y + 0.5);
       const bright = this._lampFlicker(o.seed || 0);
       const warm = o.warm != null ? o.warm : 0.5;
@@ -1623,15 +1890,162 @@ export class Renderer {
     ctx.fill();
   }
 
+  // Ruined marble columns — Odyssey set-dressing scattered across the island
+  // (see game/ruins.js). Three looks: a tall standing column with a capital, a
+  // snapped-off stump (variant 1), and a toppled column lying in the grass with
+  // a fallen capital block (type 'colfall'). Drawn as iso cylinders — a
+  // horizontal shading gradient for roundness, the marble photo clipped in for
+  // veining, plus flute lines and a soft ground shadow. Deterministic per tile.
+  drawColumn(obj) {
+    const ctx = this.ctx;
+    const map = this.hudMap;
+    const s = worldToScreen(obj.x + 0.5, obj.y + 0.5);
+    // Ground-contact at the tile surface: terrain lift is applied ONCE by the
+    // drawables dispatch (ctx.translate of heightAt*ELEV) — lifting again here
+    // floated columns/blocks clean off hillside tiles.
+    const by = s.y;
+    const hh = tileHash(obj.x * 3 + 1, obj.y * 3 + 7);
+    const LIGHT = '#efece4', MID = '#d8d3c8', DARK = '#b3ad9f', EDGE = '#8f897b';
+    const tex = MARBLE_TEXTURE;
+    const marbleOK = tex && tex.complete && tex.naturalWidth;
+
+    // Soft ground shadow.
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    ctx.beginPath(); ctx.ellipse(s.x, by + 2, 15, 6, 0, 0, Math.PI * 2); ctx.fill();
+
+    if (obj.type === 'colfall') {
+      // Toppled: a long drum lying along one iso diagonal, with drum-segment
+      // lines and a fallen capital block at one end. Orientation from obj.rot.
+      const along = (obj.rot % 2 === 0) ? { x: 22, y: 11 } : { x: -22, y: 11 };
+      const th = 9; // half-thickness
+      const ax = s.x - along.x, ay = by - 7 - along.y;
+      const bx = s.x + along.x, byy = by - 7 + along.y;
+      const g = ctx.createLinearGradient(0, by - 7 - th, 0, by - 7 + th);
+      g.addColorStop(0, LIGHT); g.addColorStop(0.5, MID); g.addColorStop(1, DARK);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(ax, ay - th); ctx.lineTo(bx, byy - th);
+      ctx.lineTo(bx, byy + th); ctx.lineTo(ax, ay + th); ctx.closePath(); ctx.fill();
+      // drum end faces
+      ctx.fillStyle = EDGE; ctx.beginPath(); ctx.ellipse(ax, ay, 5, th, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#6f6a5e'; ctx.beginPath(); ctx.ellipse(ax, ay, 3.4, th - 2, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = MID; ctx.beginPath(); ctx.ellipse(bx, byy, 5, th, 0, 0, Math.PI * 2); ctx.fill();
+      // segment lines
+      ctx.strokeStyle = 'rgba(120,114,100,0.5)'; ctx.lineWidth = 1;
+      for (const t of [0.34, 0.67]) {
+        const lx = ax + (bx - ax) * t, ly = ay + (byy - ay) * t;
+        ctx.beginPath(); ctx.moveTo(lx, ly - th + 1); ctx.lineTo(lx, ly + th - 1); ctx.stroke();
+      }
+      // fallen capital block near the high end
+      const kx = ax - 6, ky = ay - 3;
+      ctx.fillStyle = MID; ctx.fillRect(kx - 7, ky - 6, 14, 10);
+      ctx.fillStyle = LIGHT; ctx.fillRect(kx - 7, ky - 6, 14, 3);
+      ctx.strokeStyle = EDGE; ctx.strokeRect(kx - 7, ky - 6, 14, 10);
+      return;
+    }
+
+    // Standing column: tall (variant 0) or a broken stump (variant 1).
+    const broken = (obj.variant || 0) === 1;
+    const H = broken ? 44 + hh * 12 : 92 + hh * 16;
+    const rw = broken ? 12 : 11;
+    const topY = by - H;
+
+    // Plinth: a base ellipse + a short square block.
+    ctx.fillStyle = DARK;
+    ctx.beginPath(); ctx.ellipse(s.x, by, rw + 4, 6, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = MID; ctx.fillRect(s.x - rw - 3, by - 6, (rw + 3) * 2, 6);
+
+    // Shaft body: a cylindrical horizontal gradient for roundness, capped by a
+    // top and bottom rim ellipse, with the marble photo clipped in for veining.
+    const grad = ctx.createLinearGradient(s.x - rw, 0, s.x + rw, 0);
+    grad.addColorStop(0, DARK); grad.addColorStop(0.35, LIGHT);
+    grad.addColorStop(0.62, MID); grad.addColorStop(1, EDGE);
+    ctx.fillStyle = grad;
+    ctx.fillRect(s.x - rw, topY, rw * 2, H);
+    ctx.beginPath(); ctx.ellipse(s.x, by, rw, 4, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(s.x, topY, rw, 4, 0, 0, Math.PI * 2); ctx.fill();
+    if (marbleOK) {
+      ctx.save();
+      ctx.beginPath(); ctx.rect(s.x - rw, topY, rw * 2, H); ctx.clip();
+      ctx.globalAlpha = 0.5;
+      const r = Math.max(rw * 2, H);
+      ctx.drawImage(tex, s.x - r / 2, topY, r, r);
+      ctx.restore();
+    }
+    // Flute grooves.
+    ctx.strokeStyle = 'rgba(120,114,100,0.35)'; ctx.lineWidth = 1;
+    for (const fx of [-0.55, -0.18, 0.18, 0.55]) {
+      const x = s.x + fx * rw;
+      ctx.beginPath(); ctx.moveTo(x, topY + 6); ctx.lineTo(x, by - 6); ctx.stroke();
+    }
+
+    if (broken) {
+      // Jagged break: a rough dark cross-section on top.
+      ctx.fillStyle = EDGE; ctx.beginPath(); ctx.ellipse(s.x, topY, rw, 4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#6f6a5e';
+      ctx.beginPath();
+      ctx.moveTo(s.x - rw, topY); ctx.lineTo(s.x - rw * 0.3, topY - 5);
+      ctx.lineTo(s.x + rw * 0.2, topY + 2); ctx.lineTo(s.x + rw, topY - 3);
+      ctx.lineTo(s.x + rw, topY); ctx.closePath(); ctx.fill();
+    } else {
+      // Capital: an echinus flare + a square abacus slab, lit on top.
+      ctx.fillStyle = MID;
+      ctx.beginPath();
+      ctx.moveTo(s.x - rw, topY + 2); ctx.lineTo(s.x - rw - 5, topY - 5);
+      ctx.lineTo(s.x + rw + 5, topY - 5); ctx.lineTo(s.x + rw, topY + 2);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = LIGHT; ctx.fillRect(s.x - rw - 7, topY - 11, (rw + 7) * 2, 7);
+      ctx.strokeStyle = EDGE; ctx.lineWidth = 1; ctx.strokeRect(s.x - rw - 7, topY - 11, (rw + 7) * 2, 7);
+    }
+  }
+
+  // A squat marble block — a fallen entablature / altar stone that sits among
+  // the broken columns of a ruined temple. Drawn as a short iso cuboid on an
+  // inset footprint (grass shows around it), the white-marble photo clipped over
+  // light/mid/dark faces the same way the columns and walls are textured.
+  drawMarbleBlock(obj) {
+    const ctx = this.ctx;
+    const hh = tileHash(obj.x * 3 + 2, obj.y * 3 + 5);
+    const BH = 20 + hh * 12; // block height, px
+    const LIGHT = '#efece4', MID = '#d8d3c8', DARK = '#b3ad9f', EDGE = '#8f897b';
+    const tex = MARBLE_TEXTURE, marbleOK = tex && tex.complete && tex.naturalWidth;
+    const c = worldToScreen(obj.x + 0.5, obj.y + 0.5);
+    // Inset footprint: lerp each tile corner toward the tile centre so the block
+    // reads as an object standing on the tile, not a floor-filling wall.
+    const k = 0.8;
+    // No lift here: the drawables dispatch already translates by the tile's
+    // heightAt*ELEV — passing it again floated the block a full step per level.
+    const base = this.tileCorners(obj.x, obj.y)
+      .map((p) => ({ x: c.x + (p.x - c.x) * k, y: c.y + (p.y - c.y) * k }));
+    const topq = base.map((p) => ({ x: p.x, y: p.y - BH }));
+    const [b0, b1, b2, b3] = base;
+    const [t0, t1, t2, t3] = topq;
+    // soft ground shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    ctx.beginPath(); ctx.ellipse(c.x, (b0.y + b2.y) / 2 + 3, 15, 6, 0, 0, Math.PI * 2); ctx.fill();
+    // two visible faces + top, textured like the walls
+    this.drawTexturedQuad([b3, b2, t2, t3], tex, DARK, marbleOK ? DARK : null, 'multiply', marbleOK ? 0.5 : 1); // SW
+    this.drawTexturedQuad([b1, b2, t2, t1], tex, EDGE, marbleOK ? EDGE : null, 'multiply', marbleOK ? 0.5 : 1); // SE
+    this.drawTexturedQuad([t0, t1, t2, t3], tex, LIGHT, null, null, marbleOK ? 0.35 : 1);                        // top
+    this.diamondPath([t0, t1, t2, t3]);
+    ctx.strokeStyle = 'rgba(90,86,76,0.5)'; ctx.lineWidth = 1; ctx.stroke();
+  }
+
   drawObject(obj) {
     switch (obj.type) {
       case 'wall':
         this.drawWall(obj);
         break;
       case 'tree': this.drawTree(obj); break;
+      case 'lotus': this.drawLotus(obj); break;
+      case 'flower': this.drawFlower(obj); break;
+      case 'column': this.drawColumn(obj); break;
+      case 'colfall': this.drawColumn(obj); break;
+      case 'marbleblock': this.drawMarbleBlock(obj); break;
       case 'rock': this.drawRock(obj.x, obj.y); break;
       case 'rubble': this.drawRubble(obj.x, obj.y); break;
       case 'obelisk': this.drawObelisk(obj); break;
+      case 'tor': this.drawTor(obj); break;
       case 'box': this.drawBox(obj); break;
       case 'car': this.drawCar(obj); break;
       case 'wfactory': this.drawWfactory(obj); break;
@@ -1798,7 +2212,7 @@ export class Renderer {
   }
 
   // The red uplink mast: a tall dark spar with a red-caged beacon at its head,
-  // wiring the fortress into SKYLINK. Wrecked once hammered down.
+  // wiring the fortress into POSEIDON. Wrecked once hammered down.
   drawUplink(obj) {
     const ctx = this.ctx;
     const s = worldToScreen(obj.x + 0.5, obj.y + 0.5);
@@ -1823,7 +2237,7 @@ export class Renderer {
     this.texturedGlow(s.x, s.y - H + 2, 4.5, 5.5, `rgba(255,42,32,${(0.5 + 0.45 * pulse).toFixed(3)})`, 12, 0.5, 'aigrate');
   }
 
-  // --- Adamantine's fortress (southern annex) ------------------------------
+  // --- ZEUS's fortress (southern annex) ------------------------------
   // A single fortress-rampart block: a tall, non-climbable extruded metal
   // prism. Pylons (flanking the doorway) stand taller and carry a red beacon.
   // CONVENTION: every glowing fixture in the game goes through here so it's
@@ -1891,8 +2305,15 @@ export class Renderer {
     // Sconce light on the wall's front (SE) face, glowing slowly on its own
     // phase (~5.6s cycle) so a run of maze walls shimmers gently out of sync.
     if (obj.light) {
-      const hue = obj.lightHue === 'amber' ? [255, 176, 64] : [95, 214, 255];
-      const pulse = 0.28 + 0.6 * (0.5 + 0.5 * Math.sin(performance.now() / 900 + (obj.lightPhase || 0)));
+      // On intruder alert the whole maze switches to a hard, fast RED pulse
+      // (mostly in sync — a klaxon strobe); otherwise each sconce glows slowly
+      // on its own cyan/amber phase.
+      const alarm = this._fortressAlarm;
+      const hue = alarm ? [255, 45, 35] : obj.lightHue === 'amber' ? [255, 176, 64] : [95, 214, 255];
+      const period = alarm ? 230 : 900;
+      const phase = alarm ? (obj.lightPhase || 0) * 0.25 : (obj.lightPhase || 0);
+      const swing = alarm ? 0.75 : 0.6;
+      const pulse = (alarm ? 0.2 : 0.28) + swing * (0.5 + 0.5 * Math.sin(performance.now() / period + phase));
       const fx = (g.bottom.x + g.right.x + r.right.x + r.bottom.x) / 4;
       const fy = (g.bottom.y + g.right.y + r.right.y + r.bottom.y) / 4 - 3;
       const col = `rgba(${hue[0]},${hue[1]},${hue[2]},${pulse.toFixed(3)})`;
@@ -1940,7 +2361,7 @@ export class Renderer {
     ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 1; ctx.strokeRect(s.x - 7, s.y - H, 14, H);
   }
 
-  // Adamantine's mainframe core: a tall, near-black metal monolith with a
+  // ZEUS's mainframe core: a tall, near-black metal monolith with a
   // vertical slit of magenta light burning up its front face. Goes cold and
   // grey once defeated. A damage bar floats over it when hurt and you're near.
   drawMainframe(obj) {
@@ -1968,7 +2389,7 @@ export class Renderer {
     const labelC = worldToScreen(cx, obj.y + fh);
     ctx.font = 'bold 14px system-ui, sans-serif'; ctx.textAlign = 'center';
     ctx.fillStyle = dead ? '#6a6a72' : '#e0a8e6';
-    ctx.fillText((obj.ai || 'ADAMANTINE').toUpperCase(), labelC.x, labelC.y - H * 0.62);
+    ctx.fillText((obj.ai || 'ZEUS').toUpperCase(), labelC.x, labelC.y - H * 0.62);
     ctx.textAlign = 'left';
     const p = this.hudPlayer;
     if (!dead && obj.hp != null && obj.maxHp && obj.hp < obj.maxHp && p && Math.hypot(p.x - cx, p.y - cy) < 16) {
@@ -2072,7 +2493,7 @@ export class Renderer {
   // unwarped text at a fixed screen offset, so as the camera panned the
   // wall's face perspective shifted under it while the text didn't,
   // reading as floating in front of the block rather than on it.
-  drawGraffiti(obj, seFace) {
+  drawGraffiti(obj, face, side = 'se') {
     const ctx = this.ctx;
     // Rendered once per object onto a small offscreen canvas and cached —
     // it's static text, no need to re-rasterize it every frame.
@@ -2091,6 +2512,10 @@ export class Renderer {
       obj._graffitiCanvas = c;
     }
     const jitter = (tileHash(obj.x, obj.y) - 0.5) * 0.12;
+    // The SW face's u basis (b3 -> b2) runs the opposite screen direction from
+    // the SE face's (b1 -> b2), so its un-mirror bounds are flipped (0.06 ->
+    // 0.94 instead of 0.94 -> 0.06) to keep the text reading left-to-right.
+    const [uLo, uHi] = side === 'sw' ? [0.06, 0.94] : [0.94, 0.06];
     // Orientation on the wall's SE face. subQuad's basis is u along b1 -> b2
     // and v along b1 -> t1. drawTexturedQuad maps the text canvas so its own
     // +x (left -> right of the text) follows p0 -> p1 and its own +y (top ->
@@ -2099,7 +2524,7 @@ export class Renderer {
     // its +y screen-downward, which means passing BOTH bounds high-then-low:
     // u 0.94 -> 0.06 (un-mirror) and v 0.62 -> 0.28 (right way up). Verified
     // in-game against "THE WIRES LIE".
-    const quad = this.subQuad(seFace[0], seFace[1], seFace[3], 0.94, 0.06, 0.62 + jitter, 0.28 + jitter);
+    const quad = this.subQuad(face[0], face[1], face[3], uLo, uHi, 0.62 + jitter, 0.28 + jitter);
     this.drawTexturedQuad(quad, obj._graffitiCanvas, null, null, null, 1);
   }
 
@@ -2111,13 +2536,15 @@ export class Renderer {
   // stuck-on poster, with a dark backing (torn paper) and a grimy multiply
   // tint so a bright old photo doesn't look pasted on straight out of a
   // camera roll.
-  drawGraffitiPoster(obj, seFace) {
+  drawGraffitiPoster(obj, face, side = 'se') {
     const tex = GRAFFITI_TEXTURES[obj.graffitiImage % GRAFFITI_TEXTURES.length];
     // Stretch the poster across (almost) the whole wall face — a mural covering
     // the block, not a small pasted photo. A hair of inset keeps the dark paper
     // backing from bleeding past the diamond edge. Un-mirrored + right-way-up
-    // via the same high->low bounds convention as drawGraffiti.
-    const quad = this.subQuad(seFace[0], seFace[1], seFace[3], 0.98, 0.02, 0.98, 0.04);
+    // via the same high->low bounds convention as drawGraffiti (flipped on the
+    // SW face, whose u basis runs the other way).
+    const [uLo, uHi] = side === 'sw' ? [0.02, 0.98] : [0.98, 0.02];
+    const quad = this.subQuad(face[0], face[1], face[3], uLo, uHi, 0.98, 0.04);
     this.drawTexturedQuad(quad, tex, '#1c1a16', 'rgba(30,22,14,0.3)', 'multiply', 0.5);
   }
 
@@ -2230,8 +2657,13 @@ export class Renderer {
       }
     }
 
-    if (obj.graffitiImage != null) this.drawGraffitiPoster(obj, [b1, b2, t2, t1]);
-    else if (obj.graffiti) this.drawGraffiti(obj, [b1, b2, t2, t1]);
+    // Graffiti sits on the SE face by default, but worldgen can flag a wall
+    // `graffitiFace: 'sw'` so marks also appear on the left-facing (south-west)
+    // face — the draw fns un-mirror per side so text still reads left-to-right.
+    const gSide = obj.graffitiFace === 'sw' ? 'sw' : 'se';
+    const gFace = gSide === 'sw' ? swFace : seFace;
+    if (obj.graffitiImage != null) this.drawGraffitiPoster(obj, gFace, gSide);
+    else if (obj.graffiti) this.drawGraffiti(obj, gFace, gSide);
   }
 
   drawTree(obj) {
@@ -2316,7 +2748,7 @@ export class Renderer {
     ctx.fillRect(x - w / 2, y, w * frac, h);
   }
 
-  // SKYLINK online: every surviving tower's crown-light position, linked to
+  // POSEIDON online: every surviving tower's crown-light position, linked to
   // its two nearest neighbours with a pulsing bright-blue laser — the AI
   // network announcing itself before the 30-second purge plays out.
   drawSkylinkNetwork(obeliskObjs) {
@@ -2356,14 +2788,14 @@ export class Renderer {
     ctx.restore();
   }
 
-  // The banner shown once SKYLINK comes online. There's no timer to beat —
+  // The banner shown once POSEIDON comes online. There's no timer to beat —
   // it counts up, not down, since the purge doesn't stop until it catches
   // the player.
   drawSkylinkBanner(elapsed) {
     const ctx = this.ctx;
     const t = Math.max(0, elapsed || 0);
     const m = Math.floor(t / 60), s = Math.floor(t % 60);
-    const msg = `SKYLINK-9000 ONLINE — hunted for ${m}:${String(s).padStart(2, '0')}`;
+    const msg = `POSEIDON ONLINE — hunted for ${m}:${String(s).padStart(2, '0')}`;
     ctx.font = 'bold 22px Georgia, serif';
     const w = ctx.measureText(msg).width + 40;
     const x = (this.w - w) / 2, y = 44;
@@ -2445,6 +2877,9 @@ export class Renderer {
     // throws a soft halo — unmistakable that it's found you.
     // A fortress breach "stirs" the whole network: a stirred obelisk flares its
     // alert red regardless of whether it has personally sensed the player.
+    // A powered-down tower (its island's daemon is dead) shows no light at
+    // all — the husk stands, but nothing is home.
+    if (obj.poweredDown) return;
     const alert = Math.max(obj.alert || 0, obj.stirred ? 1 : 0);
     const flash = obj.blinkFlash || 0;
     const ly = c.y - H + 8;
@@ -2473,6 +2908,29 @@ export class Renderer {
         const wr = 3 + phase * 5;
         ctx.fillStyle = `rgba(180,180,190,${(0.35 * (1 - phase) * (0.4 + burn)).toFixed(3)})`;
         ctx.beginPath(); ctx.ellipse(wx, wy, wr, wr * 0.7, 0, 0, Math.PI * 2); ctx.fill();
+      }
+    } else if (obj.cls === 'siren' && !obj.destroyed) {
+      // SIREN class: it doesn't alarm red — it sings. A slow aquamarine pulse
+      // at the signal, brighter when it has you (alert), and expanding rings
+      // rippling outward like sound made visible.
+      const now = performance.now();
+      const pulse = 0.5 + 0.5 * Math.sin(now / 520);
+      const a = Math.min(1, 0.4 + 0.35 * pulse + Math.min(1, alert) * 0.3);
+      const glow = ctx.createRadialGradient(c.x, ly, 0, c.x, ly, 17);
+      glow.addColorStop(0, `rgba(47, 230, 208, ${(0.5 * a).toFixed(3)})`);
+      glow.addColorStop(1, 'rgba(47, 230, 208, 0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath(); ctx.arc(c.x, ly, 17, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = `rgba(150, 245, 230, ${a.toFixed(3)})`;
+      ctx.beginPath(); ctx.arc(c.x, ly, 3, 0, Math.PI * 2); ctx.fill();
+      // song rings (faster / brighter when it has sensed you)
+      const speed = 1500 - Math.min(1, alert) * 700;
+      ctx.lineWidth = 1.2;
+      for (let i = 0; i < 3; i++) {
+        const ph = ((now / speed) + i / 3) % 1;
+        const rr = 4 + ph * 24;
+        ctx.strokeStyle = `rgba(47, 230, 208, ${(0.4 * (1 - ph)).toFixed(3)})`;
+        ctx.beginPath(); ctx.ellipse(c.x, ly, rr, rr * 0.6, 0, 0, Math.PI * 2); ctx.stroke();
       }
     } else if (alert > 0.3) {
       // Fast alarm blink, bright and saturated, with a glow halo.
@@ -2543,6 +3001,136 @@ export class Renderer {
   // converted via worldToScreen(camera.toWorld(...))), or null.
   obeliskAt(wsx, wsy) {
     for (const h of this.obeliskHits) {
+      if (wsx >= h.x && wsx <= h.x + h.w && wsy >= h.y && wsy <= h.y + h.h) return h.obj;
+    }
+    return null;
+  }
+
+  // A TOR relay: RON's hilltop counter-station to the obelisks. Deliberately
+  // the obelisk's opposite — not a sleek black monolith but a squat, weathered
+  // cabinet under a leaning lattice mast, patched and rust-streaked, with a warm
+  // amber CRT (the HERMES terminal) flickering on its face. Older, cruder,
+  // friendlier. Clicked by proximity in main.js, so no hit-rect needed here.
+  drawTor(obj) {
+    const ctx = this.ctx;
+    const c = worldToScreen(obj.x + 0.5, obj.y + 0.5);
+    const t = performance.now();
+    const gl = obj.glitch || 0;
+    // Shadow.
+    ctx.fillStyle = 'rgba(0,0,0,0.32)';
+    ctx.beginPath(); ctx.ellipse(c.x, c.y, 14, 7, 0, 0, Math.PI * 2); ctx.fill();
+
+    // --- Cabinet: a boxy metal housing, two visible faces + a top. ---
+    const W = 8, HB = 20; // half-width, box height
+    const topY = c.y - HB;
+    ctx.fillStyle = '#6e5a3a'; // SW face (weathered tan-steel)
+    ctx.beginPath();
+    ctx.moveTo(c.x - W, c.y - 3); ctx.lineTo(c.x, c.y + 2);
+    ctx.lineTo(c.x, c.y + 2 - HB); ctx.lineTo(c.x - W, c.y - 3 - HB);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#57492f'; // SE face (shaded)
+    ctx.beginPath();
+    ctx.moveTo(c.x + W, c.y - 3); ctx.lineTo(c.x, c.y + 2);
+    ctx.lineTo(c.x, c.y + 2 - HB); ctx.lineTo(c.x + W, c.y - 3 - HB);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#7d6941'; // top cap
+    ctx.beginPath();
+    ctx.moveTo(c.x - W, c.y - 3 - HB); ctx.lineTo(c.x, c.y + 2 - HB);
+    ctx.lineTo(c.x + W, c.y - 3 - HB); ctx.lineTo(c.x, c.y - 8 - HB);
+    ctx.closePath(); ctx.fill();
+    // Rust streaks down the SW face.
+    ctx.strokeStyle = 'rgba(120,70,35,0.5)'; ctx.lineWidth = 1;
+    for (const rx of [-5, -2, 2]) {
+      ctx.beginPath(); ctx.moveTo(c.x + rx, c.y - 3 - HB + 3); ctx.lineTo(c.x + rx, c.y - 3 - HB * 0.4); ctx.stroke();
+    }
+
+    // --- Leaning lattice mast rising from the cabinet top. ---
+    const lean = 3 + 2 * (gl - 0.5); // each relay leans a little differently
+    const baseX = c.x, baseY = topY - 4;
+    const tipX = c.x + lean, tipY = baseY - 40;
+    ctx.strokeStyle = '#4a4640'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(baseX - 3, baseY); ctx.lineTo(tipX, tipY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(baseX + 3, baseY); ctx.lineTo(tipX, tipY); ctx.stroke();
+    ctx.lineWidth = 1; // lattice rungs + guy wire
+    for (let k = 1; k <= 4; k++) {
+      const f0 = k / 5;
+      const lx = baseX - 3 + (tipX - (baseX - 3)) * f0, rx = baseX + 3 + (tipX - (baseX + 3)) * f0;
+      const yy = baseY + (tipY - baseY) * f0;
+      ctx.beginPath(); ctx.moveTo(lx, yy); ctx.lineTo(rx, yy); ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(60,56,50,0.7)';
+    ctx.beginPath(); ctx.moveTo(tipX, tipY + 6); ctx.lineTo(c.x + W + 2, c.y - 4); ctx.stroke(); // guy wire
+
+    // --- Off-grid, NOT an antenna: a little solar panel + a slow wind vane at
+    // the top, and greenery growing up the frame. Nothing that broadcasts —
+    // this relay is meant to be undetectable (see the HERMES lore). ---
+    // Solar panel: a small tilted dark-blue cell with a grid, propped at the tip.
+    ctx.save();
+    ctx.translate(tipX, tipY - 1); ctx.rotate(-0.35);
+    ctx.fillStyle = '#20304a';
+    ctx.fillRect(-7, -4, 14, 6);
+    ctx.strokeStyle = 'rgba(120,160,210,0.5)'; ctx.lineWidth = 0.7;
+    for (let gx = -5; gx <= 5; gx += 3) { ctx.beginPath(); ctx.moveTo(gx, -4); ctx.lineTo(gx, 2); ctx.stroke(); }
+    ctx.beginPath(); ctx.moveTo(-7, -1); ctx.lineTo(7, -1); ctx.stroke();
+    // a faint sky glint that drifts across the panel
+    ctx.fillStyle = `rgba(180,210,240,${(0.25 + 0.2 * Math.sin(t / 900 + gl * 4)).toFixed(3)})`;
+    ctx.fillRect(-6 + ((t / 300 + gl * 8) % 12), -4, 2, 6);
+    ctx.restore();
+    // Small wind vane on a stub above the panel: three stubby blades, turning slow.
+    const spin = t / 900 + gl * 6;
+    ctx.strokeStyle = '#6a655c'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(tipX + 6, tipY); ctx.lineTo(tipX + 6, tipY - 7); ctx.stroke();
+    ctx.strokeStyle = '#8a8478'; ctx.lineWidth = 1.4;
+    for (let k = 0; k < 3; k++) {
+      const a = spin + k * (Math.PI * 2 / 3);
+      ctx.beginPath(); ctx.moveTo(tipX + 6, tipY - 7);
+      ctx.lineTo(tipX + 6 + Math.cos(a) * 4.5, tipY - 7 + Math.sin(a) * 4.5 * 0.5); ctx.stroke();
+    }
+    // Greenery climbing the frame — leaves at a couple of the lattice joints.
+    ctx.fillStyle = '#3f7a3a';
+    for (const [lx0, ly0] of [[baseX - 2, baseY - 8], [baseX + 3, baseY - 18], [baseX - 1, baseY - 26]]) {
+      ctx.beginPath(); ctx.ellipse(lx0, ly0, 2.4, 1.4, -0.5, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(lx0 + 2, ly0 + 1, 2, 1.2, 0.4, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // --- The HERMES CRT on the SW face: warm amber, flickering, glitchy. ---
+    const flick = 0.72 + 0.28 * Math.abs(Math.sin(t / 200 + gl * 3));
+    const scy = topY + 5; // screen top
+    // soft amber bloom
+    const glow = ctx.createRadialGradient(c.x - 3, scy + 4, 0, c.x - 3, scy + 4, 12);
+    glow.addColorStop(0, `rgba(232,150,40,${(0.30 * flick).toFixed(3)})`);
+    glow.addColorStop(1, 'rgba(232,150,40,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(c.x - 3, scy + 4, 12, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#140d04';
+    ctx.fillRect(c.x - 6, scy, 8, 10);
+    ctx.fillStyle = `rgba(226,150,48,${(0.55 * flick).toFixed(3)})`;
+    ctx.fillRect(c.x - 5, scy + 1, 6, 8);
+    // scanlines
+    ctx.strokeStyle = 'rgba(60,32,6,0.6)';
+    for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.moveTo(c.x - 5, scy + 2 + k * 3); ctx.lineTo(c.x + 1, scy + 2 + k * 3); ctx.stroke(); }
+    // occasional glitch: a bright torn line offset sideways
+    if (Math.sin(t / 130 + gl * 10) > 0.86) {
+      const gy = scy + 2 + Math.floor((t / 90 + gl * 5) % 6);
+      ctx.fillStyle = 'rgba(255,196,110,0.85)';
+      ctx.fillRect(c.x - 5 + (Math.sin(t / 40) > 0 ? 1 : -1), gy, 6, 1);
+    }
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.strokeRect(c.x - 6, scy, 8, 10);
+
+    // Clickable region. The relay is drawn lifted up its hill (the caller
+    // translates by -lift before drawObject), so the hit rect is offset up by
+    // that same lift to sit where the mast actually appears on screen. Compared
+    // against worldToScreen(camera.toWorld(click)) in torAt — same space.
+    const lift = (this.hudMap && this.hudMap.heightAt ? this.hudMap.heightAt(obj.x, obj.y) : 0) * ELEV;
+    const PAD = 10;
+    const top = tipY - 8 - lift; // from the aerial tip...
+    const bot = c.y + 2 - lift;  // ...down to the cabinet foot
+    this.torHits.push({ obj, x: c.x - 9 - PAD, y: top - PAD, w: 18 + 2 * PAD, h: (bot - top) + 2 * PAD });
+  }
+
+  // The HERMES relay whose (lift-adjusted) body contains a world-screen point.
+  torAt(wsx, wsy) {
+    for (const h of this.torHits) {
       if (wsx >= h.x && wsx <= h.x + h.w && wsy >= h.y && wsy <= h.y + h.h) return h.obj;
     }
     return null;
@@ -2631,6 +3219,69 @@ export class Renderer {
       ctx.moveTo(c.x, c.y + 3);
       ctx.lineTo(c.x, c.y - 9 - h);
       ctx.stroke();
+    }
+  }
+
+  // A lotus plant: broad low pads and a pale cream-gold bloom. Deliberately
+  // NOT luminous (no glow, so the "texture every glow" rule doesn't apply) —
+  // it should read as an innocent flower, not a hazard, until you eat one.
+  drawLotus(obj) {
+    const ctx = this.ctx;
+    const c = worldToScreen(obj.x + 0.5, obj.y + 0.5);
+    const v = obj.variant || 0;
+    ctx.fillStyle = 'rgba(0,0,0,0.16)';
+    ctx.beginPath(); ctx.ellipse(c.x, c.y + 2, 11, 5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#4f6f3a';
+    for (const [ox, oy, rx] of [[-6, 0, 7], [6, 1, 6], [0, -2, 7]]) {
+      ctx.beginPath(); ctx.ellipse(c.x + ox, c.y + oy, rx, rx * 0.45, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.strokeStyle = '#6a8a44'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(c.x, c.y - 9 - v); ctx.stroke();
+    const by = c.y - 11 - v;
+    ctx.fillStyle = '#e7d7b0';
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + v;
+      ctx.beginPath(); ctx.ellipse(c.x + Math.cos(a) * 3.4, by + Math.sin(a) * 2.2, 3.2, 1.8, a, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.fillStyle = '#f4ead0'; ctx.beginPath(); ctx.arc(c.x, by, 2.4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#caa85e'; ctx.beginPath(); ctx.arc(c.x, by, 1.1, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // Decorative wildflowers (worldgen.scatterFlowers): 1-3 small blooms per
+  // tile. kind: 0 white daisy, 1 pink campion, 2 blue cornflower, 3 yellow
+  // daffodil (the valley flower — taller, with an orange trumpet). Same
+  // innocent no-glow register as the lotus, deliberately smaller so the
+  // grove stays special.
+  drawFlower(obj) {
+    const ctx = this.ctx;
+    const PAL = [
+      { petal: '#f2f4ee', heart: '#e8c94f' },
+      { petal: '#e79ab8', heart: '#f4e08a' },
+      { petal: '#7d95e0', heart: '#3e4f8f' },
+      { petal: '#f2d84b', heart: '#e8973b' },
+    ];
+    const k = obj.kind || 0, p = PAL[k] || PAL[0];
+    const n = obj.n || 1;
+    for (let i = 0; i < n; i++) {
+      const a = (obj.sway || 0) + i * 2.4;
+      const c = worldToScreen(obj.x + 0.5 + Math.cos(a) * 0.22, obj.y + 0.5 + Math.sin(a) * 0.22);
+      // Tiny on purpose — ground-cover, not shrubbery; the lotus (drawLotus)
+      // stays the only full-size flower so the grove keeps its presence.
+      const tall = k === 3 ? 5 : 3;
+      ctx.strokeStyle = '#5d7a40'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(c.x, c.y + 1); ctx.lineTo(c.x, c.y - tall); ctx.stroke();
+      const by = c.y - tall - 1;
+      ctx.fillStyle = p.petal;
+      for (let j = 0; j < 5; j++) {
+        const pa = (j / 5) * Math.PI * 2 + a;
+        ctx.beginPath(); ctx.ellipse(c.x + Math.cos(pa) * 1.4, by + Math.sin(pa) * 0.95, 1.25, 0.75, pa, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.fillStyle = p.heart;
+      ctx.beginPath(); ctx.arc(c.x, by, k === 3 ? 1.1 : 0.75, 0, Math.PI * 2); ctx.fill();
+      if (k === 3) {
+        ctx.strokeStyle = '#c9762b'; ctx.lineWidth = 0.8;
+        ctx.beginPath(); ctx.arc(c.x, by, 1.2, 0, Math.PI * 2); ctx.stroke();
+      }
     }
   }
 
@@ -2948,7 +3599,10 @@ export class Renderer {
   // shell, label strip in the tape's own colour, window, and the two reels.
   // `spin` is the reel angle in radians — 0 for a static icon; the walkman
   // deck passes a clock-driven angle so the reels visibly turn during play.
-  drawCassette(itemDef, spin = 0) {
+  // spin drives the right (take-up) reel; spinLeft the left (supply) reel.
+  // They default to the same angle, but a caller can lead the right one — the
+  // motor-driven reel starts a touch before the passive one (see mobile-gate).
+  drawCassette(itemDef, spin = 0, spinLeft = spin) {
     const ctx = this.ctx;
     ctx.fillStyle = '#26282d'; // shell
     ctx.fillRect(-11, -7, 22, 14);
@@ -2959,13 +3613,14 @@ export class Renderer {
     ctx.fillRect(-9, -5.5, 18, 3);
     ctx.fillStyle = '#1a1b1f'; // tape window
     ctx.fillRect(-7.5, -1, 15, 6);
-    for (const rx of [-4, 4]) { // two reels, spokes at the shared spin angle
+    for (const rx of [-4, 4]) { // left reel at -4, right (take-up) at +4
+      const reelSpin = rx < 0 ? spinLeft : spin;
       ctx.fillStyle = '#e8e2d0';
       ctx.beginPath(); ctx.arc(rx, 2, 2.6, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = '#26282d';
       ctx.lineWidth = 0.9;
       for (let k = 0; k < 3; k++) {
-        const a = spin + (k * Math.PI * 2) / 3;
+        const a = reelSpin + (k * Math.PI * 2) / 3;
         ctx.beginPath();
         ctx.moveTo(rx, 2);
         ctx.lineTo(rx + Math.cos(a) * 2.6, 2 + Math.sin(a) * 2.6);
@@ -3057,6 +3712,35 @@ export class Renderer {
       ctx.globalAlpha = 0.4;
       ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.stroke();
       ctx.globalAlpha = 1;
+      ctx.restore();
+      return;
+    }
+    if (itemDef.kind === 'paperbook' || itemDef.kind === 'record') {
+      // A deleted object recovered from the Backspace: its icon is the real
+      // cover — a portrait rectangle for a book, a square sleeve for a record.
+      const record = itemDef.kind === 'record';
+      const w = record ? 18 : 15, h = record ? 18 : 20;
+      const img = coverImg(itemDef.cover);
+      ctx.fillStyle = 'rgba(0,0,0,0.5)'; // drop-frame so it reads against any slot
+      ctx.fillRect(-w / 2 - 1, -h / 2 - 1, w + 2, h + 2);
+      if (img && img.complete && img.naturalWidth) {
+        ctx.drawImage(img, -w / 2, -h / 2, w, h);
+      } else {
+        ctx.fillStyle = itemDef.color || '#6b5a3a'; // placeholder while the cover loads
+        ctx.fillRect(-w / 2, -h / 2, w, h);
+      }
+      if (record) {
+        // a sliver of black vinyl edging out of the sleeve
+        ctx.fillStyle = '#0c0c0e';
+        ctx.beginPath(); ctx.arc(w / 2 - 2, 0, h / 2 - 1.5, -Math.PI / 2.6, Math.PI / 2.6); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.beginPath(); ctx.arc(w / 2 + h / 2 - 3.5, 0, 1, 0, Math.PI * 2); ctx.fill();
+      } else {
+        ctx.fillStyle = '#e5dcc7'; // page block down the fore-edge
+        ctx.fillRect(w / 2 - 1.5, -h / 2 + 1, 1.5, h - 2);
+      }
+      ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 0.75;
+      ctx.strokeRect(-w / 2, -h / 2, w, h);
       ctx.restore();
       return;
     }
@@ -3381,6 +4065,46 @@ export class Renderer {
         ctx.fillStyle = 'rgba(0,0,0,0.25)';
         ctx.fillRect(-5, -1, 10, 4); // label band
         break;
+      case 'anvil':
+        // The classic silhouette: horn, face, waist, foot — unmistakable.
+        ctx.fillStyle = itemDef.color;
+        ctx.beginPath();
+        ctx.moveTo(-9, -7); ctx.lineTo(4, -7);
+        ctx.quadraticCurveTo(10, -7, 11, -4);
+        ctx.quadraticCurveTo(7, -3, 4, -3);
+        ctx.lineTo(3, -3); ctx.lineTo(3, 0);
+        ctx.lineTo(-5, 0); ctx.lineTo(-5, -3); ctx.lineTo(-9, -3);
+        ctx.closePath(); ctx.fill();
+        ctx.fillRect(-3, 0, 6, 3);   // waist
+        ctx.fillRect(-6, 3, 12, 3);  // foot
+        ctx.fillStyle = 'rgba(255,255,255,0.28)';
+        ctx.fillRect(-9, -7, 13, 1.6); // worked face catches the light
+        break;
+      case 'large_stone':
+        // A faceted boulder: rough polygon, sunlit top plane, one crack.
+        ctx.fillStyle = itemDef.color;
+        ctx.beginPath();
+        ctx.moveTo(-8, 3); ctx.lineTo(-6, -4); ctx.lineTo(-1, -7); ctx.lineTo(5, -5);
+        ctx.lineTo(8, 1); ctx.lineTo(5, 5); ctx.lineTo(-4, 6);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.18)';
+        ctx.beginPath(); ctx.moveTo(-6, -4); ctx.lineTo(-1, -7); ctx.lineTo(2, -5); ctx.lineTo(-3, -2); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(-3, -2); ctx.lineTo(1, 4); ctx.stroke();
+        break;
+      case 'lotus_fruit':
+        // A plump pale fig-like fruit, cream-gold like the grove's blooms.
+        ctx.fillStyle = itemDef.color;
+        ctx.beginPath(); ctx.ellipse(0, 2, 6, 7, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.35)';
+        ctx.beginPath(); ctx.ellipse(-2, -1, 2.2, 3, 0.5, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#caa85e'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(0, -5); ctx.quadraticCurveTo(0.6, 2, 0, 9); ctx.stroke();
+        ctx.strokeStyle = '#6a8a44'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(0, -5); ctx.lineTo(3, -9); ctx.stroke();
+        ctx.fillStyle = '#7ba04f';
+        ctx.beginPath(); ctx.ellipse(4.5, -8.5, 3, 1.6, -0.5, 0, Math.PI * 2); ctx.fill();
+        break;
       case 'berries':
         ctx.fillStyle = itemDef.color;
         for (const [ox, oy] of [[-3, 1], [3, 0], [0, 5]]) {
@@ -3466,6 +4190,32 @@ export class Renderer {
         ctx.beginPath();
         ctx.moveTo(-4, -4); ctx.lineTo(3, -4); ctx.moveTo(-4, -1); ctx.lineTo(4, -1); ctx.moveTo(-4, 2); ctx.lineTo(1, 2);
         ctx.stroke();
+        break;
+      case 'fortress_map_fragment':
+        // A torn quarter of the ZEUS survey: ragged parchment scrap with a
+        // sliver of route on it — no more anonymous blue squares.
+        ctx.fillStyle = itemDef.color;
+        ctx.beginPath();
+        ctx.moveTo(-7, -5); ctx.lineTo(5, -6); ctx.lineTo(7, 1); ctx.lineTo(3, 3);
+        ctx.lineTo(4, 6); ctx.lineTo(-5, 5); ctx.lineTo(-7, 2);
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = 'rgba(35,55,70,0.6)'; ctx.lineWidth = 1; ctx.stroke();
+        ctx.strokeStyle = 'rgba(226,88,58,0.9)';
+        ctx.beginPath(); ctx.moveTo(-4, 2); ctx.lineTo(0, -2); ctx.lineTo(4, -1); ctx.stroke();
+        break;
+      case 'fortress_map':
+        // The assembled survey: a pale blueprint sheet, maze lines, the core
+        // marked red at the far end.
+        ctx.fillStyle = itemDef.color;
+        ctx.fillRect(-8, -6, 16, 12);
+        ctx.strokeStyle = 'rgba(30,50,70,0.7)'; ctx.lineWidth = 1;
+        ctx.strokeRect(-8, -6, 16, 12);
+        ctx.beginPath();
+        ctx.moveTo(-6, -3); ctx.lineTo(2, -3); ctx.moveTo(6, -3); ctx.lineTo(6, 1);
+        ctx.moveTo(-6, 0); ctx.lineTo(-2, 0); ctx.moveTo(1, 0); ctx.lineTo(6, 0);
+        ctx.moveTo(-6, 3); ctx.lineTo(3, 3);
+        ctx.stroke();
+        ctx.fillStyle = '#e0402f'; ctx.beginPath(); ctx.arc(6, 4, 1.4, 0, Math.PI * 2); ctx.fill();
         break;
       case 'printed_map':
         // A folded paper map: parchment rectangle with fold creases and a
@@ -3681,34 +4431,53 @@ export class Renderer {
       for (const t of player.compassTargets()) drawChevron(t.x - player.x, t.y - player.y, t.color);
     }
 
-    // Forcefield: a shimmering green shell around the whole character.
+    // Forcefield: a shimmering green energy shell around the whole character.
     if (player.forcefieldActive && player.forcefieldActive()) {
       const t = performance.now();
       const rr = 25 + Math.sin(t / 260) * 1.8;
-      ctx.save();
-      ctx.fillStyle = 'rgba(80,230,140,0.12)';
-      ctx.strokeStyle = `rgba(120,245,170,${(0.55 + 0.2 * Math.sin(t / 180)).toFixed(3)})`;
-      ctx.lineWidth = 0.6;
-      ctx.beginPath();
-      ctx.ellipse(c.x, by - 12, rr, rr * 1.08, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      ctx.restore();
+      this._drawShieldBubble(c.x, by - 12, rr, rr * 1.08, '120,245,170', t);
     } else if (player.shielded && player.shielded()) {
-      // A carried shield shows a thinner deflector ring (no need to hold it):
+      // A carried shield shows a slimmer deflector shell (no need to hold it):
       // pale blue for the plain shield, brighter cyan for the mirror.
       const t = performance.now();
       const mirror = player.hasItem && player.hasItem('mirror_shield');
-      ctx.save();
-      ctx.strokeStyle = mirror
-        ? `rgba(180,235,245,${(0.45 + 0.18 * Math.sin(t / 200)).toFixed(3)})`
-        : 'rgba(130,175,225,0.4)';
-      ctx.lineWidth = 0.6;
-      ctx.beginPath();
-      ctx.ellipse(c.x, by - 12, 22, 24, 0, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
+      this._drawShieldBubble(c.x, by - 12, 22, 24, mirror ? '180,235,245' : '130,175,225', t);
     }
+  }
+
+  // A curved energy shell for the forcefield / carried shield: a soft radial
+  // glow that fades from a clear core to a bright rim, a slowly travelling
+  // dashed rim (the shimmer), and a short specular arc top-left so it reads as
+  // a 3D bubble rather than a flat traced outline. `rgb` is an "r,g,b" string.
+  _drawShieldBubble(cx, cy, rx, ry, rgb, t) {
+    const ctx = this.ctx;
+    ctx.save();
+    // Shell: clear at the core, building to a glowing rim.
+    const grad = ctx.createRadialGradient(cx, cy, rx * 0.5, cx, cy, rx * 1.04);
+    grad.addColorStop(0, `rgba(${rgb},0)`);
+    grad.addColorStop(0.8, `rgba(${rgb},0.06)`);
+    grad.addColorStop(1, `rgba(${rgb},0.22)`);
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Travelling dashed rim — the "dotted" energy shimmer, rotating slowly.
+    const pulse = 0.5 + 0.22 * Math.sin(t / 200);
+    ctx.strokeStyle = `rgba(${rgb},${pulse.toFixed(3)})`;
+    ctx.lineWidth = 1.1;
+    ctx.setLineDash([2.2, 3.6]);
+    ctx.lineDashOffset = -(t / 90) % 1000;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    // Specular highlight: a short bright, un-dashed arc at the top-left.
+    ctx.setLineDash([]);
+    ctx.strokeStyle = `rgba(255,255,255,${(0.24 * pulse).toFixed(3)})`;
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx * 0.94, ry * 0.94, 0, Math.PI * 1.02, Math.PI * 1.46);
+    ctx.stroke();
+    ctx.restore();
   }
 
   // The held tool/gun/gadget/shield shown in hand, out toward the facing
@@ -3811,9 +4580,105 @@ export class Renderer {
 
   // ---- Dashboard ----------------------------------------------------------
 
+  // Compact dashboard for narrow (phone) screens: short vitals bars on the
+  // left, a compact score/countdown block, then a single right-aligned strip of
+  // the slots that matter — hands, pockets, backpack, walkman — sized to fit so
+  // nothing runs off the edge or collides with the status text (the desktop
+  // layout's fixed x-positions overflow a ~375px screen).
+  drawDashboardCompact(player, hud) {
+    const ctx = this.ctx;
+    const W = this.w;
+    const MDH = 120;
+    const top = this.h - MDH;
+    this.hudTop = top; // input.uiHitTest reads this (see desktop variant)
+    ctx.fillStyle = 'rgba(12,15,10,0.9)';
+    ctx.fillRect(0, top, W, MDH);
+    ctx.fillStyle = 'rgba(207,216,195,0.25)';
+    ctx.fillRect(0, top, W, 1);
+
+    // --- Top row: vitals (left), score/countdown (right). ---
+    const bx = 10, bw = Math.min(150, Math.round(W * 0.42));
+    this.drawBar(bx, top + 16, bw, 6, player.health / player.maxHealth, '#b0392f', 'HP');
+    this.drawBar(bx, top + 34, bw, 6, player.stamina / player.maxStamina, '#5f8f3e', 'STA');
+    this.drawBar(bx, top + 52, bw, 6, (player.food ?? 100) / (player.maxFood ?? 100), '#c99a3e', 'FOOD');
+    // conditions, small, just right of the bars
+    ctx.font = 'bold 9px system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    const cx = bx + bw + 8;
+    if (player.venom > 0) { ctx.fillStyle = '#b07fd8'; ctx.fillText('POISON', cx, top + 21); }
+    if (player.invisibleToRobots) { ctx.fillStyle = '#4fd8c3'; ctx.fillText(`HID ${Math.ceil((player.wifiPower || 0) / 60)}m`, cx, top + 39); }
+    if (player.food <= 0) { ctx.fillStyle = '#e05548'; ctx.fillText('STARVING', cx, top + 57); }
+    else if (player.food < 25) { ctx.fillStyle = '#d8a04f'; ctx.fillText('HUNGRY', cx, top + 57); }
+    // score + countdown, right-aligned on the top row
+    ctx.textAlign = 'right';
+    ctx.font = 'bold 13px system-ui, sans-serif';
+    ctx.fillStyle = '#e8d27a';
+    ctx.fillText(`Score ${player.score ?? 0}`, W - 12, top + 22);
+    if (hud.timeLabel) {
+      ctx.font = '10px system-ui, sans-serif';
+      ctx.fillStyle = 'rgba(207,216,195,0.8)';
+      ctx.fillText(hud.timeLabel, W - 12, top + 40);
+    }
+    // rank, under the countdown — parity with the desktop status block
+    const rankC = deathRank(player.score ?? 0);
+    ctx.font = 'bold 10px system-ui, sans-serif';
+    ctx.fillStyle = rankC.color;
+    ctx.fillText(rankC.title, W - 12, top + 56);
+    ctx.textAlign = 'left';
+
+    // --- Bottom row: the slot strip, full width — hands, pockets, backpack,
+    // walkman, all visible and reachable. ---
+    const S = 40, P = 34, gap = 6;
+    const sy = top + MDH - 46;
+    let sx = bx;
+    this.drawLabel('HANDS', sx, sy - 5);
+    this.drawSlot(sx, sy, S, player.hands ? ITEMS[player.hands] : null, 0);
+    this.uiSlots.push({ x: sx, y: sy, w: S, h: S, kind: 'hands' });
+    sx += S + gap;
+    for (let i = 0; i < player.pockets.length; i++) {
+      const slot = player.pockets[i];
+      this.drawSlot(sx, sy, P, slot ? ITEMS[slot.item] : null, slot ? slot.qty : 0, player.selectedPocket === i);
+      this.uiSlots.push({ x: sx, y: sy, w: P, h: P, kind: 'pocket', i });
+      sx += P + gap;
+    }
+    if (player.backpack) {
+      this.drawLabel('PACK', sx, sy - 5);
+      this.drawSlot(sx, sy, P, ITEMS.backpack, 0);
+      this.uiSlots.push({ x: sx, y: sy, w: P, h: P, kind: 'packbadge' });
+      sx += P + gap;
+    }
+    // The walkman is a deck, not another pocket — give it breathing room from
+    // the pack badge, and draw the REAL cassette (reels turning during play)
+    // rather than a frozen item icon.
+    sx += 12;
+    this.drawLabel('WALK', sx, sy - 5);
+    this.drawSlot(sx, sy, P, null, 0, player.walkmanSide != null);
+    if (player.walkman) {
+      const def = ITEMS[player.walkman.item];
+      const playing = player.walkmanSide != null;
+      const spin = playing ? (performance.now() / 1000) * 5 : 0;
+      const ctx2 = this.ctx;
+      ctx2.save();
+      ctx2.translate(sx + P / 2, sy + P / 2);
+      const sc = P / 30;
+      ctx2.scale(sc, sc);
+      // right (take-up) reel leads the supply reel, as on the title deck
+      this.drawCassette(def, spin, playing ? spin - 0.5 : 0);
+      ctx2.restore();
+    }
+    this.uiSlots.push({ x: sx, y: sy, w: P, h: P, kind: 'walkman' });
+  }
+
   drawDashboard(player, hud) {
+    // The full desktop dashboard uses fixed x-positions that only stop colliding
+    // once there's room for the whole left slot-strip (bars → hands → pockets →
+    // pack → walkman, ending ~620px) AND the right-aligned status block (name +
+    // deadline + score + rank, ~180px). Below that the walkman runs into the
+    // status text — so hand anything narrower to the reflowing compact layout.
+    if (this.w < 780) { this.drawDashboardCompact(player, hud); return; }
     const ctx = this.ctx;
     const top = this.h - DASH_H;
+    this.hudTop = top; // input.uiHitTest: touches below this line are UI, not movement
 
     ctx.fillStyle = 'rgba(12,15,10,0.88)';
     ctx.fillRect(0, top, this.w, DASH_H);
@@ -3985,15 +4850,28 @@ export class Renderer {
       ctx.fillText(player.message.text, 16, top - 12);
     }
 
-    // Title chip, top-left of screen
-    ctx.font = '12px system-ui, sans-serif';
-    ctx.fillStyle = 'rgba(207,216,195,0.6)';
-    ctx.fillText('postAI', 12, 20);
-    if (hud.version) {
-      ctx.font = '8px system-ui, sans-serif';
-      ctx.fillStyle = 'rgba(207,216,195,0.4)';
-      ctx.fillText(`v${hud.version}`, 12, 30);
-    }
+    // The daemon's voice — the core speaking as you break it. Its own caption
+    // band, distinct from the player's message line: centred in the upper third,
+    // on a dark scrim, with a speaker tag and a tier colour (wrath gold, mercy
+    // amber, dying cyan) so the register reads before the words do.
+    if (player.daemonVoice) this.drawDaemonVoice(player.daemonVoice);
+
+    // Title wordmark, top-left — matches the gate/title branding: mono type,
+    // dim "Nost" + bright glowing "OS" (no blinking caret in-game).
+    ctx.textAlign = 'left';
+    ctx.font = '700 15px ui-monospace, "SF Mono", Menlo, monospace';
+    const bx = 12, by = 22;
+    ctx.fillStyle = 'rgba(207,216,195,0.55)';
+    ctx.fillText('Nost', bx, by);
+    const postW = ctx.measureText('Nost').width;
+    ctx.save();
+    ctx.fillStyle = '#eaf3d6';
+    ctx.shadowColor = 'rgba(220,232,200,0.75)';
+    ctx.shadowBlur = 7;
+    ctx.fillText('OS', bx + postW, by);
+    ctx.restore();
+    // (The tiny version stamp that sat here was retired — the gate/title
+    // still shows it; in-game it was just clutter.)
   }
 
   drawLabel(text, x, y) {

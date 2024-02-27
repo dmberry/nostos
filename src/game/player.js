@@ -2,6 +2,7 @@ import { screenDirToWorld } from '../engine/iso.js';
 import { sfx } from '../engine/sound.js';
 import { ITEMS } from './items.js';
 import { OBJECTS } from './tiles.js';
+import { DAEMON_VOICE, DAEMON_FINAL, daemonTier } from './fortress.js';
 
 const WALK_SPEED = 4.2;   // tiles per second
 const SPRINT_SPEED = 7.5;
@@ -12,10 +13,15 @@ const WOUNDED_SPRINT_DRAIN = 2.5; // wounded sprinting burns stamina this much f
 const RADIUS = 0.28;      // collision radius in tiles
 const REACH = 0.9;        // how far ahead the player can use a tool
 const CHIP_FRAGMENTS_PER_CHIP = 8; // fragments shed by machines to craft one chip
+const FORTRESS_MAP_FRAGMENTS = 5; // scattered map quarters pieced into a fortress map
 const SCRAP_PER_SWORD = 10; // scrap beaten into a robot sword
 const KNOCKBACK_DIST = 0.5; // tiles a melee hit shoves an animal/robot back
 const KNOCKBACK_STUN = 0.4; // seconds it's frozen (no move, no attack) after
 const TREE_HP = 4;        // penknife swings to fell a tree
+// The factory hull only yields to a serious anti-machine tool. A blade lighter
+// than this (penknife, machete, bat, saw...) just rings off the plating — you
+// need a sledgehammer/crowbar/robot-sword, or explosives, or the electro-gun.
+const FACTORY_MIN_TOOL = 4;
 const TREE_CHOP_SPEEDUP = 0.55; // chop cooldown vs a normal swing: faster axe work
 const WOOD_PER_TREE = 2;
 const PICKUP_RANGE = 0.55;
@@ -31,6 +37,16 @@ const FOOD_DRAIN = 0.14;      // per second; empties over ~1.5 game days
 const FOOD_SPRINT_MULT = 1.5; // sprinting burns food faster
 const STARVE_DRAIN = 0.8;     // health per second at zero food
 const HUNGRY_AT = 25;         // stamina recovers slowly below this
+
+// Lotus torpor: eating lotus fruit dazes you — slowed, with a drunken roll in
+// your step: your heading sways and lurches, so walking a straight line out of
+// the grove takes real correcting (the lotus-eaters of Odyssey IX).
+const TORPOR_TIME = 9;        // seconds of daze added per fruit eaten
+const TORPOR_MAX = 22;        // stacking cap, so a fistful doesn't strand you forever
+const TORPOR_SLOW = 0.5;      // movement multiplier while dazed
+const TORPOR_SWAY = 1.0;      // radians of peak heading roll while dazed (scaled by ease)
+const ANVIL_SLOW = 0.1;       // carrying the anvil, anywhere on you: a tenth of your pace
+const TORPOR_FOOD_DRAIN = 2;  // extra food/sec while dazed — you forget to look after yourself
 
 const JUMP_VZ = 3.8;      // initial jump velocity (world units/s)
 const GRAVITY = 12;
@@ -134,7 +150,7 @@ export class Player {
     this.venom = 0;       // seconds of poison remaining
 
     this.hands = 'penknife';                 // starting tool
-    this.pockets = [null, null, null, null]; // {item, qty} or null
+    this.pockets = [{ item: 'note_home', qty: 1 }, null, null, null]; // start with the Odyssey note in-pocket
     this.backpack = null;                    // {slots: [16], weapon} once found; dropped on death
     this.selectedPocket = null;              // 0-3 (pockets), 'bw' (backpack weapon), or null
     // The walkman, worn on a carry strap: its own dashboard slot that only
@@ -147,6 +163,8 @@ export class Player {
     this.swingTimer = 0;
     this.hurtTimer = 0;   // brief red flash after taking damage
     this.message = null;  // {text, ttl} transient HUD line
+    this.daemonVoice = null;  // {text, ttl, tier, ai} — the core speaking as you break it
+    this.torpor = 0;          // seconds of lotus daze remaining
 
     this.name = 'Adam';
     this.gender = 'm';    // 'm' | 'f' | 'u'
@@ -160,7 +178,7 @@ export class Player {
     this.wifiMax = WIFI_MAX;
     this.invisibleToRobots = false; // true while a charged block is in hand
     this.score = 0;       // survival score; persists across deaths
-    this.skylinkActive = false; // true during the final 30s purge once SKYLINK comes online
+    this.skylinkActive = false; // true during the final 30s purge once POSEIDON comes online
 
     // Practice makes better: melee/guns sharpen with use, knowledge with
     // reading. Levels rise on a square-root curve (25, 100, 225... xp per
@@ -261,6 +279,28 @@ export class Player {
     }
     sfx.play('zap');
     this.say('Eight fragments lock together into a working access chip.');
+    return true;
+  }
+
+  // Piece the scattered fortress-map fragments into a whole fortress map.
+  canCraftFortressMap() {
+    return !this.hasItem('fortress_map') && this.countItem('fortress_map_fragment') >= FORTRESS_MAP_FRAGMENTS;
+  }
+
+  craftFortressMap() {
+    if (!this.canCraftFortressMap()) {
+      this.say(`You need ${FORTRESS_MAP_FRAGMENTS} fortress-map fragments; you have ${this.countItem('fortress_map_fragment')}.`);
+      return false;
+    }
+    for (let n = 0; n < FORTRESS_MAP_FRAGMENTS; n++) this.removeItem('fortress_map_fragment');
+    const stored = this.stow('fortress_map', 1);
+    if (stored <= 0) {
+      this.say('No room to piece the map together — free a slot first.');
+      for (let n = 0; n < FORTRESS_MAP_FRAGMENTS; n++) this.stow('fortress_map_fragment', 1);
+      return false;
+    }
+    sfx.play('zap');
+    this.say('The fragments align into a whole fortress map — the maze laid bare. Carry it in and the way will light.');
     return true;
   }
 
@@ -366,6 +406,8 @@ export class Player {
     if (slot.kind === 'pocket') return this.pockets[slot.i] || null;
     if (slot.kind === 'bpstore') return this.backpack ? (this.backpack.slots[slot.i] || null) : null;
     if (slot.kind === 'walkman') return this.walkman || null;
+    // 'packbadge' is a drop-onto-the-backpack target only, never a source: you
+    // don't drag the bag itself, so it reads as empty.
     return null;
   }
 
@@ -374,6 +416,16 @@ export class Player {
     if (slot.kind === 'bw') { if (!this.backpack) return false; this.backpack.weapon = val ? val.item : null; return true; }
     if (slot.kind === 'pocket') { this.pockets[slot.i] = val; return true; }
     if (slot.kind === 'bpstore') { if (!this.backpack) return false; this.backpack.slots[slot.i] = val; return true; }
+    // Dropping onto the backpack badge (the bag icon on the dashboard) stows the
+    // item into the first free storage slot — the natural "put it in the bag"
+    // gesture, and how you get a pocket item into the pack without opening it.
+    if (slot.kind === 'packbadge') {
+      if (!this.backpack || !val) return false;
+      const free = this.backpack.slots.findIndex((s) => !s);
+      if (free < 0) return false; // pack full: refuse (moveItem leaves the source alone)
+      this.backpack.slots[free] = val;
+      return true;
+    }
     if (slot.kind === 'walkman') {
       // Any change of tape stops playback — the new one starts stopped and
       // wants a click, same as a real deck after a swap.
@@ -403,7 +455,13 @@ export class Player {
       this.say('Only a cassette fits the walkman.');
       return;
     }
-    this.setSlot(to, a);
+    // Place into the target FIRST and only clear the source if that succeeded —
+    // otherwise a target that can't take the item (a full backpack, a badge with
+    // no room) would delete it. Never move an item into nowhere.
+    if (!this.setSlot(to, a)) {
+      this.say(to.kind === 'packbadge' ? 'The backpack is full.' : "That won't go there.");
+      return;
+    }
     this.setSlot(from, b || null);
     this.say(`Moved ${ITEMS[a.item].name.toLowerCase()}.`);
   }
@@ -435,6 +493,8 @@ export class Player {
         sfx.playTape(def.sideA.tracks);
         this.say(`The spools catch and turn. Side A — "${def.sideA.label}".`);
       }
+      // Liner notes for the HUD toast (main.js): artist, album, side label.
+      if (this.onTapeToast) this.onTapeToast(def, this.walkmanSide);
       return;
     }
     const held = this.getSlot(slot);
@@ -469,11 +529,23 @@ export class Player {
     }
     if (slot.kind === 'bpstore' && this.backpack) {
       const s = this.backpack.slots[slot.i];
-      if (s && !HOLDABLE.has(ITEMS[s.item].kind)) {
-        this.say(`Can't hold ${ITEMS[s.item].name.toLowerCase()} in hand.`);
+      // Same as the pockets: a book/note in the backpack reads on click.
+      if (s && ITEMS[s.item].kind === 'book') {
+        const key = s.item;
+        if (s.qty > 1) s.qty -= 1; else this.backpack.slots[slot.i] = null;
+        this.learnFromBook(key);
         return;
       }
-      if (s && s.qty > 1) { this.say('Too many to take in hand.'); return; }
+      if (s && (!HOLDABLE.has(ITEMS[s.item].kind) || s.qty > 1)) {
+        // Not a hand item (or a whole stack): one tap moves it to the first
+        // free pocket instead — the mobile-friendly swap out of the pack.
+        const free = this.pockets.findIndex((ps) => !ps);
+        if (free < 0) { this.say('Pockets are full.'); return; }
+        this.pockets[free] = s;
+        this.backpack.slots[slot.i] = null;
+        this.say(`Moved ${ITEMS[s.item].name.toLowerCase()} to a pocket.`);
+        return;
+      }
       const held = this.hands;
       this.hands = s ? s.item : null;
       this.backpack.slots[slot.i] = held ? { item: held, qty: 1 } : null;
@@ -502,6 +574,10 @@ export class Player {
     if (this.message) {
       this.message.ttl -= dt;
       if (this.message.ttl <= 0) this.message = null;
+    }
+    if (this.daemonVoice) {
+      this.daemonVoice.ttl -= dt;
+      if (this.daemonVoice.ttl <= 0) this.daemonVoice = null;
     }
     this.unstickIfTrapped(map);
 
@@ -533,6 +609,23 @@ export class Player {
       this.health = Math.min(this.maxHealth, this.health + HEALTH_REGEN * dt);
     }
 
+    // Lotus torpor: the daze bleeds off slowly, drains you while it lasts,
+    // and rolls the ground under your feet — you walk drunk, not dragged
+    // (Odyssey IX by way of the taverna). The sway loosens in the last few
+    // seconds so the walk home is recoverable.
+    if (this.torpor > 0) {
+      this.torpor = Math.max(0, this.torpor - dt);
+      this.food = Math.max(0, this.food - TORPOR_FOOD_DRAIN * dt);
+      // The woozy clock: two slow sines out of phase make the roll, and every
+      // second or so the lean re-seeds so the stagger never metronomes.
+      this._woozyT = (this._woozyT || 0) + dt;
+      this._woozyLurchT = (this._woozyLurchT || 0) - dt;
+      if (this._woozyLurchT <= 0) {
+        this._woozyLurchT = 1 + Math.random() * 1.2;
+        this._woozyBias = (Math.random() - 0.5) * 1.6;
+      }
+    }
+
     const intent = input.moveIntent();
     this.moving = intent.dx !== 0 || intent.dy !== 0;
     const wantSprint = input.sprinting() && this.moving;
@@ -557,7 +650,19 @@ export class Player {
       // costs stamina (handled below).
       const under = map.floorAt(Math.floor(this.x), Math.floor(this.y));
       if (under === 'stream') speed *= 0.55;
-      else if (under === 'water') speed *= 0.45;
+      else if (under === 'water' || under === 'sea') speed *= 0.45;
+      // Pushing through a walk-through tree's foliage slows you a little.
+      const objHere = map.objectAt ? map.objectAt(Math.floor(this.x), Math.floor(this.y)) : null;
+      if (objHere && objHere.type === 'tree') speed *= 0.75;
+      // Lotus daze: heavy limbs. Fighting the pull out of the grove is slow work.
+      if (this.torpor > 0) speed *= TORPOR_SLOW;
+      // Burden items (the anvil, the large stone): heavy is heavy, wherever
+      // you put it. 10% pace, and the game says so once per pickup.
+      const burden = this.carryingBurden();
+      if (burden) {
+        speed *= ANVIL_SLOW;
+        if (!this._burdenSaid) { this._burdenSaid = true; this.say(`The ${ITEMS[burden].name.toLowerCase()} is exactly as heavy as it looks. You can barely move.`); }
+      } else if (this._burdenSaid) this._burdenSaid = false;
       // Up on a block top, ease off the pace — the footprint is small and a
       // full walking speed makes edges twitchy to line up. Slower is easier
       // to control up there.
@@ -565,8 +670,21 @@ export class Player {
       const hBefore = map.heightAt ? map.heightAt(Math.floor(this.x), Math.floor(this.y)) : 0;
       if (this.z === 0 && effBefore > hBefore) speed *= BLOCK_WALK_MULT;
       this.distanceTraveled += speed * dt;
-      this.moveAxis(dir.x * speed * dt, 0, map);
-      this.moveAxis(0, dir.y * speed * dt, map);
+      // Lotus daze: the direction you MEAN to walk rolls side to side under
+      // you — a drunken heading sway you steer against, easing off as the
+      // daze does.
+      let mdx = dir.x, mdy = dir.y;
+      if (this.torpor > 0) {
+        const ease = Math.min(1, this.torpor / 3);
+        const sway = (Math.sin(this._woozyT * 2.1) * 0.55
+          + Math.sin(this._woozyT * 0.9 + 1.7) * 0.3
+          + (this._woozyBias || 0) * 0.35) * TORPOR_SWAY * ease;
+        const cs = Math.cos(sway), sn = Math.sin(sway);
+        mdx = dir.x * cs - dir.y * sn;
+        mdy = dir.x * sn + dir.y * cs;
+      }
+      this.moveAxis(mdx * speed * dt, 0, map);
+      this.moveAxis(0, mdy * speed * dt, map);
       const effAfter = map.effectiveHeightAt ? map.effectiveHeightAt(Math.floor(this.x), Math.floor(this.y)) : 0;
       const hAfter = map.heightAt ? map.heightAt(Math.floor(this.x), Math.floor(this.y)) : 0;
       if (hAfter > hBefore) this.stamina = Math.max(0, this.stamina - CLIMB_COST);
@@ -591,11 +709,12 @@ export class Player {
 
     // Swimming a river is exhausting: it drains stamina fast and chips at
     // health, whether you're moving or treading water. Get across and out.
-    this.swimming = map.floorAt(Math.floor(this.x), Math.floor(this.y)) === 'water';
+    const swimFloor = map.floorAt(Math.floor(this.x), Math.floor(this.y));
+    this.swimming = swimFloor === 'water' || swimFloor === 'sea';
     if (this.swimming) {
       this.stamina = Math.max(0, this.stamina - SWIM_STAMINA_DRAIN * dt);
       this.health = Math.max(0, this.health - SWIM_HEALTH_DRAIN * dt);
-      if (this.health <= 0) { this.die(map, 'the cold river'); return; }
+      if (this.health <= 0) { this.die(map, swimFloor === 'sea' ? 'the cold sea' : 'the cold river'); return; }
     }
 
     // Jump: purely vertical hop; collision footprint is unchanged. A normal
@@ -687,6 +806,22 @@ export class Player {
     this.pickupNearby(map);
   }
 
+  // Returns the item key of any burden-flagged item (ITEMS[..].burden — the
+  // anvil, the large stone) anywhere on your person: hands, pockets, backpack
+  // slots, the spare-weapon sleeve. There is no clever way to carry one.
+  carryingBurden() {
+    const heavy = (k) => k && ITEMS[k] && ITEMS[k].burden ? k : null;
+    if (heavy(this.hands)) return this.hands;
+    const p = this.pockets.find((s) => s && heavy(s.item));
+    if (p) return p.item;
+    if (this.backpack) {
+      if (heavy(this.backpack.weapon)) return this.backpack.weapon;
+      const b = this.backpack.slots.find((s) => s && heavy(s.item));
+      if (b) return b.item;
+    }
+    return null;
+  }
+
   // Drop a specific slot's whole contents on the ground ahead (used by
   // dragging an item off the inventory panel to get rid of it). Lands beyond
   // pickup range so it doesn't walk straight back into your kit.
@@ -763,6 +898,15 @@ export class Player {
     }
     const i = this.selectedPocket;
     const slot = this.pockets[i];
+    // A book or note is read, not held: selecting it opens it on the spot (a
+    // note files into the notepad, a manual teaches its skill), same as R —
+    // so clicking the starting note reads it instead of refusing the hand.
+    if (slot && ITEMS[slot.item].kind === 'book') {
+      const key = slot.item;
+      if (slot.qty > 1) slot.qty -= 1; else this.pockets[i] = null;
+      this.learnFromBook(key);
+      return;
+    }
     if (slot && !HOLDABLE.has(ITEMS[slot.item].kind)) {
       this.say(`Can't hold ${ITEMS[slot.item].name.toLowerCase()} in hand.`);
       return;
@@ -841,26 +985,64 @@ export class Player {
   // spot rather than pocketing it.
   learnFromBook(itemKey) {
     const def = ITEMS[itemKey];
+    // A note/document (the starting Odyssey note, etc.): no skill, no manual —
+    // it files itself into the notepad (main.js wires onReadNote) so you carry
+    // the story, then a short line acknowledges it.
+    if (def.toNotepad) {
+      this.gainXp('knowledge', 3);
+      if (this.onReadNote) this.onReadNote(itemKey);
+      this.say(`You read ${def.name} and fold it into your notepad (N).`);
+      return;
+    }
     // The RON-ML manual and its torn pages teach the console language, not a
     // survival skill — just show their text and count as a little knowledge.
     if (def.manual) {
       this.gainXp('knowledge', def.tip ? 3 : 8);
       this.readManuals ??= new Set();
       if (!this.readManuals.has(itemKey)) { this.addScore(SCORE.book); this.readManuals.add(itemKey); }
-      this.say(`You read ${def.name}. ${def.text}`);
+      this._fileBookNote(def);
+      this.say(`You read ${def.name}. ${def.text} (Summary filed in your notepad, N.)`);
       return;
     }
+    this._fileBookNote(def);
     if (this.skills.has(def.skill)) {
       this.gainXp('knowledge', 2); // re-reading still teaches a little
-      this.say(`You have already read ${def.name}.`);
+      this.say(`You have already read ${def.name}. (It's summarised in your notepad, N.)`);
     } else {
       this.skills.add(def.skill);
       this.skillLog.push({ skill: def.skill });
       this.gainXp('knowledge', 10);
       this.addScore(SCORE.book);
-      this.say(`You read "${def.name}". ${def.skillText}`);
+      this.say(`You read "${def.name}". ${def.skillText} Summary filed in your notepad (N).`);
       if (this.onSkillLearned) this.onSkillLearned(def.skill);
     }
+  }
+
+  // File a one-page summary of a book into the notepad — title, author, and a
+  // short abstract of what it is — so a read book leaves a record you can flip
+  // back to, not just a one-off message.
+  _fileBookNote(def) {
+    if (!this.onFileNote) return;
+    // A def can supply notepadText for a hand-written, literal page (used by
+    // the RON-ML manuals, which are complex enough to warrant a clean, fully
+    // spelled-out reference rather than an auto-assembled blurb).
+    let body;
+    if (def.notepadText) {
+      body = (def.author ? `by ${def.author}\n\n` : '') + def.notepadText;
+    } else {
+      const parts = [];
+      if (def.author) parts.push(`by ${def.author}`);
+      if (def.abstract) parts.push(def.abstract);
+      const effect = def.skillText || def.text;
+      if (effect && effect !== def.abstract) parts.push(effect);
+      body = parts.join('\n\n');
+    }
+    // cover: a media path (book/album art) the notepad can render as a thumbnail;
+    // cat sorts it into the Scrapbook's Books / Albums / Documents sections.
+    const cat = (def.kind === 'record' || def.kind === 'tape') ? 'Album'
+      : (def.kind === 'book' || def.kind === 'paperbook') ? 'Book'
+      : 'Document';
+    this.onFileNote(def.short || def.name, body, def.cover || null, cat);
   }
 
   // Eat the first edible thing in the pockets, then the backpack — a
@@ -884,6 +1066,11 @@ export class Player {
           this.venom = 0;
           this.health = Math.min(this.maxHealth, this.health + 5);
           this.say('You eat the berries. The right ones: the venom fades.');
+        } else if (def.lotus) {
+          // The trap. No warning until it is already in you: a dreamy line, and
+          // the torpor takes hold in update (slow + the drunken heading sway).
+          this.torpor = Math.min(TORPOR_MAX, this.torpor + TORPOR_TIME);
+          this.say('The fruit is sweeter than anything you remember. You forget, for a moment, why you were in such a hurry.');
         } else {
           this.say(`You eat the ${def.name.toLowerCase()}.`);
         }
@@ -1021,9 +1208,13 @@ export class Player {
     // drops an AI key.
     if (obj && obj.type === 'wfactory') { this.hitFactory(obj, map, tool); return; }
 
-    // The fortress red uplink: hammer it down to cut Adamantine off from the
-    // overworld SKYLINK (the fortress controller watches obj.destroyed).
+    // The fortress red uplink: hammer it down to cut ZEUS off from the
+    // overworld POSEIDON (the fortress controller watches obj.destroyed).
     if (obj && obj.type === 'uplink') { this.hitUplink(obj, map, tool); return; }
+
+    // The mainframe core: the AI itself. Break its hull down (heavy kit only)
+    // and the island's controlling mind dies — every machine goes dark.
+    if (obj && obj.type === 'mainframe') { this.hitCore(obj, map, tool); return; }
 
     // Shovel: dig a pit in the open ground ahead. A steep pit (height -2)
     // is a trap — a wheeled T1 rolls in and can't climb out, and you can
@@ -1325,6 +1516,13 @@ export class Player {
     if (obj.destroyed) { this.say('The factory is already a smoking ruin.'); return; }
     this.swingTimer = tool.swingCooldown || 0.5;
     this.stamina = Math.max(0, this.stamina - (tool.staminaCost ?? 0));
+    // Anything lighter than a proper wrecking tool just clangs off the hull.
+    if ((tool.robotDamage ?? 1) < FACTORY_MIN_TOOL) {
+      sfx.play('swing');
+      obj.shake = 0.12;
+      this.say(`The ${(tool.name || 'weapon').toLowerCase()} clangs uselessly off the factory hull. You need a sledgehammer or crowbar, explosives, or the electro-gun.`);
+      return;
+    }
     sfx.play('chop');
     const cx = obj.x + (obj.fw || 1) / 2, cy = obj.y + (obj.fh || 1) / 2;
     this.sparkAt(map, cx, cy);
@@ -1353,6 +1551,74 @@ export class Player {
     this.addScore(40);
     sfx.play('treefall');
     this.say('The W-factory buckles and collapses in a roar. An AI key glints in the wreckage.');
+  }
+
+  // Hammer the mainframe core — the AI itself — the way you crack the factory:
+  // heavy kit only, many blows. When its hull gives, the island's mind dies and
+  // `onCoreDefeated` fires (main.js powers down the island + the victory modal).
+  hitCore(obj, map, tool) {
+    if (obj.defeated) { this.say('The core stands dark and dead.'); return; }
+    this.swingTimer = tool.swingCooldown || 0.5;
+    this.stamina = Math.max(0, this.stamina - (tool.staminaCost ?? 0));
+    if ((tool.robotDamage ?? 1) < FACTORY_MIN_TOOL) {
+      sfx.play('swing'); obj.shake = 0.12;
+      this.say(`The ${(tool.name || 'weapon').toLowerCase()} rings off the core — you need a wrecking tool, explosives, or the electro-gun to crack it.`);
+      return;
+    }
+    sfx.play('chop');
+    const cx = obj.x + (obj.fw || 1) / 2, cy = obj.y + (obj.fh || 1) / 2;
+    this.sparkAt(map, cx, cy);
+    obj.shake = 0.2;
+    this.damageCore(obj, map, (tool.robotDamage ?? 1) + this.xpLevel('melee'));
+  }
+
+  // Apply `amount` to the core (melee, a bomb blast, or the electro-gun's arc).
+  // On kill, mark it defeated and fire the island-death hook exactly once.
+  damageCore(obj, map, amount) {
+    if (obj.defeated) return;
+    obj.maxHp = obj.maxHp ?? obj.hp ?? 250;
+    obj.hp = (obj.hp ?? obj.maxHp) - amount;
+    if (obj.hp > 0) { this.daemonSpeak(obj); return; }
+    // Death throe: a heavy blow can leap the core from above 10% straight to
+    // dead, skipping the final movement of the aria. The first time that would
+    // happen, it clings to a last sliver and speaks the dying lines instead —
+    // one more blow finishes it. (Also just reads well: the god will not quite go.)
+    if (!obj._throed && obj._voiceTier !== 'dying') {
+      obj._throed = true;
+      obj.hp = Math.max(1, Math.round(obj.maxHp * 0.03));
+      obj.shake = 0.3;
+      this.daemonSpeak(obj);
+      return;
+    }
+    obj.defeated = true;
+    const cx = obj.x + (obj.fw || 1) / 2, cy = obj.y + (obj.fh || 1) / 2;
+    for (let s = 0; s < 14; s++) this.sparkAt(map, cx + (Math.random() - 0.5) * (obj.fw || 4), cy + (Math.random() - 0.5) * (obj.fh || 4));
+    this.addScore(200);
+    // The last words carry onto the victory modal (the fireworks would cover a
+    // voice-band line), so hand them to the kill hook.
+    obj.lastWords = DAEMON_FINAL;
+    if (this.onCoreDefeated) this.onCoreDefeated(obj);
+  }
+
+  // Speak the next line of the core's death-aria. Gated so the monologue reads:
+  // a fresh line fires instantly when the aria crosses into a new movement
+  // (wrath -> mercy -> dying), and otherwise no faster than MIN_VOICE_GAP, so
+  // rapid blows don't flicker through the whole script at once. The per-tier
+  // index advances so successive lines within a movement are revealed in order.
+  daemonSpeak(obj) {
+    const MIN_VOICE_GAP = 2.4;
+    const frac = obj.hp / (obj.maxHp || 1);
+    const tier = daemonTier(frac);
+    const now = this.playSeconds || 0;
+    const changed = obj._voiceTier !== tier;
+    if (!changed && now - (obj._voiceAt ?? -99) < MIN_VOICE_GAP) return;
+    if (changed) { obj._voiceTier = tier; obj._voiceIdx = 0; }
+    const pool = DAEMON_VOICE[tier] || [];
+    if (!pool.length) return;
+    const line = pool[Math.min(obj._voiceIdx || 0, pool.length - 1)];
+    obj._voiceIdx = (obj._voiceIdx || 0) + 1;
+    obj._voiceAt = now;
+    this.daemonVoice = { text: line, ttl: 5.5, tier, ai: obj.ai || 'ZEUS' };
   }
 
   // Smash an abandoned car open. A crowbar (high robotDamage) pries it apart
@@ -1415,8 +1681,22 @@ export class Player {
         + 'something that shoots, something to eat. Don\'t go out there empty-handed. '
         + 'Learn the towers before you learn to run from them. Good luck." '
         + `Inside: ${drops.map((l) => ITEMS[l.item].name.toLowerCase()).join(', ')}.`);
+    } else if (drops.some((l) => ITEMS[l.item] && ITEMS[l.item].backspace)) {
+      // A deleted object recovered from the Backspace (paper book / vinyl).
+      const names = drops.map((l) => ITEMS[l.item].name).join(', ');
+      this.say(`Inside, something backspaced out of the world: ${names}. A form they couldn't watch you use — so they deleted it, and it fell through to here.`);
     } else {
       this.say(`You prise open the cache: ${drops.map((l) => ITEMS[l.item].name.toLowerCase()).join(', ')}.`);
+    }
+    // Recovered documents packed in with the cache — RON's dispersed record,
+    // now concentrated where you actually search. Fold them into the Scrapbook.
+    if (Array.isArray(obj.lore) && obj.lore.length && this.onFindLore) {
+      let n = 0;
+      for (const id of obj.lore) if (this.onFindLore(id)) n++;
+      obj.lore = []; // consumed — a re-stocked box won't re-grant them
+      if (n) this.say(n > 1
+        ? `Wedged in beside it: a stack of papers, bound with wire. You unfold ${n} documents into your Scrapbook (J).`
+        : `Wedged in beside it: a single sheet, filed to your Scrapbook (J).`);
     }
   }
 
@@ -1651,11 +1931,27 @@ export class Player {
     // than the OB-gun, but it works. If one's in front and no closer than any
     // machine, it takes the shot instead.
     let obTarget = null;
+    let facTarget = null;
     if (tool.effect === 'fuse') {
       const ob = this.obeliskInFront(map, range);
+      let obD = Infinity;
       if (ob) {
-        const od = Math.hypot(ob.x + 0.5 - this.x, ob.y + 0.5 - this.y);
-        if (od <= best) obTarget = ob;
+        obD = Math.hypot(ob.x + 0.5 - this.x, ob.y + 0.5 - this.y);
+        if (obD <= best) obTarget = ob;
+      }
+      // The arc scorches the W-factory hull too — a slow, self-charging way to
+      // bring the foundry down without spending bombs. Measure to its nearest
+      // edge (the footprint is huge). It only takes the shot if it's the closest
+      // thing in front (nearer than any machine and than an obelisk).
+      const fac = map.objects.find((o) => o.type === 'wfactory' && !o.destroyed);
+      if (fac) {
+        const nx = Math.max(fac.x, Math.min(this.x, fac.x + (fac.fw || 1)));
+        const ny = Math.max(fac.y, Math.min(this.y, fac.y + (fac.fh || 1)));
+        const fdx = nx - this.x, fdy = ny - this.y, fd = Math.hypot(fdx, fdy);
+        if (fd <= range && (fdx * this.facing.x + fdy * this.facing.y) >= 0 && fd <= best && fd <= obD) {
+          facTarget = { fac, x: nx + 0.5, y: ny };
+          obTarget = null; // the factory is nearer — it takes the shot
+        }
       }
     }
 
@@ -1689,6 +1985,20 @@ export class Player {
     }
     this.swingTimer = tool.swingCooldown;
     this.stamina = Math.max(0, this.stamina - (tool.staminaCost ?? 0));
+
+    // W-factory in the arc's path (electro-gun only): the bolt flies to its
+    // hull and chews into it, a slow siege off the self-charging cell.
+    if (facTarget) {
+      map.projectiles = map.projectiles || [];
+      map.projectiles.push({
+        x0: this.x + this.facing.x * 0.4, y0: this.y + this.facing.y * 0.4,
+        x1: facTarget.x, y1: facTarget.y, prog: 0, kind: 'fuse',
+      });
+      sfx.play('zap');
+      this.sparkBurst(map, facTarget.x, facTarget.y);
+      this.damageFactory(facTarget.fac, map, 14);
+      return;
+    }
 
     // Obelisk in the arc's path (electro-gun only): the bolt flies to it and
     // scorches it, same as an OB-gun burn but from the electro-gun's cell.
@@ -1817,6 +2127,10 @@ export class Player {
       if (stored <= 0) continue;
       gi.qty -= stored;
       this.discoverWeapon(gi.item);
+      // A recovered book or album leaves a page in the Scrapbook (cover +
+      // what it is), the same way a read skill-book does — you carry the object
+      // AND a record of it. onFileNote dedupes, so re-grabbing won't double it.
+      if (def.kind === 'paperbook' || def.kind === 'record' || def.kind === 'tape') this._fileBookNote(def);
       // Numbered circuit boards go toward the wave gun.
       if (gi.item === 'circuit' && gi.num != null) this.circuitNums.add(gi.num);
       // A found Wi-Fi block comes with a charge — a genuine reward, and
@@ -1905,7 +2219,7 @@ export class Player {
     }
   }
 
-  // Caught in SKYLINK's final 30-second purge: there is no waking back up
+  // Caught in POSEIDON's final 30-second purge: there is no waking back up
   // at the road this time — the certificate shows straight away, same
   // ending as simply running out the clock.
   dieToSkylink() {
@@ -1913,7 +2227,7 @@ export class Player {
     this._ended = true;
     this.deaths = (this.deaths || 0) + 1;
     this.deathCert = {
-      name: this.name, gender: this.gender, cause: 'SKYLINK-9000 coming online',
+      name: this.name, gender: this.gender, cause: 'POSEIDON coming online',
       score: this.score, skills: [...this.skills], deaths: this.deaths, skylink: true,
     };
     if (this.onDeath) this.onDeath();
@@ -1933,7 +2247,7 @@ export class Player {
     };
     if (this.onDeath) this.onDeath();
 
-    this.pockets = [null, null, null, null];
+    this.pockets = [{ item: 'note_home', qty: 1 }, null, null, null]; // the note is with you each new run
     this.backpack = null;
     this.selectedPocket = null;
     this.hands = 'penknife';
@@ -2052,8 +2366,14 @@ export class Player {
     // them. Water is passable (the player swims).
     const solidCorner = (tx, ty) => {
       const obj = map.objectAt ? map.objectAt(tx, ty) : null;
-      const climbable = obj && OBJECTS[obj.type] && OBJECTS[obj.type].climbable;
-      return map.isSolid(tx, ty) && map.floorAt(tx, ty) !== 'water' && !climbable;
+      const def = obj && OBJECTS[obj.type];
+      const climbable = def && def.climbable;
+      // `soft` objects (trees) block robots and shots, but the player pushes
+      // through them — a human's edge in the woods, where the machines can't
+      // follow. So they never count as a solid corner for the player.
+      const soft = def && def.soft;
+      const wf = map.floorAt(tx, ty);
+      return map.isSolid(tx, ty) && wf !== 'water' && wf !== 'sea' && !climbable && !soft;
     };
     if (solidCorner(Math.floor(x - RADIUS), Math.floor(y - RADIUS))
       || solidCorner(Math.floor(x + RADIUS), Math.floor(y - RADIUS))

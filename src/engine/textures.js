@@ -45,8 +45,8 @@ export const FLOOR_TEXTURES = {
   road: loadDownscaled(T + 'floor-road.jpg'),
   boards: loadDownscaled(T + 'floor-boards.png'),
   bridge: loadDownscaled(T + 'floor-boards.png'),
-  sand: loadDownscaled(T + 'wall-pebbledash.png'),
-  // Adamantine's fortress decks: riveted metal panels for the corridors/maze,
+  sand: loadDownscaled(T + 'Sand.png'),
+  // ZEUS's fortress decks: riveted metal panels for the corridors/maze,
   // paving for the open quad, and a darker panel for the inner sanctum.
   panel: loadDownscaled(T + 'panel-metal-1.jpg'),
   quad: loadDownscaled(T + 'floor-pavingstone.jpg'),
@@ -65,7 +65,7 @@ export const WALL_TEXTURES = {
   // Fortress ramparts (riveted metal) and the inner charcoal maze (dark stone).
   metal: loadDownscaled(T + 'panel-metal-2.jpg'),
   darkstone: loadDownscaled(T + 'wall-darkstone-alt.png'),
-  // Adamantine's inner maze: darker "AI" wall designs, mixed for variety —
+  // ZEUS's inner maze: darker "AI" wall designs, mixed for variety —
   // riveted panels, an iron grate, and a louvred vent.
   aiwall: loadDownscaled(T + 'AI-texture/metal_06.jpg'),
   aigrate: loadDownscaled(T + 'AI-texture/grating_10.jpg'),
@@ -93,9 +93,20 @@ export const GRAFFITI_TEXTURES = [
 // map edge — deliberately NOT the road texture, so the boundary reads as rock
 // rather than another road. See Renderer.drawEdgeRock.
 export const EDGE_TEXTURE = loadDownscaled(T + 'photo-unsorted-2.jpg');
+// Open sea around the island edge — a deep-ocean battlemap, downscaled a little
+// less than the floors so the swell keeps some detail.
+export const SEA_TEXTURE = loadDownscaled(T + 'deep_ocean_battlemap.png', 128);
 
 // Dark riveted-metal texture facing the big W-factory structure.
 export const FACTORY_TEXTURE = loadDownscaled(T + 'decor-train.jpg');
+
+// White marble with grey veining — the ruined columns strewn across the island
+// (Renderer.drawColumn). One shared source, clipped into each shaft/drum.
+export const MARBLE_TEXTURE = loadDownscaled(T + 'WhiteMarble_COLOR.jpg', 96);
+
+// Aged paper for the Certificate of Death (Renderer.drawDeathCert). Kept large
+// so it fills the panel without the fine grain blurring out.
+export const PAPER_TEXTURE = loadDownscaled(T + 'paper.jpg', 512);
 
 // Abandoned cars: real 3/4-view sprites (assets/textures/cars/) instead of the
 // old procedural hull. Several models/colours, each in the four iso-diagonal

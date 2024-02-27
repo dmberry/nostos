@@ -8,11 +8,12 @@ export const FLOORS = {
   road:   { color: '#63635e', solid: false },
   boards: { color: '#9c8055', solid: false },
   sand:   { color: '#c2b280', solid: false },
-  water:  { color: '#3a6ea5', solid: true },
+  water:  { color: '#3a6ea5', solid: true },  // the river — flat blue, swum, NOT the sea
+  sea:    { color: '#22304a', solid: true },  // open ocean at the island edge; swum like the river, but drawn by Renderer.drawSeaTile (wine-dark, textured)
   stream: { color: '#4f83b5', solid: false }, // shallow water, wadeable
   bridge: { color: '#8a7048', solid: false },
   tallgrass: { color: '#6f8f3f', solid: false },
-  // Adamantine's fortress (the map's southern annex): a cold metal-panel deck
+  // ZEUS's fortress (the map's southern annex): a cold metal-panel deck
   // for the corridors and maze, a paved quadrangle for the open killing-ground,
   // and a dark charcoal deck for the inner sanctum. All walkable.
   panel:  { color: '#3c4045', solid: false },
@@ -25,7 +26,12 @@ export const FLOORS = {
 };
 
 export const OBJECTS = {
-  tree:    { solid: true },
+  tree:    { solid: true, soft: true }, // `soft`: the PLAYER pushes through (a human edge in the woods), but it still blocks robots and blocks shots (cover)
+  lotus:   { solid: false }, // lotus plant: walk-through decor marking the lotus-eaters' grove
+  flower:  { solid: false }, // decorative wildflowers (worldgen.scatterFlowers): pure scenery, walk-through
+  column:  { solid: true },  // ruined marble column: a pillar that blocks and gives shot-cover
+  colfall: { solid: false }, // toppled column / drum lying in the grass: decorative, walk over it
+  marbleblock: { solid: true }, // fallen entablature / altar stone among the columns: blocks, gives cover
   // "climbable" objects are solid for everything except the player's own
   // climb check (Player.collides via GameMap.effectiveHeightAt), which
   // treats them as a raised step of `climbHeight` levels rather than an
@@ -45,18 +51,19 @@ export const OBJECTS = {
   rubble:  { solid: true, climbable: true, climbHeight: 1 },
   rock:    { solid: true, climbable: true, climbHeight: 1 },
   obelisk: { solid: true }, // AI signal tower; destructible in a later phase
+  tor: { solid: true }, // RON resistance relay on a hilltop — the friendly HERMES terminal
   box:     { solid: true, climbable: true, climbHeight: 1 }, // resistance cache — a low crate you can step or jump onto, still searchable from beside it
   car:     { solid: true }, // abandoned wreck littering the roads; scenery only
   wfactory: { solid: true }, // W-unit foundry; periodically fields a W3 repair drone
   furniture: { solid: true }, // stacked junk cluttering the underworld's rooms; solid, you weave around it
   exitdoor: { solid: true },  // a plain door in the underworld: walk up to it to leave. Solid; you exit on approach
   lamp: { solid: false },     // a standing underworld floor lamp; drawn scenery, walk past it
-  // --- Adamantine's fortress (southern annex) ---
+  // --- ZEUS's fortress (southern annex) ---
   // Deliberately NON-climbable, unlike a town wall: the fortress rampart and
   // its inner maze can't be double-jumped, so the hacked doorway is the only
   // way in. `material` ('metal' | 'darkstone') selects the wall texture.
   fortwall: { solid: true },
-  // The red uplink mast: wires the fortress into the overworld SKYLINK. Hammer
+  // The red uplink mast: wires the fortress into the overworld POSEIDON. Hammer
   // it down to cut the fortress off, so a breach no longer stirs the world.
   uplink: { solid: true },
   // The grand doorway in the rampart: solid until the terminal hack drops a
@@ -65,6 +72,6 @@ export const OBJECTS = {
   // The console kiosk beside the doorway: walk up and click to open its RON-ML
   // hack. A low pillar you bump into, not climb.
   gateterm: { solid: true },
-  // Adamantine's mainframe core: the multi-tile structure at the far end.
+  // ZEUS's mainframe core: the multi-tile structure at the far end.
   mainframe: { solid: true },
 };

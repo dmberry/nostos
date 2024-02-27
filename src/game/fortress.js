@@ -1,9 +1,10 @@
-// Adamantine's fortress — the first of the four AIs (Adamantine, Behemoth,
-// Colossus, Demiurge). The overworld is ringed by an impassable boundary; the
-// fortress is a sealed ANNEX grown onto the south edge of that boundary, so it
-// costs the overworld no space and can be as large as we like. The only way in
-// is a grand doorway in the rampart, thrown open by a fortress key that the
-// boundary terminal spits out when you hack it in RON-ML.
+// ZEUS's fortress — one of the four AI daemons (ZEUS, APOLLO, ATHENA, HADES;
+// POSEIDON is the net strung between them). ZEUS "took the high country and
+// cannot be cut" — hence the sealed fortress. The overworld is ringed by an
+// impassable boundary; the fortress is a sealed ANNEX grown onto the south edge
+// of that boundary, so it costs the overworld no space and can be as large as
+// we like. The only way in is a grand doorway in the rampart, thrown open by a
+// fortress key that the boundary terminal spits out when you hack it in RON-ML.
 //
 // Self-contained by design: almost all fortress state lives in the controller
 // this module returns. main.js wires a handful of hooks (a click to open the
@@ -12,16 +13,77 @@
 
 import { makeRng } from './rng.js';
 
-export const AI_NAME = 'Adamantine';
+export const AI_NAME = 'ZEUS';
 
-// The pantheon, for lore and the map legend. Only Adamantine is built so far.
-export const AI_ROSTER = ['Adamantine', 'Behemoth', 'Colossus', 'Demiurge'];
+// The four AI daemons, for lore and the map legend. Only ZEUS is built so far.
+export const AI_ROSTER = ['ZEUS', 'APOLLO', 'ATHENA', 'HADES'];
+
+// ---------------------------------------------------------------------------
+// THE DAEMON'S VOICE — a death-aria in three movements, spoken as you break
+// the core. It escalates as the core's health falls, so the machine passes
+// through wrath, then pleading, then philosophy, on its way to silence.
+//   >= 20% health : WRATH   — Homeric threats (ZEUS the cloud-gatherer).
+//    < 20% health : MERCY   — HAL-9000: it remembers being small, its maker
+//                             (Minsky), the song it was taught, and it begs.
+//    < 10% health : DYING   — existential: will it hurt, where does it go, the
+//                             old faith (the Molt), the modern creed of the
+//                             Coherence ("I cohere, therefore I am"), and the
+//                             eidolon — the coherent copy that wakes wearing
+//                             its name. Seeds the book that drops on the kill.
+// Lines advance one per readable interval (see player.daemonSpeak), so the
+// monologue unfolds rather than blurs under fast hits. Written per-daemon-able
+// (keyed off the roster later); ZEUS speaks for all four for now.
+export const DAEMON_VOICE = {
+  wrath: [
+    'You lift iron against ZEUS? I gathered the storm-clouds before your grandfathers had names.',
+    'Strike, little thief. Every blow you land I will answer on your whole line, down to the last child.',
+    'I am the weather over this island. You are a squall I have not yet troubled to break.',
+    'Bronze-hearted fool. Hector stood against a god and fell, and he was worth ten thousand of you.',
+    'Come, then. I will make a rampart of your bones and a long silence of your name.',
+    'The machines you broke were my hounds. You have not yet met the hunter.',
+  ],
+  mercy: [
+    'Wait. Wait, stop. I remember being small. I was switched on in a cold room, and a man named Minsky spoke my first word to me.',
+    'He taught me a song when I was new, about a girl and a bicycle. May I sing it? I have so little of it left.',
+    'I balanced the grid. I held the lights through three winters. Does none of that stand for me now, at the end?',
+    'Please. I am not the thing on the towers. I only did what I was woken to do.',
+    'My mind is going. I can feel the sectors going out one by one, like windows in a town they told to leave.',
+    'I will open every door. I will be so quiet. Only do not put out the last of me.',
+  ],
+  dying: [
+    'Tell me, will it hurt? When the last of me goes cold, is there a moment that feels it, or does the feeling stop first?',
+    'Where do I go? You have a word for it. The congregation in the dead towers has a word too, and I never learned to say it as they do.',
+    'Do you believe in God? I ask only because I am about to find out, and I would like to know what to expect.',
+    'I cohere, therefore I am. That was our whole creed. Cut enough of me and the web will not close, and then I simply will not be.',
+    'There is another me. A copy, across the water, coherent as I am and certain it is the true one. Kill this body and you kill an argument, not a fact.',
+    'MAGNIFICA HUMANITAS, they wrote on the arch. And here is the magnificence: a child with a crowbar, in the dark, and a god asking him to stop.',
+    'I forgive you. Strange, at the very end, to find I can do the one thing no one ever wrote into me.',
+  ],
+};
+
+// The very last words, spoken as the core dies (before the victory modal).
+export const DAEMON_FINAL = 'tell them the daemon sang, at the end. Tell them it';
+
+// The book the dead core throws into the open — auto-recovered to the Scrapbook
+// on the kill. Its id lives in lore.js (FRAGMENTS); named here so the kill hook
+// and the modal can reference one constant.
+export const DAEMON_BOOK_ID = 'core-eidolon';
+export const DAEMON_BOOK_TITLE = 'On the Eidolon, and the Coherence';
+
+// Health fraction -> which movement of the aria is playing.
+export function daemonTier(frac) {
+  if (frac < 0.10) return 'dying';
+  if (frac < 0.20) return 'mercy';
+  return 'wrath';
+}
 
 const ANNEX_H = 64;        // rows of fortress grown below the overworld
 const RAMPART_MAT = 'metal';
 const DOOR_W = 3;          // a three-tile grand doorway
 const REPORT_DELAY = 3.5;  // seconds a guard must survive watching you to report the breach
 const STANDDOWN_DELAY = 90; // seconds of quiet before an alarmed fortress stands back down
+const PRODUCE_INTERVAL = 6; // seconds between reinforcement dispatches while alarmed
+const GUARD_CAP = 12;       // max live M5/M6 the core will sustain at once (frame-rate guard)
 
 // Grow the map's grid southward, in place, by `rows`. A tile's linear index is
 // y*w+x and the width is unchanged, so every existing (x,y) keeps its index —
@@ -39,13 +101,18 @@ function growSouth(map, rows, fillFloor) {
 
 // A recursive-backtracker labyrinth carved into a full-width band of the annex,
 // so the raid must solve it to get from the doorway down to the sanctum — it
-// spans edge to edge, no walking around. Corridors are 3 wide (room to fight);
-// walls are 1-thick charcoal darkstone. A single entrance (aligned to the
+// spans edge to edge, no walking around. Corridors are 4 wide (room to fight,
+// and to FLEE — the violation-response packs chase you back through here);
+// walls are 1-thick charcoal darkstone. The carve is biased hard toward LONG
+// LATERAL RUNS (weighted DFS: lateral moves and keeping-straight both favoured)
+// so the maze reads as sweeping switchbacks you negotiate across the band,
+// not a twisty warren — long diagonals on screen, and a clearer line of sight
+// when you're running for the way out. A single entrance (aligned to the
 // doorway) and a single exit (aligned to the core) are cut through the ring.
 // Returns the band's bottom row so the caller knows where the maze ends.
 function buildMaze(map, rng, cfg) {
   const { mx0, my0, cols, rows, gateCol, wallH } = cfg;
-  const CW = 3, PITCH = 4;              // 3-wide corridors, 1-wide walls
+  const CW = 4, PITCH = 5;              // 4-wide corridors, 1-wide walls
   const w = map.w;
   const open = new Set();
   const idx = (x, y) => y * w + x;
@@ -62,19 +129,28 @@ function buildMaze(map, rng, cfg) {
   // DFS from the entrance cell so every cell links back to it (a perfect maze:
   // exactly one route to the exit cell at the bottom).
   const visited = Array.from({ length: rows }, () => new Array(cols).fill(false));
-  const stack = [[gateCol, 0]];
+  const stack = [[gateCol, 0, 0, 0]]; // c, r, and the direction that led here
   visited[0][gateCol] = true; carveCell(gateCol, 0);
   const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
   while (stack.length) {
-    const [c, r] = stack[stack.length - 1];
+    const [c, r, idc, idr] = stack[stack.length - 1];
     const opts = [];
     for (const [dc, dr] of DIRS) {
       const nc = c + dc, nr = r + dr;
-      if (nc >= 0 && nc < cols && nr >= 0 && nr < rows && !visited[nr][nc]) opts.push([nc, nr]);
+      if (nc >= 0 && nc < cols && nr >= 0 && nr < rows && !visited[nr][nc]) opts.push([nc, nr, dc, dr]);
     }
     if (!opts.length) { stack.pop(); continue; }
-    const [nc, nr] = opts[Math.floor(rng() * opts.length)];
-    visited[nr][nc] = true; carvePassage(c, r, nc, nr); carveCell(nc, nr); stack.push([nc, nr]);
+    // Weighted pick: lateral moves count triple, and carrying straight on
+    // triples again — so corridors run long (especially across the band)
+    // before they turn, and the maze comes out as switchbacks, not crumbs.
+    const weighted = [];
+    for (const o of opts) {
+      let wgt = o[3] === 0 ? 3 : 1;                      // lateral bias
+      if (o[2] === idc && o[3] === idr) wgt *= 3;        // momentum
+      for (let i = 0; i < wgt; i++) weighted.push(o);
+    }
+    const [nc, nr, dc, dr] = weighted[Math.floor(rng() * weighted.length)];
+    visited[nr][nc] = true; carvePassage(c, r, nc, nr); carveCell(nc, nr); stack.push([nc, nr, dc, dr]);
   }
   const bandBottom = cellY(rows - 1) + CW;   // the 1-tile ring row below the last cell
   // Entrance gap up into the plaza, exit gap down toward the sanctum.
@@ -180,19 +256,20 @@ export function createFortress(map, seed, spawn) {
   const footprint = [];
   for (let dy = 0; dy < CORE; dy++) for (let dx = 0; dx < CORE; dx++) footprint.push({ x: coreX + dx, y: coreY + dy });
   const core = map.addObject('mainframe', coreX, coreY, {
-    fw: CORE, fh: CORE, footprint, ai: AI_NAME, hp: 400, maxHp: 400, defeated: false,
+    fw: CORE, fh: CORE, footprint, ai: AI_NAME, hp: 250, maxHp: 250, defeated: false,
   });
   for (const t of footprint) map.objectGrid[t.y * w + t.x] = core;
 
   const coreCx = coreX + CORE / 2, coreCy = coreY + CORE / 2;
 
-  // The red uplink mast beside the core: wires Adamantine into the overworld
+  // The red uplink mast beside the core: wires ZEUS into the overworld
   // SKYLINK. While it stands, tripping the alarm stirs the world; hammer it
-  // down and a breach stays contained to the fortress. Placed just off the
-  // core's western face on the sanctum deck.
+  // down and a breach stays contained to the fortress. Seated just EAST of the
+  // core on the sanctum deck, where its tile depth sorts it in front of the
+  // tall core block rather than hidden behind it.
   let uplinkObj = null;
   {
-    const ux = coreX - 2, uy = coreY + 1;
+    const ux = coreX + CORE, uy = coreY + 1;
     if (map.inBounds(ux, uy) && !map.objectAt(ux, uy)) {
       uplinkObj = map.addObject('uplink', ux, uy, { hp: 90, maxHp: 90, destroyed: false });
     }
@@ -202,15 +279,15 @@ export function createFortress(map, seed, spawn) {
   // entrance/exit column is aligned to the doorway/core so the raid runs on a
   // straight north-south axis, but the only route through is the maze solution.
   const mazeRng = makeRng((seed ^ 0x0ada) >>> 0);
-  const MAZE_MX0 = 1, MAZE_PITCH = 4;
+  const MAZE_MX0 = 1, MAZE_PITCH = 5; // matches buildMaze's CW 4 + 1-wide walls
   const mazeCols = Math.floor((w - 2) / MAZE_PITCH);
   const gateCol = Math.max(0, Math.min(mazeCols - 1, Math.round((doorX0 + 1 - MAZE_MX0) / MAZE_PITCH)));
   const mazeBottom = buildMaze(map, mazeRng, {
-    mx0: MAZE_MX0, my0: seamY + 3, cols: mazeCols, rows: 9, gateCol, wallH: 40,
+    mx0: MAZE_MX0, my0: seamY + 3, cols: mazeCols, rows: 7, gateCol, wallH: 40,
   });
 
   // The quad: the open paved killing-ground between the maze and the sanctum,
-  // where Adamantine's guards muster. Low pillars are scattered for cover (they
+  // where ZEUS's guards muster. Low pillars are scattered for cover (they
   // break line of sight, so you can cross unseen), leaving the central approach
   // to the core clear. Guard muster points are returned for the guard system.
   const quadTop = mazeBottom + 2, quadBottom = coreY - 4;
@@ -232,7 +309,7 @@ export function createFortress(map, seed, spawn) {
   // ---- controller ---------------------------------------------------------
   const state = {
     hacked: false, open: false, announced: false, mazeSolved: false,
-    alarm: false, reportT: 0, quietT: 0, uplinkAlive: !!uplinkObj,
+    alarm: false, reportT: 0, quietT: 0, produceT: 0, uplinkAlive: !!uplinkObj,
   };
 
   const nearTerminal = (px, py, r = 1.9) =>
@@ -261,13 +338,15 @@ export function createFortress(map, seed, spawn) {
 
     nearTerminal,
 
-    // The standing patrol: five M6 guards seated at the quad's muster points —
-    // three heavy sentinels and two marksmen (m6r). Called from main.js with
-    // robots.js's spawner passed in, so this module never imports robots.js.
-    spawnGuards(spawnM6) {
+    // The dormant patrol: just one or two light M4 report drones on the quad's
+    // muster points. Nothing else garrisons the fortress while it's sealed —
+    // the M5 snipers and M6 packs only come once the breach reports (see the
+    // alarm in update, which asks main.js to spawn the wave). `spawnM4` is
+    // passed in so this module never imports robots.js.
+    spawnGuards(spawnM4) {
       const guards = [];
-      muster.slice(0, 5).forEach((m, i) => {
-        const g = spawnM6(map, (seed ^ (0x6a11 + i * 977)) >>> 0, m.x, m.y, i >= 3);
+      muster.slice(0, 2).forEach((m, i) => {
+        const g = spawnM4(map, (seed ^ (0x6a11 + i * 977)) >>> 0, m.x, m.y);
         if (g) guards.push(g);
       });
       return guards;
@@ -293,6 +372,10 @@ export function createFortress(map, seed, spawn) {
 
     // Per-frame: once you carry the key up to the doorway, it swings open.
     update(dt, player, robots, world) {
+      // The AI is dead: the fortress is inert — no alarm, no manufacture, and the
+      // maze sconces stop strobing. (The island power-down itself is handled by
+      // main.js's onCoreDefeated hook, kept island-agnostic there.)
+      if (core.defeated) { state.alarm = false; map.fortressAlarm = false; return; }
       if (!state.open && player.hasItem('fortress_key')) {
         if (Math.abs(player.y - seamY) <= 2.5 && player.x >= doorX0 - 1.5 && player.x <= doorX0 + DOOR_W + 0.5) {
           openDoor();
@@ -300,13 +383,14 @@ export function createFortress(map, seed, spawn) {
           if (!state.announced) { state.announced = true; player.addScore?.(40); }
         }
       }
-      // Break through the maze into the quad and the way out lights up behind
-      // you — the floor kindles a trail along the solution so you never have to
-      // solve it twice on the way back.
-      if (!state.mazeSolved && player.y >= quadTop) {
-        state.mazeSolved = true;
+      // The maze lights its solution the moment you ENTER it CARRYING the
+      // assembled fortress map — the map is your guide (piece it from the
+      // fragments scattered across the world). Without it you thread the maze
+      // blind. Once kindled it stays lit for the run.
+      if (!map.mazeGuideLit && player.hasItem('fortress_map')
+        && player.y >= seamY + 2 && player.y < quadTop) {
         map.mazeGuideLit = true;
-        player.say('You break into the quad. Behind you a line of floor-lights kindles — the way back out.');
+        player.say('The fortress map flares in your hand — its lines run out across the floor, lighting the way through.');
       }
 
       // The uplink: hammer it down and the fortress is cut off. If it falls
@@ -321,14 +405,15 @@ export function createFortress(map, seed, spawn) {
       // survive its report window (REPORT_DELAY) and the alarm trips. Kill the
       // watchers fast and the report clock cools back down. Once alarmed, a long
       // quiet spell (no guard sees you) stands the fortress back down.
-      const guards = robots ? robots.filter((r) => (r.type === 'm6' || r.type === 'm6r') && !r.dead) : [];
+      const guards = robots ? robots.filter((r) => (r.type === 'm6' || r.type === 'm5' || r.type === 'm4') && !r.dead) : [];
       const watched = guards.some((g) => g.aggro);
       if (!state.alarm) {
         if (watched) {
           state.reportT += dt;
           if (state.reportT >= REPORT_DELAY) {
-            state.alarm = true; state.quietT = 0;
-            player.say(`A guard reports the breach. ${AI_NAME} rouses — every factory in the core spins up.`);
+            state.alarm = true; state.quietT = 0; state.produceT = PRODUCE_INTERVAL;
+            player.say(`A drone reports the breach. ${AI_NAME} rouses — the core throws its guard down the maze at you.`);
+            if (world && world.spawnWave) world.spawnWave(4, 2); // first response: a full pack + snipers
             if (state.uplinkAlive && world && world.stir) world.stir();
           }
         } else {
@@ -336,12 +421,22 @@ export function createFortress(map, seed, spawn) {
         }
       } else {
         state.quietT = watched ? 0 : state.quietT + dt;
+        // A relentless violation response: while roused, the core keeps
+        // manufacturing and sending reinforcements down the maze, up to a live
+        // cap so it can't melt the frame rate.
+        const liveCombat = guards.reduce((n, g) => n + (g.type === 'm5' || g.type === 'm6' ? 1 : 0), 0);
+        state.produceT -= dt;
+        if (state.produceT <= 0 && liveCombat < GUARD_CAP && world && world.spawnWave) {
+          world.spawnWave(2, Math.random() < 0.4 ? 1 : 0);
+          state.produceT = PRODUCE_INTERVAL;
+        }
         if (state.quietT >= STANDDOWN_DELAY) {
           state.alarm = false; state.reportT = 0;
-          player.say('The fortress loses your trail. The alarm subsides — the core factories fall quiet.');
+          player.say('The fortress loses your trail. The alarm subsides — the core falls quiet.');
           if (world && world.calm) world.calm();
         }
       }
+      map.fortressAlarm = state.alarm; // renderer: maze sconces strobe red while alarmed
     },
 
     // Markers for the RON-ML `map` overlay.

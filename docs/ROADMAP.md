@@ -15,8 +15,9 @@ map, not a schedule.
   animation + a WOUNDED tag so the player can read it.
 - **Persist fog of war across reload/death** (like skills already do), so map
   knowledge survives.
-- **Walkman tape covers**: the WARD tape folder already ships a cover image;
-  show the current tape's cover art on the walkman deck.
+- **Walkman deck cover art**: tapes now carry a `cover` (v1.56 — the WARD tape's
+  *bear stanhope* sleeve shows in the Scrapbook). Remaining: render that cover on
+  the walkman deck itself while a tape is loaded.
 - **Tapes as a runtime manifest**: tapes are already data-driven (`items.js`
   `TAPES` + `docs/tapes.md`). Optional next step: read the list from a markdown/
   JSON file at startup so a non-coder can add a tape without touching JS.
@@ -26,11 +27,6 @@ map, not a schedule.
 
 ## Phase 2 — world & story depth (the atmospheric layer)
 
-- **ELIZA in the terminal**: an interactive DOCTOR/ELIZA conversational mode you
-  can open at an obelisk terminal — you type, it reflects your words back in
-  Weizenbaum's 1966 pattern-matching style. Ties directly to the ELIZA/
-  Weizenbaum lore already seeded. Its own small parser; unsettling, optional,
-  and thematically load-bearing.
 - **The phone / comms ("the browser")**: a mobile phone the player carries, with
   **RON text messages** arriving over time (guidance, warnings, lore), and
   possibly a dead-internet "browser" of cached pages from before the collapse.
@@ -47,10 +43,14 @@ map, not a schedule.
 - **The portal gun** (a separate item from the Ubik tear): the clean sci-fi
   paired-portal teleporter, a deliberate homage. The Ubik tear was restyled to
   clear this aesthetic; the item itself is unbuilt.
-- **The other three AIs**: Adamantine's fortress is in (+ Henrik's M6 guards).
-  Build Behemoth, Colossus, Demiurge as their own annexes/fortresses, plus the
-  deeper fortress content (mainframe raid, multiple internal factories, M5/M6
-  elite guards, breach escalation).
+- **The other three AIs — now as ISLANDS, not annexes**: full design and staged
+  build plan in [docs/islands-plan.md](islands-plan.md) — the archipelago
+  (APOLLO / ATHENA / HADES islands + ITHACA home island), boat crafting, sea
+  crossings, and the Stage-0 world-contract refactor that enables parallel
+  island builds. The first fortress (core still named *Adamantine* in
+  `fortress.js`, pending the **ZEUS** rename) stays on CALYPSO's island; the
+  deeper fortress content (mainframe raid, internal factories, M5/M6 elite
+  guards, breach escalation) continues there independently.
 - **Awareness meter + escalation event** (Henrik): chain raven-sightings and
   obelisk-proximity into a rising "AI awareness"; crossing a threshold flips
   the game into a short, brutal, retry-friendly escalation (fast converging

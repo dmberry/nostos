@@ -7,6 +7,7 @@
 // mock-up. Switchable World / Backspace / Fortress colour themes.
 
 import { TAPES } from './items.js';
+import { VERSION } from '../version.js';
 import { Renderer } from '../engine/renderer.js';
 import { drawRobot } from './robots.js';
 import { worldToScreen } from '../engine/iso.js';
@@ -63,8 +64,7 @@ export function initMobileGate(mode = 'gate') {
   // title lays the same pieces out as two columns (hero text | Walkman) with
   // the dancing machines as a full-width band along the bottom, so it fits a
   // landscape laptop instead of a tall phone strip.
-  const brandHtml = `<div class="mg-brand"><span class="mg-brand-mark" aria-hidden="true"></span><h1>post<span class="mg-ai">AI</span><span class="mg-caret">▮</span></h1></div>`;
-  const skylinkHtml = `<div class="mg-skylink" id="mg-skylink">SKYLINK uplink operative · T‑<span id="mg-sky">--:--:--</span></div>`;
+  const brandHtml = `<div class="mg-brand"><span class="mg-brand-mark" aria-hidden="true"></span><h1>Nost<span class="mg-ai">OS</span><span class="mg-caret">_</span></h1></div>`;
   const stageHtml = `<div class="mg-stage" id="mg-stage"></div>`;
   const deckHtml = `<div class="mg-deck">
       <canvas class="mg-deck-cass" id="mg-deck-cass" width="264" height="168"></canvas>
@@ -80,19 +80,50 @@ export function initMobileGate(mode = 'gate') {
       <button data-theme="Backspace">Backspace</button>
       <button data-theme="Fortress">Fortress</button>
     </div>`;
+  // On the phone gate the vertical space is tight, so the theme switch lives
+  // behind a hamburger (fixed, top-right) instead of a row at the bottom that
+  // gets clipped by the browser chrome. The title (desktop) keeps it inline.
+  // The hamburger also carries an About entry.
+  const menuHtml = `<div class="mg-menu">
+      <button class="mg-menu-btn" id="mg-menu-btn" aria-label="Menu" aria-expanded="false">☰</button>
+      <div class="mg-menu-pop" id="mg-menu-pop" hidden>
+        <div class="mg-menu-label">Theme</div>${themesHtml}
+        <button class="mg-menu-about" id="mg-menu-about">About</button>
+      </div>
+    </div>`;
+  // Soundtrack list, built straight from the tape ledger so it can't drift.
+  const cleanTrack = (f) => f.replace(/\.mp3$/i, '').replace(/^\d+[-.\s]*\d*[-.\s]*/, '').trim();
+  const songsHtml = TAPES.map((t) => {
+    const a = t.a.tracks.map(cleanTrack).join(', ');
+    const b = t.b.tracks.map(cleanTrack).join(', ');
+    return `<li><b>${t.artist} — <i>${t.title}</i></b><br>A: ${a} &nbsp;·&nbsp; B: ${b}</li>`;
+  }).join('');
+  const artists = [...new Set(TAPES.map((t) => t.artist))].join(', ');
+  const aboutHtml = `<div class="mg-about" id="mg-about" hidden>
+      <div class="mg-about-card">
+        <button class="mg-about-x" id="mg-about-x" aria-label="Close">✕</button>
+        <h2>Nost<span style="color:#fff">OS</span></h2>
+        <p class="mg-about-by">A postAI Odyssey · by David and Henrik</p>
+        <div class="mg-about-h">Soundtrack — cassettes you find and play</div>
+        <ul class="mg-about-tapes">${songsHtml}</ul>
+        <p class="mg-about-tiny">Music: ${artists}. Character &amp; animal art: Kenney (kenney.nl), CC0.</p>
+        <p class="mg-about-tiny">Game designed in the UK · github.com/dmberry/nostos</p>
+      </div>
+    </div>`;
+  const footerHtml = `<div class="mg-madein">alpha · Game designed in the UK · <button class="mg-about-open" id="mg-about-open">About</button> <span class="mg-ver">v${VERSION}</span></div>`;
   const copyHtml = isTitle
-    ? `<p class="mg-sub">The machines outlived the world. Now survive it.<span class="mg-sub2">A keyboard-and-mouse survival game. Here's the soundtrack while you decide.</span></p>
+    ? `<p class="mg-sub">The machines made the world standing reserve. Now survive it.<span class="mg-sub2">A keyboard-and-mouse survival game.<br>Here's the soundtrack while you decide.</span></p>
        <div class="mg-actions">
          ${hasSave ? '<button id="mg-continue" class="mg-btn primary">Continue</button>' : ''}
          <button id="mg-start" class="mg-btn ${hasSave ? '' : 'primary'}">${hasSave ? 'New game' : 'Start'}</button>
        </div>`
-    : `<p class="mg-sub">It is the end of the world, and you will need a keyboard and mouse to save it!<span class="mg-sub2">Grab a laptop or desktop for the real thing.<br>Meanwhile, here's the soundtrack.</span></p>
-       <button class="mg-tryanyway" id="mg-tryanyway">Try and play it anyway…</button>`;
+    : `<p class="mg-sub">It's the end of the world.<span class="mg-sub2">This is an early alpha — you can play it right here with touch controls (hold to move, tap to act), or grab a laptop for the full keyboard-and-mouse game. Either way, here's the soundtrack.</span></p>
+       <div class="mg-actions"><button id="mg-tryanyway" class="mg-btn primary">▶ Play (alpha)</button></div>`;
   const bodyHtml = isTitle
-    ? `<div class="mg-hero">${brandHtml}${copyHtml}${skylinkHtml}</div>
+    ? `<div class="mg-hero">${brandHtml}${copyHtml}</div>
        <div class="mg-player">${deckHtml}${rackHtml}${themesHtml}</div>
-       ${stageHtml}`
-    : `${brandHtml}${copyHtml}${skylinkHtml}${stageHtml}${deckHtml}${rackHtml}${themesHtml}`;
+       ${stageHtml}${footerHtml}${aboutHtml}`
+    : `${brandHtml}${copyHtml}${stageHtml}${deckHtml}${rackHtml}${menuHtml}${footerHtml}${aboutHtml}`;
 
   el.innerHTML = `
     <style>
@@ -139,7 +170,46 @@ export function initMobileGate(mode = 'gate') {
         color: var(--accent); background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.18);
         border-radius: 5px; padding: 5px 11px; cursor: pointer; }
       .mg-themes button.on { color: #10130d; background: var(--accent); border-color: var(--accent); }
-      /* SKYLINK uplink clock */
+      /* hamburger theme menu (mobile gate only) */
+      .mg-menu { position: fixed; top: max(10px, env(safe-area-inset-top)); right: max(10px, env(safe-area-inset-right)); z-index: 20; }
+      .mg-menu-btn { width: 42px; height: 42px; border-radius: 10px; font-size: 19px; line-height: 1; cursor: pointer;
+        color: var(--accent); background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.22); font-family: inherit; }
+      .mg-menu-btn:active { transform: scale(0.94); }
+      .mg-menu-pop { position: absolute; top: 48px; right: 0; min-width: 150px; padding: 8px;
+        background: rgba(18,22,14,0.97); border: 1px solid rgba(255,255,255,0.18); border-radius: 11px;
+        box-shadow: 0 10px 26px rgba(0,0,0,0.55); }
+      .mg-menu-pop[hidden] { display: none; }
+      .mg-menu-label { font: 700 10px system-ui, sans-serif; text-transform: uppercase; letter-spacing: 0.08em;
+        color: var(--accent); opacity: 0.75; margin: 2px 4px 7px; }
+      .mg-menu .mg-themes { flex-direction: column; gap: 6px; margin-top: 0; }
+      .mg-menu .mg-themes button { width: 100%; text-align: center; }
+      .mg-menu-about { width: 100%; margin-top: 8px; padding: 8px 11px; cursor: pointer; font: 700 12px system-ui, sans-serif;
+        letter-spacing: 0.04em; color: var(--accent); background: rgba(255,255,255,0.06);
+        border: 1px solid rgba(255,255,255,0.18); border-radius: 6px; }
+      /* "designed in the UK" footer + About link (both modes) */
+      .mg-madein { position: fixed; left: 0; right: 0; bottom: max(5px, env(safe-area-inset-bottom));
+        text-align: center; font-size: 10px; letter-spacing: 0.03em; color: rgba(207,216,195,0.42); z-index: 6; pointer-events: none; }
+      .mg-about-open { font: inherit; color: rgba(207,216,195,0.7); background: none; border: none; padding: 0;
+        text-decoration: underline; text-underline-offset: 2px; cursor: pointer; pointer-events: auto; }
+      .mg-ver { font-size: 9px; color: rgba(207,216,195,0.3); letter-spacing: 0.02em; }
+      /* About overlay */
+      .mg-about { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center;
+        background: rgba(6,9,5,0.72); padding: 20px; -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); }
+      .mg-about[hidden] { display: none; }
+      .mg-about-card { position: relative; width: min(460px, 92vw); max-height: 84vh; overflow-y: auto;
+        background: #14180e; border: 1px solid rgba(255,255,255,0.16); border-radius: 14px; padding: 20px 20px 16px;
+        box-shadow: 0 16px 40px rgba(0,0,0,0.6); color: #cfd8c3; }
+      .mg-about-x { position: absolute; top: 10px; right: 12px; width: 30px; height: 30px; border-radius: 8px;
+        font-size: 14px; cursor: pointer; color: #cfd8c3; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.18); }
+      .mg-about-card h2 { font: 800 22px ui-monospace, Menlo, monospace; margin: 0 0 2px; color: #f2ecda; }
+      .mg-about-by { font-size: 12px; color: #9db284; margin: 0 0 14px; }
+      .mg-about-h { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); margin: 0 0 6px; }
+      .mg-about-tapes { list-style: none; margin: 0 0 12px; padding: 0; }
+      .mg-about-tapes li { font-size: 12px; margin: 0 0 8px; padding: 6px 10px; border-left: 2px solid rgba(157,178,132,0.5);
+        background: rgba(255,255,255,0.03); border-radius: 0 6px 6px 0; line-height: 1.4; }
+      .mg-about-tapes li b { color: #e8e0d0; font-weight: 700; }
+      .mg-about-tiny { font-size: 10px; color: rgba(207,216,195,0.5); margin: 3px 0 0; line-height: 1.4; }
+      /* POSEIDON uplink clock */
       .mg-skylink { font: 700 12px ui-monospace, monospace; letter-spacing: 0.1em; text-transform: uppercase;
         color: #5b9dff; text-shadow: 0 0 8px rgba(70,130,255,0.6); margin: 0 0 4px;
         border: 1px solid rgba(70,130,255,0.4); border-radius: 4px; padding: 4px 10px; background: rgba(8,18,44,0.6); }
@@ -165,8 +235,12 @@ export function initMobileGate(mode = 'gate') {
       .mg-transport button:disabled { opacity: 0.4; cursor: default; }
       .mg-transport #mg-play { width: 52px; }
       /* tape rack — real cassettes drawn to canvas */
-      .mg-rack { display: flex; gap: 12px; overflow-x: auto; width: 100%; padding: 2px 4px 4px; justify-content: safe center;
-        flex: 0 0 auto; -webkit-overflow-scrolling: touch; }
+      /* Same width as the deck and centred under it, so the cassette strip
+         lines up with the Walkman. The tapes now overflow that width (5 of
+         them), so start at the first tape and scroll right rather than centring
+         the row and clipping both ends. */
+      .mg-rack { display: flex; gap: 12px; overflow-x: auto; width: 100%; max-width: min(320px, 88vw); margin: 0 auto;
+        padding: 2px 4px 4px; justify-content: flex-start; flex: 0 0 auto; -webkit-overflow-scrolling: touch; }
       .mg-tape { flex: 0 0 auto; width: 100px; cursor: pointer; text-align: center; transition: transform 0.12s; }
       .mg-tape:active { transform: scale(0.95); }
       .mg-tape canvas { display: block; width: 100px; height: 65px; border-radius: 6px;
@@ -203,7 +277,11 @@ export function initMobileGate(mode = 'gate') {
         #mobile-gate[data-mode="title"] .mg-hero .mg-actions { justify-content: flex-start; }
         #mobile-gate[data-mode="title"] h1 { font-size: 52px; }
         #mobile-gate[data-mode="title"] .mg-player { grid-area: player; align-self: center; justify-self: center; max-width: 480px; }
-        #mobile-gate[data-mode="title"] .mg-rack { justify-content: center; }
+        /* Desktop title has room to show ALL the tapes at once — no scroll:
+           centre them and shrink each a touch so the whole rack fits. */
+        #mobile-gate[data-mode="title"] .mg-rack { justify-content: center; overflow: visible; max-width: none; gap: 9px; }
+        #mobile-gate[data-mode="title"] .mg-tape { width: 84px; }
+        #mobile-gate[data-mode="title"] .mg-tape canvas { width: 84px; height: 55px; }
         #mobile-gate[data-mode="title"] .mg-stage { grid-area: stage; width: 100%; max-height: 260px; align-self: end; }
         #mobile-gate[data-mode="title"] .mg-bot { width: 122px; height: 152px; }
       }
@@ -220,7 +298,32 @@ export function initMobileGate(mode = 'gate') {
     }
     el.querySelectorAll('#mg-themes button').forEach((b) => b.classList.toggle('on', b.dataset.theme === name));
   };
-  el.querySelectorAll('#mg-themes button').forEach((b) => b.addEventListener('click', () => applyTheme(b.dataset.theme)));
+  // Hamburger menu (gate only): toggle the theme popover; close on a pick or an
+  // outside tap.
+  const menuBtn = el.querySelector('#mg-menu-btn');
+  const menuPop = el.querySelector('#mg-menu-pop');
+  const closeMenu = () => { if (menuPop) { menuPop.hidden = true; menuBtn.setAttribute('aria-expanded', 'false'); } };
+  if (menuBtn) {
+    menuBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const open = menuPop.hidden;
+      menuPop.hidden = !open;
+      menuBtn.setAttribute('aria-expanded', String(open));
+    });
+    el.addEventListener('click', (e) => {
+      if (!menuPop.hidden && !menuPop.contains(e.target) && e.target !== menuBtn) closeMenu();
+    });
+  }
+  el.querySelectorAll('#mg-themes button').forEach((b) => b.addEventListener('click', () => { applyTheme(b.dataset.theme); closeMenu(); }));
+
+  // ---- About overlay ----
+  const about = el.querySelector('#mg-about');
+  const openAbout = () => { about.hidden = false; closeMenu(); };
+  const closeAbout = () => { about.hidden = true; };
+  el.querySelector('#mg-about-open')?.addEventListener('click', (e) => { e.stopPropagation(); openAbout(); });
+  el.querySelector('#mg-menu-about')?.addEventListener('click', (e) => { e.stopPropagation(); openAbout(); });
+  el.querySelector('#mg-about-x')?.addEventListener('click', closeAbout);
+  about?.addEventListener('click', (e) => { if (e.target === about) closeAbout(); });
 
   // Tear down the screen and hand off to the game. newGame wipes the run save
   // (keeping the durable name/gender identity, exactly like in-game New Game);
@@ -293,7 +396,7 @@ export function initMobileGate(mode = 'gate') {
   let playlist = [];
   let idx = 0;
   let current = -1;
-  let nowText = 'postAI';   // scrolls across the tape's label window (marquee)
+  let nowText = 'NostOS';   // scrolls across the tape's label window (marquee)
   const playBtn = el.querySelector('#mg-play');
   const stopBtn = el.querySelector('#mg-stop');
   const nextBtn = el.querySelector('#mg-next');
@@ -305,7 +408,7 @@ export function initMobileGate(mode = 'gate') {
   // Deck readout: while a tape is loaded, show artist + current track (with the
   // side it's on); otherwise the prompt.
   const updateNow = () => {
-    if (current < 0) { nowText = 'postAI'; return; }
+    if (current < 0) { nowText = 'NostOS'; return; }
     const t = TAPES[current];
     const side = idx < t.a.tracks.length ? 'A' : 'B';
     nowText = `${t.artist} — ${trackName(playlist[idx])} · ${side}`;
@@ -342,11 +445,23 @@ export function initMobileGate(mode = 'gate') {
     syncTransport();
     el.querySelectorAll('.mg-tape').forEach((c, j) => c.classList.toggle('sel', j === i));
   };
-  // Tapping a tape starts it; tapping the tape that's already loaded skips to
-  // its next track (the buttons below do the same explicitly).
+  // Tapping a tape starts it on side A; tapping the tape that's already loaded
+  // FLIPS the cassette to the other side (A ⇄ B), like turning a real tape over
+  // — so a second tap gets you straight to the B-side rather than clicking
+  // through every A-side track. The ▶▶| button still steps track by track.
+  const flipSide = () => {
+    const t = TAPES[current];
+    const aLen = t.a.tracks.length;
+    const onA = idx < aLen;
+    idx = onA ? aLen : 0;                 // first B-side track, or back to first A-side track
+    if (idx >= playlist.length) idx = 0;  // (empty B-side: stay on A)
+    audio.src = playlist[idx];
+    audio.play().catch(() => {});
+    updateNow();
+  };
   el.querySelectorAll('.mg-tape').forEach((card) => card.addEventListener('click', () => {
     const i = Number(card.dataset.i);
-    if (i === current) nextTrack(); else loadTape(i);
+    if (i === current) flipSide(); else loadTape(i);
   }));
   // Transport buttons. stopPropagation so they don't also fire the deck's
   // click-to-pause below.
@@ -369,18 +484,28 @@ export function initMobileGate(mode = 'gate') {
   syncTransport();   // initial: play shows ▶, stop/next disabled
 
   // ---- animation loop: spinning reels + dancing machines ----
-  let spin = 0;
+  // Two reel angles: the right reel is the motor-driven take-up spool and turns
+  // the instant play starts; the left is the passive supply spool and only
+  // begins a fraction of a second later, so a starting tape shows the right
+  // reel leading — the little tell a real Walkman gives.
+  let spinR = 0, spinL = 0, playElapsed = 0, wasPlaying = false;
   let lastT = performance.now();
   const frame = (t) => {
     if (!running) return;   // stop drawing once we've booted the game
     const dt = Math.min(0.05, (t - lastT) / 1000); lastT = t;
     const playing = current >= 0 && !audio.paused;
     // deck cassette — scaled up so the tape nearly fills the deck
-    if (playing) spin += dt * 1.1; // slow, lazy reel turn
+    if (playing) {
+      if (!wasPlaying) playElapsed = 0;          // (re)start: right leads, left waits
+      playElapsed += dt;
+      spinR += dt * 1.1;                          // motor reel: turns immediately
+      if (playElapsed > 0.22) spinL += dt * 1.1;  // passive reel: catches up a beat later
+    }
+    wasPlaying = playing;
     const S = 11.2, dcx = deckCv.width / 2, dcy = deckCv.height / 2;
     deckCtx.clearRect(0, 0, deckCv.width, deckCv.height);
     deckCtx.save(); deckCtx.translate(dcx, dcy); deckCtx.scale(S, S);
-    deckRenderer.drawCassette({ color: deckColor }, spin);
+    deckRenderer.drawCassette({ color: deckColor }, spinR, spinL);
     deckCtx.restore();
     // now-playing marquee across the tape's own coloured label strip
     // (drawCassette draws that strip at local x -9..9, y -5.5..-2.5).
@@ -388,7 +513,7 @@ export function initMobileGate(mode = 'gate') {
       const lx = dcx - 9 * S, ly = dcy - 5.5 * S, lw = 18 * S, lh = 3 * S;
       deckCtx.save();
       deckCtx.beginPath(); deckCtx.rect(lx, ly, lw, lh); deckCtx.clip();
-      deckCtx.font = `700 ${Math.round(lh * 0.56)}px ui-monospace, Menlo, monospace`;
+      deckCtx.font = `600 ${Math.round(lh * 0.4)}px ui-monospace, Menlo, monospace`;
       deckCtx.textBaseline = 'middle';
       deckCtx.fillStyle = 'rgba(18,15,8,0.92)'; // dark ink printed on the coloured label
       const midY = ly + lh / 2 + 0.5;
@@ -404,6 +529,15 @@ export function initMobileGate(mode = 'gate') {
         deckCtx.fillText(nowText, lx + lw / 2, midY);
       }
       deckCtx.restore();
+    }
+    // elapsed / total time, tiny light-grey Courier under the reels
+    if (current >= 0) {
+      const fmt = (s) => { if (!isFinite(s) || s < 0) return '0:00'; const m = Math.floor(s / 60); return `${m}:${String(Math.floor(s % 60)).padStart(2, '0')}`; };
+      deckCtx.font = `${Math.round(S * 0.9)}px "Courier New", ui-monospace, monospace`;
+      deckCtx.textAlign = 'center';
+      deckCtx.textBaseline = 'alphabetic';
+      deckCtx.fillStyle = 'rgba(208,214,198,0.6)';
+      deckCtx.fillText(`${fmt(audio.currentTime)} / ${fmt(audio.duration)}`, dcx, dcy + 6.15 * S);
     }
     // machines — bob up and down to the beat (drawRobot's own shadow is
     // suppressed via r.noShadow; we draw a separate shadow that stays planted
@@ -432,19 +566,4 @@ export function initMobileGate(mode = 'gate') {
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);
-
-  // ---- SKYLINK uplink clock (cosmetic doomsday timer) ----
-  const skyEl = el.querySelector('#mg-sky');
-  const skyBanner = el.querySelector('#mg-skylink');
-  let secs = 3 * 3600 + 27 * 60 + 41;
-  const tickSky = () => {
-    const s = Math.max(0, secs);
-    const hh = String(Math.floor(s / 3600)).padStart(2, '0');
-    const mm = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
-    const ss = String(s % 60).padStart(2, '0');
-    skyEl.textContent = `${hh}:${mm}:${ss}`;
-    if (s <= 0) { skyBanner.classList.add('imminent'); skyEl.textContent = 'IMMINENT'; } else secs -= 1;
-  };
-  tickSky();
-  skyTimer = setInterval(tickSky, 1000);
 }

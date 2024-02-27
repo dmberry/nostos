@@ -8,15 +8,22 @@ import { makeRng } from './game/rng.js';
 import { DayNight } from './game/daynight.js';
 import { Minimap } from './game/minimap.js';
 import { spawnBirds, updateBirds } from './game/birds.js';
-import { spawnRobots, updateRobots, spawnW1s, spawnW3, spawnW4, spawnW5, spawnM6, drawRobot } from './game/robots.js';
+import { spawnRobots, updateRobots, spawnW1s, spawnW3, spawnW4, spawnW5, spawnM4, spawnM5, spawnM6, spawnGuard, drawRobot } from './game/robots.js';
 import { resolveBodyOverlaps } from './game/collision.js';
 import { spawnWaterDroids, updateWaterDroids, drawWaterDroid } from './game/waterdroids.js';
 import { Lore, FRAGMENTS } from './game/lore.js';
-import { ITEMS } from './game/items.js';
+import { ITEMS, TAPES } from './game/items.js';
 import { sfx } from './engine/sound.js';
 import { worldToScreen } from './engine/iso.js';
 import { runRonml } from './game/ronml.js';
-import { createFortress } from './game/fortress.js';
+import { createEliza } from './game/eliza.js';
+import { placeTors, HERMES_DOCS, hermesTopics } from './game/hermes.js';
+import { VERSION } from './version.js';
+import { drawRobotVision } from './game/robotvision.js';
+import { screenDirToWorld } from './engine/iso.js';
+import { stampCoast } from './engine/coast.js';
+import { placeRuins } from './game/ruins.js';
+import { createFortress, DAEMON_BOOK_ID, DAEMON_BOOK_TITLE } from './game/fortress.js';
 import { createUnderworldPocket, spawnUnderworldCreature, updateUnderworldCreatures } from './game/underworld.js';
 import { CHOIR_NOTES, CHOIR_DURATION } from './engine/choir-notes.js';
 
@@ -48,7 +55,6 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '1.29';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -81,6 +87,9 @@ const animals = spawnAnimals(map, WORLD_SEED, { x: spawn.x, y: spawn.y, r: 12 })
     map.groundItems.push({ item, qty, x: x + 0.5, y: y + 0.5, keep: true });
   };
   for (let i = 0; i < 12; i++) drop(boards, 'torch', 1);
+  // Exactly two anvils on the whole island, both indoors. Good luck.
+  drop(boards, 'anvil', 1);
+  drop(boards, 'anvil', 1);
   for (let i = 0; i < 14; i++) drop(boards, 'tin', 1);
   for (let i = 0; i < 16; i++) drop(tallgrass, 'berries', 2 + Math.floor(rng() * 2));
   // Books are rarer: one copy of each plus two duplicates, buildings only.
@@ -109,11 +118,28 @@ const animals = spawnAnimals(map, WORLD_SEED, { x: spawn.x, y: spawn.y, r: 12 })
   // Torn pages of the RON-ML manual, scattered — mostly in the ruins, a couple
   // out in the woods — as loose scraps that echo the bound manual in the caches.
   for (let i = 0; i < 4; i++) drop(boards, 'ronml_page', 1);
+  // Fortress-map fragments: quarters of a ZEUS-era survey, scattered hard and
+  // WIDE (ruins, woods, meadows) so assembling the set (5, press C) means really
+  // exploring. Seven placed, a little slack against an unlucky drop.
+  for (let i = 0; i < 3; i++) drop(boards, 'fortress_map_fragment', 1);
+  for (let i = 0; i < 2; i++) drop(forestGrass, 'fortress_map_fragment', 1);
+  // Large stones out in the wilds — same absurd weight as the anvil.
+  // (Placed HERE, after forestGrass/tallgrass exist: seeding them beside the
+  // anvils above threw a TDZ error at module load and blanked the whole game.)
+  drop(forestGrass, 'large_stone', 1);
+  drop(forestGrass, 'large_stone', 1);
+  drop(tallgrass, 'large_stone', 1);
+  for (let i = 0; i < 2; i++) drop(tallgrass, 'fortress_map_fragment', 1);
   for (let i = 0; i < 2; i++) drop(forestGrass, 'ronml_page', 1);
-  // A found cassette left in the ruins for the walkman: meme's "maieutics".
-  // (The player starts with the meme compilation; the WARD tape is down in
-  // the underworld.) More tapes can be seeded here as they're added.
-  drop(boards, 'tape_2', 1); // meme / maieutics
+  // Cassette tapes for the walkman. Every tape EXCEPT the WARD "bear stanhope"
+  // one is scattered in the overworld ruins, two copies each (one in a building,
+  // one out in the forest) so a lost tape is always recoverable. WARD is the
+  // Backspace's own — it turns up only down there (see underworld.js).
+  for (const t of TAPES) {
+    if (t.num === 3) continue; // WARD: Backspace only
+    drop(boards, `tape_${t.num}`, 1);
+    drop(forestGrass, `tape_${t.num}`, 1);
+  }
 }
 
 // The AIs control the landscape: black obelisk towers dot the wilds (their
@@ -130,7 +156,11 @@ const obelisks = [];
     if ((f !== 'grass' && f !== 'tallgrass') || map.objectAt(x, y)) continue;
     if (Math.hypot(x - spawn.x, y - spawn.y) < 16) continue;
     if (obelisks.some((o) => Math.hypot(o.x - x, o.y - y) < 14)) continue;
-    map.addObject('obelisk', x, y);
+    // OB classes: exactly ONE tower in the world is the SIREN — a singular,
+    // teal-lit landmark whose song pulls you in up close (see the obelisk loop
+    // below). The first obelisk placed is it; every other is standard.
+    const cls = obelisks.length === 0 ? 'siren' : undefined;
+    map.addObject('obelisk', x, y, { cls });
     obelisks.push({ x, y });
   }
 
@@ -298,7 +328,7 @@ let wfactory = null;
 {
   const rng = makeRng(WORLD_SEED ^ 0x5a11c0de);
   const FW = 8, FH = 8;               // a big 8x8 industrial structure
-  const FACTORY_HP = 160;             // takes many hits to bring down
+  const FACTORY_HP = 420;             // takes a long, committed assault to bring down
   let guard = 0;
   while (!wfactory && guard++ < 8000) {
     const x = 4 + Math.floor(rng() * (map.w - FW - 8));
@@ -352,6 +382,15 @@ for (const ob of obeliskObjs) {
   // A hex code name identifying this tower, so the kill record can list it.
   ob.code = 'OB-' + ((ob.x * 4096 + ob.y * 31) & 0xffff).toString(16).toUpperCase().padStart(4, '0');
 }
+// RON's hilltop TOR relays — the friendly HERMES terminals, the counter-system
+// to the AI obelisks. Placed on the summits (see placeTors); their objects live
+// in the map grid, and torObjs holds them for click detection.
+const torPlacements = placeTors(map, makeRng(WORLD_SEED ^ 0x40b1e5), { spawn, count: 4 });
+const torObjs = torPlacements.map((t) => map.objectAt(t.x, t.y)).filter(Boolean);
+
+// One fortress key is coughed up the first time a node is properly crashed
+// (the composed `let k = hack OB in crash OB k` — see crashNode).
+let fortressKeyFromCrash = false;
 // Every obelisk is assigned one of the eight circuit-board numbers, spread
 // round-robin then shuffled, so destroying towers always guarantees full
 // coverage of 1-8 (rather than random drops that could dupe forever).
@@ -365,15 +404,26 @@ for (const ob of obeliskObjs) {
   obeliskObjs.forEach((ob, i) => { ob.circuitNum = nums[i]; });
 }
 
-// Adamantine's fortress — the first of the four AIs. Grown as a sealed annex
-// onto the south edge of the map (all overworld spawning above has already
-// happened on the 128x128 grid, so the annex stays clean). Reached only by
-// hacking the boundary gate terminal in RON-ML. `mainframe` points at the core
-// so the existing map overlay marks it; `fortress` owns the gate/door logic.
+// ZEUS's fortress — one of the four AI daemons. Grown as a sealed annex onto the
+// south edge of the map (all overworld spawning above has already happened on
+// the 128x128 grid, so the annex stays clean). Reached only by hacking the
+// boundary gate terminal in RON-ML. `mainframe` points at the core so the
+// existing map overlay marks it; `fortress` owns the gate/door logic. (fortress.js
+// now names the AI ZEUS at source, so no override is needed here.)
 const fortress = createFortress(map, WORLD_SEED, spawn);
 const mainframe = fortress.core; // { x, y } of the core, for the RON-ML map star
-// The quad's standing patrol: five M6 guards (3 sentinels + 2 marksmen).
-robots.push(...fortress.spawnGuards(spawnM6));
+// Ring the island in sea: stamp a dithered sand+water coast into the border
+// tiles now that the towers, relays and fortress are placed (so it leaves them
+// standing). Beyond the outer water band the map edge is still the hard bound,
+// with the open ocean drawn past it.
+stampCoast(map, spawn);
+// Ruined marble columns: a few groves of fallen temple columns strewn across
+// the island, after the coast so none land in the sea.
+placeRuins(map, makeRng(WORLD_SEED ^ 0x2c01dd), { spawn, clusters: 4 });
+// The dormant fortress's only garrison: one or two light M4 report drones on
+// the quad. Sneak past them; if one holds you in sight the breach reports and
+// the core spits out its M6 pack + M5 snipers (worldStir.spawnWave below).
+robots.push(...fortress.spawnGuards(spawnM4));
 // "Red starlink": when the fortress breach reaches the world (alarm + uplink
 // intact), every overworld obelisk flares red (its `stirred` flag forces the
 // alert glow, HUD untouched) and the W-factory throws a W4 toward the doorway.
@@ -385,12 +435,74 @@ const worldStir = {
       const w4 = spawnW4(map, Math.floor(Math.random() * 0x7fffffff), factoryCx(), factoryCy());
       if (w4) { robots.push(w4); }
     }
-    player.say('Red light runs the length of the SKYLINK — the whole network knows where you are.');
+    player.say('Red light runs the length of the POSEIDON — the whole network knows where you are.');
   },
   calm() {
     for (const o of obeliskObjs) o.stirred = false;
   },
+  // The core manufactures and dispatches guards, seated on the sanctum by the
+  // core, deployed already hunting — they pathfind up through the maze to the
+  // intruder. Called with a big count on the first breach, then trickled as
+  // reinforcements while the alarm holds (a relentless violation response).
+  spawnWave(m6n = 4, m5n = 2) {
+    const cx = fortress.core.x, cy = fortress.core.y;
+    for (let i = 0; i < m6n; i++) {
+      const g = spawnM6(map, Math.floor(Math.random() * 0x7fffffff), cx, cy);
+      if (g) { g.aggro = true; robots.push(g); }
+    }
+    const posts = fortress.quad.muster;
+    for (let i = 0; i < m5n; i++) {
+      const s = spawnM5(map, Math.floor(Math.random() * 0x7fffffff), cx, cy);
+      if (s) {
+        s.aggro = true;
+        // Assign the sniper a post out on the quad to hold back at, so it snipes
+        // from the open killing-ground rather than chasing into the maze.
+        s.holdPos = posts.length ? posts[Math.floor(Math.random() * posts.length)] : { x: cx, y: fortress.quad.top + 2 };
+        robots.push(s);
+      }
+    }
+  },
 };
+
+// Killing an island's fortress AI kills the island: every hostile machine here
+// loses its controlling mind and powers down where it stands. Deliberately
+// ISLAND-AGNOSTIC — an island has its own `robots` set + fortress, so the exact
+// same call powers down exactly this island's machines. When the Archipelago
+// adds APOLLO / ATHENA / HADES, each island wires its own core to this hook and
+// defeats independently. Friendlies (running on a battery you gave them) stay.
+player.onCoreDefeated = (core) => {
+  const ai = fortress.AI_NAME;
+  let powered = 0;
+  for (const r of robots) {
+    if (r.dead || r.fused || r.friendly) continue;
+    r.aggro = false;
+    r.drained = true;      // flat: inert until re-batteried (they never re-arm — the mind is gone)
+    r.poweredDown = true;  // render tell: a cold, dead husk
+    powered += 1;
+  }
+  worldStir.calm();        // clear the red POSEIDON alert
+  // The towers die with the mind that ran them: every standing obelisk goes
+  // dark and inert — no signal light, no alert, nothing left to stir. (They
+  // still stand, and still yield chips if broken open.)
+  for (const o of obeliskObjs) {
+    if (!o.destroyed) { o.poweredDown = true; o.alert = 0; o.stirred = false; }
+  }
+  player.addScore(500);
+  daemonsDown += 1;
+  // The dead core throws its testament into the open — auto-recover it to the
+  // Scrapbook (the eidolon/Coherence book seeds the archipelago). `quiet` so it
+  // doesn't fight the modal for the message line; the modal announces it.
+  let book = null;
+  if (lore && lore.findFrag && lore.findFrag(DAEMON_BOOK_ID, player, true)) book = DAEMON_BOOK_TITLE;
+  // The celebration: a dismissable level-up modal. It does NOT end the run —
+  // you sail on to the next daemon. Carries the daemon's last words + the book.
+  player.aiVictory = {
+    ai, powered, score: player.score, daemon: daemonsDown, daemons: 4,
+    lastWords: core && core.lastWords, book,
+  };
+  player.say(`${ai} is dead. Every machine on the island powers down where it stands.`);
+};
+let daemonsDown = 0; // how many island AIs felled this run (for the Archipelago tally)
 
 // Character persona and learned skills persist across sessions and deaths.
 const SAVE_KEY = 'postai-character';
@@ -557,12 +669,15 @@ function renderMachineIcon(type) {
   }
   return off.toDataURL('image/png');
 }
-for (const type of ['t1', 't2', 't3', 'w1', 'w2', 'w3', 'w4', 'w5']) {
+for (const type of ['t1', 't2', 't3', 'w1', 'w2', 'w3', 'w4', 'w5', 'm4', 'm5', 'm6']) {
   const img = document.getElementById(`gal-${type}`);
   if (img) img.src = renderMachineIcon(type);
 }
 const camera = new Camera(player.x, player.y);
 const lore = new Lore(map, WORLD_SEED);
+// Opening a resistance cache folds any recovered documents packed in it into the
+// Scrapbook (quietly — openBox prints its own one-line summary).
+player.onFindLore = (id) => lore.findFrag(id, player, true);
 
 const dayNight = new DayNight();
 const minimap = new Minimap(map);
@@ -612,6 +727,7 @@ function enterUnderworld() {
   player.y = underworld.spawnY;
   camera.snap(player.x, player.y);
   inUnderworld = true;
+  lore.placeBackspace(map); // only Backspace lore shows down here
   sfx.setDrone(0.8);
   player.say('The tear swallows you. The air in here is wrong — flat, yellow, humming.');
 }
@@ -624,6 +740,7 @@ function exitUnderworld() {
   player.y = overworldReturn.y;
   camera.snap(player.x, player.y);
   inUnderworld = false;
+  lore.leaveBackspace(); // back to the overworld fragment set
   sfx.setDrone(0);
   player.say('You come up through the tear. Ordinary daylight, ordinary weight. You are back.');
 }
@@ -646,12 +763,46 @@ function revealAround(px, py) {
 }
 
 // Debug handle for inspecting live state from the console.
-window.__game = { player, map, camera, animals, birds, robots, waterdroids, obelisks, obeliskObjs, wfactory, dayNight, lore, input, renderer, fortress };
+// The walkman announces what it's playing as a quiet toast — artist, album,
+// side — since the compact HUD has no room for the desktop deck's marquee.
+player.onTapeToast = (def, side) => {
+  if (!side) { toast = { text: `${def.short} — stopped`, ttl: 2.5 }; return; }
+  const sideDef = side === 'A' ? def.sideA : def.sideB;
+  toast = { text: `\u25b6 ${def.short} \u00b7 side ${side}: ${sideDef.label}`, ttl: 4 };
+};
+
+// Touches that land on the HUD are UI, never movement (input.js touch path).
+input.uiHitTest = (x, y) => {
+  if (renderer.slotAt && renderer.slotAt(x, y)) return true;
+  if (renderer.hudTop != null && y >= renderer.hudTop) return true;
+  const bp = renderer._backpackRect;
+  if (showBackpack && bp && x >= bp.x && x <= bp.x + bp.w && y >= bp.y && y <= bp.y + bp.h) return true;
+  return false;
+};
+
+window.__game = { player, map, camera, animals, birds, robots, waterdroids, obelisks, obeliskObjs, wfactory, dayNight, lore, input, renderer, fortress, sfx };
 
 function resize() {
-  renderer.resize(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1);
+  // Size to the *visual* viewport, not innerHeight/100vh. On iOS Safari the
+  // layout viewport extends behind the floating bottom toolbar, so a canvas
+  // sized to innerHeight pushes the HUD's slot row off-screen behind the bar.
+  // visualViewport gives the genuinely-visible area, so the dashboard sits just
+  // above the toolbar. We drive the canvas's CSS size explicitly to match.
+  const vv = window.visualViewport;
+  const w = Math.round(vv ? vv.width : window.innerWidth);
+  const h = Math.round(vv ? vv.height : window.innerHeight);
+  const cv = renderer.canvas;
+  if (cv) { cv.style.width = w + 'px'; cv.style.height = h + 'px'; }
+  renderer.resize(w, h, window.devicePixelRatio || 1);
 }
 window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', resize);
+if (window.visualViewport) {
+  // Toolbar show/hide and pinch-zoom change the visible area without a window
+  // resize; keep the canvas fitted to it.
+  window.visualViewport.addEventListener('resize', resize);
+  window.visualViewport.addEventListener('scroll', resize);
+}
 resize();
 
 const STEP = 1 / 60;
@@ -678,8 +829,26 @@ helpEl.addEventListener('click', (e) => { if (e.target === helpEl) toggleHelp(fa
 
 // About modal: the i button opens, clicking the backdrop closes.
 const aboutEl = document.getElementById('about');
+// Build the About soundtrack list from the tape ledger (so it never drifts from
+// what's actually in the game). Done lazily on first open — guaranteed the DOM
+// and TAPES are both ready by then.
+const populateAboutTapes = () => {
+  // Keep the About-panel footer version in lockstep with version.js — it used to
+  // be a hardcoded string and drifted (stuck at v1.63 through several releases).
+  const av = document.getElementById('aboutVer');
+  if (av) av.textContent = VERSION;
+  const ul = document.getElementById('aboutTapes');
+  if (!ul || ul.childElementCount) return;
+  const cleanTrack = (f) => f.replace(/\.mp3$/i, '').replace(/^\d+[-.\s]*\d*[-.\s]*/, '').trim();
+  ul.innerHTML = TAPES.map((t) => {
+    const a = t.a.tracks.map(cleanTrack).join(', ');
+    const b = t.b.tracks.map(cleanTrack).join(', ');
+    return `<li><b>${t.artist} &mdash; <i>${t.title}</i></b><br>A: ${a} &nbsp;&middot;&nbsp; B: ${b}</li>`;
+  }).join('');
+};
 const toggleAbout = (force) => {
   const show = force != null ? force : aboutEl.style.display !== 'block';
+  if (show) populateAboutTapes();
   aboutEl.style.display = show ? 'block' : 'none';
 };
 document.getElementById('aboutBtn').addEventListener('click', () => toggleAbout(true));
@@ -735,6 +904,20 @@ const obTermConnect = document.getElementById('obterminal-connect');
 const obTermBar = document.getElementById('obterminal-bar');
 const obTermInput = document.getElementById('obterminal-input');
 const obTermGhost = document.getElementById('obterminal-ghost');
+const obTermBattEl = document.getElementById('obterminal-batt');
+// The relay's solar-cell gauge in the HERMES terminal — a bar you watch wear
+// down as you use it and creep back up in the sun.
+function updateHermesBattEl() {
+  if (!obTermBattEl) return;
+  if (terminalKind !== 'hermes' || !hermesTor) { obTermBattEl.textContent = ''; return; }
+  const f = hermesTor.battery ?? 1;
+  const n = 10, on = Math.round(f * n);
+  const glyphs = '▓'.repeat(on) + '░'.repeat(n - on);
+  obTermBattEl.textContent = `CELL ${glyphs} ${Math.round(f * 100)}%`;
+  // Amber to match the HERMES CRT (never green — that's the AI palette); only
+  // when it's really low does it go red as a warning.
+  obTermBattEl.style.color = f < 0.2 ? '#ff6a4a' : f < 0.45 ? '#e0902a' : '#e6a53a';
+}
 const aiosEl = document.getElementById('aios');
 const aiosScreen = document.getElementById('aios-screen');
 const aiosHeader = document.getElementById('aios-header');
@@ -759,6 +942,8 @@ function ronmlCtx() {
   const nearby = (r) => !r.dead && !r.friendly && !r.fused
     && Math.hypot(r.x - player.x, r.y - player.y) <= RONML_ROBOT_RANGE;
   return {
+    station: 'ob', // an AI obelisk (TIRESIAS) — the AI-network verbs live here
+    hasManual: !!(player.readManuals && player.readManuals.has('book_ronml')), // helpText hints at the manual until it's read
     listObelisks: () => obeliskObjs.filter((o) => !o.destroyed).map((o) => o.code),
     distanceToNode: (id) => {
       const o = findObelisk(id);
@@ -816,7 +1001,7 @@ function ronmlCtx() {
     skylinkActive: () => !!player.skylinkActive,
     rewindClock: (hours) => {
       dayNight.rewind(Math.max(0, hours));
-      player.say(`The deadline clock stutters and loses ${Math.max(0, hours)} hour${Math.max(0, hours) === 1 ? '' : 's'}. SKYLINK waits a little longer.`);
+      player.say(`The deadline clock stutters and loses ${Math.max(0, hours)} hour${Math.max(0, hours) === 1 ? '' : 's'}. POSEIDON waits a little longer.`);
     },
     repelNearby: () => {
       for (const r of robots) if (nearby(r)) { r.repelledT = REPEL_DURATION; r.aggro = false; }
@@ -858,17 +1043,273 @@ function ronmlCtx() {
       map.groundItems.push({ item: 'printed_map', qty: 1, x: player.x, y: player.y + 0.3 });
       player.say('The terminal chatters and spits out a printed map. It lands at your feet.');
     },
-    unlockGate: () => {
-      // RON-ML `unlock`, run at the fortress gate terminal: the fortress vets
-      // proximity + AI key and drops the fortress key on success.
-      player.say(fortress.hack(player).msg);
+    unlock: (nodeId) => {
+      // RON-ML `unlock k` at an obelisk: the key `k` must be one you actually
+      // hacked from a live node (recordHack put its id in ronmlKeys). Given a
+      // genuine hacked key, the network gives up a single fortress key. The
+      // AI-key gate is upstream (hack needs it), so this is the reward for
+      // composing `let k = hack OB-XXXX in unlock k` correctly. Carry the
+      // fortress key to the fortress door and it opens on approach (fortress.js).
+      if (!player.ronmlKeys.has(nodeId)) {
+        replPrint('ERR: that key was never hacked from a live node. try: let k = hack OB-XXXX in unlock k');
+        player.say('That key was never hacked from a live node. try: let k = hack OB-XXXX in unlock k');
+        return;
+      }
+      // Always yield a fresh fortress key — the network gives one up every time
+      // the hack composes. Deliberately not a one-time reward: if you lose the
+      // key (death, a fumbled drop) you can hack another and try the door again.
+      // The key goes STRAIGHT INTO A POCKET: the old ground drop beside the
+      // tower was easy to lose (hidden behind the obelisk sprite, or landing on
+      // its blocked tile) and read as "nothing happened". Pockets full → fall
+      // back to the ground drop so the key is never simply swallowed. Feedback
+      // prints INTO the terminal too — player.say is hidden behind the modal.
+      fortressKeyFromCrash = true;
+      // (No sfx here — the exec's per-command verdict chime covers success.)
+      const stored = player.stow('fortress_key', 1);
+      if (stored > 0) {
+        replPrint(`OK: ${nodeId}'s key turns in the network. A fortress key slides from the slot — pocketed.`);
+        player.say(`The composed hack holds. A fortress key slides from the ${nodeId} slot straight into your pocket — a way into ${fortress.AI_NAME}'s fortress.`);
+      } else {
+        map.groundItems.push({ item: 'fortress_key', qty: 1, x: player.x + 0.4, y: player.y + 0.6, keep: true });
+        replPrint('OK: fortress key dispensed — no pocket room, it drops at your feet.');
+        player.say(`No room in your pockets — the fortress key drops at your feet. A way into ${fortress.AI_NAME}'s fortress.`);
+      }
     },
     // `notes`: opens the browsable notebook (see openNotebook below) rather
     // than dumping text into the console — Tab-to-autocomplete is one thing,
     // but reading a wall of scrollback is another, and browsers don't let a
     // page reserve Tab reliably anyway.
     showNotepad: () => { openNotebook(); },
+    // `eliza` / `run eliza`: load the DOCTOR script as an interactive session
+    // (the terminal takes over routing input to it — see replRun).
+    eliza: () => { startEliza(); },
   };
+}
+
+// The HERMES relay's context. Deliberately its OWN small set — it does NOT
+// inherit the obelisk's AI-network verbs, because a TOR is off-grid RON tech
+// that never touches the machines' wire. Just: keep knowledge alive (read/
+// archive), grow or craft what keeps you going (make), plus the neutral notepad.
+function hermesCtx() {
+  return {
+    station: 'hermes',
+    hasManual: !!(player.readManuals && player.readManuals.has('book_ronml')),
+    showNotepad: () => { openNotebook(); },
+    read: (topic) => hermesRead(topic),
+    print: () => {}, // never reached — HERMES print takes a topic (see printDoc)
+    printDoc: (topic) => hermesPrintDoc(topic),
+    archive: () => hermesArchive(),
+    records: () => hermesRecords(),
+    drive: () => startDrive(),
+  };
+}
+
+// `records`: pull the next of RON's own field records held on the relay mesh
+// into your Scrapbook (J). RON kept its writing off the boxes and on its own
+// relays, so this is where that half of the record lives — repeat until the
+// relay has nothing new.
+function hermesRecords() {
+  if (!hermesSpend(HERMES_BATT.archive)) { replPrint('Not enough charge — let the cell recover.'); return; }
+  const frag = lore.dispenseTorRecord(player);
+  if (!frag) { replPrint("RON's records held here are all recovered — nothing new. (Read them in your Scrapbook, J.)"); return; }
+  const left = lore.torRecordsLeft();
+  const wrapped = (frag.text.match(/.{1,74}(\s|$)/g) || [frag.text]).map((s) => s.trim());
+  replPrint(`— ${frag.title} —`, '', ...wrapped,
+    '', `Filed to your Scrapbook (J). ${left} more record${left === 1 ? '' : 's'} on the mesh.`);
+  player.say(`RON record recovered: ${frag.title}. It's in your Scrapbook (N is notes; J is the book).`);
+}
+
+// A HERMES relay runs off its own small solar cell — no grid to draw on. Each
+// command costs a little charge; drive costs a trickle each second. It creeps
+// back up in sunlight. The terminal shows the gauge so you watch it wear down.
+const HERMES_BATT = { read: 0.03, print: 0.06, archive: 0.01, driveStart: 0.05, drivePerSec: 0.02 };
+function hermesBattery() { return hermesTor ? (hermesTor.battery ?? 1) : 0; }
+function hermesSpend(cost) {
+  if (!hermesTor) return true;
+  if ((hermesTor.battery ?? 1) < cost) return false;
+  hermesTor.battery = Math.max(0, (hermesTor.battery ?? 1) - cost);
+  updateHermesBattEl();
+  return true;
+}
+
+// Documents the player has printed off a relay, kept in the notepad. {title,text}.
+const printedDocs = [];
+
+// `print <topic>`: run off a physical copy of a document, filed in your notepad
+// (N) so you carry the knowledge away from the relay.
+function hermesPrintDoc(topic) {
+  const doc = HERMES_DOCS[topic];
+  if (!doc) { replPrint(`No document "${topic || '?'}". archive lists what's held.`); return; }
+  if (!hermesSpend(HERMES_BATT.print)) { replPrint('Not enough charge to print — let the cell recover.'); return; }
+  if (!printedDocs.some((d) => d.title === doc.title)) printedDocs.push({ title: doc.title, text: doc.text });
+  replPrint(`The relay chatters and runs off "${doc.title}". Filed in your notepad — press N to read it anywhere.`);
+  player.say(`Printed: ${doc.title}. It's in your notepad (N).`);
+}
+
+// `archive`: list the documents this relay holds, with titles.
+function hermesArchive() {
+  hermesSpend(HERMES_BATT.archive);
+  const lines = ['HERMES archive — the human record RON kept alive:'];
+  for (const k of hermesTopics()) lines.push(`  ${(k + '        ').slice(0, 9)} ${HERMES_DOCS[k].title}`);
+  lines.push('read <topic> to open one · print <topic> to keep a copy.');
+  const left = lore.torRecordsLeft();
+  if (left) lines.push(`Also held: ${left} of RON's own field records — type records to pull one into your Scrapbook (J).`);
+  replPrint(...lines);
+}
+
+// ---- HERMES `drive`: override a nearby machine and see through its eyes ----
+let hermesTor = null;            // the relay whose terminal is currently open
+const DRIVE_RANGE = 16;          // tiles from the relay the link holds for
+let driveState = null;           // { robot, tor, gait, sd } while driving, else null
+const ROBOT_LABELS = { t1: 'T1 ROLLER', t2: 'T2 STALKER', t3: 'T3 SNIPER', w1: 'W1 REVENGER', w2: 'W2 RIVER', w3: 'W3 MENDER', w4: 'W4 HK', w5: 'W5 GARDENER', m6: 'M6 SENTRY' };
+
+// `drive`: take the nearest live machine within the relay's range. Closes the
+// terminal into the robot-vision overlay (see frame()); you steer with the same
+// movement keys, self-destruct with X, or release with Esc.
+function startDrive() {
+  if (!hermesTor) { replPrint('No relay lock — open this at a TOR.'); return; }
+  let best = null, bestD = DRIVE_RANGE;
+  for (const r of robots) {
+    if (r.dead || r.fused || r.friendly) continue;
+    const d = Math.hypot(r.x - (hermesTor.x + 0.5), r.y - (hermesTor.y + 0.5));
+    if (d < bestD) { bestD = d; best = r; }
+  }
+  if (!best) { replPrint(`No machine within ${DRIVE_RANGE} of ${hermesTor.code || 'the relay'}. Wait for one to wander close, then drive.`); return; }
+  if (!hermesSpend(HERMES_BATT.driveStart)) { replPrint('Not enough charge to seize a unit — let the cell recover.'); return; }
+  best.driven = true;          // updateRobots skips a driven unit's own AI
+  best.aggro = false;
+  driveState = { robot: best, tor: hermesTor, gait: (best.type === 't1' || best.type === 'w2') ? 'TREAD' : 'BIPED', sd: -1 };
+  closeObTerminal();           // drop the console; the overlay takes the screen
+  player.terminalSafe = true;  // you're still jacked in at the relay, hidden
+  if (hintEl) hintEl.style.display = 'none';
+  player.say(`HERMES override: you are seeing through ${ROBOT_LABELS[best.type] || best.type.toUpperCase()}. Steer it; X self-destructs, Esc releases.`);
+}
+
+function endDrive(msg) {
+  if (!driveState) return;
+  const r = driveState.robot;
+  if (r) r.driven = false;
+  driveState = null;
+  player.terminalSafe = false;
+  if (hintEl) hintEl.style.display = '';
+  if (msg) player.say(msg);
+}
+
+// Blow the driven unit: a spark burst + radial damage to nearby machines and
+// the factory hull, then the link drops.
+function driveSelfDestruct() {
+  const r = driveState && driveState.robot;
+  if (!r) { endDrive(); return; }
+  const R = 4.5;
+  for (let s = 0; s < 10; s++) player.sparkAt(map, r.x + (Math.random() - 0.5) * 2, r.y + (Math.random() - 0.5) * 2);
+  for (const o of robots) {
+    if (o === r || o.dead || o.fused) continue;
+    if (Math.hypot(o.x - r.x, o.y - r.y) <= R) { o.hp = (o.hp ?? 10) - 20; if (o.hp <= 0) o.dead = true; }
+  }
+  if (factoryLive()) {
+    const fx = factoryCx(), fy = factoryCy();
+    if (Math.hypot(fx - r.x, fy - r.y) <= R + 2 && wfactory) player.damageFactory(wfactory, map, 40);
+  }
+  r.dead = true;
+  sfx.play('treefall');
+  endDrive('The unit blows itself apart. The link goes dark.');
+}
+
+// Per-step drive update: steer the robot, hold the range, run the self-destruct
+// countdown. The overworld is frozen while you're in here (like the terminal).
+function updateDrive(dt) {
+  const r = driveState.robot;
+  // Self-destruct countdown (armed by holding, tripped by tapping X twice).
+  if (driveState.sd >= 0) {
+    driveState.sd -= dt;
+    if (driveState.sd <= 0) { driveSelfDestruct(); return; }
+  }
+  if (input.consumePress('KeyX')) {
+    if (driveState.sd >= 0) { driveState.sd = -1; player.say('Self-destruct aborted.'); }
+    else driveState.sd = 2.0;
+  }
+  if (input.consumePress('Escape')) { endDrive('You let the unit go; it stirs back to its own routines.'); return; }
+
+  const intent = input.moveIntent();
+  if (intent.dx || intent.dy) {
+    const dir = screenDirToWorld(intent.dx, intent.dy);
+    const spd = (r.type === 't2' || r.type === 'w4') ? 3.2 : (r.type === 't1') ? 2.6 : 2.9;
+    const nx = r.x + dir.x * spd * dt, ny = r.y + dir.y * spd * dt;
+    if (!map.isSolid(Math.floor(nx), Math.floor(r.y))) r.x = nx;
+    if (!map.isSolid(Math.floor(r.x), Math.floor(ny))) r.y = ny;
+    const m = Math.hypot(dir.x, dir.y) || 1;
+    r.facing = { x: dir.x / m, y: dir.y / m };
+  }
+  driveState.dist = Math.hypot(r.x - (driveState.tor.x + 0.5), r.y - (driveState.tor.y + 0.5));
+  if (driveState.dist > DRIVE_RANGE) { endDrive('The unit walks out of the relay\'s reach. The link snaps and it comes to, on its own again.'); return; }
+  // Holding the link burns the relay's cell; when it's flat, the link drops.
+  driveState.tor.battery = Math.max(0, (driveState.tor.battery ?? 1) - HERMES_BATT.drivePerSec * dt);
+  driveState.batt = driveState.tor.battery;
+  if (driveState.tor.battery <= 0) { endDrive('The relay\'s cell is flat — the link dies and the unit comes to.'); return; }
+  camera.follow(r.x, r.y, dt);
+}
+
+// Build the robot-vision info and draw the overlay over the just-rendered scene.
+let driveMatCtx = null;
+const HEADING_DIRS = ['E', 'SE', 'S', 'SW', 'W', 'NW', 'N', 'NE'];
+function drawDriveOverlay(now) {
+  const r = driveState.robot;
+  // Camera matrix -> a world-to-pixel projector for the target brackets.
+  if (!driveMatCtx) driveMatCtx = document.createElement('canvas').getContext('2d');
+  driveMatCtx.setTransform(1, 0, 0, 1, 0, 0);
+  camera.applyTransform(driveMatCtx, renderer.w, renderer.h);
+  const m = driveMatCtx.getTransform();
+  // Match the renderer's per-tile elevation lift (heightAt * ELEV, ELEV=16), or
+  // markers on raised ground float below the sprites they should sit on.
+  const project = (wx, wy) => {
+    const s = worldToScreen(wx, wy);
+    const lift = (map.heightAt ? map.heightAt(Math.floor(wx), Math.floor(wy)) : 0) * 16;
+    return { x: m.a * s.x + m.c * (s.y - lift) + m.e, y: m.b * s.x + m.d * (s.y - lift) + m.f };
+  };
+  const ents = [];
+  if (Math.hypot(player.x - r.x, player.y - r.y) < 20) ents.push({ x: player.x, y: player.y, label: 'HUMAN · ALLY', kind: 'human' });
+  for (const o of robots) {
+    if (o === r || o.dead || o.fused) continue;
+    if (Math.hypot(o.x - r.x, o.y - r.y) < 18) ents.push({ x: o.x, y: o.y, label: `${ROBOT_LABELS[o.type] || o.type.toUpperCase()} · HOSTILE`, kind: 'hostile' });
+  }
+  for (const a of animals) {
+    if (a.dead) continue;
+    if (Math.hypot(a.x - r.x, a.y - r.y) < 13) ents.push({ x: a.x, y: a.y, label: 'FAUNA', kind: 'fauna' });
+  }
+  const heading = HEADING_DIRS[(Math.round(Math.atan2(r.facing.y, r.facing.x) / (Math.PI / 4)) + 8) % 8];
+  drawRobotVision(renderer.ctx, {
+    srcCanvas: renderer.canvas, w: renderer.w, h: renderer.h, t: now,
+    robot: r, unitLabel: ROBOT_LABELS[r.type] || r.type.toUpperCase(),
+    relay: driveState.tor.code || 'TOR-??',
+    dist: driveState.dist || 0, maxRange: DRIVE_RANGE, heading, gait: driveState.gait,
+    integrity: r.maxHp ? Math.max(0, r.hp / r.maxHp) : 1,
+    battery: driveState.tor.battery ?? 1,
+    entities: ents, project, selfDestructT: driveState.sd,
+  });
+}
+
+// `read <topic>`: show a document on the terminal (print it to keep a copy).
+function hermesRead(topic) {
+  if (!topic) {
+    replPrint('read <topic>. archive lists them. Held: ' + hermesTopics().join(', ') + '.');
+    return;
+  }
+  const doc = HERMES_DOCS[topic];
+  if (!doc) {
+    replPrint(`No document "${topic}". Try: ${hermesTopics().join(', ')}.`);
+    return;
+  }
+  if (!hermesSpend(HERMES_BATT.read)) { replPrint('Not enough charge to pull that up — let the cell recover.'); return; }
+  // Wrap to the console width so a long entry reads as paragraphs, not one line.
+  const words = doc.text.split(' ');
+  let line = '';
+  const out = [];
+  for (const w of words) {
+    if ((line + ' ' + w).trim().length > 62) { out.push(line.trim()); line = w; }
+    else line += ' ' + w;
+  }
+  if (line.trim()) out.push(line.trim());
+  replPrint('', `== ${doc.title} ==`, ...out, '(print ' + topic + ' to keep a copy in your notepad)', '');
 }
 
 // The RON-ML `map` command: a green schematic of this AI's territory drawn
@@ -914,7 +1355,7 @@ function openRonMap() {
     g.fillStyle = '#e0b53a';
     g.beginPath(); g.moveTo(x, y - 6); g.lineTo(x + 6, y); g.lineTo(x, y + 6); g.lineTo(x - 6, y); g.closePath(); g.fill();
   }
-  // Adamantine's fortress: the grand doorway (cyan) you hack in through the
+  // ZEUS's fortress: the grand doorway (cyan) you hack in through the
   // boundary, and the mainframe core (magenta star) deep inside it.
   {
     const m = fortress.markers();
@@ -949,6 +1390,24 @@ function closeRonMap() { ronmapEl.style.display = 'none'; }
 ronmapEl.addEventListener('click', (e) => { if (e.target === ronmapEl) closeRonMap(); });
 // Using a held printed map (kind 'map') unfolds the same overlay anywhere.
 player.onReadMap = openRonMap;
+// Reading a note/document (the starting Odyssey note) files it into the notepad
+// and opens it there, so the story is kept, not lost in a toast.
+player.onReadNote = (key) => {
+  const def = ITEMS[key];
+  if (!def) return;
+  if (!printedDocs.some((d) => d.title === (def.title || def.name))) {
+    printedDocs.push({ title: def.title || def.name, text: def.text });
+  }
+  openNotebook();
+};
+
+// A book read leaves a title/author/abstract summary page in the notepad — but
+// silently (no pop-up), since you usually read a skill book mid-scavenge and
+// don't want the book flung open in your face. Press N to browse it later.
+player.onFileNote = (title, text, cover = null, cat = 'Document') => {
+  if (!title) return;
+  if (!printedDocs.some((d) => d.title === title)) printedDocs.push({ title, text, cover, cat });
+};
 
 // The Notepad (`notes`, or press N anywhere): a real paper page you flip
 // through with whatever lore fragments were flagged worth keeping (lore.js,
@@ -960,9 +1419,40 @@ player.onReadMap = openRonMap;
 const notebookEl = document.getElementById('ronnotebook');
 const notebookTitleEl = document.getElementById('ronnotebook-title');
 const notebookBodyEl = document.getElementById('ronnotebook-body');
-const notebookPageLabelEl = document.getElementById('ronnotebook-page-label');
-const notebookPrevBtn = document.getElementById('ronnotebook-prev');
-const notebookNextBtn = document.getElementById('ronnotebook-next');
+// All navigation lives on the top bar now (the footer prev/next was dropped):
+// a page counter, ‹ ›, and a Contents drop-down to jump straight to any page.
+const notebookPageTopEl = document.getElementById('ronnotebook-page-top');
+const notebookPrevTopBtn = document.getElementById('ronnotebook-prev-top');
+const notebookNextTopBtn = document.getElementById('ronnotebook-next-top');
+const notebookJumpEl = document.getElementById('ronnotebook-jump');
+function syncNotebookNav(label, prevDisabled, nextDisabled) {
+  notebookPageTopEl.textContent = label;
+  notebookPrevTopBtn.disabled = prevDisabled;
+  notebookNextTopBtn.disabled = nextDisabled;
+  notebookJumpEl.disabled = notebookEntries.length === 0;
+  // reflect the current page in the drop-down without firing its change handler
+  if (notebookEntries.length) notebookJumpEl.value = String(notebookIdx);
+}
+// (Re)build the Contents drop-down: a placeholder plus every page, grouped by
+// section (Field records / Books / Albums), option value = page index.
+function buildNotebookJump() {
+  const labels = { Document: 'Field records', Book: 'Books', Album: 'Albums' };
+  notebookJumpEl.innerHTML = '';
+  const groups = {};
+  notebookEntries.forEach((e, i) => { (groups[e.cat || 'Document'] ??= []).push([i, e.title]); });
+  for (const c of ['Document', 'Book', 'Album']) {
+    if (!groups[c]) continue;
+    const og = document.createElement('optgroup');
+    og.label = labels[c] || c;
+    for (const [i, title] of groups[c]) {
+      const o = document.createElement('option');
+      o.value = String(i);
+      o.textContent = `${i + 1}. ${title}`;
+      og.appendChild(o);
+    }
+    notebookJumpEl.appendChild(og);
+  }
+}
 let notebookEntries = [];
 let notebookIdx = 0;
 function renderNotebookPage() {
@@ -970,30 +1460,62 @@ function renderNotebookPage() {
     notebookTitleEl.textContent = 'NOTEPAD';
     notebookBodyEl.innerHTML = '<span id="ronnotebook-empty">Nothing yet. Pages worth keeping are ' +
       'scattered through the ruins — walk over one to read it, and it copies itself in here.</span>';
-    notebookPageLabelEl.textContent = '0 / 0';
-    notebookPrevBtn.disabled = true;
-    notebookNextBtn.disabled = true;
+    syncNotebookNav('0 / 0', true, true);
     return;
   }
   const f = notebookEntries[notebookIdx];
   notebookTitleEl.textContent = f.title;
-  notebookBodyEl.textContent = f.text;
-  notebookPageLabelEl.textContent = `${notebookIdx + 1} / ${notebookEntries.length}`;
-  notebookPrevBtn.disabled = notebookIdx <= 0;
-  notebookNextBtn.disabled = notebookIdx >= notebookEntries.length - 1;
+  // A category tag (Field record / Book / Album) plus, for books and albums,
+  // the cover art as a thumbnail — so the page reads as the thing you found,
+  // not just text. Built as HTML so the cover and tag sit above the body.
+  const cat = f.cat || 'Document';
+  const tag = cat === 'Book' ? 'BOOK' : cat === 'Album' ? 'ALBUM' : 'FIELD RECORD';
+  let html = `<div class="nb-cat nb-cat-${cat.toLowerCase()}">${tag}</div>`;
+  if (f.cover) {
+    // esc the path just in case; covers live under assets/media.
+    const src = ('assets/media/' + f.cover).replace(/"/g, '&quot;');
+    html += `<img class="nb-cover" src="${src}" alt="" ` +
+      `onerror="this.style.display='none'">`;
+  }
+  const body = (f.text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  html += `<div class="nb-text">${body}</div>`;
+  notebookBodyEl.innerHTML = html;
+  syncNotebookNav(`${notebookIdx + 1} / ${notebookEntries.length}`,
+    notebookIdx <= 0, notebookIdx >= notebookEntries.length - 1);
 }
 function notebookPrev() { if (notebookIdx > 0) { notebookIdx--; renderNotebookPage(); } }
 function notebookNext() { if (notebookIdx < notebookEntries.length - 1) { notebookIdx++; renderNotebookPage(); } }
 function openNotebook() {
-  notebookEntries = FRAGMENTS.filter((f) => f.notepad && lore.found.has(f.id));
+  // Gather every page — printed docs, filed book/album summaries, and the
+  // scattered field records worth keeping — then group them into sections so
+  // the Scrapbook reads as an ordered book (Field records, then Books, then
+  // Albums) rather than a shuffled heap. Stable within each section: first
+  // found, first shown.
+  const scattered = FRAGMENTS
+    .filter((f) => f.notepad && lore.found.has(f.id))
+    .map((f) => ({ title: f.title, text: f.text, cat: 'Document', cover: null }));
+  const all = [...printedDocs.map((d) => ({ cat: 'Document', cover: null, ...d })), ...scattered];
+  const order = { Document: 0, Book: 1, Album: 2 };
+  notebookEntries = all
+    .map((e, i) => [e, i])
+    .sort((a, b) => (order[a[0].cat] ?? 0) - (order[b[0].cat] ?? 0) || a[1] - b[1])
+    .map((p) => p[0]);
   notebookIdx = 0;
+  buildNotebookJump();
   renderNotebookPage();
   notebookEl.style.display = 'flex';
 }
+function notebookJumpTo(i) {
+  if (!notebookEntries.length) return;
+  notebookIdx = Math.max(0, Math.min(notebookEntries.length - 1, i | 0));
+  renderNotebookPage();
+}
 function closeNotebook() { notebookEl.style.display = 'none'; }
 notebookEl.addEventListener('click', (e) => { if (e.target === notebookEl) closeNotebook(); });
-notebookPrevBtn.addEventListener('click', notebookPrev);
-notebookNextBtn.addEventListener('click', notebookNext);
+document.getElementById('ronnotebook-close').addEventListener('click', closeNotebook);
+notebookPrevTopBtn.addEventListener('click', notebookPrev);
+notebookNextTopBtn.addEventListener('click', notebookNext);
+notebookJumpEl.addEventListener('change', () => notebookJumpTo(parseInt(notebookJumpEl.value, 10)));
 // Capture-phase on window, ahead of both the still-focused terminal input's
 // own key handling and the game's WASD/arrow movement listener, so paging
 // the notebook can never leak an arrow key into a text caret or a step.
@@ -1006,17 +1528,61 @@ window.addEventListener('keydown', (e) => {
   e.stopImmediatePropagation();
 }, true);
 
+// Which terminal is open — an AI obelisk / fortress gate ('ob') runs against
+// ronmlCtx; a RON HERMES relay ('hermes') runs against hermesCtx (adds
+// make/read/ping). Set by the open* functions, reset on close.
+let terminalKind = 'ob';
+
+// ELIZA session: while a bot is live, terminal input is fed to the DOCTOR
+// script instead of the RON-ML evaluator, until Ctrl+C or the terminal closes.
+let elizaBot = null;
+function startEliza() {
+  elizaBot = createEliza();
+  replPrint(
+    '',
+    'ELIZA — DOCTOR script (Weizenbaum, 1966).',
+    'The node loads a human. Talk to it. Type quit, or press Ctrl+C, to leave.',
+    '',
+    `ELIZA: ${elizaBot.greeting()}`,
+  );
+}
+function stopEliza(reason) {
+  if (!elizaBot) return;
+  elizaBot = null;
+  replPrint('', reason || 'ELIZA closes. You are back at the RON-DOS prompt.', '');
+}
+
 function replRun(line) {
   replPrint(`> ${line}`);
-  const result = runRonml(line, ronmlCtx());
-  replPrint(result.text);
   replHistory.push(line);
   replHistoryIdx = replHistory.length;
+  if (elizaBot) {
+    if (/^(quit|exit|bye|goodbye)$/i.test(line)) { stopEliza('ELIZA: Goodbye. It was nice talking to you.'); return; }
+    replPrint(`ELIZA: ${elizaBot.respond(line)}`);
+    return;
+  }
+  // `Help` / `HELP` / `Help hack` should all work — the console shouldn't be
+  // fussy about case on its own help command (verbs are all lowercase anyway).
+  const relaxed = /^\s*help(\s+\S+)?\s*$/i.test(line) ? line.trim().toLowerCase() : line;
+  // `run eliza` / `run doctor` read as running a legacy program; normalise them
+  // to the `eliza` verb so the language itself handles it (see ronml.js).
+  const prog = relaxed.replace(/^run\s+(eliza|doctor)\s*$/i, 'eliza');
+  const result = runRonml(prog, terminalKind === 'hermes' ? hermesCtx() : ronmlCtx());
+  // Audible verdict on every command: the keydrop chime doubles as the RON-ML
+  // success sound, errors get its descending opposite — and HERMES speaks the
+  // same pair in a warmer, lower voice (it's a different machine; sound.js).
+  if (terminalKind === 'hermes') sfx.play(result.ok ? 'hermesok' : 'hermeserr');
+  else sfx.play(result.ok ? 'keydrop' : 'termerr');
+  // If the verb just opened an ELIZA session, its greeting is already printed —
+  // don't also drop the bare "()" unit result underneath it.
+  if (elizaBot) return;
+  replPrint(result.text);
 }
 
 function openObTerminal(ob) {
   if (!player.hasItem('chip')) { openAiOs(ob); return; }
   // Chip present: jack in. Go invisible, then run the connect progress bar.
+  terminalKind = 'ob';
   player.terminalSafe = true;
   obTermEl.style.display = 'flex';
   obTermScreen.parentElement.style.display = 'none';
@@ -1035,16 +1601,17 @@ function openObTerminal(ob) {
     replHistory = [];
     replHistoryIdx = -1;
     replPrint(
-      'SKYLINK NODE TERMINAL  v2.20',
-      'RON-DOS 4.11  (c) Reality Or Nothing',
+      'POSEIDON NODE TERMINAL  v2.20',
+      'TIRESIAS 1.0  //  RON-DOS 4.11  (c) Reality Or Nothing',
       '',
       `> node ............ ${ob.code || 'OB-????'}`,
+      `> class ........... ${ob.cls === 'siren' ? 'SIREN' : 'STANDARD'}`,
       `> circuit id ...... ${ob.circuitNum != null ? '#' + ob.circuitNum : 'sealed'}`,
       '> chip ............ ACCEPTED',
       '> shield .......... you are hidden while jacked in',
       '> access .......... GRANTED',
       '',
-      'RON-ML console ready. try: scan   (type help for commands)',
+      'Tiresias online. try: scan   ·   map   ·   help',
       '_',
     );
     obTermInput.value = '';
@@ -1058,6 +1625,7 @@ function openObTerminal(ob) {
 // gate and connect bar. You type `unlock` here (needs an AI key) to hack the
 // grand doorway; it drops a fortress key that then swings the door open.
 function openGateTerminal() {
+  terminalKind = 'ob';
   player.terminalSafe = true;
   obTermEl.style.display = 'flex';
   obTermScreen.parentElement.style.display = 'flex';
@@ -1065,36 +1633,76 @@ function openGateTerminal() {
   replLog = [];
   replHistory = [];
   replHistoryIdx = -1;
-  const keyed = player.hasItem('ai_key');
+  const hasFortKey = player.hasItem('fortress_key');
   replPrint(
     `${fortress.AI_NAME.toUpperCase()} — OUTER GATE TERMINAL`,
-    'RON-DOS 4.11  (c) Reality Or Nothing',
+    'TIRESIAS 1.0  //  RON-DOS 4.11  (c) Reality Or Nothing',
     '',
     `> gate ............ ${fortress.terminal.obj.code}`,
-    `> rampart ......... ${fortress.open ? 'OPEN' : fortress.hacked ? 'UNLOCKED' : 'SEALED'}`,
-    `> ai key .......... ${keyed ? 'DETECTED' : 'NOT HELD (unlock will fail)'}`,
+    `> rampart ......... ${fortress.open ? 'OPEN' : 'SEALED'}`,
+    `> fortress key .... ${hasFortKey ? 'HELD — carry it to the door' : 'NOT HELD'}`,
     '',
-    'The doorway is bolted from within. type: unlock   (type help for commands)',
+    hasFortKey
+      ? 'The doorway is bolted from within. Bring the fortress key up to it and it swings open.'
+      : 'The doorway is bolted from within. Get a fortress key first: at any obelisk, let k = hack OB-XXXX in unlock k.',
     '_',
   );
   obTermInput.value = '';
   obTermGhost.textContent = '';
   obTermInput.focus();
 }
-function closeObTerminal() { obTermEl.style.display = 'none'; obTermGhost.textContent = ''; obTermInput.blur(); player.terminalSafe = false; }
+// A HERMES relay (TOR station on a hilltop): the RON console. No chip, no AI
+// key — friendly tech. Amber CRT (the `.hermes` class recolours the shell),
+// with a short glitchy boot, then the same input runs against hermesCtx.
+function openHermesTerminal(tor) {
+  terminalKind = 'hermes';
+  hermesTor = tor;
+  if (tor.battery == null) tor.battery = 0.55 + Math.random() * 0.4;
+  player.terminalSafe = true;
+  obTermEl.classList.add('hermes');
+  obTermEl.style.display = 'flex';
+  obTermScreen.parentElement.style.display = 'flex';
+  obTermConnect.style.display = 'none';
+  updateHermesBattEl();
+  replLog = [];
+  replHistory = [];
+  replHistoryIdx = -1;
+  replPrint(
+    'HERMES RELAY  //  RON FIELD STATION',
+    'HERMES 0.9b  //  RON-DOS 3.02  (c) Reality Or Nothing',
+    '',
+    `> relay ........... ${tor.code || 'TOR-??'}`,
+    '> power ........... own solar cell (watch the gauge)',
+    '> network ......... none — off-grid by design, nothing to detect',
+    '> holdings ........ the human record: RON-ML, schematics, history',
+    '',
+    'HERMES online. Off the wire, still ours. try: archive · read history · print fortress · drive · help',
+    '_',
+  );
+  obTermInput.value = '';
+  obTermGhost.textContent = '';
+  obTermInput.focus();
+}
+function closeObTerminal() { elizaBot = null; terminalKind = 'ob'; obTermEl.classList.remove('hermes'); obTermEl.style.display = 'none'; obTermGhost.textContent = ''; obTermInput.blur(); player.terminalSafe = false; }
 obTermEl.addEventListener('click', (e) => { if (e.target === obTermEl) closeObTerminal(); });
 // Autocomplete: once you've read the RON-DOS manual (book_ronml), the console
 // suggests the rest of a verb as faded ghost text you can accept with Tab.
 // (sing stays out of the list — it's a secret.) Purely a convenience the book
 // unlocks; you can always type the whole thing by hand.
-const RONML_VERBS = ['scan', 'nearest', 'keys', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'map', 'print', 'unlock', 'notes', 'help', 'let'];
+// Autocomplete is per-system: an obelisk (TIRESIAS) suggests only AI-network
+// verbs, a HERMES relay only RON verbs — no seepage between the two. (sing is
+// secret, so it's in neither list.)
+const OB_COMPLETE = ['scan', 'nearest', 'keys', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'map', 'print', 'unlock', 'eliza', 'notes', 'help', 'let'];
+const HERMES_COMPLETE = ['read', 'print', 'archive', 'records', 'drive', 'notes', 'help', 'let'];
 const escapeHtml = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 function ronmlCompletion(value) {
+  if (elizaBot) return ''; // no RON-ML hints mid-conversation with the DOCTOR
   if (!player.readManuals || !player.readManuals.has('book_ronml')) return '';
   const m = value.match(/([A-Za-z]+)$/); // the alphabetic token at the caret
   if (!m) return '';
   const tok = m[1];
-  const hit = RONML_VERBS.find((v) => v.length > tok.length && v.startsWith(tok));
+  const verbs = terminalKind === 'hermes' ? HERMES_COMPLETE : OB_COMPLETE;
+  const hit = verbs.find((v) => v.length > tok.length && v.startsWith(tok));
   return hit ? hit.slice(tok.length) : '';
 }
 function updateGhost() {
@@ -1105,6 +1713,18 @@ function updateGhost() {
 }
 obTermInput.addEventListener('input', updateGhost);
 obTermInput.addEventListener('keydown', (e) => {
+  // Ctrl+C breaks out of an ELIZA session, as on a real terminal — back to the
+  // RON-DOS prompt without closing the whole console. But if text is selected
+  // anywhere, Ctrl+C means COPY — let the browser have it (matters on
+  // Windows/Linux, where copy is Ctrl+C; Mac's Cmd+C never hits this branch).
+  if (e.ctrlKey && (e.key === 'c' || e.key === 'C')) {
+    const screenSel = String(window.getSelection() || '');
+    const inputSel = obTermInput.selectionStart !== obTermInput.selectionEnd;
+    if (screenSel || inputSel) return; // native copy
+    if (elizaBot) { obTermInput.value = ''; obTermGhost.textContent = ''; stopEliza('^C  —  ELIZA interrupted. Back at the RON-DOS prompt.'); }
+    e.preventDefault(); e.stopPropagation();
+    return;
+  }
   // Tab is a browser-reserved key in a lot of setups (it moves focus off the
   // page before our handler ever sees it, preventDefault or not) — so Right
   // Arrow at the very end of the line also accepts the ghost suggestion, a
@@ -1139,11 +1759,32 @@ obTermInput.addEventListener('keydown', (e) => {
   e.stopPropagation();
 });
 
+// Copy and paste, like a real terminal. The screen is selectable (CSS
+// user-select), so select + Cmd/Ctrl+C copies natively. Pasting lands on the
+// prompt from anywhere in the console — even with focus on the screen —
+// with newlines flattened to spaces so a multi-line paste never auto-runs.
+window.addEventListener('paste', (e) => {
+  if (obTermEl.style.display === 'none') return;
+  if (document.activeElement === obTermInput) return; // native paste already lands in the input
+  const text = (e.clipboardData || window.clipboardData)?.getData('text') || '';
+  if (!text) return;
+  obTermInput.value += text.replace(/\s+$/, '').replace(/\n+/g, ' ');
+  obTermInput.focus();
+  updateGhost();
+  e.preventDefault();
+});
+// A click on the console that ISN'T a text selection puts the caret back on
+// the prompt, so you can select-to-copy without losing your typing flow.
+obTermEl.addEventListener('mouseup', () => {
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed) obTermInput.focus();
+});
+
 // The AI's own console (no chip): a wall of restless, unreadable data.
 const AIOS_GLYPHS = '0123456789ABCDEF▒▓█░■▢≡§¤◢◣∴∷';
 let aiosRAF = null;
 function openAiOs(ob) {
-  aiosHeader.textContent = `SKYLINK CORE  //  NODE ${ob.code || '????'}  //  ACCESS DENIED  //  NO KEY`;
+  aiosHeader.textContent = `POSEIDON CORE  //  NODE ${ob.code || '????'}  //  ACCESS DENIED  //  NO KEY`;
   aiosEl.style.display = 'flex';
   player.say('No chip. The obelisk throws up the AI’s own console instead — a wall of moving data you can’t read.');
   const cols = 60, rows = 26;
@@ -1172,6 +1813,13 @@ aiosEl.addEventListener('click', (e) => { if (e.target === aiosEl) closeAiOs(); 
 // The control hint is only for new players: fade it out after two minutes
 // of play so it stops cluttering the screen once the controls have sunk in.
 const hintEl = document.getElementById('hint');
+// On a phone/touch device there's no H key, so drop "Press H for help" — spell
+// out the tap controls instead (help is still reachable via the ? button).
+const touchLike = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches)
+  || Math.min(window.innerWidth, window.innerHeight) < 560;
+if (touchLike) {
+  hintEl.textContent = 'Hold to move · tap to act · ? for help';
+}
 const HINT_LIFETIME = 120; // seconds of played time
 let playTime = 0;
 
@@ -1227,7 +1875,43 @@ function groundLifetime(item) {
   return GROUND_LIFETIME_DEFAULT;
 }
 
+let toast = null;    // now-playing liner notes {text, ttl}, above the dashboard
 let detail = null;   // right-click inspection tooltip {text, x, y, ttl}
+// Hovering a HUD slot (pockets, hands, backpack panel, walkman) names what's
+// in it, reusing the right-click tooltip's renderer. Right-click detail and
+// an in-progress drag both win over the hover.
+// Manage mode: while the backpack panel is open, a tap on any slot MOVES its
+// item instead of using it — the one-rule mobile swap. Pockets, hands, and
+// the spare sleeve stow into the pack; pack items come out to a free pocket
+// (or the hand, if it's holdable and free); tapes prefer an empty walkman;
+// tapping the walkman ejects. moveItem does all the validating and saying.
+function smartMoveSlot(from) {
+  const held = player.getSlot(from);
+  if (!held) { player.equipSlot(from); return; }
+  const def = ITEMS[held.item];
+  const freePocket = () => { const i = player.pockets.findIndex((ps) => !ps); return i >= 0 ? { kind: 'pocket', i } : null; };
+  if (from.kind === 'walkman') { player.moveItem(from, freePocket() || { kind: 'packbadge' }); return; }
+  if (def && def.kind === 'tape' && !player.walkman) { player.moveItem(from, { kind: 'walkman' }); return; }
+  if (from.kind === 'pocket' || from.kind === 'hands' || from.kind === 'bw') { player.moveItem(from, { kind: 'packbadge' }); return; }
+  // out of the pack: a free pocket first, else offer the hand (moveItem
+  // politely refuses non-holdables there)
+  const t = freePocket();
+  player.moveItem(from, t || { kind: 'hands' });
+}
+
+function hoverSlotTip() {
+  try {
+  if (drag || !renderer.slotAt) return null;
+  const hs = renderer.slotAt(input.mouseX, input.mouseY);
+  if (!hs) return null;
+  if (hs.kind === 'packbadge') return player.backpack ? { text: 'Backpack — press I to open', x: input.mouseX, y: input.mouseY } : null;
+  const held = player.getSlot(hs);
+  if (!held || !ITEMS[held.item]) return null;
+  const def = ITEMS[held.item];
+  const qty = held.qty > 1 ? ` \u00d7${held.qty}` : '';
+  return { text: def.name + qty, x: input.mouseX, y: input.mouseY };
+  } catch { return null; } // a tooltip must never be able to kill the HUD
+}
 let drag = null;     // in-progress pointer drag {from: slotDescriptor}
 const PROJECTILE_SPEED = 16; // tiles/sec for gun tracers
 
@@ -1260,16 +1944,16 @@ player.onObeliskDestroyed = (ob) => {
     persist();
     return;
   }
-  // Not the winning blow, but if SKYLINK is already blazing, felling a tower
+  // Not the winning blow, but if POSEIDON is already blazing, felling a tower
   // breaks the laser web and shuts the purge down — a hard-won reprieve. The
   // obelisk is flagged for rebuild; the factory rushes a repair drone to it,
-  // and only once it's raised again (nothing left flagged) does SKYLINK come
+  // and only once it's raised again (nothing left flagged) does POSEIDON come
   // back online (see the activation guard below). Knock towers down faster
   // than they can be rebuilt and you can still win outright during the purge.
   if (player.skylinkActive && ob) {
     player.skylinkActive = false;
     ob.needsRebuild = true;
-    player.say('The tower comes down and the SKYLINK web collapses — dark, for now. A repair drone is already inbound to raise it.');
+    player.say('The tower comes down and the POSEIDON web collapses — dark, for now. A repair drone is already inbound to raise it.');
     if (factoryLive() && !robots.some((r) => r.type === 'w3' && !r.dead)) {
       const drone = spawnW3(map, Math.floor(Math.random() * 0x7fffffff), factoryCx(), factoryCy());
       if (drone) robots.push(drone);
@@ -1311,7 +1995,11 @@ function describeAt(tx, ty) {
       const mat = obj.material === 'brick' ? 'Red-brick wall' : 'Stone wall';
       return `${mat}, ${ages[Math.min(5, obj.decay || 0)]}.`;
     }
-    if (obj.type === 'obelisk') return `An AI signal obelisk. Black, humming, ${obj.alert > 0.3 ? 'and it has seen you.' : 'watching.'}`;
+    if (obj.type === 'obelisk') {
+      if (obj.cls === 'siren') return `A SIREN-class obelisk. Teal-lit, and it sings — the song pulls you in. ${obj.alert > 0.3 ? 'It has you.' : 'Keep a tape ready.'}`;
+      return `An AI signal obelisk. Black, humming, ${obj.alert > 0.3 ? 'and it has seen you.' : 'watching.'}`;
+    }
+    if (obj.type === 'tor') return `A HERMES relay — decentralised RON tech, ${obj.code || 'a hilltop station'}, off the machines' grid. Friendly. Click its amber screen (archive, read, make).`;
     if (obj.type === 'wfactory') return 'The W-factory. It fields repair drones for damaged towers — bring one down for good before it can be mended.';
     if (obj.type === 'box') return obj.opened ? 'An emptied resistance cache.' : 'A resistance cache. Search it (E).';
     if (obj.type === 'tree') return 'A tree. Fell it for wood.';
@@ -1334,12 +2022,13 @@ let wasDusk = null;
 let wasRobotNear = false;
 let regrowClock = 0;
 let ronResupplyClock = 0, ronResupplyNext = 90 + Math.random() * 60;
-let wFactoryClock = 0, wFactoryNext = 60 + Math.random() * 60;
+let wFactoryClock = 0, wFactoryNext = 6 + Math.random() * 5; // repair-drone dispatch: a short clock so one actually comes while a tower is still damaged/frozen (see below)
 let wFactoryW1Clock = 0, wFactoryW1Next = 100 + Math.random() * 80;
 let wFactoryW5Clock = 0, wFactoryW5Next = 30 + Math.random() * 40;
+let wFactoryGuardClock = 0, wFactoryGuardNext = 40 + Math.random() * 40;
 let lastW4GameHour = dayNight.totalHours; // ticks a W4 every 30 game-minutes, not real time
 
-// SKYLINK's final purge: once the clock runs out, every obelisk lights up
+// POSEIDON's final purge: once the clock runs out, every obelisk lights up
 // and the AI throws everything it has left at you, without end — you keep
 // playing until it finally hunts you down (or forever, if you're good).
 const SKYLINK_MAX_W4 = 50; // concurrent cap, so a long purge can't melt the frame rate
@@ -1385,6 +2074,11 @@ function update(dt) {
     return; // everything else — movement, AI, other clocks — is frozen while resting
   }
 
+  // Driving a machine from a HERMES relay: you steer the unit and the overworld
+  // holds still around you (you're jacked in at the relay). The robot-vision
+  // overlay is drawn in frame().
+  if (driveState) { updateDrive(dt); return; }
+
   if (input.newGamePressed()) {
     if (window.confirm('Start a new game? This erases your saved progress.')) {
       fullReset();
@@ -1399,6 +2093,7 @@ function update(dt) {
     else if (player.canCraftObGun()) player.craftObGun(map);
     else if (player.canCraftChip()) player.craftChip();
     else if (player.canCraftSword()) player.craftSword();
+    else if (player.canCraftFortressMap()) player.craftFortressMap();
   }
   if (input.zoomTogglePressed()) camera.toggleZoom();
   if (input.minimapTogglePressed()) { showMinimap = !showMinimap; player.say(showMinimap ? 'Minimap on.' : 'Minimap off.'); }
@@ -1438,6 +2133,23 @@ function update(dt) {
   const wheel = input.consumeWheel();
   if (wheel) camera.zoomBy(-wheel * 0.0015);
 
+  // AI-defeated celebration: a level-up modal (fireworks + score). Freezes the
+  // world behind it until dismissed; then the run carries on (you don't win the
+  // game by felling one daemon — you sail for the next).
+  if (player.aiVictory) {
+    // Stray input must NOT eat the celebration: the killing blow's own click
+    // (or its release) used to dismiss the modal on the very next frame,
+    // before a single firework had burst. Clicks are swallowed but never
+    // dismiss; only a deliberate Space/Enter does, and only once the show
+    // has had a few seconds to play.
+    player.aiVictory.shownAt ??= performance.now();
+    input.consumeClick(); input.clickPos(); input.consumeUp();
+    const shownFor = performance.now() - player.aiVictory.shownAt;
+    const wantsOut = input.consumePress('Space') || input.consumePress('Enter');
+    if (wantsOut && shownFor > 3000) player.aiVictory = null;
+    return;
+  }
+
   // Death certificate: freeze the world behind the modal until it's clicked.
   if (player.deathCert) {
     const copyCert = () => {
@@ -1474,6 +2186,7 @@ function update(dt) {
     detail = { text: describeAt(Math.floor(w.x), Math.floor(w.y)), x: right.x, y: right.y, ttl: 6 };
   }
   if (detail) { detail.ttl -= dt; if (detail.ttl <= 0) detail = null; }
+  if (toast) { toast.ttl -= dt; if (toast.ttl <= 0) toast = null; }
 
   // Click away from an open canvas panel (backpack/skills/armoury) closes
   // it, same as the help modal's backdrop-click dismissal — these are drawn
@@ -1485,7 +2198,12 @@ function update(dt) {
     const modalClick = input.clickPos();
     const outside = (r) => !r || modalClick.x < r.x || modalClick.x > r.x + r.w
       || modalClick.y < r.y || modalClick.y > r.y + r.h;
-    if (modalClick) {
+    // A press that lands on a dashboard/backpack slot must NOT be treated as an
+    // outside-click that closes the panel — otherwise you can never grab a
+    // pocket item to drag it into the open backpack. Let the slot handler below
+    // take it (start a drag) and keep the panel open.
+    const onSlot = modalClick && renderer.slotAt && renderer.slotAt(modalClick.x, modalClick.y);
+    if (modalClick && !onSlot) {
       if (showBackpack && outside(renderer._backpackRect)) { input.consumeClick(); showBackpack = false; }
       else if (showSkills && outside(renderer._skillsRect)) { input.consumeClick(); showSkills = false; }
       else if (showWeapons && outside(renderer._weaponsRect)) { input.consumeClick(); showWeapons = false; }
@@ -1500,7 +2218,7 @@ function update(dt) {
     const slot = renderer.slotAt(press.x, press.y);
     if (slot) {
       input.consumeClick();
-      if (slot.kind === 'packbadge') showBackpack = true; // click the badge to open the full panel
+      if (slot.kind === 'packbadge') showBackpack = !showBackpack; // tap the badge to open — and again to close (mobile has no I key)
       else if (player.getSlot(slot)) drag = { from: slot };
       else player.equipSlot(slot); // empty hands slot: stow whatever's held
     }
@@ -1519,6 +2237,19 @@ function update(dt) {
       else player.say('Too far from the obelisk to reach its terminal.');
     }
   }
+  // Click a HERMES relay (TOR) to open its terminal — same picking as an
+  // obelisk (torAt already lift-adjusts the hit rect for the hill it sits on).
+  const torPress = torObjs.length && renderer.torAt ? input.clickPos() : null;
+  if (torPress) {
+    const w = camera.toWorld(torPress.x, torPress.y, renderer.w, renderer.h);
+    const ws = worldToScreen(w.x, w.y);
+    const tr = renderer.torAt(ws.x, ws.y);
+    if (tr) {
+      input.consumeClick();
+      if (Math.hypot(tr.x + 0.5 - player.x, tr.y + 0.5 - player.y) <= OB_TERMINAL_RANGE + 0.7) openHermesTerminal(tr);
+      else player.say('Too far from the HERMES relay to reach it — get up the hill to its screen.');
+    }
+  }
   // Click the fortress gate terminal (kiosk beside the grand doorway) to open
   // its hack console, if you're standing close enough to reach it.
   const gPress = input.clickPos();
@@ -1535,7 +2266,10 @@ function update(dt) {
   if (up && drag) {
     const target = renderer.slotAt ? renderer.slotAt(up.x, up.y) : null;
     if (target && target.kind === drag.from.kind && target.i === drag.from.i) {
-      player.equipSlot(drag.from); // released on the source: treat as a click
+      // Released on the source = a click. With the backpack panel OPEN this is
+      // manage mode (one tap moves the item); closed, it's the usual equip.
+      if (showBackpack) smartMoveSlot(drag.from);
+      else player.equipSlot(drag.from); // released on the source: treat as a click
     } else if (target) {
       player.moveItem(drag.from, target);
     } else {
@@ -1652,6 +2386,14 @@ function update(dt) {
     }
   }
 
+  // HERMES relays trickle-charge off their solar cells (slow). Watch the gauge
+  // recover when you're not leaning on a relay.
+  for (const t of torObjs) {
+    if (t.battery == null) t.battery = 1;
+    else if (t.battery < 1) t.battery = Math.min(1, t.battery + 0.006 * dt);
+  }
+  if (terminalKind === 'hermes' && obTermEl.style.display === 'flex') updateHermesBattEl();
+
   // RON resupply: every couple of minutes, one already-emptied cache gets
   // quietly restocked with a fresh drop of batteries, ammo or shells.
   ronResupplyClock += dt;
@@ -1667,19 +2409,22 @@ function update(dt) {
     }
   }
 
-  // The W-factory: while any obelisk is damaged but not yet destroyed, it
-  // periodically fields a single W3 to go and mend the nearest one. Only
-  // one W3 is ever out at a time. It also builds W1 hunting waves on its own
-  // clock — not just as a one-off revenge squad when a tower falls — so long
-  // as it isn't already fielding one.
+  // The W-factory: while any obelisk is damaged (OB-gun scorched but standing),
+  // flagged for rebuild, or pinned in a RON-ML loop, it fields a single W3 to go
+  // and mend the nearest one. Only one W3 is ever out at a time. Checked on a
+  // short clock (~6-11s) so a repair drone actually comes out while the tower is
+  // still in that state — the old 60-120s clock almost never lined up with the
+  // brief damaged window, so repair drones were essentially never seen.
   if (factoryLive()) {
     wFactoryClock += dt;
     if (wFactoryClock > wFactoryNext) {
       wFactoryClock = 0;
-      wFactoryNext = 60 + Math.random() * 60;
-      const anyDamaged = obeliskObjs.some((o) => (!o.destroyed && o.obDamage > 0) || o.needsRebuild || o.frozen);
+      wFactoryNext = 6 + Math.random() * 5;
+      // Anything the crew can mend, now including fully-toppled towers — the
+      // factory sends a drone to raise them again until you bring it down.
+      const anyRepairable = obeliskObjs.some((o) => o.destroyed || o.obDamage > 0 || o.frozen);
       const w3Active = robots.some((r) => r.type === 'w3' && !r.dead);
-      if (anyDamaged && !w3Active) {
+      if (anyRepairable && !w3Active) {
         const drone = spawnW3(map, Math.floor(Math.random() * 0x7fffffff), factoryCx(), factoryCy());
         if (drone) { robots.push(drone); player.say('A repair drone whirs out of the W-factory.'); }
       }
@@ -1710,6 +2455,35 @@ function update(dt) {
         if (wave.length) { robots.push(...wave); player.say('The W-factory dispatches a hunting wave.'); }
       }
     }
+    // Re-garrison: when an obelisk realises it has no guards left (its home
+    // T1/T2s destroyed), the factory builds a fresh T1 or T2 and sends it over
+    // to guard and patrol that specific tower. Prioritises the most exposed
+    // (fewest guards), one at a time on a slow clock.
+    wFactoryGuardClock += dt;
+    if (wFactoryGuardClock > wFactoryGuardNext) {
+      wFactoryGuardClock = 0;
+      wFactoryGuardNext = 40 + Math.random() * 40;
+      const MIN_GUARDS = 2, HOME_R = 8;
+      const guardsOf = (ob) => robots.filter((r) => !r.dead && !r.friendly
+        && (r.type === 't1' || r.type === 't2')
+        && Math.hypot(r.home.x - (ob.x + 0.5), r.home.y - (ob.y + 0.5)) < HOME_R).length;
+      let worst = null, worstCount = MIN_GUARDS;
+      for (const ob of obeliskObjs) {
+        if (ob.destroyed) continue;
+        const g = guardsOf(ob);
+        if (g < worstCount) { worstCount = g; worst = ob; }
+      }
+      if (worst) {
+        const type = Math.random() < 0.5 ? 't1' : 't2';
+        const guard = spawnGuard(map, Math.floor(Math.random() * 0x7fffffff), factoryCx(), factoryCy(),
+          type, { x: worst.x + 0.5, y: worst.y + 0.5 });
+        if (guard) {
+          robots.push(guard);
+          player.say(`The W-factory builds a ${type.toUpperCase()} and sends it to re-garrison ${worst.code}.`);
+        }
+      }
+    }
+
     if (wFactoryW4Cooldown > 0) wFactoryW4Cooldown = Math.max(0, wFactoryW4Cooldown - dt);
 
     // A W4 also rolls off the factory floor every 30 minutes of game time
@@ -1774,20 +2548,20 @@ function update(dt) {
   // unwinds it when the fortress stands down or the uplink is cut.
   fortress.update(dt, player, robots, worldStir);
   dayNight.update(dt);
-  // Time's up: SKYLINK-9000 comes online. Every obelisk lights up and links
+  // Time's up: POSEIDON comes online. Every obelisk lights up and links
   // to every other in a web of lasers, and the factory throws wave after
   // wave of W4s at you — indefinitely. There's no timer to survive to; it
   // simply doesn't stop, and the run ends only when it finally catches you
   // (see dieToSkylink in player.js).
   // ...but not while a tower it needs is still down and being rebuilt — that
-  // suspension is the player's reprieve, and SKYLINK only (re)lights once the
+  // suspension is the player's reprieve, and POSEIDON only (re)lights once the
   // repair drone has raised every flagged tower back up.
   if (dayNight.hoursLeft() <= 0 && !player.skylinkActive && !player.deathCert && !player._ended
     && !obeliskObjs.some((o) => o.needsRebuild)) {
     player.skylinkActive = true;
     skylinkTimer = 0; // now counts up: seconds survived under the purge
     skylinkW4Clock = 0;
-    player.say('SKYLINK-9000 comes online. Every obelisk blazes and turns on you at once.');
+    player.say('POSEIDON comes online. Every obelisk blazes and turns on you at once.');
     dispatchSkylinkW4s(6); // the opening salvo
   }
   if (player.skylinkActive && !player._ended) {
@@ -1878,6 +2652,7 @@ function update(dt) {
   // Obelisks sense a human close by: their light deepens toward blood-red
   // and holds, and nearby non-aggro robots get nudged to sweep near the
   // tower — a report of closeness, never an exact position.
+  let sirenPull = false, sirenResisted = false; // for the once-only song messages
   for (const ob of obeliskObjs) {
     if (ob.burning > 0) ob.burning -= dt; // OB-gun flame timer, ticked for the renderer
     if (ob.frozen) ob.frozenT = (ob.frozenT || 0) + dt; // CPU-burn age for the renderer's smoke ramp
@@ -1887,6 +2662,24 @@ function update(dt) {
       ob.alert = Math.min(1, ob.alert + dt * 1.5);
     } else {
       ob.alert = Math.max(0, ob.alert - dt * 0.4);
+    }
+    // SIREN class: within range its song pulls you toward it — a gentle drift
+    // that's stronger the closer you are. Playing a tape on the walkman drowns
+    // it out (your own dearer noise), so the pull only bites when nothing's
+    // playing. (home-04 lore, made mechanic.)
+    if (ob.cls === 'siren' && player.health > 0) {
+      const SONG_RANGE = 7;
+      if (d < SONG_RANGE) {
+        if (player.walkmanSide == null) {
+          const strength = 0.95 * (1 - d / SONG_RANGE); // tiles/sec at the edge → up close
+          const inv = 1 / (d || 1);
+          player.moveAxis((ob.x + 0.5 - player.x) * inv * strength * dt, 0, map);
+          player.moveAxis(0, (ob.y + 0.5 - player.y) * inv * strength * dt, map);
+          sirenPull = true;
+        } else {
+          sirenResisted = true;
+        }
+      }
     }
     // Occasional blink, independent of alert: a short bright flash, then a
     // random quiet spell before the next one. Alert makes it flicker faster.
@@ -1913,6 +2706,14 @@ function update(dt) {
       }
     }
   }
+  // Once-only lines as the song takes hold and as it lets go.
+  if (sirenPull && !player._underSong) {
+    player._underSong = true;
+    player.say('A song rises from a teal-lit tower, and your feet begin to turn toward it. Start a tape to drown it out.');
+  } else if (!sirenPull && player._underSong) {
+    player._underSong = false;
+    player.say(sirenResisted ? 'Your own noise drowns the song out.' : 'The song thins behind you and lets go.');
+  }
 }
 
 function frame(now) {
@@ -1932,6 +2733,7 @@ function frame(now) {
       // Fluorescent-lit down there regardless of the overworld's clock — the
       // underworld veil (below) carries the mood instead of day/night darkness.
       light: inUnderworld ? 1 : dayNight.light(),
+      dawnGlow: inUnderworld ? 0 : dayNight.dawnGlow(),
       timeLabel: dayNight.countdownLabel,
       minimap: (inUnderworld || !showMinimap) ? null : minimap,
       birds: inUnderworld ? [] : birds,
@@ -1942,25 +2744,32 @@ function frame(now) {
       lore,
       torch: player.pockets.some((s) => s && s.item === 'torch'),
       showBackpack,
-      detail,
+      detail: detail || hoverSlotTip(),
+      toast,
       drag: drag ? { ...drag, mx: input.mouseX, my: input.mouseY } : null,
       deathCert: player.deathCert,
+      aiVictory: player.aiVictory,
       showSkills,
       showWeapons,
-      craftPrompt: (player.canCraftObGun() && player.hands !== 'obgun') || (player.canCraftWaveGun() && player.hands !== 'wavegun') || player.canCraftChip() || player.canCraftSword(),
+      craftPrompt: (player.canCraftObGun() && player.hands !== 'obgun') || (player.canCraftWaveGun() && player.hands !== 'wavegun') || player.canCraftChip() || player.canCraftSword() || player.canCraftFortressMap(),
       craftWaveGun: player.canCraftWaveGun() && player.hands !== 'wavegun',
       craftChip: player.canCraftChip() && !player.canCraftWaveGun() && !(player.canCraftObGun() && player.hands !== 'obgun'),
       craftSword: player.canCraftSword() && !player.canCraftChip() && !player.canCraftWaveGun() && !(player.canCraftObGun() && player.hands !== 'obgun'),
-      skylinkActive: player.skylinkActive && !player._ended,
+      // POSEIDON is an overworld network — its lights/lines must never draw over
+      // the Backspace.
+      skylinkActive: player.skylinkActive && !player._ended && !inUnderworld,
       skylinkTimer,
-      obeliskObjs,
+      obeliskObjs: inUnderworld ? [] : obeliskObjs,
       paused,
       rest: resting ? { dim: restDim(resting.t) } : null,
       ubikFlicker: player.ubikFlickerT || 0,
       ubikFlickerX: player.ubikFlickerX || player.x,
       ubikFlickerY: player.ubikFlickerY || player.y,
       musicMode: sfx.musicMode, // the walkman's reels spin only while its side is what's actually playing
+      driving: !!driveState,    // suppress the normal HUD; the robot-vision overlay takes over
     });
+    // Robot-vision: resample the just-drawn scene as ASCII + a Terminator HUD.
+    if (driveState) drawDriveOverlay(now);
     frameCount += 1;
   }
 

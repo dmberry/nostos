@@ -13,7 +13,7 @@ const WANDER_RANGE = 2.5;       // how far wander targets stray from home
 const ANIMAL_ACTIVE_RANGE = 40; // tiles: beyond this from the player, an animal's AI is skipped (CPU)
 
 const DOG_HP = 12;
-const DOG_WANDER_SPEED = 1.2;   // tiles per second
+const DOG_WANDER_SPEED = 0.6;   // tiles per second (placid amble, half the old pace — reads calmer)
 const DOG_CHASE_SPEED = 4.2;
 const DOG_DEAGGRO_RANGE = 10;   // pack gives up beyond this
 // A pack no longer aggros just because the player wandered within sight —
@@ -31,7 +31,7 @@ const DOG_FLEE_TIME = 3.5;      // pack routs this long when a member is hurt
 const DOG_SPREAD = [-0.6, 0, 0.6]; // sideways offsets so a pack fans out
 
 const BOAR_HP = 30;
-const BOAR_WANDER_SPEED = 1.0;
+const BOAR_WANDER_SPEED = 0.5;
 const BOAR_SIGHT = 6;           // charge trigger range
 const BOAR_ANGLE_TOL = 0.2;     // rad off a compass line before it charges
 const BOAR_TELEGRAPH_TIME = 0.6;
@@ -43,7 +43,7 @@ const BOAR_STUN_TIME = 1.5;     // wall impact stun
 const BOAR_RECOVER_TIME = 1.2;  // pause before it may charge again
 
 const VIPER_HP = 2;             // fragile: one good hit
-const VIPER_SLITHER_SPEED = 0.3;
+const VIPER_SLITHER_SPEED = 0.15;
 const VIPER_STRIKE_RANGE = 1.2;
 const VIPER_RAISE_RANGE = 1.8;  // tell: rears up before you are in range
 const VIPER_STRIKE_DAMAGE = 3;
@@ -55,7 +55,7 @@ const VIPER_VENOM_SECONDS = 6;
 // fight. Sprite-only (no procedural fallback art, since this is a test of
 // the sprite pipeline on a second species, not a design commitment).
 const DEER_HP = 15;
-const DEER_WANDER_SPEED = 0.9;
+const DEER_WANDER_SPEED = 0.45;
 const DEER_FLEE_SPEED = 5.2;
 const DEER_FLEE_RANGE = 6;      // notices the player and reacts within this
 const DEER_PANIC_RANGE = 3;     // inside this it always bolts, no freeze roll

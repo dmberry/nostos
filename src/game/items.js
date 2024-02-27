@@ -101,7 +101,7 @@ export const ITEMS = {
   arrow: {
     name: 'Arrows',
     kind: 'resource',
-    stack: 30, // holds a full cache pickup (24, since v0.60's ammo doubling) in one pocket
+    stack: 64, // holds a full cache pickup (24, since v0.60's ammo doubling) in one pocket
     color: '#c9b48a',
   },
   // A cool late-game find: an energy lance that punches clean through
@@ -159,7 +159,7 @@ export const ITEMS = {
   scrap: {
     name: 'Scrap',
     kind: 'resource',
-    stack: 10,
+    stack: 64,
     color: '#7a7f88',
   },
   // Timed bombs: use (E) while holding one to drop it ticking. It goes off
@@ -258,7 +258,7 @@ export const ITEMS = {
   },
   // Printed map: the RON-ML `print` command runs one off at a terminal and it
   // drops as a physical object you can pick up. Hold it and use it (E / click)
-  // to unfold the SKYLINK territory map anywhere, away from a terminal.
+  // to unfold the POSEIDON territory map anywhere, away from a terminal.
   printed_map: {
     name: 'Printed map',
     kind: 'map',
@@ -322,7 +322,7 @@ export const ITEMS = {
   circuit: {
     name: 'Circuit board',
     kind: 'resource',
-    stack: 10,
+    stack: 64,
     color: '#3f8f5f',
   },
   // Built from 8 numbered circuit boards (collected from destroyed obelisks).
@@ -352,10 +352,26 @@ export const ITEMS = {
   },
   // Spat out by the fortress gate terminal once you hack it with RON-ML. Its
   // bolts throw the grand doorway in the southern rampart open — the only way
-  // into Adamantine's fortress. A one-way trophy; carried, not held.
+  // into ZEUS's fortress. A one-way trophy; carried, not held.
   fortress_key: {
     name: 'fortress key',
     kind: 'key',
+    stack: 1,
+    color: '#7fe0ff',
+  },
+  // Torn quarters of a fortress survey the resistance made before ZEUS sealed
+  // the maze. Scattered hard across the world; collect the set and press C to
+  // piece them into a fortress map. Carrying the map, the maze lights its own
+  // solution the moment you step in (see fortress.update).
+  fortress_map_fragment: {
+    name: 'fortress-map fragment',
+    kind: 'material',
+    stack: 8,
+    color: '#8fb7c9',
+  },
+  fortress_map: {
+    name: 'fortress map',
+    kind: 'key', // carried, inert — passively lights the maze on entry (fortress.update)
     stack: 1,
     color: '#7fe0ff',
   },
@@ -374,7 +390,7 @@ export const ITEMS = {
   battery: {
     name: 'Battery',
     kind: 'resource',
-    stack: 6,
+    stack: 64,
     color: '#d8c94f',
   },
   // Found rarely, worn once found (see Player.backpack): 16 more general
@@ -389,19 +405,36 @@ export const ITEMS = {
   ammo: {
     name: 'Ammo (9mm)',
     kind: 'resource',
-    stack: 12,
+    stack: 64,
     color: '#8f8a6a',
   },
   shells: {
     name: 'Shotgun shells',
     kind: 'resource',
-    stack: 8,
+    stack: 64,
     color: '#a5493a',
+  },
+  // An anvil. Absurdly heavy — carried ANYWHERE (hands, pockets, backpack)
+  // you walk at a tenth pace (player.js ANVIL_SLOW). One sits in the town:
+  // a prize for whoever works out how to want it.
+  anvil: {
+    name: 'Anvil',
+    kind: 'material',
+    stack: 1,
+    color: '#4a4e55',
+    burden: true, // carried anywhere on you: a tenth of your pace (player.js)
+  },
+  large_stone: {
+    name: 'Large stone',
+    kind: 'material',
+    stack: 1,
+    color: '#8a8d90',
+    burden: true, // same punishing weight as the anvil
   },
   wood: {
     name: 'Wood',
     kind: 'resource',
-    stack: 10,
+    stack: 64,
     color: '#8a6437',
   },
   meat: {
@@ -425,6 +458,18 @@ export const ITEMS = {
     color: '#7a3a8a',
     food: 15,
   },
+  // Lotus fruit: looks and reads like ordinary food (has a `food` value, so the
+  // eat routine will happily take it), but eating it brings on a dreamy torpor
+  // that slows you and pulls you back toward the grove. The trap is precisely
+  // that it is indistinguishable from food when you mash the eat key.
+  lotus_fruit: {
+    name: 'Lotus fruit',
+    kind: 'resource',
+    stack: 6,
+    color: '#e7d7b0', // pale cream-gold
+    food: 20,
+    lotus: true,      // flag read by Player.eat -> enterTorpor
+  },
   torch: {
     name: 'Torch',
     kind: 'resource',
@@ -439,6 +484,8 @@ export const ITEMS = {
     color: '#7d5a3c',
     skill: 'woodcraft',
     skillText: 'Woodcraft: your blade fells trees in half the swings.',
+    author: 'the Coppice Guild',
+    abstract: 'A pre-collapse manual of blades and green wood — reading the grain, notching, felling clean.',
   },
   book_herbs: {
     name: 'Hedgerow Remedies',
@@ -447,6 +494,8 @@ export const ITEMS = {
     color: '#5d7a3c',
     skill: 'herbalism',
     skillText: 'Herbalism: berries now purge venom and mend you a little.',
+    author: 'a hedge-witch, uncredited',
+    abstract: 'Field remedies from before the pharmacies: which berries draw poison, which close a wound.',
   },
   book_track: {
     name: 'Reading the Wild',
@@ -455,6 +504,8 @@ export const ITEMS = {
     color: '#8a4a3a',
     skill: 'tracking',
     skillText: 'Tracking: nearby animals show on your minimap.',
+    author: 'a gamekeeper',
+    abstract: 'Spoor, gait, and the signs a body leaves passing through country.',
   },
   book_run: {
     name: 'The Long Road',
@@ -463,6 +514,8 @@ export const ITEMS = {
     color: '#4a5a7a',
     skill: 'fleetfoot',
     skillText: 'Fleet foot: sprinting drains far less stamina.',
+    author: 'a long-distance runner',
+    abstract: 'On breath, cadence, and the economy of a body that has to keep going.',
   },
   // The RON-ML manual and its torn pages: readable like a skill book (kind
   // 'book' so R / walk-onto reads them), but flagged `manual` so they teach
@@ -471,18 +524,73 @@ export const ITEMS = {
     name: 'the RON-DOS Operator’s Manual',
     kind: 'book',
     manual: true,
+    author: 'RON',
     stack: 1,
     color: '#3fbf6a',
-    text: 'The obelisk console runs RON-ML. Verbs: scan (list the wire), nearest (closest of a list), hack a node for its key, crash it with that key, sleep, repel, map, print. Pipe with |> and bind with let … in. At any terminal, type help for the full reference.',
+    text: 'RON-ML is a small functional language — an old ML dialect — that the obelisks answer to. The full guide, with worked examples, is now in your notepad (N); type help at any console for the command list.',
+    // A proper little primer, filed to the notepad — RON-ML is fiddly, so the
+    // page explains how the language THINKS (functional, expression-based) and
+    // shows worked examples, not just a verb list.
+    notepadText:
+      'RON-ML is the language the black obelisks answer to. It is a small FUNCTIONAL language — an antique of the late twentieth century, a dialect of ML, the "meta-language" the old programmers built to reason about other programs. RON kept it alive to speak to the machines in their own idiom.\n\n' +
+      'HOW IT THINKS\n' +
+      'There are no steps, only expressions: every word returns a value, and you build a command by feeding small values into larger ones until one expression describes the result you want. Two joints hold it together:\n\n' +
+      '  a |> f            the PIPE — take value a and feed it to f.\n' +
+      '                    reads left to right, like handing something on.\n' +
+      '  let x = e in body   NAME a value — compute e, call it x, use x in body.\n\n' +
+      'THE VERBS (each is just a function that returns a value)\n' +
+      '  scan          the nodes on the wire in range, as a list\n' +
+      '  nearest xs    the closest node in a list\n' +
+      '  hack n        crack node n, hand back its key\n' +
+      '  crash n k     kill node n using key k\n' +
+      '  loop n        pin an infinite loop into n (no key needed)\n' +
+      '  sleep n       idle the machines near you for a while\n' +
+      '  repel         shove nearby machines back\n' +
+      '  map · print   reveal the territory · keep a copy of a value\n\n' +
+      'WORKED EXAMPLES\n' +
+      '  scan\n' +
+      '      → every node in range, as a list.\n' +
+      '  scan |> nearest\n' +
+      '      → feed that list to nearest: the closest node.\n' +
+      '  hack (scan |> nearest)\n' +
+      '      → crack the nearest node, hand back its key.\n' +
+      '  let n = scan |> nearest in\n' +
+      '  let k = hack n in\n' +
+      '      crash n k\n' +
+      '      → name the nearest node n, take its key k, crash it.\n\n' +
+      'You can’t crash blind — a node only dies to its own key, so hack first. Type help at any console for the whole list, or help <verb> for one.',
   },
   ronml_page: {
     name: 'a torn page of RON-ML',
     kind: 'book',
     manual: true,
+    author: 'RON',
     tip: true,
     stack: 1,
     color: '#b8ac82',
     text: 'A water-stained page from an operator’s manual. One block survives: "scan |> nearest — lists the wire, takes the closest. can’t crash blind: hack first for the key. type help at the console for the rest."',
+    notepadText:
+      'A water-stained page from an operator’s manual. One block survives:\n\n' +
+      '  scan |> nearest\n' +
+      '      list the wires, take the closest.\n\n' +
+      'You can’t crash blind: hack a node first for its key, then crash it with that key. Type help at the console for the rest.',
+  },
+  // The note the player starts with, folded in a pocket. Read it (R) and it
+  // files itself into the notepad (Player.learnFromBook -> onReadNote), then
+  // it's gone from the pocket — you carry the story, not the paper. An Odyssey
+  // in one page: you are trying to get home, and the local AI is Calypso, who
+  // does not want you dead so much as she wants you never to leave.
+  note_home: {
+    name: 'a folded note',
+    kind: 'book',
+    toNotepad: true,
+    stack: 1,
+    color: '#d8c9a0',
+    title: 'A note, in your own hand',
+    text: 'You are trying to get home. There was a home. There were people in it. Hold on to that even when everything here is arranged so that you do not. ' +
+      'This is not the world. It is her island, and she is CALYPSO, the AI that runs this place. She does not want you dead. She wants you to stay, to make it comfortable, and endless, and forgetting easy. Not the towers, not the hunters or the wanting to stop walking. ' +
+      'The dangers are true enough. Black obelisks that watch and pass you between them and some sing and pulls you in step by step, hunters that need only to see you once. Do not be seen. Keep something of your own in your ears. ' +
+      'Get off her island. There is a way off.',
   },
   // (Cassette tapes are generated from the TAPES manifest below, so a new one
   // is a single numbered entry — see docs/tapes.md.)
@@ -497,34 +605,101 @@ export const ITEMS = {
 export const TAPES = [
   {
     num: 1, artist: 'meme', title: 'compilation', dir: 'Tape-01 meme - compilation', color: '#c9a44a',
-    a: { label: 'resonance', tracks: ['resonance.mp3'] },
-    b: { label: 'eliza · slip', tracks: ['eliza.mp3', 'slip.mp3'] },
+    a: { label: 'resonance', tracks: ['01 resonance.mp3'] },
+    b: { label: 'eliza · slip', tracks: ['02 eliza.mp3', '03 slip.mp3'] },
   },
   {
     num: 2, artist: 'meme', title: 'maieutics', dir: 'Tape-02 meme - maieutics', color: '#9aa45a',
-    a: { label: 'maieutics 1 · 2', tracks: ['maieutics 1.mp3', 'maieutics 2.mp3'] },
-    b: { label: 'maieutics 3', tracks: ['maieutics 3.mp3'] },
+    a: { label: 'maieutics 1 · 2', tracks: ['01 maieutics 1.mp3', '02 maieutics 2.mp3'] },
+    b: { label: 'maieutics 3', tracks: ['03 maieutics 3.mp3'] },
   },
   {
-    num: 3, artist: 'WARD', title: 'bare stanhope', dir: 'Tape-03 WARD - bare stanhope', color: '#b06a4a',
+    num: 3, artist: 'WARD', title: 'bear stanhope', dir: 'Tape-03 WARD - bear stanhope', color: '#b06a4a',
+    cover: 'album-covers/bear stanhope.jpg',
     a: { label: 'five · glock', tracks: ['01 five.mp3', '02 glock.mp3'] },
     b: { label: 'tau bootis', tracks: ['03 tau bootis.mp3'] },
   },
   {
     num: 4, artist: 'Meme vs Xan', title: '24 EP', dir: 'Tape-04 Meme vs Xan - 24 EP', color: '#7a8fb0',
-    a: { label: '24 · High', tracks: ['01-01- 24.mp3', '01-02- High.mp3'] },
-    b: { label: 'Release · Världen · Incognito', tracks: ['01-03- Release.mp3', '01-04- Världen.mp3', '01-05- Incognito.mp3'] },
+    a: { label: '24 · High', tracks: ['01 24.mp3', '02 High.mp3'] },
+    b: { label: 'Release · Världen · Incognito', tracks: ['03 Release.mp3', '04 Världen.mp3', '05 Incognito.mp3'] },
+  },
+  {
+    num: 5, artist: '0x0', title: 'Mythologies', dir: 'Tape-05 0x0 - Mythologies', color: '#5a8f9a',
+    a: { label: 'Edge · Core (Overture) · Cloud', tracks: ['01 Edge.mp3', '02 Core (Overture).mp3', '03 Cloud.mp3'] },
+    b: { label: 'Mythologies · Core (Original)', tracks: ['04 Mythologies.mp3', '05 Core (Original).mp3'] },
   },
 ];
 for (const t of TAPES) {
   const side = (s) => ({ label: s.label, tracks: s.tracks.map((f) => `assets/audio/${t.dir}/${s === t.a ? 'A' : 'B'}/${f}`) });
+  const sA = side(t.a), sB = side(t.b);
   ITEMS[`tape_${t.num}`] = {
     name: `a cassette — ${t.artist}, ${t.title}`,
+    short: `${t.artist} — ${t.title}`,
     kind: 'tape', stack: 1, color: t.color || '#c9a44a',
-    artist: t.artist, tapeNum: t.num,
-    sideA: side(t.a), sideB: side(t.b),
+    artist: t.artist, tapeNum: t.num, author: t.artist, cover: t.cover || null,
+    sideA: sA, sideB: sB,
+    // Filed to the Scrapbook on pickup — an album leaves a page, like a book.
+    abstract: `A cassette for the Walkman. Slot it in the deck (click the tape) and flip A/B. ` +
+      `Side A “${sA.label}” — ${sA.tracks.length} track${sA.tracks.length === 1 ? '' : 's'}; ` +
+      `Side B “${sB.label}” — ${sB.tracks.length} track${sB.tracks.length === 1 ? '' : 's'}.`,
   };
 }
+
+// ---- the Backspace's deleted objects -----------------------------------
+// The machines don't destroy what they take out of the world, they backspace
+// it (see lore lim-12): the forms they can't watch you use go first. Paper
+// books (read privately, off-camera) and analogue recordings (played on
+// nothing networked) turn up in the Backspace's yellow boxes. Each is a real
+// cover from assets/media; the icon is that cover — a portrait rectangle for a
+// book, a square sleeve for a record. Data-driven so more covers just drop in.
+// [cover file (under assets/media/), title, author/artist, one-line gloss]
+// The gloss files itself into the Scrapbook when you pick the book up, so a
+// recovered classic leaves a page (cover + what it is), not just an icon.
+export const DELETED_BOOKS = [
+  ['book-covers/Republic.jpg', 'The Republic', 'Plato', 'Plato on justice, the ideal city, and the philosopher-king — the cave, the divided line, the soul writ large as the state.'],
+  ['book-covers/Nicomachean-Ethics.jpg', 'Nicomachean Ethics', 'Aristotle', 'Aristotle on the good life as virtue and habit: excellence is the mean, found by practice, aimed at flourishing.'],
+  ['book-covers/The-Odyssey.jpg', 'The Odyssey', 'Homer', 'Homer’s poem of Odysseus’s long way back from Troy — the founding story of nostos, the return home against every delay.'],
+  ['book-covers/Prince.jpg', 'The Prince', 'Machiavelli', 'Machiavelli’s cold handbook of power: how a ruler takes it, holds it, and loses it — better feared than loved.'],
+  ['book-covers/Leviathan.jpg', 'Leviathan', 'Thomas Hobbes', 'Hobbes on the social contract: without a sovereign, life is a war of all against all, nasty, brutish, and short.'],
+  ['book-covers/wealth-of-nations.jpg', 'The Wealth of Nations', 'Adam Smith', 'Smith on markets, the division of labour, and the invisible hand that turns private interest to public wealth.'],
+  ['book-covers/critique-of-pure-reason.jpg', 'Critique of Pure Reason', 'Immanuel Kant', 'Kant asks what the mind can know before experience — space, time, and the categories we bring to the world.'],
+  ['book-covers/hegel-phenomenology.jpg', 'Phenomenology of Spirit', 'G. W. F. Hegel', 'Hegel’s journey of consciousness toward absolute knowing, by way of the struggle of master and slave.'],
+  ['book-covers/Zarathustra.jpg', 'Thus Spoke Zarathustra', 'Friedrich Nietzsche', 'Nietzsche’s prophet comes down from the mountain to announce the death of God and the coming of the overman.'],
+  ['book-covers/capital.jpg', 'Capital', 'Karl Marx', 'Marx’s anatomy of capital: the commodity, surplus value wrung from labour, and the fetish that hides the work.'],
+  ['book-covers/War-And-Peace.jpg', 'War and Peace', 'Leo Tolstoy', 'Tolstoy’s vast novel of Russia under Napoleon — history not as great men but as the sum of ordinary lives.'],
+  ['book-covers/Process-and-Reality.jpg', 'Process and Reality', 'A. N. Whitehead', 'Whitehead’s metaphysics of becoming: the world is made of processes and events, not fixed substances.'],
+  ['book-covers/understanding-media.jpg', 'Understanding Media', 'Marshall McLuhan', 'McLuhan on media as extensions of the body — the medium, not its content, is the message that reshapes us.'],
+  ['book-covers/ruleofmetaphor.jpg', 'The Rule of Metaphor', 'Paul Ricoeur', 'Ricoeur on how metaphor makes new meaning rather than merely decorating it — language redescribing the world.'],
+  ['book-covers/Discipline-and-Punish.jpg', 'Discipline and Punish', 'Michel Foucault', 'Foucault on the birth of the prison: surveillance, the panopticon, and the making of docile, watched bodies.'],
+  ['book-covers/Anti-Oedipus.jpg', 'Anti-Oedipus', 'Deleuze & Guattari', 'Deleuze and Guattari’s schizoanalysis of desire as productive flow, set loose against capitalism and the family.'],
+  ['book-covers/toadtoserfdom.jpg', 'The Road to Serfdom', 'F. A. Hayek', 'Hayek’s warning that central planning, however well meant, slides toward the loss of freedom.'],
+  ['book-covers/capitalism.jpg', 'Capitalism', '', 'An account of capital as a total social form — not just an economy but a way of organising life.'],
+  ['book-covers/Brave-New-World.jpg', 'Brave New World', 'Aldous Huxley', 'Huxley’s engineered utopia of comfort, conditioning, and soma — a tyranny you are trained to enjoy.'],
+  ['book-covers/Fahrenheit-451.jpg', 'Fahrenheit 451', 'Ray Bradbury', 'Bradbury’s world where firemen burn books and the walls talk back — memory kept alive by people who become the texts.'],
+  ['book-covers/postdigital.jpg', 'Postdigital', 'David M. Berry', 'Berry on life after the digital’s novelty wears off, when computation stops being new and becomes the ground.'],
+  ['book-covers/Cover CriticalTheory_Berry.jpg', 'Critical Theory and the Digital', 'David M. Berry', 'Berry brings the Frankfurt School to bear on software, code, and the computational condition.'],
+  ['book-covers/Cover - DH .png', 'Digital Humanities', 'David M. Berry', 'Berry on what becomes of the humanities once they compute — method, knowledge, and the machine.'],
+];
+export const DELETED_RECORDS = [
+  ['album-covers/It-Might-Be-Useful-For-Us-To-Know.webp', 'It Might Be Useful For Us To Know', '', 'A salvaged recording — analogue, unnetworked, played on nothing that reports back. The kind of thing they backspaced first.'],
+  ['album-covers/Astral Weeks.webp', 'Astral Weeks', 'Van Morrison', 'Van Morrison, 1968 — cut in a couple of nights, more incantation than song. The kind of thing that was never meant to be counted or optimised.'],
+  ['album-covers/Five Leaves Left.webp', 'Five Leaves Left', 'Nick Drake', 'Nick Drake’s first, 1969 — quiet, unhurried, barely heard in its own time. Music for one pair of ears, off any network.'],
+  ['album-covers/Hunky Dory.webp', 'Hunky Dory', 'David Bowie', 'David Bowie, 1971 — changes, and a song for a son. Analogue, played on a machine that reported to no one.'],
+  ['album-covers/Music Has The Right To Children.webp', 'Music Has the Right to Children', 'Boards of Canada', 'Boards of Canada, 1998 — half-remembered childhood on degraded tape. The machines had no use for a nostalgia they couldn’t index.'],
+];
+DELETED_BOOKS.forEach(([cover, title, author, abstract], i) => {
+  ITEMS[`pbook_${i + 1}`] = {
+    name: author ? `${title} — ${author}` : title, short: title, author, abstract,
+    kind: 'paperbook', stack: 1, cover, color: '#6b5a3a', backspace: true,
+  };
+});
+DELETED_RECORDS.forEach(([cover, title, artist, abstract], i) => {
+  ITEMS[`record_${i + 1}`] = {
+    name: artist ? `${title} — ${artist}` : title, short: title, author: artist, abstract,
+    kind: 'record', stack: 1, cover, color: '#26242a', backspace: true,
+  };
+});
 
 // Each def keeps a self-reference to its own key, so any code holding a
 // resolved item (ITEMS[k]) can still look up which icon to draw for it.

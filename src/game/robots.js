@@ -1,4 +1,5 @@
 import { makeRng } from './rng.js';
+import { sfx } from '../engine/sound.js';
 
 // Hunter robots: the machines the towers send after the last humans. Two
 // classes, each with a signature limitation the player can learn. T1s are
@@ -113,13 +114,21 @@ const W4_DAMAGE = 9;
 const W4_BODY = '#4a1408';      // dull furnace red-black
 const W4_HEAD = '#2c0c05';
 
-// M6s: Adamantine's fortress guards (see docs/fortress-guards-plan.md). Two
-// variants: the m6 heavy melee sentinel and the m6r marksman. Unlike every
-// overworld hunter they acquire by GENUINE SIGHT ONLY — line of sight, within
-// range, inside the sensor's forward cone — never by blind proximity, so a
-// careful player can ghost past behind cover. Hardened: not reprogrammable.
-// Their home is their muster post (they recharge standing at it). The fortress
-// controller reads r.aggro off them to run its report-timer/alarm logic.
+// The fortress (ZEUS) guard classes — see docs/fortress-guards-plan.md. Three
+// M-classes. Unlike every overworld hunter they acquire by GENUINE SIGHT ONLY
+// (line of sight, within range, inside the sensor's forward cone) — never by
+// blind proximity, so a careful player can ghost past behind cover. Hardened:
+// none is reprogrammable. The fortress controller reads r.aggro off them to run
+// its report-timer/alarm logic, so any guard SEEING you is a "report".
+//
+//  M4 — light guard/report drone. The dormant fortress's only presence (one or
+//       two on patrol). Unarmed: it doesn't fight, it just spots you and holds
+//       you in sight while the breach reports. Sneak past these to stay silent.
+//  M5 — sniper. Hangs back and hides, plinking you from long range with a
+//       low-power BRIGHT ORANGE laser: annoying, not deadly. Never charges.
+//  M6 — pack robot. Attacks in waves of 3-5: close and strike, then withdraw,
+//       then charge again. On its own it hangs back at the pack's edge and
+//       waits for enough of its fellows to gather before committing to a rush.
 const M6_HP = 40;               // several sword-blows; a bow burst inside the report window still kills
 const M6_PATROL_SPEED = 1.0;
 const M6_CHASE_SPEED = 4.6;     // between your walk and sprint, same as a W1
@@ -129,15 +138,31 @@ const M6_CONE_DOT = 0.05;       // forward cone ~87° either side of facing
 const M6_HIT_RANGE = 0.65;
 const M6_HIT_DAMAGE = 14;
 const M6_HIT_COOLDOWN = 1.0;
-const M6R_HP = 28;              // the marksman is lighter-built
-const M6R_RANGE = 7.5;          // holds and fires from here, W4-style
-const M6R_MIN_RANGE = 4;
-const M6R_FIRE_COOLDOWN = 1.9;
-const M6R_DAMAGE = 8;
+const M6_PACK_MIN = 3;          // this many aggro'd M6 near you before the pack commits to a charge
+const M6_PACK_RADIUS = 11;      // how near (of the player) an aggro'd M6 counts toward the pack
+const M6_ATTACK_TIME = 5;       // seconds in the "attack" phase closing + striking...
+const M6_WITHDRAW_TIME = 3.2;   // ...then this long falling back before the next wave
+const M6_ATTACK_STANDOFF = 0.5; // how close it presses during an attack wave
+const M6_WITHDRAW_RANGE = 6;    // how far it falls back between waves (also a lone one's holding distance)
+const M5_HP = 22;               // the sniper is lightly built
+const M5_VISION = 13;
+const M5_RANGE = 12;            // fires from way back
+const M5_MIN_RANGE = 6.5;       // holds this far off; backs away (hides) if you close
+const M5_FIRE_COOLDOWN = 1.5;   // a steady, nagging plink
+const M5_DAMAGE = 5;            // low power — annoying, not lethal
+const M4_HP = 16;               // fragile; a couple of hits drops it before it can report far
+const M4_VISION = 11;
+const M4_CONE_DOT = -0.25;      // a wide ~105°-either-side scout cone
+const M4_PATROL_SPEED = 1.5;
+const M4_KEEP_RANGE = 7;        // once it has you, it hovers about here, keeping sight while it reports
+const M4_FLEE_SPEED = 3.4;
+const FORTRESS_FORGET = 20;    // seconds since an M5/M6 last GLIMPSED you before it gives up the hunt
 const M6_BODY = '#232833';      // gunmetal blue-black armour
 const M6_HEAD = '#141821';
-const M6R_BODY = '#2c2430';     // violet-tinged marksman
-const M6R_HEAD = '#191320';
+const M5_BODY = '#2c2430';      // violet-tinged sniper
+const M5_HEAD = '#191320';
+const M4_BODY = '#3a3f2a';      // drab olive recon shell
+const M4_HEAD = '#23281a';
 
 // Robots must never overlap: the minimum distance any two live (non-fused)
 // machines are allowed to close to, enforced every tick after their own AI
@@ -192,7 +217,7 @@ const W5_WANDER_RANGE = 6;       // local patrol radius around its current recen
 const W5_RECENTER_INTERVAL = 10; // seconds between re-anchoring home to itself — an unbounded slow walk, not a fixed beat
 const W5_PLANT_INTERVAL = 18;    // seconds between planting attempts
 const W5_PLANT_JITTER = 14;
-const W5_PLANT_RANGE = 3;        // how far from itself it'll look for a spot
+const W5_PLANT_RANGE = 1;        // plants right beside itself — you see the gardener garden
 const W5_BODY = '#243a1c';       // mossy green, reads as gardener not hunter
 const W5_HEAD = '#16240f';
 
@@ -414,6 +439,21 @@ export function spawnW1s(map, seed, ox, oy, count = 3) {
   return squad;
 }
 
+// A fresh T1 or T2 the factory builds to re-garrison an obelisk that's lost its
+// guards. Spawns at the factory (fx,fy), flickers in, and takes the tower's
+// seat as `home` — so it walks over there and patrols around it (patrol/updateT1
+// wander around `home`), exactly like an original garrison.
+export function spawnGuard(map, seed, fx, fy, type, home) {
+  const rng = makeRng(seed >>> 0);
+  const used = new Set();
+  const spot = seatNear(map, fx, fy, { x: fx, y: fy, r: 0 }, used, rng, SPAWN_MAX_R_FALLBACK);
+  if (!spot) return null;
+  const r = baseRobot(type, spot[0], spot[1], type === 't1' ? T1_HP : T2_HP, rng);
+  r.home = { x: home.x, y: home.y }; // its posting: the undefended tower
+  r.spawnT = FACTORY_SPAWN_T;         // flicker into existence out of the factory
+  return r;
+}
+
 // A W4 laser hunter-killer, dispatched from the factory the instant the
 // player attacks an obelisk. `seed` should vary per call.
 export function spawnW4(map, seed, fx, fy) {
@@ -455,18 +495,38 @@ export function spawnW5(map, seed, fx, fy) {
   return r;
 }
 
-// One fortress guard seated at its muster post (mx, my). `ranged` picks the
-// m6r marksman variant. `fromFactory` adds the materialisation flicker for
-// alarm-wave dispatches; the standing patrol spawns without it.
-export function spawnM6(map, seed, mx, my, ranged = false, fromFactory = false) {
+// Seat a fortress guard of `type` near (mx, my). `fromFactory` adds the
+// materialisation flicker for alarm-wave dispatches; the standing patrol spawns
+// without it. Shared by the M4/M5/M6 spawners below.
+function spawnGuardType(map, seed, mx, my, type, hp, fromFactory) {
   const rng = makeRng(seed >>> 0);
-  const used = new Set();
-  const avoid = { x: mx, y: my, r: 0 };
-  const spot = seatNear(map, Math.floor(mx), Math.floor(my), avoid, used, rng, SPAWN_MAX_R_FALLBACK);
+  const spot = seatNear(map, Math.floor(mx), Math.floor(my), { x: mx, y: my, r: 0 }, new Set(), rng, SPAWN_MAX_R_FALLBACK);
   if (!spot) return null;
-  const r = baseRobot(ranged ? 'm6r' : 'm6', spot[0], spot[1], ranged ? M6R_HP : M6_HP, rng);
+  const r = baseRobot(type, spot[0], spot[1], hp, rng);
   r.hardened = true; // cannot be reprogrammed — drain one and it's only scrap
   if (fromFactory) r.spawnT = FACTORY_SPAWN_T;
+  return r;
+}
+
+// A light M4 report drone — the dormant fortress's patrol.
+export function spawnM4(map, seed, mx, my, fromFactory = false) {
+  return spawnGuardType(map, seed, mx, my, 'm4', M4_HP, fromFactory);
+}
+// An M5 sniper — hangs back, plinks orange lasers. Alarm-wave only.
+export function spawnM5(map, seed, mx, my, fromFactory = true) {
+  return spawnGuardType(map, seed, mx, my, 'm5', M5_HP, fromFactory);
+}
+// An M6 pack robot — waves of 3-5. Alarm-wave dispatch. Staggered wave phase so
+// a squad doesn't attack and withdraw in perfect unison.
+export function spawnM6(map, seed, mx, my, fromFactory = true) {
+  const r = spawnGuardType(map, seed, mx, my, 'm6', M6_HP, fromFactory);
+  if (r) {
+    r.rng = makeRng((seed ^ 0x51ce) >>> 0);
+    r.m6Phase = r.rng() < 0.5 ? 'attack' : 'withdraw';
+    r.m6PhaseT = 1 + r.rng() * (r.m6Phase === 'attack' ? M6_ATTACK_TIME : M6_WITHDRAW_TIME);
+    r.swarmAngle = r.rng() * Math.PI * 2;
+    r.swarmSpin = (r.rng() < 0.5 ? -1 : 1) * (0.1 + r.rng() * 0.15);
+  }
   return r;
 }
 
@@ -543,12 +603,74 @@ function moveToward(r, tx, ty, speed, dt, map) {
   const ox = r.x, oy = r.y;
   moveAxis(r, (dx / len) * step, 0, map);
   moveAxis(r, 0, (dy / len) * step, map);
-  const moved = Math.hypot(r.x - ox, r.y - oy);
+  let moved = Math.hypot(r.x - ox, r.y - oy);
+  // Wall-follow: if the direct path is blocked (a big obstacle like the 8x8
+  // factory), slide along it perpendicular to the target instead of grinding
+  // to a halt. A per-robot preferred side keeps the detour consistent so it
+  // rounds a corner rather than jittering, flipping only if that side is stuck
+  // too — this is what un-jams bots pinned against the factory hull.
+  //
+  // But NOT when the target tile itself is solid — a player swimming out to sea
+  // stands on a water tile no land machine can reach, so there is no corner to
+  // round: sliding along the shore just makes the bot skitter left and right
+  // forever. Skip the slide there and let it settle at the waterline instead.
+  const targetReachable = !map.isSolid(Math.floor(tx), Math.floor(ty));
+  if (moved < step * 0.35 && targetReachable) {
+    const px = -dirY, py = dirX; // unit perpendicular to the target direction
+    if (r._slide === undefined) r._slide = 1;
+    for (const s of [r._slide, -r._slide]) {
+      const bx = r.x, by = r.y;
+      moveAxis(r, px * s * step, 0, map);
+      moveAxis(r, 0, py * s * step, map);
+      const m2 = Math.hypot(r.x - bx, r.y - by);
+      if (m2 > 1e-6) { r._slide = s; moved += m2; break; }
+    }
+  }
   if (moved > 1e-6) {
     r.facing = { x: (r.x - ox) / moved, y: (r.y - oy) / moved };
     r.walkPhase += dt * 10; // T2 legs scissor only while actually moving
   }
   return moved;
+}
+
+// The map's bridge tiles, found once and cached: the only dry crossings of the
+// river, so a land machine the river cuts off from the player heads for the
+// nearest one instead of grinding against the bank.
+function bridgeTiles(map) {
+  if (!map._bridgeTiles) {
+    const b = [];
+    for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) {
+      if (map.floorAt(x, y) === 'bridge') b.push({ x: x + 0.5, y: y + 0.5 });
+    }
+    map._bridgeTiles = b;
+  }
+  return map._bridgeTiles;
+}
+
+// True if the straight line between two points crosses river or sea water — a
+// land machine can't just walk it, it has to find a bridge.
+function waterBetween(ax, ay, bx, by, map) {
+  const steps = Math.ceil(Math.hypot(bx - ax, by - ay));
+  for (let i = 1; i < steps; i++) {
+    const t = i / steps;
+    const f = map.floorAt(Math.floor(ax + (bx - ax) * t), Math.floor(ay + (by - ay) * t));
+    if (f === 'water' || f === 'sea') return true;
+  }
+  return false;
+}
+
+// Where a chasing machine should actually head: straight at the target unless
+// water is in the way, in which case make for the nearest bridge — and once
+// it's on the bridge, a point just across it — so the machine rounds onto the
+// crossing and over rather than getting pinned on the near bank.
+function chaseTarget(r, px, py, map) {
+  if (!waterBetween(r.x, r.y, px, py, map)) return { x: px, y: py, crossing: false };
+  const bridges = bridgeTiles(map);
+  if (!bridges.length) return { x: px, y: py, crossing: false };
+  let br = null, bd = Infinity;
+  for (const t of bridges) { const d = Math.hypot(t.x - r.x, t.y - r.y); if (d < bd) { bd = d; br = t; } }
+  if (bd < 2.5) return { x: br.x + (px >= br.x ? 3 : -3), y: br.y, crossing: true }; // on the bridge: aim just across
+  return { x: br.x, y: br.y, crossing: true };
 }
 
 // Idle patrol: amble to points near home with pauses in between. The T1
@@ -635,6 +757,7 @@ function updateRecharge(r, dt, map) {
 export function updateRobots(dt, robots, player, map) {
   for (const r of robots) {
     if (r.dead) continue; // external code may set dead directly; nothing runs after
+    if (r.driven) continue; // a HERMES relay is steering this one; its AI is suspended
 
     // Materialising out of the factory: tick down the flicker timer. The bot
     // still moves and fights normally while it fades in.
@@ -712,7 +835,11 @@ export function updateRobots(dt, robots, player, map) {
     // they spawn at the remote factory and must travel across the map to mend
     // a damaged tower, which almost always happens off-screen — gating them on
     // player proximity meant they never actually came out and repaired.
-    if (!r.friendly && r.type !== 'w3' && !nearPlayer(r, player)) continue;
+    // An aggro'd fortress guard (M5/M6) keeps thinking however far off it is, so
+    // a violation response relentlessly threads the whole maze to reach you
+    // rather than freezing beyond the CPU cull range like ordinary machines.
+    const relentless = (r.type === 'm5' || r.type === 'm6') && r.aggro;
+    if (!r.friendly && r.type !== 'w3' && !relentless && !nearPlayer(r, player)) continue;
 
     // Stunned: frozen in place, battery preserved. Only the timer and the
     // amber flicker phase advance; on expiry normal AI resumes next frame
@@ -800,8 +927,9 @@ export function updateRobots(dt, robots, player, map) {
     }
 
     // Losing line of sight for long enough breaks off the hunt regardless
-    // of type or distance; see LOS_GIVEUP_AFTER above.
-    if (r.aggro && r.type !== 'w3') {
+    // of type or distance; see LOS_GIVEUP_AFTER above. Fortress M5/M6 are exempt
+    // — they hunt relentlessly on the longer FORTRESS_FORGET timer (updateGuard).
+    if (r.aggro && r.type !== 'w3' && r.type !== 'm5' && r.type !== 'm6') {
       const canSee = map.hasLineOfSight(r.x, r.y, player.x, player.y);
       r.losLostT = canSee ? 0 : (r.losLostT || 0) + dt;
       if (r.losLostT > LOS_GIVEUP_AFTER) {
@@ -820,7 +948,7 @@ export function updateRobots(dt, robots, player, map) {
     else if (r.type === 'w3') updateW3(r, dt, map, robots);
     else if (r.type === 'w4') updateW4(r, dt, player, map);
     else if (r.type === 'w5') updateW5(r, dt, map);
-    else if (r.type === 'm6' || r.type === 'm6r') updateM6(r, dt, player, map);
+    else if (r.type === 'm6' || r.type === 'm5' || r.type === 'm4') updateGuard(r, dt, player, map, robots);
     else updateT2(r, dt, player, map);
   }
   separateRobots(robots, map, dt, player);
@@ -925,7 +1053,8 @@ function updateT1(r, dt, player, map) {
 
   if (r.aggro) {
     const expected = Math.min(T1_CHASE_SPEED * dt, d);
-    const moved = moveToward(r, player.x, player.y, T1_CHASE_SPEED, dt, map);
+    const tgt = chaseTarget(r, player.x, player.y, map); // route via a bridge if the river is in the way
+    const moved = moveToward(r, tgt.x, tgt.y, T1_CHASE_SPEED, dt, map);
     // Progress bookkeeping for the stuck tell: a chaser pinned by terrain
     // for a couple of seconds admits it (the renderer shows its confusion).
     if (moved < expected * PROGRESS_FRACTION) r.noProgressT += dt;
@@ -954,6 +1083,7 @@ function fireT3Lasers(r, player, map, ease) {
       x1: player.x, y1: player.y, prog: 0, kind: 'laser_t3',
     });
   }
+  sfx.play('laser'); // one pew per salvo (play() debounces regardless)
   const block = player.blockRangedShot ? player.blockRangedShot(r.x, r.y) : null;
   if (block === 'reflect') {
     r.hp -= 999; r.hurt = true;
@@ -1035,7 +1165,8 @@ function updateT2(r, dt, player, map) {
   if (r.drained) return;
 
   if (r.aggro) {
-    moveToward(r, player.x, player.y, T2_STALK_SPEED, dt, map);
+    const tgt = chaseTarget(r, player.x, player.y, map); // route via a bridge if the river is in the way
+    moveToward(r, tgt.x, tgt.y, T2_STALK_SPEED, dt, map);
     if (d < T2_HIT_RANGE && r.attackTimer <= 0) {
       r.attackTimer = T2_HIT_COOLDOWN;
       player.takeDamage(T2_HIT_DAMAGE * ease, 'machine');
@@ -1091,8 +1222,10 @@ function updateW1(r, dt, player, map) {
 
   r.swarmAngle += r.swarmSpin * dt;
   const standoff = r.w1Phase === 'attack' ? W1_ATTACK_STANDOFF : W1_WITHDRAW_RANGE;
-  const tx = target.x + Math.cos(r.swarmAngle) * standoff;
-  const ty = target.y + Math.sin(r.swarmAngle) * standoff;
+  const route = chaseTarget(r, target.x, target.y, map);
+  let tx, ty;
+  if (route.crossing) { tx = route.x; ty = route.y; } // river in the way: make for the bridge first
+  else { tx = target.x + Math.cos(r.swarmAngle) * standoff; ty = target.y + Math.sin(r.swarmAngle) * standoff; }
   moveToward(r, tx, ty, W1_CHASE_SPEED, dt, map);
 
   // Damage always checks the real, live distance (not distTo, which a Wi-Fi
@@ -1109,11 +1242,26 @@ function updateW1(r, dt, player, map) {
 // with obDamage > 0 (hit by an OB-gun but not yet toppled) and heals it back
 // to zero over a few seconds, then disperses — its job done.
 // A repairable obelisk is damaged-but-standing (hit by an OB-gun), one felled
-// during the SKYLINK purge and flagged `needsRebuild` (the drone raises that
+// during the POSEIDON purge and flagged `needsRebuild` (the drone raises that
 // one from its heap back into a working tower), or one pinned by a RON-ML
 // `loop` hack (frozen — the drone works the loop back out instead).
 function w3Repairable(o) {
-  return o.type === 'obelisk' && ((!o.destroyed && o.obDamage > 0) || (o.destroyed && o.needsRebuild) || o.frozen);
+  // Damaged-but-standing, frozen by a `loop` hack, OR fully toppled — the drone
+  // raises even a completely destroyed tower back up (so felling obelisks is a
+  // race against the repair crew until you bring the W-factory down).
+  return o.type === 'obelisk' && (o.destroyed || o.obDamage > 0 || o.frozen);
+}
+
+// Nothing to mend right now: the drone doesn't vanish — it drifts off on a slow
+// wander (re-anchoring its patrol home as it goes), still scanning for fresh
+// damage each frame at the top of updateW3, so it peels away the instant a
+// tower takes a hit somewhere.
+function w3Wander(r, dt, map) {
+  drainBattery(r, DRAIN_PATROL, dt);
+  if (r.drained) return;
+  patrol(r, W3_SPEED * 0.6, 8, dt, map);
+  r._recenterT = (r._recenterT || 0) - dt;
+  if (r._recenterT <= 0) { r._recenterT = 3.5; r.home = { x: r.x, y: r.y }; }
 }
 function updateW3(r, dt, map, robots) {
   r.aggro = false;
@@ -1126,7 +1274,7 @@ function updateW3(r, dt, map, robots) {
     }
     r.repairTarget = best;
   }
-  if (!r.repairTarget) { r.dead = true; return; } // nothing left to mend: stand down
+  if (!r.repairTarget) { w3Wander(r, dt, map); return; } // nothing to mend: wander, looking
   const ob = r.repairTarget;
   const d = Math.hypot(ob.x + 0.5 - r.x, ob.y + 0.5 - r.y);
   drainBattery(r, DRAIN_PATROL, dt);
@@ -1151,20 +1299,19 @@ function updateW3(r, dt, map, robots) {
   // A felled tower starts its rebuild from full damage; a merely-scorched one
   // from wherever its obDamage sits. Either way, healing obDamage to zero
   // finishes the job.
-  if (ob.destroyed && ob.needsRebuild && !(ob.obDamage > 0)) ob.obDamage = 5;
+  if (ob.destroyed && !(ob.obDamage > 0)) ob.obDamage = 5; // any felled tower rebuilds from full
   if (ob.obDamage > 0) {
     ob.obDamage = Math.max(0, ob.obDamage - W3_REPAIR_RATE * dt);
     ob.burning = 0;
   }
   if (!(ob.obDamage > 0) && !ob.frozen) {
-    if (ob.destroyed && ob.needsRebuild) {
-      // Raise it: standing and solid again, so the SKYLINK web can relight.
+    if (ob.destroyed) {
+      // Raise it: standing and solid again, so the POSEIDON web can relight.
       ob.destroyed = false;
       ob.needsRebuild = false;
       map.objectGrid[ob.y * map.w + ob.x] = ob;
     }
-    r.repairTarget = null;
-    r.dead = true;
+    r.repairTarget = null; // job done — next frame it finds the next tower, or wanders
   }
 }
 
@@ -1249,6 +1396,7 @@ function updateW4(r, dt, player, map) {
     if (r.attackTimer <= 0) {
       r.attackTimer = W4_FIRE_COOLDOWN;
       (map.projectiles ??= []).push({ x0: r.x, y0: r.y, x1: player.x, y1: player.y, prog: 0, kind: 'laser' });
+      sfx.play('laser');
       // A shield or forcefield can stop the bolt; a mirror shield throws it
       // straight back and hurts the shooter.
       const block = player.blockRangedShot ? player.blockRangedShot(r.x, r.y) : null;
@@ -1264,72 +1412,184 @@ function updateW4(r, dt, player, map) {
   }
 }
 
-// ---- M6 fortress guards ----------------------------------------------------
+// ---- ZEUS fortress guards: M4 report drone / M5 sniper / M6 pack -----------
 
-// Sight test: LOS + vision range + the sensor's forward cone. A jammed Wi-Fi
-// block blinds it entirely (being struck still wakes it, via the generic hurt
-// handling in updateRobots).
-function m6Sees(r, player, map) {
+const GUARD_VISION = { m4: M4_VISION, m5: M5_VISION, m6: M6_VISION };
+const GUARD_CONE = { m4: M4_CONE_DOT, m5: -0.1, m6: M6_CONE_DOT };
+
+// Sight test: LOS + per-class vision range + the sensor's forward cone. A
+// jammed Wi-Fi block blinds it (being struck still wakes it, generically).
+function guardSees(r, player, map) {
   if (player.invisibleToRobots) return false;
   const d = Math.hypot(player.x - r.x, player.y - r.y);
-  if (d > M6_VISION || d < 1e-4) return false;
+  if (d > (GUARD_VISION[r.type] || M6_VISION) || d < 1e-4) return false;
   if (!map.hasLineOfSight(r.x, r.y, player.x, player.y)) return false;
   const dot = ((player.x - r.x) / d) * r.facing.x + ((player.y - r.y) / d) * r.facing.y;
-  return dot > M6_CONE_DOT;
+  return dot > (GUARD_CONE[r.type] ?? M6_CONE_DOT);
 }
 
-function updateM6(r, dt, player, map) {
+// --- Fortress pathfinding: BFS through the corridors -------------------------
+// The fortress is a maze, so a guard can't just walk at the intruder — it has to
+// thread the corridors. A cheap breadth-first search over walkable tiles (the
+// annex is flat, so solidity is the only gate) returns the next tile to step to.
+// The player's own tile is always allowed as the goal even if something's on it.
+function guardNextWaypoint(r, tx, ty, map) {
+  const w = map.w, sx = Math.floor(r.x), sy = Math.floor(r.y), gx = Math.floor(tx), gy = Math.floor(ty);
+  if (sx === gx && sy === gy) return { x: tx, y: ty };
+  const start = sy * w + sx, goal = gy * w + gx;
+  const prev = new Map([[start, -1]]);
+  const q = [start];
+  const MAX = 4500;               // node cap: bounds the cost if the target's unreachable
+  let found = false;
+  for (let h = 0; h < q.length && h < MAX; h++) {
+    const cur = q[h];
+    if (cur === goal) { found = true; break; }
+    const cx = cur % w, cy = (cur - cx) / w;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = cx + dx, ny = cy + dy;
+      if (nx < 0 || ny < 0 || nx >= w || ny >= map.h) continue;
+      const ni = ny * w + nx;
+      if (prev.has(ni)) continue;
+      if (ni !== goal && map.isSolid(nx, ny)) continue;
+      prev.set(ni, cur);
+      q.push(ni);
+    }
+  }
+  if (!found) return null;
+  let n = goal;
+  while (prev.get(n) !== start && prev.get(n) !== -1) n = prev.get(n);
+  return { x: (n % w) + 0.5, y: Math.floor(n / w) + 0.5 };
+}
+
+// Follow a cached corridor path toward the player. While a route exists it keeps
+// the LOS-giveup clock at zero, so a guard threading the maze (out of sight for a
+// stretch) stays on the hunt instead of giving up mid-corridor; only if there's
+// genuinely no route (you've escaped the fortress) does the generic give-up run.
+function pursueMaze(r, dt, tx, ty, map, speed) {
+  r._pathT = (r._pathT ?? 0) - dt;
+  const reached = r._wp && Math.hypot(r._wp.x - r.x, r._wp.y - r.y) < 0.45;
+  if (!r._wp || reached || r._pathT <= 0) {
+    r._wp = guardNextWaypoint(r, tx, ty, map);
+    r._pathT = 0.4 + (r.rng ? r.rng() * 0.3 : 0.15);
+  }
+  if (r._wp) moveToward(r, r._wp.x, r._wp.y, speed, dt, map);
+  else moveToward(r, tx, ty, speed, dt, map);
+}
+
+function updateGuard(r, dt, player, map, robots) {
   r.attackTimer = Math.max(0, r.attackTimer - dt);
   const ease = player.threatEase ? player.threatEase() : 1;
   drainBattery(r, r.aggro ? DRAIN_CHASE : DRAIN_PATROL, dt);
   if (r.drained) return;
 
   if (!r.aggro) {
-    if (!(r.loseInterestT > 0) && m6Sees(r, player, map)) {
+    if (!(r.loseInterestT > 0) && guardSees(r, player, map)) {
       r.aggro = true; // spotted — the fortress controller starts its report clock
     } else if (r.returning) {
       moveToward(r, r.home.x, r.home.y, M6_CHASE_SPEED * 0.5, dt, map);
       if (Math.hypot(r.home.x - r.x, r.home.y - r.y) < 1) r.returning = false;
       return;
     } else {
-      patrol(r, M6_PATROL_SPEED, M6_PATROL_RANGE, dt, map);
+      patrol(r, r.type === 'm4' ? M4_PATROL_SPEED : M6_PATROL_SPEED, M6_PATROL_RANGE, dt, map);
       return;
     }
   }
 
-  const d = distTo(r, player);
-  if (r.type === 'm6r') {
-    // The marksman: hold firing range, back off if crowded, fire on a clear
-    // line — the W4 pattern with a lighter bolt.
-    const canSee = map.hasLineOfSight(r.x, r.y, player.x, player.y);
-    if (d > M6R_RANGE) {
-      moveToward(r, player.x, player.y, M6_CHASE_SPEED, dt, map);
-    } else if (d < M6R_MIN_RANGE && d > 1e-4) {
-      const dx = r.x - player.x, dy = r.y - player.y;
-      moveToward(r, r.x + (dx / d) * 2, r.y + (dy / d) * 2, M6_CHASE_SPEED, dt, map);
-    }
-    if (d <= M6R_RANGE && d > 1e-4 && canSee) {
-      r.facing = { x: (player.x - r.x) / d, y: (player.y - r.y) / d };
-      if (r.attackTimer <= 0) {
-        r.attackTimer = M6R_FIRE_COOLDOWN;
-        (map.projectiles ??= []).push({ x0: r.x, y0: r.y, x1: player.x, y1: player.y, prog: 0, kind: 'laser' });
-        const block = player.blockRangedShot ? player.blockRangedShot(r.x, r.y) : null;
-        if (block === 'reflect') {
-          r.hp -= 999; r.hurt = true;
-          map.projectiles.push({ x0: player.x, y0: player.y, x1: r.x, y1: r.y, prog: 0, kind: 'laser' });
-        } else if (!block) {
-          player.takeDamage(M6R_DAMAGE * ease, 'machine');
-        }
-      }
-    }
-    return;
+  // Relentless-but-not-forever: an M5/M6 gives up only after FORTRESS_FORGET
+  // seconds without a single glimpse of you (so it threads the maze on the hunt,
+  // but a player who truly escapes/hides eventually shakes it → the alarm can
+  // stand down). Resets the moment it sees you again.
+  if (r.type === 'm5' || r.type === 'm6') {
+    const saw = !player.invisibleToRobots && map.hasLineOfSight(r.x, r.y, player.x, player.y);
+    r.seenT = saw ? 0 : (r.seenT || 0) + dt;
+    if (r.seenT > FORTRESS_FORGET) { r.aggro = false; r.returning = true; r.seenT = 0; return; }
   }
 
-  // The heavy sentinel: run the player down and strike. Damage checks the
-  // real, live distance (not distTo, which a Wi-Fi block forces to Infinity).
-  if (d > M6_HIT_RANGE * 0.8) moveToward(r, player.x, player.y, M6_CHASE_SPEED, dt, map);
+  const d = distTo(r, player);
+  if (d > 1e-4) r.facing = { x: (player.x - r.x) / d, y: (player.y - r.y) / d }; // face you while engaged
+  if (r.type === 'm4') updateM4(r, dt, player, map, d);
+  else if (r.type === 'm5') updateM5(r, dt, player, map, ease, d);
+  else updateM6Pack(r, dt, player, map, robots, ease);
+}
+
+// M4: unarmed. It just holds you in sight at a wary distance while the breach
+// reports (its `aggro` is what the fortress's report clock reads); it never
+// strikes. Orbits to keep line of sight, backs off if you rush it.
+function updateM4(r, dt, player, map, d) {
+  if (d > M4_KEEP_RANGE + 1) {
+    moveToward(r, player.x, player.y, M4_FLEE_SPEED, dt, map);
+  } else if (d < M4_KEEP_RANGE - 1 && d > 1e-4) {
+    const dx = r.x - player.x, dy = r.y - player.y;
+    moveToward(r, r.x + (dx / d) * 3, r.y + (dy / d) * 3, M4_FLEE_SPEED, dt, map);
+  } else if (d > 1e-4) {
+    const ang = Math.atan2(r.y - player.y, r.x - player.x) + 0.8 * dt; // slow orbit
+    moveToward(r, player.x + Math.cos(ang) * d, player.y + Math.sin(ang) * d, M4_FLEE_SPEED * 0.8, dt, map);
+  }
+}
+
+// M5: the sniper. Camps at long range and plinks a low-power ORANGE laser on a
+// clear line. It never charges — if you close inside its min range it scurries
+// back to keep its distance (hiding). Losing sight for long breaks it off
+// (generic LOS-giveup).
+function updateM5(r, dt, player, map, ease, d) {
+  const canSee = map.hasLineOfSight(r.x, r.y, player.x, player.y);
+  // No firing line: the sniper HOLDS BACK in the quad. It moves to its assigned
+  // post (r.holdPos, seeded on the open quadrangle) and waits there for you to
+  // step into a sightline, rather than chasing into the maze after the pack.
+  if (!canSee) {
+    const hx = r.holdPos ? r.holdPos.x : player.x, hy = r.holdPos ? r.holdPos.y : player.y;
+    if (Math.hypot(hx - r.x, hy - r.y) > 1.4) pursueMaze(r, dt, hx, hy, map, M6_CHASE_SPEED * 0.9);
+    return;
+  }
+  if (d < M5_MIN_RANGE && d > 1e-4) {
+    const dx = r.x - player.x, dy = r.y - player.y;
+    moveToward(r, r.x + (dx / d) * 3, r.y + (dy / d) * 3, M6_CHASE_SPEED, dt, map);
+  }
+  if (canSee && d <= M5_RANGE && d > 1e-4 && r.attackTimer <= 0) {
+    r.attackTimer = M5_FIRE_COOLDOWN;
+    (map.projectiles ??= []).push({ x0: r.x, y0: r.y, x1: player.x, y1: player.y, prog: 0, kind: 'laser_m5' });
+    sfx.play('laser');
+    const block = player.blockRangedShot ? player.blockRangedShot(r.x, r.y) : null;
+    if (block === 'reflect') {
+      r.hp -= 999; r.hurt = true;
+      map.projectiles.push({ x0: player.x, y0: player.y, x1: r.x, y1: r.y, prog: 0, kind: 'laser_m5' });
+    } else if (!block) {
+      player.takeDamage(M5_DAMAGE * ease, 'machine');
+    }
+  }
+}
+
+// M6: pack robot. Only commits to a rush once M6_PACK_MIN of its fellows are
+// aggro'd near you; a lone one hangs back at withdraw range and waits. Once the
+// pack is up it runs waves — close and strike (attack phase), then fall back
+// (withdraw), then charge again — each on its own staggered phase and swarm
+// angle so the squad surrounds you rather than piling on one spot.
+function updateM6Pack(r, dt, player, map, robots, ease) {
+  // No clear line to you (walls between): thread the maze at a run to close in.
+  if (!map.hasLineOfSight(r.x, r.y, player.x, player.y)) {
+    pursueMaze(r, dt, player.x, player.y, map, M6_CHASE_SPEED);
+    return;
+  }
+  let pack = 0;
+  for (const o of robots) {
+    if (o.type === 'm6' && o.aggro && !o.dead && Math.hypot(o.x - player.x, o.y - player.y) < M6_PACK_RADIUS) pack++;
+  }
+  if (pack >= M6_PACK_MIN) {
+    r.m6PhaseT = (r.m6PhaseT ?? 0) - dt;
+    if (r.m6PhaseT <= 0) {
+      if (r.m6Phase === 'attack') { r.m6Phase = 'withdraw'; r.m6PhaseT = M6_WITHDRAW_TIME + r.rng() * 1.5; }
+      else { r.m6Phase = 'attack'; r.m6PhaseT = M6_ATTACK_TIME + r.rng() * 2; }
+    }
+  } else {
+    r.m6Phase = 'withdraw'; // hang back at the edge until the pack forms
+  }
+
+  r.swarmAngle = (r.swarmAngle ?? 0) + (r.swarmSpin ?? 0.12) * dt;
+  const standoff = r.m6Phase === 'attack' ? M6_ATTACK_STANDOFF : M6_WITHDRAW_RANGE;
+  moveToward(r, player.x + Math.cos(r.swarmAngle) * standoff, player.y + Math.sin(r.swarmAngle) * standoff, M6_CHASE_SPEED, dt, map);
+
   const realD = Math.hypot(player.x - r.x, player.y - r.y);
-  if (realD < M6_HIT_RANGE && r.attackTimer <= 0) {
+  if (r.m6Phase === 'attack' && realD < M6_HIT_RANGE && r.attackTimer <= 0) {
     r.attackTimer = M6_HIT_COOLDOWN;
     player.takeDamage(M6_HIT_DAMAGE * ease, 'machine');
   }
@@ -1649,8 +1909,8 @@ function drawT2(ctx, r, c) {
   ctx.fillRect(-4 + swing, -10, 3, 10);
   ctx.fillRect(1 - swing, -10, 3, 10);
 
-  const bodyBase = r.type === 'w1' ? W1_BODY : r.type === 'w3' ? W3_BODY : r.type === 'w4' ? W4_BODY : r.type === 'w5' ? W5_BODY : r.type === 'm6' ? M6_BODY : r.type === 'm6r' ? M6R_BODY : T2_BODY;
-  const headBase = r.type === 'w1' ? W1_HEAD : r.type === 'w3' ? W3_HEAD : r.type === 'w4' ? W4_HEAD : r.type === 'w5' ? W5_HEAD : r.type === 'm6' ? M6_HEAD : r.type === 'm6r' ? M6R_HEAD : T2_HEAD;
+  const bodyBase = r.type === 'w1' ? W1_BODY : r.type === 'w3' ? W3_BODY : r.type === 'w4' ? W4_BODY : r.type === 'w5' ? W5_BODY : r.type === 'm6' ? M6_BODY : r.type === 'm5' ? M5_BODY : r.type === 'm4' ? M4_BODY : T2_BODY;
+  const headBase = r.type === 'w1' ? W1_HEAD : r.type === 'w3' ? W3_HEAD : r.type === 'w4' ? W4_HEAD : r.type === 'w5' ? W5_HEAD : r.type === 'm6' ? M6_HEAD : r.type === 'm5' ? M5_HEAD : r.type === 'm4' ? M4_HEAD : T2_HEAD;
   ctx.fillStyle = bodyTone(bodyBase, r); // blocky torso, roughly player height overall
   ctx.fillRect(-6, -25, 12, 16);
   if (!r.fused) {
@@ -1680,86 +1940,86 @@ function drawT2(ctx, r, c) {
   if (r.drained && !r.fused) drawBatteryIcon(ctx, c.x, c.y - 40);
 }
 
-// A stooped, reaching silhouette instead of the T2's upright stalk — a
-// permanent forward hunch reads as a predator crouched to strike rather
-// than a recoloured T2. Eyes glow orange, not the red every other machine
-// uses, so the one that actually fires the hard-hitting ambush volley is
-// unmistakable at a glance.
+// The T3 ambusher: a wheeled T2 with laser eyes — same family silhouette
+// as the stalker, planted on the T1's undercarriage, with a pair of orange
+// emitters for a face so the machine that fires the twin-laser volley is
+// unmistakable at a glance (orange, never the red of the other machines).
 function drawT3(ctx, r, c) {
-  // A long, thin shadow — it looms rather than stands square.
+  // The ambush sniper, rebuilt as a WHEELED T2 with laser eyes: the T2's
+  // upright blocky silhouette planted on a T1-style wheeled chassis (it
+  // repositions, it never walks), and a pair of always-lit orange laser
+  // eyes — the machine whose whole identity is the twin-laser volley wears
+  // its weapon on its face. Keeps the live-machine tremor, the riveted
+  // sheen, and every state tell (aggro flare, stun flicker, fused slump).
   if (!r.noShadow) {
-    ctx.fillStyle = 'rgba(0,0,0,0.34)';
+    ctx.fillStyle = 'rgba(0,0,0,0.32)';
     ctx.beginPath();
-    ctx.ellipse(c.x, c.y, 9 * T3_SCALE, 4 * T3_SCALE, 0, 0, Math.PI * 2);
+    ctx.ellipse(c.x, c.y, 11 * T3_SCALE, 5 * T3_SCALE, 0, 0, Math.PI * 2);
     ctx.fill();
   }
 
   ctx.save();
   ctx.translate(c.x, c.y);
-  // A faint tremor riding on animT (which always ticks, unlike walkPhase)
-  // keeps it reading as live machinery even while it's holding still and
-  // watching, rather than a dead, inert sprite.
   const tremor = r.fused ? 0 : Math.sin((r.animT || 0) * 9) * 0.012;
   if (r.fused) ctx.rotate(0.16);
-  else ctx.rotate(tremor); // stands up straight — just the faint live-machine tremor (Ubik-confused = bounce, not spin)
+  else ctx.rotate(tremor);
   ctx.scale(T3_SCALE, T3_SCALE);
 
-  // Legs scissor with the walk phase exactly like the T2's — a jagged knee
-  // break rather than a straight limb, and taller than a T2's. Since it
-  // barely moves once camped, this mostly only plays while it repositions.
-  const swing = r.fused ? 0 : Math.sin(r.walkPhase) * 3;
-  ctx.strokeStyle = r.fused ? FUSED_EDGE : T3_LIMB;
-  ctx.lineWidth = 2.2;
-  for (const side of [-1, 1]) {
-    const hipX = side * 3.2;
+  // Wheeled base: two dark wheels with pale hubs under a low chassis skirt —
+  // the T1's undercarriage carrying the T2's body.
+  ctx.fillStyle = r.fused ? FUSED_EDGE : T3_LIMB;
+  for (const wx of [-6, 6]) {
     ctx.beginPath();
-    ctx.moveTo(hipX, -13);
-    ctx.lineTo(hipX + swing * side * 0.4, -6);
-    ctx.lineTo(hipX + swing * side, 0);
-    ctx.stroke();
+    ctx.arc(wx, -3, 4.5, 0, Math.PI * 2);
+    ctx.fill();
   }
-
-  // Torso: a narrow, ragged waist breaking out into tall, asymmetric jagged
-  // shoulders — a broken silhouette rather than a smooth chassis block, and
-  // taller than any other machine here so it genuinely looms.
-  ctx.fillStyle = bodyTone(T3_BODY, r);
+  if (!r.fused) {
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    for (const wx of [-6, 6]) {
+      ctx.beginPath();
+      ctx.arc(wx, -3, 1.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.fillStyle = bodyTone(T3_BODY, r); // chassis skirt
   ctx.beginPath();
-  ctx.moveTo(-4, -13);
-  ctx.lineTo(4, -13);
-  ctx.lineTo(6, -23);
-  ctx.lineTo(9, -30);
-  ctx.lineTo(3, -35);
-  ctx.lineTo(-2, -36);
-  ctx.lineTo(-8, -31);
-  ctx.lineTo(-5, -24);
+  ctx.moveTo(-9, -6);
+  ctx.lineTo(9, -6);
+  ctx.lineTo(7, -12);
+  ctx.lineTo(-7, -12);
   ctx.closePath();
   ctx.fill();
+
+  // Torso: the T2's blocky trunk, a shade taller so the sniper still reads
+  // as the bigger machine at a glance.
+  ctx.fillStyle = bodyTone(T3_BODY, r);
+  ctx.fillRect(-7, -30, 14, 18);
   ctx.strokeStyle = r.fused ? FUSED_EDGE : T3_EDGE;
   ctx.lineWidth = 1;
-  ctx.stroke();
+  ctx.strokeRect(-7, -30, 14, 18);
 
   if (!r.fused) {
-    // A riveted-metal texture clipped to the torso silhouette: a diagonal
-    // brushed-steel sheen, a panel seam, and a scatter of rivets — echoes
-    // the fortress ramparts' metal without needing the full wall texture
-    // at this scale. Reuses the torso path already current from the fill.
+    // Riveted brushed-steel sheen clipped to the trunk (kept from the old
+    // draw — it earns its keep at this scale).
     ctx.save();
+    ctx.beginPath();
+    ctx.rect(-7, -30, 14, 18);
     ctx.clip();
-    const sheen = ctx.createLinearGradient(-8, -36, 9, -13);
-    sheen.addColorStop(0, 'rgba(255,255,255,0.04)');
-    sheen.addColorStop(0.42, 'rgba(255,255,255,0.24)');
-    sheen.addColorStop(0.52, 'rgba(255,255,255,0.04)');
+    const sheen = ctx.createLinearGradient(-7, -30, 7, -12);
+    sheen.addColorStop(0, 'rgba(255,255,255,0.05)');
+    sheen.addColorStop(0.42, 'rgba(255,255,255,0.22)');
+    sheen.addColorStop(0.52, 'rgba(255,255,255,0.05)');
     sheen.addColorStop(1, 'rgba(0,0,0,0.16)');
     ctx.fillStyle = sheen;
-    ctx.fillRect(-10, -38, 20, 28);
+    ctx.fillRect(-8, -31, 16, 20);
     ctx.strokeStyle = 'rgba(0,0,0,0.3)';
     ctx.lineWidth = 0.6;
     ctx.beginPath();
-    ctx.moveTo(-8, -23);
-    ctx.lineTo(8, -19);
+    ctx.moveTo(-7, -18);
+    ctx.lineTo(7, -16);
     ctx.stroke();
     ctx.fillStyle = 'rgba(255,255,255,0.4)';
-    for (const [rx, ry] of [[-5, -30], [3, -33], [-2, -16], [4, -17]]) {
+    for (const [rx, ry] of [[-4, -27], [4, -26], [-3, -15], [5, -20]]) {
       ctx.beginPath();
       ctx.arc(rx, ry, 0.55, 0, Math.PI * 2);
       ctx.fill();
@@ -1768,72 +2028,78 @@ function drawT3(ctx, r, c) {
   }
 
   if (!r.fused) {
-    // Both arms reach, opposite each other and opposite the legs on the
-    // same phase — a point-blank tell as much as a walk cycle, since these
-    // are what actually swing the claws it falls back on up close.
+    // Short claw arms off the shoulders — the point-blank tell survives the
+    // redesign: two angled struts, each ending in a two-talon pinch, with a
+    // slow reach riding the tremor clock.
+    const reach = Math.sin((r.animT || 0) * 1.6) * 1.2;
     for (const side of [-1, 1]) {
-      const reach = Math.sin(r.walkPhase + Math.PI + (side < 0 ? Math.PI : 0)) * 4;
-      const shoulderX = side * 6, shoulderY = -30;
-      const tipX = side * (11 + reach * 0.3), tipY = -25 + reach * 0.6;
+      const sx = side * 7, sy = -26;
+      const tipX = side * (11.5 + reach), tipY = -20;
       ctx.strokeStyle = T3_LIMB;
-      ctx.lineWidth = 2.5;
+      ctx.lineWidth = 2.4;
       ctx.beginPath();
-      ctx.moveTo(shoulderX, shoulderY);
+      ctx.moveTo(sx, sy);
       ctx.lineTo(tipX, tipY);
       ctx.stroke();
-
-      // A three-talon claw fanned out from the tip, along the arm's own
-      // direction — what you'd actually feel close on your shoulder.
-      const armAng = Math.atan2(tipY - shoulderY, tipX - shoulderX);
       ctx.strokeStyle = T3_EDGE;
-      ctx.lineWidth = 1.4;
-      for (const off of [-0.5, 0, 0.5]) {
-        const a = armAng + off;
+      ctx.lineWidth = 1.3;
+      for (const off of [-0.45, 0.45]) {
+        const a = Math.atan2(tipY - sy, tipX - sx) + off;
         ctx.beginPath();
         ctx.moveTo(tipX, tipY);
-        ctx.lineTo(tipX + Math.cos(a) * 4, tipY + Math.sin(a) * 4);
+        ctx.lineTo(tipX + Math.cos(a) * 3.6, tipY + Math.sin(a) * 3.6);
         ctx.stroke();
       }
     }
   }
 
-  // Head: gaunt and elongated, no neck, hunched straight into the shoulders
-  // — a skull shape rather than a boxy sensor head.
+  // Head: the T2's sensor block, one size up.
   ctx.fillStyle = r.fused ? FUSED_DARK : T3_HEAD;
-  ctx.beginPath();
-  ctx.ellipse(0.5, -42, 3.4, 6.5, 0, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.fillRect(-5, -39, 10, 9);
+  ctx.strokeStyle = r.fused ? FUSED_EDGE : T3_EDGE;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(-5, -39, 10, 9);
 
-  // Two hollow eye sockets instead of one visor — dark and empty at rest,
-  // glowing orange together the instant it's actually hunting (aggro): the
-  // same tell every other machine gives in red, recoloured so its threat
-  // reads as distinct from a T1/T2/W1/W4 at a glance.
+  // LASER EYES: a pair of round orange emitters, always faintly lit — this
+  // is the machine that shoots from its face, and it should look like it.
+  // t3SensorStyle flares them (and adds the halo) the instant it hunts;
+  // fused/drained states go dark through the same path as everyone else.
   const s = t3SensorStyle(r);
-  for (const ex of [-1.4, 1.9]) {
-    ctx.fillStyle = EYE_SOCKET;
+  for (const ex of [-2.4, 2.4]) {
+    ctx.fillStyle = EYE_SOCKET; // emitter housing
     ctx.beginPath();
-    ctx.arc(ex, -43, 1.4, 0, Math.PI * 2);
+    ctx.arc(ex, -34.5, 1.9, 0, Math.PI * 2);
     ctx.fill();
   }
   if (s) {
-    for (const ex of [-1.4, 1.9]) {
+    for (const ex of [-2.4, 2.4]) {
       if (s.halo) {
         ctx.fillStyle = s.halo;
         ctx.beginPath();
-        ctx.arc(ex, -43, 2.8, 0, Math.PI * 2);
+        ctx.arc(ex, -34.5, 3.6, 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.fillStyle = s.fill;
       ctx.beginPath();
-      ctx.arc(ex, -43, 1.1, 0, Math.PI * 2);
+      ctx.arc(ex, -34.5, 1.4, 0, Math.PI * 2);
       ctx.fill();
+    }
+    // Hunting: a thin charge-line joins the two emitters — the twin lasers
+    // converging, the last thing you see before the volley.
+    if (s.halo && !r.fused && !r.drained) {
+      ctx.strokeStyle = s.fill;
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(-2.4, -34.5);
+      ctx.lineTo(2.4, -34.5);
+      ctx.stroke();
     }
   }
 
-  drawDesignation(ctx, r, 0, -27); // 'T3' higher on the torso plate, near the chest
+  drawDesignation(ctx, r, 0, -21); // 'T3' on the trunk plate
 
   ctx.restore();
 
-  if (r.fused) drawSmoke(ctx, c.x, c.y - 38 * T3_SCALE, r.animT || 0);
-  if (r.drained && !r.fused) drawBatteryIcon(ctx, c.x, c.y - 46 * T3_SCALE);
+  if (r.fused) drawSmoke(ctx, c.x, c.y - 34 * T3_SCALE, r.animT || 0);
+  if (r.drained && !r.fused) drawBatteryIcon(ctx, c.x, c.y - 43 * T3_SCALE);
 }

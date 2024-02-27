@@ -11,7 +11,7 @@
 
 import { GameMap } from './map.js';
 import { makeRng } from './rng.js';
-import { TAPES } from './items.js';
+import { TAPES, DELETED_BOOKS, DELETED_RECORDS } from './items.js';
 import { ANIMAL_SPRITE_SETS } from '../engine/textures.js';
 
 // A big 128x128 pocket: rooms of wildly varying size scattered across an open
@@ -20,10 +20,13 @@ import { ANIMAL_SPRITE_SETS } from '../engine/textures.js';
 // boundless liminal space rather than one enclosed dungeon. The way home is a
 // plain door set in the first room's wall. One pale thing lurks in the far
 // rooms.
-const UW_SIZE = 128;
+// Bigger than it was (128 → 176): the Backspace now holds a yellow box for
+// EVERY deleted book and record (the whole shelf the machines pushed down here),
+// so it needs the floor space and the extra rooms to spread them through.
+const UW_SIZE = 176;
 const UW_WALL_H = 40;
 const UW_ROOM_MIN = 10, UW_ROOM_MAX = 26;   // room side length, tiles
-const UW_MAX_ROOMS = 15;
+const UW_MAX_ROOMS = 24;
 const UW_MARGIN = 6;
 // Values stored per tile in map.liminalTex; the renderer maps 0..6 to the
 // seven floor images (see renderer.js LIMINAL_TEX), and treats these two
@@ -51,7 +54,7 @@ function carveWorld(map, rng) {
   const rooms = [];
 
   // Scatter non-overlapping rooms of varying sizes.
-  for (let t = 0; t < 90 && rooms.length < UW_MAX_ROOMS; t++) {
+  for (let t = 0; t < 240 && rooms.length < UW_MAX_ROOMS; t++) {
     const rw = UW_ROOM_MIN + Math.floor(rng() * (UW_ROOM_MAX - UW_ROOM_MIN + 1));
     const rh = UW_ROOM_MIN + Math.floor(rng() * (UW_ROOM_MAX - UW_ROOM_MIN + 1));
     const rx = UW_MARGIN + Math.floor(rng() * (W - rw - UW_MARGIN * 2));
@@ -164,29 +167,64 @@ function carveWorld(map, rng) {
     }
     return false;
   };
-  const allNums = TAPES.map((t) => t.num);
-  // The WARD tape (num 3) belongs in the spawn room if it exists; else the first.
-  const spawnTape = allNums.includes(3) ? 3 : allNums[0];
-  boxAt(spawn.cx + 2, spawn.cy, spawnTape);
-  // Guarantee every other tape lands in one of the further rooms.
-  const need = allNums.filter((n) => n !== spawnTape);
-  let ni = 0;
-  for (let i = 1; i < rooms.length && ni < need.length; i++) {
-    if (placeInRoom(rooms[i], need[ni])) ni++;
+  // The WARD "bear stanhope" tape is the Backspace's own — it belongs down here
+  // and nowhere else (every other tape is out in the overworld, doubled). It
+  // sits in the spawn room where you land, with a couple of extra copies sparse
+  // through the further rooms so a run can never miss it.
+  const wardNum = TAPES.some((t) => t.num === 3) ? 3 : TAPES[0].num;
+  boxAt(spawn.cx + 2, spawn.cy, wardNum);
+  for (let i = 1; i < rooms.length; i++) {
+    if (rng() >= 0.25) continue;
+    const r = rooms[i];
+    boxAt(r.x + 2 + Math.floor(rng() * (r.w - 4)), r.y + 2 + Math.floor(rng() * (r.h - 4)), wardNum);
   }
-  // Any tape still unplaced (too few usable rooms) goes into the spawn room so
-  // it can never be missing from a run.
-  for (; ni < need.length; ni++) {
-    for (let k = 3; k < spawn.w - 2; k++) {
-      if (boxAt(spawn.x + k, spawn.cy + (k % 2 ? 1 : 2), need[ni])) break;
+
+  // The Backspace's deleted objects: paper books and analogue records the
+  // machines took out of the world, sparse in yellow boxes through the further
+  // rooms (same box, different loot). Books outnumber records, as the covers do.
+  const deletedKeys = [
+    ...DELETED_BOOKS.map((_, i) => `pbook_${i + 1}`),
+    ...DELETED_RECORDS.map((_, i) => `record_${i + 1}`),
+  ];
+  const boxItemAt = (bx, by, key) => {
+    if (map.inBounds(bx, by) && !map.objectAt(bx, by)) {
+      map.addObject('box', bx, by, { loot: [{ item: key, qty: 1 }], opened: false, yellow: true });
+      return true;
+    }
+    return false;
+  };
+  if (deletedKeys.length) {
+    // Guarantee EVERY deleted book and record gets its own yellow box — the
+    // machines pushed the whole shelf down here, so a determined player can
+    // recover all of it. Shuffle the list, then deal them across the further
+    // rooms round-robin (several to a room), spreading them through the
+    // Backspace rather than piling them in one place.
+    const shuffled = deletedKeys.slice();
+    for (let i = shuffled.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]; }
+    const dealRooms = rooms.length > 1 ? rooms.slice(1) : rooms; // keep the spawn room clearer
+    let ri = 0;
+    for (const key of shuffled) {
+      let placed = false;
+      for (let room = 0; room < dealRooms.length && !placed; room++) {
+        const r = dealRooms[(ri++) % dealRooms.length];
+        for (let tries = 0; tries < 24 && !placed; tries++) {
+          placed = boxItemAt(r.x + 2 + Math.floor(rng() * Math.max(1, r.w - 4)), r.y + 2 + Math.floor(rng() * Math.max(1, r.h - 4)), key);
+        }
+      }
     }
   }
-  // Sparse random extras (doubles) through the further rooms, for texture.
-  for (let i = 1; i < rooms.length; i++) {
-    if (rng() >= 0.3) continue;
-    const r = rooms[i];
-    boxAt(r.x + 2 + Math.floor(rng() * (r.w - 4)), r.y + 2 + Math.floor(rng() * (r.h - 4)),
-      allNums[Math.floor(rng() * allNums.length)]);
+
+  // A couple of RON-DOS manuals deleted into the Backspace: the machines pushed
+  // the operator's documentation down here too. Guarantee one full manual and
+  // one torn page in the further rooms so a player can learn the console from
+  // what was thrown away — a small irony of the place.
+  const manuals = ['book_ronml', 'ronml_page'];
+  for (let m = 0; m < manuals.length; m++) {
+    const r = rooms[Math.min(rooms.length - 1, 1 + m)] || spawn;
+    for (let tries = 0; tries < 16; tries++) {
+      if (boxItemAt(r.x + 2 + Math.floor(rng() * Math.max(1, r.w - 4)),
+                    r.y + 2 + Math.floor(rng() * Math.max(1, r.h - 4)), manuals[m])) break;
+    }
   }
 
   // Farthest room from spawn: where the lurker waits.
