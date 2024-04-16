@@ -61,7 +61,7 @@ Comments are `(* ml style *)`. Whitespace-insensitive. Case-insensitive keywords
 |---|---|---|---|
 | `scan` | `unit -> list` | returns nodes/robots in range of this terminal | always |
 | `nearest` | `list -> node` | the closest element of a list | always |
-| `hack n` | `node -> key` | returns node `n`'s access key (its hex) | needs an **AI key** held |
+| `hack n` | `node -> key` | returns node `n`'s access key (its hex) | free (chip only, no AI key) |
 | `crash n k` | `node -> key -> unit` | knocks node `n` offline until a repair drone reaches it; wrong/absent key fails | needs `k` from `hack n` |
 | `sleep t` | `num -> unit` | this AI's local machines idle for `t` game-minutes | needs AI key |
 | `repel` | `unit -> unit` | nearby robots' targeting inverts: they flee you for a spell | needs AI key |
@@ -100,9 +100,13 @@ goal for the players who want it.)
 
 Three gates, each doing narrative + mechanical work:
 
-1. **You need an AI key** (physical item, from a destroyed W-factory) to do anything
-   with teeth. `scan`/`keys`/`nearest` are free (they read, they don't act). One key
-   unlocks one AI's quadrant of nodes (ties straight into the eventual four-AI map).
+1. **The AI key** (physical item, from a destroyed W-factory) gates the *sharper*
+   verbs, not all the ones with teeth. `scan`/`keys`/`nearest` are free (they read).
+   `hack`/`crash`/`loop` are also free now (the access chip that opened the console is
+   enough): you can knock a node dark without an AI key. What the AI key still unlocks
+   is `sleep`/`rewind`/`repel` and the fortress `unlock`. One key unlocks one AI's
+   quadrant for those (ties into the four-AI map). *(Revised 2026-07-12: `hack`/`crash`
+   no longer need an AI key; row in §3 below marked accordingly.)*
 2. **Range** — a terminal only `scan`s / `hack`s / `crash`es nodes in its own network
    neighbourhood, so you have to physically get to the right obelisk.
 3. **You must not be hit while typing.** The terminal is a modal, but the world keeps
@@ -187,3 +191,166 @@ Nothing here needs the four-AI map first; it works against the current single ne
 - **Effect scope of `sleep`/`repel`** — this obelisk's neighbourhood, or the whole
   AI's quadrant? Suggest neighbourhood now, quadrant once the key/quadrant model
   exists.
+
+## 9. Revised gating model (David, 2026-07-12) — supersedes §4
+
+Two key items, two command tiers, a fortress-key program, and a persistent
+top-level `let`. This is the authoritative gating spec; §3/§4 above are the
+original design and are kept for history.
+
+### Two currencies
+- **Access key (the chip)** — opens the terminal. Once you are inside, every
+  Type 2 command runs *if you know the word*. Common (fell a tower, or craft from
+  fragments). Unchanged as the console-entry gate: the `hack` verb itself takes
+  no key, but you needed the access key to be in the console at all.
+- **AI key** — rare, from a wrecked W-factory, and **encrypted**. Not usable
+  raw: `decrypt aikey` turns it into a token that `unlock` consumes. This is the
+  only gate on Type 1.
+
+### Type 2 — the hacks (access key + language; NO AI key)
+`scan`, `nearest`, `keys`, `name`, `map`, `print`, `hack`, `crash`, `loop`,
+`sleep`, `repel`, `rewind`. None needs the AI key.
+
+- **`name` (new verb):** `name -> node`. Prints the code of the obelisk you are
+  jacked into (e.g. `OB-1A2B`) — a free read, like `scan`, so you can see which
+  node you're on without scrolling the boot banner. Obelisk console only; at a
+  HERMES relay it can echo the relay id (or stay ob-only — TBD).
+
+Because the three board verbs
+(`sleep`/`repel`/`rewind`) are now this easy to reach, their **effects are
+nerfed** (smaller radius / shorter duration) so easy access is not overpowered.
+(`hack`'s AI-key gate was removed 2026-07-12; `sleep`/`repel`/`rewind` follow.)
+
+### Type 1 — the deep hack (copy the AI key in, decrypt it, unlock)
+The **fortress key** is the endgame unlock, and it takes a deliberate multi-step
+program: copy your physical AI key into the terminal so the language can name it,
+decrypt it, then spend the decrypted token together with a freshly hacked node
+key.
+
+```ml
+copy aikey
+let k = hack OB-1A2B
+let d = decrypt aikey
+unlock k d
+```
+
+- **`copy` (new verb):** `copy aikey` reads the AI key you physically hold and
+  copies its keyname OFF into the session, binding `aikey` so the rest of the
+  language can use it (echoes `val aikey = KEY:AI-XXXX`, ML top-level style —
+  it behaves like a `let` sourced from your pack rather than an expression).
+  **Fails if you hold no AI key** — this is where the "AI key held" check now
+  lives. Diegetically: you copy the code off the key into the machine.
+- **`decrypt` (new verb):** `decrypt aikey -> token`. Turns the copied,
+  still-encrypted key into the token `unlock` needs.
+- **`unlock` reworked to `unlock k d`:** a hacked node key `k` AND a decrypted
+  AI-key token `d`. Drops the fortress key. (Was `unlock k` on a hacked key
+  alone — too easy.)
+
+Once `aikey` is in scope from `copy`, the tail can also be the single-expression
+form `let k = hack OB-1A2B in let d = decrypt aikey in unlock k d`; or line by
+line as above (persistent top-level `let`). Three real steps — copy, decrypt,
+unlock — is the point: the endgame key is earned, not typed.
+
+### Backing up the AI key at HERMES
+The AI key is hard-won (a wrecked W-factory) and easy to lose (death wipes the
+run). RON's relays hold a safety copy so a single bad death does not cost you the
+whole endgame path. These are HERMES-station verbs (RON's own system, off the AI
+wire), free to use but spending relay charge like the other HERMES verbs.
+
+- **`backup aikey` (HERMES relay only):** copies your held AI key into the RON
+  relay mesh. **Persists across death** (rides the campaign save, not the
+  regenerated world). RON keeping a copy off the AI's own hardware.
+- **`restore aikey` (HERMES relay only):** if the mesh holds a backup and you are
+  not carrying the key, mints a copy back into your pack. This is how you recover
+  after losing it.
+
+Symmetry with `copy`: `copy` copies the key OFF into an AI obelisk to spend it in
+the language; `backup` copies it INTO RON's relay mesh to keep it. Towers let you
+use it; relays let you not lose it.
+
+Open: should `restore` cost charge, or be free (you already paid to `backup`)?
+And is a restored key identical, or a fresh AI-key item? (Suggest: fresh item,
+`restore` free, `backup` costs the charge.)
+
+### Spares, and never decaying
+Two more guards against losing the key:
+
+- **Print spare copies.** Once `copy aikey` has brought the key into the OB
+  session, `print aikey` drops a fresh physical AI key at your feet (the `print`
+  verb already drops carryable items). Make duplicates, stash them apart.
+  Requires `aikey` in scope, so you must hold and copy the real one first.
+- **The AI key never decays on the ground.** It joins the critical-uniques set
+  (like backpacks and other one-of-a-kind items, v0.91), so a placed or dropped
+  key never rots — a stashed spare is a permanent stash.
+- **Pickup toast teaches the copy.** Picking up an AI key fires a one-off toast
+  pointing the player at the mechanic, e.g. *"AI key. Jack into an obelisk and
+  `copy aikey` — then you can print spares and never lose it."* The mechanic is
+  otherwise easy to never discover; the toast is the teaching moment.
+
+How the three loss-guards divide the work: `print` spares hedge against dropping
+one *mid-run*; never-decay makes those spares permanent in the world; HERMES
+`backup` is the only one that survives *death* (world items, spares included, are
+wiped when the run resets). They stack, but if HERMES death-recovery already
+feels sufficient, `print` spares are just convenience — worth deciding whether
+all three coexist or one is dropped.
+
+### The fortress program is found, not given
+The `copy`/`hack`/`decrypt`/`unlock` recipe is **not** taught by `help` or the
+manual. It is a `kind: 'code'` lore fragment (extends §5's Fragments A–E as
+Fragment F), **placed at random** in the world like the others, so the endgame
+key is gated behind *reading the world*, not just holding an AI key. Draft, in
+the operator-scrawl voice of the existing code fragments:
+
+```
+copy aikey
+let k = hack OB-XXXX
+let d = decrypt aikey
+unlock k d
+```
+> "the gate won't take the key raw. copy it off your hand first so the console
+> can hold it, then decrypt — the AI encrypts its own masters, force of habit —
+> then unlock with the node's key and the clean one together. put the obelisk
+> you're stood under where it says OB. burned three keys learning that. — M"
+
+Placement: the random lore pool (`lore.js` `FRAGMENTS`, dealt into caches by
+`_place`), same as any other fragment — no special guarantee, so a run that never
+finds it has to piece the program together from the verb `help` lines. (Consider
+a soft safety net: a HERMES `read` topic that hints at it, if playtests show it
+is too easy to miss.)
+
+### Persistent top-level `let` (the ML top-level)
+The obelisk console is an ML top-level, not a one-shot line. A bare `let x = e`
+(no `in`) evaluates `e`, **binds `x` for the rest of the terminal session**, and
+echoes the binding (ML-style `val x = …`). So the fortress program can be entered
+as three sequential lines that follow one another:
+
+```ml
+let k = hack OB-1A2B
+let d = decrypt aikey
+unlock k d
+```
+
+The single-expression form (`let … in … in …`) still works. Bindings live until
+the terminal closes or resets. This is the one real evaluator change; everything
+else is verb-level.
+
+### Implementation touch-points
+1. `ronml.js`: drop `requireAiKey` from `sleep`/`repel`/`rewind`; add `decrypt`,
+   `copy`, and `name` (free, reads the current node from ctx); extend `print` to
+   take `aikey` (drop a physical key copy when `aikey` is in scope); rework
+   `unlock` to arity-2 (`k`, `d`). `crash` stays.
+2. `ronml.js` + `main.js` REPL: a session environment that bare top-level `let`
+   writes and later lines read; parser accepts `let x = e` with no `in` at the
+   top level; echo `val x = …`.
+3. Effect tuning for `sleep`/`repel`/`rewind` (radius/duration) in their ctx
+   effect functions.
+4. HERMES verbs: add `backup`/`restore` to `hermesCtx` (hermes.js verb set +
+   the `HELP_VERBS` hermes rows), spending relay charge; a persisted
+   `aikeyBackedUp` flag in the character/campaign save so it survives death.
+5. Lore: add the fortress-program fragment (`kind: 'code'`, Fragment F) to
+   `lore.js` `FRAGMENTS`, dealt at random by `_place` — no guaranteed placement.
+   Also add the AI key to the critical-uniques never-decay set (items.js / the
+   decay list, per v0.91), and fire a one-off pickup toast on the AI key (the
+   pickup handler in player.js) pointing at `copy aikey`.
+6. Help table, `read ronml` (hermes.js), the RON-ML manual (items.js), and §3/§4
+   here updated to match.

@@ -58,6 +58,32 @@ export const FLOOR_TEXTURES = {
 // deterministic chance to use this instead of the usual grass texture.
 export const GRASS_PATCH_TEXTURE = loadDownscaled(T + 'floor-secret.jpg');
 
+// Natural rock/boulder surfaces (David's field photos, centre-cropped to the
+// clean stone): the scattered rocks map one of these onto their little dome so
+// they read as real mossy granite instead of a flat grey blob. A rock picks its
+// variant deterministically from its tile, so the same rock keeps the same face.
+// Downscaled like the floors to keep the per-frame minification shimmer down.
+export const ROCK_TEXTURES = [
+  loadDownscaled(T + 'rock-surface-1.jpg', 72), // small-rock: granite + moss
+  loadDownscaled(T + 'rock-surface-2.jpg', 72), // mossyrock: pink-grey, heavy moss
+  loadDownscaled(T + 'rock-surface-3.jpg', 72), // smallrock2: plain grey stone
+];
+
+// Wood grain for the loot crates. Each crate picks a variant and a slightly
+// different opacity (see drawBox) so a row of them doesn't look stamped out.
+export const BOX_TEXTURES = [
+  loadDownscaled(T + 'box-wood-1.jpg', 64),
+  loadDownscaled(T + 'box-wood-2.jpg', 64),
+];
+
+// Wood grain for the crafted boat (Renderer.drawBoat), stretched over the hull
+// faces. [0] is the darker, figured grain used for the hull sides and deck;
+// [1] the lighter, finer grain for the interior boards.
+export const BOAT_TEXTURES = [
+  loadDownscaled(T + 'boat-wood-1.jpg', 96),
+  loadDownscaled(T + 'boat-wood-2.jpg', 96),
+];
+
 // Keyed by the wall object's `material` field (tiles.js/worldgen.js).
 export const WALL_TEXTURES = {
   stone: loadDownscaled(T + 'wall-stone.jpg'),

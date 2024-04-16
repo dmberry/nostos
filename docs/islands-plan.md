@@ -8,10 +8,17 @@ using tools**. Each island is laid out differently according to its god's/AI's
 character.
 
 **Status: design APPROVED (David, 2026-07-10) — §10 decisions are settled
-except island owners. No island code exists yet, but the prerequisites have
-landed** (v1.58 guard roster + fortress map; v1.59 island-agnostic daemon-kill
-endgame; v1.61 Crown→Daemon rename; v1.62 death-aria + testament — see §2 and
-§9) **and Stage 0 is unblocked.** Stage 0 is the gating
+except island owners. Stage 0 COMPLETE: 0a (the `currentWorld` wrap, 2026-07-11)
++ 0b (the Backspace ported to a World, 2026-07-11) + 0c (`src/islands/calypso.js`
+via `createIsland`, 2026-07-12) all landed and verified** (see §3). **Stage 1a**
+(the craftable, shore-placed boat, 2026-07-12) is also landed (see §4); **next:
+Stage 1b** (departure + crossing) and **Stage 3** (the sibling islands), both
+building on `createIsland`. See also `islands-odyssey-revision.md` (R1–R5): the World contract
+should gain `obColor`/`obAlertColor`, and the fortress becomes a parameterised
+module (COORDINATE with Henrik).
+**Prerequisites all landed** (v1.58 guard roster + fortress map; v1.59
+island-agnostic daemon-kill endgame; v1.61 Crown→Daemon rename; v1.62
+death-aria + testament — see §2 and §9). Stage 0 is the gating
 refactor; Stages 3+ are designed to be built by parallel sessions without
 file contention. Read "Working rules for parallel sessions" before touching
 anything.
@@ -129,25 +136,48 @@ export function createWorld(id, opts) {
 
 Work items, in order, each leaving the game playable:
 
-1. **0a — introduce `currentWorld` for the overworld only.** Wrap the existing
-   map + entity arrays in a world object built at boot (`calypso` id), point
-   every consumer at `currentWorld.robots` etc. Pure mechanical move-and-alias;
-   no behaviour change. *Verify: full run plays identically; seed unchanged
-   produces the identical world; no console errors.*
-2. **0b — port the Backspace.** `createUnderworldPocket` returns a World; the
-   `inUnderworld` boolean and every ternary die, replaced by
-   `currentWorld.ambience` and world switching (`switchWorld(w, player)` in
-   world.js: calls onExit/onEnter, moves the player, keeps `player.map` in
-   sync). The overworld freeze-while-away behaviour is preserved because
-   main.js only ever ticks `currentWorld`. *Verify: tear in, wander, lurker
-   hunts, EXIT out, overworld resumed exactly where it was; save/reload mid-
-   Backspace does whatever it does today (no regression).*
-3. **0c — wrap the current island as `src/islands/calypso.js`.** Move the
-   world-assembly block out of main.js (the buildWorld call, spawns, fortress/
-   factory/obelisk wiring, loot seeding at ~line 100–450) into
-   `createIsland(seed)` returning a World. main.js boot becomes: make player,
-   `switchWorld(createIsland(WORLD_SEED), player)`. *Verify: seed-identical
-   world, full run, fortress alarm still works, POSEIDON countdown still runs.*
+1. **0a — introduce `currentWorld` for the overworld only. ✓ DONE (2026-07-11).**
+   New `src/game/world.js` (`createWorld` + a tiny registry, arrays held BY
+   REFERENCE); a single `currentWorld = createWorld('calypso', {...})` built after
+   the last entity array (main.js ~707), and every RUNTIME consumer repointed to
+   `currentWorld.*` (the ~78 reads below a sentinel comment; the construction
+   block keeps local names for 0c; the two ES6-shorthand literals hand-expanded).
+   `inUnderworld`/map-switching left untouched (0b). Verified: 24 tests
+   (`test/world.test.js` added), aliasing holds (`__game.robots === currentWorld.robots`
+   for all six), a T2 chases via the repointed `runUpdate` bag, renderer draws all
+   classes, no console errors.
+2. **0b — port the Backspace. ✓ DONE (2026-07-11).** The Backspace is now a
+   `backspace` World (built lazily, `keepsPosition:false` so you always land at
+   the tear's door): empty entity arrays blank the overworld for free, its
+   `ambience` (`{light:1, dawnGlow:false, minimap:false, underworld:true}`)
+   drives the veil/fullbright render, its `update()` ticks the lurker + ambient
+   shrieks, and its `onEnter`/`onExit` carry the narration + lore + drone. The
+   `inUnderworld` boolean and all five draw ternaries are gone (draw reads
+   `currentWorld.*` + `currentWorld.ambience`); the update loop dispatches on
+   `currentWorld !== calypso`. `switchWorld(from, to, player)` (world.js) runs
+   onExit/onEnter, places the player (returnPos for keepsPosition worlds, else
+   spawn), and syncs `player.map`; main.js's `goToWorld` syncs the outer `map`
+   local + camera + debug hook. Verified live: tear in (narration, blanked
+   overworld, lurker, veil, no minimap), lurker ticks, EXIT out (overworld
+   resumed at the exact return position, entities back), 26 tests, no console
+   errors.
+3. **0c — wrap the current island as `src/islands/calypso.js`. ✓ DONE (2026-07-12).**
+   The whole overworld construction (buildWorld + spawns + loot + obelisks +
+   W-factory + `createFortress` + coast + ruins + guards + birds, ~380 lines)
+   moved **verbatim** (WORLD_SEED→seed only) into `createIsland(seed) → World`;
+   main.js boot is now `const calypso = registerWorld(createIsland(WORLD_SEED))`
+   then a destructure that aliases the World's arrays + controllers by name, so
+   the ~60 runtime sites are unchanged. Controllers (`fortress`, `wfactory`,
+   `mainframe`, `torObjs`) are attached as named World fields. **Stayed** in
+   main.js (player/lore-coupled or runtime): `player`, save/load, `lore`,
+   `worldStir`, `onCoreDefeated`, the factory helpers, `registerRobotsSystem()`,
+   `fortressKeyFromCrash`. main.js 2,866 → 2,494 lines. Verified: **seed-identical**
+   (fingerprint of obelisk codes/circuit, object/loot/box/tree counts, fortress
+   core, animals/waterdroids/obelisks matched byte-for-byte pre vs post at a fixed
+   seed), 26 tests, live run (robots chase, fortress + factory controllers aliased
+   and live, renderer draws all classes, no console errors). Safety checks that
+   made the player-after-`createIsland` reorder sound: the construction is
+   player-independent and the `Player` constructor consumes no RNG.
 
 Stage 0 is also the natural moment to take the ROADMAP's file-size refactor
 partially: whatever main.js sheds here should not come back.
@@ -158,12 +188,33 @@ partially: whatever main.js sheds here should not come back.
 crossing first**; a real open-sea map can replace it later without touching
 the islands (it just becomes another World).
 
-- **Boat item + crafting** — follow the `craftFortressMap`/`craftSword`
-  pattern exactly: `boat` in items.js (kind 'vehicle', stack 1),
-  `canCraftBoat()`/`craftBoat()` in player.js gated on wood (proposed **12**)
-  plus a real tool in hand (axe/saw class), wired into the **C** craft chain
-  and the craft prompt in main.js. A crafted boat is *placed at the shore*
-  (nearest water-adjacent tile), not pocketed: it's a world object you board.
+Sliced 1a/1b/1c so each lands playable:
+
+- **1a — boat item + crafting. ✓ DONE (2026-07-12).** Follows the
+  `craftFortressMap`/`craftSword` pattern: `boat` in items.js (kind 'vehicle',
+  stack 1) + `boat` in tiles.js `OBJECTS` (solid, so the beached hull is a thing
+  you walk up to — and so `isSolid`/`blocksShot` never dereference an
+  unregistered type); `canCraftBoat(map)`/`craftBoat(map)`/`_findLaunchTile(map)`
+  in player.js gated on **12 wood** + a cutting tool in hand (`treeDamage >= 2`,
+  the axe/saw class) + standing within ~2 tiles of the sea's edge (radius
+  tightened 2026-07-12; wood stacks to 64, so 12 fits one pocket); wired into the **C** chain and
+  the craft prompt (lowest priority, so it never shadows a weapon/tool craft) in
+  main.js; `Renderer.drawBoat` draws the beached hull in the iso plane, with
+  wood-grain textures (`BOAT_TEXTURES`, `assets/textures/boat-wood-1.jpg`/`-2.jpg`)
+  stretched over the hull faces and deck. A crafted boat is *placed at the shore*
+  (nearest walkable land tile 8-adjacent to a `sea` tile, never under the player),
+  not pocketed. One boat at a time
+  (`player.boatBuilt`; 1c persists it as campaign state). Covered by
+  `test/boat.test.js` (6 tests: gates, wood spend, sea-edge placement, solidity,
+  the never-under-player + one-boat guards) and live browser-verified. **Not yet
+  boardable — that is 1b.**
+- **1b — departure + the cheap crossing** (swim/sail past the shelf, heading
+  chart, timed stamina/hull events) → `switchWorld` arrival on a stub islet.
+  A successful crossing off CALYPSO requires **Calypso's leave** (§10 #8) —
+  without it POSEIDON's storms wreck you back onto the beach.
+- **1c — the `postai-campaign` save blob** (`currentIsland`, `boat {exists, hull,
+  island}`) so a reload resumes on the right island; replaces the 1a
+  `player.boatBuilt` session flag.
 - **Departure** — swim or sail past the shelf edge (beyond the ~4 swimmable
   coast tiles). On foot/swimming this opens the crossing in swim mode; in the
   boat, boat mode.
@@ -273,11 +324,16 @@ fortress-map work, landed as v1.58; the core-kill endgame landed as v1.59.)
    victory modal — island-agnostic by design; Crown→Daemon rename in a
    parallel session). The ZEUS rename is also done
    (`AI_NAME = 'ZEUS'`, `AI_ROSTER` in fortress.js; no Adamantine remains).
-2. **Stage 0** — world contract; port Backspace; wrap CALYPSO. One session,
-   quiet window. No visible change. **Now unblocked**, subject to the
-   coordination check above.
+2. **Stage 0 — DONE (2026-07-11/12).** World contract; port Backspace; wrap
+   CALYPSO, no visible change. **0a** `world.js` + `currentWorld` wrap of the
+   overworld arrays; **0b** the Backspace is a World, `inUnderworld` gone,
+   `switchWorld` in; **0c** `src/islands/calypso.js` (`createIsland(seed) → World`,
+   the ~380-line boot construction moved verbatim, seed-identical). main.js boot
+   is now `const calypso = registerWorld(createIsland(WORLD_SEED))` + aliasing
+   destructure. All verified + on `main`.
 3. **Stage 1** — boat + cheap crossing + stub islet. Proves travel round-trip
-   and campaign save.
+   and campaign save. **1a (craftable shore-placed boat) DONE 2026-07-12**; 1b
+   (departure + crossing) and 1c (campaign save) next.
 4. **Stage 2** — islandkit extraction, seed-diff verified.
 5. **Stage 3** — ITHACA first (small, proves the contract), then APOLLO /
    ATHENA / HADES in parallel, one owner each. Each island wires
@@ -329,3 +385,17 @@ fortress-map work, landed as v1.58; the core-kill endgame landed as v1.59.)
    is a natural lore addition. Flavour line available whichever surface
    wants it: Homer's epithet for the gods is *athanatoi*, the Deathless —
    "One of the Deathless is dead."
+8. **Departure gate: Calypso's leave** (David, 2026-07-12). You cannot just
+   build a boat and sail off CALYPSO. Leaving the first island requires
+   *something obtained from Calypso herself* — her leave: a token/charm against
+   the sea, earned from a CALYPSO objective (which one is TBD). Without it,
+   **POSEIDON's storms turn every departure back**: the crossing always ends in
+   a storm-wreck, washing you ashore half-drowned on the CALYPSO beach, again
+   and again, no matter the boat or how well you sail. This is Homer exactly —
+   Calypso keeps Odysseus until the gods *compel* her to speed him on his way
+   with timber and provisions; the island's own quest is the key to leaving it.
+   It also stops the boat trivialising the campaign and refines decision #4
+   (open sailing) — sailing is open *once you can leave CALYPSO at all*.
+   Mechanically: a `calypsoLeave` campaign flag (in the §7 save blob) gates a
+   successful crossing; unset, the crossing sequence reuses the ITHACA
+   turn-back storm (#5) and returns you to the beach. Build this with Stage 1b.

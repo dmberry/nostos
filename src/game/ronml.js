@@ -40,7 +40,9 @@ function tokenize(src) {
     }
     if (/[A-Za-z]/.test(c)) {
       let j = i + 1;
-      while (j < n && /[A-Za-z0-9_-]/.test(src[j])) j++;
+      // `.` is allowed inside an identifier so filenames lex as one token
+      // (factory-id.ml, readme.md) — evalNode tags anything ending .ml/.md a file.
+      while (j < n && /[A-Za-z0-9_.-]/.test(src[j])) j++;
       toks.push({ t: 'IDENT', v: src.slice(i, j) });
       i = j;
       continue;
@@ -126,7 +128,27 @@ function parse(toks) {
     throw new RonmlError(tok.t === 'EOF' ? 'unexpected end of command' : `unexpected '${tok.v ?? tok.t}'`);
   }
 
-  const expr = parseExpr();
+  // The top level accepts a bare `let x = e` (no `in`) as a persistent
+  // binding — the ML top-level. Nested lets inside an expression still require
+  // `in` (parseExpr enforces that). So the fortress program can be typed as
+  // separate lines that follow one another (copy aikey / let k = hack OB / ...).
+  function parseTop() {
+    if (isKeyword(peek(), 'let')) {
+      p++;
+      const nameTok = eat('IDENT');
+      eat('EQ');
+      const value = parseExpr();
+      if (isKeyword(peek(), 'in')) {
+        p++;
+        const body = parseExpr();
+        return { type: 'Let', name: nameTok.v, value, body };
+      }
+      return { type: 'TopLet', name: nameTok.v, value };
+    }
+    return parseExpr();
+  }
+
+  const expr = parseTop();
   eat('EOF');
   return expr;
 }
@@ -134,6 +156,23 @@ function parse(toks) {
 // ---- Builtins ----------------------------------------------------------
 // Each `ctx` method is supplied by the caller (main.js) and does the actual
 // world-mutation; this module only handles language mechanics and gating.
+
+// `copy <file> <device>` — the arity-2 second half of the polymorphic `copy`.
+// `copy` (below) returns a partial bound to this when its first arg is a file,
+// so `copy factory-id.ml ob` moves the file, while `copy aikey` stays the
+// arity-1 key-bind. ctx.copyFile does the world-side move and returns {ok,msg}.
+const COPY_FILE = {
+  arity: 2,
+  fn: ([file, dest], ctx) => {
+    if (!file || file.tag !== 'file') throw new RonmlError('copy needs a file first — try: copy factory-id.ml ob');
+    const destName = (dest && dest.id) ? String(dest.id).toLowerCase() : '';
+    if (!destName) throw new RonmlError('copy a file WHERE? — try: copy factory-id.ml ob');
+    if (!ctx.copyFile) throw new RonmlError("you can't move files at this terminal.");
+    const r = ctx.copyFile(file.name, destName);
+    if (!r || !r.ok) throw new RonmlError((r && r.msg) || `couldn't copy ${file.name}.`);
+    return { tag: 'file', name: file.name };
+  },
+};
 
 function makeBuiltins(station) {
   const B = {
@@ -147,7 +186,7 @@ function makeBuiltins(station) {
     },
     repel: {
       arity: 0,
-      fn: (_args, ctx) => { ctx.requireAiKey('repel'); ctx.repelNearby(); return { tag: 'unit' }; },
+      fn: (_args, ctx) => { ctx.repelNearby(); return { tag: 'unit' }; },
     },
     sing: {
       arity: 0,
@@ -157,9 +196,86 @@ function makeBuiltins(station) {
       arity: 0,
       fn: (_args, ctx) => { ctx.showMap(); return { tag: 'unit' }; },
     },
+    // `print <topic>` at an obelisk: `print map` runs off a carryable map;
+    // `print aikey` stamps a fresh physical AI key at your feet (you must be
+    // holding one — a spare against losing it). The HERMES relay overrides
+    // `print` to take a document topic (see makeBuiltins).
     print: {
+      arity: 1,
+      fn: ([topic], ctx) => {
+        const raw = topic && (topic.kind === 'aikey' ? 'aikey' : (topic.id || '')) || '';
+        const name = String(raw).toLowerCase();
+        if (name === 'aikey' || name === 'key') ctx.printKey();
+        else if (name === 'map' || name === 'territory') ctx.printMap();
+        else throw new RonmlError('print needs a topic — try: print map   or   print aikey');
+        return { tag: 'unit' };
+      },
+    },
+    // `copy aikey`: read the AI key you physically hold and bind it into the
+    // session under the name you gave (usually `aikey`), so the rest of the
+    // language can use it — the bridge from your pack to the console. Returns a
+    // SEALED AI-key value; `decrypt` opens it. Fails if you hold no AI key.
+    copy: {
+      arity: 1,
+      fn: ([what], ctx) => {
+        // Polymorphic on the first argument. A FILE means `copy <file> <device>`
+        // — return a partial bound to COPY_FILE so the next atom (the device)
+        // completes it. Anything else is the classic `copy aikey`: bind the
+        // held AI key into the session as a sealed token for decrypt/unlock.
+        if (what && what.tag === 'file') {
+          return { tag: 'fn', name: 'copy', builtin: COPY_FILE, args: [what], ctx };
+        }
+        if (!ctx.hasAiKey || !ctx.hasAiKey()) {
+          throw new RonmlError('nothing to copy — you are not holding an AI key. (a wrecked W-factory drops one.)');
+        }
+        const token = { tag: 'key', kind: 'aikey', enc: true };
+        const bindName = (what && what.id ? String(what.id) : 'aikey').toLowerCase();
+        if (ctx.bindSession) ctx.bindSession(bindName, token);
+        return token;
+      },
+    },
+    // `cd <device>` / `ls`: the RON-DOS drive navigation. Devices are the AI key
+    // you hold (cd aikey / cd card), the obelisk's scratch bench (cd ob), and a
+    // HERMES relay's folder (cd hermes). `ls` lists the current device's files.
+    // ctx supplies cd/ls (main.js) — where the file state actually lives.
+    cd: {
+      arity: 1,
+      fn: ([dev], ctx) => {
+        const name = (dev && (dev.id || dev.name)) ? String(dev.id || dev.name).toLowerCase() : '';
+        if (!name) throw new RonmlError('cd needs a device — try: cd aikey  ·  cd ob');
+        if (!ctx.cd) throw new RonmlError('no drives at this terminal.');
+        const r = ctx.cd(name);
+        if (!r || !r.ok) throw new RonmlError((r && r.msg) || `no device '${name}' here.`);
+        return { tag: 'unit' };
+      },
+    },
+    ls: {
       arity: 0,
-      fn: (_args, ctx) => { ctx.printMap(); return { tag: 'unit' }; },
+      fn: (_args, ctx) => {
+        if (!ctx.ls) throw new RonmlError('no drives at this terminal.');
+        return { tag: 'list', items: (ctx.ls() || []).map((n) => ({ tag: 'file', name: n })) };
+      },
+    },
+    // `decrypt aikey`: turn a sealed AI key (from `copy`) into the open token
+    // `unlock` needs. The AI encrypts its own masters out of habit; this undoes it.
+    decrypt: {
+      arity: 1,
+      fn: ([k], ctx) => {
+        if (!k || k.tag !== 'key' || k.kind !== 'aikey') {
+          throw new RonmlError('decrypt needs the AI key. copy it in first: copy aikey');
+        }
+        return { tag: 'key', kind: 'aikey', enc: false };
+      },
+    },
+    // `name`: the code of the obelisk you are jacked into — a free read, so you
+    // can see which node you're on without scrolling the boot banner.
+    name: {
+      arity: 0,
+      fn: (_args, ctx) => {
+        const id = ctx.currentNode && ctx.currentNode();
+        if (!id) throw new RonmlError('no node here.');
+        return { tag: 'node', id };
+      },
     },
     // Opens the browsable notepad overlay (ctx.showNotepad, main.js) rather
     // than printing to the console — a real page you flip through, not a
@@ -168,29 +284,53 @@ function makeBuiltins(station) {
       arity: 0,
       fn: (_args, ctx) => { ctx.showNotepad(); return { tag: 'unit' }; },
     },
-    // Loads ELIZA — the 1966 DOCTOR script — into the node as an interactive
-    // program. A verb like any other (`eliza`, or the readable `run eliza`);
-    // the terminal then routes your lines to the doctor until you leave.
+    // ELIZA has two faces. Bare `eliza` / `run eliza` opens the 1966 DOCTOR as
+    // an interactive chat — that is intercepted in the REPL (main.js), not here,
+    // since it is a mode, not a value. `eliza <file>` is the TRANSFORM: feed a
+    // file through the DOCTOR's reflection and get a new file back. On the
+    // factory's id line (`I am W-FACTORY, my keys are mine`) the my->your
+    // reflection turns the boast into a grant — root-access.ml. (Calypso escape
+    // chain, docs/calypso-escape-chain.md.)
     eliza: {
-      arity: 0,
-      fn: (_args, ctx) => {
-        if (!ctx.eliza) throw new RonmlError('no ELIZA image on this node.');
-        ctx.eliza();
-        return { tag: 'unit' };
+      arity: 1,
+      fn: ([file], ctx) => {
+        if (!file || file.tag !== 'file') {
+          throw new RonmlError('eliza needs a file to transform — try: eliza factory-id.ml  (or `eliza` alone to talk to the DOCTOR)');
+        }
+        if (!ctx.elizaTransform) throw new RonmlError('no ELIZA image on this node.');
+        const r = ctx.elizaTransform(file.name);
+        if (!r || !r.ok) throw new RonmlError((r && r.msg) || `ELIZA can do nothing with ${file.name}.`);
+        return { tag: 'file', name: r.out };
       },
     },
     // ---- HERMES station verbs (RON hilltop relays only) ------------------
-    // RON tech is off-grid on purpose, and it's an INFORMATION resource, not a
-    // workshop: no network verb (touching the wire would give the relay away),
-    // nothing fabricated. It keeps the human record — read it here, or print a
-    // copy for your notes. (A HERMES `print` is added in makeBuiltins below, so
-    // it can take a topic; the obelisk's own arity-0 `print` maps the network.)
+    // RON tech is off-grid on purpose: no network verb (touching the wire would
+    // give the relay away). It is the human record — read it, print a copy — AND
+    // a maker's bench that forges only from what you carry in (see `forge`), so
+    // the no-wire rule holds while the relay still arms Zeus's command. (A HERMES
+    // `print` is added in makeBuiltins below, so it can take a topic; the
+    // obelisk's own arity-0 `print` maps the network.)
     read: {
       arity: 1,
       fn: ([topic], ctx) => {
-        const name = topic && (topic.id || '') || '';
+        // Accept a doc topic (read history) or a file (read readme.md) — file
+        // values carry .name, topics come through as .id/node.
+        const name = topic && (topic.name || topic.id || '') || '';
         ctx.read(String(name).toLowerCase());
         return { tag: 'unit' };
+      },
+    },
+    // `forge zeus-virus.ml` (HERMES relay): arm the sealed payload with the two
+    // credentials on your Trojan card -> zeus-lightning.ml on the relay bench.
+    // The relay stays off the wire; it forges only from what you carry in.
+    forge: {
+      arity: 1,
+      fn: ([file], ctx) => {
+        if (!file || file.tag !== 'file') throw new RonmlError('forge needs the payload file — try: forge zeus-virus.ml');
+        if (!ctx.forge) throw new RonmlError('nothing to forge at this terminal.');
+        const r = ctx.forge(file.name);
+        if (!r || !r.ok) throw new RonmlError((r && r.msg) || `can't forge ${file.name}.`);
+        return { tag: 'file', name: r.out };
       },
     },
     // Lists the human knowledge this relay still holds — RON kept it alive when
@@ -212,6 +352,18 @@ function makeBuiltins(station) {
       arity: 0,
       fn: (_args, ctx) => { ctx.drive(); return { tag: 'unit' }; },
     },
+    // `backup aikey` / `restore aikey`: RON's relays keep a copy of your AI key
+    // off the AI's hardware, so losing it (death, a fumble) needn't cost you the
+    // endgame. The `aikey` word is the thing being backed up; its value is not
+    // needed (the check is whether you physically hold / have backed up a key).
+    backup: {
+      arity: 1,
+      fn: (_args, ctx) => { ctx.backup(); return { tag: 'unit' }; },
+    },
+    restore: {
+      arity: 1,
+      fn: (_args, ctx) => { ctx.restore(); return { tag: 'unit' }; },
+    },
     nearest: {
       arity: 1,
       fn: ([list], ctx) => {
@@ -230,7 +382,10 @@ function makeBuiltins(station) {
       arity: 1,
       fn: ([node], ctx) => {
         if (!node || node.tag !== 'node') throw new RonmlError('hack needs a node — try: hack OB-XXXX');
-        ctx.requireAiKey('hack');
+        // No AI key needed to hack a node's own key — the access chip that got
+        // you into this console is enough. crash therefore needs no AI key
+        // either (it only wants the key hack hands back). The AI key still
+        // gates the sharper verbs (sleep/rewind/repel) and the fortress unlock.
         if (!ctx.nodeExists(node.id)) throw new RonmlError(`no node ${node.id} on the wire`);
         ctx.recordHack(node.id);
         return { tag: 'key', id: node.id };
@@ -269,7 +424,6 @@ function makeBuiltins(station) {
       arity: 1,
       fn: ([num], ctx) => {
         if (!num || num.tag !== 'num') throw new RonmlError('sleep needs a number of minutes — try: sleep 30');
-        ctx.requireAiKey('sleep');
         ctx.sleepNearby(num.v);
         return { tag: 'unit' };
       },
@@ -282,7 +436,6 @@ function makeBuiltins(station) {
       arity: 1,
       fn: ([num], ctx) => {
         if (!num || num.tag !== 'num') throw new RonmlError('rewind needs a number of hours — try: rewind 3');
-        ctx.requireAiKey('rewind');
         if (ctx.skylinkActive()) throw new RonmlError('POSEIDON is already live — the deadline clock isn\'t running anymore. Knock towers dark instead.');
         ctx.rewindClock(num.v);
         return { tag: 'unit' };
@@ -291,11 +444,20 @@ function makeBuiltins(station) {
     // Extract a fortress key from the network using a node key you hacked — the
     // program that actually earns its keep: `let k = hack OB-XXXX in unlock k`.
     // The argument must be a key from hack; it drops a single fortress key.
+    // `unlock k d`: the endgame program. `k` is a key hacked off a live node
+    // (`hack`), `d` is the DECRYPTED AI key (`copy aikey` then `decrypt aikey`).
+    // Both together drop a fortress key; either alone is refused with a hint.
     unlock: {
-      arity: 1,
-      fn: ([key], ctx) => {
-        if (!key || key.tag !== 'key') {
-          throw new RonmlError('unlock needs a hacked key. try: let k = hack OB-XXXX in unlock k');
+      arity: 2,
+      fn: ([key, dec], ctx) => {
+        if (!key || key.tag !== 'key' || key.kind === 'aikey') {
+          throw new RonmlError('unlock needs a hacked node key first. try: let k = hack OB-XXXX in unlock k d');
+        }
+        if (!dec || dec.tag !== 'key' || dec.kind !== 'aikey') {
+          throw new RonmlError('unlock needs the AI key too. copy it in and decrypt it: copy aikey  then  let d = decrypt aikey');
+        }
+        if (dec.enc !== false) {
+          throw new RonmlError('that AI key is still sealed. decrypt it first: let d = decrypt aikey');
         }
         ctx.unlock(key.id);
         return { tag: 'unit' };
@@ -329,11 +491,14 @@ function makeBuiltins(station) {
 // Which verbs belong to which system. Used to filter each terminal's builtins,
 // and to tell "not a command here" (a real verb, wrong system) apart from a
 // plain bad word.
-const OB_VERBS = ['scan', 'nearest', 'keys', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'sing', 'map', 'print', 'unlock', 'eliza'];
+// `copy`, `cd`, `ls` are deliberately NOT listed here — they are neutral (work at
+// both an obelisk and a HERMES relay), like `notes`. A verb tagged for one station
+// is refused at the other; the file verbs must move files at either terminal.
+const OB_VERBS = ['scan', 'nearest', 'keys', 'name', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'sing', 'map', 'print', 'decrypt', 'unlock', 'eliza'];
 // Note: HERMES's `print` is added as an override in makeBuiltins (it takes a
 // topic), not tagged here — tagging it would steal the obelisk's own arity-0
 // `print`. `print` is already in OB_VERBS, so ALL_VERBS still covers it.
-const HERMES_VERBS = ['read', 'archive', 'records', 'drive'];
+const HERMES_VERBS = ['read', 'archive', 'records', 'drive', 'backup', 'restore', 'forge'];
 // Retired verbs kept only so typing one gives a clean "not a command" instead
 // of a cryptic node error (make/ping were removed when TORs became info-only).
 const RETIRED_VERBS = ['make', 'ping'];
@@ -368,6 +533,9 @@ function evalNode(node, env, ctx, builtins) {
       if (ctx && ctx.station && ALL_VERBS.has(lower)) {
         throw new RonmlError(`'${node.name}' isn't a command on this terminal.`);
       }
+      // A dotted name ending .ml/.md is a FILE, not a node — so cd/ls/copy/eliza
+      // can carry it around the drives. Everything else is a node id (OB-XXXX).
+      if (/\.(ml|md)$/i.test(node.name)) return { tag: 'file', name: node.name };
       return { tag: 'node', id: node.name };
     }
     case 'Let': {
@@ -375,6 +543,14 @@ function evalNode(node, env, ctx, builtins) {
       const env2 = Object.create(env);
       env2[node.name.toLowerCase()] = v;
       return evalNode(node.body, env2, ctx, builtins);
+    }
+    case 'TopLet': {
+      // Bare top-level `let x = e`: evaluate `e`, then persist the binding into
+      // the session env the REPL handed us as the base `env` (main.js passes
+      // `ctx.session`), so the next line entered can read `x`. Echoes `val x = …`.
+      const v = evalNode(node.value, env, ctx, builtins);
+      env[node.name.toLowerCase()] = v;
+      return { tag: 'binding', name: node.name, value: v };
     }
     case 'App': {
       const fn = evalNode(node.fn, env, ctx, builtins);
@@ -392,8 +568,10 @@ function describeValue(v) {
     case 'unit': return '()';
     case 'num': return `the number ${v.v}`;
     case 'node': return `node ${v.id}`;
-    case 'key': return 'a key';
+    case 'key': return v.kind === 'aikey' ? 'the AI key' : 'a key';
+    case 'file': return `the file ${v.name}`;
     case 'list': return 'a list';
+    case 'binding': return `the binding ${v.name}`;
     case 'fn': return `${v.name} (needs ${v.builtin.arity - v.args.length} more arg${v.builtin.arity - v.args.length === 1 ? '' : 's'})`;
     default: return 'that';
   }
@@ -405,8 +583,10 @@ function formatValue(v) {
     case 'unit': return '()';
     case 'num': return String(v.v);
     case 'node': return v.id;
-    case 'key': return `KEY:${v.id}`;
+    case 'key': return v.kind === 'aikey' ? (v.enc === false ? 'AIKEY:open' : 'AIKEY:sealed') : `KEY:${v.id}`;
+    case 'file': return v.name;
     case 'list': return '[' + v.items.map(formatValue).join(', ') + ']';
+    case 'binding': return `val ${v.name} = ${formatValue(v.value)}`;
     case 'fn': return `<${describeValue(v)}>`;
     default: return String(v);
   }
@@ -422,9 +602,16 @@ const USAGE_HINTS = {
   nearest: 'nearest needs a list. try: scan |> nearest',
   sleep: 'sleep needs a number of minutes. try: sleep 30',
   rewind: 'rewind needs a number of hours. try: rewind 3',
-  unlock: 'unlock needs a hacked key. try: let k = hack OB-XXXX in unlock k',
-  print: 'print needs a topic — try: print fortress (archive lists them)',
+  copy: 'copy a key (copy aikey) or a file to a device (copy factory-id.ml ob)',
+  cd: 'cd needs a device. try: cd aikey  ·  cd ob',
+  eliza: 'eliza <file> transforms a file (eliza factory-id.ml); bare `eliza` opens the DOCTOR',
+  decrypt: 'decrypt needs the AI key. try: copy aikey  then  decrypt aikey',
+  unlock: 'unlock needs a hacked node key and the decrypted AI key. try: copy aikey / let k = hack OB-XXXX / let d = decrypt aikey / unlock k d',
+  print: 'print needs a topic — at an obelisk: print map  or  print aikey; at a relay: print <document>',
+  backup: 'backup needs a key — try: backup aikey',
+  restore: 'restore needs a key — try: restore aikey',
   read: 'read needs a topic — try: read history (archive lists them)',
+  forge: 'forge needs the payload — try: forge zeus-virus.ml (at a relay, Trojan card in hand)',
 };
 
 // `help` reference, shown when the operator types it at the terminal. Per-verb
@@ -436,21 +623,30 @@ const HELP_VERBS = [
   ['scan', 'unit -> list', 'obelisks/machines in range of this terminal', '', 'ob'],
   ['nearest', 'list -> node', 'the closest element of a list', '', 'ob'],
   ['keys', 'unit -> list', 'the access keys you currently hold', '', 'ob'],
-  ['hack n', 'node -> key', "take node n's access key", 'needs an AI key', 'ob'],
+  ['name', 'unit -> node', 'the code of the obelisk you are jacked into', '', 'ob'],
+  ['hack n', 'node -> key', "take node n's access key", 'no key needed', 'ob'],
   ['crash n k', 'node key -> unit', 'knock node n dark until a drone mends it', 'needs k from hack', 'ob'],
   ['loop n', 'node -> unit', 'pin an infinite loop into node n — freezes it and its garrison until a drone resets it', 'no key needed', 'ob'],
-  ['sleep t', 'num -> unit', 'idle local machines for t game-minutes', 'needs AI key', 'ob'],
-  ['rewind t', 'num -> unit', 'claw t hours back off the POSEIDON deadline', 'needs AI key; before the purge only', 'ob'],
-  ['repel', 'unit -> unit', 'nearby machines turn tail and flee you', 'needs AI key', 'ob'],
+  ['sleep t', 'num -> unit', 'idle local machines for t game-minutes', 'no key needed', 'ob'],
+  ['rewind t', 'num -> unit', 'claw t hours back off the POSEIDON deadline', 'before the purge only', 'ob'],
+  ['repel', 'unit -> unit', 'nearby machines turn tail and flee you', 'no key needed', 'ob'],
   ['map', 'unit -> unit', 'show the territory map (obelisks, machines, mainframe)', '', 'ob'],
-  ['print', 'unit -> unit', 'print a carryable map that drops at your feet', '', 'ob'],
-  ['unlock k', 'key -> unit', 'extract a fortress key from the network using a hacked node key', 'needs k from hack', 'ob'],
-  ['eliza', 'unit -> unit', 'run ELIZA, the 1966 DOCTOR script — talk to it (also: run eliza); Ctrl+C or quit to leave', '', 'ob'],
+  ['print t', 'atom -> unit', 'print map (a carryable map) or print aikey (a spare AI key)', '', 'ob'],
+  ['copy k', 'key -> key', 'copy the AI key you hold into the session as `aikey`', 'hold an AI key', ''],
+  ['copy f d', 'file device -> file', 'copy a file onto a device — copy factory-id.ml ob', '', ''],
+  ['cd d', 'device -> unit', 'change drive: cd aikey · cd ob · cd hermes', '', ''],
+  ['ls', 'unit -> list', 'list the files on the current drive', '', ''],
+  ['decrypt k', 'key -> key', 'open the sealed AI key so unlock can use it', 'hold an AI key', 'ob'],
+  ['unlock k d', 'key key -> unit', 'legacy — the fortress gate opens to a Trojan card now (refunction your AI key)', 'superseded', 'ob'],
+  ['eliza', 'file -> file', 'eliza <file> runs the DOCTOR transform on a file; bare `eliza` (or run eliza) opens the DOCTOR to talk to — quit to leave', '', 'ob'],
   ['read t', 'atom -> unit', 'read a document — read ronml / fortress / obelisks / robots / history / destroy', 'HERMES relay only', 'hermes'],
   ['print t', 'atom -> unit', 'print a copy of a document into your notepad (N)', 'HERMES relay only', 'hermes'],
   ['archive', 'unit -> unit', 'list the documents this relay holds', 'HERMES relay only', 'hermes'],
   ['records', 'unit -> unit', "pull the next of RON's own field records into your Scrapbook (J); repeat until dry", 'HERMES relay only', 'hermes'],
   ['drive', 'unit -> unit', 'override a nearby machine and see through its eyes — drive it till it leaves range', 'HERMES relay only', 'hermes'],
+  ['backup aikey', 'key -> unit', "copy your AI key to RON's relay mesh — survives death", 'HERMES relay only', 'hermes'],
+  ['restore aikey', 'key -> unit', 'mint a backed-up AI key back into your pack', 'HERMES relay only', 'hermes'],
+  ['forge f', 'file -> file', 'forge zeus-virus.ml into zeus-lightning.ml from your Trojan card', 'HERMES relay, Trojan card', 'hermes'],
   ['notes', 'unit -> unit', 'open the notepad — browse the pages you\'ve found worth keeping', '', ''],
   ['help', 'unit -> unit', 'this reference, or `help <verb>` for one verb', '', ''],
 ];
@@ -508,7 +704,9 @@ export function runRonml(source, ctx) {
     const toks = tokenize(source);
     const ast = parse(toks);
     const builtins = makeBuiltins(ctx && ctx.station);
-    const result = evalNode(ast, {}, ctx, builtins);
+    // Base env is the persistent session (main.js passes ctx.session) so bare
+    // top-level `let`/`copy` bindings survive to the next line entered.
+    const result = evalNode(ast, (ctx && ctx.session) || {}, ctx, builtins);
     if (result && result.tag === 'fn') {
       return { ok: false, text: `ERR: ${USAGE_HINTS[result.name] || `${result.name} needs more arguments`}` };
     }

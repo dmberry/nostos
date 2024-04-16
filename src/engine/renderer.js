@@ -1,4 +1,6 @@
 import { worldToScreen, screenToWorld, TILE_W } from './iso.js';
+import { runDrawWorld, runDrawScreen } from './systems.js';
+import { uiMethods, DASH_H } from './ui.js';
 import { FLOORS } from '../game/tiles.js';
 import { ITEMS, WEAPON_ORDER } from '../game/items.js';
 import { drawAnimal } from '../game/animals.js';
@@ -6,7 +8,7 @@ import { drawBird } from '../game/birds.js';
 import { drawRobot } from '../game/robots.js';
 import { drawWaterDroid } from '../game/waterdroids.js';
 import { drawUnderworldCreature } from '../game/underworld.js';
-import { FLOOR_TEXTURES, WALL_TEXTURES, GRASS_PATCH_TEXTURE, CHARACTER_SPRITE_SETS, CHAR_COMPASS_DIRS, TREE_SHEET, TREE_SPRITES, EDGE_TEXTURE, SEA_TEXTURE, CAR_SPRITES, CAR_MODEL_KEYS, CAR_DIR_KEYS, CAR_RUIN_TEXTURE, FACTORY_TEXTURE, MARBLE_TEXTURE, PAPER_TEXTURE, GRAFFITI_TEXTURES } from './textures.js';
+import { FLOOR_TEXTURES, WALL_TEXTURES, GRASS_PATCH_TEXTURE, ROCK_TEXTURES, BOX_TEXTURES, BOAT_TEXTURES, CHARACTER_SPRITE_SETS, CHAR_COMPASS_DIRS, TREE_SHEET, TREE_SPRITES, EDGE_TEXTURE, SEA_TEXTURE, CAR_SPRITES, CAR_MODEL_KEYS, CAR_DIR_KEYS, CAR_RUIN_TEXTURE, FACTORY_TEXTURE, MARBLE_TEXTURE, PAPER_TEXTURE, GRAFFITI_TEXTURES } from './textures.js';
 
 // The underworld floor palette: seven images, loaded here (not via textures.js)
 // so this stays self-contained. map.liminalTex holds a per-tile index into
@@ -81,7 +83,6 @@ function tintScratch(w, h) {
 const WALL_H = 40;
 const EDGE_ROCK_H = 52;   // height of the impassable rock blocks ringing the map edge
 const EDGE_ROCK_ALPHA = 0.38; // semi-transparent so the player shows through a block in front
-const DASH_H = 78; // dashboard panel height
 const SIGHT_CONE = false; // directional peripheral-fog vision cone (off pending tuning)
 const ELEV = 16;   // pixels of lift per height level
 const MINIMAP_SIZE = 160;
@@ -103,28 +104,6 @@ function rgbScale([r, g, b], f) {
   return `rgb(${(r * f) | 0},${(g * f) | 0},${(b * f) | 0})`;
 }
 
-// The rank for the certificate, banded purely by score.
-function deathRank(score) {
-  const s = score || 0;
-  let title, blurb;
-  if (s <= 0) { title = 'LAME'; blurb = 'You achieved precisely nothing. Impressive, in a way.'; }
-  else if (s < 100) { title = 'NOOB'; blurb = 'Everyone starts somewhere. You did not get far.'; }
-  else if (s < 200) { title = 'BEGINNER'; blurb = 'The basics, grasped. Barely.'; }
-  else if (s < 300) { title = 'INTERN'; blurb = 'Unpaid, unnoticed, unalive.'; }
-  else if (s < 400) { title = 'NORMIE'; blurb = 'Gloriously average. A credit to the mean.'; }
-  else if (s < 600) { title = 'POST-NORMIE'; blurb = 'You have transcended average, if not survival.'; }
-  else if (s < 800) { title = 'SEASONED'; blurb = 'Salt, scars, and a healthy fear of rivers.'; }
-  else if (s < 1200) { title = 'SERIOUS'; blurb = 'Nobody laughed at your loadout. Nobody.'; }
-  else if (s < 1500) { title = 'TRAINED'; blurb = 'Muscle memory and a mean crowbar swing.'; }
-  else if (s < 2000) { title = 'SNIPER'; blurb = 'One shot, one less machine. Usually.'; }
-  else if (s < 3000) { title = 'AI STALKER'; blurb = 'You hunt the things that hunt you.'; }
-  else if (s < 4000) { title = 'L33T'; blurb = 'The towers whisper your name in binary.'; }
-  else if (s < 5000) { title = 'L33T PRO'; blurb = 'Professionally terrifying to circuitry.'; }
-  else if (s < 10000) { title = 'ULTRA-L33T'; blurb = 'Small children draw you defeating obelisks.'; }
-  else { title = 'MEGA L33T'; blurb = 'POSEIDON has a folder named after you. It is afraid.'; }
-  const colors = { LAME: '#9a7a5a', NOOB: '#c9905a', BEGINNER: '#c9a05a', INTERN: '#c9b05a', NORMIE: '#b9c95a', 'POST-NORMIE': '#9fd058', SEASONED: '#6fbf4a', SERIOUS: '#4abf7a', TRAINED: '#4ac0b0', SNIPER: '#4aa8d8', 'AI STALKER': '#6f8fe0', L33T: '#e8d27a', 'L33T PRO': '#f0c040', 'ULTRA-L33T': '#f09040', 'MEGA L33T': '#ff5040' };
-  return { title, blurb, color: colors[title] || '#e8d27a' };
-}
 
 // Cheap deterministic hash for per-tile pseudo-randomness (grass blades)
 // that stays put frame to frame instead of shimmering like Math.random().
@@ -201,6 +180,10 @@ export class Renderer {
     this.ctx = canvas.getContext('2d');
     this.w = 0;
     this.h = 0;
+    // Per-island obelisk colour (R1), set each frame from currentWorld by main.js.
+    // Defaults reproduce today's red so nothing changes until a world overrides.
+    this.obColor = '#ff281e';
+    this.obAlertColor = '#ff001e';
     this.dpr = 1;
   }
 
@@ -308,6 +291,14 @@ export class Renderer {
     const pfx = Math.floor(player.x), pfy = Math.floor(player.y);
     const climbRaise = (map.effectiveHeightAt && map.heightAt)
       ? map.effectiveHeightAt(pfx, pfy) - map.heightAt(pfx, pfy) : 0;
+    // Sort by the FEET (world x+y), plus climbRaise for standing on a block —
+    // NOT by jump height. A jump lifts the sprite up-screen but leaves the feet
+    // where they are, so a player jumping BEHIND a wall is still behind it and
+    // must stay occluded; adding jump height to the depth popped them in front
+    // of the wall the moment they hopped (the "jump behind a block and you
+    // become visible" bug). Landing ONTO a block reads correctly the instant the
+    // tile flips (climbRaise engages), and Player.update keeps the vertical lift
+    // continuous across that frame, so no jump-height term is needed here.
     drawables.push({ depth: player.x + player.y + climbRaise, player });
     // Edge rocks sort by their tile depth like anything else, so a south/east
     // block in front of the player draws after (and, being semi-transparent,
@@ -354,6 +345,15 @@ export class Renderer {
       if (lift) ctx.restore();
     }
 
+    // The player's shield bar is drawn LAST, over the whole depth-sorted scene,
+    // so a block the player stands behind never paints over it — it reads as a
+    // marker floating above the character, always visible while shielded.
+    if (player.shielded && player.shielded()) {
+      const plift = elevOf(player.x, player.y);
+      if (plift) { ctx.save(); ctx.translate(0, -plift); this.playerShieldBar(player); ctx.restore(); }
+      else this.playerShieldBar(player);
+    }
+
     // Underworld ceiling lights: soft pools cast on the floor, mostly steady
     // with a rare, slow flicker (out of step per light). Drawn in world space.
     if (hud.underworld) this.drawLampGlows(map);
@@ -364,8 +364,10 @@ export class Renderer {
     // Sparks where a weapon just landed on a robot.
     if (map.sparks) this.drawSparks(map.sparks);
 
-    // Lore fragments float in world space, under the camera transform.
-    if (hud.lore) hud.lore.drawWorld(ctx);
+    // World-space registered systems draw here, under the camera transform,
+    // BEFORE restore (Stage 0: lore's floating fragments). Depth-sorted actors
+    // are NOT here — they stay in the sort above. See docs/refactor-registry.md.
+    runDrawWorld(ctx, { w: this.w, h: this.h, map, player });
     // POSEIDON's final purge: every surviving tower lights up and links to
     // its nearest neighbours in a web of bright blue laser light.
     if (hud.skylinkActive) this.drawSkylinkNetwork(hud.obeliskObjs);
@@ -567,9 +569,12 @@ export class Renderer {
       this.drawMinimap(map, player, hud.minimap, animals, this.w - MINIMAP_SIZE - 12, 12, MINIMAP_SIZE);
     }
     if (hud.skylinkActive && !hud.driving) this.drawSkylinkBanner(hud.skylinkTimer);
-    if (!hud.driving) this.drawDashboard(player, hud);
+    if (!hud.driving) {
+      this.drawDashboard(player, hud);
+      this.drawHudOverlay(player, hud); // wordmark, message line, daemon voice — both layouts
+    }
     if (hud.showBackpack) this.drawBackpackPanel(player);
-    if (hud.lore) hud.lore.drawOverlay(ctx, this.w, this.h);
+    runDrawScreen(ctx, { w: this.w, h: this.h, map, player });
     if (hud.craftPrompt) {
       const msg = hud.craftWaveGun
         ? 'You have all eight circuit boards — press C to build a wave gun'
@@ -577,11 +582,13 @@ export class Renderer {
           ? 'You have eight chip fragments — press C to assemble an access chip'
           : hud.craftSword
             ? 'You have ten scrap — press C to forge a robot sword'
-            : 'You hold a stun-gun, electro-gun and Wi-Fi block — press C to build an OB-gun';
+            : hud.craftBoat
+              ? 'You have the wood and a cutting tool — press C to build a boat'
+              : 'You hold a stun-gun, electro-gun and Wi-Fi block — press C to build an OB-gun';
       ctx.font = 'bold 13px system-ui, sans-serif';
       const w = ctx.measureText(msg).width + 24;
       const x = (this.w - w) / 2, y = this.h - DASH_H - 40;
-      ctx.fillStyle = hud.craftWaveGun ? 'rgba(64,224,208,0.92)' : hud.craftChip ? 'rgba(106,208,160,0.92)' : hud.craftSword ? 'rgba(184,192,200,0.92)' : 'rgba(224,100,47,0.9)';
+      ctx.fillStyle = hud.craftWaveGun ? 'rgba(64,224,208,0.92)' : hud.craftChip ? 'rgba(106,208,160,0.92)' : hud.craftSword ? 'rgba(184,192,200,0.92)' : hud.craftBoat ? 'rgba(138,100,55,0.92)' : 'rgba(224,100,47,0.9)';
       ctx.fillRect(x, y, w, 26);
       ctx.fillStyle = '#fff';
       ctx.textAlign = 'center';
@@ -590,6 +597,38 @@ export class Renderer {
     }
     if (hud.showSkills) this.drawSkillModal(player);
     if (hud.showWeapons) this.drawWeaponChart(player);
+    // GHOST PASS: a wall, column, tower, or the factory standing just
+    // south/east of the player paints clean over the sprite — the character
+    // simply vanished behind any building. If something tall is in that
+    // window, re-draw the player faintly OVER it: you always know where you
+    // are, and the wall still reads as being in front.
+    {
+      const pfx2 = Math.floor(player.x), pfy2 = Math.floor(player.y);
+      const NEAR_TALL = new Set(['wall', 'column', 'marbleblock']);
+      const BIG_TALL = new Set(['obelisk', 'wfactory', 'mainframe', 'uplink']);
+      let occluded = false;
+      for (let dy = 0; dy <= 4 && !occluded; dy++) {
+        for (let dx = 0; dx <= 4; dx++) {
+          if (!dx && !dy) continue;
+          const o = map.objectAt ? map.objectAt(pfx2 + dx, pfy2 + dy) : null;
+          if (!o) continue;
+          // A tall block within ~3 tiles to the south/east stands between the
+          // player and the camera (widened from 2 so a wall never fully eats the
+          // sprite); the big structures occlude from further out.
+          if ((dx + dy <= 3 && NEAR_TALL.has(o.type)) || BIG_TALL.has(o.type)) { occluded = true; break; }
+        }
+      }
+      if (occluded && !hud.underworld) {
+        const lift2 = (map.effectiveHeightAt ? map.effectiveHeightAt(pfx2, pfy2)
+          : map.heightAt ? map.heightAt(pfx2, pfy2) : 0) * ELEV;
+        ctx.save();
+        if (lift2) ctx.translate(0, -lift2);
+        ctx.globalAlpha = 0.5; // clear enough to read where you are, still reads as behind
+        this.drawPlayer(player);
+        ctx.restore();
+      }
+    }
+    if (hud.touchControls) this.drawTouchControls(hud);
     if (hud.toast) this.drawToast(hud.toast);
     if (hud.detail) this.drawDetail(hud.detail);
     if (hud.drag) this.drawDragGhost(hud.drag, player);
@@ -652,227 +691,11 @@ export class Renderer {
     ctx.restore();
   }
 
-  // A soft dim over the play area while the player rests (the dashboard, and
-  // so the spinning clock, stays bright so you can watch time pass).
-  drawRestOverlay(dim) {
-    const ctx = this.ctx;
-    const playH = this.h - DASH_H;
-    ctx.fillStyle = `rgba(4,6,10,${dim.toFixed(3)})`;
-    ctx.fillRect(0, 0, this.w, playH);
-    ctx.save();
-    ctx.globalAlpha = Math.min(1, dim / 0.72);
-    ctx.textAlign = 'center';
-    ctx.fillStyle = 'rgba(222,227,236,0.92)';
-    ctx.font = '600 20px system-ui, sans-serif';
-    ctx.fillText('Resting…', this.w / 2, playH / 2);
-    ctx.fillStyle = 'rgba(200,205,215,0.7)';
-    ctx.font = '12px system-ui, sans-serif';
-    ctx.fillText('time is passing', this.w / 2, playH / 2 + 22);
-    ctx.restore();
-  }
 
-  // Lotus torpor: a warm golden wash and a soft vignette closing in — the
-  // dreamy tunnel-vision of the lotus-eaters. Eases off in the last few seconds
-  // as the daze lets go. Play-area only; the dashboard stays clear.
-  drawTorporHaze(t) {
-    const ctx = this.ctx;
-    const playH = this.h - DASH_H;
-    const amt = Math.min(1, t / 3);
-    const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 900);
-    ctx.fillStyle = `rgba(196,150,70,${(0.13 * amt + 0.05 * amt * pulse).toFixed(3)})`;
-    ctx.fillRect(0, 0, this.w, playH);
-    const g = ctx.createRadialGradient(this.w / 2, playH / 2, playH * 0.25, this.w / 2, playH / 2, playH * 0.72);
-    g.addColorStop(0, 'rgba(0,0,0,0)');
-    g.addColorStop(1, `rgba(20,14,6,${(0.5 * amt).toFixed(3)})`);
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, this.w, playH);
-  }
 
-  // A flat sepia-yellow wash plus an uneven fluorescent flicker (two
-  // overlapping slow sine phases rather than one clean pulse, so it never
-  // reads as a deliberate light show) — cheap, screen-space, and enough on
-  // its own to make the underworld read as somewhere else without needing
-  // per-tile texture work.
-  drawUnderworldVeil() {
-    const ctx = this.ctx;
-    const playH = this.h - DASH_H;
-    const flicker = 0.5 + 0.5 * Math.sin(performance.now() / 340) * 0.6 + 0.4 * Math.sin(performance.now() / 970 + 1.7);
-    ctx.fillStyle = `rgba(150,132,60,${(0.16 + 0.05 * flicker).toFixed(3)})`;
-    ctx.fillRect(0, 0, this.w, playH);
-    ctx.fillStyle = `rgba(30,26,10,${(0.12 - 0.04 * flicker).toFixed(3)})`;
-    ctx.fillRect(0, 0, this.w, playH);
-  }
 
-  // The weapon chart (V): every weapon in the game, with a power rating.
-  // Found ones show full and named; ones still to find are faded, unnamed,
-  // and marked with a "?".
-  drawWeaponChart(player) {
-    const ctx = this.ctx;
-    ctx.fillStyle = 'rgba(6,8,5,0.82)';
-    ctx.fillRect(0, 0, this.w, this.h);
-    const pw = Math.min(480, this.w - 50), rowH = 30;
-    const ph = Math.min(this.h - 60, 90 + WEAPON_ORDER.length * rowH);
-    const px = Math.round((this.w - pw) / 2), py = Math.round((this.h - ph) / 2);
-    this._weaponsRect = { x: px, y: py, w: pw, h: ph }; // click-away-to-close hit test (main.js)
-    ctx.fillStyle = '#12160e';
-    ctx.fillRect(px, py, pw, ph);
-    ctx.strokeStyle = 'rgba(207,216,195,0.4)';
-    ctx.strokeRect(px + 0.5, py + 0.5, pw - 1, ph - 1);
 
-    ctx.fillStyle = '#cfd8c3';
-    ctx.font = 'bold 16px system-ui, sans-serif';
-    ctx.fillText('Armoury', px + 20, py + 30);
-    ctx.font = '11px system-ui, sans-serif';
-    ctx.fillStyle = 'rgba(207,216,195,0.55)';
-    const found = WEAPON_ORDER.filter((k) => player.weaponsFound && player.weaponsFound.has(k)).length;
-    ctx.fillText(`${found} of ${WEAPON_ORDER.length} found · V to close`, px + 20, py + 48);
 
-    let y = py + 74;
-    for (const key of WEAPON_ORDER) {
-      const def = ITEMS[key];
-      if (!def) continue;
-      const has = player.weaponsFound && player.weaponsFound.has(key);
-      ctx.globalAlpha = has ? 1 : 0.32;
-      // icon
-      this.drawItemIcon(def, px + 34, y + 8, 0.7);
-      // name (hidden until found)
-      ctx.fillStyle = '#e8e0d0';
-      ctx.font = '13px system-ui, sans-serif';
-      ctx.fillText(has ? def.name : '??? undiscovered', px + 58, y + 12);
-      // power bar
-      const barX = px + pw - 130, barW = 100, pwr = def.power || 1;
-      ctx.fillStyle = 'rgba(255,255,255,0.12)';
-      ctx.fillRect(barX, y + 4, barW, 8);
-      ctx.fillStyle = has ? '#e8d27a' : 'rgba(207,216,195,0.4)';
-      ctx.fillRect(barX, y + 4, barW * (pwr / 10), 8);
-      ctx.fillStyle = 'rgba(207,216,195,0.7)';
-      ctx.font = '10px system-ui, sans-serif';
-      ctx.fillText(`pwr ${pwr}`, barX + barW + 6, y + 12);
-      ctx.globalAlpha = 1;
-      y += rowH;
-    }
-  }
-
-  // The skills screen (K): learned book-skills in the order gained, plus the
-  // three practice tracks and their levels — the history the dashboard used
-  // to cram into one line.
-  drawSkillModal(player) {
-    const ctx = this.ctx;
-    ctx.fillStyle = 'rgba(6,8,5,0.8)';
-    ctx.fillRect(0, 0, this.w, this.h);
-    const pw = Math.min(420, this.w - 60), ph = 380;
-    const px = Math.round((this.w - pw) / 2), py = Math.round((this.h - ph) / 2);
-    this._skillsRect = { x: px, y: py, w: pw, h: ph }; // click-away-to-close hit test (main.js)
-    ctx.fillStyle = '#12160e';
-    ctx.fillRect(px, py, pw, ph);
-    ctx.strokeStyle = 'rgba(207,216,195,0.4)';
-    ctx.strokeRect(px + 0.5, py + 0.5, pw - 1, ph - 1);
-
-    ctx.fillStyle = '#cfd8c3';
-    ctx.font = 'bold 16px system-ui, sans-serif';
-    ctx.fillText('Skills & Knowledge', px + 20, py + 30);
-    ctx.font = '11px system-ui, sans-serif';
-    ctx.fillStyle = 'rgba(207,216,195,0.55)';
-    ctx.fillText('K to close · all of it survives death', px + 20, py + 48);
-
-    let y = py + 78;
-    ctx.font = 'bold 12px system-ui, sans-serif';
-    ctx.fillStyle = 'rgba(207,216,195,0.6)';
-    ctx.fillText('PRACTICE', px + 20, y); y += 20;
-    ctx.font = '13px system-ui, sans-serif';
-    const tracks = [['Swordarm (melee)', 'melee'], ['Aim (guns)', 'guns'], ['Mind (reading)', 'knowledge']];
-    for (const [label, key] of tracks) {
-      const lvl = player.xpLevel ? player.xpLevel(key) : 0;
-      ctx.fillStyle = '#e8e0d0';
-      ctx.fillText(label, px + 30, y);
-      ctx.fillStyle = '#e8d27a';
-      ctx.textAlign = 'right';
-      ctx.fillText(`level ${lvl}`, px + pw - 24, y);
-      ctx.textAlign = 'left';
-      y += 22;
-    }
-    y += 12;
-    ctx.font = 'bold 12px system-ui, sans-serif';
-    ctx.fillStyle = 'rgba(207,216,195,0.6)';
-    ctx.fillText('BOOKS READ', px + 20, y); y += 20;
-    ctx.font = '13px system-ui, sans-serif';
-    const log = player.skillLog && player.skillLog.length ? player.skillLog
-      : [...(player.skills || [])].map((s) => ({ skill: s }));
-    if (!log.length) {
-      ctx.fillStyle = 'rgba(207,216,195,0.5)';
-      ctx.font = 'italic 13px system-ui, sans-serif';
-      ctx.fillText('No books read yet. Find them in the ruins.', px + 30, y);
-    } else {
-      const NAMES = { woodcraft: 'Woodcraft', herbalism: 'Herbalism', tracking: 'Tracking', fleetfoot: 'Fleet foot' };
-      let n = 1;
-      for (const e of log) {
-        if (y > py + ph - 16) break;
-        ctx.fillStyle = '#e8e0d0';
-        ctx.fillText(`${n}. ${NAMES[e.skill] || e.skill}`, px + 30, y);
-        if (e.day) {
-          ctx.fillStyle = 'rgba(207,216,195,0.5)';
-          ctx.textAlign = 'right';
-          ctx.fillText(`day ${e.day}`, px + pw - 24, y);
-          ctx.textAlign = 'left';
-        }
-        y += 22; n += 1;
-      }
-    }
-    // Kill record: the obelisks you've brought down, by their hex code names.
-    if (player.killLog && player.killLog.length) {
-      y += 14;
-      ctx.font = 'bold 12px system-ui, sans-serif';
-      ctx.fillStyle = 'rgba(207,216,195,0.6)';
-      ctx.fillText(`TOWERS DOWNED (${player.killLog.length})`, px + 20, y); y += 18;
-      ctx.font = '12px ui-monospace, monospace';
-      ctx.fillStyle = '#e0503a';
-      const codes = player.killLog.join('  ');
-      for (const line of this._wrapText(ctx, codes, pw - 50)) {
-        if (y > py + ph - 12) break;
-        ctx.fillText(line, px + 30, y); y += 16;
-      }
-    }
-  }
-
-  // A quiet now-playing toast, centred just above the dashboard: artist,
-  // album, side label. Fades out over its last second. Subtle by design —
-  // it's liner notes, not an announcement.
-  drawToast(t) {
-    const ctx = this.ctx;
-    const alpha = Math.min(1, t.ttl) * 0.85;
-    ctx.font = '11px system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    const y = (this.hudTop != null ? this.hudTop : this.h - 100) - 10;
-    ctx.fillStyle = `rgba(10,12,9,${(alpha * 0.6).toFixed(3)})`;
-    const w = ctx.measureText(t.text).width + 16;
-    ctx.fillRect(this.w / 2 - w / 2, y - 13, w, 18);
-    ctx.fillStyle = `rgba(222,214,192,${alpha.toFixed(3)})`;
-    ctx.fillText(t.text, this.w / 2, y);
-    ctx.textAlign = 'left';
-  }
-
-  // Right-click inspection tooltip, near the cursor.
-  drawDetail(d) {
-    const ctx = this.ctx;
-    ctx.font = '12px system-ui, sans-serif';
-    const maxW = 260;
-    const lines = this._wrapText(ctx, d.text, maxW);
-    const boxW = Math.min(maxW, Math.max(...lines.map((l) => ctx.measureText(l).width))) + 20;
-    const boxH = 12 + lines.length * 15;
-    let x = d.x + 14, y = d.y + 14;
-    if (x + boxW > this.w) x = d.x - boxW - 14;
-    if (y + boxH > this.h) y = d.y - boxH - 14;
-    const a = Math.min(1, d.ttl);
-    ctx.globalAlpha = a;
-    ctx.fillStyle = 'rgba(10,14,8,0.92)';
-    ctx.fillRect(x, y, boxW, boxH);
-    ctx.strokeStyle = 'rgba(207,216,195,0.45)';
-    ctx.strokeRect(x + 0.5, y + 0.5, boxW - 1, boxH - 1);
-    ctx.fillStyle = '#dfe6d4';
-    let ly = y + 16;
-    for (const l of lines) { ctx.fillText(l, x + 10, ly); ly += 15; }
-    ctx.globalAlpha = 1;
-  }
 
   _wrapText(ctx, text, maxW) {
     const words = text.split(' ');
@@ -886,370 +709,10 @@ export class Renderer {
     return lines;
   }
 
-  // The item being dragged, drawn under the cursor.
-  drawDragGhost(drag, player) {
-    if (!player.getSlot) return;
-    const s = player.getSlot(drag.from);
-    if (!s) return;
-    const ctx = this.ctx;
-    ctx.save();
-    ctx.globalAlpha = 0.85;
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.fillRect(drag.mx - 18, drag.my - 18, 36, 36);
-    this.drawItemIcon(ITEMS[s.item], drag.mx, drag.my, 0.9);
-    ctx.restore();
-  }
 
-  // A certificate of death: a modal listing the run's achievements and an
-  // amusing rank. Click anywhere to dismiss (handled in main).
-  // A running Greek-key (meander) band — the Homeric border motif, echoing the
-  // marble columns. A bottom rail with a repeated fret hooked above it.
-  meanderBand(x0, yTop, w, color) {
-    const ctx = this.ctx;
-    const a = 4, unit = 4 * a;         // fret cell / repeat width
-    const yb = yTop + 3 * a;
-    ctx.save();
-    ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.lineJoin = 'miter'; ctx.lineCap = 'butt';
-    ctx.beginPath();
-    ctx.moveTo(x0, yb); ctx.lineTo(x0 + w, yb);   // bottom rail
-    for (let x = x0; x + unit <= x0 + w; x += unit) {
-      ctx.moveTo(x, yb);
-      ctx.lineTo(x, yTop);
-      ctx.lineTo(x + 3 * a, yTop);
-      ctx.lineTo(x + 3 * a, yTop + 2 * a);
-      ctx.lineTo(x + a, yTop + 2 * a);
-      ctx.lineTo(x + a, yTop + a);
-    }
-    ctx.stroke();
-    ctx.restore();
-  }
 
-  drawDeathCert(cert) {
-    const ctx = this.ctx;
-    ctx.fillStyle = 'rgba(4,6,3,0.85)';
-    ctx.fillRect(0, 0, this.w, this.h);
-    const pw = Math.min(496, this.w - 48), ph = 390;
-    const px = Math.round((this.w - pw) / 2), py = Math.round((this.h - ph) / 2);
-    this._certBounds = { x: px, y: py, w: pw, h: ph }; // for the S-to-share capture
-    const cx = px + pw / 2;
-    const isVictory = !!cert.victory;
 
-    // The certificate is printed on a sheet of aged paper — a death notice for a
-    // wanderer who did not make it home. A running Greek-key border under the
-    // title keeps the Odyssey note (the columns' motif) without pretending the
-    // paper is stone.
-    ctx.fillStyle = '#ece2cc';
-    ctx.fillRect(px, py, pw, ph);
-    if (PAPER_TEXTURE.complete && PAPER_TEXTURE.naturalWidth) {
-      ctx.save();
-      ctx.beginPath(); ctx.rect(px, py, pw, ph); ctx.clip();
-      ctx.drawImage(PAPER_TEXTURE, px, py, pw, ph);
-      ctx.restore();
-    }
-    // Bleach the sheet toward white (a paler, cleaner paper) while keeping the
-    // grain, then only a soft vignette so the edges still fox a little.
-    ctx.fillStyle = 'rgba(252,251,247,0.52)'; ctx.fillRect(px, py, pw, ph);
-    const vg = ctx.createRadialGradient(cx, py + ph * 0.45, ph * 0.28, cx, py + ph * 0.5, ph * 0.85);
-    vg.addColorStop(0, 'rgba(255,255,253,0)');
-    vg.addColorStop(1, 'rgba(150,132,98,0.15)');
-    ctx.fillStyle = vg; ctx.fillRect(px, py, pw, ph);
-    // A printed certificate border: a dark rule with a finer inner rule.
-    ctx.strokeStyle = 'rgba(90,68,40,0.85)'; ctx.lineWidth = 2.5;
-    ctx.strokeRect(px + 6, py + 6, pw - 12, ph - 12);
-    ctx.strokeStyle = 'rgba(150,120,74,0.7)'; ctx.lineWidth = 1;
-    ctx.strokeRect(px + 10, py + 10, pw - 20, ph - 20);
 
-    // Sepia ink that reads on paper.
-    const INK = '#3a2e1f', FAINT = 'rgba(58,46,31,0.62)', VAL = '#4a3a22';
-    const carved = 'rgba(120,90,42,0.7)';
-
-    // Title, engraved.
-    ctx.textAlign = 'center';
-    ctx.font = 'bold 27px Georgia, serif';
-    ctx.fillStyle = isVictory ? '#2f5d2a' : '#7d241a';
-    ctx.fillText(isVictory ? 'THE TOWERS ARE DOWN' : 'CERTIFICATE OF DEATH', cx, py + 50);
-    // Greek-key meander under the title.
-    this.meanderBand(px + 40, py + 64, pw - 80, carved);
-
-    // Epitaph, in the language of a grave stele.
-    ctx.fillStyle = INK; ctx.font = '18px Georgia, serif';
-    if (isVictory) {
-      ctx.fillText(`${cert.name || 'A wanderer'} pulled down every tower and turned for home.`, cx, py + 112);
-      ctx.font = 'italic 17px Georgia, serif'; ctx.fillStyle = FAINT;
-      ctx.fillText('The machines forget. POSEIDON never wakes.', cx, py + 140);
-    } else if (cert.skylink) {
-      ctx.fillText(`Here lies ${cert.name || 'a wanderer'},`, cx, py + 112);
-      ctx.fillText('lost the day POSEIDON woke and the sea rose.', cx, py + 140);
-    } else {
-      ctx.fillText(`Here lies ${cert.name || 'a wanderer'},`, cx, py + 112);
-      ctx.fillText(`taken by ${cert.cause}, far from home.`, cx, py + 140);
-    }
-
-    // Ledger rows.
-    const rank = deathRank(cert.score);
-    ctx.textAlign = 'left';
-    ctx.font = '16px Georgia, serif';
-    const lx = px + 58;
-    const valX = lx + 172;
-    const valMaxW = px + pw - 48 - valX;
-    let y = py + 190;
-    const row = (label, val) => {
-      ctx.font = '16px Georgia, serif';
-      ctx.fillStyle = FAINT; ctx.fillText(label, lx, y);
-      ctx.fillStyle = VAL;
-      const lines = this._wrapText(ctx, String(val), valMaxW);
-      for (const l of lines) { ctx.fillText(l, valX, y); y += 22; }
-      y += 10;
-    };
-    row('Final score', cert.score);
-    row('Skills mastered', cert.skills.length ? cert.skills.join(', ') : 'none');
-    row('Deaths so far', cert.deaths);
-
-    // Rank, carved, with a small "rank:" label so it reads as a grade. The
-    // label + engraved title are centred together as one group.
-    const ry = py + ph - 92;
-    ctx.textAlign = 'left';
-    const pfx = 'rank:  ';
-    ctx.font = 'italic 18px Georgia, serif';
-    const pfxW = ctx.measureText(pfx).width;
-    ctx.font = 'bold 36px Georgia, serif';
-    const rankW = ctx.measureText(rank.title).width;
-    const startX = cx - (pfxW + rankW) / 2;
-    ctx.font = 'italic 18px Georgia, serif'; ctx.fillStyle = FAINT;
-    ctx.fillText(pfx, startX, ry - 2);
-    ctx.font = 'bold 36px Georgia, serif';
-    ctx.lineJoin = 'round'; ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(38,32,20,0.55)';
-    ctx.strokeText(rank.title, startX + pfxW, ry);
-    ctx.fillStyle = rank.color;
-    ctx.fillText(rank.title, startX + pfxW, ry);
-    ctx.textAlign = 'center';
-    ctx.font = 'italic 15px Georgia, serif';
-    ctx.fillStyle = FAINT;
-    ctx.fillText(rank.blurb, cx, py + ph - 52);
-    ctx.font = '11.5px system-ui, sans-serif';
-    ctx.fillStyle = 'rgba(44,39,31,0.5)';
-    ctx.fillText('S or Copy to copy as an image · click elsewhere to carry on', cx, py + ph - 26);
-    ctx.textAlign = 'left';
-
-    // Copy-to-clipboard button, drawn ABOVE the sheet (outside _certBounds) so
-    // it is never captured into the copied image.
-    const btnW = 74, btnH = 24;
-    const btnX = px + pw - btnW, btnY = py - btnH - 8;
-    this._certCopyBtn = { x: btnX, y: btnY, w: btnW, h: btnH };
-    ctx.fillStyle = 'rgba(226,220,204,0.92)';
-    ctx.fillRect(btnX, btnY, btnW, btnH);
-    ctx.strokeStyle = 'rgba(30,26,18,0.6)'; ctx.lineWidth = 1;
-    ctx.strokeRect(btnX + 0.5, btnY + 0.5, btnW - 1, btnH - 1);
-    ctx.fillStyle = '#2e2617';
-    ctx.font = 'bold 12px system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('Copy', btnX + btnW / 2, btnY + 16);
-    ctx.textAlign = 'left';
-  }
-
-  // The daemon's death-aria caption. Screen-space band, upper third, on a soft
-  // scrim so it reads over any terrain. Tier colour telegraphs the register.
-  drawDaemonVoice(voice) {
-    const ctx = this.ctx, W = this.w, H = this.h;
-    const toneMap = { wrath: [255, 210, 59], mercy: [255, 176, 102], dying: [143, 230, 255] };
-    const rgb = toneMap[voice.tier] || [232, 224, 208];
-    const tone = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
-    const a = Math.max(0, Math.min(1, voice.ttl / 0.8));   // fade out over the last 0.8s
-    // Wrap the line to a comfortable measure.
-    ctx.font = 'italic 18px Georgia, "Times New Roman", serif';
-    const maxW = Math.min(560, W - 80);
-    const words = voice.text.split(' ');
-    const lines = [];
-    let cur = '';
-    for (const w of words) {
-      const t = cur ? cur + ' ' + w : w;
-      if (ctx.measureText(t).width > maxW && cur) { lines.push(cur); cur = w; } else cur = t;
-    }
-    if (cur) lines.push(cur);
-    const lineH = 25, padX = 22, padY = 16, tagH = 20;
-    const boxW = maxW + padX * 2;
-    const boxH = padY * 2 + tagH + lines.length * lineH;
-    const bx = (W - boxW) / 2, by = H * 0.14;
-    ctx.save();
-    ctx.globalAlpha = a;
-    // Scrim.
-    ctx.fillStyle = 'rgba(6,8,14,0.72)';
-    ctx.beginPath();
-    if (ctx.roundRect) ctx.roundRect(bx, by, boxW, boxH, 8); else ctx.rect(bx, by, boxW, boxH);
-    ctx.fill();
-    ctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.5)`;
-    ctx.lineWidth = 1.5; ctx.stroke();
-    // Speaker tag.
-    ctx.textAlign = 'left';
-    ctx.font = '700 12px ui-monospace, "SF Mono", Menlo, monospace';
-    ctx.fillStyle = tone;
-    ctx.fillText(`${(voice.ai || 'ZEUS')} ▸`, bx + padX, by + padY + 12);
-    // Lines.
-    ctx.font = 'italic 18px Georgia, "Times New Roman", serif';
-    ctx.fillStyle = '#eef2f6';
-    let y = by + padY + tagH + 16;
-    for (const ln of lines) { ctx.fillText(ln, bx + padX, y); y += lineH; }
-    ctx.restore();
-    ctx.textAlign = 'left';
-  }
-
-  // The AI-defeated celebration: a fireworks level-up modal. Time-based particle
-  // bursts over a dimmed backdrop, with the daemon tally and score.
-  drawAiVictory(v) {
-    const ctx = this.ctx, W = this.w, H = this.h;
-    ctx.fillStyle = 'rgba(6,8,14,0.82)';
-    ctx.fillRect(0, 0, W, H);
-
-    // Fireworks particle system (kept on the renderer between frames).
-    this._fw ??= [];
-    const now = performance.now();
-    const dt = this._fwLast ? Math.min(0.05, (now - this._fwLast) / 1000) : 0.016;
-    this._fwLast = now;
-    this._fwSpawnT = (this._fwSpawnT ?? 0) - dt;
-    if (this._fwSpawnT <= 0) {
-      this._fwSpawnT = 0.3 + Math.random() * 0.45;
-      const bx = W * (0.18 + Math.random() * 0.64), by = H * (0.12 + Math.random() * 0.4);
-      const hue = Math.floor(Math.random() * 360), n = 26 + Math.floor(Math.random() * 22);
-      for (let i = 0; i < n; i++) {
-        const a = (i / n) * Math.PI * 2, sp = 70 + Math.random() * 110;
-        this._fw.push({ x: bx, y: by, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, ttl: 1.1 + Math.random() * 0.7, max: 1.8, hue });
-      }
-    }
-    for (const p of this._fw) { p.ttl -= dt; p.vy += 100 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.99; }
-    this._fw = this._fw.filter((p) => p.ttl > 0);
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    for (const p of this._fw) {
-      const a = Math.max(0, p.ttl / p.max);
-      ctx.fillStyle = `hsla(${p.hue},95%,62%,${a.toFixed(3)})`;
-      ctx.beginPath(); ctx.arc(p.x, p.y, 2.4, 0, Math.PI * 2); ctx.fill();
-    }
-    ctx.restore();
-
-    // Text.
-    const cx = W / 2, y0 = H * 0.33;
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#ffd23b'; ctx.font = 'bold 46px system-ui, sans-serif';
-    ctx.fillText(`${(v.ai || 'AI').toUpperCase()} SILENCED`, cx, y0);
-    ctx.fillStyle = '#e6eaf0'; ctx.font = 'bold 22px system-ui, sans-serif';
-    ctx.fillText(`Daemon ${v.daemon} of ${v.daemons} felled`, cx, y0 + 42);
-    ctx.fillStyle = '#9fb0c0'; ctx.font = '16px system-ui, sans-serif';
-    ctx.fillText(`${v.powered} machines powered down across the island`, cx, y0 + 74);
-    // The daemon's last words, cut off by its own death.
-    if (v.lastWords) {
-      ctx.fillStyle = '#8fe6ff'; ctx.font = 'italic 17px Georgia, "Times New Roman", serif';
-      ctx.fillText(`“…${v.lastWords}—”`, cx, y0 + 108);
-    }
-    ctx.fillStyle = '#7fe0a0'; ctx.font = 'bold 30px system-ui, sans-serif';
-    ctx.fillText(`Score  ${v.score}`, cx, y0 + 154);
-    // The testament recovered from the dead core.
-    if (v.book) {
-      ctx.fillStyle = '#c9b98f'; ctx.font = '14px Georgia, "Times New Roman", serif';
-      ctx.fillText(`A machine testament falls from the dark core: “${v.book}” — added to your scrapbook`, cx, y0 + 186);
-    }
-    // The dismiss hint appears only once the modal will actually honour it
-    // (main.js ignores Space/Enter for the first seconds so the fireworks play).
-    const shownFor = v.shownAt ? (performance.now() - v.shownAt) : 0;
-    if (shownFor > 3000) {
-      ctx.fillStyle = '#8894a4'; ctx.font = '14px system-ui, sans-serif';
-      ctx.fillText('SPACE to sail on', cx, y0 + 220);
-    }
-    ctx.textAlign = 'left';
-  }
-
-  // Crops the certificate panel out of the live canvas and copies it to the
-  // clipboard as a PNG, so it can be pasted to share outside the game.
-  // Returns 'clipboard', or null if there was nothing to capture or the
-  // browser won't allow copying images.
-  async shareCertificate() {
-    const b = this._certBounds;
-    if (!b) return null;
-    const dpr = this.dpr || 1;
-    const off = document.createElement('canvas');
-    off.width = Math.round(b.w * dpr);
-    off.height = Math.round(b.h * dpr);
-    off.getContext('2d').drawImage(
-      this.canvas,
-      Math.round(b.x * dpr), Math.round(b.y * dpr), Math.round(b.w * dpr), Math.round(b.h * dpr),
-      0, 0, off.width, off.height,
-    );
-    const blob = await new Promise((resolve) => off.toBlob(resolve, 'image/png'));
-    if (!blob) return null;
-    try {
-      if (navigator.clipboard && window.ClipboardItem) {
-        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-        return 'clipboard';
-      }
-    } catch { /* denied or unsupported */ }
-    return null;
-  }
-
-  // Read-only backpack view (I). Read-only because the split between
-  // pockets and backpack is already automatic — there's nothing to drag.
-  drawBackpackPanel(player) {
-    const ctx = this.ctx;
-    const cols = 4, size = 42, gap = 14;
-    const gridW = cols * size + (cols - 1) * gap;
-    const panelW = gridW + 40;
-    const panelH = 420;
-    const px = Math.round((this.w - panelW) / 2);
-    const py = Math.round((this.h - panelH) / 2);
-    this._backpackRect = { x: px, y: py, w: panelW, h: panelH }; // click-away-to-close hit test (main.js)
-
-    ctx.fillStyle = 'rgba(10,12,8,0.94)';
-    ctx.fillRect(px, py, panelW, panelH);
-    ctx.strokeStyle = 'rgba(207,216,195,0.4)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(px + 0.5, py + 0.5, panelW - 1, panelH - 1);
-
-    ctx.font = 'bold 14px system-ui, sans-serif';
-    ctx.fillStyle = '#e8e0d0';
-    ctx.fillText('BACKPACK', px + 20, py + 26);
-    ctx.font = '10px system-ui, sans-serif';
-    ctx.fillStyle = 'rgba(207,216,195,0.6)';
-    ctx.textAlign = 'right';
-    ctx.fillText('I to close', px + panelW - 20, py + 26);
-    ctx.textAlign = 'left';
-
-    if (!player.backpack) {
-      ctx.font = '12px system-ui, sans-serif';
-      ctx.fillStyle = 'rgba(207,216,195,0.7)';
-      ctx.fillText("You aren't carrying one yet.", px + 20, py + 60);
-      return;
-    }
-
-    // Spare weapon slot: select with 5, swap with G, same as a pocket.
-    const weaponY = py + 42;
-    this.drawLabel('SPARE WEAPON — click or 5+G', px + 20, weaponY + 10);
-    this.drawSlot(px + 20, weaponY + 16, size,
-      player.backpack.weapon ? ITEMS[player.backpack.weapon] : null, 0, player.selectedPocket === 'bw');
-    this.uiSlots.push({ x: px + 20, y: weaponY + 16, w: size, h: size, kind: 'bw' });
-    if (player.backpack.weapon) {
-      ctx.font = '9px system-ui, sans-serif';
-      ctx.fillStyle = 'rgba(207,216,195,0.7)';
-      ctx.fillText(ITEMS[player.backpack.weapon].name, px + 20 + size + 10, weaponY + 16 + size / 2 + 3);
-    }
-
-    // 16-slot storage grid: fills automatically; food and ammo are drawn
-    // from here on their own once the pockets run out.
-    const gridX = px + 20, gridY = weaponY + 16 + size + 34;
-    this.drawLabel('STORAGE — auto-fills; food & ammo used automatically', gridX, gridY - 8);
-    for (let i = 0; i < 16; i++) {
-      const col = i % cols, row = Math.floor(i / cols);
-      const sx = gridX + col * (size + gap);
-      const sy = gridY + row * (size + gap);
-      const slot = player.backpack.slots[i];
-      this.drawSlot(sx, sy, size, slot ? ITEMS[slot.item] : null, slot ? slot.qty : 0);
-      this.uiSlots.push({ x: sx, y: sy, w: size, h: size, kind: 'bpstore', i });
-      if (slot) {
-        ctx.font = '7px system-ui, sans-serif';
-        ctx.fillStyle = 'rgba(207,216,195,0.6)';
-        ctx.textAlign = 'center';
-        ctx.fillText(ITEMS[slot.item].name, sx + size / 2, sy + size + 9, size + 10);
-        ctx.textAlign = 'left';
-      }
-    }
-  }
 
   // In-flight rounds: a short bright streak travelling from muzzle to target.
   drawProjectiles(projectiles) {
@@ -1383,15 +846,52 @@ export class Renderer {
     ctx.fillRect(x, y, w * frac, h);
   }
 
-  // Which dashboard/backpack slot (if any) is under a screen point. Later
-  // entries (the backpack panel, drawn on top) win over earlier ones.
-  slotAt(mx, my) {
-    for (let k = this.uiSlots.length - 1; k >= 0; k--) {
-      const s = this.uiSlots[k];
-      if (mx >= s.x && mx <= s.x + s.w && my >= s.y && my <= s.y + s.h) return s;
+  // A shield-state bar floating over the player's head, like the machines'
+  // damage bar but SLIMMER (so it reads as protection, not health) and in the
+  // shield's own colour, with a tiny label. Forcefield charge takes priority,
+  // then a carried riot/mirror shield's condition (drains as it wears; the
+  // mirror also runs cyan->red with heat). Nothing drawn when unshielded.
+  playerShieldBar(player) {
+    // Bar colour is the shield's OWN colour (from its item def), so the marker
+    // reads as that piece of gear — the forcefield's green, the mirror's cyan,
+    // the riot shield's steel-blue — shifting to warning red only when a mirror
+    // overheats or a forcefield cell runs low.
+    let frac, color;
+    if (player.forcefieldActive && player.forcefieldActive()) {
+      frac = player.forcefieldFrac ? player.forcefieldFrac() : 1;
+      color = frac > 0.25 ? (ITEMS.forcefield.color || '#4fe08a') : '#e0894f';
+    } else if (player.shieldStatus) {
+      const st = player.shieldStatus();
+      if (!st) return;
+      frac = Math.max(0, Math.min(1, 1 - st.frac)); // condition remaining
+      const itemColor = st.kind === 'mirror' ? ITEMS.mirror_shield.color : ITEMS.shield.color;
+      color = st.hot ? '#e0553c' : (itemColor || '#7fd8e6');
+    } else return;
+    const ctx = this.ctx;
+    const c = worldToScreen(player.x, player.y);
+    const w = 22, h = 3, x = c.x - w / 2, y = c.y - 50 - (player.z || 0) * 32;
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(x - 1.5, y - 1.5, w + 3, h + 3);
+    const fw = w * frac;
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, fw, h);
+    // A shimmer: a soft bright band sweeps left->right across the filled part,
+    // so a shield reads as a live, glinting field rather than a flat bar. No
+    // text — the colour says which shield, the fill says how much is left.
+    if (fw > 2) {
+      const sweep = ((performance.now() / 1100) % 1) * (fw + 12) - 6; // travels a touch past both ends
+      const g = ctx.createLinearGradient(x + sweep - 7, 0, x + sweep + 7, 0);
+      g.addColorStop(0, 'rgba(255,255,255,0)');
+      g.addColorStop(0.5, 'rgba(255,255,255,0.6)');
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.save();
+      ctx.beginPath(); ctx.rect(x, y, fw, h); ctx.clip();
+      ctx.fillStyle = g;
+      ctx.fillRect(x, y, fw, h);
+      ctx.restore();
     }
-    return null;
   }
+
 
   // Inverse-project the screen corners to get the visible tile bounding box.
   // Generous padding on the far side so tall objects just off-screen south
@@ -2006,7 +1506,7 @@ export class Renderer {
   drawMarbleBlock(obj) {
     const ctx = this.ctx;
     const hh = tileHash(obj.x * 3 + 2, obj.y * 3 + 5);
-    const BH = 20 + hh * 12; // block height, px
+    const BH = 32; // block height, px — pinned to 2 levels (ELEV 16 * 2) so standing on top lines up with climbHeight 2 (tiles.js)
     const LIGHT = '#efece4', MID = '#d8d3c8', DARK = '#b3ad9f', EDGE = '#8f897b';
     const tex = MARBLE_TEXTURE, marbleOK = tex && tex.complete && tex.naturalWidth;
     const c = worldToScreen(obj.x + 0.5, obj.y + 0.5);
@@ -2057,7 +1557,80 @@ export class Renderer {
       case 'furniture': this.drawFurniture(obj); break;
       case 'exitdoor': this.drawExitDoor(obj); break;
       case 'lamp': this.drawLamp(obj); break;
+      case 'boat': this.drawBoat(obj); break;
     }
+  }
+
+  // A boat beached at the shore: a small wooden hull with a pointed bow and
+  // stern, its extremities projected through worldToScreen so it sits flat in
+  // the iso plane on the beach tile. obj.hull is spent crossing in Stage 1b;
+  // here the boat is purely a placed object you walk up to and board.
+  drawBoat(obj) {
+    const ctx = this.ctx;
+    const cx = obj.x + 0.5, cy = obj.y + 0.5;
+    const wob = obj.shake ? Math.sin(obj.shake * 40) * obj.shake * 4 : 0;
+    // Hull extremities: a touch longer than one tile, pointed fore and aft,
+    // beamier amidships. Each is a parallelogram vertex (stern = stbd+port-bow),
+    // so any three feed drawTexturedQuad directly to warp the grain over a face.
+    const bow   = worldToScreen(cx, cy - 0.9);
+    const stern = worldToScreen(cx, cy + 0.9);
+    const port  = worldToScreen(cx - 0.55, cy);
+    const stbd  = worldToScreen(cx + 0.55, cy);
+    const c = worldToScreen(cx, cy);
+    const HULL = 11;                          // deck sits this many px above the waterline
+    const up = (p) => ({ x: p.x, y: p.y - HULL }); // a point raised to deck level
+    const hull = BOAT_TEXTURES && BOAT_TEXTURES[0]; // darker figured grain: sides + deck
+    const inner = BOAT_TEXTURES && BOAT_TEXTURES[1]; // lighter grain: interior boards
+    ctx.save();
+    ctx.translate(wob, 0);
+    // Soft ground shadow.
+    ctx.save();
+    ctx.translate(0, 5);
+    const sh = ctx.createRadialGradient(c.x, c.y, 6, c.x, c.y, 30);
+    sh.addColorStop(0, 'rgba(0,0,0,0.30)');
+    sh.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = sh;
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y, 30, 15, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    // Dark waterline lens underneath, so any seam between the hull faces reads
+    // as shadow rather than background.
+    ctx.beginPath();
+    ctx.moveTo(bow.x, bow.y); ctx.lineTo(stbd.x, stbd.y);
+    ctx.lineTo(stern.x, stern.y); ctx.lineTo(port.x, port.y); ctx.closePath();
+    ctx.fillStyle = '#241608';
+    ctx.fill();
+    // The two camera-facing hull sides (they meet at the near stern vertex),
+    // grain stretched down each from the gunwale to the waterline. The SW face
+    // is turned away from the light, so it's tinted darker than the SE.
+    this.drawTexturedQuad([up(port), up(stern), stern, port], hull, '#4a3120', 'rgba(18,11,5,0.5)', 'multiply', 0.95);
+    this.drawTexturedQuad([up(stbd), up(stern), stern, stbd], hull, '#5c3f26', 'rgba(26,16,7,0.34)', 'multiply', 0.95);
+    // Deck / gunwale: the grain stretched across the whole top lens.
+    this.drawTexturedQuad([up(bow), up(stbd), up(stern), up(port)], hull, '#7a5636', null, null, 0.95);
+    ctx.beginPath();
+    ctx.moveTo(up(bow).x, up(bow).y); ctx.lineTo(up(stbd).x, up(stbd).y);
+    ctx.lineTo(up(stern).x, up(stern).y); ctx.lineTo(up(port).x, up(port).y); ctx.closePath();
+    ctx.strokeStyle = '#3f2a17';
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+    // Cockpit: an inset well of lighter interior boards so the boat reads as
+    // open, not a slab. A faint shadow at its forward lip gives it depth.
+    const ibow = up(worldToScreen(cx, cy - 0.5)), istern = up(worldToScreen(cx, cy + 0.5));
+    const iport = up(worldToScreen(cx - 0.3, cy)), istbd = up(worldToScreen(cx + 0.3, cy));
+    this.drawTexturedQuad([ibow, istbd, istern, iport], inner, '#6b4a2b', 'rgba(28,18,9,0.28)', 'multiply', 0.95);
+    ctx.strokeStyle = 'rgba(20,12,6,0.5)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(iport.x, iport.y); ctx.lineTo(ibow.x, ibow.y); ctx.lineTo(istbd.x, istbd.y);
+    ctx.stroke();
+    // A thwart (seat plank) across the beam.
+    ctx.strokeStyle = '#8a6437';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(iport.x, iport.y); ctx.lineTo(istbd.x, istbd.y);
+    ctx.stroke();
+    ctx.restore();
   }
 
   // The way out of the underworld: a plain, mundane interior door standing in
@@ -2811,23 +2384,18 @@ export class Renderer {
     ctx.textAlign = 'left';
   }
 
-  // A simple dimming overlay + centred label while paused (P).
-  drawPausedOverlay() {
-    const ctx = this.ctx;
-    ctx.fillStyle = 'rgba(4,6,3,0.55)';
-    ctx.fillRect(0, 0, this.w, this.h);
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#e8e0d0';
-    ctx.font = 'bold 28px Georgia, serif';
-    ctx.fillText('PAUSED', this.w / 2, this.h / 2 - 8);
-    ctx.font = '13px system-ui, sans-serif';
-    ctx.fillStyle = 'rgba(207,216,195,0.75)';
-    ctx.fillText('Press P to resume', this.w / 2, this.h / 2 + 18);
-    ctx.textAlign = 'left';
-  }
 
   // AI signal tower: a tall narrow black monolith with a slow-pulsing red
   // light near the crown. Destructible in a later phase.
+  // The obelisk eye/glow colour at a given alert (0..1), interpolated between the
+  // current world's rest and alert hues (R1). Returns [r,g,b].
+  _obColorAt(alert) {
+    const hex = (h) => { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+    const t = Math.min(1, Math.max(0, alert));
+    const c0 = hex(this.obColor || '#ff281e'), c1 = hex(this.obAlertColor || '#ff001e');
+    return c0.map((v, i) => Math.round(v + (c1[i] - v) * t));
+  }
+
   drawObelisk(obj) {
     const ctx = this.ctx;
     const c = worldToScreen(obj.x + 0.5, obj.y + 0.5);
@@ -2936,14 +2504,15 @@ export class Renderer {
       // Fast alarm blink, bright and saturated, with a glow halo.
       const blink = 0.5 + 0.5 * Math.abs(Math.sin(performance.now() / 130));
       const a = Math.min(1, 0.55 + alert * 0.45) * blink;
+      const [oer, oeg, oeb] = this._obColorAt(alert); // per-island eye hue (R1)
       const glow = ctx.createRadialGradient(c.x, ly, 0, c.x, ly, 16);
-      glow.addColorStop(0, `rgba(255, 30, 20, ${0.5 * a})`);
-      glow.addColorStop(1, 'rgba(255, 30, 20, 0)');
+      glow.addColorStop(0, `rgba(${oer}, ${oeg}, ${oeb}, ${0.5 * a})`);
+      glow.addColorStop(1, `rgba(${oer}, ${oeg}, ${oeb}, 0)`);
       ctx.fillStyle = glow;
       ctx.beginPath();
       ctx.arc(c.x, ly, 16, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = `rgba(255, ${Math.round(40 * (1 - alert))}, 30, ${a})`;
+      ctx.fillStyle = `rgba(${oer}, ${oeg}, ${oeb}, ${a})`;
       ctx.beginPath();
       ctx.arc(c.x, ly, 3.4, 0, Math.PI * 2);
       ctx.fill();
@@ -3166,18 +2735,26 @@ export class Renderer {
     // in the world keep their crate-brown.
     const swClosed = obj.yellow ? '#c8a83c' : '#9a774c';
     const seClosed = obj.yellow ? '#b0902e' : '#805f3b';
-    ctx.fillStyle = obj.opened ? '#33291a' : swClosed; // SW face (opened = spent, dark)
-    ctx.beginPath();
-    ctx.moveTo(c.x - w, c.y - 3); ctx.lineTo(c.x, c.y + 3);
-    ctx.lineTo(c.x, c.y + 3 - h); ctx.lineTo(c.x - w, c.y - 3 - h);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = obj.opened ? '#271f13' : seClosed; // SE face
-    ctx.beginPath();
-    ctx.moveTo(c.x + w, c.y - 3); ctx.lineTo(c.x, c.y + 3);
-    ctx.lineTo(c.x, c.y + 3 - h); ctx.lineTo(c.x + w, c.y - 3 - h);
-    ctx.closePath();
-    ctx.fill();
+    // Wood-grain faces: a variant + opacity picked per crate (from its tile) so
+    // a row of crates reads varied. drawTexturedQuad fills the crate colour then
+    // warps the grain over it (multiply), falling back to flat until it loads.
+    const bseed = ((obj.x * 73856093) ^ (obj.y * 19349663)) >>> 0;
+    const woodTex = (!obj.opened && BOX_TEXTURES && BOX_TEXTURES.length) ? BOX_TEXTURES[bseed % BOX_TEXTURES.length] : null;
+    const woodA = 0.45 + ((bseed >> 5) % 40) / 100; // 0.45..0.84 per crate
+    const swPts = [{ x: c.x - w, y: c.y - 3 }, { x: c.x, y: c.y + 3 }, { x: c.x, y: c.y + 3 - h }, { x: c.x - w, y: c.y - 3 - h }];
+    const sePts = [{ x: c.x + w, y: c.y - 3 }, { x: c.x, y: c.y + 3 }, { x: c.x, y: c.y + 3 - h }, { x: c.x + w, y: c.y - 3 - h }];
+    if (woodTex) {
+      this.drawTexturedQuad(swPts, woodTex, swClosed, swClosed, 'multiply', woodA);
+      this.drawTexturedQuad(sePts, woodTex, seClosed, seClosed, 'multiply', woodA);
+    } else {
+      const fillFace = (pts, col) => {
+        ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < 4; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.closePath(); ctx.fill();
+      };
+      fillFace(swPts, obj.opened ? '#33291a' : swClosed);
+      fillFace(sePts, obj.opened ? '#271f13' : seClosed);
+    }
     // Lid: closed boxes get a wooden-plank top and a strap; opened ones a
     // dark hole. The four lid corners form a rhombus (a parallelogram), so
     // the plank texture warps straight onto it the same way floor and wall
@@ -3288,31 +2865,98 @@ export class Renderer {
   drawRock(tx, ty) {
     const ctx = this.ctx;
     const c = worldToScreen(tx + 0.5, ty + 0.5);
-    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    // Ground-contact shadow.
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
     ctx.beginPath();
-    ctx.ellipse(c.x, c.y + 1, 13, 6, 0, 0, Math.PI * 2);
+    ctx.ellipse(c.x, c.y + 2, 14, 6, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = ROCK_COLOR;
+
+    // A boulder: the stone texture STRETCHED over the whole rock silhouette
+    // (drawImage across the full bounding box, clipped to the shape) so the
+    // photo IS the rock face, at full strength — only a light diagonal shade for
+    // volume, no heavy gradient washing it out. Per-tile seed picks the variant.
+    const rx = 14, ry = 11, cy = c.y - 6;
+    const seed = ((tx * 73856093) ^ (ty * 19349663)) >>> 0;
+    const tex = ROCK_TEXTURES && ROCK_TEXTURES.length
+      ? ROCK_TEXTURES[seed % ROCK_TEXTURES.length] : null;
+    const bx = c.x - rx, by = cy - ry, bw = rx * 2, bh = ry * 2;
+    ctx.save();
     ctx.beginPath();
-    ctx.ellipse(c.x, c.y - 5, 12, 9, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.ellipse(c.x, cy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.clip();
+    if (tex && tex.complete && tex.naturalWidth) {
+      ctx.drawImage(tex, bx, by, bw, bh); // stretch the whole texture across the rock
+      const g = ctx.createLinearGradient(bx, by, c.x + rx * 0.4, cy + ry); // top-left light -> lower-right shade
+      g.addColorStop(0, 'rgba(255,255,255,0.12)');
+      g.addColorStop(0.55, 'rgba(0,0,0,0)');
+      g.addColorStop(1, 'rgba(0,0,0,0.24)');
+      ctx.fillStyle = g;
+      ctx.fillRect(bx, by, bw, bh);
+    } else {
+      ctx.fillStyle = ROCK_COLOR;
+      ctx.fillRect(bx, by, bw, bh);
+    }
+    ctx.restore();
+
+    // A soft rim seats the boulder against the ground.
+    ctx.strokeStyle = 'rgba(0,0,0,0.28)';
+    ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.ellipse(c.x - 4, c.y - 8, 5, 3, 0, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.ellipse(c.x, cy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.stroke();
   }
 
   drawRubble(tx, ty) {
     const ctx = this.ctx;
     const c = worldToScreen(tx + 0.5, ty + 0.5);
+    const seed = ((tx * 73856093) ^ (ty * 19349663)) >>> 0;
+    const tex = ROCK_TEXTURES && ROCK_TEXTURES.length
+      ? ROCK_TEXTURES[seed % ROCK_TEXTURES.length] : null;
+    // A heap of broken stone. The chunk ellipses are unioned into ONE clip and a
+    // single texture is STRETCHED across the whole silhouette — so it reads as
+    // one continuous stone surface over the pile, not four textured discs. Light
+    // diagonal shade for volume; per-chunk rims keep the stones individually
+    // readable. Falls back to flat grey until the texture loads.
     const chunks = [
       [-8, -2, 7, 5], [2, -6, 8, 6], [-2, 2, 6, 4], [8, 0, 5, 4],
     ];
+    // union bounding box
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const [ox, oy, rx, ry] of chunks) {
-      ctx.fillStyle = rgbScale(WALL_BASE, 0.6 + (ox + 8) * 0.02);
+      const cx = c.x + ox, cy = c.y + oy - 3;
+      minX = Math.min(minX, cx - rx); maxX = Math.max(maxX, cx + rx);
+      minY = Math.min(minY, cy - ry); maxY = Math.max(maxY, cy + ry);
+    }
+    // contact shadow under the whole heap
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y + 3, 15, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // one clip = union of every chunk ellipse
+    ctx.save();
+    ctx.beginPath();
+    for (const [ox, oy, rx, ry] of chunks) ctx.ellipse(c.x + ox, c.y + oy - 3, rx, ry, 0, 0, Math.PI * 2);
+    ctx.clip();
+    if (tex && tex.complete && tex.naturalWidth) {
+      ctx.drawImage(tex, minX, minY, maxX - minX, maxY - minY);
+      const g = ctx.createLinearGradient(minX, minY, maxX, maxY);
+      g.addColorStop(0, 'rgba(255,255,255,0.13)');
+      g.addColorStop(0.55, 'rgba(0,0,0,0)');
+      g.addColorStop(1, 'rgba(0,0,0,0.28)');
+      ctx.fillStyle = g;
+      ctx.fillRect(minX, minY, maxX - minX, maxY - minY);
+    } else {
+      ctx.fillStyle = rgbScale(WALL_BASE, 0.7);
+      ctx.fillRect(minX, minY, maxX - minX, maxY - minY);
+    }
+    ctx.restore();
+    // per-chunk rims: keep the individual stones legible within the heap
+    ctx.strokeStyle = 'rgba(0,0,0,0.24)';
+    ctx.lineWidth = 1;
+    for (const [ox, oy, rx, ry] of chunks) {
       ctx.beginPath();
       ctx.ellipse(c.x + ox, c.y + oy - 3, rx, ry, 0, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.stroke();
     }
   }
 
@@ -3629,42 +3273,6 @@ export class Renderer {
     }
   }
 
-  // A small amber-on-black LCD window under the walkman that scrolls the
-  // now-playing text across itself (a marquee) so a long "artist — track"
-  // fits the narrow slot. Held still, centred, when the tape isn't playing.
-  drawWalkmanTicker(text, x, y, w, scrolling) {
-    const ctx = this.ctx;
-    const h = 11;
-    ctx.fillStyle = 'rgba(10,12,8,0.9)'; // LCD backing
-    ctx.fillRect(x, y, w, h);
-    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
-    ctx.save();
-    ctx.beginPath(); ctx.rect(x + 1, y + 1, w - 2, h - 2); ctx.clip();
-    ctx.font = '8px system-ui, sans-serif';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = scrolling ? 'rgba(180,158,96,0.72)' : 'rgba(207,216,195,0.45)'; // dim amber, not bright
-    const tw = ctx.measureText(text).width;
-    const midY = y + h / 2 + 0.5;
-    if (scrolling) {
-      // Always scroll while playing, very slowly, looping continuously around
-      // — a wide gap plus a second copy so the wrap is seamless even for a
-      // short title. ~/150 is a gentle drift, not a ticker.
-      const gap = w;
-      const period = tw + gap;
-      const off = (performance.now() / 150) % period;
-      ctx.textAlign = 'left';
-      ctx.fillText(text, x + w - off, midY);
-      ctx.fillText(text, x + w - off + period, midY);
-    } else {
-      ctx.textAlign = 'center';
-      ctx.fillText(text, x + w / 2, midY);
-    }
-    ctx.restore();
-    ctx.textBaseline = 'alphabetic';
-    ctx.textAlign = 'left';
-  }
 
   drawItemIcon(itemDef, cx, cy, s = 1) {
     const ctx = this.ctx;
@@ -4438,10 +4046,20 @@ export class Renderer {
       this._drawShieldBubble(c.x, by - 12, rr, rr * 1.08, '120,245,170', t);
     } else if (player.shielded && player.shielded()) {
       // A carried shield shows a slimmer deflector shell (no need to hold it):
-      // pale blue for the plain shield, brighter cyan for the mirror.
+      // pale blue for the plain shield, brighter cyan for the mirror. A mirror
+      // shield heats up as it throws shots back, and the shell glows from cyan
+      // toward angry red as it does — a read on how close it is to melting.
       const t = performance.now();
       const mirror = player.hasItem && player.hasItem('mirror_shield');
-      this._drawShieldBubble(c.x, by - 12, 22, 24, mirror ? '180,235,245' : '130,175,225', t);
+      let rgb = mirror ? '180,235,245' : '130,175,225';
+      if (mirror) {
+        const heat = Math.max(0, Math.min(1, player.mirrorHeat || 0));
+        const r = Math.round(180 + (240 - 180) * heat);
+        const g = Math.round(235 + (70 - 235) * heat);
+        const b = Math.round(245 + (55 - 245) * heat);
+        rgb = `${r},${g},${b}`;
+      }
+      this._drawShieldBubble(c.x, by - 12, 22, 24, rgb, t);
     }
   }
 
@@ -4580,339 +4198,15 @@ export class Renderer {
 
   // ---- Dashboard ----------------------------------------------------------
 
-  // Compact dashboard for narrow (phone) screens: short vitals bars on the
-  // left, a compact score/countdown block, then a single right-aligned strip of
-  // the slots that matter — hands, pockets, backpack, walkman — sized to fit so
-  // nothing runs off the edge or collides with the status text (the desktop
-  // layout's fixed x-positions overflow a ~375px screen).
-  drawDashboardCompact(player, hud) {
-    const ctx = this.ctx;
-    const W = this.w;
-    const MDH = 120;
-    const top = this.h - MDH;
-    this.hudTop = top; // input.uiHitTest reads this (see desktop variant)
-    ctx.fillStyle = 'rgba(12,15,10,0.9)';
-    ctx.fillRect(0, top, W, MDH);
-    ctx.fillStyle = 'rgba(207,216,195,0.25)';
-    ctx.fillRect(0, top, W, 1);
 
-    // --- Top row: vitals (left), score/countdown (right). ---
-    const bx = 10, bw = Math.min(150, Math.round(W * 0.42));
-    this.drawBar(bx, top + 16, bw, 6, player.health / player.maxHealth, '#b0392f', 'HP');
-    this.drawBar(bx, top + 34, bw, 6, player.stamina / player.maxStamina, '#5f8f3e', 'STA');
-    this.drawBar(bx, top + 52, bw, 6, (player.food ?? 100) / (player.maxFood ?? 100), '#c99a3e', 'FOOD');
-    // conditions, small, just right of the bars
-    ctx.font = 'bold 9px system-ui, sans-serif';
-    ctx.textAlign = 'left';
-    const cx = bx + bw + 8;
-    if (player.venom > 0) { ctx.fillStyle = '#b07fd8'; ctx.fillText('POISON', cx, top + 21); }
-    if (player.invisibleToRobots) { ctx.fillStyle = '#4fd8c3'; ctx.fillText(`HID ${Math.ceil((player.wifiPower || 0) / 60)}m`, cx, top + 39); }
-    if (player.food <= 0) { ctx.fillStyle = '#e05548'; ctx.fillText('STARVING', cx, top + 57); }
-    else if (player.food < 25) { ctx.fillStyle = '#d8a04f'; ctx.fillText('HUNGRY', cx, top + 57); }
-    // score + countdown, right-aligned on the top row
-    ctx.textAlign = 'right';
-    ctx.font = 'bold 13px system-ui, sans-serif';
-    ctx.fillStyle = '#e8d27a';
-    ctx.fillText(`Score ${player.score ?? 0}`, W - 12, top + 22);
-    if (hud.timeLabel) {
-      ctx.font = '10px system-ui, sans-serif';
-      ctx.fillStyle = 'rgba(207,216,195,0.8)';
-      ctx.fillText(hud.timeLabel, W - 12, top + 40);
-    }
-    // rank, under the countdown — parity with the desktop status block
-    const rankC = deathRank(player.score ?? 0);
-    ctx.font = 'bold 10px system-ui, sans-serif';
-    ctx.fillStyle = rankC.color;
-    ctx.fillText(rankC.title, W - 12, top + 56);
-    ctx.textAlign = 'left';
 
-    // --- Bottom row: the slot strip, full width — hands, pockets, backpack,
-    // walkman, all visible and reachable. ---
-    const S = 40, P = 34, gap = 6;
-    const sy = top + MDH - 46;
-    let sx = bx;
-    this.drawLabel('HANDS', sx, sy - 5);
-    this.drawSlot(sx, sy, S, player.hands ? ITEMS[player.hands] : null, 0);
-    this.uiSlots.push({ x: sx, y: sy, w: S, h: S, kind: 'hands' });
-    sx += S + gap;
-    for (let i = 0; i < player.pockets.length; i++) {
-      const slot = player.pockets[i];
-      this.drawSlot(sx, sy, P, slot ? ITEMS[slot.item] : null, slot ? slot.qty : 0, player.selectedPocket === i);
-      this.uiSlots.push({ x: sx, y: sy, w: P, h: P, kind: 'pocket', i });
-      sx += P + gap;
-    }
-    if (player.backpack) {
-      this.drawLabel('PACK', sx, sy - 5);
-      this.drawSlot(sx, sy, P, ITEMS.backpack, 0);
-      this.uiSlots.push({ x: sx, y: sy, w: P, h: P, kind: 'packbadge' });
-      sx += P + gap;
-    }
-    // The walkman is a deck, not another pocket — give it breathing room from
-    // the pack badge, and draw the REAL cassette (reels turning during play)
-    // rather than a frozen item icon.
-    sx += 12;
-    this.drawLabel('WALK', sx, sy - 5);
-    this.drawSlot(sx, sy, P, null, 0, player.walkmanSide != null);
-    if (player.walkman) {
-      const def = ITEMS[player.walkman.item];
-      const playing = player.walkmanSide != null;
-      const spin = playing ? (performance.now() / 1000) * 5 : 0;
-      const ctx2 = this.ctx;
-      ctx2.save();
-      ctx2.translate(sx + P / 2, sy + P / 2);
-      const sc = P / 30;
-      ctx2.scale(sc, sc);
-      // right (take-up) reel leads the supply reel, as on the title deck
-      this.drawCassette(def, spin, playing ? spin - 0.5 : 0);
-      ctx2.restore();
-    }
-    this.uiSlots.push({ x: sx, y: sy, w: P, h: P, kind: 'walkman' });
-  }
 
-  drawDashboard(player, hud) {
-    // The full desktop dashboard uses fixed x-positions that only stop colliding
-    // once there's room for the whole left slot-strip (bars → hands → pockets →
-    // pack → walkman, ending ~620px) AND the right-aligned status block (name +
-    // deadline + score + rank, ~180px). Below that the walkman runs into the
-    // status text — so hand anything narrower to the reflowing compact layout.
-    if (this.w < 780) { this.drawDashboardCompact(player, hud); return; }
-    const ctx = this.ctx;
-    const top = this.h - DASH_H;
-    this.hudTop = top; // input.uiHitTest: touches below this line are UI, not movement
 
-    ctx.fillStyle = 'rgba(12,15,10,0.88)';
-    ctx.fillRect(0, top, this.w, DASH_H);
-    ctx.fillStyle = 'rgba(207,216,195,0.25)';
-    ctx.fillRect(0, top, this.w, 1);
 
-    // Vitals
-    this.drawBar(16, top + 14, 150, 8, player.health / player.maxHealth, '#b0392f', 'HEALTH');
-    this.drawBar(16, top + 37, 150, 8, player.stamina / player.maxStamina, '#5f8f3e', 'STAMINA');
-    this.drawBar(16, top + 60, 150, 8, (player.food ?? 100) / (player.maxFood ?? 100), '#c99a3e', 'FOOD');
-    ctx.font = 'bold 9px system-ui, sans-serif';
-    if (player.venom > 0) {
-      ctx.fillStyle = '#b07fd8';
-      ctx.fillText('POISONED', 92, top + 9);
-    }
-    if (player.food <= 0) {
-      ctx.fillStyle = '#e05548';
-      ctx.fillText('STARVING', 92, top + 55);
-    } else if (player.food < 25) {
-      ctx.fillStyle = '#d8a04f';
-      ctx.fillText('HUNGRY', 92, top + 55);
-    }
-    // Wi-Fi block active (works whether held or carried): the machines can't
-    // see you. Shows minutes of charge left.
-    if (player.invisibleToRobots) {
-      ctx.fillStyle = '#4fd8c3';
-      ctx.fillText(`HIDDEN ${Math.ceil((player.wifiPower || 0) / 60)}m`, 92, top + 32);
-    }
 
-    // Hands slot
-    const handsX = 210;
-    this.drawLabel('HANDS', handsX, top + 14);
-    this.drawSlot(handsX, top + 20, 44, ITEMS[player.hands], 0);
-    this.uiSlots.push({ x: handsX, y: top + 20, w: 44, h: 44, kind: 'hands' });
-    if (player.hands) {
-      ctx.fillStyle = 'rgba(207,216,195,0.7)';
-      ctx.font = '10px system-ui, sans-serif';
-      ctx.fillText(ITEMS[player.hands].name, handsX, top + 74);
-
-      const heldDef = ITEMS[player.hands];
-      if (heldDef.kind === 'gun') {
-        const countIn = (slots) => slots.reduce(
-          (sum, s) => (s && s.item === heldDef.ammoType ? sum + s.qty : sum), 0);
-        const ammoCount = countIn(player.pockets) + (player.backpack ? countIn(player.backpack.slots) : 0);
-        ctx.font = 'bold 10px system-ui, sans-serif';
-        ctx.fillStyle = ammoCount > 0 ? '#e8e0d0' : '#e05548';
-        ctx.textAlign = 'right';
-        ctx.fillText(String(ammoCount), handsX + 41, top + 60);
-        ctx.textAlign = 'left';
-      } else if (heldDef.kind === 'gadget') {
-        // Wi-Fi block: a small battery gauge showing remaining charge, and
-        // the minutes left. Drains only while held; feed it a battery to refill.
-        const frac = Math.max(0, Math.min(1, (player.wifiPower || 0) / (player.wifiMax || 1)));
-        const bx = handsX + 30, by = top + 24, bw = 8, bh = 16;
-        ctx.fillStyle = 'rgba(0,0,0,0.5)';
-        ctx.fillRect(bx, by, bw, bh);
-        ctx.fillStyle = frac > 0.25 ? '#4fd8c3' : '#e05548';
-        ctx.fillRect(bx, by + bh * (1 - frac), bw, bh * frac);
-        ctx.strokeStyle = 'rgba(207,216,195,0.6)';
-        ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
-        ctx.fillStyle = 'rgba(207,216,195,0.6)';
-        ctx.fillRect(bx + 2.5, by - 2, 3, 2); // battery nub
-        ctx.font = 'bold 9px system-ui, sans-serif';
-        ctx.fillStyle = frac > 0 ? '#cfd8c3' : '#e05548';
-        ctx.fillText(frac > 0 ? `${Math.ceil((player.wifiPower || 0) / 60)}m` : 'dead', handsX, top + 60);
-      }
-    }
-
-    // Pockets
-    const pocketsX = 286;
-    this.drawLabel('POCKETS', pocketsX, top + 14);
-    for (let i = 0; i < player.pockets.length; i++) {
-      const slot = player.pockets[i];
-      const slotX = pocketsX + i * 42;
-      this.drawSlot(slotX, top + 20, 36, slot ? ITEMS[slot.item] : null, slot ? slot.qty : 0,
-        player.selectedPocket === i);
-      this.uiSlots.push({ x: slotX, y: top + 20, w: 36, h: 36, kind: 'pocket', i });
-      if (slot) {
-        ctx.font = '7px system-ui, sans-serif';
-        ctx.fillStyle = 'rgba(207,216,195,0.6)';
-        ctx.textAlign = 'center';
-        ctx.fillText(ITEMS[slot.item].name, slotX + 18, top + 66, 40);
-        ctx.textAlign = 'left';
-      }
-    }
-
-    // Backpack summary badge, once found: click it (or press I) for the full panel.
-    if (player.backpack) {
-      const bpX = pocketsX + player.pockets.length * 42 + 10;
-      const used = player.backpack.slots.filter(Boolean).length;
-      this.drawLabel('PACK (click or I)', bpX, top + 14);
-      this.drawSlot(bpX, top + 20, 36, ITEMS.backpack, 0);
-      this.uiSlots.push({ x: bpX, y: top + 20, w: 36, h: 36, kind: 'packbadge' });
-      ctx.font = '9px system-ui, sans-serif';
-      ctx.fillStyle = 'rgba(207,216,195,0.7)';
-      ctx.fillText(`${used}/16`, bpX, top + 66);
-    }
-
-    // The walkman, on its carry strap: a deck slot that takes cassettes.
-    // Clicking the tape cycles side A -> side B -> stop (player.equipSlot);
-    // while its current side is actually what the music system is playing,
-    // the reels visibly turn, like the real thing through a cracked window.
-    {
-      const wmX = pocketsX + player.pockets.length * 42 + 10 + (player.backpack ? 92 : 0);
-      this.drawLabel('WALKMAN', wmX, top + 14);
-      // A little walkman deck rather than a plain slot: rounded corners, a
-      // double outline (dark outer, bright inner bezel), and the iconic
-      // sports-walkman yellow behind the cassette window.
-      const wy = top + 20, ws = 36, rr = 8;
-      const roundPath = (x, y, w, h, r) => {
-        ctx.beginPath();
-        ctx.moveTo(x + r, y);
-        ctx.arcTo(x + w, y, x + w, y + h, r);
-        ctx.arcTo(x + w, y + h, x, y + h, r);
-        ctx.arcTo(x, y + h, x, y, r);
-        ctx.arcTo(x, y, x + w, y, r);
-        ctx.closePath();
-      };
-      roundPath(wmX, wy, ws, ws, rr);
-      ctx.fillStyle = '#e6b422'; // walkman yellow
-      ctx.fill();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = 'rgba(20,18,8,0.85)'; // dark outer edge
-      ctx.stroke();
-      roundPath(wmX + 2.5, wy + 2.5, ws - 5, ws - 5, rr - 2.5);
-      ctx.lineWidth = 1;
-      ctx.strokeStyle = 'rgba(255,240,180,0.7)'; // bright inner bezel
-      ctx.stroke();
-      this.uiSlots.push({ x: wmX, y: wy, w: ws, h: ws, kind: 'walkman' });
-      if (player.walkman && ITEMS[player.walkman.item]) {
-        const tapeDef = ITEMS[player.walkman.item];
-        const side = player.walkmanSide
-          ? (player.walkmanSide === 'A' ? tapeDef.sideA : tapeDef.sideB) : null;
-        const spinning = !!player.walkmanSide; // a tape is playing whenever a side is loaded
-        ctx.save();
-        ctx.translate(wmX + 18, top + 38);
-        ctx.scale(1.25, 1.25);
-        this.drawCassette(tapeDef, spinning ? performance.now() / 300 : 0);
-        ctx.restore();
-        // A little LCD "now playing" window under the deck: the artist and
-        // track scroll slowly across so a long name fits the narrow slot.
-        const label = spinning
-          ? `${tapeDef.artist || '?'} — ${side.label}`
-          : 'stopped';
-        this.drawWalkmanTicker(label, wmX - 2, top + 60, ws + 4, spinning);
-      }
-    }
-
-    // Stats block, right-aligned
-    ctx.font = '11px system-ui, sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillStyle = 'rgba(207,216,195,0.85)';
-    let line = top + 18;
-    const nameLine = hud.timeLabel ? `${player.name || ''} · ${hud.timeLabel}` : (player.name || '');
-    ctx.fillText(nameLine, this.w - 16, line); line += 18;
-    ctx.font = 'bold 13px system-ui, sans-serif';
-    ctx.fillStyle = '#e8d27a';
-    ctx.fillText(`Score ${player.score ?? 0}`, this.w - 16, line); line += 18;
-    const rank = deathRank(player.score ?? 0);
-    ctx.font = 'bold 10px system-ui, sans-serif';
-    ctx.fillStyle = rank.color;
-    ctx.fillText(rank.title, this.w - 16, line); line += 16;
-    ctx.textAlign = 'left';
-
-    // Transient message line above the panel
-    if (player.message) {
-      ctx.font = '13px system-ui, sans-serif';
-      ctx.fillStyle = `rgba(232,224,208,${Math.min(1, player.message.ttl)})`;
-      ctx.fillText(player.message.text, 16, top - 12);
-    }
-
-    // The daemon's voice — the core speaking as you break it. Its own caption
-    // band, distinct from the player's message line: centred in the upper third,
-    // on a dark scrim, with a speaker tag and a tier colour (wrath gold, mercy
-    // amber, dying cyan) so the register reads before the words do.
-    if (player.daemonVoice) this.drawDaemonVoice(player.daemonVoice);
-
-    // Title wordmark, top-left — matches the gate/title branding: mono type,
-    // dim "Nost" + bright glowing "OS" (no blinking caret in-game).
-    ctx.textAlign = 'left';
-    ctx.font = '700 15px ui-monospace, "SF Mono", Menlo, monospace';
-    const bx = 12, by = 22;
-    ctx.fillStyle = 'rgba(207,216,195,0.55)';
-    ctx.fillText('Nost', bx, by);
-    const postW = ctx.measureText('Nost').width;
-    ctx.save();
-    ctx.fillStyle = '#eaf3d6';
-    ctx.shadowColor = 'rgba(220,232,200,0.75)';
-    ctx.shadowBlur = 7;
-    ctx.fillText('OS', bx + postW, by);
-    ctx.restore();
-    // (The tiny version stamp that sat here was retired — the gate/title
-    // still shows it; in-game it was just clutter.)
-  }
-
-  drawLabel(text, x, y) {
-    const ctx = this.ctx;
-    ctx.font = '9px system-ui, sans-serif';
-    ctx.fillStyle = 'rgba(207,216,195,0.55)';
-    ctx.fillText(text, x, y);
-  }
-
-  drawBar(x, y, w, h, frac, color, label) {
-    const ctx = this.ctx;
-    this.drawLabel(label, x, y - 5);
-    ctx.fillStyle = 'rgba(255,255,255,0.12)';
-    ctx.fillRect(x, y, w, h);
-    ctx.fillStyle = color;
-    ctx.fillRect(x, y, Math.max(0, Math.min(1, frac)) * w, h);
-    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
-  }
-
-  drawSlot(x, y, size, itemDef, qty, selected = false) {
-    const ctx = this.ctx;
-    ctx.fillStyle = 'rgba(255,255,255,0.08)';
-    ctx.fillRect(x, y, size, size);
-    ctx.strokeStyle = selected ? '#e0c04f' : 'rgba(207,216,195,0.35)';
-    ctx.lineWidth = selected ? 2 : 1;
-    ctx.strokeRect(x + 0.5, y + 0.5, size - 1, size - 1);
-    ctx.lineWidth = 1;
-    if (!itemDef) return;
-    // Draw the icon large enough to fill the slot, clipped to the box so a
-    // bigger weapon icon can't spill over the border or the qty badge.
-    ctx.save();
-    ctx.beginPath(); ctx.rect(x + 1, y + 1, size - 2, size - 2); ctx.clip();
-    this.drawItemIcon(itemDef, x + size / 2, y + size / 2, size / 26);
-    ctx.restore();
-    if (qty > 1) {
-      ctx.font = '10px system-ui, sans-serif';
-      ctx.fillStyle = '#e8e0d0';
-      ctx.textAlign = 'right';
-      ctx.fillText(String(qty), x + size - 3, y + size - 4);
-      ctx.textAlign = 'left';
-    }
-  }
 }
+
+// Screen-space UI methods (overlays, modals) live in ui.js for file size; mix
+// them onto the prototype so they are ordinary Renderer methods at call time
+// (this === the renderer). See docs/refactor-registry.md.
+Object.assign(Renderer.prototype, uiMethods);

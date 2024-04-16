@@ -3,6 +3,7 @@ import { sfx } from '../engine/sound.js';
 import { ITEMS } from './items.js';
 import { OBJECTS } from './tiles.js';
 import { DAEMON_VOICE, DAEMON_FINAL, daemonTier } from './fortress.js';
+import { fire, SCORE, zombieImmune } from './combat.js';
 
 const WALK_SPEED = 4.2;   // tiles per second
 const SPRINT_SPEED = 7.5;
@@ -15,6 +16,20 @@ const REACH = 0.9;        // how far ahead the player can use a tool
 const CHIP_FRAGMENTS_PER_CHIP = 8; // fragments shed by machines to craft one chip
 const FORTRESS_MAP_FRAGMENTS = 5; // scattered map quarters pieced into a fortress map
 const SCRAP_PER_SWORD = 10; // scrap beaten into a robot sword
+const WOOD_PER_BOAT = 12;   // wood felled and lashed into a boat (Player.craftBoat)
+const BOAT_HULL = 100;      // a beached boat's starting hull HP (Stage 1b spends it crossing)
+const BOAT_LAUNCH_RADIUS = 2; // must be right at the sea's edge to launch (within ~2 tiles of the shore)
+// How each machine's hull rings under a blade (sfx 'clang' pitch factor):
+// small and thin rings high and short, heavy plate rings low and long.
+const CLANG_PITCH = {
+  t1: 1.5, m4: 1.3, w2: 1.3,          // small, tinny
+  w3: 1.15, w5: 1.15,                  // light drones
+  t2: 1, m5: 1,                        // the standard biped ring
+  t3: 0.85, w1: 0.85, m6: 0.85,        // heavier chassis
+  w4: 0.65,                            // the furnace plate
+};
+const TEMPLE_HEAL_R = 7;      // tiles from a temple-grove centre that count as inside it
+const TEMPLE_HEAL_MULT = 3;   // health regen multiplier among the old stones
 const KNOCKBACK_DIST = 0.5; // tiles a melee hit shoves an animal/robot back
 const KNOCKBACK_STUN = 0.4; // seconds it's frozen (no move, no attack) after
 const TREE_HP = 4;        // penknife swings to fell a tree
@@ -56,14 +71,22 @@ const FORCEFIELD_MAX = 60;  // seconds of forcefield per battery
 const FORCEFIELD_DRAIN = 1; // charge/sec while the field is up
 const SHIELD_FRONT = 0.2;   // a shield covers shots from within this facing dot
 const REFLECT_DAMAGE = 8;   // a mirror shield throws this back at the shooter
+// Shields wear out under fire. The riot shield is sheet metal — count the blows
+// it soaks and it eventually caves in. The mirror shield overheats: every bolt
+// it throws back adds heat, it sheds heat when the fire lets up, past FADE it's
+// glowing too hot to reflect (only absorbs), and at full heat it melts to scrap.
+// The forcefield is energy, not metal, so it never breaks — but each blow it
+// swallows costs extra charge, so a barrage drains the cell far faster than idle.
+const RIOT_SHIELD_HITS = 12;      // blocked hits before a riot shield is battered apart
+const MIRROR_HEAT_PER_HIT = 0.17; // heat gained per bolt reflected (0..1 scale)
+const MIRROR_HEAT_COOL = 0.13;    // heat/sec shed while not being hit
+const MIRROR_HEAT_FADE = 0.6;     // above this it's too hot to reflect — only absorbs
+const FORCEFIELD_HIT_COST = 2;    // seconds of charge burned per blow the field eats
 
 const WIFI_MAX = 600;    // Wi-Fi block charge in seconds (10 real minutes)
 const SWIM_STAMINA_DRAIN = 8;  // stamina/sec while in deep water
 const SWIM_HEALTH_DRAIN = 1.2; // health/sec: swimming a river is exhausting
 
-// Survival score awards. A felled tree is the baseline point; skilled tools
-// and tougher kills are worth more.
-const SCORE = { tree: 1, animal: 3, robot: 10, wreck: 2, cache: 2, book: 5, fragment: 5 };
 
 // Item kinds that can occupy the hands slot.
 const HOLDABLE = new Set(['tool', 'gun', 'gadget', 'bomb', 'map', 'spray']);
@@ -96,12 +119,6 @@ const BARE_HANDS = {
   swingCooldown: 0.4, staminaCost: 2,
 };
 
-// A robot the OB-gun's beam has corrupted into a "zombie" shrugs off every
-// weapon except the bow and the wave gun — the only two builds precise
-// enough to hit whatever in it is still killable.
-function zombieImmune(target, tool) {
-  return !!(target && target.zombie) && tool.key !== 'bow' && tool.key !== 'wavegun';
-}
 
 // Soft ground a shovel can sink into; hard surfaces (road, boards, water)
 // resist digging.
@@ -119,6 +136,8 @@ export class Player {
     this.doubleJumped = false; // a second, mid-air jump: reaches block tops
     this.forcefieldCharge = 0; // seconds of forcefield left in the current cell
     this.forcefieldArmed = false; // toggled by clicking the forcefield in any slot
+    this.riotShieldHits = 0;   // blows a carried riot shield has soaked; breaks at RIOT_SHIELD_HITS
+    this.mirrorHeat = 0;       // 0..1 mirror-shield overheat; reflects while cool, melts at 1
     this.compassArmed = false; // toggled by clicking the electro-compass in any slot
     this.ronmlKeys = new Set(); // node ids RON-ML's `hack` has cracked open this session
     this.ammoFrac = {};        // accumulated fractional ammo per gun
@@ -150,6 +169,7 @@ export class Player {
     this.venom = 0;       // seconds of poison remaining
 
     this.hands = 'penknife';                 // starting tool
+    this.boatBuilt = false;                  // one boat at a time; a session flag (Stage 1c persists it as campaign state)
     this.pockets = [{ item: 'note_home', qty: 1 }, null, null, null]; // start with the Odyssey note in-pocket
     this.backpack = null;                    // {slots: [16], weapon} once found; dropped on death
     this.selectedPocket = null;              // 0-3 (pockets), 'bw' (backpack weapon), or null
@@ -232,6 +252,21 @@ export class Player {
     return false;
   }
 
+  // The AI card is one physical object refunctioned through three states —
+  // ai_key -> trojan_key -> hermes_card (the Calypso escape chain). Anything
+  // that asks "do you hold the AI key" accepts the whole family, so refunctioning
+  // the card never strips its base authority (copy aikey / backup still work).
+  hasAiKeyFamily() {
+    return this.hasItem('ai_key') || this.hasItem('trojan_key') || this.hasItem('hermes_card');
+  }
+
+  // The refunctioned card — a Trojan key or the Hermes card — carries the
+  // Lion's-Gate credential (factory-id.ml + root-access.ml); a bare ai_key does
+  // not. This is what opens the fortress gate now (fortress_key is retired).
+  hasTrojanCard() {
+    return this.hasItem('trojan_key') || this.hasItem('hermes_card');
+  }
+
   // Remove one of a named item from wherever it is. Returns whether it went.
   removeItem(key) {
     if (this.hands === key) { this.hands = null; return true; }
@@ -241,6 +276,28 @@ export class Player {
       if (this.backpack.weapon === key) { this.backpack.weapon = null; return true; }
       i = this.backpack.slots.findIndex((s) => s && s.item === key);
       if (i >= 0) { this.backpack.slots[i].qty -= 1; if (this.backpack.slots[i].qty <= 0) this.backpack.slots[i] = null; return true; }
+    }
+    return false;
+  }
+
+  // Swap one held item for another IN PLACE — same hand, pocket, or backpack
+  // spot. Used to refunction the AI card through its states (ai_key ->
+  // trojan_key -> hermes_card): the card is one physical object, so its new
+  // state must take the exact place of the old. Never remove-then-restow — that
+  // fails, and can LOSE the card, when the key is in hand or the pack is full.
+  // (A qty>1 stack decrements and stows the new one; restores itself if full.)
+  swapItem(fromKey, toKey) {
+    if (this.hands === fromKey) { this.hands = toKey; return true; }
+    const doSlot = (arr, i) => {
+      if (arr[i].qty > 1) { arr[i].qty -= 1; if (this.stow(toKey, 1) > 0) return true; arr[i].qty += 1; return false; }
+      arr[i] = { item: toKey, qty: 1 }; return true;
+    };
+    let i = this.pockets.findIndex((s) => s && s.item === fromKey);
+    if (i >= 0) return doSlot(this.pockets, i);
+    if (this.backpack) {
+      if (this.backpack.weapon === fromKey) { this.backpack.weapon = toKey; return true; }
+      i = this.backpack.slots.findIndex((s) => s && s.item === fromKey);
+      if (i >= 0) return doSlot(this.backpack.slots, i);
     }
     return false;
   }
@@ -318,6 +375,69 @@ export class Player {
     sfx.play('zap');
     this.say('You beat ten scrap into a robot sword. It bites the machines hard.');
     return true;
+  }
+
+  // A boat: 12 wood lashed together with a real cutting tool (axe/saw class —
+  // anything that bites wood, treeDamage >= 2) in hand, built standing at the
+  // water's edge. Not pocketed: craftBoat beaches it as a world object you
+  // board (Stage 1b). One boat at a time (this.boatBuilt); Stage 1c persists it.
+  canCraftBoat(map) {
+    if (this.boatBuilt) return false;
+    if (this.countItem('wood') < WOOD_PER_BOAT) return false;
+    if ((ITEMS[this.hands]?.treeDamage ?? 0) < 2) return false;
+    return !!this._findLaunchTile(map);
+  }
+
+  craftBoat(map) {
+    if (this.boatBuilt) { this.say('Your boat is already beached at the shore.'); return false; }
+    if (this.countItem('wood') < WOOD_PER_BOAT) {
+      this.say(`You need ${WOOD_PER_BOAT} wood to build a boat; you have ${this.countItem('wood')}.`);
+      return false;
+    }
+    if ((ITEMS[this.hands]?.treeDamage ?? 0) < 2) {
+      this.say('You need a proper cutting tool in hand — a saw or a good blade — to fell and shape the timber.');
+      return false;
+    }
+    const tile = this._findLaunchTile(map);
+    if (!tile) { this.say("You must be at the water's edge to launch a boat."); return false; }
+    const boat = map.addObject('boat', tile.x, tile.y, { hull: BOAT_HULL, maxHull: BOAT_HULL });
+    if (!boat) { this.say('No room at the shore to set the boat down.'); return false; }
+    for (let n = 0; n < WOOD_PER_BOAT; n++) this.removeItem('wood');
+    this.boatBuilt = true;
+    sfx.play('zap');
+    this.say("You lash the timber into a boat, beached at the water's edge. Board it to cross the sea.");
+    return true;
+  }
+
+  // The nearest walkable land tile at the sea's edge (8-adjacent to an open-sea
+  // tile), within BOAT_LAUNCH_RADIUS of the player and clear of objects — where
+  // a crafted boat is beached. Excludes the player's own tile so building never
+  // traps you inside the hull. Returns {x, y} or null (not at the shore).
+  _findLaunchTile(map) {
+    if (!map) return null;
+    const px = Math.floor(this.x), py = Math.floor(this.y);
+    const seaAdjacent = (x, y) => {
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        if (!dx && !dy) continue;
+        if (map.floorAt(x + dx, y + dy) === 'sea') return true;
+      }
+      return false;
+    };
+    let best = null, bestD = Infinity;
+    const R = BOAT_LAUNCH_RADIUS;
+    for (let y = py - R; y <= py + R; y++) {
+      for (let x = px - R; x <= px + R; x++) {
+        if (!map.inBounds(x, y)) continue;
+        if (x === px && y === py) continue;         // never under the player
+        const f = map.floorAt(x, y);
+        if (f === 'sea' || f === 'water') continue;  // must be land, not water
+        if (map.objectAt(x, y)) continue;            // tile must be free
+        if (!seaAdjacent(x, y)) continue;            // right at the sea's edge
+        const d = (x - px) * (x - px) + (y - py) * (y - py);
+        if (d < bestD) { bestD = d; best = { x, y }; }
+      }
+    }
+    return best;
   }
 
   // Eight distinct numbered circuit boards (from destroyed obelisks) build a
@@ -499,8 +619,7 @@ export class Player {
     }
     const held = this.getSlot(slot);
     if (held && held.item === 'forcefield') {
-      this.forcefieldArmed = !this.forcefieldArmed;
-      this.say(this.forcefieldArmed ? 'Forcefield armed — it will power up once it has a battery.' : 'Forcefield disarmed.');
+      this.toggleForcefield();
       return;
     }
     if (held && held.item === 'compass') {
@@ -606,7 +725,16 @@ export class Player {
       this.health -= VENOM_DRAIN * dt;
       if (this.health <= 0) this.die(map, 'the venom');
     } else if (this.health < this.maxHealth && this.food > 50) {
-      this.health = Math.min(this.maxHealth, this.health + HEALTH_REGEN * dt);
+      // The marble temples hold a healing vibe: within an old grove, recovery
+      // runs faster — the stones remember being sacred (map.temples is set
+      // from placeRuins' grove centres in main.js).
+      let regen = HEALTH_REGEN;
+      const temples = map.temples;
+      if (temples && temples.some((t) => Math.hypot(t.x - this.x, t.y - this.y) < TEMPLE_HEAL_R)) {
+        regen *= TEMPLE_HEAL_MULT;
+        if (!this._templeSaid) { this._templeSaid = true; this.say('A stillness among the old stones. Your wounds knit faster here.'); }
+      } else if (this._templeSaid) this._templeSaid = false;
+      this.health = Math.min(this.maxHealth, this.health + regen * dt);
     }
 
     // Lotus torpor: the daze bleeds off slowly, drains you while it lasts,
@@ -695,6 +823,16 @@ export class Player {
       if (this.z === 0 && this.vz === 0 && effAfter < effBefore) {
         this.z = (effBefore - effAfter) * 0.5;
         this.doubleJumped = false;
+      } else if ((this.z > 0 || this.vz !== 0) && effAfter > effBefore) {
+        // Inverse of the drop-off above: jumping or climbing ONTO a taller
+        // tile (a crate, or a wall via the double jump). The terrain lift the
+        // renderer applies (effectiveHeightAt * ELEV) jumps up by the whole
+        // block height the instant your tile flips onto the block; bleed that
+        // same height back out of the jump `z` so the sprite's total lift
+        // stays continuous instead of popping up a block-height in one frame
+        // (the "jumpy on blocks" glitch). Clamp at 0 — if the ledge was grabbed
+        // before you rose to its height, you just settle onto it with no dip.
+        this.z = Math.max(0, this.z - (effAfter - effBefore) * 0.5);
       }
       this.walkPhase += dt * (this.sprinting ? 13 : 9);
       // Footstep on each stride, voiced by the surface underfoot.
@@ -783,6 +921,17 @@ export class Player {
     } else {
       this._ffOn = false;
     }
+
+    // Mirror shield sheds heat when it isn't actively bouncing fire, so it only
+    // overheats under a sustained barrage. Carry no mirror shield and its heat
+    // resets, so a freshly found one starts cool. Likewise a dropped riot shield
+    // forgets its dents — pick a new one up and it's whole again.
+    if (this.hasItem('mirror_shield')) {
+      this.mirrorHeat = Math.max(0, this.mirrorHeat - MIRROR_HEAT_COOL * dt);
+    } else {
+      this.mirrorHeat = 0;
+    }
+    if (!this.hasItem('shield')) this.riotShieldHits = 0;
 
     // Electro-compass: armed the same way — click it in whatever slot it's
     // carried in. Stays armed (chevrons on) until you drop the item entirely.
@@ -1112,7 +1261,7 @@ export class Player {
 
     if (tool.kind === 'gun' || tool.kind === 'gadget' || tool.kind === 'bomb' || tool.kind === 'spray') {
       if (facingBox) { this.openBox(obj, map); return; }
-      if (tool.kind === 'gun') this.fire(tool, map, animals, robots);
+      if (tool.kind === 'gun') fire(this, tool, map, animals, robots);
       else if (tool.kind === 'gadget') this.useGadget(tool);
       else if (tool.kind === 'bomb') this.dropBomb(tool, map);
       else if (tool.kind === 'spray') this.sprayUbik(map);
@@ -1165,7 +1314,10 @@ export class Player {
     if (target) {
       this.swingTimer = tool.swingCooldown;
       this.stamina -= tool.staminaCost;
-      sfx.play('chop');
+      // Metal answers in metal — and different hulls ring differently: the
+      // T1's thin wedge is tinny, the W4's furnace plate is deep and long.
+      if (isRobot) sfx.play('clang', { pitch: CLANG_PITCH[target.type] || 1 });
+      else sfx.play('chop');
       // A practised swordarm hits harder.
       const bonus = this.xpLevel('melee');
       target.hp -= (isRobot ? (tool.robotDamage ?? 1) : (tool.animalDamage ?? 3)) + bonus;
@@ -1500,7 +1652,7 @@ export class Player {
     if (obj.destroyed) { this.say('The uplink is already wrecked.'); return; }
     this.swingTimer = tool.swingCooldown || 0.5;
     this.stamina = Math.max(0, this.stamina - (tool.staminaCost ?? 0));
-    sfx.play('chop');
+    sfx.play('clang', { pitch: 0.9 }); // the mast rings thin
     this.sparkAt(map, obj.x + 0.5, obj.y + 0.5);
     obj.shake = 0.2;
     obj.hp = (obj.hp ?? obj.maxHp ?? 90) - ((tool.robotDamage ?? 1) + this.xpLevel('melee'));
@@ -1518,12 +1670,12 @@ export class Player {
     this.stamina = Math.max(0, this.stamina - (tool.staminaCost ?? 0));
     // Anything lighter than a proper wrecking tool just clangs off the hull.
     if ((tool.robotDamage ?? 1) < FACTORY_MIN_TOOL) {
-      sfx.play('swing');
+      sfx.play('clang', { pitch: 0.5 }); // it says clang — it should clang (deep: 8x8 of plate)
       obj.shake = 0.12;
       this.say(`The ${(tool.name || 'weapon').toLowerCase()} clangs uselessly off the factory hull. You need a sledgehammer or crowbar, explosives, or the electro-gun.`);
       return;
     }
-    sfx.play('chop');
+    sfx.play('clang', { pitch: 0.5 }); // the foundry's deep ring
     const cx = obj.x + (obj.fw || 1) / 2, cy = obj.y + (obj.fh || 1) / 2;
     this.sparkAt(map, cx, cy);
     obj.shake = 0.2;
@@ -1565,7 +1717,7 @@ export class Player {
       this.say(`The ${(tool.name || 'weapon').toLowerCase()} rings off the core — you need a wrecking tool, explosives, or the electro-gun to crack it.`);
       return;
     }
-    sfx.play('chop');
+    sfx.play('clang', { pitch: 0.55 }); // the daemon's housing: nearly as deep as the foundry
     const cx = obj.x + (obj.fw || 1) / 2, cy = obj.y + (obj.fh || 1) / 2;
     this.sparkAt(map, cx, cy);
     obj.shake = 0.2;
@@ -1717,18 +1869,6 @@ export class Player {
     return ob;
   }
 
-  burnObelisk(tool, map, range) {
-    const ob = this.obeliskInFront(map, range);
-    if (!ob) { this.say('No obelisk in your sights.'); return; }
-    let i = this.pockets.findIndex((s) => s && s.item === 'battery');
-    let slots = this.pockets;
-    if (i < 0 && this.backpack) { i = this.backpack.slots.findIndex((s) => s && s.item === 'battery'); slots = this.backpack.slots; }
-    if (i < 0) { this.say('The OB-gun needs a battery.'); return; }
-    slots[i].qty -= 1; if (slots[i].qty <= 0) slots[i] = null;
-    this.swingTimer = tool.swingCooldown;
-    sfx.play('zap');
-    this.damageObelisk(ob, map, 1);
-  }
 
   // Land `amount` burns on an obelisk: scorch/shrink it, report the attack up
   // the network (a W4 is dispatched), and fell it once it reaches five. Shared
@@ -1806,279 +1946,6 @@ export class Player {
     if (this.onObeliskDestroyed) this.onObeliskDestroyed(ob);
   }
 
-  // A piercing beam: cuts a straight line from the muzzle out to `range` and
-  // damages every enemy it passes through. Costs one round of the gun's ammo.
-  pierceShot(tool, map, animals, robots) {
-    let ai = this.pockets.findIndex((s) => s && s.item === tool.ammoType);
-    let slots = this.pockets;
-    if (ai < 0 && this.backpack) { ai = this.backpack.slots.findIndex((s) => s && s.item === tool.ammoType); slots = this.backpack.slots; }
-    if (ai < 0) { this.say(`The ${tool.name.toLowerCase()} needs ${ITEMS[tool.ammoType].name.toLowerCase()}.`); return; }
-    slots[ai].qty -= 1; if (slots[ai].qty <= 0) slots[ai] = null;
-    this.swingTimer = tool.swingCooldown;
-    sfx.play('zap');
-    const rng = tool.range + this.xpLevel('guns') * 0.3;
-    // The beam stops dead at the first solid object in its path — it
-    // doesn't cut through walls to hit whatever's cowering behind one.
-    const maxAlong = this.beamRange(map, rng);
-    let wiped = false;
-    // Everything within a narrow corridor ahead, up to the beam's actual
-    // (possibly wall-shortened) reach, gets hit.
-    const hit = (e, robot) => {
-      if (e.dead || e.fused || e.friendly) return;
-      const dx = e.x - this.x, dy = e.y - this.y;
-      const along = dx * this.facing.x + dy * this.facing.y;
-      if (along < 0 || along > maxAlong) return;
-      const perp = Math.abs(dx * -this.facing.y + dy * this.facing.x);
-      if (perp > 0.8) return;
-      // The beam that fells towers doesn't wound a mere machine — it wipes
-      // it out where it stands, whatever the class (the old corrupt-into-a-
-      // zombie behaviour is gone; existing zombies still fall to it too).
-      if (robot && tool.effect === 'burn') {
-        e.hp = 0; e.hurt = true; wiped = true;
-        e.scrapPenalty = true; // gunfire ruins the salvage, this most of all
-        this.sparkAt(map, e.x, e.y);
-        this.gainXp('guns', 2);
-        this.addScore(SCORE.robot);
-        return;
-      }
-      if (robot && zombieImmune(e, tool)) return;
-      e.hp -= robot ? (tool.robotDamage + this.xpLevel('guns')) : (tool.animalDamage + this.xpLevel('guns'));
-      e.hurt = true;
-      if (robot) { e.scrapPenalty = true; this.sparkAt(map, e.x, e.y); }
-      this.gainXp('guns', 2);
-      if (e.hp <= 0 && !robot) { e.dead = true; map.groundItems.push({ item: 'meat', qty: 1, x: e.x, y: e.y }); this.addScore(SCORE.animal); }
-      else if (e.hp <= 0 && robot) this.addScore(SCORE.robot);
-    };
-    for (const a of animals) hit(a, false);
-    for (const r of robots) hit(r, true);
-    // A long tracer to the end of the beam (or the wall that stopped it).
-    map.projectiles = map.projectiles || [];
-    map.projectiles.push({ x0: this.x + this.facing.x * 0.4, y0: this.y + this.facing.y * 0.4, x1: this.x + this.facing.x * maxAlong, y1: this.y + this.facing.y * maxAlong, prog: 0, kind: 'fuse' });
-    this.say(wiped
-      ? 'The beam takes the machine apart where it stands.'
-      : 'The beam cuts a line clean through them.');
-  }
-
-  // The wave gun: a fan of laser shots that hits every enemy inside a wide
-  // cone ahead, up to range — built to scythe a whole wave at once.
-  coneShot(tool, map, animals, robots) {
-    let ai = this.pockets.findIndex((s) => s && s.item === tool.ammoType);
-    let slots = this.pockets;
-    if (ai < 0 && this.backpack) { ai = this.backpack.slots.findIndex((s) => s && s.item === tool.ammoType); slots = this.backpack.slots; }
-    if (ai < 0) { this.say(`The ${tool.name.toLowerCase()} needs ${ITEMS[tool.ammoType].name.toLowerCase()}.`); return; }
-    slots[ai].qty -= 1; if (slots[ai].qty <= 0) slots[ai] = null;
-    this.swingTimer = tool.swingCooldown;
-    sfx.play('zap');
-    const rng = tool.range + this.xpLevel('guns') * 0.3;
-    const HALF = Math.cos(Math.PI / 5); // ~36° half-angle cone
-    let hitCount = 0;
-    const hit = (e, robot) => {
-      if (e.dead || e.fused || e.friendly) return;
-      const dx = e.x - this.x, dy = e.y - this.y;
-      const d = Math.hypot(dx, dy);
-      if (d > rng || d === 0) return;
-      if ((dx * this.facing.x + dy * this.facing.y) / d < HALF) return; // outside the cone
-      if (!map.hasLineOfSight(this.x, this.y, e.x, e.y)) return; // a wall shadows this one
-      e.hp -= robot ? tool.robotDamage : tool.animalDamage;
-      e.hurt = true;
-      if (robot) { e.scrapPenalty = true; this.sparkAt(map, e.x, e.y); }
-      hitCount++;
-      if (e.hp <= 0 && !robot) { e.dead = true; map.groundItems.push({ item: 'meat', qty: 1, x: e.x, y: e.y }); this.addScore(SCORE.animal); }
-      else if (e.hp <= 0 && robot) this.addScore(SCORE.robot);
-    };
-    for (const a of animals) hit(a, false);
-    for (const r of robots) hit(r, true);
-    this.gainXp('guns', 2 + hitCount);
-    // Three visible fan beams.
-    map.projectiles = map.projectiles || [];
-    for (const ang of [-0.5, 0, 0.5]) {
-      const fx = this.facing.x * Math.cos(ang) - this.facing.y * Math.sin(ang);
-      const fy = this.facing.x * Math.sin(ang) + this.facing.y * Math.cos(ang);
-      map.projectiles.push({ x0: this.x + fx * 0.4, y0: this.y + fy * 0.4, x1: this.x + fx * rng, y1: this.y + fy * rng, prog: 0, kind: 'stun' });
-    }
-    this.say(hitCount ? `The wave gun scythes through ${hitCount}.` : 'The wave fans out into empty air.');
-  }
-
-  // Fire the held gun at the nearest target in range and roughly in front.
-  // Guns consume ammunition (ammoType) from the pockets per shot. Stun and
-  // fuse effects work on machines only; pistol and shotgun hit flesh too.
-  fire(tool, map, animals, robots) {
-    // Gun practice steadies the hand: range grows a little with the level.
-    const range = tool.range + this.xpLevel('guns') * 0.3;
-
-    // The OB-gun burns an obelisk if one is in front; otherwise it fires a
-    // piercing beam that cuts through every enemy in its path. The railgun
-    // always pierces.
-    if (tool.effect === 'burn') {
-      if (this.obeliskInFront(map, range)) { this.burnObelisk(tool, map, range); return; }
-      this.pierceShot(tool, map, animals, robots, range); return;
-    }
-    if (tool.pierce) { this.pierceShot(tool, map, animals, robots, range); return; }
-    if (tool.cone) { this.coneShot(tool, map, animals, robots, range); return; }
-    let target = null, best = Infinity, isRobot = false;
-    const consider = (e, robot) => {
-      if (e.dead || e.fused || e.friendly) return;
-      const dx = e.x - this.x, dy = e.y - this.y;
-      const d = Math.hypot(dx, dy);
-      if (d > range || d === 0) return;
-      if (dx * this.facing.x + dy * this.facing.y < 0) return;
-      if (d < best && map.hasLineOfSight(this.x, this.y, e.x, e.y)) { best = d; target = e; isRobot = robot; }
-    };
-    if (tool.animalDamage != null) for (const a of animals) consider(a, false);
-    for (const r of robots) consider(r, true);
-
-    // The electro-gun's arc bites obelisks too — a slower way to fell a tower
-    // than the OB-gun, but it works. If one's in front and no closer than any
-    // machine, it takes the shot instead.
-    let obTarget = null;
-    let facTarget = null;
-    if (tool.effect === 'fuse') {
-      const ob = this.obeliskInFront(map, range);
-      let obD = Infinity;
-      if (ob) {
-        obD = Math.hypot(ob.x + 0.5 - this.x, ob.y + 0.5 - this.y);
-        if (obD <= best) obTarget = ob;
-      }
-      // The arc scorches the W-factory hull too — a slow, self-charging way to
-      // bring the foundry down without spending bombs. Measure to its nearest
-      // edge (the footprint is huge). It only takes the shot if it's the closest
-      // thing in front (nearer than any machine and than an obelisk).
-      const fac = map.objects.find((o) => o.type === 'wfactory' && !o.destroyed);
-      if (fac) {
-        const nx = Math.max(fac.x, Math.min(this.x, fac.x + (fac.fw || 1)));
-        const ny = Math.max(fac.y, Math.min(this.y, fac.y + (fac.fh || 1)));
-        const fdx = nx - this.x, fdy = ny - this.y, fd = Math.hypot(fdx, fdy);
-        if (fd <= range && (fdx * this.facing.x + fdy * this.facing.y) >= 0 && fd <= best && fd <= obD) {
-          facTarget = { fac, x: nx + 0.5, y: ny };
-          obTarget = null; // the factory is nearer — it takes the shot
-        }
-      }
-    }
-
-    // The electro-gun runs off its own self-charging cell — no pocket ammo.
-    // When the cell's too low it just needs a moment to trickle back up.
-    if (tool.selfCharge) {
-      if (this.electroCharge < tool.shotCost) {
-        this.say('The electro-gun hums, near flat — give its cell a moment to recharge.');
-        return;
-      }
-      this.electroCharge -= tool.shotCost;
-      // Firing near wildlife spooks it: the crackle sends animals bolting.
-      this.scareAnimals(animals, 7);
-    } else {
-      // Other guns draw ammo from the pockets first, then the backpack — no
-      // need to manually shuffle rounds forward. Consumed whether or not
-      // there's a target in range: pulling the trigger with nothing in your
-      // sights still wastes the round rather than refusing to fire.
-      let ammoSlots = this.pockets;
-      let i = this.pockets.findIndex((s) => s && s.item === tool.ammoType);
-      if (i < 0 && this.backpack) {
-        i = this.backpack.slots.findIndex((s) => s && s.item === tool.ammoType);
-        ammoSlots = this.backpack.slots;
-      }
-      if (i < 0) {
-        this.say(`The ${tool.name.toLowerCase()} is dead weight without ${ITEMS[tool.ammoType].name.toLowerCase()}.`);
-        return;
-      }
-      ammoSlots[i].qty -= 1;
-      if (ammoSlots[i].qty <= 0) ammoSlots[i] = null;
-    }
-    this.swingTimer = tool.swingCooldown;
-    this.stamina = Math.max(0, this.stamina - (tool.staminaCost ?? 0));
-
-    // W-factory in the arc's path (electro-gun only): the bolt flies to its
-    // hull and chews into it, a slow siege off the self-charging cell.
-    if (facTarget) {
-      map.projectiles = map.projectiles || [];
-      map.projectiles.push({
-        x0: this.x + this.facing.x * 0.4, y0: this.y + this.facing.y * 0.4,
-        x1: facTarget.x, y1: facTarget.y, prog: 0, kind: 'fuse',
-      });
-      sfx.play('zap');
-      this.sparkBurst(map, facTarget.x, facTarget.y);
-      this.damageFactory(facTarget.fac, map, 14);
-      return;
-    }
-
-    // Obelisk in the arc's path (electro-gun only): the bolt flies to it and
-    // scorches it, same as an OB-gun burn but from the electro-gun's cell.
-    if (obTarget) {
-      const bx = obTarget.x + 0.5, by = obTarget.y + 0.5;
-      map.projectiles = map.projectiles || [];
-      map.projectiles.push({
-        x0: this.x + this.facing.x * 0.4, y0: this.y + this.facing.y * 0.4,
-        x1: bx, y1: by, prog: 0, kind: 'fuse',
-      });
-      sfx.play('zap');
-      this.sparkBurst(map, bx, by);
-      this.damageObelisk(obTarget, map, 1);
-      return;
-    }
-
-    // A visible round travels from the muzzle to the target (cosmetic; the
-    // hit itself is instant). Electric guns fire a cyan/violet bolt. With no
-    // target it still flies out to the shot's real reach (a wall or a hill
-    // stops it early, same as beamRange elsewhere) rather than nowhere.
-    const missRange = this.beamRange(map, range);
-    const tx = target ? target.x : this.x + this.facing.x * missRange;
-    const ty = target ? target.y : this.y + this.facing.y * missRange;
-    map.projectiles = map.projectiles || [];
-    map.projectiles.push({
-      x0: this.x + this.facing.x * 0.4, y0: this.y + this.facing.y * 0.4,
-      x1: tx, y1: ty, prog: 0,
-      kind: tool.effect === 'stun' ? 'stun' : tool.effect === 'fuse' ? 'fuse' : 'bullet',
-    });
-
-    if (!target) {
-      sfx.play('shot');
-      this.say('You fire into the empty air.');
-      return;
-    }
-
-    if (isRobot && zombieImmune(target, tool)) {
-      this.say('The shot has no effect — the husk is only vulnerable to a bow or the wave gun now.');
-    } else if (tool.effect === 'stun') {
-      sfx.play('zap');
-      target.disabledT = tool.stunTime;
-      this.sparkAt(map, target.x, target.y);
-      this.say('The stun bolt drops the machine cold. It will not stay down forever.');
-    } else if (tool.effect === 'fuse') {
-      sfx.play('zap');
-      // A full charge destroys the machine outright — a clean kill (no scrap
-      // penalty), so it drops its full salvage on the robots module's next
-      // tick, chip fragment and all.
-      target.hp = 0;
-      target.hurt = true;
-      target.scrapPenalty = false;
-      this.sparkBurst(map, target.x, target.y);
-      this.addScore(SCORE.robot);
-      this.say('The machine convulses in a storm of sparks and dies where it stands.');
-    } else if (isRobot) {
-      sfx.play('shot');
-      target.scrapPenalty = true; // gunfire mangles the salvage
-      target.hp -= tool.robotDamage + this.xpLevel('guns');
-      target.hurt = true;
-      this.sparkAt(map, target.x, target.y);
-      this.gainXp('guns', target.hp <= 0 ? 5 : 1);
-      if (target.hp <= 0) this.addScore(SCORE.robot);
-      this.say(target.hp <= 0
-        ? 'The machine collapses in a shower of sparks.'
-        : 'The round punches into the machine.');
-    } else {
-      sfx.play('shot');
-      target.hp -= tool.animalDamage + this.xpLevel('guns');
-      target.hurt = true;
-      this.gainXp('guns', target.hp <= 0 ? 5 : 1);
-      if (target.hp <= 0) {
-        target.dead = true;
-        map.groundItems.push({ item: 'meat', qty: 1, x: target.x, y: target.y });
-        this.addScore(SCORE.animal);
-        this.say(`The ${target.type} drops where it stands.`);
-      } else {
-        this.say(`You wing the ${target.type}.`);
-      }
-    }
-  }
 
   // Walk over dropped loot to collect it (if there is room). A backpack
   // found on the ground is worn, not stowed. A better weapon than the one
@@ -2124,7 +1991,16 @@ export class Player {
         continue;
       }
       const stored = this.stow(gi.item, gi.qty);
-      if (stored <= 0) continue;
+      if (stored <= 0) {
+        // Nothing fit: with no backpack to overflow into, the pockets are full.
+        // Nudge the player to go find a backpack — but only a couple of times,
+        // so it never nags. (The hint counter persists for the run.)
+        if (!this.backpack && (this._backpackHints || 0) < 2) {
+          this._backpackHints = (this._backpackHints || 0) + 1;
+          this.say('Your pockets are full. A backpack would carry far more — go find one.');
+        }
+        continue;
+      }
       gi.qty -= stored;
       this.discoverWeapon(gi.item);
       // A recovered book or album leaves a page in the Scrapbook (cover +
@@ -2139,6 +2015,8 @@ export class Player {
       sfx.play('pickup');
       this.say(gi.item === 'wifiblock'
         ? 'You find a Wi-Fi block — hold it and the machines cannot see you.'
+        : gi.item === 'ai_key'
+        ? 'AI key. Jack into an obelisk and type  copy aikey  — then you can print spares, or back it up at a HERMES relay, and never lose it.'
         : `+${stored} ${ITEMS[gi.item].name.toLowerCase()}`);
     }
     map.groundItems = map.groundItems.filter((gi) => gi.qty > 0);
@@ -2146,6 +2024,22 @@ export class Player {
 
   forcefieldActive() {
     return this.hasItem('forcefield') && this.forcefieldArmed && this.forcefieldCharge > 0;
+  }
+
+  // Forcefield charge as a 0..1 fraction of a full cell, for the HUD gauge.
+  forcefieldFrac() {
+    return Math.max(0, Math.min(1, this.forcefieldCharge / FORCEFIELD_MAX));
+  }
+
+  // Arm/disarm the forcefield — from a click on the item (equipSlot) or the T
+  // key. Disarming stops the cell draining, so you can save battery between
+  // fights instead of letting it burn while carried.
+  toggleForcefield() {
+    if (!this.hasItem('forcefield')) { this.say('You have no forcefield to arm.'); return; }
+    this.forcefieldArmed = !this.forcefieldArmed;
+    this.say(this.forcefieldArmed
+      ? 'Forcefield armed — it powers up once it has a battery.'
+      : 'Forcefield disarmed — the cell stops draining.');
   }
 
   // While the electro-compass is armed and carried, the facing chevron
@@ -2181,10 +2075,74 @@ export class Player {
   // worn deflector, not something you have to hold up and aim — and cover you
   // from any direction. The mirror shield takes priority over the plain one.
   blockRangedShot() {
-    if (this.forcefieldActive()) return 'absorb';
-    if (this.hasItem('mirror_shield')) return 'reflect';
-    if (this.hasItem('shield')) return 'absorb';
+    // Called once per incoming shot as it resolves, so this is also where a
+    // shield ages: each call is one blow landing on it.
+    if (this.forcefieldActive()) {
+      // Energy shell — never breaks, but swallowing a blow costs extra charge.
+      this.forcefieldCharge = Math.max(0, this.forcefieldCharge - FORCEFIELD_HIT_COST);
+      return 'absorb';
+    }
+    if (this.hasItem('mirror_shield')) {
+      // Reflect only while cool; each bolt heats it, and at full heat it melts.
+      const cool = this.mirrorHeat < MIRROR_HEAT_FADE;
+      const wasCool = cool;
+      this.mirrorHeat = Math.min(1, this.mirrorHeat + MIRROR_HEAT_PER_HIT);
+      if (wasCool && this.mirrorHeat >= MIRROR_HEAT_FADE) {
+        this.say('The mirror shield flares cherry-red — too hot to throw shots back now.');
+      }
+      if (this.mirrorHeat >= 1) { this._meltMirrorShield(); return 'absorb'; }
+      return cool ? 'reflect' : 'absorb';
+    }
+    if (this.hasItem('shield')) {
+      this.riotShieldHits += 1;
+      if (this.riotShieldHits >= RIOT_SHIELD_HITS) { this._breakRiotShield(); return 'absorb'; }
+      if (this.riotShieldHits === RIOT_SHIELD_HITS - 3) {
+        this.say('Your riot shield is badly dented — it will not take many more.');
+      }
+      return 'absorb';
+    }
     return null;
+  }
+
+  // The mirror shield reaches full heat and slumps: it's gone, leaving a lump
+  // of molten metal recovered as scrap. Heat resets so a fresh one starts cool.
+  _meltMirrorShield() {
+    this.removeItem('mirror_shield');
+    this.mirrorHeat = 0;
+    const got = this.stow('scrap', 3);
+    if (got < 3 && this.map) this.map.groundItems.push({ item: 'scrap', qty: 3 - got, x: this.x, y: this.y });
+    this.say('The mirror shield overheats and slumps into a lump of molten scrap.');
+    sfx.play('hurt');
+  }
+
+  // The riot shield caves in after too many blows: gone, leaving some scrap.
+  _breakRiotShield() {
+    this.removeItem('shield');
+    this.riotShieldHits = 0;
+    const got = this.stow('scrap', 2);
+    if (got < 2 && this.map) this.map.groundItems.push({ item: 'scrap', qty: 2 - got, x: this.x, y: this.y });
+    this.say('Your riot shield caves in under the barrage — battered to scrap.');
+    sfx.play('hurt');
+  }
+
+  // A carried riot/mirror shield also turns a machine's physical BLOW (T1/T2
+  // and the rest), not only its lasers, and wears the same way — a hit counts
+  // against the riot shield, heats the mirror. No reflect on a melee blow (you
+  // can't bounce a fist back), so the mirror just absorbs it. Returns true if a
+  // shield ate the blow.
+  absorbMeleeOnShield() {
+    if (this.hasItem('mirror_shield')) {
+      this.mirrorHeat = Math.min(1, this.mirrorHeat + MIRROR_HEAT_PER_HIT);
+      if (this.mirrorHeat >= 1) this._meltMirrorShield();
+      return true;
+    }
+    if (this.hasItem('shield')) {
+      this.riotShieldHits += 1;
+      if (this.riotShieldHits === RIOT_SHIELD_HITS - 3) this.say('Your riot shield is badly dented — it will not take many more.');
+      if (this.riotShieldHits >= RIOT_SHIELD_HITS) this._breakRiotShield();
+      return true;
+    }
+    return false;
   }
 
   // True if a carried shield/forcefield is currently shielding you — used to
@@ -2193,18 +2151,47 @@ export class Player {
     return this.forcefieldActive() || this.hasItem('mirror_shield') || this.hasItem('shield');
   }
 
+  // A read on the carried plain/mirror shield's condition, for the HUD. Returns
+  // { kind, frac (0 fresh -> 1 spent/melting), hot, label } or null. Mirror
+  // takes priority (it's what actually protects — see blockRangedShot).
+  shieldStatus() {
+    // `frac` is how SPENT the shield is (0 fresh -> 1 gone); `pct` is the
+    // condition remaining as a percentage, which the HUD shows.
+    if (this.hasItem('mirror_shield')) {
+      const frac = Math.max(0, Math.min(1, this.mirrorHeat));
+      return { kind: 'mirror', frac, pct: Math.round((1 - frac) * 100), hot: frac >= MIRROR_HEAT_FADE };
+    }
+    if (this.hasItem('shield')) {
+      const frac = Math.max(0, Math.min(1, this.riotShieldHits / RIOT_SHIELD_HITS));
+      return { kind: 'riot', frac, pct: Math.round((1 - frac) * 100), hot: this.riotShieldHits >= RIOT_SHIELD_HITS - 3 };
+    }
+    return null;
+  }
+
   // True when standing (not mid-jump) on top of a raised block — its
   // effective height sits above the bare terrain height there.
   onBlockTop() {
     const m = this.map;
     if (!m || !m.effectiveHeightAt || !m.heightAt || this.z > 0) return false;
     const fx = Math.floor(this.x), fy = Math.floor(this.y);
-    return m.effectiveHeightAt(fx, fy) > m.heightAt(fx, fy);
+    // Only a TALL block is a real safe perch — a wall you double-jump onto
+    // (climbHeight 2.5). A low crate or rock (climbHeight 1) lifts you but not
+    // out of a machine's reach: robots strike up onto it (see reachBonus in
+    // robots.js), so a loot box is no longer an invincibility pedestal.
+    return m.effectiveHeightAt(fx, fy) - m.heightAt(fx, fy) >= 2;
   }
 
   takeDamage(amount, source) {
-    // The forcefield stops everything — shot or blow — while it's up.
-    if (this.forcefieldActive()) { this.hurtTimer = 0.12; return; }
+    // The forcefield stops everything — shot or blow — while it's up, but each
+    // blow it eats costs charge, so being swarmed drains the cell fast.
+    if (this.forcefieldActive()) {
+      this.forcefieldCharge = Math.max(0, this.forcefieldCharge - FORCEFIELD_HIT_COST);
+      this.hurtTimer = 0.12;
+      return;
+    }
+    // A carried riot/mirror shield turns a machine's melee blow too (not just
+    // its lasers, which blockRangedShot already handles), wearing as it does.
+    if (source === 'machine' && this.absorbMeleeOnShield()) { this.hurtTimer = 0.12; return; }
     // Up on a block top, ground enemies can't reach you — melee, bites, and
     // lasers all fall short. (A bomb blast still catches you; flying machines,
     // to come, will too.) So they keep trying in vain while you're safe up high.

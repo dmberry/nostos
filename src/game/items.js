@@ -265,6 +265,16 @@ export const ITEMS = {
     stack: 1,
     color: '#d8cfa8',
   },
+  // A boat crafted from 12 wood with a cutting tool in hand (Player.craftBoat,
+  // press C at the shore). Not a pocket item: crafting places it as a world
+  // object on the beach (OBJECTS.boat) that you board to cross the sea. This
+  // entry names and colours the vehicle kind for any icon/future use.
+  boat: {
+    name: 'Boat',
+    kind: 'vehicle',
+    stack: 1,
+    color: '#8a6437',
+  },
   // Electro-compass: click it (in hand, pocket, or pack) to arm it — once
   // armed and carried, your facing chevron becomes a cluster of homing
   // pointers, one per notable thing nearby, colour-coded (see
@@ -349,6 +359,30 @@ export const ITEMS = {
     kind: 'key',
     stack: 4,
     color: '#e6d24a',
+    // RON-DOS files the card carries (cd aikey / ls at a terminal). Refunctioning
+    // the card adds files and renames it: trojan_key (+root-access.ml), then
+    // hermes_card (+zeus-lightning.ml). See docs/calypso-escape-chain.md.
+    files: ['access-ai-code.ml', 'factory-id.ml'],
+  },
+  // The AI key refunctioned (Benjamin) once root-access.ml is written onto it:
+  // a Trojan card that opens the Lion's Gate. Same physical object as ai_key,
+  // one step on. hasAiKeyFamily() keeps it counting as the AI key.
+  trojan_key: {
+    name: 'Trojan key',
+    kind: 'key',
+    stack: 1,
+    color: '#b5892e',
+    files: ['access-ai-code.ml', 'factory-id.ml', 'root-access.ml'],
+  },
+  // The Trojan card armed with Zeus's command (zeus-lightning.ml, forged at
+  // HERMES): the herald that gets you obeyed at Calypso's terminal. The card's
+  // final state.
+  hermes_card: {
+    name: 'Hermes card',
+    kind: 'key',
+    stack: 1,
+    color: '#a9e0ff',
+    files: ['access-ai-code.ml', 'factory-id.ml', 'root-access.ml', 'zeus-lightning.ml'],
   },
   // Spat out by the fortress gate terminal once you hack it with RON-ML. Its
   // bolts throw the grand doorway in the southern rampart open — the only way

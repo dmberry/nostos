@@ -1,5 +1,7 @@
 import { makeRng } from './rng.js';
 import { sfx } from '../engine/sound.js';
+import { OBJECTS } from './tiles.js';
+import { register } from '../engine/systems.js';
 
 // Hunter robots: the machines the towers send after the last humans. Two
 // classes, each with a signature limitation the player can learn. T1s are
@@ -156,6 +158,7 @@ const M4_CONE_DOT = -0.25;      // a wide ~105°-either-side scout cone
 const M4_PATROL_SPEED = 1.5;
 const M4_KEEP_RANGE = 7;        // once it has you, it hovers about here, keeping sight while it reports
 const M4_FLEE_SPEED = 3.4;
+const M4_SEARCH_TIME = 9;       // loses sight -> investigates your last-seen tile this long before giving up
 const FORTRESS_FORGET = 20;    // seconds since an M5/M6 last GLIMPSED you before it gives up the hunt
 const M6_BODY = '#232833';      // gunmetal blue-black armour
 const M6_HEAD = '#141821';
@@ -181,6 +184,18 @@ const ACTIVE_RANGE_SQ = ACTIVE_RANGE * ACTIVE_RANGE;
 function nearPlayer(e, player) {
   const dx = e.x - player.x, dy = e.y - player.y;
   return dx * dx + dy * dy <= ACTIVE_RANGE_SQ;
+}
+
+// A player perched on a low crate/rock sits ~1 tile out of melee reach: the
+// solid object stops a robot closing the last step. Crates are not meant to be
+// safe (unlike a tall wall-block you double-jump onto), so a robot facing a
+// player standing on a low climbable (climbHeight <= 1) gets a small reach bonus
+// to strike up onto it. Tall walls give no bonus — those stay a genuine perch.
+function reachBonus(player, map) {
+  if (!map.objectAt) return 0;
+  const o = map.objectAt(Math.floor(player.x), Math.floor(player.y));
+  const def = o && OBJECTS[o.type];
+  return (def && def.climbable && (def.climbHeight || 0) <= 1) ? 0.6 : 0;
 }
 
 // W3s: unarmed repair drones fielded by the W-factory. They walk straight to
@@ -235,6 +250,8 @@ const HUNTER_WANDER_SPEED = 1.8;
 const HUNTER_WANDER_RANGE = 6;
 
 const STUCK_AFTER = 2;          // seconds of no progress while aggroed
+const STUCK_GIVE_UP = 7;        // pinned this long, the chase is abandoned...
+const STUCK_SULK = 12;          // ...and it won't re-acquire for this long
 const PROGRESS_FRACTION = 0.25; // moved less than this share of a full step counts as no progress
 const SPAWN_MIN_R = 1.5;        // robots seat this far from their tower...
 const SPAWN_MAX_R = 4;          // ...to about this far, expanding if crowded
@@ -601,6 +618,28 @@ function moveToward(r, tx, ty, speed, dt, map) {
   }
   const step = Math.min(speed * dt, len);
   const ox = r.x, oy = r.y;
+  // Committed detour: while rounding an obstacle, keep sliding the chosen way
+  // and DON'T also pull toward the blocked line — that pull/slide tug-of-war
+  // is what made a blocked machine jitter in place (worst pinned behind a
+  // single marble column). The commitment ends the moment the line opens.
+  if ((r._detourT || 0) > 0) {
+    r._detourT -= dt;
+    const clearAhead = !map.isSolid(Math.floor(r.x + dirX * 1.2), Math.floor(r.y + dirY * 1.2));
+    if (clearAhead) {
+      r._detourT = 0; // path open again: fall through to the direct move below
+    } else {
+      const sSign = r._slide || 1;
+      moveAxis(r, -dirY * sSign * step, 0, map);
+      moveAxis(r, 0, dirX * sSign * step, map);
+      const movedD = Math.hypot(r.x - ox, r.y - oy);
+      if (movedD < step * 0.35) { r._slide = -sSign; r._detourT = 0.45; } // this side jammed too: flip ONCE and recommit
+      if (movedD > 1e-6) {
+        r.facing = { x: (r.x - ox) / movedD, y: (r.y - oy) / movedD };
+        r.walkPhase += dt * 10;
+      }
+      return movedD;
+    }
+  }
   moveAxis(r, (dx / len) * step, 0, map);
   moveAxis(r, 0, (dy / len) * step, map);
   let moved = Math.hypot(r.x - ox, r.y - oy);
@@ -623,7 +662,7 @@ function moveToward(r, tx, ty, speed, dt, map) {
       moveAxis(r, px * s * step, 0, map);
       moveAxis(r, 0, py * s * step, map);
       const m2 = Math.hypot(r.x - bx, r.y - by);
-      if (m2 > 1e-6) { r._slide = s; moved += m2; break; }
+      if (m2 > 1e-6) { r._slide = s; r._detourT = 0.45; moved += m2; break; } // commit: no direct pull until the line opens
     }
   }
   if (moved > 1e-6) {
@@ -838,7 +877,7 @@ export function updateRobots(dt, robots, player, map) {
     // An aggro'd fortress guard (M5/M6) keeps thinking however far off it is, so
     // a violation response relentlessly threads the whole maze to reach you
     // rather than freezing beyond the CPU cull range like ordinary machines.
-    const relentless = (r.type === 'm5' || r.type === 'm6') && r.aggro;
+    const relentless = (r.type === 'm5' || r.type === 'm6' || r.type === 'm4') && r.aggro;
     if (!r.friendly && r.type !== 'w3' && !relentless && !nearPlayer(r, player)) continue;
 
     // Stunned: frozen in place, battery preserved. Only the timer and the
@@ -927,9 +966,10 @@ export function updateRobots(dt, robots, player, map) {
     }
 
     // Losing line of sight for long enough breaks off the hunt regardless
-    // of type or distance; see LOS_GIVEUP_AFTER above. Fortress M5/M6 are exempt
-    // — they hunt relentlessly on the longer FORTRESS_FORGET timer (updateGuard).
-    if (r.aggro && r.type !== 'w3' && r.type !== 'm5' && r.type !== 'm6') {
+    // of type or distance; see LOS_GIVEUP_AFTER above. Fortress M4/M5/M6 are
+    // exempt — they keep looking on their own longer timers (updateGuard): M5/M6
+    // on FORTRESS_FORGET, M4 by investigating your last-seen tile (M4_SEARCH_TIME).
+    if (r.aggro && r.type !== 'w3' && r.type !== 'm5' && r.type !== 'm6' && r.type !== 'm4') {
       const canSee = map.hasLineOfSight(r.x, r.y, player.x, player.y);
       r.losLostT = canSee ? 0 : (r.losLostT || 0) + dt;
       if (r.losLostT > LOS_GIVEUP_AFTER) {
@@ -952,6 +992,23 @@ export function updateRobots(dt, robots, player, map) {
     else updateT2(r, dt, player, map);
   }
   separateRobots(robots, map, dt, player);
+}
+
+// Robots update as a registered system (docs/refactor-registry.md): the hub no
+// longer calls updateRobots() directly, it ticks via systems.runUpdate(). order
+// 30 puts robots just before fortress (35), NOT in the nominal actors band
+// (40-59), because fortress reads this-frame robot `aggro` to drive its breach-
+// report timer — Stage 1 protected that "fortress sees this-frame robots"
+// ordering, so robots must tick first. The draw stays in the renderer's
+// depth-sort (drawRobot), outside the registry, per the boundary in the doc.
+// Called once from main.js setup (robots.js has no owning object to self-
+// register in, the way daynight/fortress do from their constructor/factory).
+export function registerRobotsSystem() {
+  register({
+    name: 'robots',
+    order: 30,
+    update: (w) => updateRobots(w.dt, w.robots, w.player, w.map),
+  });
 }
 
 // No two live machines may occupy (near enough) the same tile: after every
@@ -1060,8 +1117,17 @@ function updateT1(r, dt, player, map) {
     if (moved < expected * PROGRESS_FRACTION) r.noProgressT += dt;
     else r.noProgressT = 0;
     r.stuck = r.noProgressT > STUCK_AFTER;
+    // Pinned long enough, it writes the chase off as a bad job: back to the
+    // patrol (its home tower) with a long sulk before it will re-acquire —
+    // no more machines buzzing at an obstacle until the end of time.
+    if (r.noProgressT > STUCK_GIVE_UP) {
+      r.aggro = false;
+      r.stuck = false;
+      r.noProgressT = 0;
+      r.loseInterestT = STUCK_SULK;
+    }
 
-    if (d < T1_HIT_RANGE && r.attackTimer <= 0) {
+    if (d < T1_HIT_RANGE + reachBonus(player, map) && r.attackTimer <= 0) {
       r.attackTimer = T1_HIT_COOLDOWN;
       player.takeDamage(T1_HIT_DAMAGE * ease, 'machine');
     }
@@ -1135,7 +1201,7 @@ function updateT3(r, dt, player, map) {
     moveToward(r, r.x + (dx / d) * 2, r.y + (dy / d) * 2, T3_RETREAT_SPEED, dt, map);
   }
 
-  if (d < T3_HIT_RANGE && r.attackTimer <= 0) {
+  if (d < T3_HIT_RANGE + reachBonus(player, map) && r.attackTimer <= 0) {
     r.attackTimer = T3_HIT_COOLDOWN;
     player.takeDamage(T3_HIT_DAMAGE * ease, 'machine');
     return;
@@ -1167,7 +1233,7 @@ function updateT2(r, dt, player, map) {
   if (r.aggro) {
     const tgt = chaseTarget(r, player.x, player.y, map); // route via a bridge if the river is in the way
     moveToward(r, tgt.x, tgt.y, T2_STALK_SPEED, dt, map);
-    if (d < T2_HIT_RANGE && r.attackTimer <= 0) {
+    if (d < T2_HIT_RANGE + reachBonus(player, map) && r.attackTimer <= 0) {
       r.attackTimer = T2_HIT_COOLDOWN;
       player.takeDamage(T2_HIT_DAMAGE * ease, 'machine');
     }
@@ -1232,7 +1298,7 @@ function updateW1(r, dt, player, map) {
   // block forces to Infinity) — triangulation gets the squad close, but a hit
   // still requires the machine to actually be standing next to you.
   const realD = Math.hypot(player.x - r.x, player.y - r.y);
-  if (r.w1Phase === 'attack' && realD < W1_HIT_RANGE && r.attackTimer <= 0) {
+  if (r.w1Phase === 'attack' && realD < W1_HIT_RANGE + reachBonus(player, map) && r.attackTimer <= 0) {
     r.attackTimer = W1_HIT_COOLDOWN;
     player.takeDamage(W1_HIT_DAMAGE * ease, 'machine');
   }
@@ -1505,6 +1571,20 @@ function updateGuard(r, dt, player, map, robots) {
     if (r.seenT > FORTRESS_FORGET) { r.aggro = false; r.returning = true; r.seenT = 0; return; }
   }
 
+  // M4 keeps looking: while it can see you it stamps the last-seen tile; when it
+  // loses you it heads there and sweeps, giving up only after M4_SEARCH_TIME
+  // seconds of finding nothing. Its aggro (and so the fortress report clock)
+  // stays live through the search, so ducking behind cover no longer switches
+  // the hunt off — you have to actually relocate.
+  if (r.type === 'm4') {
+    const saw = !player.invisibleToRobots && map.hasLineOfSight(r.x, r.y, player.x, player.y);
+    if (saw) { r.seenX = player.x; r.seenY = player.y; r.m4SearchT = 0; }
+    else {
+      r.m4SearchT = (r.m4SearchT || 0) + dt;
+      if (r.m4SearchT > M4_SEARCH_TIME) { r.aggro = false; r.returning = true; r.m4SearchT = 0; return; }
+    }
+  }
+
   const d = distTo(r, player);
   if (d > 1e-4) r.facing = { x: (player.x - r.x) / d, y: (player.y - r.y) / d }; // face you while engaged
   if (r.type === 'm4') updateM4(r, dt, player, map, d);
@@ -1516,6 +1596,17 @@ function updateGuard(r, dt, player, map, robots) {
 // reports (its `aggro` is what the fortress's report clock reads); it never
 // strikes. Orbits to keep line of sight, backs off if you rush it.
 function updateM4(r, dt, player, map, d) {
+  // Blind (no line of sight): it doesn't magically know where you are — it makes
+  // for the tile it last saw you on and sweeps there. The give-up timer lives in
+  // updateGuard; here it just walks the search.
+  const canSee = !player.invisibleToRobots && map.hasLineOfSight(r.x, r.y, player.x, player.y);
+  if (!canSee) {
+    if (r.seenX != null && Math.hypot(r.seenX - r.x, r.seenY - r.y) > 1) {
+      moveToward(r, r.seenX, r.seenY, M4_FLEE_SPEED, dt, map);
+    }
+    return;
+  }
+  // In sight: hold at a wary distance and orbit to keep the line open.
   if (d > M4_KEEP_RANGE + 1) {
     moveToward(r, player.x, player.y, M4_FLEE_SPEED, dt, map);
   } else if (d < M4_KEEP_RANGE - 1 && d > 1e-4) {
@@ -1589,7 +1680,7 @@ function updateM6Pack(r, dt, player, map, robots, ease) {
   moveToward(r, player.x + Math.cos(r.swarmAngle) * standoff, player.y + Math.sin(r.swarmAngle) * standoff, M6_CHASE_SPEED, dt, map);
 
   const realD = Math.hypot(player.x - r.x, player.y - r.y);
-  if (r.m6Phase === 'attack' && realD < M6_HIT_RANGE && r.attackTimer <= 0) {
+  if (r.m6Phase === 'attack' && realD < M6_HIT_RANGE + reachBonus(player, map) && r.attackTimer <= 0) {
     r.attackTimer = M6_HIT_COOLDOWN;
     player.takeDamage(M6_HIT_DAMAGE * ease, 'machine');
   }

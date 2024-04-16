@@ -72,11 +72,11 @@ export function placeTors(map, rng, opts = {}) {
 export const HERMES_DOCS = {
   ronml: {
     title: 'RON-DOS / RON-ML field reference',
-    text: 'The obelisk consoles run RON-ML — a tiny language RON left runnable in the ruins. scan lists the wire; scan |> nearest takes the closest node. With an AI key (a wrecked W-factory drops one): hack a node for its key, crash it with that key to knock it dark, or loop it with no key at all to freeze it and its guards. sleep idles machines; rewind claws hours off the POSEIDON clock; repel scatters them. To breach the fortress: at any obelisk, let k = hack OB-XXXX in unlock k drops a fortress key. These relays are a separate system, off the wire, so those verbs are not typed here — this is only the reference.',
+    text: 'The obelisk consoles run RON-ML — a tiny language RON left runnable in the ruins. scan lists the wire; scan |> nearest takes the closest node. hack a node for its key and crash it with that key to knock it dark, or loop it to freeze it and its guards — no AI key needed for any of these, the access chip that got you into the console is enough. sleep idles nearby machines; rewind claws hours off the POSEIDON clock; repel scatters them — no AI key needed for those either now, though they reach less far than they used to. What the AI key is really for is the fortress. It comes sealed: copy it into a console (copy aikey), decrypt it, and unlock with a freshly hacked node key and the clean key together — copy aikey / let k = hack OB-XXXX / let d = decrypt aikey / unlock k d — to drop a fortress key. Lose the AI key easily; so back it up here (backup aikey) and restore it at any relay. These relays are a separate system, off the wire, so the obelisk verbs are not typed here — this is only the reference.',
   },
   fortress: {
     title: 'Schematic: ZEUS\'s fortress',
-    text: 'The first AI sits in a sealed annex on the south edge, walled in stone you cannot climb — the hacked doorway is the only way in. A red uplink mast wires it into the overworld POSEIDON: hammer that mast down and a breach no longer rouses the whole map. The grand door is bolted from within; it opens only when you approach carrying a fortress key (composed at an obelisk: let k = hack OB-XXXX in unlock k). Inside, the maze lights a faint way-out and the mainframe core waits at the far end. Expect the interior thick with garrison.',
+    text: 'The first AI sits in a sealed annex on the south edge, walled in stone you cannot climb — the hacked doorway is the only way in. A red uplink mast wires it into the overworld POSEIDON: hammer that mast down and a breach no longer rouses the whole map. The Lion\'s Gate is bolted from within; it opens to a Trojan card — refunction your AI key at an obelisk (copy factory-id.ml ob / eliza factory-id.ml / copy root-access.ml aikey) and carry the card up to it. Inside, the maze lights a faint way-out and the mainframe core waits at the far end. Expect the interior thick with garrison.',
   },
   obelisks: {
     title: 'Field notes: the obelisk classes',
@@ -111,3 +111,20 @@ export const HERMES_DOCS = {
 export function hermesTopics() {
   return Object.keys(HERMES_DOCS);
 }
+
+// The zeus-virus folder RON left runnable on the relays — the mechanism of
+// Odysseus's release (Odyssey V: Zeus commands, Hermes carries, Calypso yields).
+// `cd hermes / ls` lists these; `read readme.md` is the forge recipe; `forge
+// zeus-virus.ml` (with a Trojan card in hand) arms it into zeus-lightning.ml.
+// See docs/calypso-escape-chain.md.
+export const ZEUS_VIRUS_FILES = ['readme.md', 'zeus-virus.ml'];
+export const ZEUS_VIRUS_DOCS = {
+  'readme.md': {
+    title: 'zeus-virus / readme.md',
+    text: "ZEUS-VIRUS — RON build notes. The payload is inert alone. Arm it with the two credentials a Trojan card carries: root-access.ml (the factory's own grant, reflected out of it by ELIZA) and access-ai-code.ml (the AI's access key). At this relay, card in hand, type: forge zeus-virus.ml. That folds both credentials into the shell and writes zeus-lightning.ml — Zeus's command, made runnable. Copy it onto the Trojan card (copy zeus-lightning.ml card) and the card becomes a hermes card: the herald Calypso cannot refuse. Homer had the shape of it — the god commands, the messenger carries, the nymph lets him go.",
+  },
+  'zeus-virus.ml': {
+    title: 'zeus-virus.ml (sealed)',
+    text: "let zeus = seal (* the sky-father's command, sealed pending the herald's two keys *) in\n  await root-access.ml |> await access-ai-code.ml |> arm.\n(* inert until forged. forge zeus-virus.ml at a relay, card in hand. *)",
+  },
+};

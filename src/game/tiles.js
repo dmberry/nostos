@@ -31,7 +31,7 @@ export const OBJECTS = {
   flower:  { solid: false }, // decorative wildflowers (worldgen.scatterFlowers): pure scenery, walk-through
   column:  { solid: true },  // ruined marble column: a pillar that blocks and gives shot-cover
   colfall: { solid: false }, // toppled column / drum lying in the grass: decorative, walk over it
-  marbleblock: { solid: true }, // fallen entablature / altar stone among the columns: blocks, gives cover
+  marbleblock: { solid: true, climbable: true, climbHeight: 2 }, // fallen entablature / altar stone: climb it like a wall (its draw height is pinned to 2 levels to match)
   // "climbable" objects are solid for everything except the player's own
   // climb check (Player.collides via GameMap.effectiveHeightAt), which
   // treats them as a raised step of `climbHeight` levels rather than an
@@ -54,6 +54,10 @@ export const OBJECTS = {
   tor: { solid: true }, // RON resistance relay on a hilltop — the friendly HERMES terminal
   box:     { solid: true, climbable: true, climbHeight: 1 }, // resistance cache — a low crate you can step or jump onto, still searchable from beside it
   car:     { solid: true }, // abandoned wreck littering the roads; scenery only
+  // A boat crafted at the shore (Player.craftBoat): a solid wooden hull you walk
+  // up to and, from Stage 1b, board to cross POSEIDON's sea. Placed on a beach
+  // tile at the water's edge, never pocketed.
+  boat:    { solid: true },
   wfactory: { solid: true }, // W-unit foundry; periodically fields a W3 repair drone
   furniture: { solid: true }, // stacked junk cluttering the underworld's rooms; solid, you weave around it
   exitdoor: { solid: true },  // a plain door in the underworld: walk up to it to leave. Solid; you exit on approach

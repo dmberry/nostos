@@ -17,6 +17,23 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
+## Islands archipelago — refactor + Stage 1 (David's session)
+
+The world-contract refactor (`docs/islands-plan.md`) is on `main`: Stage 0 done
+(0a `currentWorld` wrap, 0b Backspace-as-World, 0c `src/islands/calypso.js` via
+`createIsland`), all seed-identical and verified. **Stage 1a (2026-07-12): a
+craftable, shore-placed boat.** Hub-file touches, all surgical/append-only:
+`items.js` (new `boat` item, kind 'vehicle'), `tiles.js` (`boat` in `OBJECTS`,
+solid), `player.js` (`canCraftBoat`/`craftBoat`/`_findLaunchTile` — 12 wood + a
+cutting tool at the sea's edge), `renderer.js`/`textures.js` (`drawBoat` stretches
+wood-grain textures — new `assets/textures/boat-wood-1.jpg`/`-2.jpg`,
+`BOAT_TEXTURES` — over the hull faces and deck, plus one craft-prompt branch),
+`main.js` (boat added to the **C** craft chain, lowest priority). New
+`test/boat.test.js` (6 tests; suite now 32 green). No VERSION bump yet — the boat
+isn't boardable until 1b (departure + crossing), so the bump waits for end of
+Stage 1. Next: 1b, then 1c (campaign save). Fetch before touching those five
+files; the boat additions are localized but they are in the shared hubs.
+
 ## Art conventions
 
 - **Always put a texture on a glowing thing.** No glow is ever a flat coloured blob — a grille/panel texture is laid over it (the factory-vent trick). Everything luminous goes through `Renderer.texturedGlow`, which caps the glow with an AI grate texture; if you add a new light, use it rather than a bare `fill`. (David, 2026-07-07.)
@@ -47,6 +64,163 @@ Full per-version history lives in the README's **Version history** table
 keeps only the latest status, plus the conventions, art notes, and forward plan
 above and below. (The old blow-by-blow "Where we are (v1.06 … v1.54)" log was
 pruned; the README table is the record now.)
+
+### v1.88 — RON-ML terminal overhaul (gating now tracks power)
+
+**Handoff for the other session (read before you touch the terminal or the AI key):**
+the whole RON-ML gating model changed. Full spec: [docs/ob-terminal-language.md §9](docs/ob-terminal-language.md).
+Files touched: `src/game/ronml.js`, `src/main.js`, `src/game/player.js`,
+`src/game/lore.js`, `src/game/hermes.js`, `index.html`, `README.md`,
+`src/version.js`, this file. **Rebased onto the islands refactor** — my ctx
+effect loops use `currentWorld.robots`/`currentWorld.obeliskObjs` to match 0a/0b.
+
+What changed:
+- **RON console is amber** (RON's own OS, like HERMES; green was the AI's). CSS
+  base recoloured in `index.html`; `.hermes` class now carries only the relay
+  battery gauge. The magenta `#aios` (no-chip AI OS) is untouched.
+- **Two tiers.** *Type 2* (access chip + language, NO AI key): `scan`, `nearest`,
+  `keys`, `name` (new — reads current node), `hack`, `crash`, `loop`, `sleep`,
+  `repel`, `rewind`. The three board verbs are **nerfed** — reach 20→12
+  (`RONML_SOFT_RANGE`), sleep capped 20 min, rewind 2 h, repel 60→30 s.
+  *Type 1* (needs the AI key, decrypted): `unlock` only.
+- **Persistent top-level `let`.** The REPL carries a session env (`replSession`
+  in main.js, passed as `ctx.session`, reset on terminal open/close). A bare
+  `let x = e` (no `in`) binds for the visit — parser has a new `TopLet` node;
+  evaluator writes into the base env; echoes `val x = …`.
+- **Fortress key = a ritual**, not a one-liner: `copy aikey` (binds the held AI
+  key into the session, new ctx `hasAiKey`/`bindSession`), `decrypt aikey`,
+  `unlock k d` (now arity-2: hacked node key + decrypted AI-key token). The
+  recipe is **found lore** (`ronml-07` in lore.js `FRAGMENTS`, random), not `help`.
+- **AI key robustness:** `print aikey` stamps a spare (OB `print` is now arity-1:
+  `print map` / `print aikey`); ai_key already never decays; new HERMES
+  `backup`/`restore aikey` persist a copy in a durable key (`postai-aikey-backup`)
+  that survives death/fullReset; pickup toast teaches `copy aikey`.
+- **Watch-outs:** OB `print` changed from bare (=map) to `print map`; `unlock` is
+  arity-2 now (any code calling it as `unlock k` hits the teaching error).
+  Verified headless (evaluator harness: full fortress program, persistent let,
+  backup/restore, refusals). Open tuning: the nerf numbers are conservative.
+
+### v1.87 — visual + shield pass: textured rocks/rubble/crates, shields block melee, marble climbable, forcefield hotkey, HUD fixes
+
+- **Rock/rubble textures** (`renderer.js` + `textures.js` + assets): swapped the photo-crops (leafy edges) for centre-clips of David's purpose-shot surfaces — small-rock, mossyrock, smallrock2 (`rock-surface-{1,2,3}.jpg`). `drawRock`/`drawRubble` now STRETCH one texture over the whole silhouette (rubble unions its chunk-ellipses into a single clip) at full strength with only light diagonal shading, so the stone reads instead of a washed-out blob.
+- **Loot-crate wood** (`renderer.js` `drawBox` + `BOX_TEXTURES` + assets): wood-grain (`box-wood-{1,2}.jpg`) warped onto the crate faces via `drawTexturedQuad`, variant + opacity picked per tile so a row of crates varies.
+- **Shields block melee** (`player.js`): a carried riot/mirror shield now also turns a machine's physical blow (T1/T2 etc.), not just its lasers — `absorbMeleeOnShield()` called from `takeDamage` for `source==='machine'`, wearing the shield the same way (riot counts a hit, mirror heats). Fixes "riot shield not protecting against T1/T2".
+- **Shield bar** (`renderer.js` `playerShieldBar`): slim bar over the head in the shield's OWN colour (steel-blue riot / cyan mirror / green field, red when a mirror overheats). Removed the % text (hard to read) and added a sweeping **shimmer**. Drawn in a top pass AFTER the depth-sorted scene, so a block the player stands behind never occludes it. Removed the now-dead held-shield hands gauge (shields aren't holdable — `HOLDABLE` excludes them, so the mirror already can't go in hands).
+- **Marble climbable** (`tiles.js` + `renderer.js`): `marbleblock` gets `climbable:true, climbHeight:2`, its draw height pinned to 32px (2 levels) so standing on top lines up. Jump onto it like a wall.
+- **Forcefield hotkey** (`input.js` + `player.js` + `main.js`): **T** toggles the forcefield on/off from anywhere (via `player.toggleForcefield()`, shared with the slot-click), to drop it and save the cell without opening a slot.
+- **Occlusion ghost** (`renderer.js`): the faint player redraw when behind a tall block is clearer (alpha 0.28→0.5) and detects a wider band (dx+dy ≤ 3), so you're never lost behind a wall.
+- **Health flash** (`renderer.js` `drawBar`): the health bar blinks bright red with a pulsing red outline + label below 25%.
+- **Scrapbook click-away** (`main.js`): a click outside the Scrapbook panel now closes it (like the notepad and the other panels) — handled in the main update's modal block, BEFORE the click reaches the world; its own `lore.update` check ran too late (after fire ate the click). Escape closes it too.
+- **Narrow-screen HUD** (`ui.js` + `renderer.js`): the toast and message lines are lifted well above the panel so they no longer collide with the bottom-anchored touch/help hint on a phone screen (they used to overlap into garbled text).
+- **Removed** the earlier status-chip row (David didn't want it) — back to the terse inline conditions by the bars.
+- **Title background restored** (`mobile-gate.js`): `5df6672` removed the `.mg-bgvideo` element believing `postAI-background.mp4` was never committed — but it was tracked since v1.39 (`4a1abf9`), so the removal killed a working backdrop. Reinstated; the mp4 being tracked means the deploy gets it too.
+
+### v1.86 — smooth block-jumps, shields wear out, small-window HUD, backpack nudge
+
+- **Block-jump feel fixed** (`player.js` + `renderer.js`): jumping/climbing onto a taller tile used to pop the sprite up a whole block-height (40px for a wall) and flip the block's draw order in the single frame your tile crossed onto it — the "jumpy/glitchy on blocks" + "character overlapping blocks" reports. The walk-*off* case already bled lost height into the jump `z` for a smooth drop; added the mirror branch for climbing *on* (bleed the height gained back out of `z`), and added the jump height (`z*2`, matching `climbRaise`'s units) to the player's **sort depth** so draw order tracks true elevation and hands off to `climbRaise` on landing. Verified against the running build: worst frame-to-frame lift jump on a wall landing 40px → 9.9px, sort snap 2.5 → 0.62; walk-off stays 0.1px. Both changes are scoped to airborne frames, so static play is byte-identical.
+- **Shields wear out** (`player.js` + `renderer.js`): `blockRangedShot()` is the single per-hit resolution point, so shields age there. Riot shield counts blows (`RIOT_SHIELD_HITS`=12, warns at −3) and caves in to 2 scrap. Mirror shield gains heat per reflected bolt (`MIRROR_HEAT_PER_HIT`=0.17), sheds it at 0.13/s, only reflects while cool (< `MIRROR_HEAT_FADE` 0.6, else absorbs), and melts to 3 scrap at full heat; the carried deflector shell tints cyan→red with heat, and a held shield shows a condition gauge. Forcefield never breaks but each blow it eats (laser or, via `takeDamage`, melee/blast) burns `FORCEFIELD_HIT_COST`=2s of charge on top of the passive drain. Counters reset when a shield leaves your kit. Verified: mirror reflects 4, absorbs hot, melts on the 6th; riot breaks on the 12th; forcefield 60→52 over 3 shots + 1 blow.
+- **Small-window HUD** (`renderer.js`): the wordmark, version stamp, message line, and daemon death-aria all lived inside `drawDashboard` *after* its early-return to the compact layout, so on a narrow window they silently vanished (the "wordmark goes missing" report). Hoisted into `drawHudOverlay()`, called after the dashboard in both layouts off `this.hudTop`. Raised the desktop→compact threshold 780→810 so the cramped band (walkman colliding into the right-aligned status block) reflows to compact instead. Verified wordmark + message render at 760px and 1120px.
+- **Backpack nudge** (`player.js`): a pickup that can't be stowed because pockets are full and there's no backpack now says so and suggests finding one — but only twice per run (a persistent counter), so it never nags.
+- **Rock textures** (`renderer.js` + `textures.js` + 2 new assets): the scattered rocks were flat grey ellipses; now `drawRock` clips the dome and maps a real boulder photo (centre crops of David's field shots Rocks 08 + 09, `rock-surface-{1,2}.jpg`) with a top-light/base-shadow gradient and a seating rim, variant + slice picked per tile so a cluster doesn't clone. Falls back to the flat fill until loaded.
+- **Regression caught + fixed** (`renderer.js`): the first cut of the block-jump fix added jump height (`z*2`) to the player's sort depth, which made jumping *behind* a wall pop you in front of it ("jump behind a block and you become visible"). Reverted that term — a jump lifts the sprite up-screen but the feet don't move, so occlusion must be z-independent; landing onto a block still reads via `climbRaise` the instant the tile flips. Verified: player sort depth identical at z=0 and z=1.2; a player behind a wall stays occluded standing and mid-air.
+
+### v1.85 — relentless M4s, crates aren't safe, version stamp back (+ the refactor landed)
+
+- **M4 keeps looking** (`robots.js`): the fortress report-drone used to drop you at 6s of no line-of-sight and freeze past the 42-tile CPU cull. Now it stamps your last-seen tile while it can see you, and on losing sight heads there and sweeps for `M4_SEARCH_TIME` (9s) before giving up — cull-exempt while aggro'd, and it only tracks you when it actually has LOS (no more seeing through walls). M4-only, deliberately, to keep the cull cheap. Its own give-up in `updateGuard`, excluded from the generic LOS-giveup.
+- **Loot crate no longer safe** (`robots.js` + `player.js`): a perched player was untouchable — the solid crate held melee robots ~1 tile out (past 0.6–0.9 reach) and `onBlockTop()` gave blanket damage immunity. Split by height: `reachBonus()` gives a robot +0.6 reach to strike a player on a low climbable (climbHeight ≤ 1: box/rock/rubble), 0 on a tall wall; `onBlockTop()` now only counts elevation ≥ 2 as a safe perch. So a crate lifts you but isn't a fortress; a double-jump wall-block still is. Verified: T1 lands 24 dmg on a box, 0 on a wall.
+- **Version stamp restored** (`renderer.js`): it had been retired as clutter; `hud.version` was still passed, just not drawn. Back small/dim under the wordmark so the build is always readable.
+- **Under the hood — the systems-registry refactor landed on main.** Features self-register as `{update, drawWorld, drawScreen}` (dayNight/fortress/lore), ranged weapon-fire extracted to `combat.js` (player.js −294 lines), renderer HUD/modals mixed in from `ui.js`, plus a zero-dep `node --test` suite (registry + combat, 15 tests). See `docs/refactor-registry.md`.
+### v1.84 — occlusion ghost + stuck machines give up
+
+- **Ghost pass** (renderer, after the drawables loop): if a tall object sits
+  in the player's SE window (walls/columns/marble within 2 tiles, obelisk/
+  factory/core/uplink within 4), the player re-draws at 0.28 alpha OVER it.
+  Verified: drawPlayer once per frame in the open, twice when occluded.
+- **Stuck give-up**: T1 noProgressT > STUCK_GIVE_UP (7s) → aggro dropped,
+  stuck cleared, loseInterestT = STUCK_SULK (12s) — it wanders back to its
+  patrol instead of buzzing at the obstacle. Verified live: pinned T1
+  disengaged at ~6s of no progress.
+- **Books audit** (no code change): all 23 paperbooks + 5 records confirmed
+  present in a generated Backspace; the v1.56 guarantee holds.
+
+### v1.83 — structures clang: factory 0.5x, core 0.55x, uplink 0.9x
+
+- hitFactory / hitCore / hitUplink played the wooden 'chop'; all three now
+  use the pitched clang (factory deepest at 0.5, the core 0.55, the thin
+  mast 0.9). The weak-tool bounce off the factory hull — whose message
+  already said "clangs uselessly" — plays the deep clang too instead of a
+  bare swing whoosh.
+
+### v1.82 — detour commitment (the column jitter)
+
+- moveToward's wall-follow used to take one perpendicular sidestep per
+  blocked frame while STILL applying the direct pull every frame — around a
+  1-tile obstacle (column) the two fought, oscillating the machine in place
+  (David's screenshot: T1 vibrating behind a marble column).
+- Fix: on block, commit to the chosen side for 0.45s (`r._detourT`); while
+  committed, the direct pull is suppressed entirely and only the slide runs;
+  a 1.2-tile look-ahead probe ends the commitment the instant the line to
+  the target opens; a jammed committed side flips ONCE and recommits.
+- Verified headless on a reconstruction of the screenshot: direction flips
+  in 5s dropped to 1 (the genuine turn), and the T1 rounds the column to
+  within 0.58 tiles of the player.
+
+### v1.81 — per-hull clangs
+
+- `sfx.play` accepts opts; the 'clang' recipe scales frequency by opts.pitch
+  and ring duration by 1/sqrt(pitch) (big low plates ring longer). CLANG_PITCH
+  table in player.js: t1 1.5 / m4,w2 1.3 / w3,w5 1.15 / t2,m5 1 / t3,w1,m6
+  0.85 / w4 0.65. Verified headless across the pitch range.
+
+### v1.80 — smaller terminal type, dry snakes
+
+- Terminal font 15px → 13px across all four synced faces (screen, ghost,
+  prompt, input — the ghost overlay must share metrics exactly), fixing the
+  line-wrap on longer RON-ML output.
+- `moveAxis` in animals.js now respects an `a.noWater` flag (water/sea/stream
+  are hard edges); set on vipers at spawn. Verified: a viper forced toward an
+  across-the-river home holds on the sand bank indefinitely.
+
+### v1.79 — clang, temple healing, spaced backpacks
+
+- **'clang' sfx** (two detuned triangle partials + a tick of highpass noise,
+  quiet): melee hits on machines play it instead of 'chop'; animals keep the
+  thud.
+- **Temple healing aura**: placeRuins' grove centres persist as `map.temples`;
+  within TEMPLE_HEAL_R (7 tiles) HEALTH_REGEN runs at TEMPLE_HEAL_MULT (3x),
+  one-time flavour line per visit. Verified headless: near-regen exactly 3x.
+- **Backpack spacing**: 4 forest backpacks by rejection sampling, min 18
+  tiles apart.
+
+### v1.78 — touch drag-and-drop with slip guard
+
+- UI touches now behave exactly like the mouse: the press fires at touchstart
+  (main.js starts the drag from the slot immediately), touchmove feeds the
+  drag ghost via mouseX/Y, and the release lands as upAt — so slot-to-slot
+  moveItem, tape-onto-walkman swaps, and drag-off-to-ground dropSlot all run
+  through the one existing code path. `input.uiDragActive()` keeps main.js
+  from cancelling a live touch drag (mouseHeld is false on touch).
+- **Slip guard** (mouse AND touch): drag origin stored on the drag; a release
+  off-slot within 22px of the origin resolves as the intended click
+  (equip / manage-mode move), never a ground drop.
+- Taps unchanged: same-slot release still equips (panel closed) or moves
+  (manage mode). Verified on the emulated phone with synthetic multitouch:
+  pocket→world ground drop, pocket→walkman tape insert, 17px slip = no drop.
+
+### v1.77 — mobile RUN + JUMP buttons, real multitouch
+
+- **input.js rewritten for multitouch**: touches tracked by identifier and
+  routed by landing zone — RUN button (hold: `_touchRun`, feeds `sprinting()`),
+  JUMP button (one-shot `_touchJump`, consumed by `jumpPressed()`), HUD
+  (uiHitTest: tap-select as before), else the first free finger owns movement.
+  A move finger and a button finger coexist; releases route by identifier.
+- **renderer.drawTouchControls** (hud.touchControls = main's touchLike): two
+  R30 circles right of centre above the dashboard, generous 36px hit radius,
+  RUN brightens while held; registered per-frame in `renderer.touchButtons`
+  for `input.touchButtonHit` (same rebuild pattern as uiSlots).
+- Verified on emulated iPhone-size viewport with synthetic TouchEvents:
+  JUMP tap → player jumps; RUN held + second world finger → sprinting true,
+  false on release; screenshot confirms layout. Hint text updated.
 
 ### v1.76 — manage mode, audible lasers, daemon takes the towers, stamp retired
 
