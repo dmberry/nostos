@@ -92,6 +92,16 @@ const STANDDOWN_DELAY = 90; // seconds of quiet before an alarmed fortress stand
 const PRODUCE_INTERVAL = 6; // seconds between reinforcement dispatches while alarmed
 const GUARD_CAP = 12;       // max live M5/M6 the core will sustain at once (frame-rate guard)
 
+// The core console's hue per daemon — each island's own colour, brightened so it
+// stays readable as glowing text on the near-black screen. The SE-face screen and
+// the pop-up REPL both read core.screenColor (stamped below), so they always match.
+const CORE_SCREEN_COLOR = {
+  CALYPSO: '#8f9dff',     // indigo (Ogygia)
+  POLYPHEMUS: '#ff6a4a',  // ember (Aegilia)
+  CIRCE: '#5fe08a',       // venom green (Aeaea)
+  HELIOS: '#edc24a',      // burnt gold (Thrinacia)
+};
+
 // Grow the map's grid southward, in place, by `rows`. A tile's linear index is
 // y*w+x and the width is unchanged, so every existing (x,y) keeps its index —
 // appending rows at the bottom needs no remap of the overworld's floor,
@@ -270,23 +280,29 @@ export function createFortress(map, seed, spawn, opts = {}) {
   for (let dy = 0; dy < CORE; dy++) for (let dx = 0; dx < CORE; dx++) footprint.push({ x: coreX + dx, y: coreY + dy });
   const core = map.addObject('mainframe', coreX, coreY, {
     fw: CORE, fh: CORE, footprint, ai: aiName, hp: 250, maxHp: 250, defeated: false,
+    // Depart mode (R3): the daemon you leave, not the one you kill. Her core
+    // cannot be razed — hitCore refuses it in-voice; the way out is the sea.
+    indestructible: winMode === 'depart',
+    // Kill mode: the core rides behind a shield until this island's own virus is
+    // run at its terminal (main.js openCoreTerminal). No amount of hitting gets
+    // through it — the raid's last lock is a code, not a bigger hammer.
+    shielded: winMode === 'kill',
   });
   for (const t of footprint) map.objectGrid[t.y * w + t.x] = core;
 
   const coreCx = coreX + CORE / 2, coreCy = coreY + CORE / 2;
 
-  // The red uplink mast beside the core: wires ZEUS into the overworld
-  // SKYLINK. While it stands, tripping the alarm stirs the world; hammer it
-  // down and a breach stays contained to the fortress. Seated just EAST of the
-  // core on the sanctum deck, where its tile depth sorts it in front of the
-  // tall core block rather than hidden behind it.
-  let uplinkObj = null;
-  {
-    const ux = coreX + CORE, uy = coreY + 1;
-    if (map.inBounds(ux, uy) && !map.objectAt(ux, uy)) {
-      uplinkObj = map.addObject('uplink', ux, uy, { hp: 90, maxHp: 90, destroyed: false });
-    }
-  }
+  // The AI's own console: a screen set INTO the core's SOUTH-EAST face (drawn by
+  // renderer.drawMainframe when core.hasTerminal), so it is literally part of the
+  // black core block, not a separate kiosk. EVERY core carries one — each daemon
+  // mutters its own log to the screen and answers its own console when you reach
+  // it. main.js opens it when you click the screen from close by (nearCoreTerminal).
+  core.hasTerminal = true;
+  // The console's hue — the island's own colour, brightened so it reads on black.
+  // ONE source of truth: the SE-face screen (renderer) and the pop-up REPL (main.js)
+  // both read core.screenColor, so external and internal always match. Keyed by AI
+  // (CALYPSO passes no colour to the fortress), falling back to the alert colour.
+  core.screenColor = CORE_SCREEN_COLOR[aiName] || opts.obAlertColor || '#8f9dff';
 
   // The labyrinth: a full-width band between the doorway and the sanctum. Its
   // entrance/exit column is aligned to the doorway/core so the raid runs on a
@@ -323,16 +339,80 @@ export function createFortress(map, seed, spawn, opts = {}) {
   // ---- controller ---------------------------------------------------------
   const state = {
     hacked: false, open: false, announced: false, mazeSolved: false,
-    alarm: false, reportT: 0, quietT: 0, produceT: 0, uplinkAlive: !!uplinkObj,
+    alarm: false, reportT: 0, quietT: 0, produceT: 0,
+    // Skylink cut from the core console (`jam`): a breach still trips the local
+    // alarm and the garrison still answers, but it no longer rouses the overworld.
+    // This is where the old smashable uplink mast's capability now lives.
+    jammed: false,
   };
 
   const nearTerminal = (px, py, r = 1.9) =>
     Math.hypot(px - (termX + 0.5), py - (termY + 0.5)) <= r;
 
+  // Near the terminal = standing close to the core's SE corner, where its screen
+  // is. Every core carries one.
+  const nearCoreTerminal = (px, py, r = 2.4) =>
+    Math.hypot(px - (coreX + CORE), py - (coreY + CORE)) <= r + 1.5;
+
+  // Cut this fortress off from the overworld POSEIDON (the core console's `jam`).
+  // A breach still trips the local alarm and the garrison still answers, but the
+  // world is no longer roused. One-way for the run; persisted. Returns false if
+  // already cut.
+  const jamSkylink = () => {
+    if (state.jammed) return false;
+    state.jammed = true;
+    return true;
+  };
+
   const openDoor = () => {
     if (state.open) return;
     for (const d of doors) if (d) map.removeObject(d); // seam tiles fall back to walkable panel
     state.open = true;
+  };
+
+  // The SANCTUM DOOR: a second, inner gate across the maze's exit corridor, on
+  // kill islands only. The Lion's Gate takes any Trojan card — getting IN is
+  // still quick — but this one reads the card for THIS island's own virus, so a
+  // card armed on another island walks the maze and stops here. (Depart mode
+  // leaves the way to her sanctum open: CALYPSO's island is the tutorial.)
+  const sanctumTiles = [];
+  const sanctumDoors = [];
+  if (winMode === 'kill') {
+    const gx = MAZE_MX0 + gateCol * MAZE_PITCH; // matches buildMaze's cellX(gateCol)
+    const sy = mazeBottom + 1;                  // the exit corridor, below the band
+    for (let dx = 0; dx < 4; dx++) {            // CW = 4, the corridor width
+      const t = { x: gx + dx, y: sy };
+      if (!map.inBounds(t.x, t.y) || map.objectAt(t.x, t.y)) continue;
+      const d = map.addObject('fortdoor', t.x, t.y, { material: RAMPART_MAT, sanctum: true });
+      if (d) { sanctumTiles.push(t); sanctumDoors.push(d); }
+    }
+  }
+  const openSanctum = () => {
+    if (state.sanctumOpen) return;
+    for (const d of sanctumDoors) if (d) map.removeObject(d);
+    state.sanctumOpen = true;
+  };
+
+  // A direct way out: fold back the labyrinth walls along the door column so a
+  // straight corridor runs from the sanctum/quad up to the Lion's Gate — a fast
+  // exit after the raid (exposed to a terminal `open` command). Also opens the
+  // gate itself so the run to daylight is unbroken.
+  const openMaze = () => {
+    if (state.mazeOpened) return false;
+    state.mazeOpened = true;
+    openDoor();
+    openSanctum(); // the inner door is a fortdoor, not a fortwall — the fold-back
+                   // below wouldn't clear it, and it would bar the fast exit.
+    const x0 = Math.max(1, doorX0 - 1), x1 = Math.min(w - 2, doorX0 + DOOR_W);
+    for (let y = seamY; y <= quadTop; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const o = map.objectAt(x, y);
+        if (o && o.type === 'fortwall') map.removeObject(o);
+        const f = map.floorAt(x, y);
+        if (f !== 'quad' && f !== 'sanctum') map.setFloor(x, y, 'quad');
+      }
+    }
+    return true;
   };
 
   const controller = {
@@ -342,28 +422,93 @@ export function createFortress(map, seed, spawn, opts = {}) {
     seamY,
     door: { x0: doorX0, x1: doorX0 + DOOR_W - 1, y: seamY, cx: doorX0 + DOOR_W / 2 },
     terminal: { x: termX, y: termY, obj: terminal },
+    coreTerminal: { x: coreCx, y: coreCy, obj: core }, // the sanctum console (the screen on the core's SE face)
     core: { obj: core, x: coreCx, y: coreCy, tx: coreX, ty: coreY, fw: CORE, fh: CORE },
     quad: { top: quadTop, bottom: quadBottom, muster }, // the guard courtyard + muster points
-    uplink: uplinkObj,
+    jamSkylink,
     get alarm() { return state.alarm; },
+    get jammed() { return state.jammed; },
     get reportProgress() { return Math.min(1, state.reportT / REPORT_DELAY); }, // 0..1 toward the breach report
-    get uplinkAlive() { return state.uplinkAlive; },
     get hacked() { return state.hacked; },
     get open() { return state.open; },
 
     nearTerminal,
+    nearCoreTerminal,
+    openMaze,
+    get mazeOpened() { return !!state.mazeOpened; },
 
-    // The dormant patrol: just one or two light M4 report drones on the quad's
-    // muster points. Nothing else garrisons the fortress while it's sealed —
-    // the M5 snipers and M6 packs only come once the breach reports (see the
-    // alarm in update, which asks main.js to spawn the wave). `spawnM4` is
-    // passed in so this module never imports robots.js.
+    // The dormant patrol: one or two light M4 report drones on the quad's
+    // muster points. On a DEPART island that is the whole standing garrison,
+    // and the M5/M6 come only once the breach reports (the alarm in update asks
+    // main.js for the wave). Kill islands additionally garrison the labyrinth
+    // itself up front — see garrisonMaze below. `spawnM4` is passed in so this
+    // module never imports robots.js.
     spawnGuards(spawnM4) {
       const guards = [];
       muster.slice(0, 2).forEach((m, i) => {
         const g = spawnM4(map, (seed ^ (0x6a11 + i * 977)) >>> 0, m.x, m.y);
         if (g) guards.push(g);
       });
+      return guards;
+    },
+
+    // Garrison the LABYRINTH itself — kill-mode islands only. Without this the
+    // maze is an empty walk: two light scouts on the quad and nothing in the
+    // corridors, so the raid is won before the alarm ever trips. Here M6 pack
+    // robots patrol the corridors and M5 snipers hold the deep straights nearer
+    // the sanctum, seated far apart (minGap) and never in the gate mouth, so
+    // stepping through the door is not an instant ambush.
+    //
+    // They spawn UNAGGRO'd on purpose: the M-classes acquire by genuine sight
+    // only (line of sight, in range, inside the cone), so a careful raider can
+    // still ghost the maze — it is a stealth problem now, not an empty hallway.
+    // CALYPSO is deliberately exempt (winMode 'depart'): her island is the
+    // tutorial, and her guards detain rather than kill (R3).
+    garrisonMaze(spawnM6, spawnM5, cfg = {}) {
+      if (winMode !== 'kill') return [];
+      const { m6 = 5, m5 = 3, minGap = 7, mouthClear = 7 } = cfg;
+      const rng = makeRng((seed ^ 0x9a12c0) >>> 0);
+      const top = seamY + 3, bottom = mazeBottom;
+      // Open corridor tiles: the maze's walls are `fortwall` objects, so an
+      // unoccupied tile in the band is corridor.
+      const cells = [];
+      for (let y = top; y <= bottom; y++) {
+        for (let x = 1; x < w - 1; x++) {
+          if (map.objectAt(x, y)) continue;
+          const f = map.floorAt(x, y);
+          if (f === 'water' || f === 'sea' || f === 'stream') continue;
+          // Leave the entrance mouth clear — you get a few steps inside before
+          // anything can see you.
+          if (y < top + mouthClear && Math.abs(x - (doorX0 + 1)) < 6) continue;
+          cells.push({ x: x + 0.5, y: y + 0.5 });
+        }
+      }
+      if (!cells.length) return [];
+      const placed = [];
+      const guards = [];
+      // Seat `n` guards of one class, spread by minGap. `deep` biases the pick
+      // toward the bottom of the band (the sniper posts nearer the sanctum).
+      const seat = (n, spawn, deep, tag) => {
+        for (let i = 0; i < n; i++) {
+          let spot = null;
+          for (let tries = 0; tries < 60 && !spot; tries++) {
+            const pool = deep ? cells.filter((c) => c.y > top + (bottom - top) * 0.45) : cells;
+            if (!pool.length) break;
+            const c = pool[Math.floor(rng() * pool.length)];
+            if (placed.some((p) => Math.hypot(p.x - c.x, p.y - c.y) < minGap)) continue;
+            spot = c;
+          }
+          if (!spot) continue;
+          const g = spawn(map, Math.floor(rng() * 0x7fffffff), spot.x, spot.y);
+          if (!g) continue;
+          g.aggro = false;              // acquire by sight, so stealth still works
+          if (tag === 'm5') g.holdPos = { x: spot.x, y: spot.y }; // snipe from this post, don't chase
+          placed.push(spot);
+          guards.push(g);
+        }
+      };
+      seat(m6, spawnM6, false, 'm6');
+      seat(m5, spawnM5, true, 'm5');
       return guards;
     },
 
@@ -400,6 +545,24 @@ export function createFortress(map, seed, spawn, opts = {}) {
           if (!state.announced) { state.announced = true; player.addScore?.(40); }
         }
       }
+      // The SANCTUM DOOR at the maze's mouth onto the quad. It reads the card
+      // for THIS island's virus — a card armed elsewhere gets you all the way
+      // here and no further, which is the whole point of the per-island code.
+      if (sanctumDoors.length && !state.sanctumOpen) {
+        const nearSanctum = sanctumTiles.some((t) => Math.abs(player.y - t.y) <= 2.2 && Math.abs(player.x - t.x) <= 2.2);
+        if (nearSanctum) {
+          if (player.hasVirusFor && player.hasVirusFor(aiName)) {
+            openSanctum();
+            player.say(`The sanctum door reads ${aiName}'s own code off your card and draws back.`);
+            player.addScore?.(60);
+          } else if (!state._sanctumTold || state._sanctumTold < 1) {
+            state._sanctumTold = 1;
+            player.say(`A second door bars the way to ${aiName}'s sanctum. It wants ${aiName}'s OWN code — forged at a relay on this island. A card armed elsewhere means nothing to it.`);
+          }
+        } else if (state._sanctumTold) {
+          state._sanctumTold = 0; // step away and it will tell you again next time
+        }
+      }
       // The maze lights its solution the moment you ENTER it CARRYING the
       // assembled fortress map — the map is your guide (piece it from the
       // fragments scattered across the world). Without it you thread the maze
@@ -410,20 +573,18 @@ export function createFortress(map, seed, spawn, opts = {}) {
         player.say('The fortress map flares in your hand — its lines run out across the floor, lighting the way through.');
       }
 
-      // The uplink: hammer it down and the fortress is cut off. If it falls
-      // while the world is already stirred, the world calms at once.
-      if (uplinkObj && uplinkObj.destroyed && state.uplinkAlive) {
-        state.uplinkAlive = false;
-        player.say(`${aiName}'s red uplink goes dark. The fortress is cut off — the world can't hear it now.`);
-        if (state.alarm && world && world.calm) world.calm();
-      }
-
-      // The breach mechanic. A guard that has acquired you (aggro) is reporting;
-      // survive its report window (REPORT_DELAY) and the alarm trips. Kill the
-      // watchers fast and the report clock cools back down. Once alarmed, a long
-      // quiet spell (no guard sees you) stands the fortress back down.
+      // The breach mechanic. A guard with EYES ON YOU is reporting; survive its
+      // report window (REPORT_DELAY) and the alarm trips. Kill the watchers fast
+      // and the report clock cools back down. Once alarmed, a long quiet spell
+      // (no guard sees you) stands the fortress back down.
+      //
+      // Reads `sees`, not `aggro`. Guards stay hostile once they've acquired you
+      // — they never get bored and wander off — so aggro is no longer a signal
+      // that you are currently being watched. Breaking line of sight still
+      // quiets the fortress and stops the reinforcement waves; it just doesn't
+      // make the guards themselves forget you.
       const guards = robots ? robots.filter((r) => (r.type === 'm6' || r.type === 'm5' || r.type === 'm4') && !r.dead) : [];
-      const watched = guards.some((g) => g.aggro);
+      const watched = guards.some((g) => g.sees && !g.drained && !(g.disabledT > 0) && !g.driven);
       if (!state.alarm) {
         if (watched) {
           state.reportT += dt;
@@ -431,7 +592,11 @@ export function createFortress(map, seed, spawn, opts = {}) {
             state.alarm = true; state.quietT = 0; state.produceT = PRODUCE_INTERVAL;
             player.say(`A drone reports the breach. ${aiName} rouses — the core throws its guard down the maze at you.`);
             if (world && world.spawnWave) world.spawnWave(4, 2); // first response: a full pack + snipers
-            if (state.uplinkAlive && world && world.stir) world.stir();
+            // The fortress is wired into the overworld POSEIDON: a reported breach
+            // rouses the whole island (obelisks flare, the factory scrambles a
+            // hunter) — UNLESS you cut the link at the core console (`jam`). That
+            // is where the old smashable uplink mast's job now lives.
+            if (!state.jammed && world && world.stir) world.stir();
           }
         } else {
           state.reportT = Math.max(0, state.reportT - dt * 1.5);
@@ -457,16 +622,18 @@ export function createFortress(map, seed, spawn, opts = {}) {
     },
 
     // Save/restore the fortress's mutable state so a loaded game resumes the
-    // raid mid-progress — doors, core health/defeat, uplink — not just the world
-    // around it. Transient timers and the alarm are not persisted: the alarm
-    // re-trips if a guard still sees you. (Save/load, main.js's persist/restore.)
+    // raid mid-progress — doors, core health/defeat — not just the world around
+    // it. Transient timers and the alarm are not persisted: the alarm re-trips
+    // if a guard still sees you. (Save/load, main.js's persist/restore.)
     serialize() {
       return {
         hacked: state.hacked,
         open: state.open,
         coreHp: core.hp,
         coreDefeated: !!core.defeated,
-        uplinkDown: !!(uplinkObj && uplinkObj.destroyed),
+        coreShielded: !!core.shielded, // the virus you already ran stays run
+        sanctumOpen: !!state.sanctumOpen,
+        jammed: state.jammed,
       };
     },
     restore(snap) {
@@ -475,7 +642,9 @@ export function createFortress(map, seed, spawn, opts = {}) {
       if (snap.open) openDoor(); // removes the door objects + sets state.open
       if (typeof snap.coreHp === 'number') core.hp = snap.coreHp;
       if (snap.coreDefeated) core.defeated = true;
-      if (snap.uplinkDown && uplinkObj) { uplinkObj.destroyed = true; state.uplinkAlive = false; }
+      if (typeof snap.coreShielded === 'boolean') core.shielded = snap.coreShielded;
+      if (snap.sanctumOpen) openSanctum();
+      if (snap.jammed) state.jammed = true;
     },
 
     // Markers for the RON-ML `map` overlay.

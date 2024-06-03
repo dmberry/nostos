@@ -14,7 +14,7 @@ const BEACH_BAND = 2;   // tiles of sand inside the water
 
 // Structures the sea must never swallow (win-condition towers, the factory, the
 // whole fortress). A tile carrying one of these stays land.
-const KEEP_OBJ = new Set(['obelisk', 'tor', 'wfactory', 'fortwall', 'fortdoor', 'gateterm', 'mainframe', 'uplink']);
+const KEEP_OBJ = new Set(['obelisk', 'tor', 'wfactory', 'fortwall', 'fortdoor', 'gateterm', 'mainframe']);
 // Floors that belong to built things (fortress decks, house boards, bridges) —
 // never flood these either.
 const KEEP_FLOOR = new Set(['panel', 'quad', 'sanctum', 'boards', 'bridge']);

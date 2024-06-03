@@ -218,20 +218,31 @@ function makeBuiltins(station) {
     copy: {
       arity: 1,
       fn: ([what], ctx) => {
-        // Polymorphic on the first argument. A FILE means `copy <file> <device>`
-        // — return a partial bound to COPY_FILE so the next atom (the device)
-        // completes it. Anything else is the classic `copy aikey`: bind the
-        // held AI key into the session as a sealed token for decrypt/unlock.
+        // Polymorphic on the first argument.
+        //  - a FILE (foo.ml)      -> `copy <file> <device>`: a partial bound to
+        //    COPY_FILE that the next atom (the device) completes.
+        //  - `aikey`/`card`/`key` -> the classic key-bind: bind the held AI key
+        //    into the session as a sealed token for decrypt/unlock.
+        //  - any OTHER bare word  -> a filename someone typed without its
+        //    extension (players type `copy zeus-lightning card`, not
+        //    `zeus-lightning.ml`): treat it as a file too, and let COPY_FILE + the
+        //    fs resolve the extension. Forgiving beats a misleading error.
         if (what && what.tag === 'file') {
           return { tag: 'fn', name: 'copy', builtin: COPY_FILE, args: [what], ctx };
         }
-        if (!ctx.hasAiKey || !ctx.hasAiKey()) {
-          throw new RonmlError('nothing to copy — you are not holding an AI key. (a wrecked W-factory drops one.)');
+        const id = (what && what.id ? String(what.id) : '').toLowerCase();
+        if (id === 'aikey' || id === 'card' || id === 'key') {
+          if (!ctx.hasAiKey || !ctx.hasAiKey()) {
+            throw new RonmlError('nothing to copy — you are not holding an AI key. (a wrecked W-factory drops one.)');
+          }
+          const token = { tag: 'key', kind: 'aikey', enc: true };
+          if (ctx.bindSession) ctx.bindSession(id === 'key' ? 'aikey' : id, token);
+          return token;
         }
-        const token = { tag: 'key', kind: 'aikey', enc: true };
-        const bindName = (what && what.id ? String(what.id) : 'aikey').toLowerCase();
-        if (ctx.bindSession) ctx.bindSession(bindName, token);
-        return token;
+        if (id) {
+          return { tag: 'fn', name: 'copy', builtin: COPY_FILE, args: [{ tag: 'file', name: id }], ctx };
+        }
+        throw new RonmlError('copy what? — try: copy <file> <drive>   or   copy aikey');
       },
     },
     // `cd <device>` / `ls`: the RON-DOS drive navigation. Devices are the AI key
@@ -242,10 +253,20 @@ function makeBuiltins(station) {
       arity: 1,
       fn: ([dev], ctx) => {
         const name = (dev && (dev.id || dev.name)) ? String(dev.id || dev.name).toLowerCase() : '';
-        if (!name) throw new RonmlError('cd needs a device — try: cd aikey  ·  cd ob');
+        if (!name) throw new RonmlError('cd needs a drive — try: cd card  ·  cd ob  (drives lists them)');
         if (!ctx.cd) throw new RonmlError('no drives at this terminal.');
         const r = ctx.cd(name);
-        if (!r || !r.ok) throw new RonmlError((r && r.msg) || `no device '${name}' here.`);
+        if (!r || !r.ok) throw new RonmlError((r && r.msg) || `no drive '${name}' here — try: drives`);
+        return r.label ? { tag: 'node', id: `» ${r.label}` } : { tag: 'unit' }; // echo which drive + card state
+      },
+    },
+    // `drives`: list the drives attached here (ob / card / hermes) and, crucially,
+    // the card's CURRENT name — so you can always tell what state it's in.
+    drives: {
+      arity: 0,
+      fn: (_args, ctx) => {
+        if (!ctx.drives) throw new RonmlError('no drives at this terminal.');
+        ctx.drives();
         return { tag: 'unit' };
       },
     },
@@ -301,6 +322,16 @@ function makeBuiltins(station) {
         const r = ctx.elizaTransform(file.name);
         if (!r || !r.ok) throw new RonmlError((r && r.msg) || `ELIZA can do nothing with ${file.name}.`);
         return { tag: 'file', name: r.out };
+      },
+    },
+    // `retire` (R3): with the hermes card, stand the fortress guards down — they
+    // become gardeners instead of hunters. The refunction-by-command payoff.
+    retire: {
+      arity: 0,
+      fn: (_args, ctx) => {
+        if (!ctx.retire) throw new RonmlError('nothing to retire from this terminal.');
+        ctx.retire();
+        return { tag: 'unit' };
       },
     },
     // ---- HERMES station verbs (RON hilltop relays only) ------------------
@@ -494,7 +525,7 @@ function makeBuiltins(station) {
 // `copy`, `cd`, `ls` are deliberately NOT listed here — they are neutral (work at
 // both an obelisk and a HERMES relay), like `notes`. A verb tagged for one station
 // is refused at the other; the file verbs must move files at either terminal.
-const OB_VERBS = ['scan', 'nearest', 'keys', 'name', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'sing', 'map', 'print', 'decrypt', 'unlock', 'eliza'];
+const OB_VERBS = ['scan', 'nearest', 'keys', 'name', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'sing', 'map', 'print', 'decrypt', 'unlock', 'eliza', 'retire'];
 // Note: HERMES's `print` is added as an override in makeBuiltins (it takes a
 // topic), not tagged here — tagging it would steal the obelisk's own arity-0
 // `print`. `print` is already in OB_VERBS, so ALL_VERBS still covers it.
@@ -634,11 +665,13 @@ const HELP_VERBS = [
   ['print t', 'atom -> unit', 'print map (a carryable map) or print aikey (a spare AI key)', '', 'ob'],
   ['copy k', 'key -> key', 'copy the AI key you hold into the session as `aikey`', 'hold an AI key', ''],
   ['copy f d', 'file device -> file', 'copy a file onto a device — copy factory-id.ml ob', '', ''],
-  ['cd d', 'device -> unit', 'change drive: cd aikey · cd ob · cd hermes', '', ''],
+  ['cd d', 'device -> node', 'change drive — the console echoes which drive, and the card state (run `drives` to see what is attached here)', '', ''],
+  ['drives', 'unit -> unit', "list the drives attached here and the card's current name", '', ''],
   ['ls', 'unit -> list', 'list the files on the current drive', '', ''],
   ['decrypt k', 'key -> key', 'open the sealed AI key so unlock can use it', 'hold an AI key', 'ob'],
   ['unlock k d', 'key key -> unit', 'legacy — the fortress gate opens to a Trojan card now (refunction your AI key)', 'superseded', 'ob'],
   ['eliza', 'file -> file', 'eliza <file> runs the DOCTOR transform on a file; bare `eliza` (or run eliza) opens the DOCTOR to talk to — quit to leave', '', 'ob'],
+  ['retire', 'unit -> unit', "stand the fortress guards down — they become gardeners (needs the hermes card)", 'hermes card', 'ob'],
   ['read t', 'atom -> unit', 'read a document — read ronml / fortress / obelisks / robots / history / destroy', 'HERMES relay only', 'hermes'],
   ['print t', 'atom -> unit', 'print a copy of a document into your notepad (N)', 'HERMES relay only', 'hermes'],
   ['archive', 'unit -> unit', 'list the documents this relay holds', 'HERMES relay only', 'hermes'],

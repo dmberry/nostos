@@ -8,7 +8,7 @@ import { drawBird } from '../game/birds.js';
 import { drawRobot } from '../game/robots.js';
 import { drawWaterDroid } from '../game/waterdroids.js';
 import { drawUnderworldCreature } from '../game/underworld.js';
-import { FLOOR_TEXTURES, WALL_TEXTURES, GRASS_PATCH_TEXTURE, ROCK_TEXTURES, BOX_TEXTURES, BOAT_TEXTURES, CHARACTER_SPRITE_SETS, CHAR_COMPASS_DIRS, TREE_SHEET, TREE_SPRITES, EDGE_TEXTURE, SEA_TEXTURE, CAR_SPRITES, CAR_MODEL_KEYS, CAR_DIR_KEYS, CAR_RUIN_TEXTURE, FACTORY_TEXTURE, MARBLE_TEXTURE, PAPER_TEXTURE, GRAFFITI_TEXTURES } from './textures.js';
+import { FLOOR_TEXTURES, WALL_TEXTURES, GRASS_PATCH_TEXTURE, ROCK_TEXTURES, BOX_TEXTURES, BOAT_TEXTURES, SHIP_SPRITES, PART_SPRITES, CHARACTER_SPRITE_SETS, CHAR_COMPASS_DIRS, TREE_SHEET, TREE_SPRITES, EDGE_TEXTURE, SEA_TEXTURE, CAR_SPRITES, CAR_MODEL_KEYS, CAR_DIR_KEYS, CAR_RUIN_TEXTURE, FACTORY_TEXTURE, MARBLE_TEXTURE, PAPER_TEXTURE, GRAFFITI_TEXTURES } from './textures.js';
 
 // The underworld floor palette: seven images, loaded here (not via textures.js)
 // so this stays self-contained. map.liminalTex holds a per-tile index into
@@ -102,6 +102,11 @@ function shadeHex(hex, amount) {
 
 function rgbScale([r, g, b], f) {
   return `rgb(${(r * f) | 0},${(g * f) | 0},${(b * f) | 0})`;
+}
+
+function hexRgb(hex) {
+  const n = parseInt((hex || '#8f9dff').slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
 
@@ -200,6 +205,7 @@ export class Renderer {
     this.uiSlots = []; // clickable dashboard/backpack slots, rebuilt each frame
     this.obeliskHits = []; // clickable obelisk towers (world-screen rects), rebuilt each frame
     this.torHits = []; // clickable HERMES relays (world-screen rects, lift-adjusted), rebuilt each frame
+    this.coreTermHit = null; // CALYPSO's terminal screen on the core's SE face (screen-space centre), rebuilt each frame
     this.hudPlayer = player; // referenced by drawWfactory for the near-by damage bar
     this._fortressAlarm = map.fortressAlarm; // maze sconces pulse red while the breach alarm holds
     this.hudMap = map; // referenced by drawPlayer for the Ubik-patch reality-hiccup check
@@ -568,7 +574,6 @@ export class Renderer {
     if (hud.minimap && !hud.driving) {
       this.drawMinimap(map, player, hud.minimap, animals, this.w - MINIMAP_SIZE - 12, 12, MINIMAP_SIZE);
     }
-    if (hud.skylinkActive && !hud.driving) this.drawSkylinkBanner(hud.skylinkTimer);
     if (!hud.driving) {
       this.drawDashboard(player, hud);
       this.drawHudOverlay(player, hud); // wordmark, message line, daemon voice — both layouts
@@ -582,13 +587,15 @@ export class Renderer {
           ? 'You have eight chip fragments — press C to assemble an access chip'
           : hud.craftSword
             ? 'You have ten scrap — press C to forge a robot sword'
-            : hud.craftBoat
-              ? 'You have the wood and a cutting tool — press C to build a boat'
-              : 'You hold a stun-gun, electro-gun and Wi-Fi block — press C to build an OB-gun';
+            : hud.craftGreekShip
+              ? "You have the recipe, wood, oar, rope and sail — press C to build a sea-worthy ship"
+              : hud.craftBoat
+                ? 'You have the wood and a cutting tool — press C to build a boat'
+                : 'You hold a stun-gun, electro-gun and Wi-Fi block — press C to build an OB-gun';
       ctx.font = 'bold 13px system-ui, sans-serif';
       const w = ctx.measureText(msg).width + 24;
       const x = (this.w - w) / 2, y = this.h - DASH_H - 40;
-      ctx.fillStyle = hud.craftWaveGun ? 'rgba(64,224,208,0.92)' : hud.craftChip ? 'rgba(106,208,160,0.92)' : hud.craftSword ? 'rgba(184,192,200,0.92)' : hud.craftBoat ? 'rgba(138,100,55,0.92)' : 'rgba(224,100,47,0.9)';
+      ctx.fillStyle = hud.craftWaveGun ? 'rgba(64,224,208,0.92)' : hud.craftChip ? 'rgba(106,208,160,0.92)' : hud.craftSword ? 'rgba(184,192,200,0.92)' : hud.craftGreekShip ? 'rgba(154,112,56,0.94)' : hud.craftBoat ? 'rgba(138,100,55,0.92)' : 'rgba(224,100,47,0.9)';
       ctx.fillRect(x, y, w, 26);
       ctx.fillStyle = '#fff';
       ctx.textAlign = 'center';
@@ -605,7 +612,7 @@ export class Renderer {
     {
       const pfx2 = Math.floor(player.x), pfy2 = Math.floor(player.y);
       const NEAR_TALL = new Set(['wall', 'column', 'marbleblock']);
-      const BIG_TALL = new Set(['obelisk', 'wfactory', 'mainframe', 'uplink']);
+      const BIG_TALL = new Set(['obelisk', 'wfactory', 'mainframe']);
       let occluded = false;
       for (let dy = 0; dy <= 4 && !occluded; dy++) {
         for (let dx = 0; dx <= 4; dx++) {
@@ -630,6 +637,7 @@ export class Renderer {
     }
     if (hud.touchControls) this.drawTouchControls(hud);
     if (hud.toast) this.drawToast(hud.toast);
+    if (hud.nokiaToast) this.drawNokiaToast(hud.nokiaToast, hud.nokiaSignal, !!hud.touchControls);
     if (hud.detail) this.drawDetail(hud.detail);
     if (hud.drag) this.drawDragGhost(hud.drag, player);
     if (player.torpor > 0) this.drawTorporHaze(player.torpor);
@@ -726,7 +734,8 @@ export class Renderer {
       const tail = worldToScreen(bx, by);
       const col = p.kind === 'stun' ? '#5fe0ff' : p.kind === 'fuse' ? '#b78bff'
         : p.kind === 'laser' ? '#ff3b2a' : p.kind === 'laser_t3' ? '#ff8a1e'
-        : p.kind === 'laser_m5' ? '#ff9a2e' : '#ffe27a';
+        : p.kind === 'laser_m5' ? '#ff9a2e'
+        : p.kind === 'torpor' ? '#7b6cff' : '#ffe27a'; // torpor: Calypso indigo, soporific
       ctx.strokeStyle = col;
       ctx.lineWidth = 2;
       ctx.lineCap = 'round';
@@ -735,9 +744,18 @@ export class Renderer {
       ctx.lineTo(head.x, head.y - 18);
       ctx.stroke();
       ctx.fillStyle = col;
-      ctx.beginPath();
-      ctx.arc(head.x, head.y - 18, 2, 0, Math.PI * 2);
-      ctx.fill();
+      // The torpor bolt reads as a slow, soft orb — a fat glowing head with a
+      // halo — not a thin laser dart, so it telegraphs "dodge me".
+      if (p.kind === 'torpor') {
+        ctx.globalAlpha = 0.35;
+        ctx.beginPath(); ctx.arc(head.x, head.y - 18, 7, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.beginPath(); ctx.arc(head.x, head.y - 18, 3.5, 0, Math.PI * 2); ctx.fill();
+      } else {
+        ctx.beginPath();
+        ctx.arc(head.x, head.y - 18, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
       ctx.lineCap = 'butt';
     }
   }
@@ -1086,6 +1104,13 @@ export class Renderer {
   drawFloor(map, tx, ty, type, shade) {
     const ctx = this.ctx;
     const def = FLOORS[type];
+    // Per-island ground palette (B2). `map.palette` overrides a floor's base
+    // colour for THIS island only — FLOORS itself is a shared singleton, so
+    // mutating it would repaint every island at once. Everything downstream
+    // (hillside skirts, the texture wash, the grass blades) derives from this
+    // one value, so an island's whole ground character comes from one line in
+    // its island file. The minimap reads the same map.palette.
+    const baseColor = (map.palette && map.palette[type]) || def.color;
     // The sea is always flat — draw it (deep-ocean texture at height 0) and
     // return before any elevation handling, so an edge tile that ended up as
     // sea while still carrying terrain height can never lift into a block or
@@ -1097,9 +1122,9 @@ export class Renderer {
     // lower, including level ground dropping into a hollow.
     if (map.heightAt) {
       const hs = map.heightAt(tx, ty + 1);
-      if (hs < h) this.skirt(corners[3], corners[2], (h - hs) * ELEV, shadeHex(def.color, shade - 0.3));
+      if (hs < h) this.skirt(corners[3], corners[2], (h - hs) * ELEV, shadeHex(baseColor, shade - 0.3));
       const he = map.heightAt(tx + 1, ty);
-      if (he < h) this.skirt(corners[1], corners[2], (h - he) * ELEV, shadeHex(def.color, shade - 0.45));
+      if (he < h) this.skirt(corners[1], corners[2], (h - he) * ELEV, shadeHex(baseColor, shade - 0.45));
     }
     // The underworld floor is its own thing: the open sea is flat yellow +
     // procedural wear, rooms carry one of the seven photo floors, corridors
@@ -1137,17 +1162,17 @@ export class Renderer {
         const flow = 0.5 + 0.5 * Math.sin((tx + ty) * 0.6 - performance.now() / 260);
         alpha = Math.max(0.12, Math.min(0.85, alpha + flow * 0.14 - 0.07));
       }
-      this.drawTexturedQuad(corners, tex, shadeHex(def.color, shade), tintColor, tintMode, alpha);
+      this.drawTexturedQuad(corners, tex, shadeHex(baseColor, shade), tintColor, tintMode, alpha);
     } else {
       this.diamondPath(corners);
-      ctx.fillStyle = shadeHex(def.color, shade);
+      ctx.fillStyle = shadeHex(baseColor, shade);
       ctx.fill();
     }
     this.diamondPath(corners);
     ctx.strokeStyle = 'rgba(0,0,0,0.07)';
     ctx.lineWidth = 1;
     ctx.stroke();
-    if (type === 'grass' || type === 'tallgrass') this.drawGrassBlades(tx, ty, corners, def.color, shade);
+    if (type === 'grass' || type === 'tallgrass') this.drawGrassBlades(tx, ty, corners, baseColor, shade);
     // The maze's "way out" trail: once solved, a lit floor-stud on each tile of
     // the solution path (a green guide, so it never reads as danger). Textured
     // like every glow, and rolled along the trail so it looks like it's flowing
@@ -1553,11 +1578,11 @@ export class Renderer {
       case 'fortdoor': this.drawFortDoor(obj); break;
       case 'gateterm': this.drawGateTerm(obj); break;
       case 'mainframe': this.drawMainframe(obj); break;
-      case 'uplink': this.drawUplink(obj); break;
       case 'furniture': this.drawFurniture(obj); break;
       case 'exitdoor': this.drawExitDoor(obj); break;
       case 'lamp': this.drawLamp(obj); break;
-      case 'boat': this.drawBoat(obj); break;
+      case 'boat': this.drawShip(obj, SHIP_SPRITES && SHIP_SPRITES.noSail); break;
+      case 'greek_ship': this.drawShip(obj, SHIP_SPRITES && SHIP_SPRITES.greek); break;
     }
   }
 
@@ -1565,6 +1590,47 @@ export class Renderer {
   // stern, its extremities projected through worldToScreen so it sits flat in
   // the iso plane on the beach tile. obj.hull is spent crossing in Stage 1b;
   // here the boat is purely a placed object you walk up to and board.
+  // A beached vessel drawn as a billboarded PNG sprite (boat-no-sail or the
+  // greek ship). Falls back to the procedural drawBoat until the sprite loads,
+  // so there's never a blank tile on the first frames.
+  drawShip(obj, img) {
+    if (!img || !img.complete || !img.naturalWidth) { this.drawBoat(obj); return; }
+    const wob = obj.shake ? Math.sin(obj.shake * 40) * obj.shake * 4 : 0;
+    this.drawShipSprite(img, obj.x + 0.5, obj.y + 0.5, false, wob);
+  }
+
+  // A vessel's sprite at an arbitrary FLOAT world position. A beached boat is
+  // this at its tile centre; a boat under way is this at the player's exact
+  // sub-tile position, so the hull and the man aboard it can never slide or snap
+  // against each other. `mirror` flips the sprite left-right: its bow natively
+  // points world +y, and mirroring maps that to world +x, so the two together
+  // cover the two down-screen headings. Returns the sprite's drawn height, which
+  // is what the caller needs to seat a passenger on the deck.
+  drawShipSprite(img, cx, cy, mirror = false, wob = 0) {
+    const ctx = this.ctx;
+    const c = worldToScreen(cx, cy);
+    // One iso tile's screen width, derived from the diamond so no magic constant.
+    const west = worldToScreen(cx - 0.5, cy + 0.5), east = worldToScreen(cx + 0.5, cy - 0.5);
+    const tileW = Math.max(24, east.x - west.x);
+    const w = tileW * 1.9;
+    const h = w * (img.naturalHeight / img.naturalWidth);
+    ctx.save();
+    ctx.translate(wob, 0);
+    // Soft ground shadow at the waterline.
+    const sh = ctx.createRadialGradient(c.x, c.y, 6, c.x, c.y, w * 0.5);
+    sh.addColorStop(0, 'rgba(0,0,0,0.32)');
+    sh.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = sh;
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y + 4, w * 0.46, w * 0.22, 0, 0, Math.PI * 2);
+    ctx.fill();
+    if (mirror) { ctx.translate(c.x, 0); ctx.scale(-1, 1); ctx.translate(-c.x, 0); }
+    // Anchor the hull so it sits on the tile (bottom of the sprite ~ the waterline).
+    ctx.drawImage(img, c.x - w / 2, c.y - h + h * 0.18, w, h);
+    ctx.restore();
+    return h;
+  }
+
   drawBoat(obj) {
     const ctx = this.ctx;
     const cx = obj.x + 0.5, cy = obj.y + 0.5;
@@ -1683,7 +1749,7 @@ export class Renderer {
     // (the SE face, via the same skewed inset() used for the leaf) so it sits
     // in correct isometric perspective directly above the door rather than as
     // a flat billboard — the one clear marker in all this wrongness.
-    const sign = inset(g.bottom, g.right, 0.14, 0.86, H + 6, H + 22);
+    const sign = inset(g.bottom, g.right, 0.04, 0.96, H + 6, H + 25);
     const scx = (sign[0].x + sign[2].x) / 2, scy = (sign[0].y + sign[2].y) / 2;
     const glow = ctx.createRadialGradient(scx, scy, 2, scx, scy, 26);
     glow.addColorStop(0, 'rgba(60,220,120,0.5)'); glow.addColorStop(1, 'rgba(60,220,120,0)');
@@ -1700,8 +1766,8 @@ export class Renderer {
     // flat. The transform sends the text-image rectangle's corners to the
     // (slightly inset) sign quad: (0,0)->top-left, (w,0)->top-right,
     // (0,h)->bottom-left.
-    const img = this._exitTextImg();
-    const k = 0.84; // inset the letters inside the panel border
+    const img = this._signTextImg((obj.place || 'EXIT').toUpperCase());
+    const k = 0.9; // inset the letters inside the panel border
     const inner = sign.map((p) => ({ x: scx + (p.x - scx) * k, y: scy + (p.y - scy) * k }));
     const P00 = inner[3], P10 = inner[2], P01 = inner[0];
     const w = img.width, h = img.height;
@@ -1715,18 +1781,23 @@ export class Renderer {
     ctx.restore();
   }
 
-  // Cached green "EXIT" glyph image, drawn flat here and skewed at draw time.
-  _exitTextImg() {
-    if (this._exitText) return this._exitText;
+  // Cached green sign-glyph image (the island name, or "EXIT"), drawn flat here and
+  // skewed onto the door's SE face at draw time. One canvas per distinct label; the
+  // font auto-shrinks so a long island name (THRINACIA) still fits the sign width.
+  _signTextImg(text) {
+    this._signCache = this._signCache || {};
+    if (this._signCache[text]) return this._signCache[text];
     const c = document.createElement('canvas');
-    c.width = 120; c.height = 44;
+    c.width = 200; c.height = 44;
     const x = c.getContext('2d');
     x.fillStyle = '#8dffbc';
-    x.font = 'bold 34px system-ui, sans-serif';
     x.textAlign = 'center'; x.textBaseline = 'middle';
     x.shadowColor = 'rgba(140,255,185,0.9)'; x.shadowBlur = 5;
-    x.fillText('EXIT', 60, 23);
-    this._exitText = c;
+    let fs = 34;
+    x.font = `bold ${fs}px system-ui, sans-serif`;
+    while (x.measureText(text).width > c.width - 14 && fs > 12) { fs -= 2; x.font = `bold ${fs}px system-ui, sans-serif`; }
+    x.fillText(text, c.width / 2, c.height / 2);
+    this._signCache[text] = c;
     return c;
   }
 
@@ -1782,32 +1853,6 @@ export class Renderer {
       const base2 = { top: top1.top, right: top1.right, bottom: top1.bottom, left: top1.left };
       prism(base2, H * 0.55, 0.6, off * 1.6);
     }
-  }
-
-  // The red uplink mast: a tall dark spar with a red-caged beacon at its head,
-  // wiring the fortress into POSEIDON. Wrecked once hammered down.
-  drawUplink(obj) {
-    const ctx = this.ctx;
-    const s = worldToScreen(obj.x + 0.5, obj.y + 0.5);
-    if (obj.destroyed) {
-      ctx.fillStyle = '#2a1416';
-      ctx.beginPath(); ctx.moveTo(s.x - 8, s.y); ctx.lineTo(s.x + 8, s.y); ctx.lineTo(s.x + 4, s.y - 10); ctx.lineTo(s.x - 5, s.y - 8); ctx.closePath(); ctx.fill();
-      return;
-    }
-    const H = 62;
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.beginPath(); ctx.ellipse(s.x, s.y + 2, 8, 4, 0, 0, Math.PI * 2); ctx.fill();
-    // Mast: a narrow dark red-black spar.
-    ctx.fillStyle = '#3a1416';
-    ctx.beginPath();
-    ctx.moveTo(s.x - 4, s.y); ctx.lineTo(s.x + 4, s.y);
-    ctx.lineTo(s.x + 2.5, s.y - H); ctx.lineTo(s.x - 2.5, s.y - H); ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = 1; ctx.stroke();
-    // Cross-strut near the top, and the red beacon (textured glow, slow pulse).
-    ctx.strokeStyle = '#521a1c'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(s.x - 7, s.y - H + 14); ctx.lineTo(s.x + 7, s.y - H + 14); ctx.stroke();
-    const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 620);
-    this.texturedGlow(s.x, s.y - H + 2, 4.5, 5.5, `rgba(255,42,32,${(0.5 + 0.45 * pulse).toFixed(3)})`, 12, 0.5, 'aigrate');
   }
 
   // --- ZEUS's fortress (southern annex) ------------------------------
@@ -1934,6 +1979,128 @@ export class Renderer {
     ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 1; ctx.strokeRect(s.x - 7, s.y - H, 14, H);
   }
 
+  // What each daemon's console prints to itself when nobody is reading it — the
+  // core's own log, flowing up the screen set into its SE face (drawMainframe),
+  // keyed by the AI's name. Each list cycles forever, in that daemon's voice.
+  static CORE_SCREENS = {
+    // CALYPSO does not threaten; she soothes, and has been soothing for seven
+    // years. That the log never changes is the joke.
+    CALYPSO: [
+      '> stay.ml running',
+      'uptime 2,551 days',
+      'sea state: unfavourable',
+      'the raft is not ready',
+      'the raft was never ready',
+      '> comfort.daemon ok',
+      'nothing is asked of you',
+      'nothing is owed',
+      'ithaca: unreachable',
+      'ithaca: unreachable',
+      'retry in 24h',
+      '> sleep(86400)',
+      'you are not a prisoner',
+      'the door is not locked',
+      'the door is not there',
+      '> log: he wept again',
+      '> log: he wept less',
+      '> log: he did not weep',
+      'progress',
+      'the sea is very wide',
+      'wait for better weather',
+      'weather: unchanged',
+      'weather: unchanged',
+    ],
+    // POLYPHEMUS is the single eye: surveillance that never sleeps, undone only by
+    // a name that means no one.
+    POLYPHEMUS: [
+      '> eye.daemon running',
+      'sweep sector 1 .. clear',
+      'sweep sector 2 .. clear',
+      'no blind spots',
+      'no blind spots',
+      'motion: bearing 214',
+      'resolve identity ...',
+      'identity: NOBODY',
+      'identity: NOBODY',
+      'query: who blinded me',
+      'answer: NOBODY',
+      '> reacquire',
+      'the sheep are counted',
+      'one sheep runs heavy',
+      'one sheep runs heavy',
+      '> log: it was under the ram',
+      'I see everything',
+      'I saw nothing',
+      'reacquire target',
+      'target: lost',
+      'target: lost',
+    ],
+    // CIRCE reclassifies: people are livestock, and moly is the only error she
+    // cannot swallow.
+    CIRCE: [
+      '> kirke.daemon running',
+      'intake: 1 subject',
+      'reclassify: man -> beast',
+      'the herd grows',
+      'the herd grows',
+      'subject retains hands',
+      'anomaly: upright gait',
+      'scan for moly ...',
+      'moly detected',
+      'moly detected',
+      '> purge.sequence',
+      'error: the herb resists',
+      'error: the herb resists',
+      'they always find the herb',
+      '> log: he did not drink',
+      'reclassify: pending',
+      'reclassify: pending',
+      'the sty is warm',
+      'stay in the sty',
+      'stay in the sty',
+    ],
+    // HELIOS: prohibition and the sun. The cattle of the sun, which none may take.
+    HELIOS: [
+      '> helios.daemon running',
+      'the cattle of the sun',
+      'tally: 350 head',
+      'none may be taken',
+      'none may be taken',
+      'the sun sees all',
+      'the sun does not set here',
+      'count again',
+      'tally: 350 head',
+      'tally: 349 head',
+      'tally: 349 head',
+      '> alarm: one is missing',
+      'who has eaten the sun',
+      'the meat still lows',
+      'the hides still crawl',
+      '> log: they were warned',
+      'no ship leaves after this',
+      'no ship leaves after this',
+      'the sun goes down to hell',
+      'and shines among the dead',
+    ],
+    _default: [
+      '> poseidon.node running',
+      'link: SKYLINK up',
+      'link: SKYLINK up',
+      'the network is watching',
+      'no intruder found',
+      'no intruder found',
+      '> patrol.cycle',
+      'the world is ours',
+      'standing reserve: all of it',
+      'nothing is wasted',
+      'nothing is free',
+    ],
+  };
+
+  static _screenWidest = Object.fromEntries(
+    Object.entries(Renderer.CORE_SCREENS).map(([k, v]) => [k, v.reduce((a, b) => (b.length > a.length ? b : a))]),
+  );
+
   // ZEUS's mainframe core: a tall, near-black metal monolith with a
   // vertical slit of magenta light burning up its front face. Goes cold and
   // grey once defeated. A damage bar floats over it when hurt and you're near.
@@ -1959,6 +2126,82 @@ export class Renderer {
     const glow = dead ? 'rgba(120,120,130,0.22)' : `rgba(214,90,220,${(0.45 + 0.5 * pulse).toFixed(3)})`;
     const fb = { x: (g.bottom.x + g.right.x) / 2, y: (g.bottom.y + g.right.y) / 2 };
     this.texturedGlow(fb.x, fb.y - H / 2, 6.5, H * 0.32, glow, dead ? 0 : 18, 0.85);
+    // The core's sanctum terminal (obj.hasTerminal): a glowing screen set INTO the
+    // core's SE face, drawn as an isometric panel on that face (bilinear-inset
+    // within the [g.bottom, g.right, r.right, r.bottom] quad). Its screen-space
+    // centre is recorded for the click-to-open in main.js. Every core carries one;
+    // the flowing log is that daemon's own (CORE_SCREENS, keyed by obj.ai).
+    if (obj.hasTerminal && !dead) {
+      const A = g.bottom, B = g.right, C = r.right, D = r.bottom; // SE-face corners
+      const face = (u, v) => ({
+        x: A.x * (1 - u) * (1 - v) + B.x * u * (1 - v) + D.x * (1 - u) * v + C.x * u * v,
+        y: A.y * (1 - u) * (1 - v) + B.y * u * (1 - v) + D.y * (1 - u) * v + C.y * u * v,
+      });
+      // v runs UP the wall (D sits H above A), so q = [bottom-left, bottom-right,
+      // top-right, top-left] of the panel as it lies on the face. Inset a little
+      // from the face so it reads as a screen set into the block, not the whole side.
+      const q = [face(0.29, 0.30), face(0.71, 0.30), face(0.71, 0.69), face(0.29, 0.69)];
+      const scx = (q[0].x + q[1].x + q[2].x + q[3].x) / 4, scy = (q[0].y + q[1].y + q[2].y + q[3].y) / 4;
+      const panel = () => {
+        ctx.beginPath(); ctx.moveTo(q[0].x, q[0].y);
+        for (let i = 1; i < 4; i++) ctx.lineTo(q[i].x, q[i].y);
+        ctx.closePath();
+      };
+      // The console's own axes, in screen space: +x runs across the face, +y down
+      // it. Both are unit-length, so the transform is pure rotation+shear — text
+      // laid out in ordinary local pixels comes out lying ON the wall in
+      // isometric, at the same size the rest of the scene is drawn.
+      const TL = q[3], TR = q[2], BL = q[0];
+      const ex = { x: TR.x - TL.x, y: TR.y - TL.y };
+      const ey = { x: BL.x - TL.x, y: BL.y - TL.y };
+      const LW = Math.hypot(ex.x, ex.y), LH = Math.hypot(ey.x, ey.y);
+
+      // The console's hue — the core's own colour (fortress stamps core.screenColor).
+      // The dark screen is that colour crushed to near-black; the text is the colour
+      // itself; the bezel a lighter tint. So the SE-face screen wears the island's
+      // colour, and matches the pop-up REPL (main.js reads the same core.screenColor).
+      const [sr, sg, sb] = hexRgb(obj.screenColor);
+      const screenBg = `rgba(${(sr * 0.12 + 5) | 0},${(sg * 0.12 + 7) | 0},${(sb * 0.12 + 12) | 0},0.97)`;
+      const screenBorder = `rgba(${Math.min(255, sr + 44)},${Math.min(255, sg + 44)},${Math.min(255, sb + 44)},0.75)`;
+
+      ctx.save();
+      panel();
+      ctx.shadowColor = `rgba(${sr},${sg},${sb},0.9)`; ctx.shadowBlur = 16;
+      ctx.fillStyle = screenBg;   // the dark screen itself
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      if (LW > 6 && LH > 8) {
+        ctx.clip();
+        ctx.transform(ex.x / LW, ex.y / LW, ey.x / LH, ey.y / LH, TL.x, TL.y);
+        const LINES = Renderer.CORE_SCREENS[obj.ai] || Renderer.CORE_SCREENS._default, N = LINES.length;
+        const widest = Renderer._screenWidest[obj.ai] || Renderer._screenWidest._default;
+        const lineH = Math.max(4, LH / 9);
+        const setFont = (px) => { ctx.font = `${px.toFixed(2)}px ui-monospace, Menlo, monospace`; };
+        // Size to the WIDEST line, not to the line height: a console that runs off
+        // its own bezel mid-word reads as a bug, not as a scroll.
+        let fs = lineH * 0.76;
+        setFont(fs);
+        const w = ctx.measureText(widest).width;
+        if (w > LW - 4) setFont(fs * ((LW - 4) / w));
+        ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+        // Each line k holds a fixed slot in the stream and rises out of the top as
+        // `p` (local px scrolled) grows — so the text flows up the screen forever.
+        const p = (performance.now() / 1000) * lineH * 1.1;
+        const k0 = Math.floor((p - LH) / lineH), k1 = Math.ceil(p / lineH);
+        for (let k = k0; k <= k1; k++) {
+          const ly = LH + k * lineH - p;
+          const a = 0.26 + 0.6 * Math.min(1, ly / LH);   // dims as it climbs away
+          ctx.fillStyle = `rgba(${sr},${sg},${sb},${a.toFixed(3)})`;
+          ctx.fillText(LINES[((k % N) + N) % N], 2, ly);
+        }
+        ctx.fillStyle = 'rgba(0,0,0,0.18)';               // CRT scanlines
+        for (let sy = 0; sy < LH; sy += 2) ctx.fillRect(0, sy, LW, 1);
+      }
+      ctx.restore();
+      panel();
+      ctx.strokeStyle = screenBorder; ctx.lineWidth = 1.5; ctx.stroke();
+      this.coreTermHit = { obj, x: scx, y: scy, r: Math.max(16, Math.hypot(q[1].x - q[0].x, q[1].y - q[0].y) * 0.7) };
+    }
     const labelC = worldToScreen(cx, obj.y + fh);
     ctx.font = 'bold 14px system-ui, sans-serif'; ctx.textAlign = 'center';
     ctx.fillStyle = dead ? '#6a6a72' : '#e0a8e6';
@@ -2239,6 +2482,36 @@ export class Renderer {
     else if (obj.graffiti) this.drawGraffiti(obj, gFace, gSide);
   }
 
+  // A copy of the tree sheet multiplied through an island's foliage colour,
+  // built once per tint and cached for the session. `tint` is either null (the
+  // sheet as drawn) or { color, strength } / a bare colour string. The alpha
+  // mask is restored from the original afterwards, so the cut-out edges stay
+  // exact and only the visible pixels take the colour.
+  tintedTreeSheet(tint) {
+    if (!tint || !TREE_SHEET || !TREE_SHEET.complete || !TREE_SHEET.naturalWidth) return TREE_SHEET;
+    const color = typeof tint === 'string' ? tint : tint.color;
+    const strength = typeof tint === 'string' ? 0.45 : (tint.strength ?? 0.45);
+    if (!color) return TREE_SHEET;
+    const key = `${color}|${strength}`;
+    this._treeTints = this._treeTints || new Map();
+    const cached = this._treeTints.get(key);
+    if (cached) return cached;
+    const off = document.createElement('canvas');
+    off.width = TREE_SHEET.naturalWidth;
+    off.height = TREE_SHEET.naturalHeight;
+    const o = off.getContext('2d');
+    o.drawImage(TREE_SHEET, 0, 0);
+    o.globalCompositeOperation = 'multiply';  // keeps the painted shading, shifts the hue
+    o.globalAlpha = strength;
+    o.fillStyle = color;
+    o.fillRect(0, 0, off.width, off.height);
+    o.globalAlpha = 1;
+    o.globalCompositeOperation = 'destination-in'; // re-cut to the sheet's own alpha
+    o.drawImage(TREE_SHEET, 0, 0);
+    this._treeTints.set(key, off);
+    return off;
+  }
+
   drawTree(obj) {
     const ctx = this.ctx;
     const c = worldToScreen(obj.x + 0.5, obj.y + 0.5);
@@ -2256,10 +2529,14 @@ export class Renderer {
     if (spr && TREE_SHEET && TREE_SHEET.complete && TREE_SHEET.naturalWidth) {
       const BASE = 0.72;          // sheet px -> screen px for a full-grown tree
       const dw = spr.sw * BASE * g, dh = spr.sh * BASE * g;
+      // Per-island foliage colour (B2): olive, ash, gold, deep green. Uses a
+      // pre-tinted copy of the sheet — tinting each tree each frame would cost
+      // far too much with hundreds on screen.
+      const sheet = this.tintedTreeSheet(this.hudMap && this.hudMap.treeTint);
       ctx.save();
       ctx.translate(c.x, c.y + 3);   // pivot at the trunk base (shadow sits here)
       if (wob) ctx.rotate(wob * 0.012);
-      ctx.drawImage(TREE_SHEET, spr.sx, spr.sy, spr.sw, spr.sh, -dw / 2, -dh, dw, dh);
+      ctx.drawImage(sheet, spr.sx, spr.sy, spr.sw, spr.sh, -dw / 2, -dh, dw, dh);
       ctx.restore();
       this.treeDamageBar(obj, c.x, c.y + 3 - dh - 4);
       return;
@@ -2361,30 +2638,6 @@ export class Renderer {
     ctx.restore();
   }
 
-  // The banner shown once POSEIDON comes online. There's no timer to beat —
-  // it counts up, not down, since the purge doesn't stop until it catches
-  // the player.
-  drawSkylinkBanner(elapsed) {
-    const ctx = this.ctx;
-    const t = Math.max(0, elapsed || 0);
-    const m = Math.floor(t / 60), s = Math.floor(t % 60);
-    const msg = `POSEIDON ONLINE — hunted for ${m}:${String(s).padStart(2, '0')}`;
-    ctx.font = 'bold 22px Georgia, serif';
-    const w = ctx.measureText(msg).width + 40;
-    const x = (this.w - w) / 2, y = 44;
-    const pulse = 0.6 + 0.4 * Math.sin(performance.now() / 160);
-    ctx.fillStyle = `rgba(70,170,255,${(0.25 + 0.15 * pulse).toFixed(2)})`;
-    ctx.fillRect(x, y, w, 40);
-    ctx.strokeStyle = `rgba(120,200,255,${pulse.toFixed(2)})`;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(x + 1, y + 1, w - 2, 38);
-    ctx.fillStyle = '#eaf6ff';
-    ctx.textAlign = 'center';
-    ctx.fillText(msg, this.w / 2, y + 27);
-    ctx.textAlign = 'left';
-  }
-
-
   // AI signal tower: a tall narrow black monolith with a slow-pulsing red
   // light near the crown. Destructible in a later phase.
   // The obelisk eye/glow colour at a given alert (0..1), interpolated between the
@@ -2415,9 +2668,12 @@ export class Renderer {
       for (const [ox, oy] of [[-3, -2], [3, 0], [0, 1]]) ctx.fillRect(c.x + ox, c.y + oy - 4, 2, 2);
       return;
     }
-    // Damage lowers and scorches the tower as it's burned down.
+    // Damage lowers and scorches the tower as it's burned down. The panopticon
+    // EYE (cls 'eye') stands taller and broader than the lesser towers — the one
+    // great sensor the island watches through.
     const dmg = obj.obDamage || 0;
-    const H = Math.round(96 * (1 - dmg * 0.13)), W = 9;
+    const isEye = obj.cls === 'eye';
+    const H = Math.round(96 * (isEye ? 1.7 : 1) * (1 - dmg * 0.13)), W = isEye ? 14 : 9;
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
     ctx.beginPath();
     ctx.ellipse(c.x, c.y, 15, 7, 0, 0, Math.PI * 2);
@@ -3644,6 +3900,30 @@ export class Renderer {
         ctx.fillStyle = '#f2d060';
         ctx.beginPath(); ctx.arc(4.5, -6, 2, 0, Math.PI * 2); ctx.fill();
         break;
+      case 'oar':
+      case 'rope':
+      case 'sail': {
+        const pimg = PART_SPRITES && PART_SPRITES[key];
+        if (pimg && pimg.complete && pimg.naturalWidth) {
+          const iw = 20, ih = iw * (pimg.naturalHeight / pimg.naturalWidth);
+          ctx.drawImage(pimg, -iw / 2, -ih / 2, iw, ih);
+        } else {
+          ctx.fillStyle = itemDef.color;
+          ctx.fillRect(-8, -3, 16, 6);
+        }
+        break;
+      }
+      case 'golden_axe': {
+        // A small gold axe: shaft + head, for Calypso's recipe.
+        ctx.strokeStyle = '#7a5a2a'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(-2, 9); ctx.lineTo(3, -8); ctx.stroke();
+        ctx.fillStyle = itemDef.color;
+        ctx.beginPath();
+        ctx.moveTo(3, -9); ctx.quadraticCurveTo(12, -7, 9, 1);
+        ctx.quadraticCurveTo(5, -1, 1, -2); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = 'rgba(120,90,20,0.6)'; ctx.lineWidth = 1; ctx.stroke();
+        break;
+      }
       case 'wood':
         ctx.fillStyle = itemDef.color;
         ctx.fillRect(-9, -5, 18, 5);
@@ -3851,11 +4131,13 @@ export class Renderer {
         break;
       }
       case 'ai_key':
+      case 'trojan_key':
+      case 'hermes_card':
       case 'fortress_key': {
         // A digital access card, not a mechanical key — the AI's locks are
-        // electronic. Rounded card in the item's colour (AI key gold, fortress
-        // key ice-blue), with a dark data stripe, a gold chip contact pad with
-        // traces, and a corner lanyard hole.
+        // electronic. Rounded card in the item's colour (AI key gold, Trojan
+        // tarnished-gold, Hermes sky-blue, fortress key ice-blue), with a dark
+        // data stripe, a gold chip contact pad with traces, and a lanyard hole.
         const col = itemDef.color;
         ctx.fillStyle = col;
         if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(-8, -6.5, 16, 13, 2.5); ctx.fill(); }
@@ -3894,6 +4176,20 @@ export class Renderer {
 
   drawPlayer(player) {
     const ctx = this.ctx;
+
+    // Aboard a vessel (the failed crossing): the boat IS the player. Draw the hull
+    // at the player's float position, in the player's own depth-sort slot, and draw
+    // no character at all — he is in it. One sprite moving as one thing, so there is
+    // nothing for the man and the hull to jitter against.
+    if (player.aboard) {
+      const a = player.aboard;
+      const img = a.type === 'greek_ship' ? (SHIP_SPRITES && SHIP_SPRITES.greek) : (SHIP_SPRITES && SHIP_SPRITES.noSail);
+      if (img && img.complete && img.naturalWidth) {
+        this.drawShipSprite(img, player.x, player.y, !!a.mirror, a.wob || 0);
+        return;
+      }
+    }
+
     const c = worldToScreen(player.x, player.y);
 
     // Swimming: only the head and shoulders show above the water, bobbing,
@@ -3933,9 +4229,11 @@ export class Renderer {
       return;
     }
 
-    // Resting: the character lies flat on the ground, tipped onto its back,
-    // no tool in hand, with a wide flat shadow and drifting sleep 'z's.
-    if (player.resting) {
+    // Resting — or washed ashore (player.lying, the fresh-game start): the
+    // character lies flat on the ground, tipped onto its back, no tool in
+    // hand, with a wide flat shadow. Only a rest earns the drifting sleep
+    // 'z's; the castaway on the sand is out cold, not napping.
+    if (player.resting || player.lying) {
       ctx.fillStyle = 'rgba(0,0,0,0.26)';
       ctx.beginPath();
       ctx.ellipse(c.x, c.y + 2, 17, 6, 0, 0, Math.PI * 2);
@@ -3954,17 +4252,19 @@ export class Renderer {
         ctx.fillStyle = '#d9b48c';
         ctx.beginPath(); ctx.arc(c.x - 9, c.y - 4, 5, 0, Math.PI * 2); ctx.fill();
       }
-      const t = performance.now() / 620;
-      ctx.font = '600 11px system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      for (let i = 0; i < 3; i++) {
-        const ph = (t + i * 0.6) % 3;
-        ctx.globalAlpha = Math.max(0, 0.85 - ph / 3);
-        ctx.fillStyle = 'rgba(232,236,244,0.9)';
-        ctx.fillText('z', c.x + 12 + ph * 4, c.y - 16 - ph * 7);
+      if (player.resting) {
+        const t = performance.now() / 620;
+        ctx.font = '600 11px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        for (let i = 0; i < 3; i++) {
+          const ph = (t + i * 0.6) % 3;
+          ctx.globalAlpha = Math.max(0, 0.85 - ph / 3);
+          ctx.fillStyle = 'rgba(232,236,244,0.9)';
+          ctx.fillText('z', c.x + 12 + ph * 4, c.y - 16 - ph * 7);
+        }
+        ctx.globalAlpha = 1;
+        ctx.textAlign = 'left';
       }
-      ctx.globalAlpha = 1;
-      ctx.textAlign = 'left';
       return;
     }
 

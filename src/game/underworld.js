@@ -142,11 +142,6 @@ function carveWorld(map, rng) {
   }
 
   const spawn = rooms[0];
-  // A plain door set into the room's west wall — the back-left wall from the
-  // isometric camera (screen north-west), so you cross the room toward it and
-  // see the door and its EXIT sign square-on, rather than a near wall where it
-  // reads as an afterthought. Mundane, which is exactly what makes it wrong.
-  const exitTX = spawn.x, exitTY = spawn.cy;
 
   // Yellow supply boxes hold the cassette tapes. Reuses the resistance-cache
   // box (opened with E), tinted yellow (renderer drawBox reads obj.yellow).
@@ -237,22 +232,35 @@ function carveWorld(map, rng) {
   return {
     tex,
     spawn: { x: spawn.cx + 0.5, y: spawn.cy + 0.5 },
-    exit: { x: exitTX + 0.5, y: exitTY + 0.5, tx: exitTX, ty: exitTY },
+    rooms,
     creature: { x: far.cx + 0.5, y: far.cy + 0.5 },
   };
 }
 
-// Builds the pocket once, lazily, and keeps it for the session.
-export function createUnderworldPocket(seed) {
+// Builds the pocket once, lazily, and keeps it for the session. `destinations`
+// (islands-plan §6 / R4) is the list of ways up — [{ id, place }, …]; each gets
+// its OWN labelled door, set into a different room's west wall (the back-left wall
+// from the iso camera, so you cross the room toward it and read the sign square-on)
+// and littered across the pocket. main.js surfaces you on that island on approach.
+export function createUnderworldPocket(seed, destinations = []) {
   const map = new GameMap(UW_SIZE, UW_SIZE, 'liminal');
   const rng = makeRng(seed >>> 0);
-  const { tex, spawn, exit, creature } = carveWorld(map, rng);
+  const { tex, spawn, rooms, creature } = carveWorld(map, rng);
   map.liminalTex = tex;        // per-tile floor-texture index (renderer reads it)
-  // The exit is a plain door set into the wall (not a Ubik tear): drop the
-  // wall there and stand a door in its place. main.js exits on approach.
-  const w = map.objectAt(exit.tx, exit.ty);
-  if (w) map.removeObject(w);
-  map.addObject('exitdoor', exit.tx, exit.ty, {});
+  // One door per destination island. A door is a plain leaf set into the wall (not
+  // a Ubik tear): drop the wall tile there and stand a door in its place, carrying
+  // its island id + place name for the sign (renderer) and the crossing (main.js).
+  const exits = [];
+  const nRooms = Math.max(1, rooms.length);
+  const dests = destinations.length ? destinations : [{ id: null, place: 'EXIT' }];
+  dests.forEach((dest, i) => {
+    const r = rooms[i % nRooms];
+    const tx = r.x, ty = r.cy;                 // west wall midpoint of this room
+    const wobj = map.objectAt(tx, ty);
+    if (wobj) map.removeObject(wobj);
+    map.addObject('exitdoor', tx, ty, { island: dest.id, place: dest.place });
+    exits.push({ x: tx + 0.5, y: ty + 0.5, tx, ty, island: dest.id, place: dest.place });
+  });
   // Defensive fields so the pocket is a fully-formed map.
   map.projectiles = [];
   map.bombs = [];
@@ -260,7 +268,7 @@ export function createUnderworldPocket(seed) {
   map.explored = new Uint8Array(map.w * map.h).fill(1);
   map.newlyRevealed = [];
   return {
-    map, spawnX: spawn.x, spawnY: spawn.y, exitX: exit.x, exitY: exit.y,
+    map, spawnX: spawn.x, spawnY: spawn.y, exits,
     creatureX: creature.x, creatureY: creature.y,
   };
 }

@@ -118,11 +118,30 @@ Line references are approximate — firm against the text.
 
 ## 8. To build (new subsystem over existing RON-ML primitives)
 
-**Build status (2026-07-12): Layer A is BUILT** (branch `gameplay`, unpushed — commits
-`e7fc056`, `c5d4ff9`, `0f76040`). The whole terminal hack `ai_key → trojan_key →
-hermes_card` runs at the obelisk + HERMES consoles, with autocopy/reprint recovery; 48
-unit tests; live-verified card state machine. Everything below is now implemented except
-where noted. **Layer B (§ Sequencing) is still deferred.**
+**Build status (2026-07-12): Layer A BUILT + the escape loop CLOSED.** The whole terminal
+hack `ai_key → trojan_key → hermes_card` runs at the obelisk + HERMES consoles, with
+autocopy/reprint recovery; 57 unit tests; live-verified card state machine. **Stages 6–7
+now close the loop (v1.90):** the `retire` command (hermes card in hand) refunctions
+Calypso and sets `player.calypsoLeave` (persisted in the save); boarding a beached boat at
+the shore (`player.boardBoat`, reached via the E-key `useHands` path) reads that flag —
+with it you sail off Ogygia (a victory certificate, "you sailed from Ogygia"); without it
+Poseidon's storm hurls you back onto the sand (decision #8).
+
+**Stage 6 — CALYPSO's sanctum terminal now built (v1.91):** a kiosk on the sanctum deck,
+on the core's approach face (`fortress.coreTerminal` / `nearCoreTerminal`, reached only by
+walking in past the open Lion's Gate). It is her voice, not a RON-DOS console
+(`terminalKind === 'calypso'` routes to `calypsoRun`): she is soporific — she lets you
+`look`/`help` but meets almost every command with a cycled Lotus/Ogygia deflection, and
+refuses the refunction in-voice without the thunder. With the hermes card in hand, `run`
+speaks zeus-lightning.ml and fires the shared `refunctionCalypso()` (guards → gardeners,
+`calypsoLeave` set, her release beat). The OB `retire` verb calls the same function, so the
+payoff reads the same wherever it fires.
+
+**R3 `winMode:'depart'` now BUILT (v1.123):** Calypso's core is `indestructible` — no
+core-kill win; the departure (refunction → ship-launch) is the only way out, and
+`refunctionCalypso` records her fall in the daemons-down tally. Her fortress guards detain
+(warn-then-lethal) via `player.detainHit`. Still deferred (minor): gating `retire` to her
+terminal only, and per-island voice/colour (R5).
 
 
 **Exists:** `copy`(key) / `decrypt` / `unlock` / `backup` / `restore` / `eliza`(DOCTOR) /

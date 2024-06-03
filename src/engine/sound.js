@@ -161,6 +161,14 @@ class Sound {
         case 'pickup': // short bright blip
           this._tone({ when: t, dur: 0.09, type: 'triangle', freq: 880 * v, end: 1420 * v, gain: 0.22, attack: 0.002 });
           break;
+        case 'sms': { // the Nokia 3310 SMS tone — Morse for "SMS": ··· −− ···
+          const F = 1380 * v;
+          const beep = (at, dur) => this._tone({ when: t + at, dur, type: 'square', freq: F, gain: 0.14, attack: 0.003 });
+          [0.00, 0.11, 0.22].forEach((a) => beep(a, 0.05));   // S = · · ·
+          [0.40, 0.59].forEach((a) => beep(a, 0.13));         // M = − −
+          [0.85, 0.96, 1.07].forEach((a) => beep(a, 0.05));   // S = · · ·
+          break;
+        }
         case 'eat': // two soft low pops
           this._tone({ when: t, dur: 0.06, freq: 170 * v, end: 120, gain: 0.28, attack: 0.003 });
           this._tone({ when: t + 0.11, dur: 0.06, freq: 160 * v, end: 115, gain: 0.28, attack: 0.003 });

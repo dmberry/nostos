@@ -131,6 +131,15 @@ const W4_HEAD = '#2c0c05';
 //  M6 — pack robot. Attacks in waves of 3-5: close and strike, then withdraw,
 //       then charge again. On its own it hangs back at the pack's edge and
 //       waits for enough of its fellows to gather before committing to a rush.
+// Depart mode (R3): a guard's blow either wounds (kill islands) or detains (her
+// Ogygia — a warning of torpor + turn-back until patience runs out). One helper
+// so all three M-class hit sites route the same way; `player.detainMode` is set
+// by main.js per world, so only her fortress guards ever detain.
+function guardHit(player, amount, source) {
+  if (player.detainMode && player.detainHit) player.detainHit(amount, source);
+  else player.takeDamage(amount, source);
+}
+
 const M6_HP = 40;               // several sword-blows; a bow burst inside the report window still kills
 const M6_PATROL_SPEED = 1.0;
 const M6_CHASE_SPEED = 4.6;     // between your walk and sprint, same as a W1
@@ -152,14 +161,118 @@ const M5_RANGE = 12;            // fires from way back
 const M5_MIN_RANGE = 6.5;       // holds this far off; backs away (hides) if you close
 const M5_FIRE_COOLDOWN = 1.5;   // a steady, nagging plink
 const M5_DAMAGE = 5;            // low power — annoying, not lethal
+const TORPOR_BOLT_SPEED = 5.5;  // depart mode (R3): her soporific bolt crawls (vs the 16-t/s war-laser) so you can dodge it
 const M4_HP = 16;               // fragile; a couple of hits drops it before it can report far
 const M4_VISION = 11;
 const M4_CONE_DOT = -0.25;      // a wide ~105°-either-side scout cone
 const M4_PATROL_SPEED = 1.5;
 const M4_KEEP_RANGE = 7;        // once it has you, it hovers about here, keeping sight while it reports
 const M4_FLEE_SPEED = 3.4;
-const M4_SEARCH_TIME = 9;       // loses sight -> investigates your last-seen tile this long before giving up
-const FORTRESS_FORGET = 20;    // seconds since an M5/M6 last GLIMPSED you before it gives up the hunt
+// (No give-up timers for the M-classes: a fortress guard that has acquired you
+// stays on the hunt until it is destroyed or a terminal takes it off you. It
+// sweeps your last-seen tile indefinitely rather than going home. See updateGuard.)
+
+// ---- M4 scout squads -------------------------------------------------------
+// Losing you turns the scouts from a scatter of individuals into a SEARCH TEAM:
+// up to four form up and sweep the last contact together in an arrowhead, point
+// leading, wings out, tail trailing. It reads as a deliberate hunt rather than
+// four machines milling about, and a wall of four sightlines is much harder to
+// slip than one.
+//
+// Spacing is the load-bearing constant here: two machines closer than
+// ROBOT_MIN_SEP (0.62) get shoved apart AND chipped for BUMP_DAMAGE each
+// (separateRobots), and an M4 only has 16 HP — a squad that flew in tight
+// formation would grind itself to scrap. SQUAD_SPACING is ~2.6x the separation
+// floor, and followers ease off as they reach their slot rather than driving
+// through it, so the formation settles instead of jostling.
+const SQUAD_MAX = 4;
+const SQUAD_JOIN_R = 18;      // how far apart two searching scouts can be and still form up
+const SQUAD_SPACING = 1.9;    // tiles between slots — ~3x ROBOT_MIN_SEP
+const SQUAD_SETTLE = 0.4;     // once this close to its slot a follower stops nudging
+const SQUAD_REFORM_T = 1.5;   // seconds between re-evaluating team membership (sticky in between)
+const SQUAD_PERSONAL = 1.4;   // scouts actively steer apart inside this radius (bump range is 0.62)
+const SQUAD_TURN_RATE = 2.2;  // how fast the arrowhead's heading may swing (rad/s), so slots don't whip
+
+// Arrowhead, in formation space: forward = the sweep heading, side = its
+// perpendicular. Slot 0 is the point (the leader, who actually drives the sweep).
+const SQUAD_SLOTS = [
+  { f: 0.9, s: 0 },    // point
+  { f: -0.2, s: -1 },  // left wing
+  { f: -0.2, s: 1 },   // right wing
+  { f: -1.2, s: 0 },   // tail
+];
+
+let _squadReformT = 0;
+
+// Nudge a move target away from any scout crowding this one. Bumping costs both
+// machines HP (separateRobots), so the fix is to never get that close: each
+// scout keeps a personal bubble and steers around its fellows rather than
+// being shoved out of them after the fact.
+function avoidScouts(r, robots, tx, ty) {
+  let ax = 0, ay = 0, crowd = 0;
+  for (const o of robots) {
+    if (o === r || o.dead || o.fused || o.type !== 'm4') continue;
+    const dx = r.x - o.x, dy = r.y - o.y;
+    const d = Math.hypot(dx, dy);
+    if (d >= SQUAD_PERSONAL) continue;
+    // Coincident: push along a deterministic axis rather than dividing by ~0.
+    const nx = d > 1e-4 ? dx / d : 1, ny = d > 1e-4 ? dy / d : 0;
+    const strength = (SQUAD_PERSONAL - d) / SQUAD_PERSONAL; // 0 at the edge -> 1 at contact
+    if (strength > crowd) crowd = strength;
+    ax += nx * strength * 3.2;
+    ay += ny * strength * 3.2;
+  }
+  // `crowd` lets the caller ALSO ease off the throttle. Steering alone can't
+  // always win: two scouts closing head-on cover the gap inside a frame no
+  // matter where their targets point. Slowing as they close is what actually
+  // keeps them out of each other.
+  return { x: tx + ax, y: ty + ay, crowd };
+}
+
+// Turn a heading toward a new one at a bounded rate, so the arrowhead swings
+// smoothly instead of snapping (a snapped heading teleports the wing slots
+// across each other, which is how formation flyers collide).
+function steerHeading(cur, want, dt) {
+  if (!cur) return want;
+  const ca = Math.atan2(cur.y, cur.x), wa = Math.atan2(want.y, want.x);
+  let diff = wa - ca;
+  while (diff > Math.PI) diff -= Math.PI * 2;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  const max = SQUAD_TURN_RATE * dt;
+  const a = ca + Math.max(-max, Math.min(max, diff));
+  return { x: Math.cos(a), y: Math.sin(a) };
+}
+
+// Re-form the search teams. Called once per frame from updateRobots, before the
+// per-robot pass, so slots are current when updateM4 reads them. Membership is
+// sticky between re-forms so scouts don't thrash between teams every frame.
+function formM4Squads(robots, dt) {
+  _squadReformT -= dt;
+  const searching = [];
+  for (const r of robots) {
+    if (r.type !== 'm4') continue;
+    const usable = !r.dead && !r.fused && !r.drained && !(r.disabledT > 0) && !r.driven;
+    // Searching = hunting, but with no eyes on you and a last-known tile to work.
+    if (usable && r.aggro && !r.sees && r.seenX != null) searching.push(r);
+    else { r._squad = null; r._slot = -1; r._squadLead = null; }
+  }
+  if (_squadReformT > 0) return;
+  _squadReformT = SQUAD_REFORM_T;
+  for (const r of searching) { r._squad = null; r._slot = -1; r._squadLead = null; }
+  let squadId = 0;
+  for (const lead of searching) {
+    if (lead._squad != null) continue;
+    const team = [lead];
+    for (const other of searching) {
+      if (team.length >= SQUAD_MAX) break;
+      if (other === lead || other._squad != null) continue;
+      if (Math.hypot(other.x - lead.x, other.y - lead.y) <= SQUAD_JOIN_R) team.push(other);
+    }
+    if (team.length < 2) continue; // a lone scout is not a squad: it keeps its own spiral
+    const id = squadId++;
+    team.forEach((m, i) => { m._squad = id; m._slot = i; m._squadLead = team[0]; });
+  }
+}
 const M6_BODY = '#232833';      // gunmetal blue-black armour
 const M6_HEAD = '#141821';
 const M5_BODY = '#2c2430';      // violet-tinged sniper
@@ -521,6 +634,14 @@ function spawnGuardType(map, seed, mx, my, type, hp, fromFactory) {
   if (!spot) return null;
   const r = baseRobot(type, spot[0], spot[1], hp, rng);
   r.hardened = true; // cannot be reprogrammed — drain one and it's only scrap
+  // MAINS-POWERED. A fortress guard draws off the fortress, not a cell it has to
+  // go and refill: it never runs its battery down, never breaks off the hunt to
+  // trudge home and recharge, and never goes flat where it stands. Overworld
+  // scavengers keep the battery economy; these do not, because a guard that
+  // wanders off mid-raid to sit at its muster point reads as broken AI, not as
+  // logistics. They stop for exactly three things: being killed, being stunned
+  // or driven from a terminal (disabledT / driven), and the island's mind dying.
+  r.mains = true;
   if (fromFactory) r.spawnT = FACTORY_SPAWN_T;
   return r;
 }
@@ -757,6 +878,7 @@ function scrapQty(x, y) {
 // permanent until external code re-batteries it (battery = 100, drained =
 // false); a friendly stays friendly while flat.
 function drainBattery(r, rate, dt) {
+  if (r.mains) return; // fortress guards run off the fortress: no drain, never flat
   r.battery = Math.max(0, r.battery - rate * dt);
   if (r.battery <= 0) {
     r.battery = 0;
@@ -794,6 +916,7 @@ function updateRecharge(r, dt, map) {
 // ---- Update ---------------------------------------------------------------
 
 export function updateRobots(dt, robots, player, map) {
+  formM4Squads(robots, dt); // scouts that have lost you form up into search teams
   for (const r of robots) {
     if (r.dead) continue; // external code may set dead directly; nothing runs after
     if (r.driven) continue; // a HERMES relay is steering this one; its AI is suspended
@@ -885,6 +1008,7 @@ export function updateRobots(dt, robots, player, map) {
     // (and aggros at once if the player is still in range).
     if (r.disabledT > 0) {
       r.disabledT = Math.max(0, r.disabledT - dt);
+      if (r.disabledT === 0) r.stunColor = null; // drop CALYPSO's indigo tint on expiry
       r.animT += dt;
       continue;
     }
@@ -955,7 +1079,10 @@ export function updateRobots(dt, robots, player, map) {
     // slowly (see updateRecharge/REPAIR_RATE), before rejoining the fight.
     // Zombies are excluded: an OB-corrupted machine has no self-preservation
     // left in it.
-    if (r.battery < BATTERY_LOW || (!r.zombie && r.hp < r.maxHp * HP_FLEE_FRAC)) {
+    // Mains-powered fortress guards never break off: no battery to run down, and
+    // no limping home to mend. A guard holds its post until it is destroyed —
+    // wounding one buys you nothing but a wounded guard still coming.
+    if (!r.mains && (r.battery < BATTERY_LOW || (!r.zombie && r.hp < r.maxHp * HP_FLEE_FRAC))) {
       r.recharging = true;
       r.aggro = false;
       r.stuck = false;
@@ -967,8 +1094,8 @@ export function updateRobots(dt, robots, player, map) {
 
     // Losing line of sight for long enough breaks off the hunt regardless
     // of type or distance; see LOS_GIVEUP_AFTER above. Fortress M4/M5/M6 are
-    // exempt — they keep looking on their own longer timers (updateGuard): M5/M6
-    // on FORTRESS_FORGET, M4 by investigating your last-seen tile (M4_SEARCH_TIME).
+    // exempt — they never break off at all (updateGuard): they sweep your
+    // last-seen tile and keep hunting until destroyed or taken off you.
     if (r.aggro && r.type !== 'w3' && r.type !== 'm5' && r.type !== 'm6' && r.type !== 'm4') {
       const canSee = map.hasLineOfSight(r.x, r.y, player.x, player.y);
       r.losLostT = canSee ? 0 : (r.losLostT || 0) + dt;
@@ -1547,6 +1674,7 @@ function updateGuard(r, dt, player, map, robots) {
   const ease = player.threatEase ? player.threatEase() : 1;
   drainBattery(r, r.aggro ? DRAIN_CHASE : DRAIN_PATROL, dt);
   if (r.drained) return;
+  r.sees = false; // set true below only while actually hunting with eyes on you
 
   if (!r.aggro) {
     if (!(r.loseInterestT > 0) && guardSees(r, player, map)) {
@@ -1561,33 +1689,25 @@ function updateGuard(r, dt, player, map, robots) {
     }
   }
 
-  // Relentless-but-not-forever: an M5/M6 gives up only after FORTRESS_FORGET
-  // seconds without a single glimpse of you (so it threads the maze on the hunt,
-  // but a player who truly escapes/hides eventually shakes it → the alarm can
-  // stand down). Resets the moment it sees you again.
-  if (r.type === 'm5' || r.type === 'm6') {
-    const saw = !player.invisibleToRobots && map.hasLineOfSight(r.x, r.y, player.x, player.y);
-    r.seenT = saw ? 0 : (r.seenT || 0) + dt;
-    if (r.seenT > FORTRESS_FORGET) { r.aggro = false; r.returning = true; r.seenT = 0; return; }
-  }
-
-  // M4 keeps looking: while it can see you it stamps the last-seen tile; when it
-  // loses you it heads there and sweeps, giving up only after M4_SEARCH_TIME
-  // seconds of finding nothing. Its aggro (and so the fortress report clock)
-  // stays live through the search, so ducking behind cover no longer switches
-  // the hunt off — you have to actually relocate.
-  if (r.type === 'm4') {
-    const saw = !player.invisibleToRobots && map.hasLineOfSight(r.x, r.y, player.x, player.y);
-    if (saw) { r.seenX = player.x; r.seenY = player.y; r.m4SearchT = 0; }
-    else {
-      r.m4SearchT = (r.m4SearchT || 0) + dt;
-      if (r.m4SearchT > M4_SEARCH_TIME) { r.aggro = false; r.returning = true; r.m4SearchT = 0; return; }
-    }
-  }
+  // A guard that has acquired you STAYS on the hunt. It does not get bored, does
+  // not wander back to its post, and does not forget: a fortress guard is not a
+  // scavenger with somewhere else to be. The only things that take one off you
+  // are destroying it, stunning or driving it from a terminal (disabledT /
+  // driven), and the island's mind dying. It keeps sweeping your last-seen tile
+  // when it loses sight, and re-acquires the moment it sees you again.
+  //
+  // `r.sees` — whether it has eyes on you THIS frame — is tracked separately from
+  // `r.aggro` (whether it is hunting at all). The fortress's report clock and
+  // stand-down read `sees`, so hiding well still quiets the alarm and stops the
+  // reinforcement waves, even though the guards themselves stay hostile.
+  const saw = !player.invisibleToRobots && map.hasLineOfSight(r.x, r.y, player.x, player.y);
+  r.sees = saw;
+  if (saw) { r.seenX = player.x; r.seenY = player.y; r.seenT = 0; }
+  else r.seenT = (r.seenT || 0) + dt;
 
   const d = distTo(r, player);
   if (d > 1e-4) r.facing = { x: (player.x - r.x) / d, y: (player.y - r.y) / d }; // face you while engaged
-  if (r.type === 'm4') updateM4(r, dt, player, map, d);
+  if (r.type === 'm4') updateM4(r, dt, player, map, d, robots);
   else if (r.type === 'm5') updateM5(r, dt, player, map, ease, d);
   else updateM6Pack(r, dt, player, map, robots, ease);
 }
@@ -1595,17 +1715,78 @@ function updateGuard(r, dt, player, map, robots) {
 // M4: unarmed. It just holds you in sight at a wary distance while the breach
 // reports (its `aggro` is what the fortress's report clock reads); it never
 // strikes. Orbits to keep line of sight, backs off if you rush it.
-function updateM4(r, dt, player, map, d) {
+function updateM4(r, dt, player, map, d, robots = []) {
   // Blind (no line of sight): it doesn't magically know where you are — it makes
   // for the tile it last saw you on and sweeps there. The give-up timer lives in
   // updateGuard; here it just walks the search.
   const canSee = !player.invisibleToRobots && map.hasLineOfSight(r.x, r.y, player.x, player.y);
   if (!canSee) {
-    if (r.seenX != null && Math.hypot(r.seenX - r.x, r.seenY - r.y) > 1) {
-      moveToward(r, r.seenX, r.seenY, M4_FLEE_SPEED, dt, map);
+    if (r.seenX == null) return;
+    // A WING or the TAIL of a search team: hold station on the point instead of
+    // running your own hunt. The whole squad moves as one shape.
+    const lead = r._squadLead;
+    if (r._squad != null && r._slot > 0 && lead && !lead.dead && !lead.drained) {
+      const dir = lead._sweepDir || { x: 1, y: 0 };
+      const px = -dir.y, py = dir.x; // perpendicular: the wings ride out on this
+      const slot = SQUAD_SLOTS[Math.min(r._slot, SQUAD_SLOTS.length - 1)];
+      let tx = lead.x + (dir.x * slot.f + px * slot.s) * SQUAD_SPACING;
+      let ty = lead.y + (dir.y * slot.f + py * slot.s) * SQUAD_SPACING;
+      const av = avoidScouts(r, robots, tx, ty); // never crowd a fellow
+      tx = av.x; ty = av.y;
+      const gap = Math.hypot(tx - r.x, ty - r.y);
+      // Ease off inside the slot: driving hard at a station you already hold is
+      // what makes machines grind into each other (and bumping costs both HP).
+      if (gap > SQUAD_SETTLE) {
+        const base = gap > 3 ? M4_FLEE_SPEED : M4_PATROL_SPEED;
+        moveToward(r, tx, ty, base * (1 - 0.75 * av.crowd), dt, map);
+      }
+      return;
     }
+    // The POINT (or a lone scout): drive the search. Head for the last-seen tile
+    // first, then sweep outward from it.
+    let tx, ty, speed;
+    if (Math.hypot(r.seenX - r.x, r.seenY - r.y) > 1) {
+      tx = r.seenX; ty = r.seenY; speed = M4_FLEE_SPEED;
+    } else {
+      // Arrived and you are not there. It used to simply STOP here — standing on
+      // the spot forever, which is what read as a guard losing its point. Now it
+      // sweeps: a widening spiral around the last contact. Resets whenever it
+      // sees you again (updateGuard stamps seenX/seenY).
+      //
+      // WAYPOINT spiral, not a time-driven one. A target swept round a circle by
+      // the clock moves faster than the scout can walk (radius x rate outruns
+      // patrol speed), so the machine just gets dragged in a tight circle at the
+      // centre and never searches anything. Instead it walks one leg at a time
+      // and only advances the spiral when the leg is actually WALKED — so the
+      // search genuinely expands outward over the ground.
+      //
+      // The phase offset is per-scout and stable: without it two scouts working
+      // the same last contact trace the SAME spiral and drive straight into each
+      // other. With it they quarter different arcs of the same ground.
+      if (r._sweepPhase == null) r._sweepPhase = r.rng ? r.rng() * Math.PI * 2 : 0;
+      r._searchWpT = (r._searchWpT ?? 0) - dt;
+      const reached = r._searchWp && Math.hypot(r._searchWp.x - r.x, r._searchWp.y - r.y) < 1.2;
+      if (!r._searchWp || reached || r._searchWpT <= 0) {
+        r._searchLeg = (r._searchLeg || 0) + 1;
+        const ang = r._sweepPhase + r._searchLeg * 1.1;             // ~63 degrees per leg
+        const rad = 2.5 + Math.min(11, r._searchLeg * 1.3);         // creeps outward, capped
+        r._searchWp = { x: r.seenX + Math.cos(ang) * rad, y: r.seenY + Math.sin(ang) * rad };
+        r._searchWpT = 6;                                           // abandon an unreachable leg
+      }
+      tx = r._searchWp.x; ty = r._searchWp.y;
+      speed = M4_PATROL_SPEED;
+    }
+    const av = avoidScouts(r, robots, tx, ty);
+    tx = av.x; ty = av.y;
+    // Publish the heading (rate-limited) so the wings know which way the
+    // arrowhead points without it snapping around under them.
+    const hx = tx - r.x, hy = ty - r.y, hd = Math.hypot(hx, hy);
+    if (hd > 1e-3) r._sweepDir = steerHeading(r._sweepDir, { x: hx / hd, y: hy / hd }, dt);
+    moveToward(r, tx, ty, speed * (1 - 0.75 * av.crowd), dt, map);
     return;
   }
+  // Eyes on you again: the search spiral starts fresh from the new contact.
+  r._searchLeg = 0; r._searchWp = null;
   // In sight: hold at a wary distance and orbit to keep the line open.
   if (d > M4_KEEP_RANGE + 1) {
     moveToward(r, player.x, player.y, M4_FLEE_SPEED, dt, map);
@@ -1638,6 +1819,19 @@ function updateM5(r, dt, player, map, ease, d) {
   }
   if (canSee && d <= M5_RANGE && d > 1e-4 && r.attackTimer <= 0) {
     r.attackTimer = M5_FIRE_COOLDOWN;
+    // Depart mode (R3): her sniper fires a SOPORIFIC bolt, not a laser. It is
+    // slow and indigo — you can see it coming and step out of its path. It flies
+    // to where you STOOD (x1/y1 fixed at fire time) and only detains if you are
+    // still there when it lands (main.js resolves torpor bolts on arrival), so
+    // moving is a real dodge. No instant hit, no reflect — a slow lotus-shot.
+    if (player.detainMode) {
+      (map.projectiles ??= []).push({
+        x0: r.x, y0: r.y, x1: player.x, y1: player.y, prog: 0,
+        kind: 'torpor', speed: TORPOR_BOLT_SPEED, dmg: M5_DAMAGE * ease,
+      });
+      sfx.play('laser', { pitch: 0.55 }); // a lower, sleepier note than the war-laser
+      return;
+    }
     (map.projectiles ??= []).push({ x0: r.x, y0: r.y, x1: player.x, y1: player.y, prog: 0, kind: 'laser_m5' });
     sfx.play('laser');
     const block = player.blockRangedShot ? player.blockRangedShot(r.x, r.y) : null;
@@ -1645,7 +1839,7 @@ function updateM5(r, dt, player, map, ease, d) {
       r.hp -= 999; r.hurt = true;
       map.projectiles.push({ x0: player.x, y0: player.y, x1: r.x, y1: r.y, prog: 0, kind: 'laser_m5' });
     } else if (!block) {
-      player.takeDamage(M5_DAMAGE * ease, 'machine');
+      guardHit(player, M5_DAMAGE * ease, 'machine');
     }
   }
 }
@@ -1682,7 +1876,7 @@ function updateM6Pack(r, dt, player, map, robots, ease) {
   const realD = Math.hypot(player.x - r.x, player.y - r.y);
   if (r.m6Phase === 'attack' && realD < M6_HIT_RANGE + reachBonus(player, map) && r.attackTimer <= 0) {
     r.attackTimer = M6_HIT_COOLDOWN;
-    player.takeDamage(M6_HIT_DAMAGE * ease, 'machine');
+    guardHit(player, M6_HIT_DAMAGE * ease, 'machine');
   }
 }
 
@@ -1799,7 +1993,13 @@ function sensorStyle(r) {
     const t = r.animT || 0;
     const gate = Math.max(0, Math.sin(t * 11) * (0.4 + 0.6 * Math.sin(t * 4.3)));
     const a = 0.25 + 0.35 * gate;
-    return { fill: `rgba(${STUN_AMBER[0]},${STUN_AMBER[1]},${STUN_AMBER[2]},${a.toFixed(3)})`, halo: null };
+    // `stunColor` overrides the amber: CALYPSO's interventions flicker in her own
+    // indigo (nokia.js), so her hand on POSEIDON's machine reads as hers.
+    const c = r.stunColor || `rgb(${STUN_AMBER[0]},${STUN_AMBER[1]},${STUN_AMBER[2]})`;
+    const rgb = c.startsWith('#')
+      ? [parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16)]
+      : c.replace(/rgba?\(|\)/g, '').split(',').slice(0, 3).map(Number);
+    return { fill: `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${a.toFixed(3)})`, halo: null };
   }
   // Singing (RON-ML sing): the red light pulses in time with the choir. Each
   // machine is on a different vocal part (r.choirFlash, set in main from the

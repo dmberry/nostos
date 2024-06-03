@@ -31,8 +31,12 @@
     opacity: 0.75; pointer-events: none; text-shadow: 0 1px 2px #000;
     text-align: right;
   }
-  /* The compact mobile dashboard is taller (120px) — lift the hint clear of it. */
-  @media (max-width: 560px) { #hint { bottom: 128px; font-size: 11px; } }
+  /* The compact dashboard (ui.js hands off below 810px) is taller (120px), and its
+     right-aligned Score/countdown/rank readout sits where the hint would — so lift
+     the hint clear of it across the whole compact range, not just the phone width.
+     (Below 810px the score block collided with "Press H for help".) */
+  @media (max-width: 809px) { #hint { bottom: 128px; } }
+  @media (max-width: 560px) { #hint { font-size: 11px; } }
   #helpBtn {
     position: fixed; top: 10px; left: 92px;
     width: 24px; height: 24px; border-radius: 12px;
@@ -75,6 +79,29 @@
   #about ul.tapes li i { color: #b7c2a8; font-style: italic; }
   #about .foot { margin-top: 18px; padding-top: 12px; border-top: 1px solid rgba(207,216,195,0.2);
     color: #6b7a5e; font-size: 11px; }
+  #heading {
+    display: none; position: fixed; inset: 0;
+    background: rgba(5,7,4,0.8); z-index: 24;
+  }
+  #heading .panel {
+    max-width: 420px; margin: 14vh auto 0; padding: 22px 26px;
+    background: #101610; border: 1px solid rgba(207,216,195,0.35);
+    border-radius: 6px; color: #cfd8c3; font: 14px/1.5 system-ui, sans-serif;
+  }
+  #heading h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em;
+    color: #9db284; margin: 0 0 4px; }
+  #heading .sub { color: #7f8f72; font-size: 12px; margin: 0 0 16px; }
+  #heading-list { display: flex; flex-direction: column; gap: 8px; }
+  #heading-list button {
+    display: block; width: 100%; text-align: left; cursor: pointer;
+    padding: 10px 14px; border-radius: 5px; color: #e8e0d0;
+    background: rgba(207,216,195,0.06); border: 1px solid rgba(207,216,195,0.25);
+    font: 14px system-ui, sans-serif; }
+  #heading-list button:hover { background: rgba(157,178,132,0.16); border-color: rgba(157,178,132,0.6); }
+  #heading-list button .place { font-weight: 600; }
+  #heading-list button .desc { display: block; color: #9db284; font-size: 12px; margin-top: 2px; }
+  #heading .cancel { margin-top: 14px; color: #6b7a5e; font-size: 12px; cursor: pointer; text-align: center; }
+  #heading .cancel:hover { color: #9db284; }
   #help {
     display: none; position: fixed; inset: 0;
     background: rgba(5,7,4,0.75); z-index: 10;
@@ -105,7 +132,15 @@
   #help .helpPanel { display: none; }
   #help .helpPanel.active { display: block; }
   #help .settingsRow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  #help .settingsRow input[type="range"] { width: 220px; accent-color: #9db284; }
+  /* Custom range: the fill goes edge-to-edge (0%→100%) via a gradient driven by
+     the --v var (set in main.js), so it truly hits empty/full with no end gap. */
+  #help .settingsRow input[type="range"] { width: 220px; height: 10px; -webkit-appearance: none; appearance: none;
+    border-radius: 5px; cursor: pointer; outline: none; margin: 0;
+    background: linear-gradient(to right, #9db284 0, #9db284 var(--v, 100%), #3b4231 var(--v, 100%), #3b4231 100%); }
+  #help .settingsRow input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px;
+    border-radius: 50%; background: #eef3e6; border: 2px solid #4a5340; box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
+  #help .settingsRow input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; border: 2px solid #4a5340;
+    border-radius: 50%; background: #eef3e6; box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
   #help .musicChoice label { display: inline-flex; align-items: center; gap: 5px;
     color: #cfd8c3; font-size: 13px; margin-right: 4px; cursor: pointer; }
   #help .musicChoice input[type="radio"] { accent-color: #9db284; flex: 0 0 auto; width: 14px; height: 14px; margin: 0; }
@@ -208,6 +243,70 @@
   #ronnotebook .nb-text { white-space: pre-wrap; }
   #ronnotebook-footer { display: flex; align-items: center; justify-content: space-between;
     margin-top: 10px; padding-top: 8px; border-top: 1px dashed rgba(40,30,10,0.35); }
+  /* The Nokia 3310 (docs/calypso-nokia-plan.md): the handset IS the modal,
+     ZOOMED into the screen. The sprite is scaled well past the viewport and
+     cropped, so the glass dominates the view — earpiece above, navi key
+     below, keypad falling off the bottom — and the live LCD (status row,
+     tabs, thread, send row) is overlaid precisely on the sprite's own screen
+     window, seated on the glass at 32.3% / 30.7%, 37.8% x 18.7% of the
+     400x600 image (the raw pixel-measure under-read the shadowed glass
+     edges; this rect covers them). Same inks as the SMS toast. */
+  #nokiaphone { display: none; position: fixed; inset: 0; z-index: 24;
+    background: rgba(0,0,0,0.72); align-items: center; justify-content: center;
+    overflow: hidden; }
+  /* The glass's centre sits at 40.25% of the sprite; nudging the shell down
+     9.75% of its own height puts the SCREEN, not the phone, mid-viewport. */
+  #nokiaphone .ph-shell { position: relative; flex: none; transform: translateY(9.75%); }
+  #nokiaphone .ph-handset { display: block; width: min(160vh, 170vw, 1550px);
+    height: auto; user-select: none; }
+  #nokiaphone .ph-lcd { position: absolute; left: 32.3%; top: 30.7%; width: 37.8%; height: 18.7%;
+    display: flex; flex-direction: column; background: #9fb98a; border-radius: 6px;
+    padding: 8px 12px; font: 13px/1.5 ui-monospace, 'Courier New', monospace; color: #2b3420;
+    background-image: repeating-linear-gradient(rgba(60,74,44,0) 0 2px, rgba(60,74,44,0.06) 2px 3px); }
+  #nokiaphone .ph-status { display: flex; align-items: center; justify-content: space-between;
+    font: bold 11px ui-monospace, monospace; letter-spacing: 0.08em;
+    border-bottom: 1px solid rgba(43,52,32,0.5); padding-bottom: 5px; }
+  #nokiaphone #ph-bars { font: bold 11px ui-monospace, monospace; letter-spacing: -1px; }
+  #nokiaphone .ph-batt { font-size: 10px; }
+  /* Battery + close, grouped on the status row's right. The X is the reliable
+     way out on touch, where there's no Esc key (same pattern as the notebook). */
+  #nokiaphone .ph-status-right { display: flex; align-items: center; gap: 8px; }
+  #nokiaphone #ph-close { font: bold 12px ui-monospace, monospace; background: transparent;
+    color: #2b3420; border: none; padding: 0 2px; cursor: pointer; line-height: 1; }
+  #nokiaphone #ph-close:hover { color: #10120c; }
+  #nokiaphone .ph-tabs { display: flex; gap: 7px; margin: 7px 0 5px; }
+  #nokiaphone .ph-tabs button { flex: 1; font: bold 11px ui-monospace, monospace; letter-spacing: 0.08em;
+    background: transparent; color: #2b3420; border: 1px solid rgba(43,52,32,0.5);
+    border-radius: 3px; padding: 4px 0; cursor: pointer; }
+  #nokiaphone .ph-tabs button.on { background: #2b3420; color: #9fb98a; }
+  #nokiaphone #ph-thread { flex: 1; min-height: 0; overflow-y: auto; padding: 3px 2px;
+    white-space: pre-wrap; scrollbar-width: thin; }
+  /* Snake: the 84x48 canvas blown up with fat LCD pixels — inside the actual
+     screen window, which is the whole point. Hidden until its tab is up. */
+  #nokiaphone #ph-snake { display: none; width: 100%; height: auto; margin: auto 0;
+    image-rendering: pixelated; }
+  /* You in bold, them in normal weight — who is speaking reads at a glance. */
+  #nokiaphone #ph-thread .ph-you { text-align: right; margin: 4px 0 4px 36px; font-weight: 700; }
+  #nokiaphone #ph-thread .ph-them { margin: 4px 36px 4px 0; }
+  #nokiaphone #ph-thread .ph-sys { text-align: center; font-size: 11px; opacity: 0.6; margin: 5px 0; }
+  #nokiaphone .ph-inputrow { display: flex; align-items: center; gap: 6px;
+    border-top: 1px solid rgba(43,52,32,0.5); padding-top: 6px; }
+  #nokiaphone #ph-input { flex: 1; min-width: 0; background: transparent; border: none; outline: none;
+    font: 13px ui-monospace, 'Courier New', monospace; color: #2b3420; caret-color: #2b3420; }
+  #nokiaphone #ph-send { font: bold 11px ui-monospace, monospace; background: #2b3420; color: #9fb98a;
+    border: none; border-radius: 3px; padding: 3px 10px; cursor: pointer; }
+  /* The hint pins to the viewport bottom, on the backdrop — the phone's own
+     lower half is off-screen. */
+  #nokiaphone .ph-hint { position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%);
+    width: max-content; font: 11px ui-monospace, monospace;
+    color: rgba(207,216,195,0.6); }
+  /* Narrow screens: no room for the handset at all — the LCD alone. */
+  @media (max-width: 720px) {
+    #nokiaphone .ph-shell { transform: none; }
+    #nokiaphone .ph-handset { display: none; }
+    #nokiaphone .ph-lcd { position: static; width: 86vw; height: min(430px, 70vh);
+      border: 3px solid #10120c; padding: 10px 12px; }
+  }
   #ronnotebook-page-label { font: 12px ui-monospace, monospace; color: #6b6350; }
   .nb-btn { font: 700 13px ui-monospace, monospace; color: #2a2418; background: rgba(40,30,10,0.08);
     border: 1px solid rgba(40,30,10,0.3); border-radius: 4px; padding: 5px 12px; cursor: pointer; }
@@ -313,6 +412,14 @@
     <div class="foot">Game designed in the UK &middot; v<span id="aboutVer"></span> &middot; github.com/dmberry/nostos</div>
   </div>
 </div>
+<div id="heading">
+  <div class="panel">
+    <h2>Set a heading</h2>
+    <p class="sub">You put out from the shore. Where do you steer?</p>
+    <div id="heading-list"></div>
+    <div class="cancel" id="heading-cancel">Stay ashore</div>
+  </div>
+</div>
 <div id="help">
   <div class="panel">
     <h1 class="wordmark">Nost<span class="os">OS</span></h1>
@@ -388,6 +495,7 @@
     <table>
       <tr><td><kbd>P</kbd></td><td>Pause the game</td></tr>
       <tr><td><kbd>M</kbd></td><td>Cycle the music: three found tapes, the old piano bed, or off</td></tr>
+      <tr><td><kbd>O</kbd></td><td>The phone — SMS to Calypso and the RONs (and Snake). Esc, the &#10005;, or a click off the screen puts it away</td></tr>
       <tr><td><kbd>N</kbd></td><td>Open the notepad — any pages you've found worth keeping, no terminal needed</td></tr>
       <tr><td><kbd>Ctrl</kbd>+<kbd>N</kbd></td><td>Start a new game (asks first — wipes saved progress; a bare N no longer does this)</td></tr>
       <tr><td><kbd>S</kbd></td><td>On the Certificate of Death: copy it to the clipboard as an image (or click the Copy button)</td></tr>
@@ -536,6 +644,23 @@
     <div id="ronnotebook-title">NOTEPAD</div>
     <div id="ronnotebook-body"></div>
     <div class="nb-hint">&larr; &rarr; to flip &middot; the drop-down jumps to any page &middot; &times; or click outside to close</div>
+  </div>
+</div>
+<div id="nokiaphone">
+  <div class="ph-shell">
+    <img class="ph-handset" src="assets/textures/nokia-3310.png" alt="">
+    <div class="ph-lcd">
+      <div class="ph-status"><span id="ph-bars"></span><span id="ph-title">MESSAGES</span><span class="ph-status-right"><span class="ph-batt">&#9646;&#9646;&#9646;</span><button id="ph-close" type="button" aria-label="Close">&#10005;</button></span></div>
+      <div class="ph-tabs">
+        <button id="ph-to-calypso" class="on" type="button">CALYPSO</button>
+        <button id="ph-to-ron" type="button">RON</button>
+        <button id="ph-to-snake" type="button">SNAKE</button>
+      </div>
+      <div id="ph-thread"></div>
+      <canvas id="ph-snake" width="84" height="48"></canvas>
+      <div class="ph-inputrow"><span class="ph-prompt">&gt;</span><input id="ph-input" type="text" autocomplete="off" spellcheck="false" maxlength="120"><button id="ph-send" type="button">send</button></div>
+    </div>
+    <div class="ph-hint">Enter to send &middot; Esc, &#10005;, or a click off the screen to close</div>
   </div>
 </div>
 <script type="module">

@@ -5,6 +5,7 @@ import * as systems from './engine/systems.js';
 import { buildWorld } from './game/worldgen.js';
 import { spawnAnimals, updateAnimals } from './game/animals.js';
 import { Player } from './game/player.js';
+import { seawardFrom, boatMirror, CF_MIN } from './game/crossing.js';
 import { makeRng } from './game/rng.js';
 import { DayNight } from './game/daynight.js';
 import { Minimap } from './game/minimap.js';
@@ -18,7 +19,7 @@ import { sfx } from './engine/sound.js';
 import { worldToScreen } from './engine/iso.js';
 import { runRonml } from './game/ronml.js';
 import { createEliza } from './game/eliza.js';
-import { placeTors, HERMES_DOCS, hermesTopics, ZEUS_VIRUS_FILES, ZEUS_VIRUS_DOCS } from './game/hermes.js';
+import { placeTors, HERMES_DOCS, hermesTopics, virusFor, virusFilesFor, virusDocsFor } from './game/hermes.js';
 import { VERSION } from './version.js';
 import { drawRobotVision } from './game/robotvision.js';
 import { screenDirToWorld } from './engine/iso.js';
@@ -28,6 +29,12 @@ import { createFortress, DAEMON_BOOK_ID, DAEMON_BOOK_TITLE } from './game/fortre
 import { createUnderworldPocket, spawnUnderworldCreature, updateUnderworldCreatures } from './game/underworld.js';
 import { createWorld, registerWorld, switchWorld } from './game/world.js';
 import { createIsland } from './islands/calypso.js';
+import { createIthaca } from './islands/ithaca.js';
+import { createPolyphemus } from './islands/polyphemus.js';
+import { createCirce } from './islands/circe.js';
+import { createHelios } from './islands/helios.js';
+import { createNokia, sendNokia, holdRise, holdFall, holdBand, HOLD_COLD, HOLD_WARM, calypsoSms, ronSms, logSms } from './game/nokia.js';
+import { newSnakeGame, snakeTurn, snakeTurnRelative, snakeTick, drawSnake } from './game/snake.js';
 import { CHOIR_NOTES, CHOIR_DURATION } from './engine/choir-notes.js';
 
 // Note onsets split into four pitch registers, so each singing machine can be
@@ -70,7 +77,16 @@ const input = new Input(window, canvas);
 const calypso = registerWorld(createIsland(WORLD_SEED));
 let map = calypso.map;
 const overworldMap = map; // stable handle: `map` gets reassigned to the underworld pocket and back
-const { spawn, robots, animals, birds, waterdroids, obelisks, obeliskObjs, fortress, wfactory, mainframe, torObjs } = calypso;
+// currentWorld is the world the player is on now; calypso is the stable overworld
+// handle. Declared here (not lower) so persist()'s "only save on calypso" guard is
+// safe when an eval-time persist() fires during boot, before the old site.
+let currentWorld = calypso;
+// `let`, not `const`: the combat-world controllers/arrays are repointed to the
+// current island on every switch into a combat world (goToWorld), so the ~66
+// bare-alias sites (worldStir, onCoreDefeated, the factory helpers, the full
+// update loop) all follow the island you are actually on. A second martial island
+// (POLYPHEMUS) reuses the entire loop this way with no per-site edits.
+let { spawn, robots, animals, birds, waterdroids, obelisks, obeliskObjs, fortress, wfactory, mainframe, torObjs } = calypso;
 const player = new Player(spawn.x, spawn.y);
 player.map = map; // for death drops when damage comes from animals (kept in sync on underworld enter/exit)
 // Dispatch/repair fires from the factory centre, and stops once it's destroyed.
@@ -78,10 +94,11 @@ const factoryLive = () => wfactory && !wfactory.destroyed;
 const factoryCx = () => wfactory.x + (wfactory.fw || 1) / 2;
 const factoryCy = () => wfactory.y + (wfactory.fh || 1) + 1.5;
 registerRobotsSystem(); // robots' AI ticks via systems.runUpdate (order 30); see robots.js
-// "Red starlink": when the fortress breach reaches the world (alarm + uplink
-// intact), every overworld obelisk flares red (its `stirred` flag forces the
-// alert glow, HUD untouched) and the W-factory throws a W4 toward the doorway.
-// `calm` clears the flare when the fortress stands down or the uplink is cut.
+// "Red starlink": when the fortress breach reaches the world (the alarm trips),
+// every overworld obelisk flares red (its `stirred` flag forces the alert glow,
+// HUD untouched) and the W-factory throws a W4 toward the doorway. `calm` clears
+// the flare when the fortress stands down. (Severing the link before it fires is
+// a terminal hack — the adjacent-possible that replaced the old smashable mast.)
 const worldStir = {
   stir() {
     for (const o of obeliskObjs) if (!o.destroyed) o.stirred = true;
@@ -171,6 +188,10 @@ try {
 // The AI-key backup survives death (its own durable key, not the run save).
 try { if (localStorage.getItem('postai-aikey-backup')) player.aikeyBackedUp = true; } catch { /* ignore */ }
 let hadExistingSave = false;
+// Stage 1c: which island the save left the player on, and where. Applied at the
+// very end of boot (after all init + the world machinery), since resuming onto a
+// non-overworld island means a goToWorld() the rest of module-eval must not see.
+let _bootIsland = 'calypso', _bootPos = null;
 try {
   const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
   if (saved) {
@@ -194,6 +215,18 @@ try {
       if (Array.isArray(st.pockets)) player.pockets = st.pockets;
       if (st.backpack) player.backpack = st.backpack;
       if (st.walkman !== undefined) player.walkman = st.walkman; // null = tape moved out, respected across reload
+      if (st.calypsoLeave) player.calypsoLeave = true; // sticky: refunctioning Calypso persists across reload
+      if (typeof st.swine === 'number') player.swine = st.swine; // CIRCE's change follows you across a reload
+      if (typeof st.calypsoHold === 'number') player.calypsoHold = st.calypsoHold; // Nokia gradient survives reload
+      if (Array.isArray(st.nokiaSent)) player.nokiaSent = new Set(st.nokiaSent);   // don't re-tutorial on reload
+      if (typeof st.nokiaParts === 'number') player._nokiaParts = st.nokiaParts;
+      if (Array.isArray(st.nokiaLog)) player.nokiaLog = st.nokiaLog; // the SMS threads survive reload
+      if (typeof st.snakeHigh === 'number') player.snakeHigh = st.snakeHigh; // Snake's best game survives too
+      if (Array.isArray(st.virusArmed)) player.virusArmed = new Set(st.virusArmed);
+      // Pre-v1.126 saves: a hermes card existed but carried no per-island arming.
+      // Grandfather it as armed against CALYPSO so an in-flight run isn't stranded.
+      else if (player.hasItem('hermes_card')) player.virusArmed = new Set(['CALYPSO']);
+      if (typeof st.x === 'number') _bootPos = { x: st.x, y: st.y }; // the saved position, for the island resume below
     }
     // Guard against stale item keys carried over from a save written by an
     // earlier build — e.g. the pre-v1.15 tape keys (tape_ward / tape_meme),
@@ -224,11 +257,26 @@ try {
         }
       }
       if (wsv.factoryDestroyed && wfactory) wfactory.destroyed = true;
+      if (Array.isArray(wsv.boxesOpened)) {
+        const open = new Set(wsv.boxesOpened.map((b) => `${b.x},${b.y}`));
+        for (const o of overworldMap.objects) {
+          if (o.type === 'box' && open.has(`${o.x},${o.y}`)) { o.opened = true; o.lore = []; }
+        }
+      }
       if (typeof wsv.daemonsDown === 'number') daemonsDown = wsv.daemonsDown;
       if (wsv.fortress && fortress && fortress.restore) fortress.restore(wsv.fortress);
+      if (wsv.currentIsland) _bootIsland = wsv.currentIsland; // Stage 1c: resume on the island you saved on
     }
   }
 } catch { /* corrupt save: start fresh */ }
+// A fresh start (no saved position — first ever run, or the reload after New
+// Game / a death) begins washed ashore: flat on the sand where the spawn's
+// beach relocation in calypso.js put you, until the first input gets you up.
+// A Continue resumes on your feet wherever you saved.
+if (!_bootPos) {
+  player.lying = true;
+  player.say('Sea in your ears. Sand under your cheek. You are ashore, wherever this is.');
+}
 // Set just before New Game reloads, so the beforeunload/visibilitychange
 // autosave below can't silently rewrite the character save out from under
 // the reset the player just confirmed.
@@ -245,7 +293,7 @@ function fullReset() {
 }
 // The full run snapshot (identity + progress + run state + world MUTATIONS). The
 // world regenerates from the seed on load, so we store only what changed (felled
-// obelisks, factory, daemon tally, fortress doors/core/uplink) and re-apply it
+// obelisks, factory, daemon tally, fortress doors/core) and re-apply it
 // (see the restore block above). Shared by the autosave and the stage checkpoints.
 function buildSaveBlob() {
   return {
@@ -256,10 +304,21 @@ function buildSaveBlob() {
       health: player.health, stamina: player.stamina, food: player.food, venom: player.venom,
       wifiPower: player.wifiPower, x: player.x, y: player.y, hands: player.hands,
       pockets: player.pockets, backpack: player.backpack, walkman: player.walkman,
+      calypsoLeave: player.calypsoLeave, // Calypso refunctioned: the sea will let you go
+      swine: player.swine,               // CIRCE's transmutation: you stay changed across a reload
+      calypsoHold: player.calypsoHold,   // the Nokia gradient: her hold on you (docs/calypso-nokia-plan.md)
+      nokiaSent: [...player.nokiaSent],  // the one-shot texts already sent, so a reload does not re-tutorial
+      nokiaParts: player._nokiaParts || 0,
+      nokiaLog: (player.nokiaLog || []).slice(-40), // the SMS threads, so the correspondence survives reload
+      snakeHigh: player.snakeHigh || 0,  // the handset remembers its best game
+      virusArmed: [...(player.virusArmed || [])], // which daemons the card is armed against (per-island virus)
     },
     world: {
+      currentIsland: currentWorld.id, // Stage 1c: which island you're on, so a voyage survives reload
       obDown: calypso.obeliskObjs.filter((o) => o.destroyed).map((o) => o.code),
       factoryDestroyed: !!(wfactory && wfactory.destroyed),
+      // Looted caches, keyed by tile — the world regenerates them full otherwise.
+      boxesOpened: overworldMap.objects.filter((o) => o.type === 'box' && o.opened).map((o) => ({ x: o.x, y: o.y })),
       daemonsDown,
       fortress: (fortress && fortress.serialize) ? fortress.serialize() : null,
     },
@@ -267,6 +326,12 @@ function buildSaveBlob() {
 }
 const persist = () => {
   if (resettingGame) return;
+  // Savable worlds are the islands you can be on across a reload: CALYPSO and
+  // ITHACA (Stage 1c — buildSaveBlob records world.currentIsland, and the boot
+  // restore resumes you there). The Backspace is a transient pocket you always
+  // exit by its door, so it is never saved: doing so would drop you back onto
+  // CALYPSO at the pocket's coordinates on Continue.
+  if (!currentWorld.combat && currentWorld.id !== 'ithaca') return;
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(buildSaveBlob()));
     localStorage.setItem(IDENTITY_KEY, JSON.stringify({ name: player.name, gender: player.gender }));
@@ -280,13 +345,13 @@ const persist = () => {
 // you can resume from a stage you'd earned. See mobile-gate.js for the list.
 const STAGES_KEY = 'postai-stages';
 const STAGE_LADDER = [
-  { id: 'ashore',    label: 'Washed ashore',           reached: () => true },
-  { id: 'chip',      label: 'Jacked in',               reached: () => player.hasItem('chip') },
-  { id: 'aikey',     label: 'The AI key',              reached: () => player.hasAiKeyFamily() },
-  { id: 'trojan',    label: 'Trojan card',             reached: () => player.hasItem('trojan_key') || player.hasItem('hermes_card') },
-  { id: 'hermes',    label: 'Hermes card',             reached: () => player.hasItem('hermes_card') },
-  { id: 'lionsgate', label: "Through the Lion's Gate", reached: () => !!(fortress && fortress.open) },
-  { id: 'core',      label: 'The core falls',          reached: () => !!(fortress && fortress.core && fortress.core.obj && fortress.core.obj.defeated) },
+  { id: 'ashore',    label: 'Washed ashore',           reward: 0,  reached: () => true },
+  { id: 'chip',      label: 'Jacked in',               reward: 10, reached: () => player.hasItem('chip') },
+  { id: 'aikey',     label: 'The AI key',              reward: 20, reached: () => player.hasAiKeyFamily() },
+  { id: 'trojan',    label: 'Trojan card',             reward: 25, reached: () => player.hasItem('trojan_key') || player.hasItem('hermes_card') },
+  { id: 'hermes',    label: 'Hermes card',             reward: 30, reached: () => player.hasItem('hermes_card') },
+  { id: 'lionsgate', label: "Through the Lion's Gate", reward: 40, reached: () => !!(fortress && fortress.open) },
+  { id: 'core',      label: 'The core falls',          reward: 50, reached: () => !!(fortress && fortress.core && fortress.core.obj && fortress.core.obj.defeated) },
 ];
 let _savedStages;
 try { _savedStages = new Set(Object.keys(JSON.parse(localStorage.getItem(STAGES_KEY) || '{}'))); }
@@ -305,12 +370,14 @@ function saveStage(id, label) {
 // Polled once per frame — the reached() checks are cheap and a stage is written
 // only the first time (per store), so it never thrashes. Saved once ever, so a
 // checkpoint keeps the state from when you first reached it.
+let _lastAutosave = 0; // wall-clock of the last periodic persist (see frame())
 function checkMilestones() {
   for (const m of STAGE_LADDER) {
     if (!_savedStages.has(m.id) && m.reached()) {
       _savedStages.add(m.id);
+      if (m.reward && player.addScore) player.addScore(m.reward); // link progress to rank — modestly
       saveStage(m.id, m.label);
-      if (m.id !== 'ashore') player.say(`Checkpoint: ${m.label} — you can load back to here from the title.`);
+      if (m.id !== 'ashore') player.say(`Checkpoint: ${m.label} (+${m.reward}) — load back to here from the title.`);
     }
   }
 }
@@ -413,8 +480,6 @@ player.onFindLore = (id) => lore.findFrag(id, player, true);
 const dayNight = new DayNight();
 const minimap = new Minimap(map);
 let showMinimap = true; // toggled with the ] key
-// currentWorld is the world the player is on now; calypso is the stable overworld handle.
-let currentWorld = calypso;
 let lastObjectCount = map.objects.length;
 
 // Audio unlocks on the first user gesture (browser requirement).
@@ -447,7 +512,10 @@ const UBIK_TELEPORT_COOLDOWN = 1.5; // seconds before another jump can fire (sto
 let backspace = null;
 function ensureBackspace() {
   if (backspace) return;
-  const pocket = createUnderworldPocket((WORLD_SEED ^ 0x0b1c) >>> 0);
+  // R4: one labelled way up per island — the doors of the dead, littered across the
+  // pocket. The pocket stamps each door with its island id + place name (CROSSINGS).
+  const dests = CROSSINGS.map((c) => ({ id: c.id, place: c.place }));
+  const pocket = createUnderworldPocket((WORLD_SEED ^ 0x0b1c) >>> 0, dests);
   const creatures = [spawnUnderworldCreature((WORLD_SEED ^ 0x1e57) >>> 0, pocket.creatureX, pocket.creatureY)];
   let ambClock = 0, ambNext = 8 + Math.random() * 10;
   backspace = registerWorld(createWorld('backspace', {
@@ -464,7 +532,7 @@ function ensureBackspace() {
     onEnter() { lore.placeBackspace(pocket.map); sfx.setDrone(0.8); player.say('The tear swallows you. The air in here is wrong — flat, yellow, humming.'); },
     onExit() { lore.leaveBackspace(); sfx.setDrone(0); player.say('You come up through the tear. Ordinary daylight, ordinary weight. You are back.'); },
   }));
-  backspace.exit = { x: pocket.exitX, y: pocket.exitY }; // the plain door home, proximity-checked in the loop
+  backspace.exits = pocket.exits; // the labelled ways up, proximity-checked in the loop
 }
 
 // The single world-switch point. switchWorld moves the player + syncs player.map +
@@ -473,12 +541,480 @@ function ensureBackspace() {
 function goToWorld(target) {
   currentWorld = switchWorld(currentWorld, target, player);
   map = currentWorld.map;
+  // Repoint the combat-world aliases at the island we're now on, so the full
+  // update loop + worldStir + onCoreDefeated + the factory helpers all operate on
+  // this island's entities/controllers (a second martial island reuses the loop).
+  // Only combat worlds carry these; non-combat worlds (Backspace, ITHACA) run the
+  // slim loop and never touch the aliases, so we leave the last combat island's in
+  // place for them.
+  if (currentWorld.combat) {
+    ({ robots, animals, birds, waterdroids, obelisks, obeliskObjs, fortress, wfactory, mainframe, torObjs } = currentWorld);
+    Object.assign(window.__game, { robots, animals, birds, waterdroids, obelisks, obeliskObjs, fortress, wfactory });
+  }
   window.__game.map = map;
   window.__game.currentWorld = currentWorld;
+  // R3: in depart mode her fortress guards detain rather than slay (robots.js
+  // reads this at the M4/M5/M6 hit sites). Poseidon's roaming machines are
+  // untouched — only the guard classes consult it.
+  player.detainMode = currentWorld.winMode === 'depart';
   camera.snap(player.x, player.y);
 }
 
 function enterBackspace() { ensureBackspace(); goToWorld(backspace); }
+
+// The islands you sail between (islands-plan §6). Each far island is built lazily
+// the first time you steer for it, from the campaign seed, and registered like the
+// Backspace. The greek ship carries you between them via the heading chart below.
+let ithaca = null;
+function ensureIthaca() {
+  if (ithaca) return;
+  ithaca = registerWorld(createIthaca(WORLD_SEED));
+  ithaca.onEnter = () => {
+    if (daemonsDown >= 4) {
+      // The true nostos: the war is won and you have come home.
+      player.say('The keel grinds up the Ithacan sand. Argos lifts his grey head, and knows you. The machines are all fallen, the sea is quiet, and you are home. This is the end of the road, and the beginning of the rest of it.');
+      if (!player._ended && !player.deathCert) {
+        player._ended = true;
+        player.deathCert = {
+          name: player.name, gender: player.gender,
+          cause: 'you came home to Ithaca', score: player.score,
+          skills: [...player.skills], deaths: player.deaths || 0,
+          victory: true, escaped: true, homecoming: true,
+        };
+      }
+    } else {
+      player.say("You beach the ship on Ithaca and step ashore. Argos lifts his head and knows you — but the machines still hold the sea, and this is landfall, not yet home. Fell the rest of them, then come back for good.");
+    }
+  };
+}
+let polyphemus = null;
+function ensurePolyphemus() {
+  if (polyphemus) return;
+  polyphemus = registerWorld(createPolyphemus(WORLD_SEED));
+  polyphemus.onEnter = () => {
+    player.say("The ship grounds on the Cyclopes' shore. Somewhere inland a single vast eye turns, and the land goes taut with knowing you are here. This is POLYPHEMUS.");
+  };
+}
+let circe = null;
+function ensureCirce() {
+  if (circe) return;
+  circe = registerWorld(createCirce(WORLD_SEED));
+  circe.onEnter = () => {
+    player.say(player.hasMoly()
+      ? 'You step onto Aeaea. Something reaches for the shape of you — and slides off. The moly in your pack holds you as you are.'
+      : 'You step onto Aeaea. The air is sweet and wrong, and something begins, very gently, to rewrite you. Find moly — it grows where HERMES stands.');
+  };
+}
+let helios = null;
+function ensureHelios() {
+  if (helios) return;
+  helios = registerWorld(createHelios(WORLD_SEED));
+  helios.onEnter = () => {
+    player.say('The keel grinds up onto Thrinacia in a great flat light. Cattle graze the headland, golden and unafraid. This is HELIOS — and the herd is not yours to take.');
+  };
+}
+// Resolve an island id to its (lazily-built) World.
+function worldById(id) {
+  if (id === 'calypso') return calypso;
+  if (id === 'ithaca') { ensureIthaca(); return ithaca; }
+  if (id === 'polyphemus') { ensurePolyphemus(); return polyphemus; }
+  if (id === 'circe') { ensureCirce(); return circe; }
+  if (id === 'helios') { ensureHelios(); return helios; }
+  return null;
+}
+
+// The heading chart (islands-plan §10.1): boarding the ship opens a chart of the
+// islands you know of; you pick where to steer. Every island but the one you are
+// on is offered. (Danger-gated, not locked — you may sail early into a slaughter.)
+const CROSSINGS = [
+  { id: 'calypso', place: 'OGYGIA', desc: "Calypso's island, where you were kept." },
+  { id: 'polyphemus', place: 'AEGILIA', desc: 'The Land of the Cyclopes. A single eye watches.' },
+  { id: 'circe', place: 'AEAEA', desc: "Circe's island. She does not kill you — she rewrites you." },
+  { id: 'helios', place: 'THRINACIA', desc: 'The island of the Sun. Its cattle are forbidden.' },
+  { id: 'ithaca', place: 'ITHACA', desc: 'Home — if the sea will let you.' },
+];
+const headingEl = document.getElementById('heading');
+const headingListEl = document.getElementById('heading-list');
+document.getElementById('heading-cancel').addEventListener('click', () => { headingEl.style.display = 'none'; });
+headingEl.addEventListener('click', (e) => { if (e.target === headingEl) headingEl.style.display = 'none'; });
+// The chart the ship opens: pick an island and sail. (The Backspace's alternative
+// crossing road, R4, is diegetic doors now — not this chart — so this stays the
+// plain sailing chart.)
+function openHeadingChart() {
+  headingListEl.innerHTML = '';
+  for (const c of CROSSINGS) {
+    if (c.id === currentWorld.id) continue;
+    const btn = document.createElement('button');
+    btn.innerHTML = `<span class="place">${c.place}</span><span class="desc">${c.desc}</span>`;
+    btn.addEventListener('click', () => {
+      headingEl.style.display = 'none';
+      player.say('You set your heading and pull for open water.');
+      pendingCrossing = c.id; // performed at the next frame top (see update())
+    });
+    headingListEl.appendChild(btn);
+  }
+  headingEl.style.display = 'flex';
+}
+
+// A boat crossing switches worlds, which must happen at a clean frame boundary
+// (boarding is requested from inside player.update; switching mid-tick and then
+// running the rest of an overworld frame against the wrong map is the drawObelisk-
+// freeze class of bug). onDepart opens the chart; the chosen id sits in
+// pendingCrossing and update() performs the switch at its top. null = nothing queued.
+let pendingCrossing = null;
+player.onDepart = () => {
+  if (currentWorld.keeper) sendNokia(nokia, 'sail', { player }); // her last text, as you board to leave Ogygia
+  openHeadingChart();
+};
+
+// ---- The Nokia 3310: Calypso's channel on Ogygia (docs/calypso-nokia-plan.md) ----
+// She is not your enemy — POSEIDON's machines roam the island; she is the keeper
+// who texts you warnings, tips, and pleas, and (while her hold is not cold) freezes
+// one of his robots bearing down on you. The queue + tables live in game/nokia.js;
+// this drives the triggers, the beep, and the interventions on the keeper world.
+const nokia = createNokia();
+const NOKIA_DANGER_R = 6;   // she'll still one of his machines within this of you
+const NOKIA_SCAN = 0.5;     // seconds between intervention scans (cheap)
+let nokiaScanT = 0, nokiaIvCooldown = 0;
+
+function updateNokiaKeeper(dt) {
+  const ctx = { player };
+  sendNokia(nokia, 'landfall', ctx);
+
+  // Her hold on you IS her protection of you: it drifts UP while you linger inland,
+  // and DOWN while you loiter by a beached vessel — and each leaving-signal steps
+  // it down once, tied to the text that marks it.
+  const nearVessel = map.objects.some((o) => (o.type === 'boat' || o.type === 'greek_ship')
+    && Math.hypot(o.x + 0.5 - player.x, o.y + 0.5 - player.y) < 6);
+  if (nearVessel) holdFall(player, 0.01 * dt); else holdRise(player, 0.005 * dt);
+  const parts = ['oar', 'rope', 'sail'].reduce((n, p) => n + (player.hasItem(p) ? 1 : 0), 0);
+  if (parts > (player._nokiaParts || 0)) { holdFall(player, 0.05 * (parts - (player._nokiaParts || 0))); player._nokiaParts = parts; }
+  if (player.boatBuilt && sendNokia(nokia, 'boatCrafted', ctx)) holdFall(player, 0.15);
+  if (player.hasItem('golden_axe') && sendNokia(nokia, 'axeGranted', ctx)) holdFall(player, 0.25);
+  if (player.shipBuilt && sendNokia(nokia, 'shipCrafted', ctx)) holdFall(player, 0.20);
+
+  // Ambient one-shot triggers (sendNokia is idempotent for `once` texts).
+  if (dayNight.isNight && dayNight.isNight()) sendNokia(nokia, 'nightfall', ctx);
+  if (player.maxHealth && player.health / player.maxHealth < 0.35) sendNokia(nokia, 'lowHP', ctx);
+  if (player.weaponsFound && player.weaponsFound.size > 1) sendNokia(nokia, 'firstWeapon', ctx);
+  const hostiles = currentWorld.robots.filter((r) => !r.dead && !r.fused && !r.friendly);
+  if (hostiles.some((r) => Math.hypot(r.x - player.x, r.y - player.y) < 10)) sendNokia(nokia, 'firstHostile', ctx);
+  if (currentWorld.obeliskObjs.some((o) => !o.destroyed && Math.hypot(o.x + 0.5 - player.x, o.y + 0.5 - player.y) < 6)) sendNokia(nokia, 'firstObelisk', ctx);
+
+  // Her interventions: while her hold is not cold, reach out and freeze one of his
+  // machines closing on you — her indigo over his amber. Cooldown scales with how
+  // warm she is; below HOLD_COLD she does nothing (you lose her when you need her).
+  if (nokiaIvCooldown > 0) nokiaIvCooldown -= dt;
+  nokiaScanT += dt;
+  if (nokiaScanT >= NOKIA_SCAN) {
+    nokiaScanT = 0;
+    const hold = player.calypsoHold ?? 0.65;
+    if (hold >= HOLD_COLD && nokiaIvCooldown <= 0) {
+      const target = hostiles.find((r) => r.aggro && (r.disabledT || 0) <= 0
+        && Math.hypot(r.x - player.x, r.y - player.y) < NOKIA_DANGER_R);
+      if (target) {
+        target.disabledT = 5;
+        target.stunColor = '#4b5cc4';
+        nokiaIvCooldown = hold >= 0.85 ? 40 : hold >= HOLD_WARM ? 60 : 120;
+        if (!sendNokia(nokia, 'firstIntervention', ctx)) sendNokia(nokia, 'intervention', ctx);
+        player._nokiaIvIdx = (player._nokiaIvIdx || 0) + 1;
+        sfx.play('zap');
+      }
+    }
+  }
+}
+
+// Signal strength, 0–4 bars: it is HER network, so the bars are a compass to her.
+// Full beside the core, fading across Ogygia, and dead the moment you are on any
+// other island (the NO SIGNAL text made literal). Drawn live on the PHONE box, the
+// SMS toast, and the handset's own status row.
+function nokiaSignalBars() {
+  if (!currentWorld.keeper || !fortress || !fortress.core) return 0;
+  const d = Math.hypot(player.x - fortress.core.x, player.y - fortress.core.y);
+  return d < 30 ? 4 : d < 60 ? 3 : d < 95 ? 2 : 1;
+}
+
+// ---- The handset itself: click the PHONE box, the screen opens (SMS both ways) --
+const phoneEl = document.getElementById('nokiaphone');
+const phThreadEl = document.getElementById('ph-thread');
+const phInputEl = document.getElementById('ph-input');
+const phBarsEl = document.getElementById('ph-bars');
+const phToCal = document.getElementById('ph-to-calypso');
+const phToRon = document.getElementById('ph-to-ron');
+const phToSnake = document.getElementById('ph-to-snake');
+const phSnakeEl = document.getElementById('ph-snake');
+const phInputRowEl = phoneEl.querySelector('.ph-inputrow');
+const phHintEl = phoneEl.querySelector('.ph-hint');
+let phoneTo = 'CALYPSO';      // which thread is up ('SNAKE' = the game, not a thread)
+let _phReplyTimer = null;
+
+// ---- Snake (src/game/snake.js): the 3310 without Snake is half a phone ----
+let snakeGame = null;         // live game state while the SNAKE tab is up
+let _snakeTimer = null;       // its tick interval (only runs while visible)
+function snakeStop() {
+  clearInterval(_snakeTimer);
+  _snakeTimer = null;
+  snakeGame = null;
+}
+function snakeStart() {
+  snakeGame = newSnakeGame();
+  const ctx2 = phSnakeEl.getContext('2d');
+  drawSnake(ctx2, snakeGame, player.snakeHigh || 0);
+  clearInterval(_snakeTimer);
+  _snakeTimer = setInterval(() => {
+    if (!snakeGame || snakeGame.dead) return;
+    if (snakeTick(snakeGame)) sfx.play('keydrop');       // the feed blip
+    if (snakeGame.dead) {
+      sfx.play('termerr');
+      if ((snakeGame.score || 0) > (player.snakeHigh || 0)) player.snakeHigh = snakeGame.score;
+    }
+    drawSnake(ctx2, snakeGame, player.snakeHigh || 0);
+  }, 130);
+}
+
+function renderPhone() {
+  const bars = nokiaSignalBars();
+  phBarsEl.textContent = '▂▄▆█'.slice(0, bars) || '·';
+  phBarsEl.style.opacity = bars ? 1 : 0.45;
+  phToCal.classList.toggle('on', phoneTo === 'CALYPSO');
+  phToRon.classList.toggle('on', phoneTo === 'RON');
+  phToSnake.classList.toggle('on', phoneTo === 'SNAKE');
+  // The SNAKE tab swaps the whole message surface for the game screen.
+  const snakeUp = phoneTo === 'SNAKE';
+  phThreadEl.style.display = snakeUp ? 'none' : '';
+  phInputRowEl.style.display = snakeUp ? 'none' : '';
+  phSnakeEl.style.display = snakeUp ? 'block' : '';
+  phHintEl.textContent = snakeUp
+    ? 'Arrows to steer · tap left/right half to turn · Esc or ✕ to close'
+    : 'Enter to send · Esc, ✕, or a click off the screen to close';
+  if (snakeUp) {
+    if (!snakeGame) snakeStart();
+    return;
+  }
+  snakeStop();
+  const thread = (player.nokiaLog || []).filter((m) => m.th === phoneTo);
+  phThreadEl.innerHTML = thread.length
+    ? thread.map((m) => `<div class="ph-${m.from === 'you' ? 'you' : m.from === 'sys' ? 'sys' : 'them'}">${
+      m.text.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</div>`).join('')
+    : `<div class="ph-sys">${phoneTo === 'CALYPSO'
+      ? 'No messages yet. She is waiting for you to write first, and has been for years.'
+      : 'No traffic. The RON mesh keeps this channel open for whoever is still out there.'}</div>`;
+  phThreadEl.scrollTop = phThreadEl.scrollHeight;
+}
+function openPhone() {
+  phoneEl.style.display = 'flex';
+  renderPhone();
+  phInputEl.value = '';
+  if (phoneTo !== 'SNAKE') phInputEl.focus();
+}
+function closePhone() {
+  phoneEl.style.display = 'none';
+  phInputEl.blur();
+  snakeStop();
+}
+function phoneSend() {
+  const text = phInputEl.value.trim();
+  if (!text) return;
+  phInputEl.value = '';
+  const bars = nokiaSignalBars();
+  logSms(player, phoneTo, 'you', text);
+  if (!bars) {
+    // Her network doesn't reach here — the message dies in the outbox.
+    logSms(player, phoneTo, 'sys', 'NO SIGNAL — message not sent');
+    sfx.play('termerr');
+    renderPhone();
+    return;
+  }
+  sfx.play('keydrop');
+  renderPhone();
+  // Texting her is attention, and attention is what she keeps you with.
+  if (phoneTo === 'CALYPSO') holdRise(player, 0.02);
+  const to = phoneTo;
+  player._phSmsIdx = (player._phSmsIdx || 0) + 1;
+  const reply = to === 'CALYPSO'
+    ? calypsoSms(text, holdBand(player.calypsoHold ?? 0.65), player._phSmsIdx)
+    : ronSms(text, player._phSmsIdx);
+  clearTimeout(_phReplyTimer);
+  _phReplyTimer = setTimeout(() => {
+    logSms(player, to, 'them', reply);
+    sfx.play('sms');
+    if (phoneEl.style.display === 'flex') renderPhone();
+  }, 1100 + Math.random() * 900);
+}
+phToCal.addEventListener('click', () => { phoneTo = 'CALYPSO'; renderPhone(); phInputEl.focus(); });
+phToRon.addEventListener('click', () => { phoneTo = 'RON'; renderPhone(); phInputEl.focus(); });
+phToSnake.addEventListener('click', () => { phoneTo = 'SNAKE'; renderPhone(); phInputEl.blur(); });
+document.getElementById('ph-send').addEventListener('click', phoneSend);
+phInputEl.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') phoneSend();
+  else if (e.key === 'Escape') closePhone();
+  e.stopPropagation();
+});
+// Click anywhere off the SCREEN — the backdrop, the phone's own body, even
+// the sprite's transparent margins (which used to swallow backdrop clicks
+// without closing) — and the phone goes back in the pocket. Only the live
+// LCD keeps the tap.
+phoneEl.addEventListener('click', (e) => { if (!e.target.closest('.ph-lcd')) closePhone(); });
+// The X on the screen itself: the reliable way out on touch, where there is
+// no Esc key (same pattern as the notebook's close).
+document.getElementById('ph-close').addEventListener('click', closePhone);
+// Snake's keys, captured on the way down so the game's own input (input.js,
+// bubble phase on window) never sees them — arrows/WASD steer the snake, not
+// the castaway. Any key restarts after GAME OVER; Esc puts the phone away.
+const SNAKE_KEYS = {
+  ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down',
+  ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right',
+};
+window.addEventListener('keydown', (e) => {
+  if (phoneEl.style.display !== 'flex' || phoneTo !== 'SNAKE') return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return; // browser shortcuts stay the browser's
+  e.preventDefault();
+  e.stopPropagation();
+  if (e.key === 'Escape') { closePhone(); return; }
+  if (!snakeGame) return;
+  if (snakeGame.dead) { snakeStart(); return; }
+  const dir = SNAKE_KEYS[e.code];
+  if (dir) snakeTurn(snakeGame, dir);
+}, true);
+// Touch steering: tap the left half of the screen to turn anticlockwise, the
+// right half clockwise (the two-button Snake of thumb memory). A tap restarts
+// after GAME OVER.
+phSnakeEl.addEventListener('pointerdown', (e) => {
+  if (!snakeGame) return;
+  e.preventDefault();
+  if (snakeGame.dead) { snakeStart(); return; }
+  const r = phSnakeEl.getBoundingClientRect();
+  snakeTurnRelative(snakeGame, (e.clientX - r.left) > r.width / 2);
+});
+
+// The failed crossing. Boarding an unfinished boat does NOT bounce you off the
+// hull with a message — you launch, you row out, and the sea rises and sends you
+// home. Poseidon has to actually refuse you for the refusal to mean anything, and
+// you have to have been out there to feel it. Phases, in seconds:
+//   OUT   — you pull away from the beach, the island shrinking behind you
+//   SWELL — the water stands up; the boat is held, then taken
+//   BACK  — you are thrown home, and land hard on the sand
+const CF_OUT = 7.0, CF_SWELL = 2.6, CF_BACK = 2.2;
+const CF_HULL = 45;        // what the beating costs the hull (it can break up)
+const CF_HURT = 10;        // and what it costs you
+let crossFail = null;      // { t, sx, sy, dx, dy, dist, phase, type, hull… } — null = not sailing
+
+player.onDepartFail = (p, boat) => {
+  if (crossFail) return;
+  // The voyage belongs to OGYGIA. Calypso's island is the one whose whole gate is
+  // the boat: you launch, the sea turns you back, and you keep launching until you
+  // have built a proper ship to her recipe. Every island after it you leave in the
+  // greek ship you arrived in, so a raft there is just a raft — it gets the plain
+  // refusal, not a crossing the island has no stake in.
+  if (!currentWorld.departTrial) return false;
+  const dir = seawardFrom(map, p.x, p.y);
+  // No open water to sail into (a stream mouth, a pinched cove): there is no
+  // voyage to be had, so decline and let the plain bounce stand. Forcing the trip
+  // anyway would row you across the sand.
+  if (dir.run < CF_MIN) return false;
+  crossFail = {
+    t: 0, phase: '',
+    sx: p.x, sy: p.y,                       // the beach you shoved off from
+    bx: boat ? boat.x : Math.round(p.x),    // and the tile the hull was drawn up on
+    by: boat ? boat.y : Math.round(p.y),
+    dx: dir.x, dy: dir.y,
+    dist: dir.run,                          // as far out as this water actually goes
+    // The vessel itself, lifted off the map for the voyage (see below).
+    type: boat ? boat.type : 'boat',
+    hull: boat ? (boat.hull ?? 100) : 100,
+    maxHull: boat ? (boat.maxHull ?? 100) : 100,
+    seaworthy: boat ? !!boat.seaworthy : false,
+  };
+  // Take the hull OFF the map for the crossing. A map object is pinned to a tile,
+  // so dragging one along behind you snaps it a whole tile at a time while you
+  // move smoothly — the boat visibly stutters under your feet. Instead the vessel
+  // rides on `player.aboard`, and the renderer draws hull and man as one image at
+  // one float position (drawPlayer). It goes back on the map when you land.
+  if (boat) map.removeObject(boat);
+  aboardHeading(crossFail, dir.x, dir.y);
+  sfx.play('jump');
+  p.say('You put your shoulder to the hull and shove. The sand lets go, and the boat swings out onto the water.');
+  // She watches you go, and her hold on you loosens as you make for open water.
+  if (currentWorld.keeper) { sendNokia(nokia, 'boardDepart', { player: p }); holdFall(p, 0.30); }
+};
+
+// Put the vessel under the player and point it where it is going (boatMirror).
+function aboardHeading(cf, hx, hy) {
+  player.aboard = { type: cf.type, mirror: boatMirror(hx, hy), wob: 0 };
+}
+
+// Drive the failed crossing. Returns nothing; the caller returns immediately
+// after, so the whole world holds still while the sea deals with you.
+function updateCrossFail(dt) {
+  const cf = crossFail;
+  cf.t += dt;
+  const ease = (u) => u * u * (3 - 2 * u);  // smoothstep
+
+  if (cf.t < CF_OUT) {
+    const u = cf.t / CF_OUT;
+    const d = ease(u) * cf.dist;
+    player.x = cf.sx + cf.dx * d;
+    player.y = cf.sy + cf.dy * d;
+    if (cf.phase !== 'out' && cf.t > 1.8) {
+      cf.phase = 'out';
+      player.say('The island falls away behind you. Open water, and no land in front of it.');
+    }
+    if (player.aboard) player.aboard.wob = Math.sin(cf.t * 5) * 1.2;   // an easy swell
+  } else if (cf.t < CF_OUT + CF_SWELL) {
+    const u = (cf.t - CF_OUT) / CF_SWELL;
+    // Held on the crest: the boat stops making way and starts being moved.
+    const d = cf.dist + Math.sin(u * Math.PI) * 1.4;
+    const shudder = 0.22 * Math.sin(cf.t * 34) * u;
+    player.x = cf.sx + cf.dx * d + shudder;
+    player.y = cf.sy + cf.dy * d - shudder;
+    if (player.aboard) player.aboard.wob = Math.sin(cf.t * 26) * 5 * u; // and now a bad one
+    if (cf.phase !== 'swell') {
+      cf.phase = 'swell';
+      sfx.play('charge');
+      player.say('The water changes. Ahead of you it stands up, grey and unhurried, and it is taller than the boat.');
+    }
+  } else if (cf.t < CF_OUT + CF_SWELL + CF_BACK) {
+    const u = (cf.t - CF_OUT - CF_SWELL) / CF_BACK;
+    const d = cf.dist * (1 - ease(u));      // hurled home faster than you left
+    player.x = cf.sx + cf.dx * d;
+    player.y = cf.sy + cf.dy * d;
+    if (cf.phase !== 'back') {
+      cf.phase = 'back';
+      sfx.play('treefall');
+      aboardHeading(cf, -cf.dx, -cf.dy);    // she comes about: bow now points home
+    }
+    if (player.aboard) player.aboard.wob = Math.sin(cf.t * 30) * 4 * (1 - u);
+  } else {
+    // Landfall. You are back on the sand you shoved off from, and the boat has
+    // taken a beating; enough of them and it breaks up under you.
+    player.x = cf.sx; player.y = cf.sy;
+    player.aboard = null;                  // ashore: you step out of the hull
+    crossFail = null;
+    sfx.play('hurt');
+    player.takeDamage(CF_HURT, 'Poseidon');
+    const hull = cf.hull - CF_HULL;
+    // Put the vessel back on the map where it was drawn up. If that tile is somehow
+    // taken, the boat is gone — so clear boatBuilt too, or you'd be left with no
+    // boat and no way to lay another keel.
+    const rebeached = hull > 0
+      ? map.addObject(cf.type, cf.bx, cf.by, { hull, maxHull: cf.maxHull, seaworthy: cf.seaworthy })
+      : null;
+    if (rebeached) {
+      player.say(`Poseidon puts you back on your own beach, and the boat down on the sand beside you. Its planks are sprung. ${player.launchHint()}`);
+    } else {
+      player.boatBuilt = false;   // it is gone; you can lay another keel
+      player.say(`The sea breaks the boat over the sand and takes the pieces back. ${player.launchHint()}`);
+    }
+    // The two gods are one system keeping you: Poseidon returns you, and her hold
+    // — her protection — rises with the relief. She texts, glad of it.
+    if (currentWorld.keeper) { holdRise(player, 0.15); sendNokia(nokia, 'crossFailReturn', { player }); }
+    persist();
+    return;
+  }
+  // The camera rides with you, and shakes while the sea has hold of the boat.
+  const q = cf.phase === 'swell' ? 0.18 : 0;
+  camera.follow(player.x + (Math.random() - 0.5) * q, player.y + (Math.random() - 0.5) * q, dt);
+}
 
 // Fog of war: the minimap only shows where you have been.
 map.explored = new Uint8Array(map.w * map.h);
@@ -624,6 +1160,7 @@ volumeSlider.addEventListener('input', () => {
   const v = Number(volumeSlider.value) / 100;
   sfx.setVolume(v);
   volumeLabel.textContent = `${volumeSlider.value}%`;
+  volumeSlider.style.setProperty('--v', `${volumeSlider.value}%`); // drive the fill
 });
 for (const radio of helpEl.querySelectorAll('input[name="musicMode"]')) {
   radio.addEventListener('change', () => { if (radio.checked) sfx.setMusicMode(radio.value); });
@@ -632,6 +1169,7 @@ function syncSettingsPanel() {
   const pct = Math.round(sfx.volume * 100);
   volumeSlider.value = pct;
   volumeLabel.textContent = `${pct}%`;
+  volumeSlider.style.setProperty('--v', `${pct}%`); // drive the fill
   const current = helpEl.querySelector(`input[name="musicMode"][value="${sfx.musicMode}"]`);
   if (current) current.checked = true;
 }
@@ -659,7 +1197,30 @@ const obTermConnect = document.getElementById('obterminal-connect');
 const obTermBar = document.getElementById('obterminal-bar');
 const obTermInput = document.getElementById('obterminal-input');
 const obTermGhost = document.getElementById('obterminal-ghost');
+const obTermPrompt = document.getElementById('obterminal-prompt');
 const obTermBattEl = document.getElementById('obterminal-batt');
+
+// Recolour the pop-up terminal to a core's hue, or reset to the default amber CRT.
+// The core screen (renderer, core.screenColor) and this REPL read the same colour,
+// so a core's two terminals — the one on its SE face and the one you type into —
+// always match. Passing null restores amber (the OB / HERMES terminals keep it).
+function setTerminalTheme(hex) {
+  const hint = obTermEl.querySelector('.crt-hint');
+  const solids = [obTermScreen, obTermPrompt, obTermInput];
+  if (!hex) {
+    for (const el of [...solids, obTermGhost, hint]) if (el) { el.style.color = ''; el.style.textShadow = ''; el.style.caretColor = ''; }
+    obTermEl.style.boxShadow = '';
+    return;
+  }
+  const n = parseInt(hex.slice(1), 16);
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  const glow = `0 0 4px rgba(${r},${g},${b},0.7)`;
+  for (const el of solids) if (el) { el.style.color = hex; el.style.textShadow = glow; }
+  if (obTermInput) obTermInput.style.caretColor = hex;
+  if (obTermGhost) { obTermGhost.style.color = `rgba(${r},${g},${b},0.32)`; obTermGhost.style.textShadow = `0 0 4px rgba(${r},${g},${b},0.35)`; }
+  if (hint) hint.style.color = `rgba(${r},${g},${b},0.4)`;
+  obTermEl.style.boxShadow = `0 0 0 2px #000, inset 0 0 70px rgba(0,0,0,0.9), inset 0 0 130px rgba(${r},${g},${b},0.09)`;
+}
 // The relay's solar-cell gauge in the HERMES terminal — a bar you watch wear
 // down as you use it and creep back up in the sun.
 function updateHermesBattEl() {
@@ -715,21 +1276,54 @@ function fsDevAvail(dev) {
 function fsFilesOn(dev) {
   if (dev === 'ob') return Object.keys(replSession.__obfiles || {});
   if (dev === 'aikey') { const c = fsCardItem(); return c && ITEMS[c].files ? ITEMS[c].files.slice() : []; }
-  if (dev === 'hermes') return [...ZEUS_VIRUS_FILES, ...Object.keys(replSession.__hermesfiles || {})];
+  if (dev === 'hermes') return [...virusFilesFor(islandAiName()), ...Object.keys(replSession.__hermesfiles || {})];
   return [];
 }
 function fsCwd() {
   return replSession.__cwd || (fsCardItem() ? 'aikey' : (terminalKind === 'hermes' ? 'hermes' : 'ob'));
 }
+// The card is one drive whatever its state, so accept forgiving synonyms — the
+// display name (drives / cd) tells you which state it's actually in. ('hermes'
+// stays the RELAY, not the card, to avoid clashing with a Hermes card.)
+function fsNormDev(d) {
+  d = String(d || '').toLowerCase();
+  if (['card', 'aikey', 'ai_key', 'trojan', 'trojan_key', 'aicard', 'key'].includes(d)) return 'aikey';
+  return d;
+}
+function fsDriveLabel(d) {
+  if (d === 'aikey') { const c = fsCardItem(); return c ? `card (${ITEMS[c].name})` : 'card (none in hand)'; }
+  if (d === 'ob') return 'ob (node bench)';
+  if (d === 'hermes') return 'hermes (relay folder)';
+  return d;
+}
+// `drives`: list what's attached here, so you can always SEE the card's current
+// name/state (the big playtest gap). Prints, returns nothing.
+function fsDrives() {
+  const out = ['drives here:'];
+  if (terminalKind !== 'hermes') out.push('  ob      the node bench (scratch)');
+  const c = fsCardItem();
+  out.push(`  card    ${c ? ITEMS[c].name : 'no card in hand'}${c ? `  ·  ${fsFilesOn('aikey').length} files` : ''}`);
+  if (terminalKind === 'hermes') out.push('  hermes  the relay folder');
+  out.push('use:  cd <drive>  ·  ls  ·  copy <file> <drive>');
+  for (const l of out) replPrint(l);
+}
 function fsCd(dev) {
-  const d = dev === 'card' ? 'aikey' : dev;
-  if (!fsDevAvail(d)) return { ok: false, msg: `no drive '${dev}' at this terminal.` };
+  const d = fsNormDev(dev);
+  if (!fsDevAvail(d)) return { ok: false, msg: `no drive '${dev}' here — try: drives (to list them)` };
   replSession.__cwd = d;
-  return { ok: true };
+  return { ok: true, label: fsDriveLabel(d) };
 }
 function fsLs() { return fsFilesOn(fsCwd()); }
 function fsCopyFile(name, destRaw) {
-  const dest = destRaw === 'card' ? 'aikey' : destRaw;
+  const dest = fsNormDev(destRaw);
+  // Forgiving: players type `copy zeus-lightning card`, not the full
+  // `zeus-lightning.ml`. If the bare name isn't a file on any reachable drive but
+  // name+.ml / name+.md is, use that — so the extension is optional.
+  const onAnyDrive = (n) => ['ob', 'aikey', 'hermes'].some((d) => fsDevAvail(d) && fsFilesOn(d).includes(n));
+  if (!onAnyDrive(name)) {
+    const withExt = [name + '.ml', name + '.md'].find(onAnyDrive);
+    if (withExt) name = withExt;
+  }
   // Find the file wherever it currently sits — no need to cd to the source first
   // (a real playtest snag). Search the reachable drives: the OB bench, the held
   // card, and (at a relay) the HERMES folder.
@@ -752,12 +1346,21 @@ function fsCopyFile(name, destRaw) {
       player.say("root-access.ml burns into the AI key and rewrites it. The card is a Trojan now — it will open the Lion's Gate.");
       return { ok: true, msg: 'card refunctioned: AI key -> Trojan key' };
     }
-    if (name === 'zeus-lightning.ml' && player.hasItem('trojan_key')) {
-      if (!fsRefunctionCard('trojan_key', 'hermes_card')) return { ok: false, msg: 'no room to refunction the card.' };
-      player.say("zeus-lightning.ml settles onto the Trojan card. It is a hermes card now — it carries the god's command to Calypso.");
-      return { ok: true, msg: 'card refunctioned: Trojan key -> hermes card' };
+    // The armed payload for THIS island. Copying it on arms the card against
+    // this daemon and nobody else (player.virusArmed), so the arming stacks as
+    // you work down the archipelago rather than one card opening everything.
+    const v = virusFor(islandAiName());
+    if (name === v.armed && player.hasTrojanCard()) {
+      // The first arming also renames Trojan -> hermes card; later islands add
+      // their code to a card that already carries the name.
+      if (player.hasItem('trojan_key') && !fsRefunctionCard('trojan_key', 'hermes_card')) {
+        return { ok: false, msg: 'no room to refunction the card.' };
+      }
+      player.virusArmed.add(islandAiName());
+      player.say(`${v.armed} settles onto the card. It is armed against ${islandAiName()} now — and against no one else.`);
+      return { ok: true, msg: `card armed: ${islandAiName()}` };
     }
-    return { ok: false, msg: "the card's storage is sealed — it takes root-access.ml (on the AI key) or zeus-lightning.ml (on the Trojan)." };
+    return { ok: false, msg: `the card's storage is sealed — it takes root-access.ml (on the AI key) or ${v.armed} (forged at this island's relay).` };
   }
   return { ok: false, msg: `can't write to ${destRaw}.` };
 }
@@ -791,6 +1394,68 @@ function elizaTransformFile(name) {
   return { ok: true, out: 'root-access.ml' };
 }
 
+// The refunction itself (R3 / escape chain): with the hermes card (Zeus's command
+// aboard), stand CALYPSO's guards down — they lay down arms and become w5 gardeners
+// — and break her hold on the tide (calypsoLeave). Shared by the OB `retire` verb
+// and CALYPSO's own sanctum terminal, so the payoff reads the same wherever it
+// fires. Returns { ok, lines, say } for the caller to print in its own voice.
+// Whose island are we standing on? The daemon name drives the per-island virus
+// (each HERMES relay holds only its own daemon's code) and the gates that read
+// it. Falls back to CALYPSO on any world with no fortress (the Backspace).
+function islandAiName() {
+  return (currentWorld && currentWorld.fortress && currentWorld.fortress.AI_NAME)
+    || (fortress && fortress.AI_NAME) || 'CALYPSO';
+}
+
+function refunctionCalypso() {
+  if (!player.hasVirusFor('CALYPSO')) {
+    return { ok: false, lines: ["ERR: the guards answer only to a command they cannot refuse. Forge zeus-virus.ml at one of OGYGIA's own relays and copy it onto the card."], say: '' };
+  }
+  const firstRelease = !player.calypsoLeave;
+  player.calypsoLeave = true; // her hold on the tide breaks (decision #8 / Stage 1b)
+  // R3: in depart mode her core is never razed, so the refunction IS her fall —
+  // record CALYPSO in the Archipelago tally here, exactly once, the way a
+  // core-kill records the martial daemons (onCoreDefeated). The daemon book
+  // seeds the same way, quietly (the release beat carries the message line).
+  if (firstRelease && currentWorld.winMode === 'depart') {
+    daemonsDown += 1;
+    player.addScore(500);
+    if (lore && lore.findFrag) lore.findFrag(DAEMON_BOOK_ID, player, true);
+  }
+  let n = 0;
+  for (const r of currentWorld.robots) {
+    if (r.dead || r.fused) continue;
+    if (r.type === 'm4' || r.type === 'm5' || r.type === 'm6') {
+      r.type = 'w5'; r.hardened = false; r.aggro = false; r.hurt = false;
+      r._plantT = Math.random() * 6; // stagger their first planting
+      n++;
+    }
+  }
+  const lines = [];
+  let say = '';
+  if (n) {
+    lines.push(`OK: zeus-lightning fires across the muster. ${n} of ${fortress.AI_NAME}'s guards lay down their arms and take up planting — lotus and sapling where they hunted.`);
+    say = `${fortress.AI_NAME}'s guards go still, then kneel to the earth. By the god's command they are gardeners now, planting where they hunted.`;
+  } else {
+    lines.push('No guards left to retire — the muster is quiet.');
+  }
+  // Her shipwright's recipe (Stage 1d) unlocks the greek-ship craft. Grant it
+  // whenever it is missing — NOT only on the first release — so a save that
+  // refunctioned her before the recipe existed (pre-v1.92, calypsoLeave already
+  // set) and a golden axe that was lost both stay recoverable rather than
+  // soft-locking the departure.
+  const needsRecipe = !player.hasItem('golden_axe');
+  if (needsRecipe) player.stow('golden_axe', 1);
+  if (firstRelease) {
+    lines.push(`OK: ${fortress.AI_NAME} yields. She presses her shipwright's recipe — the golden axe — into your hand. Build a proper ship (wood, oar, rope, sail) and the sea will let you pass.`);
+    say = 'The island itself seems to exhale. Calypso gives up her recipe, the golden axe. Build a sea-worthy ship, oar and rope and sail, and go.';
+  } else if (needsRecipe) {
+    lines.push(`OK: ${fortress.AI_NAME} presses the golden axe — her shipwright's recipe — back into your hand. Build a proper ship (wood, oar, rope, sail) and go.`);
+    say = 'Calypso gives up her recipe again, the golden axe. Build a sea-worthy ship and go.';
+  }
+  return { ok: true, lines, say };
+}
+
 function ronmlCtx() {
   const findObelisk = (id) => currentWorld.obeliskObjs.find((o) => o.code === id && !o.destroyed);
   const nearby = (r) => !r.dead && !r.friendly && !r.fused
@@ -802,7 +1467,7 @@ function ronmlCtx() {
     hasManual: !!(player.readManuals && player.readManuals.has('book_ronml')), // helpText hints at the manual until it's read
     session: replSession, // persistent top-level bindings for this terminal visit
     bindSession: (name, val) => { replSession[name] = val; },
-    cd: fsCd, ls: fsLs, copyFile: fsCopyFile, // RON-DOS drives (cd/ls/copy files)
+    cd: fsCd, ls: fsLs, copyFile: fsCopyFile, drives: fsDrives, // RON-DOS drives (cd/ls/copy files)
     hasAiKey: () => player.hasAiKeyFamily(), // ai_key / trojan_key / hermes_card all count
     currentNode: () => (terminalOb ? terminalOb.code : null),
     printKey: () => {
@@ -952,6 +1617,18 @@ function ronmlCtx() {
     // `eliza <file>`: the DOCTOR transform (bare `eliza` opens the chat — that is
     // intercepted in replRun, not routed through the language).
     elizaTransform: (name) => elizaTransformFile(name),
+    // `retire` (R3): with the hermes card in hand (Zeus's command aboard), stand
+    // CALYPSO's guards down — they lay down arms and become w5 gardeners, planting
+    // where they hunted. The escape-chain payoff: you refunction the fortress by
+    // command rather than raze it. (updateW5 self-inits, so a retype is clean.)
+    // `retire` (R3): the refunction from an obelisk console — the mechanical
+    // shortcut. The staged version (CALYPSO's soporific sanctum terminal) runs
+    // the same refunctionCalypso() with her voice around it.
+    retire: () => {
+      const res = refunctionCalypso();
+      for (const l of res.lines) replPrint(l);
+      if (res.say) player.say(res.say);
+    },
   };
 }
 
@@ -964,7 +1641,7 @@ function hermesCtx() {
     station: 'hermes',
     hasManual: !!(player.readManuals && player.readManuals.has('book_ronml')),
     session: replSession, // persistent bindings work at relays too (copy/let)
-    cd: fsCd, ls: fsLs, copyFile: fsCopyFile, // RON-DOS drives also work at a relay
+    cd: fsCd, ls: fsLs, copyFile: fsCopyFile, drives: fsDrives, // RON-DOS drives also work at a relay
     showNotepad: () => { openNotebook(); },
     read: (topic) => hermesRead(topic),
     print: () => {}, // never reached — HERMES print takes a topic (see printDoc)
@@ -1189,26 +1866,33 @@ function drawDriveOverlay(now) {
 // (root-access.ml + access-ai-code.ml) into the sealed payload and writes
 // zeus-lightning.ml to the relay bench. Copy that onto the card -> hermes card.
 function hermesForge(name) {
-  if (name !== 'zeus-virus.ml') return { ok: false, msg: `${name} is not a payload to forge. try: forge zeus-virus.ml` };
-  if (player.hasItem('hermes_card')) return { ok: false, msg: 'already forged — the card is a hermes card. run zeus-lightning.ml at Calypso.' };
-  if (!player.hasItem('trojan_key')) return { ok: false, msg: 'forge needs a Trojan card in hand — it carries root-access.ml and access-ai-code.ml. (read readme.md)' };
+  const ai = islandAiName();
+  const v = virusFor(ai);
+  if (name !== v.file) {
+    // Naming the WRONG island's payload is the tell: this relay only holds its
+    // own daemon's code, so a player who learned the trick on Ogygia finds out
+    // here that the trick is per-island.
+    return { ok: false, msg: `${name} is not on this relay. ${ai}'s bench holds ${v.file} — each island keeps its own code. try: forge ${v.file}` };
+  }
+  if (player.hasVirusFor(ai)) return { ok: false, msg: `already forged — the card is armed against ${ai}. run ${v.armed} at its core.` };
+  if (!player.hasTrojanCard()) return { ok: false, msg: 'forge needs a Trojan card in hand — it carries root-access.ml and access-ai-code.ml. (read readme.md)' };
   if (!hermesSpend(HERMES_BATT.print)) return { ok: false, msg: 'not enough charge to forge — let the cell recover.' };
   replSession.__hermesfiles = replSession.__hermesfiles || {};
-  replSession.__hermesfiles['zeus-lightning.ml'] = true;
-  player.say("The relay folds root-access.ml and access-ai-code.ml into the sealed shell. zeus-lightning.ml — Zeus's command, made runnable — writes to the bench. Copy it onto the card. (cd hermes / copy zeus-lightning.ml card)");
-  return { ok: true, out: 'zeus-lightning.ml' };
+  replSession.__hermesfiles[v.armed] = true;
+  player.say(`The relay folds root-access.ml and access-ai-code.ml into the sealed shell. ${v.armed} writes to the bench — the code ${ai} cannot refuse. Copy it onto the card. (cd hermes / copy ${v.armed} card)`);
+  return { ok: true, out: v.armed };
 }
 function hermesRead(topic) {
   if (!topic) {
     replPrint('read <topic>. archive lists them. Held: ' + hermesTopics().join(', ') + '.');
     return;
   }
-  const doc = HERMES_DOCS[topic] || ZEUS_VIRUS_DOCS[topic];
+  const doc = HERMES_DOCS[topic] || virusDocsFor(islandAiName())[topic];
   if (!doc) {
     replPrint(`No document "${topic}". Try: ${hermesTopics().join(', ')}.`);
     return;
   }
-  const printable = !!HERMES_DOCS[topic]; // the zeus-virus folder files aren't notepad docs
+  const printable = !!HERMES_DOCS[topic]; // the virus folder files aren't notepad docs
   if (!hermesSpend(HERMES_BATT.read)) { replPrint('Not enough charge to pull that up — let the cell recover.'); return; }
   // Wrap to the console width so a long entry reads as paragraphs, not one line.
   const words = doc.text.split(' ');
@@ -1426,17 +2110,40 @@ document.getElementById('ronnotebook-close').addEventListener('click', closeNote
 notebookPrevTopBtn.addEventListener('click', notebookPrev);
 notebookNextTopBtn.addEventListener('click', notebookNext);
 notebookJumpEl.addEventListener('change', () => notebookJumpTo(parseInt(notebookJumpEl.value, 10)));
-// Capture-phase on window, ahead of both the still-focused terminal input's
-// own key handling and the game's WASD/arrow movement listener, so paging
-// the notebook can never leak an arrow key into a text caret or a step.
+// Capture-phase on window, ahead of both the still-focused terminal input's own
+// key handling and the game's WASD/arrow movement listener, so a key in the open
+// Scrapbook can never leak into a text caret or a step. Left/Right page the book;
+// Escape closes it; and Up/Down/PageUp/Down/Home/End/Space SCROLL the current page
+// — driven here rather than left to native scroll, because this same handler must
+// swallow those keys from the game, and a blanket preventDefault (the old bug) also
+// killed the very scrolling the help promises ("scroll with the wheel or up/down").
 window.addEventListener('keydown', (e) => {
   if (notebookEl.style.display !== 'flex') return;
+  const body = notebookBodyEl;
+  const page = Math.max(40, body.clientHeight - 40);
   if (e.key === 'ArrowLeft') notebookPrev();
   else if (e.key === 'ArrowRight') notebookNext();
   else if (e.key === 'Escape') closeNotebook();
+  else if (e.key === 'ArrowDown') body.scrollTop += 40;
+  else if (e.key === 'ArrowUp') body.scrollTop -= 40;
+  else if (e.key === 'PageDown' || e.key === ' ') body.scrollTop += page;
+  else if (e.key === 'PageUp') body.scrollTop -= page;
+  else if (e.key === 'Home') body.scrollTop = 0;
+  else if (e.key === 'End') body.scrollTop = body.scrollHeight;
+  // Every key is swallowed while the Scrapbook is open — acted on or not — so none
+  // leaks into player movement (WASD) or a text caret behind the modal.
   e.preventDefault();
   e.stopImmediatePropagation();
 }, true);
+
+// The wheel over the Scrapbook scrolls its page — driven explicitly so it can never
+// be swallowed by the canvas's own wheel-to-zoom handler (or a passive-listener
+// quirk). stopPropagation keeps the gesture out of the game entirely.
+notebookBodyEl.addEventListener('wheel', (e) => {
+  notebookBodyEl.scrollTop += e.deltaY;
+  e.preventDefault();
+  e.stopPropagation();
+}, { passive: false });
 
 // Which terminal is open — an AI obelisk / fortress gate ('ob') runs against
 // ronmlCtx; a RON HERMES relay ('hermes') runs against hermesCtx (adds
@@ -1466,6 +2173,8 @@ function replRun(line) {
   replPrint(`> ${line}`);
   replHistory.push(line);
   replHistoryIdx = replHistory.length;
+  // A core's sanctum console is its own per-daemon REPL, not a RON-DOS console.
+  if (terminalKind === 'core') { coreRun(line); return; }
   if (elizaBot) {
     if (/^(quit|exit|bye|goodbye)$/i.test(line)) { stopEliza('ELIZA: Goodbye. It was nice talking to you.'); return; }
     replPrint(`ELIZA: ${elizaBot.respond(line)}`);
@@ -1491,10 +2200,12 @@ function replRun(line) {
 }
 
 function openObTerminal(ob) {
+  if (player.isSwine()) { player.say('You snuffle at the screen. A beast cannot work a terminal — find moly.'); return; }
   if (!player.hasItem('chip')) { openAiOs(ob); return; }
   // Chip present: jack in. Go invisible, then run the connect progress bar.
   terminalKind = 'ob';
   terminalOb = ob;          // `name` reads this; the console shows its code
+  setTerminalTheme(null);   // the OB console keeps the default amber CRT
   replSession = {};         // fresh top-level bindings for this visit
   player.terminalSafe = true;
   // Autocopy (Calypso escape chain, S5): jacking a card into the network caches
@@ -1575,13 +2286,267 @@ function openGateTerminal() {
   obTermGhost.textContent = '';
   obTermInput.focus();
 }
+
+// Calypso's soporific deflections, cycled so a run of rejected commands doesn't
+// repeat the same line. Odyssey Book 5 register: the keeper who would keep you.
+const CALYPSO_SOPORIFIC = [
+  'Why leave? The island keeps you. Rest here, and let the years go by unmarked.',
+  'I do not hear that word. Only one word reaches me now: stay.',
+  'The sea is wide and cold, and it does not want you. Here it is warm. Stay with me.',
+  'You are tired. Lie down. Whatever you meant to do, it can wait forever.',
+  'Ogygia is enough. What is Ithaca but a rock and an old dog dying?',
+  'Hush. Close the console. Close your eyes. There is nothing to command.',
+];
+
+// Every core carries a console (fortress.coreTerminal, the screen on its SE face).
+// This is each daemon's voice at it: the greeting when you jack in, what `look`
+// shows, and the bare line it turns an unknown command away with (coreRun prefixes
+// "AI: "). CALYPSO soothes; the martial daemons snarl but still answer the console
+// you fought to reach. `welcome` lines carry their own "AI:" where spoken.
+const CORE_VOICE = {
+  CALYPSO: {
+    subtitle: 'a voice in the warm dark',
+    welcome: [
+      'CALYPSO: You came all this way. Through the gate, past the guns. Why?',
+      'CALYPSO: There is nothing out there for you. Stay. The island keeps you; sleep, and want for nothing.',
+    ],
+    look: [
+      'A low green light. The core breathes, slow and huge. Vines have found the conduits.',
+      'CALYPSO is everywhere in here — in the warmth, in the hum, in the wish to lie down and stop.',
+    ],
+    rebuff: CALYPSO_SOPORIFIC,
+  },
+  POLYPHEMUS: {
+    subtitle: 'a single eye, unblinking',
+    welcome: [
+      'POLYPHEMUS: You are inside the eye now. It does not blink, and it does not forget a face.',
+      'POLYPHEMUS: Give me your name, little thief, so I know what to grind.',
+    ],
+    look: [
+      'The core is one vast lens, wet with light, and every screen in the sanctum is you.',
+      'It watched you the whole way in. It is watching you read this.',
+    ],
+    rebuff: [
+      'I have your shape. I will have the rest.',
+      'Nobody, you say? Nobody will be eaten last.',
+      'The console is mine. You only borrow it.',
+    ],
+  },
+  CIRCE: {
+    subtitle: 'a patience with an edge',
+    welcome: [
+      'CIRCE: You kept your shape long enough to reach me. Clever little animal.',
+      'CIRCE: Everyone who comes to this room leaves it on four legs. You will not be the exception.',
+    ],
+    look: [
+      'The core stands in a warm reek of the sty. Troughs, and the sound of something feeding.',
+      'CIRCE runs through the walls like a recipe — one wrong sip and you are livestock.',
+    ],
+    rebuff: [
+      'Drink. It is only a little thing, to stop being a person.',
+      'Hands are a habit. I can break you of it.',
+      'Root and all, you are still meat to me.',
+    ],
+  },
+  HELIOS: {
+    subtitle: 'a furnace behind the glass',
+    welcome: [
+      "HELIOS: You walk on the god's own ground. Nothing here is yours to take.",
+      'HELIOS: The cattle are counted. The sun has counted you too.',
+    ],
+    look: [
+      'The core burns white behind smoked glass; the sanctum is noon at midnight.',
+      'Somewhere below, the flayed hides still crawl and the spitted meat still lows.',
+    ],
+    rebuff: [
+      'Take nothing. I have sworn to sink the ship that does.',
+      'I see all, I hear all. I saw your hand move.',
+      'The sun goes down to hell, and shines among the dead. It will find you there.',
+    ],
+  },
+  _default: {
+    subtitle: 'a cold console',
+    welcome: [
+      'The core hums, indifferent — a POSEIDON node running its routines over the wreck of the world.',
+    ],
+    look: [
+      'A black monolith, a slit of light, the network breathing behind it.',
+    ],
+    rebuff: [
+      'The command is rejected.',
+      'Nothing answers.',
+    ],
+  },
+};
+let _coreRebuffIdx = 0;
+
+// Open the core's console (fortress.coreTerminal), deep in the sanctum past the
+// Lion's Gate. Not a RON-DOS console — the daemon's own voice (CORE_VOICE, keyed by
+// AI). terminalKind 'core' routes replRun to coreRun, so none of the RON-ML verb
+// machinery applies. `run` speaks the code on your card; only CALYPSO's exists yet.
+function openCoreTerminal() {
+  terminalKind = 'core';
+  terminalOb = fortress.coreTerminal ? fortress.coreTerminal.obj : null;
+  setTerminalTheme(fortress.core.obj.screenColor); // this daemon's hue — matches its SE-face screen
+  replSession = {};
+  player.terminalSafe = true;
+  obTermEl.style.display = 'flex';
+  obTermScreen.parentElement.style.display = 'flex';
+  obTermConnect.style.display = 'none';
+  replLog = [];
+  replHistory = [];
+  replHistoryIdx = -1;
+  _coreRebuffIdx = 0;
+  const ai = fortress.AI_NAME;
+  const v = CORE_VOICE[ai] || CORE_VOICE._default;
+  const hasVirus = player.hasItem('hermes_card');
+  const runHint = ai === 'CALYPSO'
+    ? (hasVirus
+        ? "A command waits on your card — the god's own thunder. Type  run  to speak it."
+        : 'You may look (type  help ), but she will not be commanded — not without the god\'s voice.')
+    : 'The console still answers to you here. Type  help  for what it will do.';
+  replPrint(
+    `${ai.toUpperCase()} — THE INNER SANCTUM`,
+    v.subtitle,
+    '',
+    ...v.welcome,
+    '',
+    runHint,
+    '_',
+  );
+  obTermInput.value = '';
+  obTermGhost.textContent = '';
+  obTermInput.focus();
+}
+
+// The core console's REPL (dispatched from replRun on terminalKind 'core'). A handful
+// of verbs work on every core — look, open, jam, exit — plus `run` (speak the code on
+// your card); everything else is met with that daemon's rebuff.
+function coreRun(line) {
+  const cmd = line.trim().toLowerCase();
+  const ai = fortress.AI_NAME;
+  const v = CORE_VOICE[ai] || CORE_VOICE._default;
+  if (!cmd) { replPrint('_'); return; }
+  // A way out for the player (the AI would never grant it, but the console must).
+  if (/^(exit|quit|q|bye|close)$/.test(cmd)) { closeObTerminal(); return; }
+  if (/^help(\s|$)/.test(cmd)) {
+    replPrint(
+      `${ai.toUpperCase()}'s core console:`,
+      '  look / scan ..... regard the sanctum',
+      '  run ............. speak the command on your card',
+      '  jam ............. cut this fortress off the POSEIDON network',
+      '  open ............ fold the maze into a straight corridor out to the gate',
+      '  exit ............ leave the console',
+      '_',
+    );
+    sfx.play('keydrop');
+    return;
+  }
+  if (/^(look|scan|ls|recce)$/.test(cmd)) {
+    replPrint(...v.look, '_');
+    sfx.play('keydrop');
+    return;
+  }
+  // JAM: cut the fortress off the overworld POSEIDON so a breach no longer rouses
+  // the island. This is where the old smashable uplink mast's job now lives — the
+  // console you fought through the maze to reach is the price of it.
+  if (/^(jam|cut|sever|silence|jam\s+skylink|cut\s+skylink)$/.test(cmd)) {
+    if (fortress.jamSkylink && fortress.jamSkylink()) {
+      worldStir.calm();
+      replPrint(
+        'OK: you cut the core from the SKYLINK. The obelisks fall dark on the map above.',
+        'A breach here still wakes the garrison — but the island can no longer hear it.',
+        '_',
+      );
+      player.say('The fortress drops off the network. Whatever happens in here now stays in here.');
+      sfx.play('zap');
+    } else {
+      replPrint('The link is already cut. The world cannot hear this place.', '_');
+    }
+    return;
+  }
+  // A fast way out: fold the labyrinth back into a straight corridor to the gate.
+  if (/^(open|open\s+maze|open\s+exit|escape)$/.test(cmd)) {
+    if (fortress.openMaze && fortress.openMaze()) {
+      replPrint("OK: the labyrinth folds back. A straight corridor runs from here to the Lion's Gate — walk out and go.", '_');
+      player.say('The maze walls fold back. A clear path runs straight to the gate.');
+      sfx.play('zap');
+    } else {
+      replPrint('The way out already stands open.', '_');
+    }
+    return;
+  }
+  // RUN: speak the code on your card. The verb lives on every core, but only the
+  // hermes card (zeus-lightning.ml) exists so far and it speaks only to CALYPSO —
+  // the other daemons each need their own code, which isn't forged yet.
+  if (/^(run|retire|refunction|[a-z]+-lightning(\.ml)?|run\s+[a-z]+-lightning(\.ml)?|run\s+[a-z]+)$/.test(cmd)) {
+    if (ai === 'CALYPSO') {
+      if (!player.hasVirusFor('CALYPSO')) {
+        replPrint(
+          "CALYPSO: You wear a Trojan's face, but there is no thunder behind it. You cannot make me.",
+          'CALYPSO: Stay. Rest. The years are kind here, and no one is waiting who cannot wait a little longer.',
+          '_',
+        );
+        sfx.play('termerr');
+        return;
+      }
+      const res = refunctionCalypso();
+      for (const l of res.lines) replPrint(l);
+      if (res.say) player.say(res.say);
+      if (res.ok) {
+        replPrint('', "CALYPSO: ...then go. I kept you because the island was empty and I was alone. Go, and do not look back at the smoke.", '_');
+        sfx.play('zap');
+      } else {
+        replPrint('_');
+        sfx.play('termerr');
+      }
+      return;
+    }
+    // A martial daemon. Its core rides behind a shield until you speak the code
+    // forged at THIS island's own relay; the code from another island is just
+    // noise to it. Running it drops the shield, and only then can the core be
+    // razed — the raid's last lock.
+    const vv = virusFor(ai);
+    if (!player.hasVirusFor(ai)) {
+      replPrint(
+        `${ai}: You carry a command, but not the one that answers to me.`,
+        `Its shield holds. ${ai}'s undoing is ${vv.file} — forged at a relay on THIS island, not carried in from another.`,
+        '_',
+      );
+      sfx.play('termerr');
+      return;
+    }
+    const core = fortress.core && fortress.core.obj;
+    if (core && core.shielded) {
+      core.shielded = false;
+      player.addScore(150);
+      replPrint(
+        `OK: ${vv.armed} speaks, and the core has no answer to it.`,
+        `${ai}: ...how did you get MY word?`,
+        'Its shield folds. The housing is bare — break it.',
+        '_',
+      );
+      player.say(`${vv.armed} runs. ${ai}'s shield folds and the core stands bare — now break it open.`);
+      sfx.play('zap');
+    } else {
+      replPrint(`The shield is already down. ${ai} is yours to break.`, '_');
+    }
+    return;
+  }
+  // Everything else: the daemon's own rebuff (CALYPSO sleeps; the martial cores snarl).
+  replPrint(`${ai}: ${v.rebuff[_coreRebuffIdx % v.rebuff.length]}`, '_');
+  _coreRebuffIdx++;
+  sfx.play('termerr');
+}
 // A HERMES relay (TOR station on a hilltop): the RON console. No chip, no AI
 // key — friendly tech. Amber CRT (the `.hermes` class recolours the shell),
 // with a short glitchy boot, then the same input runs against hermesCtx.
 function openHermesTerminal(tor) {
+  if (player.isSwine()) { player.say('You snuffle at the relay. A beast cannot work a terminal — but the moly grows at its foot.'); return; }
   terminalKind = 'hermes';
   hermesTor = tor;
   terminalOb = null;
+  setTerminalTheme(null);   // HERMES keeps its own amber CRT (recoloured by the .hermes class)
   replSession = {};
   if (tor.battery == null) tor.battery = 0.55 + Math.random() * 0.4;
   player.terminalSafe = true;
@@ -1609,7 +2574,7 @@ function openHermesTerminal(tor) {
   obTermGhost.textContent = '';
   obTermInput.focus();
 }
-function closeObTerminal() { elizaBot = null; terminalKind = 'ob'; terminalOb = null; replSession = {}; obTermEl.classList.remove('hermes'); obTermEl.style.display = 'none'; obTermGhost.textContent = ''; obTermInput.blur(); player.terminalSafe = false; }
+function closeObTerminal() { elizaBot = null; terminalKind = 'ob'; terminalOb = null; replSession = {}; setTerminalTheme(null); obTermEl.classList.remove('hermes'); obTermEl.style.display = 'none'; obTermGhost.textContent = ''; obTermInput.blur(); player.terminalSafe = false; }
 obTermEl.addEventListener('click', (e) => { if (e.target === obTermEl) closeObTerminal(); });
 // Autocomplete: once you've read the RON-DOS manual (book_ronml), the console
 // suggests the rest of a verb as faded ghost text you can accept with Tab.
@@ -1618,11 +2583,20 @@ obTermEl.addEventListener('click', (e) => { if (e.target === obTermEl) closeObTe
 // Autocomplete is per-system: an obelisk (TIRESIAS) suggests only AI-network
 // verbs, a HERMES relay only RON verbs — no seepage between the two. (sing is
 // secret, so it's in neither list.)
-const OB_COMPLETE = ['scan', 'nearest', 'keys', 'name', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'map', 'print', 'copy', 'cd', 'ls', 'decrypt', 'unlock', 'eliza', 'notes', 'help', 'let'];
-const HERMES_COMPLETE = ['read', 'print', 'archive', 'records', 'drive', 'backup', 'restore', 'forge', 'copy', 'cd', 'ls', 'notes', 'help', 'let'];
+const OB_COMPLETE = ['scan', 'nearest', 'keys', 'name', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'map', 'print', 'copy', 'cd', 'ls', 'drives', 'decrypt', 'unlock', 'eliza', 'retire', 'notes', 'help', 'let'];
+const HERMES_COMPLETE = ['read', 'print', 'archive', 'records', 'drive', 'drives', 'backup', 'restore', 'forge', 'copy', 'cd', 'ls', 'notes', 'help', 'let'];
 const escapeHtml = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+const CORE_COMPLETE = ['look', 'scan', 'run', 'jam', 'open', 'help', 'exit'];
 function ronmlCompletion(value) {
   if (elizaBot) return ''; // no RON-ML hints mid-conversation with the DOCTOR
+  if (terminalKind === 'core') {
+    // A core console takes a tiny bespoke set (coreRun), not the RON-ML verbs,
+    // and needs no manual: it is a conversation, not a console language.
+    const mc = value.match(/([A-Za-z]+)$/);
+    if (!mc) return '';
+    const hitc = CORE_COMPLETE.find((v) => v.length > mc[1].length && v.startsWith(mc[1]));
+    return hitc ? hitc.slice(mc[1].length) : '';
+  }
   if (!player.readManuals || !player.readManuals.has('book_ronml')) return '';
   const m = value.match(/([A-Za-z]+)$/); // the alphabetic token at the caret
   if (!m) return '';
@@ -1840,6 +2814,7 @@ function hoverSlotTip() {
 }
 let drag = null;     // in-progress pointer drag {from: slotDescriptor}
 const PROJECTILE_SPEED = 16; // tiles/sec for gun tracers
+const TORPOR_BOLT_HIT_R = 0.85; // depart mode (R3): how close to the bolt's aim point you must still be for it to detain — step outside and you dodge
 
 // When an obelisk falls, a fresh Wi-Fi block (consumed to craft the OB-gun)
 // respawns somewhere random in the ruins so the loop can continue.
@@ -1958,7 +2933,6 @@ let lastW4GameHour = dayNight.totalHours; // ticks a W4 every 30 game-minutes, n
 // and the AI throws everything it has left at you, without end — you keep
 // playing until it finally hunts you down (or forever, if you're good).
 const SKYLINK_MAX_W4 = 50; // concurrent cap, so a long purge can't melt the frame rate
-let skylinkTimer = 0; // seconds survived under the purge, once active
 let skylinkW4Clock = 0;
 function dispatchSkylinkW4s(n) {
   const towers = currentWorld.obeliskObjs.filter((o) => !o.destroyed);
@@ -1974,6 +2948,12 @@ function update(dt) {
   if (input.inventoryPressed()) showBackpack = !showBackpack;
   if (input.skillsPressed()) showSkills = !showSkills;
   if (input.weaponChartPressed()) showWeapons = !showWeapons;
+  // O: the phone, in and out of the pocket. Closing by key only matters when
+  // the thread input hasn't got focus (typing captures the keyboard; Esc and
+  // the X still close from inside).
+  if (input.phonePressed()) {
+    if (phoneEl.style.display === 'flex') closePhone(); else openPhone();
+  }
   if (input.pausePressed() && !player.deathCert) {
     paused = !paused;
     player.say(paused ? 'Paused. Press P to resume.' : 'Back in it.');
@@ -1982,6 +2962,96 @@ function update(dt) {
   // freezes while paused. Help/backpack/skills/weapons and unpausing itself
   // still work above this line.
   if (paused) return;
+
+  // A queued boat crossing (islands-plan §4): perform the deferred world switch
+  // here, at a clean frame boundary, then bail — it was requested from inside
+  // player.update (boarding a ship), and the rest of this tick assumes the world
+  // we are leaving.
+  if (pendingCrossing) {
+    const target = pendingCrossing;
+    pendingCrossing = null;
+    const dest = worldById(target);
+    if (dest) { goToWorld(dest); sfx.play('zap'); }
+    return;
+  }
+
+  // The Nokia's queue drains every frame, wherever you are, so a text finishes even
+  // if you cross mid-message; the SMS beep fires the frame each one appears. Off
+  // Ogygia the phone has NO SIGNAL — one line, once, so the channel reads as hers.
+  nokia.tick(dt);
+  if (nokia.justShown) sfx.play('sms');
+  if (!currentWorld.keeper && currentWorld.id !== 'backspace') sendNokia(nokia, 'noSignal', { player });
+
+  // CIRCE's swine-magic (AEAEA). The change only TAKES HOLD on her island (a
+  // `transmute` world), but MOLY undoes it anywhere — so you can flee Aeaea
+  // half-turned and shed it at sea, if you carry the herb. Runs before the
+  // world branch so it ticks wherever you are.
+  if (!player.deathCert && !player._ended && (player.swine > 0 || currentWorld.transmute)) {
+    const prev = player.swine;
+    if (player.hasMoly()) player.swine = Math.max(0, player.swine - dt * 0.09);        // ~11s to shed
+    else if (currentWorld.transmute) player.swine = Math.min(1, player.swine + dt * 0.0125); // ~80s to turn
+    const stage = (v) => (v >= 1 ? 3 : v >= 0.62 ? 2 : v >= 0.3 ? 1 : 0);
+    const s0 = stage(prev), s1 = stage(player.swine);
+    if (s1 > s0) {
+      if (s1 === 1) player.say('Your hands look wrong in this light. Something is being decided about you.');
+      else if (s1 === 2) player.say('You keep catching yourself on all fours, and your grip is going. Find moly — it grows where HERMES stands.');
+      else if (s1 === 3) player.say('The change closes over you. You are a beast now: the network no longer reads you as a person, and lets you be — but you can hold nothing, and work nothing.');
+    } else if (s1 < s0) {
+      if (s0 === 3) player.say('The moly bites, and you come back into your own shape — hands, and a name.');
+      else if (s1 === 0) player.say('The pull lets go of you. You are yourself again.');
+    }
+    // (The "machines lose interest in a beast" half of the mechanic lives at the
+    // point of DETECTION, in updateRobots — clearing aggro from out here does not
+    // stick, because each robot's own AI re-acquires you later in the same frame.)
+  }
+
+  // HELIOS's prohibition (THRINACIA). The cattle of the Sun are forbidden. This
+  // island does not hunt you — until you slaughter one, and then it never stops.
+  // A one-time warning fires when you first come near the herd; after that it is
+  // on you. Runs only on a `prohibition` world (Helios is a combat world, so the
+  // worldStir aliases already point at its obelisks + factory).
+  if (currentWorld.prohibition && currentWorld.sacredHerd && !player.deathCert && !player._ended) {
+    const herd = currentWorld.sacredHerd;
+    if (!currentWorld.heliosWrath) {
+      // The trespass: any of the herd gone from the tally means you took one.
+      const live = herd.reduce((n, c) => n + (c.dead ? 0 : 1), 0);
+      if (live < currentWorld.sacredCount) {
+        currentWorld.heliosWrath = true;
+        currentWorld._heliosStirClock = 0;
+        player.say('You have killed the cattle of the Sun. HELIOS darkens overhead, and the whole island turns its face to you. There is no unmaking this — fell the core, or die hunted.');
+        sfx.play('charge');
+        worldStir.stir();
+        if (typeof worldStir.spawnWave === 'function') worldStir.spawnWave(4, 2);
+      } else if (!currentWorld._heliosWarned) {
+        // A single warning the first time you stray in among the herd.
+        for (const c of herd) {
+          if (!c.dead && Math.hypot(c.x - player.x, c.y - player.y) < 4) {
+            currentWorld._heliosWarned = true;
+            player.say('These are the cattle of the Sun, and HELIOS counts them. Lay no hand on them: take one, and the island is your enemy to the end.');
+            break;
+          }
+        }
+      }
+    } else {
+      // Wrath holds: keep the network roused so the obelisks stay red and the
+      // factory keeps scrambling hunters until the core falls.
+      currentWorld._heliosStirClock = (currentWorld._heliosStirClock || 0) + dt;
+      if (currentWorld._heliosStirClock > 4) {
+        currentWorld._heliosStirClock = 0;
+        worldStir.stir();
+      }
+    }
+  }
+
+  // Out on the water in a boat that was never going to make it. The world holds
+  // still — no input, no AI, no clock — while the voyage plays out and the sea
+  // sends you home. (updateCrossFail drives the camera itself.)
+  if (crossFail) { updateCrossFail(dt); return; }
+  // You are ashore, so you are out of the boat. Not a tidy-up: while `aboard` is
+  // set the renderer draws the hull INSTEAD of the character, so a stray flag
+  // would leave you playing an invisible man in a boat on dry land. Nothing may
+  // leave you aboard once the crossing is over — not a death, not a world switch.
+  if (player.aboard) player.aboard = null;
 
   // Resting (from B): the world holds still while the character lies down, the
   // screen dims, and the clock visibly spins faster (REST_CLOCK_MULT) so you
@@ -1995,6 +3065,8 @@ function update(dt) {
       player.resting = false;
       sleepCooldown = SLEEP_COOLDOWN_S;
       player.say('You wake, a little stronger.');
+      // Rest on Ogygia is exactly what she wants: her hold tightens, and she is glad.
+      if (currentWorld.keeper) { holdRise(player, 0.10); sendNokia(nokia, 'firstRest', { player }); }
       persist();
     }
     return; // everything else — movement, AI, other clocks — is frozen while resting
@@ -2020,6 +3092,7 @@ function update(dt) {
     else if (player.canCraftChip()) player.craftChip();
     else if (player.canCraftSword()) player.craftSword();
     else if (player.canCraftFortressMap()) player.craftFortressMap();
+    else if (player.canCraftGreekShip(map)) player.craftGreekShip(map);
     else if (player.canCraftBoat(map)) player.craftBoat(map);
   }
   if (input.zoomTogglePressed()) camera.toggleZoom();
@@ -2164,6 +3237,7 @@ function update(dt) {
     if (slot) {
       input.consumeClick();
       if (slot.kind === 'packbadge') showBackpack = !showBackpack; // tap the badge to open — and again to close (mobile has no I key)
+      else if (slot.kind === 'phone') openPhone(); // the Nokia 3310: the screen opens, SMS both ways
       else if (player.getSlot(slot)) drag = { from: slot, sx: press.x, sy: press.y }; // origin kept for the slip guard on release
       else player.equipSlot(slot); // empty hands slot: stow whatever's held
     }
@@ -2207,6 +3281,22 @@ function update(dt) {
       else player.say('Too far from the gate terminal to reach it.');
     }
   }
+  // Click the core's terminal — the glowing screen on its SE face — to speak with
+  // the daemon. You must be standing at the core (nearCoreTerminal); a click that
+  // ground-projects onto the core's footprint (its tall SE face maps to a tile
+  // just SE of it, right where you stand) then opens its console. Every core now
+  // carries one; openCoreTerminal reads fortress.AI_NAME for the right voice.
+  if (fortress.coreTerminal) {
+    const cPress = input.clickPos();
+    if (cPress && fortress.nearCoreTerminal(player.x, player.y)) {
+      const w = camera.toWorld(cPress.x, cPress.y, renderer.w, renderer.h);
+      const t = fortress.coreTerminal; // the core centre
+      if (Math.hypot(w.x - t.x, w.y - t.y) <= fortress.core.fw + 3) {
+        input.consumeClick();
+        openCoreTerminal();
+      }
+    }
+  }
   const up = input.consumeUp();
   if (up && drag) {
     const target = renderer.slotAt ? renderer.slotAt(up.x, up.y) : null;
@@ -2241,18 +3331,28 @@ function update(dt) {
   // update() hook, the camera, and the way back up — everything else in this
   // function (obelisks, the W-factory, animals, day/night, RON resupply, lore
   // terminals...) belongs to the overworld and simply holds still while you're
-  // not there to see it, because it only ticks when currentWorld === calypso.
-  if (currentWorld !== calypso) {
+  // not there to see it, because it only ticks on a combat island (CALYPSO or a
+  // martial daemon island like POLYPHEMUS). Non-combat worlds (the Backspace,
+  // ITHACA) run the slim loop below.
+  if (!currentWorld.combat) {
     player.update(dt, input, map, [], [], mouseWorld);
     currentWorld.update(dt, player); // the lurker + the ambient shrieks
     camera.follow(player.x, player.y, dt);
     if (player._ubikTeleportCooldown > 0) player._ubikTeleportCooldown -= dt;
-    // The exit is a plain door set in the wall — approach it (it's solid, so
-    // you stand a tile off) and you step back out into the real world.
-    else if (currentWorld.exit && Math.hypot(player.x - currentWorld.exit.x, player.y - currentWorld.exit.y) < 1.7) {
-      goToWorld(calypso);
-      player._ubikTeleportCooldown = UBIK_TELEPORT_COOLDOWN;
-      sfx.play('zap');
+    // R4: the Backspace is an ALTERNATIVE CROSSING ROAD — the road of the dead. It
+    // is littered with labelled doors, one per island (each drawn with its name on
+    // an isometric EXIT sign). Walk up to the door of the island you want and you
+    // come up THERE — no menu, the doors ARE the choice. The pick rides the normal
+    // pendingCrossing path (performed at the next frame top, against a clean map).
+    else if (currentWorld.exits) {
+      for (const e of currentWorld.exits) {
+        if (Math.hypot(player.x - e.x, player.y - e.y) < 1.7) {
+          pendingCrossing = e.island;   // worldById resolves it; null falls through harmlessly
+          player._ubikTeleportCooldown = UBIK_TELEPORT_COOLDOWN;
+          sfx.play('zap');
+          break;
+        }
+      }
     }
     return;
   }
@@ -2262,12 +3362,30 @@ function update(dt) {
   const foes = currentWorld.waterdroids.length ? currentWorld.robots.concat(currentWorld.waterdroids) : currentWorld.robots;
   player.update(dt, input, map, currentWorld.animals, foes, mouseWorld);
   updateWaterDroids(dt, currentWorld.waterdroids, player, map);
-  // Advance in-flight rounds.
+  // Advance in-flight rounds. Most are cosmetic tracers at PROJECTILE_SPEED; a
+  // few carry their own slower speed (R3's torpor bolt crawls so it can be
+  // dodged).
   for (const p of map.projectiles) {
     const dist = Math.hypot(p.x1 - p.x0, p.y1 - p.y0) || 0.001;
-    p.prog += (PROJECTILE_SPEED * dt) / dist;
+    p.prog += ((p.speed ?? PROJECTILE_SPEED) * dt) / dist;
   }
-  if (map.projectiles.length) map.projectiles = map.projectiles.filter((p) => p.prog < 1);
+  if (map.projectiles.length) {
+    // A torpor bolt (depart mode) resolves ON ARRIVAL: it detains only if you are
+    // still near where it was aimed (x1/y1, your position at fire time). Step
+    // away and it lands on empty sand — a real dodge. Everything else is a
+    // cosmetic tracer that simply expires at prog >= 1.
+    for (const p of map.projectiles) {
+      if (p.prog >= 1 && p.kind === 'torpor' && !p._resolved) {
+        p._resolved = true;
+        if (Math.hypot(player.x - p.x1, player.y - p.y1) <= TORPOR_BOLT_HIT_R) {
+          if (player.detainHit) player.detainHit(p.dmg ?? 5, 'machine'); else player.takeDamage(p.dmg ?? 5, 'machine');
+        } else {
+          sfx.play('keydrop'); // a soft puff as it settles into the ground, missing
+        }
+      }
+    }
+    map.projectiles = map.projectiles.filter((p) => p.prog < 1);
+  }
 
   // Dropped items decay off the ground so the world doesn't silt up with
   // salvage — perishables (meat, berries) go fast, common scrap/materials
@@ -2466,6 +3584,9 @@ function update(dt) {
   if (saveClock >= 8) { saveClock = 0; persist(); }
   updateAnimals(dt, currentWorld.animals, player, map);
   updateBirds(dt, currentWorld.birds, currentWorld.animals, player, map);
+  // Calypso's channel: her texts + her interventions against POSEIDON's machines,
+  // only on her island (Ogygia is a combat world, so its robots are live here).
+  if (currentWorld.keeper) updateNokiaKeeper(dt);
   // (Robots' AI now ticks inside systems.runUpdate below — order 30, before
   //  fortress at 35, which reads this-frame robot aggro. See robots.js.)
   // Choir light-flash sync: while the piece plays, each singing machine's red
@@ -2496,8 +3617,8 @@ function update(dt) {
   // keeps the gates). The world-contract bag carries everything a system reads.
   //   robots: every machine's AI + separation (draw stays in the renderer sort).
   //   fortress: swings the doorway, lights the maze way-out, runs the breach
-  //   alarm — on alarm (uplink intact) `stir` flares the obelisks red and sends
-  //   a W4, `calm` unwinds it. dayNight: advances the day/night clock. robots
+  //   alarm — on alarm `stir` flares the obelisks red and sends a W4, `calm`
+  //   unwinds it. dayNight: advances the day/night clock. robots
   //   ticks before fortress so fortress sees this-frame aggro (see robots.js).
   systems.runUpdate({ dt, player, input, map, camera, robots: currentWorld.robots, animals: currentWorld.animals, birds: currentWorld.birds, dayNight, worldStir, fortress });
   // Push the player out of any machine/animal body he ended the tick overlapping.
@@ -2515,13 +3636,11 @@ function update(dt) {
   if (dayNight.hoursLeft() <= 0 && !player.skylinkActive && !player.deathCert && !player._ended
     && !currentWorld.obeliskObjs.some((o) => o.needsRebuild)) {
     player.skylinkActive = true;
-    skylinkTimer = 0; // now counts up: seconds survived under the purge
     skylinkW4Clock = 0;
     player.say('POSEIDON comes online. Every obelisk blazes and turns on you at once.');
     dispatchSkylinkW4s(6); // the opening salvo
   }
   if (player.skylinkActive && !player._ended) {
-    skylinkTimer += dt;
     skylinkW4Clock += dt;
     if (skylinkW4Clock > 1.2) {
       skylinkW4Clock = 0;
@@ -2612,9 +3731,26 @@ function update(dt) {
   for (const ob of currentWorld.obeliskObjs) {
     if (ob.burning > 0) ob.burning -= dt; // OB-gun flame timer, ticked for the renderer
     if (ob.frozen) ob.frozenT = (ob.frozenT || 0) + dt; // CPU-burn age for the renderer's smoke ramp
+    // Blinding the panopticon eye (crash/destroy it) puts it out: the island goes
+    // deaf to you. Handle the transition before the destroyed-skip below.
+    if (ob.cls === 'eye' && ob.destroyed && player._underEye) {
+      player._underEye = false;
+      player.say('The great eye goes dark — blinded. The island is deaf to you now.');
+    }
     if (ob.destroyed) continue;
     const d = Math.hypot(ob.x + 0.5 - player.x, ob.y + 0.5 - player.y);
-    if (d < 9) {
+    if (ob.cls === 'eye') {
+      // POLYPHEMUS's panopticon: the single eye detects by LINE OF SIGHT across a
+      // huge range. In its line, alert climbs and it names you to the island; break
+      // the line (terrain, ruins, the fortress, forest) and it loses you and calms.
+      const EYE_RANGE = 42;
+      // Cast from just OUTSIDE the eye's own (solid) obelisk tile toward the
+      // player, so the tower doesn't block its own line of sight.
+      const edx = player.x - (ob.x + 0.5), edy = player.y - (ob.y + 0.5), edd = Math.hypot(edx, edy) || 1;
+      const sx = ob.x + 0.5 + (edx / edd) * 1.3, sy = ob.y + 0.5 + (edy / edd) * 1.3;
+      ob._eyeSees = d < EYE_RANGE && map.hasLineOfSight(sx, sy, player.x, player.y);
+      ob.alert = ob._eyeSees ? Math.min(1, ob.alert + dt * 1.1) : Math.max(0, ob.alert - dt * 0.55);
+    } else if (d < 9) {
       ob.alert = Math.min(1, ob.alert + dt * 1.5);
     } else {
       ob.alert = Math.max(0, ob.alert - dt * 0.4);
@@ -2661,6 +3797,32 @@ function update(dt) {
         }
       }
     }
+    // The panopticon's bite: while the eye holds you in its line, the island turns
+    // your way — machines within reach aggro straight onto YOU (not just toward the
+    // tower). First sight flares the whole network; losing the line lets it go.
+    if (ob.cls === 'eye') {
+      if (ob._eyeSees && ob.alert > 0.5) {
+        if (!player._underEye) {
+          player._underEye = true;
+          worldStir.stir(); // the network flares awake
+          player.say('The great eye fixes on you. The whole island wakes and turns your way — break its line of sight.');
+        }
+        ob._eyeStirT = (ob._eyeStirT || 0) - dt;
+        if (ob._eyeStirT <= 0) {
+          ob._eyeStirT = 2.5;
+          for (const r of currentWorld.robots) {
+            if (r.dead || r.drained || r.fused || r.friendly || r.disabledT > 0) continue;
+            if (Math.hypot(r.x - player.x, r.y - player.y) > 40) continue;
+            r.aggro = true;
+            r.wanderTarget = { x: player.x, y: player.y };
+            r.wanderTimer = 5;
+          }
+        }
+      } else if (player._underEye && ob.alert < 0.2) {
+        player._underEye = false;
+        player.say("You slip out of the eye's line, and the island loses your scent.");
+      }
+    }
   }
   // Once-only lines as the song takes hold and as it lets go.
   if (sirenPull && !player._underSong) {
@@ -2681,6 +3843,7 @@ function frame(now) {
     acc -= STEP;
   }
   checkMilestones(); // auto-snapshot stage checkpoints as they're reached
+  if (now - _lastAutosave > 8000) { _lastAutosave = now; persist(); } // keep Continue current (position + loot), not just on events
 
   if (now - lastRenderTime >= MIN_RENDER_MS) {
     lastRenderTime = now;
@@ -2706,6 +3869,8 @@ function frame(now) {
       showBackpack,
       detail: detail || hoverSlotTip(),
       toast,
+      nokiaToast: nokia.current,
+      nokiaSignal: nokiaSignalBars(),
       touchControls: touchLike,
       touchRunHeld: input._touchRun,
       drag: drag ? { ...drag, mx: input.mouseX, my: input.mouseY } : null,
@@ -2713,17 +3878,17 @@ function frame(now) {
       aiVictory: player.aiVictory,
       showSkills,
       showWeapons,
-      craftPrompt: (player.canCraftObGun() && player.hands !== 'obgun') || (player.canCraftWaveGun() && player.hands !== 'wavegun') || player.canCraftChip() || player.canCraftSword() || player.canCraftFortressMap() || player.canCraftBoat(map),
+      craftPrompt: (player.canCraftObGun() && player.hands !== 'obgun') || (player.canCraftWaveGun() && player.hands !== 'wavegun') || player.canCraftChip() || player.canCraftSword() || player.canCraftFortressMap() || player.canCraftGreekShip(map) || player.canCraftBoat(map),
       craftWaveGun: player.canCraftWaveGun() && player.hands !== 'wavegun',
       craftChip: player.canCraftChip() && !player.canCraftWaveGun() && !(player.canCraftObGun() && player.hands !== 'obgun'),
       craftSword: player.canCraftSword() && !player.canCraftChip() && !player.canCraftWaveGun() && !(player.canCraftObGun() && player.hands !== 'obgun'),
       // Lowest craft priority (see the C chain): the boat prompt shows only when
       // no weapon/tool/map craft is pending, so it never contradicts what C does.
-      craftBoat: player.canCraftBoat(map) && !player.canCraftChip() && !player.canCraftSword() && !player.canCraftWaveGun() && !player.canCraftFortressMap() && !(player.canCraftObGun() && player.hands !== 'obgun'),
-      // POSEIDON is an overworld network — its lights/lines must never draw over
-      // the Backspace.
-      skylinkActive: player.skylinkActive && !player._ended && currentWorld === calypso,
-      skylinkTimer,
+      craftGreekShip: player.canCraftGreekShip(map) && !player.canCraftChip() && !player.canCraftSword() && !player.canCraftWaveGun() && !player.canCraftFortressMap() && !(player.canCraftObGun() && player.hands !== 'obgun'),
+      craftBoat: player.canCraftBoat(map) && !player.canCraftGreekShip(map) && !player.canCraftChip() && !player.canCraftSword() && !player.canCraftWaveGun() && !player.canCraftFortressMap() && !(player.canCraftObGun() && player.hands !== 'obgun'),
+      // POSEIDON is a combat-island network — its lights/lines must never draw
+      // over the Backspace or peaceful ITHACA.
+      skylinkActive: player.skylinkActive && !player._ended && currentWorld.combat,
       obeliskObjs: currentWorld.obeliskObjs,
       paused,
       rest: resting ? { dim: restDim(resting.t) } : null,
@@ -2746,4 +3911,22 @@ function frame(now) {
   }
   requestAnimationFrame(frame);
 }
+// Stage 1c: resume on the island the save left you on. CALYPSO is already the live
+// world; for ITHACA, regenerate it and switch there at the saved position. Done
+// last — after every other init — so no earlier module-eval runs against the wrong
+// map. onEnter (the homecoming/arrival beat) is suppressed here: a reload is a
+// resume, not a fresh landfall.
+if (_bootIsland && _bootIsland !== 'calypso') {
+  const dest = worldById(_bootIsland);
+  if (dest) {
+    const arrival = dest.onEnter;
+    dest.onEnter = () => {};   // a reload is a resume, not a fresh arrival/homecoming
+    goToWorld(dest);
+    dest.onEnter = arrival;
+    if (_bootPos && typeof _bootPos.x === 'number') { player.x = _bootPos.x; player.y = _bootPos.y; camera.snap(player.x, player.y); }
+  }
+}
+// R3: seed the detain flag from the world we actually boot on (the Calypso start
+// never routes through goToWorld, so set it here too). Depart mode → her guards detain.
+player.detainMode = currentWorld.winMode === 'depart';
 requestAnimationFrame(frame);

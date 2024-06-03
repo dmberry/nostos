@@ -629,15 +629,15 @@ function scatterLoners(map, rng, keepClear) {
 
 // Abandoned cars, left where they stalled or crashed when the grid died.
 // Big now — a 2x3 hulk of six tiles — and smashable with a crowbar for what
-// was left inside. Sparse and spread out so they read as landmarks, not a
-// hazard course. Placed on or beside a road with all six footprint tiles
-// clear; the whole footprint points back at one car object so a hit on any
-// tile strips the same wreck.
+// was left inside. Only a handful per island, spread far apart, so each one
+// reads as a landmark rather than a car park. Placed on or beside a road with
+// all footprint tiles clear; the whole footprint points back at one car
+// object so a hit on any tile strips the same wreck.
 function scatterWrecks(map, rng) {
   const placed = [];
   const minGap = 18;
   let guard = 0;
-  while (placed.length < 7 && guard++ < 6000) {
+  while (placed.length < 4 && guard++ < 6000) {
     const x = Math.floor(rng() * (map.w - 3));
     const y = Math.floor(rng() * (map.h - 3));
     // A tight 2x2 solid core. The car sprite is a touch wider than this on

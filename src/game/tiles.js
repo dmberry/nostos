@@ -58,6 +58,7 @@ export const OBJECTS = {
   // up to and, from Stage 1b, board to cross POSEIDON's sea. Placed on a beach
   // tile at the water's edge, never pocketed.
   boat:    { solid: true },
+  greek_ship: { solid: true },
   wfactory: { solid: true }, // W-unit foundry; periodically fields a W3 repair drone
   furniture: { solid: true }, // stacked junk cluttering the underworld's rooms; solid, you weave around it
   exitdoor: { solid: true },  // a plain door in the underworld: walk up to it to leave. Solid; you exit on approach
@@ -67,9 +68,6 @@ export const OBJECTS = {
   // its inner maze can't be double-jumped, so the hacked doorway is the only
   // way in. `material` ('metal' | 'darkstone') selects the wall texture.
   fortwall: { solid: true },
-  // The red uplink mast: wires the fortress into the overworld POSEIDON. Hammer
-  // it down to cut the fortress off, so a breach no longer stirs the world.
-  uplink: { solid: true },
   // The grand doorway in the rampart: solid until the terminal hack drops a
   // fortress key and the key throws its bolts. Removed from the grid when open.
   fortdoor: { solid: true },

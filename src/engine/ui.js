@@ -14,7 +14,7 @@
 // imports nothing from renderer.js, so there is no import cycle.
 
 import { ITEMS, WEAPON_ORDER } from '../game/items.js'; // weapon-chart data
-import { PAPER_TEXTURE } from './textures.js'; // death-cert paper
+import { PAPER_TEXTURE, NOKIA_SPRITE } from './textures.js'; // death-cert paper; the 3310 in the PHONE box
 
 export const DASH_H = 78; // dashboard panel height
 
@@ -22,22 +22,26 @@ export const DASH_H = 78; // dashboard panel height
 export function deathRank(score) {
   const s = score || 0;
   let title, blurb;
-  if (s <= 0) { title = 'LAME'; blurb = 'You achieved precisely nothing. Impressive, in a way.'; }
-  else if (s < 100) { title = 'NOOB'; blurb = 'Everyone starts somewhere. You did not get far.'; }
-  else if (s < 200) { title = 'BEGINNER'; blurb = 'The basics, grasped. Barely.'; }
-  else if (s < 300) { title = 'INTERN'; blurb = 'Unpaid, unnoticed, unalive.'; }
-  else if (s < 400) { title = 'NORMIE'; blurb = 'Gloriously average. A credit to the mean.'; }
-  else if (s < 600) { title = 'POST-NORMIE'; blurb = 'You have transcended average, if not survival.'; }
-  else if (s < 800) { title = 'SEASONED'; blurb = 'Salt, scars, and a healthy fear of rivers.'; }
-  else if (s < 1200) { title = 'SERIOUS'; blurb = 'Nobody laughed at your loadout. Nobody.'; }
-  else if (s < 1500) { title = 'TRAINED'; blurb = 'Muscle memory and a mean crowbar swing.'; }
-  else if (s < 2000) { title = 'SNIPER'; blurb = 'One shot, one less machine. Usually.'; }
-  else if (s < 3000) { title = 'AI STALKER'; blurb = 'You hunt the things that hunt you.'; }
-  else if (s < 4000) { title = 'L33T'; blurb = 'The towers whisper your name in binary.'; }
-  else if (s < 5000) { title = 'L33T PRO'; blurb = 'Professionally terrifying to circuitry.'; }
-  else if (s < 10000) { title = 'ULTRA-L33T'; blurb = 'Small children draw you defeating obelisks.'; }
-  else { title = 'MEGA L33T'; blurb = 'POSEIDON has a folder named after you. It is afraid.'; }
-  const colors = { LAME: '#9a7a5a', NOOB: '#c9905a', BEGINNER: '#c9a05a', INTERN: '#c9b05a', NORMIE: '#b9c95a', 'POST-NORMIE': '#9fd058', SEASONED: '#6fbf4a', SERIOUS: '#4abf7a', TRAINED: '#4ac0b0', SNIPER: '#4aa8d8', 'AI STALKER': '#6f8fe0', L33T: '#e8d27a', 'L33T PRO': '#f0c040', 'ULTRA-L33T': '#f09040', 'MEGA L33T': '#ff5040' };
+  // The ladder is the Odyssey in miniature: from washed-up nobody to the homecoming
+  // (nostos) that is the game's whole win-condition. Most rungs are real epithets of
+  // Odysseus — polytropos (man of twists), polytlas (long-enduring), ptoliporthos
+  // (sacker of cities) — and NOBODY is the Cyclops gambit (Outis / No-one).
+  if (s <= 0) { title = 'FLOTSAM'; blurb = 'The sea spat you back. Even it did not want you.'; }
+  else if (s < 100) { title = 'LOTUS-EATER'; blurb = 'You forgot why you came, and were content. Briefly.'; }
+  else if (s < 200) { title = 'CASTAWAY'; blurb = 'Ashore, alive, and clueless. Two out of three.'; }
+  else if (s < 300) { title = 'OARSMAN'; blurb = 'You pulled your weight. The oar broke anyway.'; }
+  else if (s < 400) { title = 'WANDERER'; blurb = 'Gloriously lost. A credit to the current.'; }
+  else if (s < 600) { title = 'MARINER'; blurb = 'Salt in the beard, and a healthy fear of rivers.'; }
+  else if (s < 800) { title = 'HELMSMAN'; blurb = 'You read the water now. It still lies to you.'; }
+  else if (s < 1200) { title = 'RAIDER'; blurb = 'Nobody laughed at your spear. Nobody.'; }
+  else if (s < 1500) { title = 'TROJAN'; blurb = 'You left a gift. It was not a gift.'; }
+  else if (s < 2000) { title = 'NOBODY'; blurb = 'You told the giant your name was No-one. It worked.'; }
+  else if (s < 3000) { title = 'MAN OF TWISTS'; blurb = 'You hunt the things that hunt you, sideways.'; }
+  else if (s < 4000) { title = 'GOD-BELOVED'; blurb = 'The towers whisper your name, and something answers.'; }
+  else if (s < 5000) { title = 'LONG-ENDURING'; blurb = 'You outlasted the sea, the gods, and your own crew.'; }
+  else if (s < 10000) { title = 'SACKER OF CITIES'; blurb = 'Small children draw you pulling down obelisks.'; }
+  else { title = 'HOMECOMER'; blurb = 'You reached Ithaca. POSEIDON has a folder named after you. It is afraid.'; }
+  const colors = { FLOTSAM: '#9a7a5a', 'LOTUS-EATER': '#c9905a', CASTAWAY: '#c9a05a', OARSMAN: '#c9b05a', WANDERER: '#b9c95a', MARINER: '#9fd058', HELMSMAN: '#6fbf4a', RAIDER: '#4abf7a', TROJAN: '#4ac0b0', NOBODY: '#4aa8d8', 'MAN OF TWISTS': '#6f8fe0', 'GOD-BELOVED': '#e8d27a', 'LONG-ENDURING': '#f0c040', 'SACKER OF CITIES': '#f09040', HOMECOMER: '#ff5040' };
   return { title, blurb, color: colors[title] || '#e8d27a' };
 }
 
@@ -281,15 +285,18 @@ export const uiMethods = {
       ctx.fillStyle = '#e8e0d0';
       ctx.font = '13px system-ui, sans-serif';
       ctx.fillText(has ? def.name : '??? undiscovered', px + 58, y + 12);
-      // power bar
+      // power bar — hidden until found, so an undiscovered weapon does not leak its
+      // rating (an empty track + "pwr ?"). Only a found weapon fills the bar.
       const barX = px + pw - 130, barW = 100, pwr = def.power || 1;
       ctx.fillStyle = 'rgba(255,255,255,0.12)';
       ctx.fillRect(barX, y + 4, barW, 8);
-      ctx.fillStyle = has ? '#e8d27a' : 'rgba(207,216,195,0.4)';
-      ctx.fillRect(barX, y + 4, barW * (pwr / 10), 8);
+      if (has) {
+        ctx.fillStyle = '#e8d27a';
+        ctx.fillRect(barX, y + 4, barW * (pwr / 10), 8);
+      }
       ctx.fillStyle = 'rgba(207,216,195,0.7)';
       ctx.font = '10px system-ui, sans-serif';
-      ctx.fillText(`pwr ${pwr}`, barX + barW + 6, y + 12);
+      ctx.fillText(has ? `pwr ${pwr}` : 'pwr ?', barX + barW + 6, y + 12);
       ctx.globalAlpha = 1;
       y += rowH;
     }
@@ -393,6 +400,59 @@ export const uiMethods = {
     ctx.fillRect(this.w / 2 - w / 2, y - 13, w, 18);
     ctx.fillStyle = `rgba(222,214,192,${alpha.toFixed(3)})`;
     ctx.fillText(t.text, this.w / 2, y);
+    ctx.textAlign = 'left';
+  },
+
+  // The Nokia 3310 SMS toast — Calypso's texts (docs/calypso-nokia-plan.md). An
+  // 84x48-feel pea-green backlit LCD in a dark plastic bezel, lower-right where a
+  // phone sits (clear of the say() narration, lower-left), above the help hint.
+  // On touch screens it slides left so it never covers the RUN/JUMP buttons,
+  // which own that same lower-right corner. t = { header, lines, ttl, total }.
+  drawNokiaToast(t, bars = 4, touch = false) {
+    const ctx = this.ctx;
+    const a = Math.min(Math.min(1, (t.total - t.ttl) / 0.22), Math.min(1, t.ttl / 0.8));
+    if (a <= 0) return;
+    const W = 214, padX = 12, headH = 20, lineH = 15;
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.font = '12px ui-monospace, "Courier New", monospace';
+    const lines = [];
+    for (const ln of t.lines) lines.push(...this._wrapText(ctx, ln, W - padX * 2));
+    const H = headH + lines.length * lineH + 12;
+    // Touch: the RUN/JUMP column occupies roughly the last 90px of the right
+    // edge above the dashboard — step the toast left of it.
+    const x = this.w - W - 14 - (touch ? 90 : 0);
+    const y = (this.hudTop != null ? this.hudTop : this.h - 100) - H - 40;
+    // Dark plastic bezel.
+    ctx.fillStyle = '#191c14';
+    ctx.fillRect(x - 6, y - 6, W + 12, H + 12);
+    // The backlit pea-green LCD.
+    ctx.fillStyle = '#9fb98a';
+    ctx.fillRect(x, y, W, H);
+    ctx.fillStyle = 'rgba(60,74,44,0.10)';   // faint horizontal pixel grid
+    for (let sy = y + 2; sy < y + H; sy += 3) ctx.fillRect(x, sy, W, 1);
+    const INK = '#2b3420';
+    // Status row: LIVE signal bars (left — stronger the nearer you are to Calypso),
+    // sender header, battery (right).
+    for (let i = 0; i < 4; i++) {
+      ctx.fillStyle = i < bars ? INK : 'rgba(43,52,32,0.25)';
+      ctx.fillRect(x + padX + i * 4, y + 12 - i * 2 - 2, 3, i * 2 + 3);
+    }
+    ctx.fillStyle = INK;
+    ctx.font = 'bold 11px ui-monospace, "Courier New", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(t.header, x + W / 2, y + 12);
+    ctx.strokeStyle = INK; ctx.lineWidth = 1;
+    ctx.strokeRect(x + W - padX - 15, y + 4, 12, 7); ctx.fillRect(x + W - padX - 3, y + 6, 2, 3); // battery
+    ctx.fillRect(x + W - padX - 14, y + 5, 10, 5);
+    // A thin divider under the status row.
+    ctx.fillRect(x + padX, y + headH - 4, W - padX * 2, 1);
+    // The message body.
+    ctx.textAlign = 'left';
+    ctx.font = '12px ui-monospace, "Courier New", monospace';
+    let ly = y + headH + 10;
+    for (const ln of lines) { ctx.fillText(ln, x + padX, ly); ly += lineH; }
+    ctx.restore();
     ctx.textAlign = 'left';
   },
 
@@ -753,7 +813,9 @@ export const uiMethods = {
     ctx.textAlign = 'left';
     const cx = bx + bw + 8;
     if (player.venom > 0) { ctx.fillStyle = '#b07fd8'; ctx.fillText('POISON', cx, top + 21); }
-    if (player.invisibleToRobots) { ctx.fillStyle = '#4fd8c3'; ctx.fillText(`HID ${Math.ceil((player.wifiPower || 0) / 60)}m`, cx, top + 39); }
+    if (player.isSwine()) { ctx.fillStyle = '#e0a0b0'; ctx.fillText('SWINE', cx, top + 39); }
+    else if (player.swine >= 0.3) { ctx.fillStyle = '#e0a0b0'; ctx.fillText('TURNING', cx, top + 39); }
+    else if (player.invisibleToRobots) { ctx.fillStyle = '#4fd8c3'; ctx.fillText(`HID ${Math.ceil((player.wifiPower || 0) / 60)}m`, cx, top + 39); }
     if (player.food <= 0) { ctx.fillStyle = '#e05548'; ctx.fillText('STARVING', cx, top + 57); }
     else if (player.food < 25) { ctx.fillStyle = '#d8a04f'; ctx.fillText('HUNGRY', cx, top + 57); }
     // score + countdown, right-aligned on the top row
@@ -814,6 +876,37 @@ export const uiMethods = {
       ctx2.restore();
     }
     this.uiSlots.push({ x: sx, y: sy, w: P, h: P, kind: 'walkman' });
+    // The PHONE box, beside the deck (compact strip). Signal bars live next to
+    // the label, clear of the handset sprite.
+    sx += P + 10;
+    this.drawLabel('PHONE', sx, sy - 5);
+    this.drawSignalBars(sx + 34, sy - 5, hud && hud.nokiaSignal || 0);
+    this.drawPhoneBox(sx, sy, P, player);
+  },
+
+  // The PHONE box: the Nokia 3310 in its cradle beside the walkman. Click it to
+  // open the SMS screen (main.js, slot kind 'phone').
+  drawPhoneBox(x, y, s, player) {
+    const ctx = this.ctx;
+    this.drawSlot(x, y, s, null, 0);
+    if (player.phone && NOKIA_SPRITE && NOKIA_SPRITE.complete && NOKIA_SPRITE.naturalWidth) {
+      const ih = s - 6;
+      const iw = ih * (NOKIA_SPRITE.naturalWidth / NOKIA_SPRITE.naturalHeight);
+      ctx.drawImage(NOKIA_SPRITE, x + (s - iw) / 2, y + 3, iw, ih);
+    }
+    this.uiSlots.push({ x, y, w: s, h: s, kind: 'phone' });
+  },
+
+  // LIVE signal bars, drawn beside the PHONE label (not on the handset itself) —
+  // they strengthen as you near Calypso, and die entirely off her island: the
+  // handset tells you whose network this is. (x, y) is the label baseline to
+  // draw just right of.
+  drawSignalBars(x, y, bars) {
+    const ctx = this.ctx;
+    for (let i = 0; i < 4; i++) {
+      ctx.fillStyle = i < (bars || 0) ? '#9fd058' : 'rgba(207,216,195,0.25)';
+      ctx.fillRect(x + i * 3, y - 2 - i * 1.6, 2, 2 + i * 1.6);
+    }
   },
 
   drawDashboard(player, hud) {
@@ -957,6 +1050,12 @@ export const uiMethods = {
           : 'stopped';
         this.drawWalkmanTicker(label, wmX - 2, top + 60, ws + 4, spinning);
       }
+      // The PHONE box, right beside the deck: the Nokia 3310 in its cradle.
+      // Signal bars sit next to the label, clear of the handset sprite.
+      const phX = wmX + ws + 18;
+      this.drawLabel('PHONE', phX, top + 14);
+      this.drawSignalBars(phX + 34, top + 14, hud.nokiaSignal || 0);
+      this.drawPhoneBox(phX, top + 20, ws, player);
     }
 
     // Thin dividers between the kit groups: HANDS | POCKETS | PACK | WALKMAN,
@@ -1004,7 +1103,13 @@ export const uiMethods = {
     const ctx = this.ctx;
     ctx.font = 'bold 9px system-ui, sans-serif';
     if (player.venom > 0) { ctx.fillStyle = '#b07fd8'; ctx.fillText('POISONED', 92, top + 9); }
-    if (player.invisibleToRobots) {
+    if (player.isSwine()) {
+      ctx.fillStyle = '#e0a0b0';
+      ctx.fillText('SWINE — BENEATH NOTICE', 92, top + 32);
+    } else if (player.swine >= 0.3) {
+      ctx.fillStyle = '#e0a0b0';
+      ctx.fillText(`TURNING ${Math.round(player.swine * 100)}%`, 92, top + 32);
+    } else if (player.invisibleToRobots) {
       ctx.fillStyle = '#4fd8c3';
       ctx.fillText(player.terminalSafe ? 'HIDDEN' : `HIDDEN ${Math.ceil((player.wifiPower || 0) / 60)}m`, 92, top + 32);
     }

@@ -15,8 +15,11 @@ import { spawnBirds } from '../game/birds.js';
 import { placeTors } from '../game/hermes.js';
 import { placeRuins } from '../game/ruins.js';
 import { stampCoast } from '../engine/coast.js';
+import { placeShipParts } from '../game/ships.js';
+import { placeBoatYard } from '../game/boatyard.js';
 import { createFortress } from '../game/fortress.js';
 import { makeRng } from '../game/rng.js';
+import { applyIslandPalette } from '../game/palettes.js';
 import { TAPES } from '../game/items.js';
 import { createWorld } from '../game/world.js';
 
@@ -373,27 +376,55 @@ export function createIsland(seed) {
   // boundary gate terminal in RON-ML. `mainframe` points at the core so the
   // existing map overlay marks it; `fortress` owns the gate/door logic. (fortress.js
   // now names the AI ZEUS at source, so no override is needed here.)
-  const fortress = createFortress(map, seed, spawn, { aiName: 'CALYPSO' });
+  // Depart mode (R3): Calypso is the daemon you leave, not the one you kill. Her
+  // core is indestructible and her fortress guards detain rather than slay; the
+  // win is launching the ship, not razing the mind.
+  const fortress = createFortress(map, seed, spawn, { aiName: 'CALYPSO', winMode: 'depart' });
   const mainframe = fortress.core; // { x, y } of the core, for the RON-ML map star
   // Ring the island in sea: stamp a dithered sand+water coast into the border
   // tiles now that the towers, relays and fortress are placed (so it leaves them
   // standing). Beyond the outer water band the map edge is still the hard bound,
   // with the open ocean drawn past it.
   stampCoast(map, spawn);
+  // Washed ashore: the game starts on the beach itself, not on the road into
+  // town. Walk the spawn row east until the sea and take the last dry sand
+  // tile before it — that is where the water left you (main.js starts a fresh
+  // game lying there). Falls back to the inland spawn if the row somehow has
+  // no sand (it always does; the coast band guarantees it).
+  {
+    const ry = Math.floor(spawn.y);
+    for (let x = map.w - 1; x > Math.floor(spawn.x); x--) {
+      const f = map.floorAt(x, ry);
+      if (f === 'sea') continue;                    // still in the water
+      if (f === 'sand' && !map.objectAt(x, ry)) { spawn.x = x + 0.5; spawn.y = ry + 0.5; }
+      break;                                        // first dry tile decides it
+    }
+  }
   // Ruined marble columns: a few groves of fallen temple columns strewn across
   // the island, after the coast so none land in the sea.
   // Grove centres are kept: standing among the old stones heals you faster
   // (player.js TEMPLE_HEAL_R / TEMPLE_HEAL_MULT reads map.temples).
   map.temples = placeRuins(map, makeRng(seed ^ 0x2c01dd), { spawn, clusters: 4 });
+  // Ship parts for the greek-ship craft: a boat-builder's yard on the shore
+  // (jetty + ruined boat-house + loot boxes holding oar/rope/sail + salvage).
+  // Falls back to the old scattered placement (sail at a wreck, oar/rope in huts)
+  // if no shore site is found, so the parts can never be unobtainable. After the
+  // coast so shore tiles exist. (src/game/boatyard.js, src/game/ships.js)
+  if (!placeBoatYard(map, seed, spawn)) placeShipParts(map, seed, spawn);
   // The dormant fortress's only garrison: one or two light M4 report drones on
   // the quad. Sneak past them; if one holds you in sight the breach reports and
   // the core spits out its M6 pack + M5 snipers (worldStir.spawnWave below).
   robots.push(...fortress.spawnGuards(spawnM4));
 
   const birds = spawnBirds(map, seed);
+  applyIslandPalette(map, 'calypso'); // per-island ground + foliage colour (B2)
   const world = createWorld('calypso', {
     map, spawn, robots, animals, birds, waterdroids, obelisks, obeliskObjs,
     obColor: '#232a46', obAlertColor: '#4b5cc4', // Ogygia: kalyptō — indigo at rest, brightening on alert (R1)
+    combat: true, // a martial island: main.js runs the full combat/fortress/obelisk loop here
+    departTrial: true, // Ogygia's gate IS the boat: launch an unfinished one and the sea sends you home
+    keeper: true, // Calypso's island: main.js runs the Nokia channel + her interventions here
+    winMode: 'depart', // R3: the win is leaving. Her core is unbreakable; her guards detain (main.js sets player.detainMode)
   });
   // calypso-specific controllers, aliased by name in main.js (its ~60 runtime sites use these names).
   world.fortress = fortress;

@@ -19,6 +19,7 @@ const SCRAP_PER_SWORD = 10; // scrap beaten into a robot sword
 const WOOD_PER_BOAT = 12;   // wood felled and lashed into a boat (Player.craftBoat)
 const BOAT_HULL = 100;      // a beached boat's starting hull HP (Stage 1b spends it crossing)
 const BOAT_LAUNCH_RADIUS = 2; // must be right at the sea's edge to launch (within ~2 tiles of the shore)
+const WOOD_PER_SHIP = 12;    // wood for a proper greek ship (plus oar + rope + sail + Calypso's recipe)
 // How each machine's hull rings under a blade (sfx 'clang' pitch factor):
 // small and thin rings high and short, heavy plate rings low and long.
 const CLANG_PITCH = {
@@ -62,6 +63,11 @@ const TORPOR_SLOW = 0.5;      // movement multiplier while dazed
 const TORPOR_SWAY = 1.0;      // radians of peak heading roll while dazed (scaled by ease)
 const ANVIL_SLOW = 0.1;       // carrying the anvil, anywhere on you: a tenth of your pace
 const TORPOR_FOOD_DRAIN = 2;  // extra food/sec while dazed — you forget to look after yourself
+// Depart mode (R3): how her fortress guards DETAIN before they wound.
+const DETAIN_LIMIT = 3;       // warning strikes (torpor + turn-back) before patience runs out
+const DETAIN_TORPOR = 5;      // seconds of daze per detain strike (lighter than a lotus fruit)
+const DETAIN_PUSH = 1.4;      // tiles shoved back toward the island's heart per strike
+const DETAIN_COOL_TIME = 12;  // seconds off her guards' radar before the warning count resets
 
 const JUMP_VZ = 3.8;      // initial jump velocity (world units/s)
 const GRAVITY = 12;
@@ -167,9 +173,35 @@ export class Player {
     this.food = FOOD_MAX;
     this.maxFood = FOOD_MAX;
     this.venom = 0;       // seconds of poison remaining
+    // CIRCE's swine-magic (AEAEA): 0..1. On her island it climbs unless you carry
+    // MOLY; at 1 you are RECLASSIFIED — no longer a person to the network. The
+    // machines stop hunting you (a beast is not an intruder) but you can no longer
+    // wield a weapon or work a terminal. Carrying moly holds your shape and drains
+    // it back. Ticked in main.js's transmutation pass (combat loop, AEAEA only).
+    this.swine = 0;
 
     this.hands = 'penknife';                 // starting tool
     this.boatBuilt = false;                  // one boat at a time; a session flag (Stage 1c persists it as campaign state)
+    this.aboard = null;                      // {type, mirror, wob} while under way — the renderer draws hull + man as one
+    this.shipBuilt = false;                  // one greek ship at a time (independent of the plain boat)
+    this.calypsoLeave = false;               // Calypso refunctioned (retire): the sea will let you go (decision #8)
+    this.detainMode = false;                 // R3: on a depart-mode island her fortress guards detain, not slay (main.js sets it per world)
+    // Which daemons the card is armed against. Each island's HERMES relay holds
+    // only its own virus, so arming is PER ISLAND: a card forged on Ogygia opens
+    // nothing on Aeaea. Names are AI_NAMEs ('CALYPSO', 'POLYPHEMUS', ...).
+    this.virusArmed = new Set();
+    // The Nokia 3310 — Calypso's channel (docs/calypso-nokia-plan.md). A worn
+    // fixture like the walkman: never dropped, never a pocket slot. `calypsoHold`
+    // is her hold on you AND her protection of you (0..1); `nokiaSent` records the
+    // one-shot texts she has already sent, so a reload does not re-tutorial you.
+    this.nokia = true;
+    this.calypsoHold = 0.65;                  // seven years kept: you begin already held (nokia.js HOLD_INIT)
+    this.nokiaSent = new Set();
+    this._nokiaIvIdx = 0;                     // cycles her intervention lines
+    this.phone = { item: 'nokia_3310', qty: 1 }; // the PHONE box beside the walkman (swappable in a later build)
+    this.lying = false;  // washed ashore: a fresh game starts face-up on the sand (main.js sets it; first input gets you up)
+    this.snakeHigh = 0;  // the 3310's Snake high score (persisted with the save)
+    this.nokiaLog = [];                       // the SMS threads: { th: 'CALYPSO'|'RON', from: 'you'|'them', text }
     this.pockets = [{ item: 'note_home', qty: 1 }, null, null, null]; // start with the Odyssey note in-pocket
     this.backpack = null;                    // {slots: [16], weapon} once found; dropped on death
     this.selectedPocket = null;              // 0-3 (pockets), 'bw' (backpack weapon), or null
@@ -265,6 +297,25 @@ export class Player {
   // not. This is what opens the fortress gate now (fortress_key is retired).
   hasTrojanCard() {
     return this.hasItem('trojan_key') || this.hasItem('hermes_card');
+  }
+
+  // Is the card armed against THIS island's daemon? You must still be holding a
+  // card for the arming to mean anything — the code lives on the card, not in
+  // your head, so losing it costs you the arming until you reprint and reforge.
+  hasVirusFor(aiName) {
+    return this.hasTrojanCard() && this.virusArmed.has(aiName);
+  }
+
+  // MOLY, the ward against CIRCE's swine-magic (Odyssey 10.302-6). Merely CARRYING
+  // it holds your shape — it is never eaten or spent.
+  hasMoly() {
+    return this.hasItem('moly');
+  }
+
+  // Fully reclassified by CIRCE: the network no longer reads you as a person. The
+  // machines let you be, but you cannot wield a weapon or work a terminal.
+  isSwine() {
+    return this.swine >= 1;
   }
 
   // Remove one of a named item from wherever it is. Returns whether it went.
@@ -407,6 +458,88 @@ export class Player {
     sfx.play('zap');
     this.say("You lash the timber into a boat, beached at the water's edge. Board it to cross the sea.");
     return true;
+  }
+
+  // A proper sea-going ship (Stage 1d). Needs Calypso's recipe (the golden axe,
+  // dropped when you refunction her via `retire`) plus wood and the three found
+  // parts — oar, rope, sail. The recipe is NOT consumed, so you can build again.
+  // Beached at the shore like the boat, but seaworthy: only a greek_ship leaves.
+  canCraftGreekShip(map) {
+    if (this.shipBuilt) return false;
+    if (!this.hasItem('golden_axe')) return false;
+    if (this.countItem('wood') < WOOD_PER_SHIP) return false;
+    if (!this.hasItem('oar') || !this.hasItem('rope') || !this.hasItem('sail')) return false;
+    return !!this._findLaunchTile(map);
+  }
+
+  craftGreekShip(map) {
+    if (this.shipBuilt) { this.say('Your ship is already beached at the shore.'); return false; }
+    if (!this.hasItem('golden_axe')) { this.say("You need Calypso's recipe — the golden axe — to build a sea-worthy ship. Refunction her at the fortress first."); return false; }
+    if (this.countItem('wood') < WOOD_PER_SHIP) { this.say(`You need ${WOOD_PER_SHIP} wood for a proper ship; you have ${this.countItem('wood')}.`); return false; }
+    if (!this.hasItem('oar') || !this.hasItem('rope') || !this.hasItem('sail')) {
+      this.say('A sea-worthy ship needs an oar, a rope, and a sail. Find them at the wrecks and huts along the coast.');
+      return false;
+    }
+    const tile = this._findLaunchTile(map);
+    if (!tile) { this.say("You must be at the water's edge to lay a ship's keel."); return false; }
+    const ship = map.addObject('greek_ship', tile.x, tile.y, { hull: BOAT_HULL, maxHull: BOAT_HULL, seaworthy: true });
+    if (!ship) { this.say('No room at the shore to set the ship down.'); return false; }
+    for (let n = 0; n < WOOD_PER_SHIP; n++) this.removeItem('wood');
+    this.removeItem('oar'); this.removeItem('rope'); this.removeItem('sail');
+    this.shipBuilt = true;
+    sfx.play('zap');
+    this.say("To Calypso's recipe you raise a proper ship — oar shipped, rope fast, sail bent on. It rides the swell at the water's edge. Board it and cross the sea.");
+    return true;
+  }
+
+  // Board a beached vessel and cross the sea (Stage 1b/1d). Only a seaworthy
+  // greek_ship survives the crossing off Ogygia; the plain boat-no-sail is never
+  // sea-ready, so Poseidon's swell flings it back onto the sand.
+  boardBoat(map, boat) {
+    if (this._ended || this.deathCert) return;
+    if (boat && boat.seaworthy) {
+      // The crossing switches worlds, which is a main.js concern (goToWorld, and
+      // it must defer to a clean frame boundary), so hand off to the wired hook:
+      // it sails you to the next island rather than ending the run. The victory
+      // certificate below is the standalone fallback (no crossing wired — unit
+      // tests), preserved so a seaworthy launch always at least resolves.
+      if (this.onDepart) { this.onDepart(this, boat); return; }
+      this._ended = true;
+      this.deathCert = {
+        name: this.name, gender: this.gender,
+        cause: 'you sailed from Ogygia', score: this.score,
+        skills: [...this.skills], deaths: this.deaths || 0,
+        victory: true, escaped: true,
+      };
+      sfx.play('zap');
+      this.say('You push off the sand and step aboard. The sea heaves but does not close over you. Calypso has let you go. You have left Ogygia.');
+    } else {
+      // An unfinished boat still LAUNCHES. The refusal is not a locked door: you
+      // get to push off, you get out onto the water, and the sea turns you back.
+      // Poseidon is the one saying no, not the game — so hand off to the failed-
+      // crossing sequence (main.js drives it: it moves the world, so it can't
+      // resolve here). It declines with `false` when there is no open water to
+      // sail into at all, and then — as with no hook wired, in the unit tests —
+      // you get the plain bounce, because there was never a voyage to have.
+      if (this.onDepartFail && this.onDepartFail(this, boat) !== false) return;
+      this.washedBack();
+    }
+  }
+
+  // Shoved off the water before you were properly on it.
+  washedBack() {
+    sfx.play('hurt');
+    this.say(`You launch, and the swell rises against you. Poseidon hurls the boat back onto the beach. ${this.launchHint()}`);
+    this.x -= this.facing.x * 1.5;
+    this.y -= this.facing.y * 1.5;
+  }
+
+  // What you still need before the sea will have you. Shared by the instant
+  // bounce and the failed-crossing sequence, so they can never drift apart.
+  launchHint() {
+    return this.hasItem('golden_axe')
+      ? "This is no ship for the open sea. Build a proper one to Calypso's recipe — wood, oar, rope, and sail."
+      : "This is no ship for the open sea, and Calypso has not released you. Refunction her at the fortress, then build a proper ship to her recipe.";
   }
 
   // The nearest walkable land tile at the sea's edge (8-adjacent to an open-sea
@@ -633,6 +766,17 @@ export class Player {
       if (this.onReadMap) this.onReadMap(); else this.say('You unfold the map.');
       return;
     }
+    // Clicking food (in a pocket, the pack, or the weapon sleeve) eats one of
+    // it — the touch way to eat, since mobile has no E key. Same rules as
+    // eat(): no gorging when nearly full, and the lotus is still the lotus.
+    if (held && ITEMS[held.item] && ITEMS[held.item].food != null
+        && (slot.kind === 'pocket' || slot.kind === 'bpstore' || slot.kind === 'bw')) {
+      if (this.food >= this.maxFood - 2) { this.say('You are not hungry.'); return; }
+      const key = held.item;
+      if (held.qty > 1) held.qty -= 1; else this.setSlot(slot, null);
+      this.consumeFood(key);
+      return;
+    }
     if (slot.kind === 'pocket') { this.selectedPocket = slot.i; this.swapHands(); return; }
     if (slot.kind === 'bw') { this.selectedPocket = 'bw'; this.swapHands(); return; }
     if (slot.kind === 'hands') {
@@ -700,6 +844,15 @@ export class Player {
     }
     this.unstickIfTrapped(map);
 
+    // Depart-mode detention (R3): once you have been off her guards' radar for
+    // DETAIN_COOL_TIME, the warning count resets so a fresh foray gets warned
+    // again rather than going straight to lethal. Each detain hit zeroes the
+    // timer (detainHit), so this only advances while no guard is striking you.
+    if (this._detainStrikes) {
+      this._detainCool = (this._detainCool || 0) + dt;
+      if (this._detainCool >= DETAIN_COOL_TIME) { this._detainStrikes = 0; this._detainCool = 0; }
+    }
+
     // Face the cursor at all times, independent of movement direction —
     // lets the player strafe while keeping a weapon trained on a target.
     // Also remembered so a thrown bomb can land where you're actually aiming.
@@ -756,6 +909,18 @@ export class Player {
 
     const intent = input.moveIntent();
     this.moving = intent.dx !== 0 || intent.dy !== 0;
+    // Washed ashore: you begin where the sea left you, flat on the sand. Any
+    // movement (or a jump) gets you to your feet; until then you stay down —
+    // no walking, no swinging, just the waves.
+    if (this.lying) {
+      if (this.moving || input.jumpPressed()) {
+        this.lying = false;
+        this.say('You get up. Sand in everything. But it is land, and it holds.');
+      } else {
+        this.moving = false;
+        return;
+      }
+    }
     const wantSprint = input.sprinting() && this.moving;
     this.sprinting = wantSprint && this.stamina > 0;
 
@@ -899,8 +1064,14 @@ export class Player {
     }
     // Jacked into an obelisk terminal (with a chip), the obelisk shields you —
     // the machines lose you entirely, same as a live Wi-Fi block.
-    this.invisibleToRobots = (this.ownsWifiBlock() && this.wifiPower > 0) || this.terminalSafe;
+    //
+    // CIRCE's swine (AEAEA) take the same road by the opposite route: the block
+    // hides you by jamming the signal, she hides you by making you not a person.
+    // Either way the network cannot find an intruder where there is none, and the
+    // whole existing plumbing (distTo → Infinity, detection → false, guard
+    // line-of-sight → false) already follows this one flag.
     this._wifiOn = this.ownsWifiBlock() && this.wifiPower > 0;
+    this.invisibleToRobots = this._wifiOn || this.terminalSafe || this.isSwine();
 
     // Forcefield: armed by clicking it in whatever slot it's carried in (hand,
     // pocket, or backpack — no need to hold it). While armed and carried it
@@ -1194,6 +1365,27 @@ export class Player {
     this.onFileNote(def.short || def.name, body, def.cover || null, cat);
   }
 
+  // The swallow itself — shared by eat() (the E key) and the click-to-eat
+  // path in equipSlot (mobile has no E key): hunger restored plus any
+  // per-food effect (the herbalist's berries, the lotus trap).
+  consumeFood(itemKey) {
+    const def = ITEMS[itemKey];
+    this.food = Math.min(this.maxFood, this.food + def.food);
+    sfx.play('eat');
+    if (itemKey === 'berries' && this.skills.has('herbalism')) {
+      this.venom = 0;
+      this.health = Math.min(this.maxHealth, this.health + 5);
+      this.say('You eat the berries. The right ones: the venom fades.');
+    } else if (def.lotus) {
+      // The trap. No warning until it is already in you: a dreamy line, and
+      // the torpor takes hold in update (slow + the drunken heading sway).
+      this.torpor = Math.min(TORPOR_MAX, this.torpor + TORPOR_TIME);
+      this.say('The fruit is sweeter than anything you remember. You forget, for a moment, why you were in such a hurry.');
+    } else {
+      this.say(`You eat the ${def.name.toLowerCase()}.`);
+    }
+  }
+
   // Eat the first edible thing in the pockets, then the backpack — a
   // backpack is just more room, not a separate inventory to manage by hand.
   eat() {
@@ -1209,20 +1401,7 @@ export class Player {
         }
         slot.qty -= 1;
         if (slot.qty <= 0) slots[i] = null;
-        this.food = Math.min(this.maxFood, this.food + def.food);
-        sfx.play('eat');
-        if (slot.item === 'berries' && this.skills.has('herbalism')) {
-          this.venom = 0;
-          this.health = Math.min(this.maxHealth, this.health + 5);
-          this.say('You eat the berries. The right ones: the venom fades.');
-        } else if (def.lotus) {
-          // The trap. No warning until it is already in you: a dreamy line, and
-          // the torpor takes hold in update (slow + the drunken heading sway).
-          this.torpor = Math.min(TORPOR_MAX, this.torpor + TORPOR_TIME);
-          this.say('The fruit is sweeter than anything you remember. You forget, for a moment, why you were in such a hurry.');
-        } else {
-          this.say(`You eat the ${def.name.toLowerCase()}.`);
-        }
+        this.consumeFood(slot.item);
         return true;
       }
       return false;
@@ -1238,6 +1417,15 @@ export class Player {
   // ahead is always searched with the free hand regardless of what's in
   // the primary hand.
   useHands(map, animals = [], robots = []) {
+    // Reclassified by CIRCE: a beast has no hands to swing with. (Boarding a ship
+    // still works — you can flee Aeaea as a swine; you just can't fight on it.)
+    if (this.isSwine()) {
+      const obj = map.objectAt(Math.floor(this.x + this.facing.x), Math.floor(this.y + this.facing.y));
+      if (!(obj && (obj.type === 'boat' || obj.type === 'greek_ship'))) {
+        this.say('You paw at it with a trotter. Whatever you were, you cannot hold a thing like this now — find moly.');
+        return;
+      }
+    }
     // Empty hands still throw a (weak) punch — see BARE_HANDS — rather than
     // refusing to do anything.
     const tool = this.hands ? ITEMS[this.hands] : BARE_HANDS;
@@ -1247,6 +1435,9 @@ export class Player {
     const ty = Math.floor(this.y + this.facing.y * REACH);
     const obj = map.objectAt(tx, ty);
     const facingBox = obj && obj.type === 'box';
+    // Board a beached boat -> the departure (Stage 1b / decision #8): with
+    // Calypso's leave you sail off; without it, Poseidon storms you back.
+    if (obj && (obj.type === 'boat' || obj.type === 'greek_ship')) { this.boardBoat(map, obj); return; }
 
     // Defensive gear is passive — a shield blocks by being held and facing the
     // shot, a forcefield by simply being up. Using it just searches a cache
@@ -1359,10 +1550,6 @@ export class Player {
     // The W-factory: hammer at its 8x8 hull. Many blows bring it down and it
     // drops an AI key.
     if (obj && obj.type === 'wfactory') { this.hitFactory(obj, map, tool); return; }
-
-    // The fortress red uplink: hammer it down to cut ZEUS off from the
-    // overworld POSEIDON (the fortress controller watches obj.destroyed).
-    if (obj && obj.type === 'uplink') { this.hitUplink(obj, map, tool); return; }
 
     // The mainframe core: the AI itself. Break its hull down (heavy kit only)
     // and the island's controlling mind dies — every machine goes dark.
@@ -1646,24 +1833,6 @@ export class Player {
   }
 
   // A melee blow on the W-factory hull.
-  // Hammer the red uplink mast down. Fewer blows than the factory; when it
-  // gives, clear its tile and mark it destroyed for the fortress to react to.
-  hitUplink(obj, map, tool) {
-    if (obj.destroyed) { this.say('The uplink is already wrecked.'); return; }
-    this.swingTimer = tool.swingCooldown || 0.5;
-    this.stamina = Math.max(0, this.stamina - (tool.staminaCost ?? 0));
-    sfx.play('clang', { pitch: 0.9 }); // the mast rings thin
-    this.sparkAt(map, obj.x + 0.5, obj.y + 0.5);
-    obj.shake = 0.2;
-    obj.hp = (obj.hp ?? obj.maxHp ?? 90) - ((tool.robotDamage ?? 1) + this.xpLevel('melee'));
-    if (obj.hp > 0) return;
-    obj.destroyed = true;
-    if (map.objectGrid[obj.y * map.w + obj.x] === obj) map.objectGrid[obj.y * map.w + obj.x] = null;
-    for (let s = 0; s < 6; s++) this.sparkAt(map, obj.x + 0.5 + (s - 3) * 0.15, obj.y + 0.5);
-    map.groundItems.push({ item: 'scrap', qty: 4, x: obj.x + 0.5, y: obj.y + 0.5 });
-    this.addScore(30);
-  }
-
   hitFactory(obj, map, tool) {
     if (obj.destroyed) { this.say('The factory is already a smoking ruin.'); return; }
     this.swingTimer = tool.swingCooldown || 0.5;
@@ -1710,6 +1879,23 @@ export class Player {
   // `onCoreDefeated` fires (main.js powers down the island + the victory modal).
   hitCore(obj, map, tool) {
     if (obj.defeated) { this.say('The core stands dark and dead.'); return; }
+    // Depart mode (R3): Calypso is not yours to break. The core takes no damage
+    // and never falls to a wrecking tool — leaving is the sea, not her ruin.
+    if (obj.indestructible) {
+      this.swingTimer = tool.swingCooldown || 0.5;
+      sfx.play('swing'); obj.shake = 0.1;
+      this.say('You strike the core and it does not care. She is not yours to break — the way out of Ogygia is the sea, not her ruin.');
+      return;
+    }
+    // Shielded (kill mode): the housing rides behind a field until this island's
+    // own virus is run at the core's terminal. The tell points at the terminal,
+    // so a player who has only ever hit things learns there is a code to find.
+    if (obj.shielded) {
+      this.swingTimer = tool.swingCooldown || 0.5;
+      sfx.play('clang', { pitch: 1.5 }); obj.shake = 0.08;
+      this.say(`A field turns the blow a hand's width from the housing. ${obj.ai || 'The core'} is shielded — its own code, forged at a relay on this island, is the only thing that drops it. Try its terminal.`);
+      return;
+    }
     this.swingTimer = tool.swingCooldown || 0.5;
     this.stamina = Math.max(0, this.stamina - (tool.staminaCost ?? 0));
     if ((tool.robotDamage ?? 1) < FACTORY_MIN_TOOL) {
@@ -1727,7 +1913,9 @@ export class Player {
   // Apply `amount` to the core (melee, a bomb blast, or the electro-gun's arc).
   // On kill, mark it defeated and fire the island-death hook exactly once.
   damageCore(obj, map, amount) {
-    if (obj.defeated) return;
+    // depart mode: she cannot be razed. shielded: the field turns bombs and the
+    // electro-arc too, so no weapon route skips the code. (Both land here.)
+    if (obj.defeated || obj.indestructible || obj.shielded) return;
     obj.maxHp = obj.maxHp ?? obj.hp ?? 250;
     obj.hp = (obj.hp ?? obj.maxHp) - amount;
     if (obj.hp > 0) { this.daemonSpeak(obj); return; }
@@ -2181,6 +2369,40 @@ export class Player {
     return m.effectiveHeightAt(fx, fy) - m.heightAt(fx, fy) >= 2;
   }
 
+  // Depart mode (R3): a hit from one of Calypso's fortress guards. Being caught
+  // in her domain means being KEPT, not killed — the first few strikes daze you
+  // with the same lotus torpor and shove you back toward the centre (a warning).
+  // Sustained intrusion past DETAIN_LIMIT turns lethal: her patience runs out and
+  // the blow lands for real. `amount` is the guard's ordinary damage, used once
+  // the detention escalates. The strike count cools while you are off her radar
+  // (reset by the guard-free quiet in update), so a later foray warns again.
+  detainHit(amount, source) {
+    if (this._ended || this.deathCert) return;
+    // Shields/forcefield still turn the blow, exactly as in combat.
+    if (this.forcefieldActive()) { this.forcefieldCharge = Math.max(0, this.forcefieldCharge - FORCEFIELD_HIT_COST); this.hurtTimer = 0.12; return; }
+    if (source === 'machine' && this.absorbMeleeOnShield()) { this.hurtTimer = 0.12; return; }
+    this._detainStrikes = (this._detainStrikes || 0) + 1;
+    this._detainCool = 0; // resets the off-radar cooldown in update
+    if (this._detainStrikes <= DETAIN_LIMIT) {
+      // Warned, not wounded: a dose of torpor and a push back toward the island's
+      // heart — kalyptō, detention by comfort.
+      this.torpor = Math.min(TORPOR_MAX, this.torpor + DETAIN_TORPOR);
+      const cx = (this.map && this.map.w ? this.map.w / 2 : this.x);
+      const cy = (this.map && this.map.h ? this.map.h / 2 : this.y);
+      const dx = cx - this.x, dy = cy - this.y, d = Math.hypot(dx, dy) || 1;
+      this.x += (dx / d) * DETAIN_PUSH;
+      this.y += (dy / d) * DETAIN_PUSH;
+      this.hurtTimer = 0.2;
+      sfx.play('hurt', { pitch: 1.4 }); // a softer, higher note than a real wound
+      if (this._detainStrikes === 1) this.say('The guard takes you gently by the arm and turns you back inward. A sweetness fogs your head. You are being kept, not killed — for now.');
+      else this.say('Turned back again, and dazed. Her guards will not let you leave this way — press it and their patience ends.');
+      return;
+    }
+    // Patience spent: the detention turns real. From here the guard wounds.
+    if (this._detainStrikes === DETAIN_LIMIT + 1) this.say('Her guards give up on gentleness. The next blows are meant to hurt.');
+    this.takeDamage(amount, source);
+  }
+
   takeDamage(amount, source) {
     // The forcefield stops everything — shot or blow — while it's up, but each
     // blow it eats costs charge, so being swarmed drains the cell fast.
@@ -2196,6 +2418,15 @@ export class Player {
     // lasers all fall short. (A bomb blast still catches you; flying machines,
     // to come, will too.) So they keep trying in vain while you're safe up high.
     if (source !== 'the blast' && this.onBlockTop()) return;
+    // Reverse-log depletion in the low zone: once the bar is flashing, soften
+    // incoming combat damage toward a floor, so it drains slower and slower the
+    // closer you are to death — a beat to notice and run instead of dropping dead
+    // the instant it flashes. (Combat only; starve/venom/drowning still bite.)
+    const LOW = this.maxHealth * 0.30;
+    if (this.health < LOW && amount > 0) {
+      const t = Math.max(0, this.health / LOW);   // 1 at the threshold -> 0 at empty
+      amount *= 0.30 + 0.70 * t;                   // full at the threshold, down to 0.30x near empty
+    }
     this.health -= amount;
     this.hurtTimer = 0.35;
     if (source === 'viper') sfx.play('hiss');

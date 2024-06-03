@@ -238,6 +238,15 @@ export const ITEMS = {
     ammoType: 'battery',
     color: '#4fd8c3',
   },
+  // The Nokia 3310 — Calypso's channel (docs/calypso-nokia-plan.md). Lives in the
+  // dashboard's PHONE box (its own slot beside the walkman, never a pocket); click
+  // it to open the SMS screen and text the RONs — or her. Defined as an item so a
+  // later build can swap other handsets into the box.
+  nokia_3310: {
+    name: 'Nokia 3310',
+    kind: 'phone',
+    color: '#2b3350',
+  },
   // Access chip: carried (not held), it's your interface into the obelisk
   // terminals — the RON-DOS console only opens for someone holding one. While
   // you're jacked in, the obelisk masks you: the machines lose you entirely.
@@ -275,6 +284,28 @@ export const ITEMS = {
     stack: 1,
     color: '#8a6437',
   },
+  // A proper sea-going ship, built to Calypso's recipe from wood + the three
+  // found parts. Unlike the plain boat, it is seaworthy — only a greek_ship
+  // survives the crossing off Ogygia.
+  greek_ship: {
+    name: 'Greek ship',
+    kind: 'vehicle',
+    stack: 1,
+    color: '#9a7038',
+  },
+  // Calypso's shipwright recipe — the "golden axe". Dropped when you refunction
+  // her at the fortress (RON-ML `retire`). Holding it unlocks the greek_ship
+  // craft; it is not consumed, so you can build more than one ship.
+  golden_axe: {
+    name: "Golden axe (Calypso's recipe)",
+    kind: 'recipe',
+    stack: 1,
+    color: '#e8c24a',
+  },
+  // The three ship parts — found at wrecks and huts along the coast, not crafted.
+  oar: { name: 'Oar', kind: 'part', stack: 4, color: '#8a6437' },
+  rope: { name: 'Rope', kind: 'part', stack: 4, color: '#b8a066' },
+  sail: { name: 'Sail', kind: 'part', stack: 2, color: '#d8d2c0' },
   // Electro-compass: click it (in hand, pocket, or pack) to arm it — once
   // armed and carried, your facing chevron becomes a cluster of homing
   // pointers, one per notable thing nearby, colour-coded (see
@@ -503,6 +534,18 @@ export const ITEMS = {
     color: '#e7d7b0', // pale cream-gold
     food: 20,
     lotus: true,      // flag read by Player.eat -> enterTorpor
+  },
+  // MOLY — the herb Hermes gives Odysseus against Circe's drug (Odyssey 10.302-6):
+  // black at the root, milk-white in flower. On AEAEA, CIRCE's swine-magic rewrites
+  // what you ARE; simply CARRYING moly holds your shape (main.js's transmutation
+  // tick reads player.hasMoly()) and drains a transformation already begun. It is
+  // not eaten and never spends — the herb is a ward, not a cure you swallow.
+  moly: {
+    name: 'Moly',
+    kind: 'resource',
+    stack: 4,
+    color: '#eef4e2',  // milk-white flower on a black root
+    ward: 'swine',     // read by hasMoly() / the CIRCE transmutation
   },
   torch: {
     name: 'Torch',

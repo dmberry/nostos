@@ -246,7 +246,7 @@ export function initMobileGate(mode = 'gate') {
         background: rgba(255,255,255,0.03); border-radius: 0 6px 6px 0; line-height: 1.4; }
       .mg-about-tapes li b { color: #e8e0d0; font-weight: 700; }
       .mg-about-tiny { font-size: 10px; color: rgba(207,216,195,0.5); margin: 3px 0 0; line-height: 1.4; }
-      /* POSEIDON uplink clock */
+      /* POSEIDON skylink countdown */
       .mg-skylink { font: 700 12px ui-monospace, monospace; letter-spacing: 0.1em; text-transform: uppercase;
         color: #5b9dff; text-shadow: 0 0 8px rgba(70,130,255,0.6); margin: 0 0 4px;
         border: 1px solid rgba(70,130,255,0.4); border-radius: 4px; padding: 4px 10px; background: rgba(8,18,44,0.6); }
