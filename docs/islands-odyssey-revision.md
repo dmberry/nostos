@@ -377,11 +377,59 @@ Journey hazards that live *between* islands, not on them, and still need a home
 somewhere in the archipelago (probably on the crossings or the coasts, not as
 landfalls):
 
-- **Scylla and Charybdis — the two monsters.** The forced-choice strait: the
-  six-headed cliff-thing that takes a few of you for certain, and the whirlpool
-  that risks all of you. The natural fit is a narrows on one of the crossings
-  (sea route or the Backspace road), where the player must choose which loss to
-  take. These two want building somewhere; flagged so they are not forgotten.
+- **Scylla and Charybdis — BUILT (v1.145), REBUILT AS A PLAYED RUN (v1.150-v1.160).**
+  The strait sits on the **AEAEA <-> THRINACIA** crossing, where Homer puts it
+  (Od. XII): Circe sends Odysseus through the narrows and he makes landfall on
+  Helios's island after. Sail that route either way and the crossing is held.
+
+  **What changed, and why.** The first build was a forced-choice modal: hug the
+  rock or steer wide, one click, watch the result. It was faithful and it was
+  inert. Homer's bargain is made continuously, with your hands on a ship, so it is
+  now an 8-bit arcade cabinet you play: a title card, a coin, an open-water run-in,
+  and about a minute of channel. Rules in `src/game/narrows.js` (pure and
+  unit-tested, no canvas); the old `src/game/strait.js` still owns the route, the
+  toll and the Circe advice, so the outcome vocabulary the rest of the sea
+  understands did not have to change.
+
+  **The bargain, translated.** Homer's choice only works because Odysseus has a
+  crew: Scylla eats six men, Charybdis risks the ship. You sail alone here, so the
+  translation keeps the *shape* rather than the cargo: a cheap and repeatable loss
+  on one hand against a single final one on the other.
+  - *Scylla* is ONE creature on the port wall who keeps station on your row. She is
+    invisible while she lurks; she rises out of the water to strike, and that rise
+    is the telegraph. Each lunge that lands takes one thing off the deck and the
+    run goes on. She reaches pockets and pack storage only, never what is in your
+    hands, and **never the AI card** in any of its three states, since losing the
+    hermes card would leave the run quietly unwinnable (there is no reprint for
+    it). That exclusion is a tested invariant, not a convention.
+  - *Charybdis* is ONE enormous whirlpool that surfaces at the head of the channel
+    and comes down it with the current, widening as she comes and covering a band
+    of rows. Her water has TWO parts (v1.162): the outer PULL batters the hull and
+    throws you clear to port, and you sail on; only the THROAT, the columns hard
+    against the wall, takes the ship and the voyage with it. Clipping the rim of a
+    whirlpool and being deleted from the run was the wrong punishment for the
+    wrong mistake — the passage is a cheap repeatable loss weighed against one
+    final one, and that only reads if the final one takes a real error to reach.
+  - *Rocks and chicanes* hold the seam between them. Without them the middle of the
+    channel was permanently safe water and the correct play was to park and never
+    touch the helm; there is a regression test named for it. Late in the passage
+    the rocks walk, one column per row, so the gap slides and has to be followed.
+  - *The bronze ram* (v1.160) lies in a wreck on Aeaea's far shore and shoulders
+    the first three rocks aside. It deliberately cannot clear a rock and is no use
+    against either monster: it changes what a mistake costs, not whether the hazard
+    is there. Arming yourself against Scylla is also the one thing Circe tells
+    Odysseus not to do.
+  - **Circe's advice** is hers in the game as in the poem: if you have made
+    landfall on Aeaea, she texts you before the narrows telling you to hug the rock
+    and grieve for the few. Never been to her island, and you go in blind, so
+    exploration is what buys the information.
+
+  The passage maims but never kills: dying mid-crossing would leave the run dead
+  aboard a boat in a frame that returns before input.
+
+  Testing: the lyre console has `narrows` (play the cabinet on a loop and return
+  where you were), `strait [island] [now]`, and a **Bronze ram** kit.
+
 - **The Sirens** — already in the game (the teal SIREN obelisk, tape as counter).
   Keep, and consider seeding one on a crossing as well as on the islands.
 - **Other unplaced encounters** worth a home eventually: the Laestrygonians (an

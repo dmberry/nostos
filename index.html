@@ -30,6 +30,7 @@
     color: #cfd8c3; font: 13px/1.4 system-ui, sans-serif;
     opacity: 0.75; pointer-events: none; text-shadow: 0 1px 2px #000;
     text-align: right;
+    transition: opacity 1.1s ease-out; /* main.js fades it out once you're past needing it */
   }
   /* The compact dashboard (ui.js hands off below 810px) is taller (120px), and its
      right-aligned Score/countdown/rank readout sits where the hint would — so lift
@@ -79,29 +80,59 @@
   #about ul.tapes li i { color: #b7c2a8; font-style: italic; }
   #about .foot { margin-top: 18px; padding-top: 12px; border-top: 1px solid rgba(207,216,195,0.2);
     color: #6b7a5e; font-size: 11px; }
-  #heading {
+  /* The heading chart. Opened from OPEN WATER after you have rowed out, so it
+     wants to read as a chart unrolled on the thwart in the fog — old paper, sea
+     ink, a Greek-key border — not as a level-select menu. */
+  .seamodal {
     display: none; position: fixed; inset: 0;
-    background: rgba(5,7,4,0.8); z-index: 24;
+    background: rgba(4,8,12,0.86); z-index: 24;
+    /* main.js shows this with display:flex — without these the panel stretches
+       to the full viewport height instead of hugging its content. */
+    align-items: flex-start; justify-content: center; overflow-y: auto;
   }
-  #heading .panel {
-    max-width: 420px; margin: 14vh auto 0; padding: 22px 26px;
-    background: #101610; border: 1px solid rgba(207,216,195,0.35);
-    border-radius: 6px; color: #cfd8c3; font: 14px/1.5 system-ui, sans-serif;
+  .seamodal .panel {
+    position: relative; width: min(470px, 92vw); margin: 11vh 0 6vh; padding: 26px 30px 22px;
+    color: #2e2617; font: 14px/1.55 Georgia, 'Times New Roman', serif;
+    /* aged chart paper, foxed at the edges */
+    background:
+      radial-gradient(120% 90% at 50% 0%, rgba(255,250,232,0.95) 0%, rgba(236,224,192,0.95) 55%, rgba(214,198,158,0.95) 100%),
+      #e6d8b0;
+    border: 1px solid #8a7748;
+    border-radius: 3px;
+    box-shadow: 0 18px 50px rgba(0,0,0,0.65), inset 0 0 60px rgba(150,120,60,0.28);
   }
-  #heading h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em;
-    color: #9db284; margin: 0 0 4px; }
-  #heading .sub { color: #7f8f72; font-size: 12px; margin: 0 0 16px; }
-  #heading-list { display: flex; flex-direction: column; gap: 8px; }
-  #heading-list button {
+  /* The meander (Greek key) rule, top and bottom — the same border motif the
+     death certificate and the marble columns use. */
+  .seamodal .panel::before, .seamodal .panel::after {
+    content: ''; position: absolute; left: 26px; right: 26px; height: 10px;
+    /* A true Greek-key fret, tiled from an inline SVG — the same meander motif
+       the marble columns and the death certificate use. */
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='10' viewBox='0 0 20 10'><path d='M0 9h20M2 9V2h11v5H7v-3' fill='none' stroke='%237d6a3c' stroke-width='1.3'/></svg>");
+    background-repeat: repeat-x;
+    opacity: 0.75;
+  }
+  .seamodal .panel::before { top: 11px; }
+  .seamodal .panel::after { bottom: 9px; transform: scaleY(-1); }
+  .seamodal h2 {
+    font: 600 13px/1 Georgia, serif; text-transform: uppercase; letter-spacing: 0.28em;
+    color: #6b5526; margin: 10px 0 6px; text-align: center; }
+  .seamodal .sub { color: #5f5334; font-size: 13px; font-style: italic; margin: 0 0 18px;
+    text-align: center; }
+  .seamodal-list { display: flex; flex-direction: column; gap: 7px; }
+  .seamodal-list button {
     display: block; width: 100%; text-align: left; cursor: pointer;
-    padding: 10px 14px; border-radius: 5px; color: #e8e0d0;
-    background: rgba(207,216,195,0.06); border: 1px solid rgba(207,216,195,0.25);
-    font: 14px system-ui, sans-serif; }
-  #heading-list button:hover { background: rgba(157,178,132,0.16); border-color: rgba(157,178,132,0.6); }
-  #heading-list button .place { font-weight: 600; }
-  #heading-list button .desc { display: block; color: #9db284; font-size: 12px; margin-top: 2px; }
-  #heading .cancel { margin-top: 14px; color: #6b7a5e; font-size: 12px; cursor: pointer; text-align: center; }
-  #heading .cancel:hover { color: #9db284; }
+    padding: 9px 14px; border-radius: 2px; color: #241d10;
+    background: rgba(255,252,238,0.42);
+    border: 1px solid rgba(122,104,58,0.45);
+    font: 14px/1.4 Georgia, 'Times New Roman', serif; transition: background 90ms, border-color 90ms; }
+  .seamodal-list button:hover { background: rgba(255,252,238,0.85); border-color: #7d6a3c; }
+  .seamodal-list button .place { font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; font-size: 13px; }
+  /* The Homeric epithet, set as a line of verse beside the name. */
+  .seamodal-list button .epithet { color: #6b5526; font-style: italic; font-size: 12.5px; margin-left: 8px; }
+  .seamodal-list button .desc { display: block; color: #4a3f27; font-size: 12.5px; margin-top: 3px; }
+  .seamodal .cancel { margin: 16px 0 6px; color: #6b5526; font-size: 12.5px; font-style: italic;
+    cursor: pointer; text-align: center; }
+  .seamodal .cancel:hover { color: #241d10; text-decoration: underline; }
   #help {
     display: none; position: fixed; inset: 0;
     background: rgba(5,7,4,0.75); z-index: 10;
@@ -243,6 +274,29 @@
   #ronnotebook .nb-text { white-space: pre-wrap; }
   #ronnotebook-footer { display: flex; align-items: center; justify-content: space-between;
     margin-top: 10px; padding-top: 8px; border-top: 1px dashed rgba(40,30,10,0.35); }
+  /* The HERMES test console (type "hermes" in-game). Deliberately plain and
+     un-game-like — it is a tool, not a diegetic screen, and it should never be
+     mistaken for one. */
+  #devbox { display: none; position: fixed; inset: 0; z-index: 40;
+    background: rgba(0,0,0,0.55); align-items: flex-start; justify-content: center; }
+  #devbox .dev-panel { margin-top: 6vh; width: min(720px, 92vw); max-height: 82vh; overflow: auto;
+    background: #12140f; border: 1px solid #47c07a; border-radius: 8px; padding: 14px 16px;
+    font: 12px ui-monospace, 'Courier New', monospace; color: #cfe8d4;
+    box-shadow: 0 18px 50px rgba(0,0,0,0.7); }
+  #devbox .dev-head { display: flex; justify-content: space-between; align-items: center;
+    font-weight: 700; letter-spacing: 0.12em; color: #47c07a; margin-bottom: 10px; }
+  #devbox #dev-close { background: transparent; border: none; color: #47c07a; font: 700 14px ui-monospace, monospace; cursor: pointer; }
+  #devbox .dev-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  #devbox .dev-row button { font: 11px ui-monospace, monospace; background: #1b2018; color: #cfe8d4;
+    border: 1px solid #35603f; border-radius: 4px; padding: 5px 9px; cursor: pointer; }
+  #devbox .dev-row button:hover { background: #24301f; border-color: #47c07a; }
+  #devbox #dev-out { max-height: 32vh; overflow-y: auto; white-space: pre-wrap; line-height: 1.5;
+    border-top: 1px solid #2a3a2c; border-bottom: 1px solid #2a3a2c; padding: 8px 2px; margin: 4px 0;
+    color: #a9c9b0; }
+  #devbox .dev-inputrow { display: flex; gap: 6px; align-items: center; padding-top: 6px; }
+  #devbox #dev-input { flex: 1; background: transparent; border: none; outline: none;
+    font: 12px ui-monospace, monospace; color: #eafff0; caret-color: #47c07a; }
+
   /* The Nokia 3310 (docs/calypso-nokia-plan.md): the handset IS the modal,
      ZOOMED into the screen. The sprite is scaled well past the viewport and
      cropped, so the glass dominates the view — earpiece above, navi key
@@ -286,9 +340,14 @@
   #nokiaphone #ph-snake { display: none; width: 100%; height: auto; margin: auto 0;
     image-rendering: pixelated; }
   /* You in bold, them in normal weight — who is speaking reads at a glance. */
-  #nokiaphone #ph-thread .ph-you { text-align: right; margin: 4px 0 4px 36px; font-weight: 700; }
-  #nokiaphone #ph-thread .ph-them { margin: 4px 36px 4px 0; }
+  #nokiaphone #ph-thread .ph-you { text-align: right; margin: 1px 0 4px 36px; font-weight: 700; }
+  #nokiaphone #ph-thread .ph-them { margin: 1px 36px 4px 0; }
   #nokiaphone #ph-thread .ph-sys { text-align: center; font-size: 11px; opacity: 0.6; margin: 5px 0; }
+  /* Sender + time header over each bubble, and a hairline separating senders. */
+  #nokiaphone #ph-thread .ph-meta { font-size: 0.72em; opacity: 0.5; letter-spacing: 0.05em; margin-top: 4px; }
+  #nokiaphone #ph-thread .ph-meta-you { text-align: right; }
+  #nokiaphone #ph-thread .ph-sep { border-bottom: 1px solid rgba(43,52,32,0.22); margin: 4px 0; }
+  #nokiaphone #ph-thread .ph-sep:last-child { border-bottom: none; margin-bottom: 0; }
   #nokiaphone .ph-inputrow { display: flex; align-items: center; gap: 6px;
     border-top: 1px solid rgba(43,52,32,0.5); padding-top: 6px; }
   #nokiaphone #ph-input { flex: 1; min-width: 0; background: transparent; border: none; outline: none;
@@ -412,12 +471,12 @@
     <div class="foot">Game designed in the UK &middot; v<span id="aboutVer"></span> &middot; github.com/dmberry/nostos</div>
   </div>
 </div>
-<div id="heading">
+<div id="heading" class="seamodal">
   <div class="panel">
     <h2>Set a heading</h2>
-    <p class="sub">You put out from the shore. Where do you steer?</p>
-    <div id="heading-list"></div>
-    <div class="cancel" id="heading-cancel">Stay ashore</div>
+    <p class="sub">The fog stands close on every side. Which way do you put the bow?</p>
+    <div id="heading-list" class="seamodal-list"></div>
+    <div class="cancel" id="heading-cancel">Come about, and row back to the beach</div>
   </div>
 </div>
 <div id="help">
@@ -430,6 +489,7 @@
       <button class="helpTab" data-panel="survival" type="button">Survival</button>
       <button class="helpTab" data-panel="animals" type="button">Animals</button>
       <button class="helpTab" data-panel="machines" type="button">Machines</button>
+      <button class="helpTab" data-panel="sea" type="button">The sea</button>
       <button class="helpTab" data-panel="settings" type="button">Settings</button>
     </div>
 
@@ -554,7 +614,7 @@
     <p>Whatever is in your hand can be swung at them, even nothing at all — bare fists land a weak hit, a proper tool or blade lands a much harder one. Your penknife barely scratches them. <b>RON</b> — a resistance calling itself Reality or Nothing, whether or not it's still out there — hid weapons in crates inside the buildings: search them (<kbd>E</kbd>) for crowbars, bats, machetes, and if you are lucky the guns: a <b>stun-gun</b> (drops a machine cold for a while), an <b>electro-gun</b> (destroys a machine outright in a shower of sparks, scares off nearby animals, and its arc even scorches <b>obelisks</b> — a slower way to fell a tower than the OB-gun, but it works; its internal cell slowly self-charges while carried, so it never stays flat for long), a <b>pistol</b> or a <b>shotgun</b> (holes in anything, but gunfire ruins the salvage). Guns are dead weight without <b>batteries, ammo, or shells</b>, hidden in the same crates. None of them shoot through a wall — a solid object blocks a shot exactly like it blocks a step. Pulling the trigger with nothing in your sights still fires — and still spends the round.</p>
     <p>On defence, the crates sometimes hide <b>shields</b>. Just <b>carrying</b> one protects you — no need to hold it, and a faint deflector ring shows around you while it's up. A <b>riot shield</b> absorbs a laser from any direction, but it is only sheet metal: enough blows and it caves in to scrap. A rarer <b>mirror shield</b> throws the shot straight back to <b>destroy the machine that fired it</b>, but every reflection heats it — press it under sustained fire and it glows red, stops bouncing shots back, and finally melts into a lump of scrap (let the fire ease and it cools off again). Rarest of all is the <b>forcefield</b> — but it's the one exception that needs a deliberate switch: <b>click it</b> in whichever slot it's sitting in (hand, pocket, or pack) to <b>arm</b> it. Once armed and carried, a green energy shell wraps right around you that nothing — shot or blow — can get through, burning a battery a minute (faster under heavy fire, since every blow it eats costs extra charge) and pulling a fresh one from your kit when a cell dies; with none left, the field drops until you feed it one. Click it again any time to disarm it and stop the drain.</p>
     <p>Every machine runs on a battery: hunting drains it and they crawl home to their obelisk to recharge. One that gets stuck runs flat where it stands. A flat machine can be <b>reprogrammed</b> (<kbd>R</kbd>, costs a battery) — it turns friendly, follows you, and a friendly T2 fells trees for you — or, if you'd rather just be rid of it, it can be <b>destroyed</b> like any other kill: it can't fight back while flat, and it still drops scrap.</p>
-    <p>The obelisks <b>can</b> be brought down. Carry a stun-gun, an electro-gun and a Wi-Fi block together and you're prompted to build an <b>OB-gun</b> (<kbd>C</kbd>): five burns topple a tower into a heap of circuit boards, batteries, scrap, and an <b>access chip</b> — every tower you fell always leaves a chip, so bringing one down hands you the means to jack into the others. A rare <b>insane bomb</b> can level one on its own (and it, too, drops the chip). Every tower is assigned one of eight circuit numbers when the world is built, so toppling every obelisk always gets you a complete set of one to eight — collect them and you can build a <b>wave gun</b> (<kbd>C</kbd>), which fans laser fire through a whole crowd at once. <b>Bring down every obelisk on the map and you win</b> — the AI is defeated before POSEIDON ever wakes. Run out the countdown first and it wakes instead: every surviving tower lights up and links to its neighbours in a web of bright blue lasers, and the factory throws wave after wave of W4s at you. But it isn't hopeless — <b>topple a tower while POSEIDON is blazing and the whole web collapses</b>, shutting the purge down for a reprieve, until a <b>repair drone</b> reaches the wreck and raises the tower again. Keep knocking towers down faster than they can be rebuilt and you can still win outright, even during the purge.</p>
+    <p>The obelisks <b>can</b> be brought down. Carry a stun-gun, an electro-gun and a Wi-Fi block together and you're prompted to build an <b>OB-gun</b> (<kbd>C</kbd>): five burns topple a tower into a heap of circuit boards, batteries, scrap, and an <b>access chip</b> — every tower you fell always leaves a chip, so bringing one down hands you the means to jack into the others. A rare <b>insane bomb</b> can level one on its own (and it, too, drops the chip). Every tower is assigned one of eight circuit numbers when the world is built, so toppling every obelisk always gets you a complete set of one to eight — collect them and you can build a <b>wave gun</b> (<kbd>C</kbd>), which fans laser fire through a whole crowd at once. <b>Clear an island's towers and you have broken its network</b> — but the island is not finished until its <b>daemon</b> is (see <b>The sea</b>), and the run is not finished until every daemon is down and you have come home to Ithaca. Run out the countdown first and POSEIDON wakes: every surviving tower lights up and links to its neighbours in a web of bright blue lasers, and the factory throws wave after wave of W4s at you. But it isn't hopeless — <b>topple a tower while POSEIDON is blazing and the whole web collapses</b>, shutting the purge down for a reprieve, until a <b>repair drone</b> reaches the wreck and raises the tower again. Keep knocking towers down faster than they can be rebuilt and you can still win outright, even during the purge.</p>
     <p>Each obelisk has a small <b>terminal screen</b> on it. Walk up and <b>click the screen itself</b> to jack in — but you need an <b>access chip</b> to do anything. You get chips two ways: felling any obelisk always drops one, and every machine you destroy sheds a <b>chip fragment</b> — collect eight and press <kbd>C</kbd> to assemble a whole chip. Carry a chip (you don't have to hold it) and clicking opens a channel: a connect bar runs, then a live <b>amber console</b> — RON's own operating system, the same one the hilltop HERMES relays run — and while you're logged in the obelisk <b>hides you from the machines</b>. Click a terminal with no chip and you get the AI's own magenta console instead — a wall of moving data you can't use. Carry the <b>electro-compass</b> and <b>click it</b> to arm it — it stays armed until you drop it. Once armed, your aim marker becomes a small cluster of needles, one for each nearest thing worth finding, colour-coded: blue for the factory, green for an obelisk, yellow for a dropped backpack, orange for a dropped OB-gun.</p>
     <p>The console at the terminal runs <b>RON-ML</b> — a tiny language the resistance left scattered through the ruins as runnable scraps, half command and half operator's note. It is a little <b>ML top-level</b>: type a command and it runs, and a bare <code>let x = e</code> (no <code>in</code>) binds a value that lasts the rest of your visit, so you can build a program line by line. <b>Reading and hacking need no AI key</b> — the chip that got you in is enough. Type <code>scan</code> to list the obelisks on the wire, <code>scan |&gt; nearest</code> to pipe that straight to the closest, <code>name</code> for the node you're on. <code>loop node</code> pins an infinite loop into a tower, freezing it and its garrison where they stand until a repair drone works the loop back out. <code>hack node</code> hands you that node's own key, and only with it does <code>crash node key</code> knock it dark for a while — <code>let k = hack OB-XXXX in crash OB-XXXX k</code> is the two-step spelled out. <code>sleep 30</code>, <code>repel</code>, and <code>rewind 3</code> (only before POSEIDON comes online) buy you room, though they reach less far than they used to. The <b>AI key</b> (from a wrecked W-factory) is now needed for one thing only, the <b>fortress</b>: it comes sealed, so <code>copy aikey</code> to bring it into the console, <code>decrypt</code> it, and <code>unlock</code> with a hacked node key and the clean key together to drop a <b>fortress key</b> — <code>copy aikey</code> / <code>let k = hack OB-XXXX</code> / <code>let d = decrypt aikey</code> / <code>unlock k d</code>. That recipe is <b>not</b> in <code>help</code>; you find it on a scrap in the ruins. <code>print aikey</code> stamps a spare key at your feet, and an AI key <b>never rots on the ground</b>, so you can stash copies. The fragments you find teach the rest one idea at a time, and each real command copies itself into your <b>notepad</b> — a general page-collector: type <code>notes</code>, or press <kbd>N</kbd> anywhere, to flip through it (arrow keys, the <b>&lsaquo; &rsaquo;</b> on the top bar, or the <b>Contents</b> drop-down). Find and read <b>the RON-DOS Operator's Manual</b> and the console starts <b>autocompleting</b> verbs — faded ghost text you accept with <kbd>Tab</kbd> (or <kbd>&rarr;</kbd> at the line end). <code>map</code> pulls up a schematic of the AI's whole territory; <code>print map</code> runs off a <b>physical copy</b> you pick up and <b>click in your inventory</b> to unfold anywhere. On a <b>HERMES relay</b> you can <code>backup aikey</code> and <code>restore aikey</code>: RON keeps a copy of your key off the AI's hardware, so a bad death needn't cost you it. Get something wrong and the terminal tells you what to try — it's built to teach, not to gatekeep. There's also a secret word, never spelled out anywhere — find it and the terminal drops you back into the world to watch what it does.</p>
     <p>The OB-gun's beam is just as final against a machine as against a tower: any robot caught in the line is <b>wiped out on the spot</b>, whatever its class — though, like any gunfire, it ruins most of the salvage. The limit is ammunition: every burn spends a battery, and batteries are better saved for the towers themselves.</p>
@@ -577,6 +637,42 @@
     <h2>Walkman</h2>
     <p>You carry a <b>walkman</b> on a strap — its slot sits on the dashboard. It takes <b>cassette tapes</b>; you start with one (meme's "compilation"), and more turn up out in the ruins and down in the Backspace. <b>Click the tape</b> in the walkman to play it: once for side A, again to flip to side B, again to stop. Each side can hold more than one track and loops round. The reels turn while it plays and the artist and track drift slowly across the little screen below. The game's own music is just a quiet synth bed (or off, toggled with <kbd>M</kbd>) — the only way to hear the tapes is to start one on the walkman.</p>
     </div><!-- /survival (part 2) -->
+
+    <div class="helpPanel" data-panel="sea">
+    <h2>Ogygia, and getting off it</h2>
+    <p>You wake washed up on <b>OGYGIA</b>, and it is not your island. It belongs to <b>CALYPSO</b>, and she keeps you here — well, and kindly, and completely. Hers is the one island whose daemon you do not kill: her core cannot be broken, and her guards <b>detain</b> rather than finish you. The win on Ogygia is <b>leaving</b>, which turns out to be harder.</p>
+    <p>Two things stand between you and the water. The first is her: go into the fortress, reach the terminal on the core itself, and <b>refunction</b> her with the right virus in hand — she is soporific, and will deflect almost anything you say until you have the thunder to say it with. The second is the boat. A raft lashed together out of wood is not a ship, and the sea knows it: launch one and Poseidon rows you back onto your own sand, every time. Refunctioning her hands you her shipwright's recipe, the <b>golden axe</b>, and with it you can build a sea-worthy <b>greek ship</b> from wood and three found parts — a <b>sail</b> at a beached wreck, an <b>oar</b> and a <b>rope</b> left in the fishermen's huts. Only the greek ship survives the crossing.</p>
+
+    <h2>Sailing</h2>
+    <p>Board a beached boat and you do not pick a destination off a menu. You <b>row out</b> first: the land slides away behind you, the fog closes ahead, and only when there is no land in any direction does the <b>chart</b> open and ask which way you put the bow. Each landfall is listed with its Homeric epithet, the formula the poem itself uses. Change your mind and you can come about and pull back for the beach. You leave every later island in the ship you arrived in, so the sea only refuses you once, on Ogygia.</p>
+
+    <h2>The archipelago</h2>
+    <table>
+      <tr><td><b>OGYGIA</b></td><td>Calypso's island, where you were kept, and kept well. The one you leave rather than win.</td></tr>
+      <tr><td><b>AEGILIA</b></td><td>The goat isle, harbourless — the land of the Cyclopes. <b>POLYPHEMUS</b> is a single vast eye, and it watches by genuine line of sight. A great mountain stands over it, rock above the tree line and a patchy snow-cap wearing a cloud.</td></tr>
+      <tr><td><b>AEAEA</b></td><td>Where the dawn has her dancing-floor. <b>CIRCE</b> does not kill what she takes, she changes what it is — stay ashore and she begins, very gently, to rewrite you. <b>Moly</b> holds you as you are; it grows where HERMES stands.</td></tr>
+      <tr><td><b>THRINACIA</b></td><td>The island of the Sun. <b>HELIOS</b>'s cattle graze the headland, golden and unafraid, and they are forbidden. Take one and the island is your enemy to the end.</td></tr>
+      <tr><td><b>ITHACA</b></td><td>Clear-seen, a good nurse of young men. Home — rough, and small, and yours, if the sea will let you come to it.</td></tr>
+    </table>
+    <p>Each island's card is keyed to its own daemon, so one virus does not open the whole archipelago: you forge a payload per island at its <b>HERMES</b> relay. Landing somewhere for the first time sets a <b>checkpoint</b> you can load back to from the title.</p>
+
+    <h2>Scylla and Charybdis</h2>
+    <p>The passage between <b>AEAEA and THRINACIA</b> runs through a throat of rock, and it is not a choice you make once. The channel closes around you and you have the helm: <b>WASD</b> or the arrow keys work the ship across the water <i>and</i> up and down it. On a phone, <b>drag anywhere</b>: the ship follows the direction of your thumb from the middle of the screen, in both axes, and the dashboard goes inert for the duration so a resting thumb steers rather than grabbing at your pack. You come up to the narrows on open water first, so there is a moment to get your hands right before anything wants you, and you leave the same way: the rock stops before the run does, the walls fall away astern, and you row out into open sea before anything is counted up.</p>
+    <p><b>Scylla</b> holds the port wall. You will not see her at all until she wants you: come inside her reach and she rises out of the water where a moment ago there was nothing, and that rising is your warning. Row out of her row, or bear away to starboard, and the lunge closes on empty water. Let it land and she takes one thing off your deck, then goes back under. She can reach pockets and pack only, never what is in your hands, and never the AI card.</p>
+    <p><b>Charybdis</b> is the starboard water itself. One enormous whirlpool surfaces at the head of the channel and comes down on you with the current, widening as she comes, covering a band of the channel rather than a line. You can see how much water she is going to want long before she wants it. Her outer water is survivable: it batters the hull and throws you back out to port, and you sail on. Her <b>throat</b>, the water hard against the wall where her mouth actually is, takes the ship and the voyage with it and puts you back on the beach you sailed from.</p>
+    <p>The sea gives something back, too. <b>Flotsam</b> drifts down the channel and is worth steering <i>for</i>: a <b>timber</b> spar off some earlier ship puts a hull back, and a broken <b>bronze</b> beak puts a charge back on your ram, fitting one if you came in without. Both are scarce, both sit out in the open water rather than in the safe seam, and what the sea offers is weighted by what you are actually short of.</p>
+    <p>The middle is not free either. <b>Rocks</b> stand in the seam between them, and late in the passage they stop arriving one at a time and start walking, stepping one column per row so the gap slides across the channel and you have to follow it. Six strikes, from rocks or from her churn, and the hull comes apart. Carry the <b>bronze ram</b> found at a wreck on Aeaea's far shore and it is lashed to your bow, where it shoulders the first three rocks aside for you. It will not clear a rock out of the channel, and it is no use whatever against either of them. It is also <b>spent by using it</b>: run all three charges down and the beak is torn off, and you will want another before you try the passage again.</p>
+    <p>However it ends, the cabinet tells you what the run came to: how far you got, what she had off the deck, what the rocks had off the hull. It waits on <b>ENTER</b> (or a tap on the key it draws) before it gives you back to the sea, so the tally cannot be skipped past by a key you were already holding. If you have made landfall on Aeaea, <b>Circe will text you</b> before the narrows. Never been to her island, and you go in blind.</p>
+
+    <h2>The phone</h2>
+    <p>You carry a <b>Nokia 3310</b> (<kbd>O</kbd>). On Ogygia it is Calypso's channel — she texts you warnings, tips and pleas, and while her hold on you is warm she will freeze a machine bearing down on you. Off her island the handset finds whichever <b>AI rules the ground you are standing on</b>, and you can text it: POLYPHEMUS answers in blunt capitals, CIRCE sweetly and in the language of tariffs, HELIOS like the sun itself. Signal comes off the island's own network, so it is strongest near a fortress core and gone entirely where there is nothing left to carry it. Making landfall anywhere new brings a <b>roaming welcome</b> from a carrier that no longer has customers, only subjects. There is also <b>Snake</b> on it, and it remembers your best game.</p>
+
+    <h2>The road of the dead</h2>
+    <p>The <b>Backspace</b> is an alternative way across. Its ways up are <b>labelled doors</b>, one per island, each drawn with its name on an isometric exit sign — walk up to the door of the island you want and you come up there. No chart, no boat: the doors <i>are</i> the choice.</p>
+
+    <h2>Coming home</h2>
+    <p>Felling an island's daemon powers down every machine <b>and every obelisk</b> on that island. Do that on all four of the martial islands — and leave Calypso rather than kill her — then sail for <b>Ithaca</b>. Land there with the war won and Argos lifts his grey head and knows you, and that is the end of the road and the beginning of the rest of it. Land there with daemons still standing and it is only landfall: the machines still hold the sea. Fell the rest of them, then come back for good.</p>
+    </div><!-- /sea -->
 
     <div class="helpPanel" data-panel="settings">
     <h2>Volume</h2>
@@ -644,6 +740,16 @@
     <div id="ronnotebook-title">NOTEPAD</div>
     <div id="ronnotebook-body"></div>
     <div class="nb-hint">&larr; &rarr; to flip &middot; the drop-down jumps to any page &middot; &times; or click outside to close</div>
+  </div>
+</div>
+<div id="devbox">
+  <div class="dev-panel">
+    <div class="dev-head"><span>LYRE · test console</span><button id="dev-close" type="button" aria-label="Close">&#10005;</button></div>
+    <div class="dev-row" id="dev-jump"></div>
+    <div class="dev-row" id="dev-kit"></div>
+    <div class="dev-row" id="dev-scene"></div>
+    <div id="dev-out"></div>
+    <div class="dev-inputrow"><span>&gt;</span><input id="dev-input" type="text" autocomplete="off" spellcheck="false" placeholder="help"></div>
   </div>
 </div>
 <div id="nokiaphone">

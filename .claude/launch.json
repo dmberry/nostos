@@ -2,7 +2,7 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "postai",
+      "name": "nostos",
       "runtimeExecutable": "sh",
       "runtimeArgs": ["-c", "exec python3 dev-server.py \"${PORT:-8123}\""],
       "autoPort": true

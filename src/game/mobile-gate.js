@@ -11,6 +11,7 @@ import { VERSION } from '../version.js';
 import { Renderer } from '../engine/renderer.js';
 import { drawRobot } from './robots.js';
 import { worldToScreen } from '../engine/iso.js';
+import { showBootLoader } from './boot-loader.js';
 
 export function isMobile() {
   const ua = /Mobi|Android|iPhone|iPod|iPad|Silk|Kindle|BlackBerry|Opera Mini|IEMobile/i.test(navigator.userAgent || '');
@@ -118,7 +119,7 @@ export function initMobileGate(mode = 'gate') {
         <p class="mg-about-tiny">Game designed in the UK · github.com/dmberry/nostos</p>
       </div>
     </div>`;
-  const footerHtml = `<div class="mg-madein">alpha · Game designed in the UK · <button class="mg-about-open" id="mg-about-open">About</button> <span class="mg-ver">v${VERSION}</span></div>`;
+  const footerHtml = `<div class="mg-madein">beta · Game designed in the UK · <button class="mg-about-open" id="mg-about-open">About</button> <span class="mg-ver">v${VERSION}</span></div>`;
   // A looping game-world clip drifting slowly behind everything, low opacity.
   // It plays at half speed (set in JS) and pans gently left→right (CSS).
   // H.264 MP4 — plays in every modern browser (transcoded from the source .mov).
@@ -126,13 +127,13 @@ export function initMobileGate(mode = 'gate') {
       <source src="assets/media/videos/postAI-background.mp4" type="video/mp4">
     </video>`;
   const copyHtml = isTitle
-    ? `<p class="mg-sub">The machines made the world standing reserve. Now survive it.<span class="mg-sub2">A keyboard-and-mouse survival game.<br>Here's the soundtrack while you decide.</span></p>
+    ? `<p class="mg-sub">The machines made the world standing reserve. Only a God can save you.<span class="mg-sub2">A keyboard-and-mouse survival game.<br>Here's the soundtrack while you decide.</span></p>
        <div class="mg-actions">
          ${hasSave ? '<button id="mg-continue" class="mg-btn primary">Continue</button>' : ''}
          <button id="mg-start" class="mg-btn ${hasSave ? '' : 'primary'}">${hasSave ? 'New game' : 'Start'}</button>
        </div>`
-    : `<p class="mg-sub">It's the end of the world.<span class="mg-sub2">This is an early alpha — you can play it right here with touch controls (hold to move, tap to act), or grab a laptop for the full keyboard-and-mouse game. Either way, here's the soundtrack.</span></p>
-       <div class="mg-actions"><button id="mg-tryanyway" class="mg-btn primary">▶ Play (alpha)</button></div>`;
+    : `<p class="mg-sub">It's the end of the world.<span class="mg-sub2">This is a beta — playable end to end, and still growing. You can play it right here with touch controls (hold to move, tap to act), or grab a laptop for the full keyboard-and-mouse game. Either way, here's the soundtrack.</span></p>
+       <div class="mg-actions"><button id="mg-tryanyway" class="mg-btn primary">▶ Play (beta)</button></div>`;
   const checkpointHtml = (isTitle && stageEntries.length)
     ? `<div class="mg-stages">
          <div class="mg-stages-h">Load a checkpoint</div>
@@ -388,7 +389,33 @@ export function initMobileGate(mode = 'gate') {
       } catch (e) { /* storage blocked */ }
     }
     el.remove();
-    import('../main.js');
+
+    // The boot loader takes the screen the instant the title goes, so there is
+    // never a black gap — and, more importantly, it is what catches a boot that
+    // fails. `import('../main.js')` returns a promise nobody was awaiting, so a
+    // throw during module evaluation (a Safari parse quirk, a bad asset) vanished
+    // and left a black screen. Now it is caught and printed.
+    const loader = showBootLoader(VERSION);
+    loader.step('modules');
+
+    const onProgress = (e) => { try { loader.step(e.detail && e.detail.step); } catch (_) { /* loader gone */ } };
+    const cleanup = () => {
+      window.removeEventListener('nostos:progress', onProgress);
+      window.removeEventListener('error', onError);
+      window.removeEventListener('unhandledrejection', onRejection);
+    };
+    const onReady = () => { cleanup(); loader.succeed(); };
+    // A throw inside the first frame() (not the import) surfaces here rather than
+    // as a black canvas. One-shot: once we have shown a failure, stop listening.
+    const onError = (ev) => { cleanup(); loader.fail(ev.error || ev.message || 'script error'); };
+    const onRejection = (ev) => { cleanup(); loader.fail(ev.reason || 'unhandled rejection'); };
+
+    window.addEventListener('nostos:ready', onReady, { once: true });
+    window.addEventListener('nostos:progress', onProgress);
+    window.addEventListener('error', onError);
+    window.addEventListener('unhandledrejection', onRejection);
+
+    import('../main.js').catch((err) => { cleanup(); loader.fail(err); });
   };
   if (isTitle) {
     // Start = new game (wipe save); Continue = resume the existing save.

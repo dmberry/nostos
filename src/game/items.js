@@ -304,6 +304,12 @@ export const ITEMS = {
   },
   // The three ship parts — found at wrecks and huts along the coast, not crafted.
   oar: { name: 'Oar', kind: 'part', stack: 4, color: '#8a6437' },
+  // The bronze ram (embolos) off an older warship, rusted into a wreck on Aeaea.
+  // Not a ship part: the greek_ship craft does not want it and never asks. Carry
+  // it through the narrows and it is fitted to the bow, where it shoulders the
+  // first few rocks aside. It is no use at all against Scylla or Charybdis, which
+  // is the point of it — see RAM_MAX in game/narrows.js.
+  ram: { name: 'Bronze ram', kind: 'part', stack: 1, color: '#b07d3a' },
   rope: { name: 'Rope', kind: 'part', stack: 4, color: '#b8a066' },
   sail: { name: 'Sail', kind: 'part', stack: 2, color: '#d8d2c0' },
   // Electro-compass: click it (in hand, pocket, or pack) to arm it — once
@@ -316,6 +322,17 @@ export const ITEMS = {
     kind: 'compass',
     tier: 2,
     color: '#8fd0e0',
+  },
+  // Night-vision goggles: click them (in any slot) to wear/lift them. Worn, they
+  // cut through POSEIDON's fog — the veil the network drags over the island once
+  // it wakes. Found rarely, or crafted from 5 torches + a circuit board (the
+  // phosphor from the torch-heads, the board to drive the tube). Another sink for
+  // the circuits obelisks drop. See main.js's poseidon fog + player.gogglesOn.
+  goggles: {
+    name: 'Night-vision goggles',
+    kind: 'wearable',
+    tier: 2,
+    color: '#4fd06a',
   },
   // Held defensive gear (kind 'shield'): while it's in your hands a laser
   // coming at you from roughly the front is stopped. A plain shield absorbs

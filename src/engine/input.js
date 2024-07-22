@@ -8,6 +8,10 @@ const TRACKED = new Set([
   'ShiftLeft', 'ShiftRight',
   'KeyE', 'Slash', 'Space', 'KeyQ', 'KeyH', 'KeyR', 'KeyG', 'KeyF', 'KeyI', 'KeyP', 'KeyZ', 'KeyJ',
   'KeyK', 'KeyC', 'KeyM', 'KeyO', 'KeyV', 'KeyN', 'KeyB', 'KeyX', 'KeyT', 'BracketRight', 'Escape',
+  // ENTER was being asked for by the narrows (the coin slot, and the GAME OVER
+  // card) but was never tracked, so consumePress('Enter') could not fire. Typing
+  // into an HTML control is already guarded above, so this cannot eat a form.
+  'Enter', 'NumpadEnter',
   'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5',
 ]);
 

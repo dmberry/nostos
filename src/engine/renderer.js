@@ -1,4 +1,4 @@
-import { worldToScreen, screenToWorld, TILE_W } from './iso.js';
+import { worldToScreen, screenToWorld, TILE_W, ELEV } from './iso.js';
 import { runDrawWorld, runDrawScreen } from './systems.js';
 import { uiMethods, DASH_H } from './ui.js';
 import { FLOORS } from '../game/tiles.js';
@@ -84,7 +84,8 @@ const WALL_H = 40;
 const EDGE_ROCK_H = 52;   // height of the impassable rock blocks ringing the map edge
 const EDGE_ROCK_ALPHA = 0.38; // semi-transparent so the player shows through a block in front
 const SIGHT_CONE = false; // directional peripheral-fog vision cone (off pending tuning)
-const ELEV = 16;   // pixels of lift per height level
+// ELEV (pixels of lift per height level) now lives in iso.js, so the camera can
+// read the same constant to follow the player's elevation. Imported below.
 const MINIMAP_SIZE = 160;
 
 const WALL_BASE = [122, 113, 102];
@@ -241,6 +242,15 @@ export class Renderer {
         if (type) this.drawFloor(map, x, y, type, map.shadeAt(x, y));
       }
     }
+
+    // Sacred mist: a low, slow swirl of pale vapour lying over each temple grove
+    // — the visible sign of the healing there. Drawn on the ground (after the
+    // floor, before the depth-sorted objects) so the fallen columns and the
+    // player stand up out of it. Only the groves in view are drawn.
+    if (map.temples && map.temples.length) this.drawTempleMist(map, range);
+    // Cloud on the summit: the great mountain's snow-cap wears the same mist,
+    // lifted to the peak's elevation so it hangs about the top of the massif.
+    if (map.mountain) this.drawSummitMist(map, range);
 
     // Pass 2: depth-sorted drawables. Objects use their tile centre for
     // depth; the player uses its continuous position.
@@ -506,16 +516,19 @@ export class Renderer {
       ctx.restore();
     }
 
+    // Night-vision goggles: the dark (and POSEIDON's fog below) give way to a
+    // green phosphor view — you see the whole scene, lit flat and green, the way
+    // a real image-intensifier does. This is what makes the goggles worth
+    // wearing at night or under the fog, not only in a purge.
+    const nvOn = player && player.gogglesOn && player.hasItem && player.hasItem('goggles');
     // Night: a dark veil over the world, never over the HUD. A carried
     // torch opens a pool of light around the player; without one you get
-    // only a faint arm's-length glimmer.
-    if (hud.light != null && hud.light < 1) {
+    // only a faint arm's-length glimmer. Goggles replace the dark with green sight.
+    if (hud.light != null && hud.light < 1 && !nvOn) {
       const dark = (1 - hud.light) * 0.78;
       const z = camera.zoom || 1;
-      const pw = worldToScreen(player.x, player.y);
-      const cw = worldToScreen(camera.x, camera.y);
-      const px = (pw.x - cw.x) * z + this.w / 2;
-      const py = (pw.y - cw.y) * z + this.h / 2 - 16 * z;
+      const p = this.playerScreen(map, player, camera);
+      const px = p.x, py = p.y;
       const radius = (hud.torch ? 200 : 70) * z;
       const veil = ctx.createRadialGradient(px, py, radius * 0.25, px, py, radius);
       veil.addColorStop(0, `rgba(8,12,28,${Math.max(0, dark - (hud.torch ? 0.72 : 0.3))})`);
@@ -530,6 +543,45 @@ export class Renderer {
         ctx.fillStyle = glow;
         ctx.fillRect(0, 0, this.w, this.h - DASH_H);
       }
+    }
+
+    // POSEIDON's fog: once the network wakes it drags a grey veil over the whole
+    // island, collapsing sight to a short pool around you. Its density tracks how
+    // much of the network still stands (hud.poseidonFog.n), so felling towers
+    // thins it. Night-vision goggles (hud.poseidonFog.goggles) cut it — the veil
+    // gives way to a thin green wash you can see through. Modelled on the night
+    // veil above; drawn over the world, never the HUD.
+    if (hud.poseidonFog && !nvOn) {
+      const fog = hud.poseidonFog.n;
+      const z = camera.zoom || 1;
+      const p = this.playerScreen(map, player, camera);
+      const px = p.x, py = p.y;
+      // The clear pool shrinks as the fog thickens: wide when the network is
+      // nearly broken, close and blinding when every tower still stands.
+      const radius = (260 - 150 * fog) * z;
+      const veil = ctx.createRadialGradient(px, py, radius * 0.3, px, py, radius);
+      veil.addColorStop(0, `rgba(150,158,166,${(0.05 * fog).toFixed(3)})`);
+      veil.addColorStop(1, `rgba(150,158,166,${(0.9 * fog).toFixed(3)})`);
+      ctx.fillStyle = veil;
+      ctx.fillRect(0, 0, this.w, this.h - DASH_H);
+    }
+
+    // The goggles' own view: a green phosphor wash over the whole scene, laid on
+    // once (in place of the dark and the fog they cut). Stronger the darker or
+    // foggier it would otherwise be, so "seeing through it" is legible; a faint
+    // tint even in daylight, so putting them on always does something.
+    if (nvOn) {
+      const dk = hud.light != null ? (1 - hud.light) : 0;
+      const fg = hud.poseidonFog ? hud.poseidonFog.n : 0;
+      const strength = 0.10 + 0.22 * Math.max(dk, fg);
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';   // lift the darkness rather than tint over it
+      ctx.fillStyle = `rgba(40,150,70,${strength.toFixed(3)})`;
+      ctx.fillRect(0, 0, this.w, this.h - DASH_H);
+      ctx.restore();
+      // a thin scanline, so it reads as a device and not just a colour filter
+      ctx.fillStyle = 'rgba(0,0,0,0.06)';
+      for (let y = 0; y < this.h - DASH_H; y += 3) ctx.fillRect(0, y, this.w, 1);
     }
 
     // Rosy-fingered dawn (and a softer dusk): a warm rose wash laid OVER the
@@ -554,19 +606,20 @@ export class Renderer {
     // it goes live; the drawSightCone method is kept ready to switch back on.
     if (SIGHT_CONE && !hud.rest && !hud.deathCert && !hud.paused) {
       const z = camera.zoom || 1;
-      const cw = worldToScreen(camera.x, camera.y);
       const pw = worldToScreen(player.x, player.y);
       const fw = worldToScreen(player.x + player.facing.x, player.y + player.facing.y);
-      const px = (pw.x - cw.x) * z + this.w / 2;
-      const py = (pw.y - cw.y) * z + this.h / 2 - 16 * z;
+      const p = this.playerScreen(map, player, camera);
       const ang = Math.atan2(fw.y - pw.y, fw.x - pw.x);
-      this.drawSightCone(px, py, ang, z);
+      this.drawSightCone(p.x, p.y, ang, z);
     }
 
     // The underworld: a sickly, jaundiced wash over the whole play area with
     // a slow, uneven fluorescent flicker — the tell that reality here is
     // thin, distinct from the ordinary day/night veil.
     if (hud.underworld) this.drawUnderworldVeil();
+
+    // Poseidon's fog on the failed crossing. Over the world, under the HUD.
+    if (hud.seaFog) this.drawSeaFog(hud.seaFog);
 
     // While driving a machine, the robot-vision overlay (drawn by main.js after
     // this) samples the canvas as ASCII — so suppress the normal HUD here, or it
@@ -578,6 +631,13 @@ export class Renderer {
       this.drawDashboard(player, hud);
       this.drawHudOverlay(player, hud); // wordmark, message line, daemon voice — both layouts
     }
+    // A panel is up. The world's own overlays all draw AFTER the panels, so
+    // without this the touch buttons, the toasts and the occlusion ghost paint
+    // straight over whatever you are trying to read. (The lore archive draws
+    // in runDrawScreen just below, so it counts as a panel too.)
+    const modalOpen = !!(hud.showBackpack || hud.showSkills || hud.showWeapons
+      || hud.narrows || hud.pong           // an arcade cabinet owns the screen
+      || (hud.lore && hud.lore.archiveOpen));
     if (hud.showBackpack) this.drawBackpackPanel(player);
     runDrawScreen(ctx, { w: this.w, h: this.h, map, player });
     if (hud.craftPrompt) {
@@ -589,20 +649,22 @@ export class Renderer {
             ? 'You have ten scrap — press C to forge a robot sword'
             : hud.craftGreekShip
               ? "You have the recipe, wood, oar, rope and sail — press C to build a sea-worthy ship"
-              : hud.craftBoat
-                ? 'You have the wood and a cutting tool — press C to build a boat'
-                : 'You hold a stun-gun, electro-gun and Wi-Fi block — press C to build an OB-gun';
+              : hud.craftGoggles
+                ? 'You have five torches and a circuit board — press C to build night-vision goggles'
+                : hud.craftBoat
+                  ? 'You have the wood and a cutting tool — press C to build a boat'
+                  : 'You hold a stun-gun, electro-gun and Wi-Fi block — press C to build an OB-gun';
       ctx.font = 'bold 13px system-ui, sans-serif';
       const w = ctx.measureText(msg).width + 24;
       const x = (this.w - w) / 2, y = this.h - DASH_H - 40;
-      ctx.fillStyle = hud.craftWaveGun ? 'rgba(64,224,208,0.92)' : hud.craftChip ? 'rgba(106,208,160,0.92)' : hud.craftSword ? 'rgba(184,192,200,0.92)' : hud.craftGreekShip ? 'rgba(154,112,56,0.94)' : hud.craftBoat ? 'rgba(138,100,55,0.92)' : 'rgba(224,100,47,0.9)';
+      ctx.fillStyle = hud.craftWaveGun ? 'rgba(64,224,208,0.92)' : hud.craftChip ? 'rgba(106,208,160,0.92)' : hud.craftSword ? 'rgba(184,192,200,0.92)' : hud.craftGreekShip ? 'rgba(154,112,56,0.94)' : hud.craftGoggles ? 'rgba(79,208,106,0.92)' : hud.craftBoat ? 'rgba(138,100,55,0.92)' : 'rgba(224,100,47,0.9)';
       ctx.fillRect(x, y, w, 26);
       ctx.fillStyle = '#fff';
       ctx.textAlign = 'center';
       ctx.fillText(msg, this.w / 2, y + 17);
       ctx.textAlign = 'left';
     }
-    if (hud.showSkills) this.drawSkillModal(player);
+    if (hud.showSkills) this.drawSkillModal(player, hud);
     if (hud.showWeapons) this.drawWeaponChart(player);
     // GHOST PASS: a wall, column, tower, or the factory standing just
     // south/east of the player paints clean over the sprite — the character
@@ -625,7 +687,7 @@ export class Renderer {
           if ((dx + dy <= 3 && NEAR_TALL.has(o.type)) || BIG_TALL.has(o.type)) { occluded = true; break; }
         }
       }
-      if (occluded && !hud.underworld) {
+      if (occluded && !hud.underworld && !modalOpen) {
         const lift2 = (map.effectiveHeightAt ? map.effectiveHeightAt(pfx2, pfy2)
           : map.heightAt ? map.heightAt(pfx2, pfy2) : 0) * ELEV;
         ctx.save();
@@ -635,15 +697,35 @@ export class Renderer {
         ctx.restore();
       }
     }
-    if (hud.touchControls) this.drawTouchControls(hud);
-    if (hud.toast) this.drawToast(hud.toast);
-    if (hud.nokiaToast) this.drawNokiaToast(hud.nokiaToast, hud.nokiaSignal, !!hud.touchControls);
+    if (hud.touchControls && !modalOpen) this.drawTouchControls(hud);
+    // Not drawn means not TAPPABLE: the hit list is rebuilt each frame from the
+    // draw, so leaving a stale one would let a tap on the panel — where JUMP
+    // happens to sit — still jump.
+    else if (modalOpen) this.touchButtons = [];
+    if (hud.toast && !modalOpen) this.drawToast(hud.toast);
+    if (hud.nokiaToast && !modalOpen) this.drawNokiaToast(hud.nokiaToast, hud.nokiaSignal, !!hud.touchControls);
+    else if (modalOpen) this._nokiaToastRect = null;   // nor tappable-to-dismiss behind a panel
     if (hud.detail) this.drawDetail(hud.detail);
     if (hud.drag) this.drawDragGhost(hud.drag, player);
     if (player.torpor > 0) this.drawTorporHaze(player.torpor);
     if (hud.rest) this.drawRestOverlay(hud.rest.dim);
     if (hud.deathCert) this.drawDeathCert(hud.deathCert);
     if (hud.aiVictory) this.drawAiVictory(hud.aiVictory);
+    // The narrows: an arcade cabinet over everything, because while you are in
+    // it there is nothing else to attend to.
+    if (hud.narrows) {
+      if (hud.narrows.attract) this.drawNarrowsAttract(hud.narrows, hud.touchControls);
+      else this.drawNarrows(hud.narrows, hud.touchControls);
+      // The GAME OVER card sits OVER the frozen field, arcade fashion, rather
+      // than replacing it: you want to see the water that got you.
+      if (hud.narrowsOver) this.drawNarrowsGameOver(hud.narrows, hud.narrowsOver);
+    }
+    // Calypso's pong — the same "cabinet owns the screen" treatment.
+    if (hud.pong) {
+      if (hud.pong.attract) this.drawCalypsoPongAttract(hud.pong, hud.touchControls);
+      else this.drawCalypsoPong(hud.pong, hud.touchControls);
+      if (hud.pongOver) this.drawCalypsoPongOver(hud.pong, hud.pongOver);
+    }
     if (hud.paused) this.drawPausedOverlay();
   }
 
@@ -1101,6 +1183,24 @@ export class Renderer {
     ctx.restore();
   }
 
+  // The player sprite's actual on-screen pixel, accounting for the camera's
+  // elevation lift and the player's own height (the sprite is drawn raised by
+  // effectiveHeightAt * ELEV). Used by the night veil and the sight cone so the
+  // light pool tracks the sprite up the mountain instead of staying on its feet
+  // at sea level. Mirrors the drawables lift, minus the camera lift the transform
+  // already applied.
+  playerScreen(map, player, camera) {
+    const z = camera.zoom || 1;
+    const cw = worldToScreen(camera.x, camera.y);
+    const pw = worldToScreen(player.x, player.y);
+    const elev = (map.effectiveHeightAt ? map.effectiveHeightAt(Math.floor(player.x), Math.floor(player.y))
+      : map.heightAt ? map.heightAt(Math.floor(player.x), Math.floor(player.y)) : 0) * ELEV;
+    const lift = (camera.screenLift || 0);
+    const x = (pw.x - cw.x) * z + this.w / 2;
+    const y = (pw.y - cw.y + lift - elev - (player.z || 0) * 32) * z + this.h / 2 - 16 * z;
+    return { x, y };
+  }
+
   drawFloor(map, tx, ty, type, shade) {
     const ctx = this.ctx;
     const def = FLOORS[type];
@@ -1115,7 +1215,25 @@ export class Renderer {
     // return before any elevation handling, so an edge tile that ended up as
     // sea while still carrying terrain height can never lift into a block or
     // cast a dark, sea-coloured hillside skirt floating over the water.
-    if (type === 'sea') { this.drawSeaTile(tx, ty); return; }
+    if (type === 'sea') {
+      this.drawSeaTile(tx, ty);
+      // Belt-and-braces against the black-wedge bug: a sea tile is pinned flat at
+      // height 0, but if its south/east neighbour sits LOWER (a hollow carved to
+      // the shore), the general skirt pass below never runs for sea — so nothing
+      // paints the vertical face down to that ground and raw canvas shows through.
+      // coast.js now lifts such shorelines to 0 so this should never fire, but if
+      // any generator dips below sea level again, fill the face in the sea colour
+      // rather than leave a hole. (Only DOWNWARD faces; sea never stacks upward.)
+      if (map.heightAt) {
+        const c = this.tileCorners(tx, ty, 0);
+        const seaFace = shadeHex(FLOORS.sea.color, -0.15);
+        const hs = map.heightAt(tx, ty + 1);
+        if (hs < 0) this.skirt(c[3], c[2], -hs * ELEV, seaFace);
+        const he = map.heightAt(tx + 1, ty);
+        if (he < 0) this.skirt(c[1], c[2], -he * ELEV, seaFace);
+      }
+      return;
+    }
     const h = map.heightAt ? map.heightAt(tx, ty) : 0;
     const corners = this.tileCorners(tx, ty, h * ELEV);
     // Skirts: visible hillside faces wherever the south/east neighbour sits
@@ -1139,8 +1257,19 @@ export class Renderer {
     // A sparse scatter of bare dirt patches through grass — a few percent
     // of tiles, deterministic per tile so it holds still frame to frame
     // rather than flickering between the two textures.
+    // POSEIDON's blight is the GRASS tile, recoloured: same texture and blades,
+    // but tinted by its own base colour (sickly yellow at the front, dead grey
+    // behind). So it reads as the living ground SICKENING, not a flat grey blob
+    // swapped in — which is the whole point of it.
+    const isBlight = type === 'blight' || type === 'blight_sick';
+    const texType = isBlight ? 'grass' : type;
+    const grassy = type === 'grass' || type === 'tallgrass' || isBlight;
+    // Fully dead ground has no living blades: the sickly-yellow front still shows
+    // grass (jaundiced but standing), the dead grey behind it is bare ashen earth.
+    // So blades draw for grass and the sick stage, but NOT the dead stage.
+    const bladesOn = type === 'grass' || type === 'tallgrass' || type === 'blight_sick';
     const patchy = (type === 'grass' || type === 'tallgrass') && tileHash(tx * 5 + 2, ty * 5 + 7) < 0.05;
-    const tex = patchy ? GRASS_PATCH_TEXTURE : FLOOR_TEXTURES[type];
+    const tex = patchy ? GRASS_PATCH_TEXTURE : FLOOR_TEXTURES[texType];
     if (tex) {
       let tintColor = null, tintMode = 'multiply';
       if (shade < -0.02) tintColor = `rgba(10,10,12,${Math.min(0.85, -shade)})`;
@@ -1149,7 +1278,7 @@ export class Renderer {
       // detail) and reads as noisy even at the general texture alpha —
       // toned down further, on top of the grass-blade strokes already
       // drawn over it. The dirt patch variant can hold a bit more strength.
-      const baseAlpha = patchy ? 0.4 : (type === 'grass' || type === 'tallgrass') ? 0.28 : type === 'sand' ? 0.32 : 0.55;
+      const baseAlpha = patchy ? 0.4 : grassy ? 0.28 : type === 'sand' ? 0.32 : 0.55;
       // Vary the texture opacity subtly per tile (deterministic, so it holds
       // still frame to frame) — a gentle ±10% breaks up an otherwise flat
       // expanse of the same floor without reading as a patchwork.
@@ -1172,7 +1301,25 @@ export class Renderer {
     ctx.strokeStyle = 'rgba(0,0,0,0.07)';
     ctx.lineWidth = 1;
     ctx.stroke();
-    if (type === 'grass' || type === 'tallgrass') this.drawGrassBlades(tx, ty, corners, baseColor, shade);
+    if (bladesOn) this.drawGrassBlades(tx, ty, corners, baseColor, shade);
+    // Dead ground reads deader with a faint dark mottle laid over the flat earth —
+    // patches of rot, deterministic per tile so they hold still.
+    if (type === 'blight') {
+      const ctx2 = this.ctx;
+      ctx2.save();
+      this.diamondPath(corners);
+      ctx2.clip();
+      ctx2.globalAlpha = 0.28;
+      for (let i = 0; i < 3; i++) {
+        const hx = tileHash(tx * 7 + i * 13, ty * 7 + i * 5);
+        const hy = tileHash(tx * 3 + i * 5, ty * 11 + i * 7);
+        const cx = corners[0].x + (corners[2].x - corners[0].x) * (0.2 + 0.6 * hx);
+        const cy = corners[0].y + (corners[2].y - corners[0].y) * (0.2 + 0.6 * hy);
+        ctx2.fillStyle = '#26231d';
+        ctx2.beginPath(); ctx2.ellipse(cx, cy, 5 + 4 * hx, 3 + 2 * hy, 0, 0, Math.PI * 2); ctx2.fill();
+      }
+      ctx2.restore();
+    }
     // The maze's "way out" trail: once solved, a lit floor-stud on each tile of
     // the solution path (a green guide, so it never reads as danger). Textured
     // like every glow, and rolled along the trail so it looks like it's flowing
@@ -2512,6 +2659,170 @@ export class Renderer {
     return off;
   }
 
+  // Sacred mist over the temple groves (map.temples). A handful of soft pale
+  // clouds orbiting the grove centre and breathing in and out, so the ground
+  // among the old stones looks touched — a quiet, benign counterpart to the
+  // sea's angry fog. Cheap: a few gradient blobs per grove, only for groves near
+  // the visible range, phased off world time.
+  drawTempleMist(map, range) {
+    const ctx = this.ctx;
+    const t = performance.now() / 1000;
+    const R = 4; // hug the heart of the grove, not the whole heal radius
+    ctx.save();
+    for (const g of map.temples) {
+      if (g.x < range.minX - R || g.x > range.maxX + R || g.y < range.minY - R || g.y > range.maxY + R) continue;
+      // A tight knot of pale banks turning slowly over the grove, each breathing
+      // out of phase so the mass rolls rather than spins as a wheel. Denser and
+      // closer than the old version, which was too thin and wide to read.
+      for (let i = 0; i < 12; i++) {
+        const seed = i * 2.399963;
+        const ang = seed + t * (0.13 + (i % 3) * 0.05);
+        const rad = R * (0.12 + 0.42 * ((i * 5 % 7) / 7)) * (0.85 + 0.15 * Math.sin(t * 0.5 + seed));
+        const s = worldToScreen(g.x + Math.cos(ang) * rad, g.y + Math.sin(ang) * rad);
+        const size = 40 + 16 * Math.sin(t * 0.6 + seed);
+        // A high floor on the breath, so the mass stays dense rather than thinning
+        // to nothing at the trough — it should read as mist, not the odd wisp.
+        const puff = 0.7 + 0.3 * Math.sin(t * 0.8 + seed);
+        const a = 0.52 * puff;
+        const grad = ctx.createRadialGradient(s.x, s.y - 6, 0, s.x, s.y - 6, size);
+        grad.addColorStop(0, `rgba(236,244,240,${a.toFixed(3)})`);
+        grad.addColorStop(0.55, `rgba(216,228,224,${(a * 0.55).toFixed(3)})`);
+        grad.addColorStop(1, 'rgba(208,222,218,0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.ellipse(s.x, s.y - 6, size, size * 0.5, 0, 0, Math.PI * 2); // flat, ground-hugging
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  // Cloud crowning the mountain summit — the same swirl as the temple mist, but
+  // bigger, colder, and lifted to the peak's own elevation so it hangs about the
+  // top of the massif rather than lying on the ground. Only drawn when the summit
+  // is near the visible range.
+  drawSummitMist(map, range) {
+    const m = map.mountain;
+    if (m.x < range.minX - 20 || m.x > range.maxX + 20 || m.y < range.minY - 20 || m.y > range.maxY + 20) return;
+    const ctx = this.ctx;
+    const t = performance.now() / 1000;
+    const lift = (map.heightAt ? map.heightAt(m.x, m.y) : 0) * ELEV; // ELEV px per height level
+    ctx.save();
+    for (let i = 0; i < 16; i++) {
+      const seed = i * 2.399963;
+      const ang = seed + t * (0.09 + (i % 3) * 0.04);
+      const frac = (i * 5 % 7) / 7;
+      // Spill PAST the white snow-cap onto the darker slopes: pale vapour over
+      // white snow barely reads, so the cloud only looks like mist where it laps
+      // the grey rock around the peak. A wide ring does that framing.
+      const rad = 2.2 + 4.4 * frac;
+      const s = worldToScreen(m.x + Math.cos(ang) * rad, m.y + Math.sin(ang) * rad);
+      // Crown the peak: hang at the summit's elevation and billow a little higher,
+      // more so on the outer banks, so it reads as a cap of cloud sitting on top.
+      const sy = s.y - lift - (12 + 26 * frac);
+      const size = 66 + 24 * Math.sin(t * 0.5 + seed);
+      // High floor on the breath so the cap stays a solid cloud, not a thin veil.
+      const puff = 0.72 + 0.28 * Math.sin(t * 0.6 + seed);
+      const a = 0.62 * puff;
+      const g = ctx.createRadialGradient(s.x, sy, 0, s.x, sy, size);
+      g.addColorStop(0, `rgba(242,247,249,${a.toFixed(3)})`);
+      g.addColorStop(0.55, `rgba(220,230,234,${(a * 0.55).toFixed(3)})`);
+      g.addColorStop(1, 'rgba(214,226,230,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.ellipse(s.x, sy, size, size * 0.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // Poseidon's fog, drawn during the failed crossing (main.js updateCrossFail).
+  // Two jobs at once: it sells the refusal — the sea closing round the boat and
+  // walking it home — and it veils the open water, which is the emptiest, most
+  // primitive-looking part of the game, at exactly the moment the camera is
+  // furthest from land.
+  //
+  // f = { amount 0..1, swirl, t, push } where `push` is the seaward unit vector
+  // the boat is being driven back ALONG (screen space). Banks stream in from
+  // ahead — the direction you were trying to go — and turn about the boat, so
+  // the motion reads as the sea itself refusing, not as weather.
+  drawSeaFog(f) {
+    const a = Math.max(0, Math.min(1, f.amount || 0));
+    if (a <= 0.001) return;
+    const ctx = this.ctx;
+    const W = this.w, H = this.hudTop != null ? this.hudTop : this.h;
+    const cx = W / 2, cy = H / 2 - 16;   // the boat sits at the camera's centre
+    const t = f.t || 0;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip(); // never bleed onto the dashboard
+    // A flat grey-green veil first, so distance genuinely goes: the further you
+    // are from the boat the less you can make out.
+    const veil = ctx.createRadialGradient(cx, cy, Math.min(W, H) * 0.10, cx, cy, Math.max(W, H) * 0.62);
+    veil.addColorStop(0, `rgba(196,206,206,${(a * 0.10).toFixed(3)})`);
+    veil.addColorStop(1, `rgba(176,190,196,${(a * 0.80).toFixed(3)})`);
+    ctx.fillStyle = veil;
+    ctx.fillRect(0, 0, W, H);
+    // Banks: big soft blobs orbiting the boat. Each has its own radius, rate and
+    // phase, so they shear past one another and the mass never reads as a
+    // rotating wheel. The swirl tightens (radius shrinks, rate rises) as the sea
+    // takes hold, which is what makes it look like it is closing IN.
+    const swirl = f.swirl || 0;
+    const px = f.push ? f.push.x : 0, py = f.push ? f.push.y : -1;
+    // One streak. Drawn as a circle squashed hard along its own orbit tangent —
+    // round blobs, however many, just average into a flat wash and read as haze;
+    // ELONGATED banks lying along the direction of travel are what the eye picks
+    // up as rotation. That is the whole trick of this effect.
+    const streak = (ox, oy, size, tangent, stretch, alpha, core) => {
+      if (alpha <= 0.002) return;
+      ctx.save();
+      ctx.translate(ox, oy);
+      ctx.rotate(tangent);
+      ctx.scale(1, stretch);                 // squash across the direction of motion
+      const g = ctx.createRadialGradient(0, 0, 0, 0, 0, size);
+      g.addColorStop(0, `rgba(${core},${alpha.toFixed(3)})`);
+      g.addColorStop(0.5, `rgba(210,220,222,${(alpha * 0.5).toFixed(3)})`);
+      g.addColorStop(1, 'rgba(198,210,214,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(0, 0, size, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    };
+    // The banks: long shelves of fog orbiting the boat, counter-rotating so they
+    // shear past one another. They tighten and speed up as the sea takes hold.
+    const BANKS = 13;
+    const drift = (1 - Math.cos(Math.min(1, t / 6) * Math.PI)) * 0.5;
+    for (let i = 0; i < BANKS; i++) {
+      const seed = i * 2.399963;                       // golden angle: even spread, no banding
+      const spin = (i % 2 ? 1 : -1);
+      const rate = 0.30 + (i % 4) * 0.11 + swirl * 0.85;
+      const ang = seed + t * rate * spin;
+      const spread = Math.max(W, H) * (0.52 - swirl * 0.20);
+      const rad = spread * (0.30 + 0.70 * ((i * 7 % 11) / 11));
+      // Drift the field in from the seaward side, so the fog arrives from the way
+      // you were headed and is driven back over you with the boat.
+      const ox = cx + Math.cos(ang) * rad - px * spread * 0.40 * drift;
+      const oy = cy + Math.sin(ang) * rad * 0.60 - py * spread * 0.40 * drift;
+      const size = Math.max(W, H) * (0.16 + 0.13 * ((i * 5 % 7) / 7));
+      const puff = 0.5 + 0.5 * Math.sin(t * (0.7 + (i % 3) * 0.25) + seed);
+      // Tangent to the orbit = the way this bank is actually travelling.
+      const tangent = ang + Math.PI / 2 * spin;
+      streak(ox, oy, size, tangent, 0.34 - swirl * 0.10, a * 0.42 * puff, '234,240,240');
+    }
+    // A close, fast layer right around the hull — the part that reads as the fog
+    // TOUCHING the boat and dragging round it rather than sitting behind.
+    for (let i = 0; i < 7; i++) {
+      const spin = (i % 2 ? 1 : -1);
+      const ang = i * 0.897 + t * (1.3 + swirl * 2.4) * spin;
+      const rad = (64 + 30 * Math.sin(t * 1.3 + i)) * (1 - swirl * 0.22);
+      const ox = cx + Math.cos(ang) * rad, oy = cy + Math.sin(ang) * rad * 0.5;
+      const size = 84 + 26 * Math.sin(t * 0.9 + i * 2);
+      const alpha = a * (0.16 + 0.20 * swirl) * (0.55 + 0.45 * Math.sin(t * 1.7 + i));
+      streak(ox, oy, size, ang + Math.PI / 2 * spin, 0.30, alpha, '246,250,250');
+    }
+    ctx.restore();
+  }
+
   drawTree(obj) {
     const ctx = this.ctx;
     const c = worldToScreen(obj.x + 0.5, obj.y + 0.5);
@@ -2531,8 +2842,12 @@ export class Renderer {
       const dw = spr.sw * BASE * g, dh = spr.sh * BASE * g;
       // Per-island foliage colour (B2): olive, ash, gold, deep green. Uses a
       // pre-tinted copy of the sheet — tinting each tree each frame would cost
-      // far too much with hundreds on screen.
-      const sheet = this.tintedTreeSheet(this.hudMap && this.hudMap.treeTint);
+      // far too much with hundreds on screen. A tree on blighted ground is DEAD:
+      // a heavy grey-brown multiply mutes the green to withered ash. Same cache,
+      // so it costs nothing per frame.
+      const sheet = obj.dead
+        ? this.tintedTreeSheet({ color: '#6b6355', strength: 0.9 })
+        : this.tintedTreeSheet(this.hudMap && this.hudMap.treeTint);
       ctx.save();
       ctx.translate(c.x, c.y + 3);   // pivot at the trunk base (shadow sits here)
       if (wob) ctx.rotate(wob * 0.012);
@@ -3567,6 +3882,22 @@ export class Renderer {
       ctx.restore();
       return;
     }
+    if (itemDef.kind === 'wearable') {
+      // Night-vision goggles: two round green lenses on a dark strap, a small
+      // green phosphor pip in each so they read as night-vision at a glance.
+      ctx.fillStyle = '#20241f';
+      this.roundRect(-9, -4, 18, 8, 3); ctx.fill();     // the housing/strap
+      for (const lx of [-4.5, 4.5]) {
+        ctx.fillStyle = '#0c1a0e';
+        ctx.beginPath(); ctx.arc(lx, 0, 3.6, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = itemDef.color; ctx.lineWidth = 1.4;
+        ctx.beginPath(); ctx.arc(lx, 0, 3.6, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = 'rgba(79,208,106,0.7)';
+        ctx.beginPath(); ctx.arc(lx, 0, 1.5, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+      return;
+    }
     if (itemDef.kind === 'forcefield') {
       // A little emitter with a green energy halo.
       ctx.fillStyle = '#2a3b30';
@@ -3913,6 +4244,22 @@ export class Renderer {
         }
         break;
       }
+      case 'ram': {
+        // A trireme's bronze beak: three fins over a wedge, lying on its side.
+        ctx.fillStyle = '#8a5f28';
+        ctx.beginPath();
+        ctx.moveTo(-9, -4); ctx.lineTo(6, -3); ctx.lineTo(10, 0); ctx.lineTo(6, 3); ctx.lineTo(-9, 4);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#c08a3e';
+        ctx.beginPath();
+        ctx.moveTo(-9, -4); ctx.lineTo(6, -3); ctx.lineTo(10, 0); ctx.lineTo(-9, -1);
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = '#5c3f19'; ctx.lineWidth = 1;
+        for (let f = -2; f <= 2; f += 2) {
+          ctx.beginPath(); ctx.moveTo(-6, f); ctx.lineTo(7, f * 0.4); ctx.stroke();
+        }
+        break;
+      }
       case 'golden_axe': {
         // A small gold axe: shaft + head, for Calypso's recipe.
         ctx.strokeStyle = '#7a5a2a'; ctx.lineWidth = 2;
@@ -4167,6 +4514,54 @@ export class Renderer {
         ctx.beginPath(); ctx.arc(5.7, -3, 1.1, 0, Math.PI * 2); ctx.fill();
         break;
       }
+      // A sheet of paper folded once and carried in a pocket: the lower leaf, the
+      // upper leaf laid over it, a crease between them, and the ghost of
+      // handwriting. It was falling through to the default beige square.
+      case 'note_home': {
+        ctx.save();
+        ctx.rotate(-0.06);
+        ctx.fillStyle = 'rgba(0,0,0,0.28)';                 // the leaf behind
+        ctx.fillRect(-6, -6, 12, 12);
+        ctx.fillStyle = '#e6dcc0';
+        ctx.fillRect(-7, -7, 13, 7);                        // upper leaf
+        ctx.fillStyle = '#d8ccab';
+        ctx.fillRect(-7, 0, 13, 6);                         // lower leaf, shaded
+        ctx.strokeStyle = 'rgba(120,105,70,0.75)';          // the crease
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(-7, -0.5); ctx.lineTo(6, -0.5); ctx.stroke();
+        ctx.strokeStyle = 'rgba(90,80,55,0.5)';             // handwriting
+        ctx.beginPath();
+        for (const ly of [-4.5, -2.5, 2.5, 4.5]) { ctx.moveTo(-5, ly); ctx.lineTo(ly > 0 ? 2 : 4, ly); }
+        ctx.stroke();
+        ctx.restore();
+        break;
+      }
+      // Moly: black root, milk-white flower (Od. X.304-306). The root is the
+      // half that matters — it is what Hermes digs up and what wards her magic.
+      case 'moly': {
+        ctx.strokeStyle = '#1a1712';                        // the black root
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(0, 7); ctx.lineTo(-3, 9);
+        ctx.moveTo(0, 7); ctx.lineTo(3, 9.5);
+        ctx.moveTo(0, 7); ctx.lineTo(0.5, 10);
+        ctx.stroke();
+        ctx.strokeStyle = '#5f8f3e';                        // stem
+        ctx.lineWidth = 1.4;
+        ctx.beginPath(); ctx.moveTo(0, 7); ctx.lineTo(0, -1); ctx.stroke();
+        ctx.fillStyle = '#4e7a34';                          // one leaf
+        ctx.beginPath(); ctx.ellipse(-3, 3, 3, 1.5, -0.5, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#f2f6ea';                          // milk-white petals
+        for (let i = 0; i < 5; i++) {
+          const a = -Math.PI / 2 + i * (Math.PI * 2 / 5);
+          ctx.beginPath();
+          ctx.ellipse(Math.cos(a) * 3.4, -4 + Math.sin(a) * 3.4, 2.6, 1.9, a, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.fillStyle = '#e8d27a';                          // heart
+        ctx.beginPath(); ctx.arc(0, -4, 1.7, 0, Math.PI * 2); ctx.fill();
+        break;
+      }
       default:
         ctx.fillStyle = itemDef.color;
         ctx.fillRect(-6, -6, 12, 12);
@@ -4414,11 +4809,20 @@ export class Renderer {
     const baseAng = Math.atan2(player.facing.y * 0.5, player.facing.x);
     let reach = 0.42;
     let extraAng = 0;
+    let grip = 0;
     if (isRanged) {
       reach = 0.42 - pulse * 0.14;
     } else {
-      reach = 0.42 + pulse * 0.55;
-      extraAng = p >= 0 ? (-1.0 + p * 1.7) : 0;
+      // Melee animates IN PLACE: the swing is a ROTATION about the hand, not a
+      // lunge that flings the weapon out into the space around the character
+      // (which read as unnatural — the tool appeared to fly away on every use).
+      // The hand stays put (only a hair of forward thrust on the strike); the
+      // arc is all in extraAng. `grip` shifts the icon forward of the pivot so it
+      // sweeps about its handle like a real swing rather than spinning on its
+      // centre.
+      reach = 0.42 + pulse * 0.06;
+      extraAng = p >= 0 ? (-0.9 + p * 1.6) : 0;
+      grip = 5 + pulse * 3;
     }
     const hx = c.x + 3 + player.facing.x * 11 * reach / 0.42;
     // Sit the item at the character's hand height (mid-torso), not up by the
@@ -4428,8 +4832,9 @@ export class Renderer {
     ctx.translate(hx, hy);
     ctx.rotate(baseAng + extraAng);
     // Scaled down to suit the smaller (v0.67) character sprite — the old 0.85
-    // left tools looking oversized in hand.
-    this.drawItemIcon(def, 0, 0, 0.55 + pulse * 0.12);
+    // left tools looking oversized in hand. `grip` draws the item forward of the
+    // rotation pivot so the blade sweeps from the handle.
+    this.drawItemIcon(def, grip, 0, 0.55 + pulse * 0.12);
     ctx.restore();
     if (isRanged && def.kind === 'gun' && pulse > 0.3) {
       const fx = c.x + player.facing.x * 26, fy = by - 12 + player.facing.y * 14;

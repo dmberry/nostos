@@ -16,6 +16,7 @@ const REACH = 0.9;        // how far ahead the player can use a tool
 const CHIP_FRAGMENTS_PER_CHIP = 8; // fragments shed by machines to craft one chip
 const FORTRESS_MAP_FRAGMENTS = 5; // scattered map quarters pieced into a fortress map
 const SCRAP_PER_SWORD = 10; // scrap beaten into a robot sword
+const TORCHES_PER_GOGGLES = 5; // torch-heads stripped for phosphor + a board -> goggles
 const WOOD_PER_BOAT = 12;   // wood felled and lashed into a boat (Player.craftBoat)
 const BOAT_HULL = 100;      // a beached boat's starting hull HP (Stage 1b spends it crossing)
 const BOAT_LAUNCH_RADIUS = 2; // must be right at the sea's edge to launch (within ~2 tiles of the shore)
@@ -145,6 +146,7 @@ export class Player {
     this.riotShieldHits = 0;   // blows a carried riot shield has soaked; breaks at RIOT_SHIELD_HITS
     this.mirrorHeat = 0;       // 0..1 mirror-shield overheat; reflects while cool, melts at 1
     this.compassArmed = false; // toggled by clicking the electro-compass in any slot
+    this.gogglesOn = false;    // night-vision goggles worn: they cut POSEIDON's fog
     this.ronmlKeys = new Set(); // node ids RON-ML's `hack` has cracked open this session
     this.ammoFrac = {};        // accumulated fractional ammo per gun
     this.electroCharge = (ITEMS.electrogun && ITEMS.electrogun.internalMax) || 4; // electro-gun's self-charging internal cell
@@ -218,7 +220,7 @@ export class Player {
     this.daemonVoice = null;  // {text, ttl, tier, ai} — the core speaking as you break it
     this.torpor = 0;          // seconds of lotus daze remaining
 
-    this.name = 'Adam';
+    this.name = 'Nobody';   // Odysseus's 'Outis' to the Cyclops — and the 'nobody' the OB terminals accept
     this.gender = 'm';    // 'm' | 'f' | 'u'
     this.skills = new Set(); // knowledge from books; survives death
     this.skillLog = [];   // books read, in order (for the skills screen)
@@ -415,6 +417,26 @@ export class Player {
   // Ten scrap beaten into a robot sword — a heavy anti-machine melee blade.
   canCraftSword() {
     return this.countItem('scrap') >= SCRAP_PER_SWORD && !this.hasItem('robot_sword');
+  }
+
+  // Night-vision goggles from 5 torches (their phosphor) + a circuit board (to
+  // drive the tube) — see items.js. Another use for the circuit boards obelisks
+  // drop, and the thing that lets you move under POSEIDON's fog.
+  canCraftGoggles() {
+    return this.countItem('torch') >= TORCHES_PER_GOGGLES && this.hasItem('circuit') && !this.hasItem('goggles');
+  }
+
+  craftGoggles() {
+    if (!this.canCraftGoggles()) {
+      this.say(`Goggles need ${TORCHES_PER_GOGGLES} torches and a circuit board.`);
+      return false;
+    }
+    for (let n = 0; n < TORCHES_PER_GOGGLES; n++) this.removeItem('torch');
+    this.removeItem('circuit');
+    if (!this.stow('goggles', 1)) { this.say('No room for the goggles.'); return false; }
+    sfx.play('zap');
+    this.say('You strip five torch-heads for their phosphor and wire them to a board: night-vision goggles. Click them to wear them.');
+    return true;
   }
 
   craftSword() {
@@ -758,6 +780,11 @@ export class Player {
     if (held && held.item === 'compass') {
       this.compassArmed = !this.compassArmed;
       this.say(this.compassArmed ? 'Compass armed — the chevrons will home on anything notable nearby.' : 'Compass disarmed.');
+      return;
+    }
+    if (held && held.item === 'goggles') {
+      this.gogglesOn = !this.gogglesOn;
+      this.say(this.gogglesOn ? 'Goggles on. The fog goes green and thin, and you can see.' : 'Goggles up. The fog closes back in.');
       return;
     }
     // Clicking a printed map (in any slot) just unfolds it — no need to move
@@ -1107,6 +1134,7 @@ export class Player {
     // Electro-compass: armed the same way — click it in whatever slot it's
     // carried in. Stays armed (chevrons on) until you drop the item entirely.
     if (!this.hasItem('compass')) this.compassArmed = false;
+    if (!this.hasItem('goggles')) this.gogglesOn = false;
 
     // Electro-gun solar trickle: while you carry it (hand, pocket, or pack)
     // its internal cell slowly refills, so it comes back to life on its own.
@@ -1561,6 +1589,14 @@ export class Player {
     if (tool.dig && !obj) { this.dig(map, tx, ty); return; }
 
     if (!obj || obj.type !== 'tree') {
+      // A swing at empty air. It MUST still animate: early players press the use
+      // key with nothing in range, and if the tool does not visibly move they
+      // read the controls as broken (real feedback from testers). The arc is
+      // driven entirely by swingTimer (renderer.drawHeldItem), so a whiff that
+      // did not set it showed nothing. A whiff costs half stamina — you swung,
+      // but hit nothing to follow through on — never health.
+      this.swingTimer = tool.swingCooldown;
+      this.stamina = Math.max(0, this.stamina - tool.staminaCost * 0.5);
       sfx.play('swing');
       return;
     }
@@ -1955,10 +1991,12 @@ export class Player {
     if (changed) { obj._voiceTier = tier; obj._voiceIdx = 0; }
     const pool = DAEMON_VOICE[tier] || [];
     if (!pool.length) return;
-    const line = pool[Math.min(obj._voiceIdx || 0, pool.length - 1)];
+    const raw = pool[Math.min(obj._voiceIdx || 0, pool.length - 1)];
+    const ai = obj.ai || 'ZEUS';
+    const line = raw.replace(/\{AI\}/g, ai);   // the core speaks its OWN name
     obj._voiceIdx = (obj._voiceIdx || 0) + 1;
     obj._voiceAt = now;
-    this.daemonVoice = { text: line, ttl: 5.5, tier, ai: obj.ai || 'ZEUS' };
+    this.daemonVoice = { text: line, ttl: 5.5, tier, ai };
   }
 
   // Smash an abandoned car open. A crowbar (high robotDamage) pries it apart

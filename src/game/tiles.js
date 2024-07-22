@@ -13,6 +13,11 @@ export const FLOORS = {
   stream: { color: '#4f83b5', solid: false }, // shallow water, wadeable
   bridge: { color: '#8a7048', solid: false },
   tallgrass: { color: '#6f8f3f', solid: false },
+  // High ground on a mountain island: bare rock above the tree line, and a pale
+  // snow-cap at the very top. Both walkable — you climb the mountain — just no
+  // longer green. (worldgen's dressMountain converts high open tiles to these.)
+  stone:  { color: '#7c7a74', solid: false },
+  snow:   { color: '#dfe3e6', solid: false },
   // ZEUS's fortress (the map's southern annex): a cold metal-panel deck
   // for the corridors and maze, a paved quadrangle for the open killing-ground,
   // and a dark charcoal deck for the inner sanctum. All walkable.
@@ -23,6 +28,17 @@ export const FLOORS = {
   // yellow-beige, all walkable — no FLOOR_TEXTURES entry exists for it, so
   // drawFloor falls back to this flat colour automatically.
   liminal:{ color: '#b9a862', solid: false },
+  // POSEIDON's blight: living ground converted to "standing reserve" — spreading
+  // outward from each live obelisk once the network wakes (see game/blight.js).
+  // Two stages, so the spread READS as a sickness moving through the grass: the
+  // leading edge yellows and sickens first (`blight_sick`), and behind it the
+  // ground drains to dead grey (`blight`). Both walkable, but caches stop
+  // restocking and temples stop healing on either, and a tree standing on blight
+  // dies. Drawn as the GRASS texture recoloured by these bases (drawFloor), so it
+  // reads as the living ground SICKENING — same blades, jaundiced then drained —
+  // not a flat grey blob swapped in.
+  blight_sick: { color: '#9a944e', solid: false },  // grass gone jaundiced at the front
+  blight:      { color: '#3b372f', solid: false },  // dead ashen earth behind it — no blades left
 };
 
 export const OBJECTS = {

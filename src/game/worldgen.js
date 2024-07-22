@@ -16,19 +16,70 @@ const SPUR_ROAD_Y = 28;   // east-west spur to the hamlet (rows 28-29)
 const EAST_ROAD_X = 84;   // north-south road through the main town (cols 84-85)
 const WEST_ROAD_X = 14;   // north-south lane through the hamlet (cols 14-15)
 
+// Per-island terrain character (B1). `buildWorld(seed)` used to take nothing but
+// a seed, so every island was the SAME map with a different RNG stream — same
+// river at x=40, same road grid, same thirteen building lots, same hills. These
+// knobs let an island file say what kind of place it is; omitting cfg entirely
+// reproduces the original Ogygia layout exactly, so nothing regresses.
+//
+//   river     null for a riverless island, else { cx, amp, freq, halfMin, halfMax }
+//   roads     'grid' (the original four runs) | 'coastal' | 'spur' | 'none'
+//   lots      how many of the building lots to use (0 = wilderness), and a shuffle
+//   hills     { count, peak }   — how mountainous
+//   hollows   { count }         — pits and dells
+//   forests   { density }       — scales every forest region's tree count
+//   meadows   { count }
+//   flowers   { density }   — wildflower banks; Ithaca runs generous
+//   wrecks    { count }  — abandoned cars. DEFAULTS TO 0: the wrecks are off the
+//             islands for now, but scatterWrecks and everything downstream (the
+//             car sprites, smashCar's salvage, the right-click inspection) is
+//             kept whole, so a better vehicle can be dropped in later by setting
+//             a count. Do not delete the generator.
+//   mountain  one great peak: { x, y, peak } — much taller than the ordinary
+//             hills (which cap at 8), rock above the tree line, snow at the top
+//   feature   a signature landform: 'sandpit' | 'marsh' | 'burn' | 'olives'
+//   lotus     false on every island but Ogygia (it was generated on ALL of them,
+//             at the identical spot — her signature grove was everywhere)
+const TERRAIN_DEFAULTS = {
+  river: { cx: 40, amp: 9, freq: 0.045, halfMin: 1.0, halfMax: 2.0 },
+  roads: 'grid',
+  lots: null,          // null = every lot, in the original order
+  hills: { count: null, peak: 1 },
+  hollows: { count: null },
+  forests: { density: 1 },
+  meadows: { count: null },
+  flowers: { density: 1 },
+  wrecks: { count: 0 },   // no cars on any island for now — see the note above
+  mountain: null,
+  feature: null,
+  lotus: false,
+};
+
 // Build the whole world for a seed. Returns the map and a spawn point on
 // the main road at the eastern edge of the town (continuous world coords).
-export function buildWorld(seed) {
+export function buildWorld(seed, cfg = {}) {
+  const t = {
+    ...TERRAIN_DEFAULTS,
+    ...cfg,
+    hills: { ...TERRAIN_DEFAULTS.hills, ...(cfg.hills || {}) },
+    hollows: { ...TERRAIN_DEFAULTS.hollows, ...(cfg.hollows || {}) },
+    forests: { ...TERRAIN_DEFAULTS.forests, ...(cfg.forests || {}) },
+    meadows: { ...TERRAIN_DEFAULTS.meadows, ...(cfg.meadows || {}) },
+    flowers: { ...TERRAIN_DEFAULTS.flowers, ...(cfg.flowers || {}) },
+    wrecks: { ...TERRAIN_DEFAULTS.wrecks, ...(cfg.wrecks || {}) },
+    // `river: null` must survive the spread as a genuine null, not be re-defaulted.
+    river: 'river' in cfg ? cfg.river : TERRAIN_DEFAULTS.river,
+  };
   const map = new GameMap(MAP_W, MAP_H, 'grass');
   const rng = makeRng(seed);
 
-  carveRiver(map, rng);
-  layRoads(map);
+  if (t.river) carveRiver(map, rng, t.river);
+  layRoads(map, t.roads);
 
   // Buildings, tracking a small margin around each so scatter and meadows
   // never blockade a doorway or fill a yard.
   const keepClear = [];
-  for (const lot of buildingLots()) {
+  for (const lot of buildingLots(t.lots, rng)) {
     placeBuilding(map, rng, lot);
     keepClear.push({
       x0: lot.x0 - 2, y0: lot.y0 - 2,
@@ -40,17 +91,31 @@ export function buildWorld(seed) {
   // streams are carved from the hill feet down to the river, and finally the
   // height field is zeroed on all locked ground and relaxed so no two
   // adjacent tiles ever differ by more than one step.
-  const hills = raiseHills(map, rng);
-  carveStreams(map, rng, hills);
+  const hills = raiseHills(map, rng, t.hills);
+  if (t.mountain) raiseMountain(map, rng, t.mountain, keepClear);
+  if (t.river) carveStreams(map, rng, hills);
   finalizeHeights(map, keepClear);
-  carveHollows(map, rng, keepClear);
+  carveHollows(map, rng, keepClear, t.hollows);
+  // Ground the inland water. A river or a hillside stream must lie IN the land,
+  // never perched above it with a wall of water dropping to lower ground (which
+  // is what a stream carved down a slope, or a hollow dug beside a river, would
+  // otherwise leave). Runs after every height pass, before the floor-only
+  // scatter, so trees and loot place on the corrected relief.
+  groundWater(map, keepClear);
+  // The mountain's rock/snow lines are painted AFTER the heights are final (the
+  // Chebyshev clamp shaped the cone) and BEFORE the forests, so trees only land
+  // on the grassy lower slopes and never on bare rock.
+  if (t.mountain) dressMountain(map, rng, t.mountain);
 
-  plantForests(map, rng, keepClear);
-  layMeadows(map, rng, keepClear);
-  plantLotusGrove(map, rng, keepClear);
-  scatterFlowers(map, rng, keepClear);
+  plantForests(map, rng, keepClear, t.forests);
+  layMeadows(map, rng, keepClear, t.meadows);
+  if (t.lotus) plantLotusGrove(map, rng, keepClear);
+  scatterFlowers(map, rng, keepClear, t.flowers);
   scatterLoners(map, rng, keepClear);
-  scatterWrecks(map, rng);
+  scatterWrecks(map, rng, t.wrecks);
+  // The island's one unmistakable landform, stamped over the general terrain so
+  // it overrides whatever was scattered there (B3).
+  stampFeature(map, rng, t.feature, keepClear);
   paintGraffiti(map, rng);
 
   const spawn = { x: 112.5, y: MAIN_ROAD_Y + 0.5 };
@@ -59,19 +124,31 @@ export function buildWorld(seed) {
 
 // River: a gently meandering north-south channel of solid water, 3-5 tiles
 // wide, with a sand rim along both banks.
-function carveRiver(map, rng) {
+// cfg: { cx, amp, freq, halfMin, halfMax, axis }. `axis: 'ew'` transposes the
+// whole channel so the river runs east-west instead of north-south — the single
+// biggest change to how an island reads, since everything else (bridges, banks,
+// where the town sits relative to the water) follows the water.
+function carveRiver(map, rng, cfg = {}) {
+  const { cx: CX = 40, amp = 9, freq = 0.045, halfMin = 1.0, halfMax = 2.0, axis = 'ns' } = cfg;
+  const ew = axis === 'ew';
+  const along = ew ? map.w : map.h;   // the axis the river runs down
+  const across = ew ? map.h : map.w;  // the axis it meanders across
   const phase = rng() * Math.PI * 2;
-  let cx = 40 + (rng() - 0.5) * 6;
-  let half = 2.0;
-  for (let y = 0; y < map.h; y++) {
-    const target = 40 + 9 * Math.sin(y * 0.045 + phase);
+  let cx = CX + (rng() - 0.5) * 6;
+  let half = halfMax;
+  const lo = Math.max(3, CX - amp - 2), hi = Math.min(across - 4, CX + amp + 2);
+  for (let i = 0; i < along; i++) {
+    const target = CX + amp * Math.sin(i * freq + phase);
     cx += (target - cx) * 0.15 + (rng() - 0.5) * 0.9;
-    cx = Math.max(31, Math.min(51, cx));
+    cx = Math.max(lo, Math.min(hi, cx));
     half += (rng() - 0.5) * 0.3;
-    half = Math.max(1.0, Math.min(2.0, half));
-    const width = Math.round(half * 2 + 1); // 3-5 tiles wide
-    const x0 = Math.round(cx - width / 2);
-    for (let x = x0; x < x0 + width; x++) map.setFloor(x, y, 'water');
+    half = Math.max(halfMin, Math.min(halfMax, half));
+    const width = Math.round(half * 2 + 1);
+    const c0 = Math.round(cx - width / 2);
+    for (let c = c0; c < c0 + width; c++) {
+      if (ew) map.setFloor(i, c, 'water');   // i = x, c = y
+      else map.setFloor(c, i, 'water');      // c = x, i = y
+    }
   }
   // Sand rim: any grass tile touching water (8-neighbour) becomes bank.
   for (let y = 0; y < map.h; y++) {
@@ -91,32 +168,51 @@ function carveRiver(map, rng) {
 // Roads, two tiles wide. Wherever a road meets the river it becomes a
 // wooden bridge, so both east-west crossings are laid automatically and the
 // road surface runs straight onto each bridge end.
-function layRoads(map) {
+// `layout` picks the settlement's road pattern — the strongest single cue that
+// two islands are different places, since the roads are what the buildings and
+// the wrecks hang off.
+//   'grid'    the original: main east-west, north-south through town, hamlet spur
+//   'spur'    just the main road and a short stub: a thinner, lonelier settlement
+//   'coastal' one long road hugging the south, with two short inland fingers
+//   'none'    no roads at all — wilderness (and so no car wrecks, which need tarmac)
+function layRoads(map, layout = 'grid') {
+  if (layout === 'none') return;
   const pave = (x, y) => {
     const f = map.floorAt(x, y);
     if (f === 'water') map.setFloor(x, y, 'bridge');
     else if (f !== null) map.setFloor(x, y, 'road');
   };
-  for (let x = 0; x < map.w; x++) {
-    pave(x, MAIN_ROAD_Y); pave(x, MAIN_ROAD_Y + 1);
+  const runX = (y, x0 = 0, x1 = map.w - 1) => { for (let x = x0; x <= x1; x++) { pave(x, y); pave(x, y + 1); } };
+  const runY = (x, y0 = 0, y1 = map.h - 1) => { for (let y = y0; y <= y1; y++) { pave(x, y); pave(x + 1, y); } };
+  if (layout === 'coastal') {
+    runX(map.h - 22);                       // the shore road
+    runY(EAST_ROAD_X, map.h - 46, map.h - 21);
+    runY(WEST_ROAD_X + 10, map.h - 40, map.h - 21);
+    return;
   }
-  for (let y = 0; y < map.h; y++) {
-    pave(EAST_ROAD_X, y); pave(EAST_ROAD_X + 1, y);
+  if (layout === 'spur') {
+    runX(MAIN_ROAD_Y);
+    runY(EAST_ROAD_X, MAIN_ROAD_Y - 18, MAIN_ROAD_Y + 1);
+    return;
   }
-  for (let x = WEST_ROAD_X; x <= EAST_ROAD_X + 1; x++) {
-    pave(x, SPUR_ROAD_Y); pave(x, SPUR_ROAD_Y + 1);
-  }
-  for (let y = SPUR_ROAD_Y; y <= MAIN_ROAD_Y + 1; y++) {
-    pave(WEST_ROAD_X, y); pave(WEST_ROAD_X + 1, y);
-  }
+  runX(MAIN_ROAD_Y);
+  runY(EAST_ROAD_X);
+  runX(SPUR_ROAD_Y, WEST_ROAD_X, EAST_ROAD_X + 1);
+  runY(WEST_ROAD_X, SPUR_ROAD_Y, MAIN_ROAD_Y + 1);
 }
 
 // Building lots: position, size, which side the door faces (towards the
 // nearest road), and a base ruin level. The main town (east of the river)
 // has ten buildings from cottage to warehouse, a couple near-intact and
 // most damaged; the hamlet (west) has three, more ruined.
-function buildingLots() {
-  return [
+// `n` caps how many lots are used (null = all thirteen, the original town).
+// Fewer lots reads as a sparser, wilder island; the subset is shuffled so it
+// isn't always the same buildings that survive. NOTE for island authors: several
+// islands mine `boards` (building interior) tiles for loot and caches, so an
+// island with very few lots has correspondingly few indoor drops — keep n high
+// enough to hold whatever that island seeds indoors.
+function buildingLots(n = null, rng = null) {
+  const lots = [
     // Main town, around the crossroads at (84, 64).
     { x0: 66, y0: 54, w: 12, h: 8, door: 'S', ruin: 0.45 }, // warehouse
     { x0: 90, y0: 56, w: 7,  h: 6, door: 'S', ruin: 0.08 }, // near-intact
@@ -133,6 +229,12 @@ function buildingLots() {
     { x0: 18, y0: 44, w: 5,  h: 4, door: 'W', ruin: 0.65 },
     { x0: 6,  y0: 52, w: 7,  h: 5, door: 'E', ruin: 0.60 },
   ];
+  if (n == null || n >= lots.length) return lots;
+  if (n <= 0) return [];
+  if (!rng) return lots.slice(0, n);
+  const pick = lots.slice();
+  for (let i = pick.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [pick[i], pick[j]] = [pick[j], pick[i]]; }
+  return pick.slice(0, n);
 }
 
 // One building: boards interior, a wall perimeter with a door gap of 1-2
@@ -230,7 +332,7 @@ function placeBuilding(map, rng, lot) {
 // relaxes the field so no adjacent step ever exceeds one. The first three
 // zones are always used (they seed the streams); the rest are optional.
 // All zones sit well clear of roads, buildings, and the river channel.
-function raiseHills(map, rng) {
+function raiseHills(map, rng, cfg = {}) {
   const mandatory = [
     { x: 16, y: 13 },   // north-west, in the hamlet-side forest
     { x: 66, y: 13 },   // north-east, between river and town road
@@ -248,7 +350,10 @@ function raiseHills(map, rng) {
     const j = Math.floor(rng() * (i + 1));
     [optional[i], optional[j]] = [optional[j], optional[i]];
   }
-  const extra = 3 + Math.floor(rng() * 3); // 6-8 hills in total: rugged, not just the town's edge
+  // cfg.count = total hills wanted (the three mandatory ones always stand, since
+  // carveStreams destructures them); cfg.peak scales how high they rise.
+  const want = cfg.count == null ? mandatory.length + 3 + Math.floor(rng() * 3) : cfg.count;
+  const extra = Math.max(0, Math.min(optional.length, want - mandatory.length));
   const chosen = [...mandatory, ...optional.slice(0, extra)];
 
   const hills = [];
@@ -283,6 +388,107 @@ function raiseHills(map, rng) {
     hills.push({ cx, cy, r, peak });
   }
   return hills;
+}
+
+// One GREAT mountain — much taller than the ordinary hills (which cap at 8).
+// A single cone stamped with its own high peak and a radius wide enough that
+// finalizeHeights' one-step clamp leaves a steep but climbable spiral of banks
+// rather than a sheer cliff. A couple of shoulder-blobs break the perfect cone
+// so it reads as a mountain, not a wizard's hat. Placed near the interior, clear
+// of the town, so it dominates the skyline of its island.
+function raiseMountain(map, rng, cfg, keepClear) {
+  const peak = cfg.peak || 14;
+  const cx = cfg.x, cy = cfg.y;
+  // Radius must cover the whole descent (one step per tile) plus slack, or the
+  // clamp would shave the summit down to fit the ground it can reach.
+  const r = peak + 4 + Math.floor(rng() * 3);
+  const blobs = [{ x: cx, y: cy, p: peak, r }];
+  // Two lower shoulders, offset, so the massif is lopsided and natural.
+  for (let i = 0; i < 2; i++) {
+    blobs.push({
+      x: cx + Math.round((rng() - 0.5) * peak),
+      y: cy + Math.round((rng() - 0.5) * peak),
+      p: Math.round(peak * (0.5 + rng() * 0.2)),
+      r: r * 0.6,
+    });
+  }
+  for (const b of blobs) {
+    const R = Math.ceil(b.r);
+    for (let y = b.y - R; y <= b.y + R; y++) {
+      for (let x = b.x - R; x <= b.x + R; x++) {
+        if (!map.inBounds(x, y)) continue;
+        const d = Math.hypot(x - b.x, y - b.y);
+        // LINEAR descent (peak/radius per tile, kept under 1 by the radius slack
+        // above) so finalizeHeights' one-step clamp never has to shave the flanks
+        // — which, propagating inward, would lower the summit. Small per-tile
+        // jitter roughens the otherwise perfect cone.
+        const v = Math.round(b.p * (1 - d / b.r) + (rng() - 0.5) * 0.8);
+        if (v > map.heightAt(x, y)) map.setHeight(x, y, v); // no 8-cap: this is THE mountain
+      }
+    }
+  }
+  map.mountain = { x: cx, y: cy, peak };
+}
+
+// Paint the mountain's zones once the heights are final: bare rock above the
+// tree line, a snow-cap near the summit. Only converts open ground (so it never
+// eats a road or a building that happens to sit on a shoulder), and marks the
+// grass just below the tree line so plantForests can thin it into an alpine
+// fringe (see the 'treeLine' hook there).
+function dressMountain(map, rng, cfg) {
+  const peak = cfg.peak || 14;
+  // The white cap: a wider band than before (peak-4), painted PATCHY rather than
+  // solid. Snow starts as a scatter of patches over the rock at the bottom of the
+  // band and thickens with height, becoming a solid crown only at the very top —
+  // so the summit fades into the mountain instead of wearing a hard white block.
+  const snowLine = Math.max(6, peak - 4);
+  const snowSolid = peak - 1;               // the top ~two levels are fully snow
+  const stoneLine = Math.max(4, Math.round(peak * 0.5)); // bare rock: the upper half
+  map.treeLine = stoneLine;                 // plantForests / scatterLoners read this
+  // The cap concentrates on the summit: a solid core disc around the peak, patches
+  // thinning outward. Keyed to distance from the centre AND height, so the snow
+  // clusters at the top-middle rather than scattering evenly over every contour.
+  const mx = map.mountain ? map.mountain.x : cfg.x;
+  const my = map.mountain ? map.mountain.y : cfg.y;
+  const capR = Math.max(4, Math.round((peak - snowLine) * 1.6)); // rough cap radius
+  for (let y = 0; y < map.h; y++) {
+    for (let x = 0; x < map.w; x++) {
+      const f = map.floorAt(x, y);
+      if (f !== 'grass' && f !== 'tallgrass') continue;
+      const h = map.heightAt(x, y);
+      if (h >= snowLine) {
+        // frac: 0 at the snow line, 1 at the peak. central: 1 at the summit, 0 at
+        // the cap edge. A solid core (very top, or well inside the centre disc),
+        // then a snow chance that falls off with both, so patches gather at the
+        // middle and fray at the rim instead of dusting the whole cap evenly.
+        const frac = (h - snowLine) / Math.max(1, snowSolid - snowLine);
+        const central = Math.max(0, 1 - Math.hypot(x - mx, y - my) / capR);
+        const w = Math.max(frac, central);
+        const pSnow = 0.1 + 0.9 * w * w;
+        const solid = h >= snowSolid || central > 0.5;
+        map.setFloor(x, y, (solid || rng() < pSnow) ? 'snow' : 'stone');
+      }
+      else if (h >= stoneLine) map.setFloor(x, y, 'stone');
+      // A ragged rock/grass border just under the stone line so the transition
+      // isn't a clean contour ring.
+      else if (h === stoneLine - 1 && rng() < 0.35) map.setFloor(x, y, 'stone');
+      // A few stray snow patches just BELOW the cap, so its lower edge frays into
+      // the rock rather than ending on a clean contour.
+      if (map.floorAt(x, y) === 'stone' && h === snowLine - 1 && rng() < 0.18) map.setFloor(x, y, 'snow');
+    }
+  }
+  // The alpine fringe: a scatter of small, spare conifers on the grass just
+  // below the rock (a real tree line thins to stunted trees, not lush forest).
+  // Planted here — before plantForests, which is told to skip this high band —
+  // so the upper slopes read as mountain, not woodland climbing to the summit.
+  for (let y = 0; y < map.h; y++) {
+    for (let x = 0; x < map.w; x++) {
+      if (map.floorAt(x, y) !== 'grass' || map.objectAt(x, y)) continue;
+      const h = map.heightAt(x, y);
+      if (h < stoneLine - 3 || h >= stoneLine) continue;   // just the fringe band
+      if (rng() < 0.22) map.addObject('tree', x, y, { variant: rng() < 0.6 ? 3 : 4 }); // small / bare-conifer
+    }
+  }
 }
 
 // Streams: 2-3 shallow, wadeable channels, 1-2 tiles wide, each rising at
@@ -394,13 +600,59 @@ function finalizeHeights(map, keepClear) {
   }
 }
 
+// Ground the inland water so no river or stream tile is ever higher than the
+// land beside it. Streams are carved down a hillside and keep the slope's
+// height, and a hollow can be dug next to a river, either of which leaves water
+// perched with a vertical face of water dropping to lower ground. Water lies in
+// the land, not on it. Force every water/stream tile to 0, lift any bank a
+// hollow dug below 0, then relax outward with a lowering-only clamp so the banks
+// step down to meet the water at one level per tile (a river cuts its valley).
+function groundWater(map) {
+  const w = map.w, h = map.h;
+  const isWater = (x, y) => { const f = map.floorAt(x, y); return f === 'water' || f === 'stream'; };
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (isWater(x, y)) { if (map.heightAt(x, y) !== 0) map.setHeight(x, y, 0); }
+    }
+  }
+  // No bank below the water it borders.
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (isWater(x, y) || map.heightAt(x, y) >= 0) continue;
+      let touches = false;
+      for (let dy = -1; dy <= 1 && !touches; dy++) {
+        for (let dx = -1; dx <= 1; dx++) if (isWater(x + dx, y + dy)) { touches = true; break; }
+      }
+      if (touches) map.setHeight(x, y, 0);
+    }
+  }
+  // Lowering-only relax: any land tile more than one step above a neighbour is
+  // stepped down. Water is pinned, so this cuts the valley toward the channel
+  // without ever raising the water. A few passes settle the whole corridor.
+  for (let pass = 0; pass < 8; pass++) {
+    let changed = false;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (isWater(x, y)) continue;
+        const hh = map.heightAt(x, y);
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          if (!map.inBounds(x + dx, y + dy)) continue;
+          const nb = map.heightAt(x + dx, y + dy);
+          if (hh - nb > 1) { map.setHeight(x, y, nb + 1); changed = true; break; }
+        }
+      }
+    }
+    if (!changed) break;
+  }
+}
+
 // Hollows: sunken dips and valleys (heights -1 to -2) in the wilds, built
 // exactly like hills but as a separate non-negative DEPTH field with its own
 // Lipschitz clamp, then subtracted. Zones sit well away from every hill zone
 // so the two fields never overlap (their difference would otherwise be able
 // to step by two). Locked ground (roads, water, streams, buildings, aprons)
 // stays at depth 0, so all valley floors and rims remain walkable.
-function carveHollows(map, rng, keepClear) {
+function carveHollows(map, rng, keepClear, cfg = {}) {
   const w = map.w, h = map.h;
   const zones = [
     { x: 70, y: 38 },  // open country east of the river, north of the main road
@@ -409,7 +661,7 @@ function carveHollows(map, rng, keepClear) {
     { x: 100, y: 122 },// south-east corner
     { x: 96, y: 60 },  // east of the main road crossing, clear of the town
   ];
-  const n = 3 + Math.floor(rng() * 3); // 3-5, more undulation
+  const n = cfg.count == null ? 3 + Math.floor(rng() * 3) : Math.max(0, Math.min(zones.length, cfg.count));
   const D = new Int8Array(w * h);
 
   for (const z of zones.slice(0, n)) {
@@ -492,9 +744,123 @@ function inKeepClear(x, y, rects) {
   return false;
 }
 
+// ---- Signature landforms (B3) ----------------------------------------------
+// One big, unmistakable feature per island, so you know where you are from the
+// shape of the ground rather than only its colour. Each is a single named blob
+// stamped after the general terrain, and each is opt-in from the island's
+// terrain profile (`feature: 'sandpit' | 'marsh' | 'burn' | 'olives'`).
+//
+// They deliberately sit near the middle of the map, well clear of the coast and
+// the spawn, so they read as *the* landmark of that island rather than scenery
+// you might sail past without seeing.
+
+// A great bowl of sand bitten out of the interior — Thrinacia's dust-bowl, the
+// sun's own scar. Sand floor, dished down so it reads as a crater, cleared of
+// trees, with a rim of dry grass.
+function stampSandPit(map, rng, cx, cy, R) {
+  for (let y = Math.floor(cy - R - 2); y <= cy + R + 2; y++) {
+    for (let x = Math.floor(cx - R - 2); x <= cx + R + 2; x++) {
+      if (!map.inBounds(x, y)) continue;
+      const f = map.floorAt(x, y);
+      if (f === 'water' || f === 'sea' || f === 'road' || f === 'bridge' || f === 'boards') continue;
+      const d = Math.hypot(x - cx, y - cy) + (rng() - 0.5) * 1.8; // ragged edge
+      if (d > R + 2) continue;
+      const o = map.objectAt(x, y);
+      if (o && (o.type === 'tree' || o.type === 'rock')) map.removeObject(o);
+      if (d <= R) {
+        map.setFloor(x, y, 'sand');
+        // Dish it: deepest in the middle, so you walk down into it.
+        if (map.setHeight) map.setHeight(x, y, d < R * 0.45 ? -2 : d < R * 0.75 ? -1 : 0);
+      } else if (map.floorAt(x, y) === 'grass') {
+        map.setFloor(x, y, 'tallgrass'); // a dry fringe around the lip
+      }
+    }
+  }
+}
+
+// Standing water in the low ground — Aeaea's fen. Wadeable stream tiles laced
+// through tallgrass, with reed clumps: slow to cross, easy to lose a line of
+// sight in, and exactly the sort of place a witch's island should have.
+function stampMarsh(map, rng, cx, cy, R) {
+  for (let y = Math.floor(cy - R); y <= cy + R; y++) {
+    for (let x = Math.floor(cx - R); x <= cx + R; x++) {
+      if (!map.inBounds(x, y)) continue;
+      const f = map.floorAt(x, y);
+      if (f === 'water' || f === 'sea' || f === 'road' || f === 'bridge' || f === 'boards') continue;
+      const d = Math.hypot(x - cx, y - cy) + (rng() - 0.5) * 2.4;
+      if (d > R) continue;
+      const o = map.objectAt(x, y);
+      if (o && (o.type === 'tree' || o.type === 'rock')) map.removeObject(o);
+      if (map.setHeight) map.setHeight(x, y, 0); // marsh is flat; no wading uphill
+      // Stippled: pools through reedbed rather than one clean pond.
+      map.setFloor(x, y, rng() < 0.55 ? 'stream' : 'tallgrass');
+    }
+  }
+}
+
+// A burnt forest — Aegilia's fire scar. Dead standing trunks (tree variant 4,
+// the bare one) on scorched dirt: a grey, open, hostile patch where a wood used
+// to be, and one of the few places on the goat isle with clear sightlines.
+function stampBurn(map, rng, cx, cy, R) {
+  for (let y = Math.floor(cy - R); y <= cy + R; y++) {
+    for (let x = Math.floor(cx - R); x <= cx + R; x++) {
+      if (!map.inBounds(x, y)) continue;
+      const f = map.floorAt(x, y);
+      if (f === 'water' || f === 'sea' || f === 'road' || f === 'bridge' || f === 'boards') continue;
+      const d = Math.hypot(x - cx, y - cy) + (rng() - 0.5) * 2.2;
+      if (d > R) continue;
+      const o = map.objectAt(x, y);
+      if (o && o.type === 'tree') map.removeObject(o);
+      if (f === 'grass' || f === 'tallgrass') map.setFloor(x, y, 'dirt');
+      // A thin stand of dead trunks left standing in the ash.
+      if (!map.objectAt(x, y) && rng() < 0.16) map.addObject('tree', x, y, { variant: 4 });
+    }
+  }
+}
+
+// An olive grove — Ithaca's, and the one landform in the game that is purely a
+// kindness. Ordered rows of trees on tended ground: the only regular planting
+// in the archipelago, because someone once looked after it. (Odysseus's own
+// olive is the bed-post his marriage is proved by, Od. 23.190-204.)
+function stampOlives(map, rng, cx, cy, R) {
+  for (let y = Math.floor(cy - R); y <= cy + R; y++) {
+    for (let x = Math.floor(cx - R); x <= cx + R; x++) {
+      if (!map.inBounds(x, y)) continue;
+      const f = map.floorAt(x, y);
+      if (f !== 'grass' && f !== 'tallgrass') continue;
+      const d = Math.hypot(x - cx, y - cy);
+      if (d > R) continue;
+      if (map.objectAt(x, y)) continue;
+      // Planted in rows, not scattered — the tell that this is husbandry.
+      if (x % 2 === 0 && y % 2 === 0 && rng() < 0.9) {
+        map.addObject('tree', x, y, { variant: Math.floor(rng() * 3) });
+      } else if (rng() < 0.25) {
+        map.setFloor(x, y, 'tallgrass'); // long grass between the rows
+      }
+    }
+  }
+}
+
+// Stamp whichever signature feature this island asked for.
+function stampFeature(map, rng, kind, keepClear) {
+  if (!kind) return;
+  // Somewhere central-ish, nudged by the seed, and never on the town.
+  let cx = 0, cy = 0;
+  for (let tries = 0; tries < 60; tries++) {
+    cx = 34 + Math.floor(rng() * 60);
+    cy = 34 + Math.floor(rng() * 60);
+    if (!inKeepClear(cx, cy, keepClear)) break;
+  }
+  if (kind === 'sandpit') stampSandPit(map, rng, cx, cy, 13);
+  else if (kind === 'marsh') stampMarsh(map, rng, cx, cy, 15);
+  else if (kind === 'burn') stampBurn(map, rng, cx, cy, 14);
+  else if (kind === 'olives') stampOlives(map, rng, cx, cy, 18);
+  map.feature = { kind, x: cx, y: cy };
+}
+
 // Three dense forest regions, like the test-map cluster but larger: one on
 // each side of the river in the north, one in the south-east.
-function plantForests(map, rng, keepClear) {
+function plantForests(map, rng, keepClear, cfg = {}) {
   const regions = [
     { x: 2,  y: 2,  w: 25, h: 22, n: 260 }, // north-west, hamlet side
     { x: 56, y: 4,  w: 26, h: 20, n: 250 }, // north-east
@@ -502,12 +868,17 @@ function plantForests(map, rng, keepClear) {
     { x: 8,  y: 92, w: 22, h: 24, n: 220 }, // south-west wilds
     { x: 40, y: 100, w: 24, h: 20, n: 210 }, // deep south
   ];
+  const density = cfg.density == null ? 1 : cfg.density; // scales every region at once
   for (const r of regions) {
-    for (let i = 0; i < r.n; i++) {
+    const n = Math.max(0, Math.round(r.n * density));
+    for (let i = 0; i < n; i++) {
       const x = r.x + Math.floor(rng() * r.w);
       const y = r.y + Math.floor(rng() * r.h);
       if (map.floorAt(x, y) !== 'grass' || map.objectAt(x, y)) continue;
       if (inKeepClear(x, y, keepClear)) continue;
+      // Leafy forest stops at the tree line: the alpine fringe (dressMountain)
+      // owns the band just below the rock, and above it is bare mountain.
+      if (map.treeLine != null && map.heightAt(x, y) >= map.treeLine - 2) continue;
       if (rng() < 0.7) map.addObject('tree', x, y, { variant: treeVariant(rng) });
     }
   }
@@ -515,11 +886,12 @@ function plantForests(map, rng, keepClear) {
 
 // Tall-grass meadows: ragged round patches 6-12 tiles across, converting
 // grass only, well away from buildings. These hide snakes in later phases.
-function layMeadows(map, rng, keepClear) {
+function layMeadows(map, rng, keepClear, cfg = {}) {
   const centres = [
     [22, 92], [8, 74], [60, 100], [100, 30], [112, 90], [62, 10], [26, 112],
   ];
-  for (const [mx, my] of centres) {
+  const use = cfg.count == null ? centres : centres.slice(0, Math.max(0, cfg.count));
+  for (const [mx, my] of use) {
     const cx = mx + Math.floor((rng() - 0.5) * 4);
     const cy = my + Math.floor((rng() - 0.5) * 4);
     const r = 3 + rng() * 3;
@@ -544,7 +916,10 @@ function layMeadows(map, rng, keepClear) {
 // banks of mixed blooms on the gentle hill slopes, yellow daffodils drifting
 // through the valleys and hollows, and the odd lone flower out on the flat,
 // sparse on purpose. kind: 0 daisy, 1 campion, 2 cornflower, 3 daffodil.
-function scatterFlowers(map, rng, keepClear) {
+// cfg.density scales the wildflower banks. Ithaca runs generous: flowers are the
+// cheapest possible signal that a place is loved rather than merely survived.
+function scatterFlowers(map, rng, keepClear, cfg = {}) {
+  const density = cfg.density == null ? 1 : cfg.density;
   const plant = (x, y, kind) => {
     if (map.floorAt(x, y) !== 'grass' || map.objectAt(x, y)) return;
     if (inKeepClear(x, y, keepClear)) return;
@@ -557,7 +932,7 @@ function scatterFlowers(map, rng, keepClear) {
     const h = map.heightAt(x, y);
     if (h >= 1 && h <= 3 && map.floorAt(x, y) === 'grass') hillTiles.push([x, y]);
   }
-  const banks = Math.min(14, Math.floor(hillTiles.length / 40));
+  const banks = Math.round(Math.min(14, Math.floor(hillTiles.length / 40)) * density);
   for (let b = 0; b < banks; b++) {
     const [cx, cy] = hillTiles[Math.floor(rng() * hillTiles.length)];
     const kind = rng() < 0.45 ? 0 : rng() < 0.55 ? 1 : 2;
@@ -569,11 +944,11 @@ function scatterFlowers(map, rng, keepClear) {
   }
   // Daffodils in the low ground — the valley flower.
   for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) {
-    if (map.heightAt(x, y) <= -1 && rng() < 0.10) plant(x, y, 3);
+    if (map.heightAt(x, y) <= -1 && rng() < 0.10 * density) plant(x, y, 3);
   }
   // Lone blooms on the flat, rare enough to be a small pleasure to pass.
   for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) {
-    if (map.heightAt(x, y) === 0 && rng() < 0.006) plant(x, y, Math.floor(rng() * 3));
+    if (map.heightAt(x, y) === 0 && rng() < 0.006 * density) plant(x, y, Math.floor(rng() * 3));
   }
 }
 
@@ -622,6 +997,9 @@ function scatterLoners(map, rng, keepClear) {
     const y = Math.floor(rng() * map.h);
     if (map.floorAt(x, y) !== 'grass' || map.objectAt(x, y)) continue;
     if (inKeepClear(x, y, keepClear)) continue;
+    // Above the tree line, drop a bare rock but never a leafy loner.
+    const highGround = map.treeLine != null && map.heightAt(x, y) >= map.treeLine - 2;
+    if (highGround) { map.addObject('rock', x, y); continue; }
     if (rng() < 0.75) map.addObject('tree', x, y, { variant: treeVariant(rng) });
     else map.addObject('rock', x, y);
   }
@@ -633,11 +1011,12 @@ function scatterLoners(map, rng, keepClear) {
 // reads as a landmark rather than a car park. Placed on or beside a road with
 // all footprint tiles clear; the whole footprint points back at one car
 // object so a hit on any tile strips the same wreck.
-function scatterWrecks(map, rng) {
+function scatterWrecks(map, rng, cfg = {}) {
   const placed = [];
   const minGap = 18;
   let guard = 0;
-  while (placed.length < 4 && guard++ < 6000) {
+  const want = cfg.count == null ? 4 : cfg.count;
+  while (placed.length < want && guard++ < 6000) {
     const x = Math.floor(rng() * (map.w - 3));
     const y = Math.floor(rng() * (map.h - 3));
     // A tight 2x2 solid core. The car sprite is a touch wider than this on

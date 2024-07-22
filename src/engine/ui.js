@@ -15,6 +15,11 @@
 
 import { ITEMS, WEAPON_ORDER } from '../game/items.js'; // weapon-chart data
 import { PAPER_TEXTURE, NOKIA_SPRITE } from './textures.js'; // death-cert paper; the 3310 in the PHONE box
+import {
+  NARROWS_W, VIEW_ROWS, MONSTERS, HULL_MAX, RAM_MAX, CHARYBDIS_ROWS,
+  narrowsProgress, narrowsCalm, narrowsRunOut, narrowsRunOutT,
+} from '../game/narrows.js'; // the Scylla/Charybdis arcade run
+import { PADDLE_H, calypsoVoice } from '../game/calypso-pong.js'; // Calypso's un-winnable pong
 
 export const DASH_H = 78; // dashboard panel height
 
@@ -44,6 +49,19 @@ export function deathRank(score) {
   const colors = { FLOTSAM: '#9a7a5a', 'LOTUS-EATER': '#c9905a', CASTAWAY: '#c9a05a', OARSMAN: '#c9b05a', WANDERER: '#b9c95a', MARINER: '#9fd058', HELMSMAN: '#6fbf4a', RAIDER: '#4abf7a', TROJAN: '#4ac0b0', NOBODY: '#4aa8d8', 'MAN OF TWISTS': '#6f8fe0', 'GOD-BELOVED': '#e8d27a', 'LONG-ENDURING': '#f0c040', 'SACKER OF CITIES': '#f09040', HOMECOMER: '#ff5040' };
   return { title, blurb, color: colors[title] || '#e8d27a' };
 }
+
+// The four island daemons, in the order their chips are drawn on the Record
+// panel. CALYPSO is in the roster even though she is left rather than killed:
+// her refunction is her fall, and it counts toward the same four.
+// AEGILIA -> Aegilia. The roster and the terminals speak in caps; the HUD
+// says the names the way a person would.
+function sentenceCase(s) {
+  return String(s || '').replace(/[A-Za-z\u00C0-\u024F']+/g,
+    (wd) => wd.charAt(0).toUpperCase() + wd.slice(1).toLowerCase());
+}
+
+const AI_ROSTER = ['CALYPSO', 'POLYPHEMUS', 'CIRCE', 'HELIOS'];
+const CHIPS_H = 58;   // the bottom band the chip row reserves in the panel
 
 export const uiMethods = {
   // A soft dim over the play area while the player rests (the dashboard, and
@@ -305,11 +323,41 @@ export const uiMethods = {
   // The skills screen (K): learned book-skills in the order gained, plus the
   // three practice tracks and their levels — the history the dashboard used
   // to cram into one line.
-  drawSkillModal(player) {
+  drawSkillModal(player, hud = {}) {
     const ctx = this.ctx;
     ctx.fillStyle = 'rgba(6,8,5,0.8)';
     ctx.fillRect(0, 0, this.w, this.h);
-    const pw = Math.min(420, this.w - 60), ph = 380;
+    // RESPONSIVE. On a narrow phone the panel used to keep desktop metrics and
+    // simply overflow: 420 wide against a 330-wide viewport, 13px stats, 20px
+    // rows. Everything below scales off `k`, so the same panel shrinks to fit a
+    // handset and still reads.
+    const pw = Math.min(420, this.w - 28);
+    const k = Math.max(0.78, Math.min(1, pw / 420));      // 1 on desktop, ~0.8 on a phone
+    const fs = (n) => `${Math.round(n * k)}px system-ui, sans-serif`;
+    const fsb = (n) => `bold ${Math.round(n * k)}px system-ui, sans-serif`;
+    const row = Math.round(19 * k), pad = Math.round(20 * k);
+
+    // The panel is sized to its CONTENT rather than to a fixed height. It used
+    // to be a fixed 486 with the chip row pinned to the floor, which left a hole
+    // in the middle of an early run (no books, three obelisks) and clipped a late
+    // one. Measure first, then draw: every block reports its height, the OB list
+    // is wrapped against the real font, and the panel is whatever the sum comes
+    // to — clamped so it can never outgrow the viewport.
+    const bookLog = player.skillLog && player.skillLog.length ? player.skillLog
+      : [...(player.skills || [])].map((s) => ({ skill: s }));
+    ctx.font = `${Math.round(12 * k)}px ui-monospace, monospace`;
+    const obLines = (player.killLog && player.killLog.length)
+      // Bracketed, so a run of hex codes reads as a list of separate names
+      // rather than one long string of characters.
+      ? this._wrapText(ctx, player.killLog.map((c) => `[${c}]`).join(' '), pw - 50) : [];
+    const H_HEAD = Math.round(68 * k);                                    // title + subtitle
+    const H_RECORD = pad + 3 * row + Math.round(12 * k);                    // heading + 3 rows
+    const H_PRACTICE = pad + Math.round(26 * k);                           // heading + one inline row
+    const H_BOOKS = pad + (bookLog.length ? bookLog.length * pad : pad) + Math.round(12 * k);
+    const H_OBS = obLines.length ? pad + obLines.length * Math.round(16 * k) + Math.round(12 * k) : 0;
+    const H_CHIPS = Math.round((18 + 34 + 14) * k);                         // heading + chip + pad
+    const ph = Math.min(this.h - 40,
+      H_HEAD + H_RECORD + H_PRACTICE + H_BOOKS + H_OBS + H_CHIPS + 14);
     const px = Math.round((this.w - pw) / 2), py = Math.round((this.h - ph) / 2);
     this._skillsRect = { x: px, y: py, w: pw, h: ph }; // click-away-to-close hit test (main.js)
     ctx.fillStyle = '#12160e';
@@ -318,69 +366,176 @@ export const uiMethods = {
     ctx.strokeRect(px + 0.5, py + 0.5, pw - 1, ph - 1);
 
     ctx.fillStyle = '#cfd8c3';
-    ctx.font = 'bold 16px system-ui, sans-serif';
-    ctx.fillText('Skills & Knowledge', px + 20, py + 30);
-    ctx.font = '11px system-ui, sans-serif';
+    ctx.font = fsb(16);
+    ctx.fillText('Skills & Knowledge', px + pad, py + Math.round(30 * k));
+    ctx.font = fs(11);
     ctx.fillStyle = 'rgba(207,216,195,0.55)';
-    ctx.fillText('K to close · all of it survives death', px + 20, py + 48);
+    ctx.fillText('K to close · all of it survives death', px + pad, py + Math.round(48 * k));
 
-    let y = py + 78;
-    ctx.font = 'bold 12px system-ui, sans-serif';
+    // THE RECORD — score, the rank it has earned, and the run's tallies. This
+    // lives here rather than on the HUD: the dashboard should carry only what
+    // you need mid-fight, and a rank is something you look up, not something you
+    // steer by. Two columns so six figures cost three rows.
+    let y = py + Math.round(76 * k);
+    ctx.font = fsb(12);
     ctx.fillStyle = 'rgba(207,216,195,0.6)';
-    ctx.fillText('PRACTICE', px + 20, y); y += 20;
-    ctx.font = '13px system-ui, sans-serif';
-    const tracks = [['Swordarm (melee)', 'melee'], ['Aim (guns)', 'guns'], ['Mind (reading)', 'knowledge']];
-    for (const [label, key] of tracks) {
-      const lvl = player.xpLevel ? player.xpLevel(key) : 0;
-      ctx.fillStyle = '#e8e0d0';
-      ctx.fillText(label, px + 30, y);
-      ctx.fillStyle = '#e8d27a';
-      ctx.textAlign = 'right';
-      ctx.fillText(`level ${lvl}`, px + pw - 24, y);
-      ctx.textAlign = 'left';
-      y += 22;
-    }
-    y += 12;
-    ctx.font = 'bold 12px system-ui, sans-serif';
-    ctx.fillStyle = 'rgba(207,216,195,0.6)';
-    ctx.fillText('BOOKS READ', px + 20, y); y += 20;
-    ctx.font = '13px system-ui, sans-serif';
-    const log = player.skillLog && player.skillLog.length ? player.skillLog
-      : [...(player.skills || [])].map((s) => ({ skill: s }));
-    if (!log.length) {
+    ctx.fillText('RECORD', px + pad, y); y += pad;
+
+    const rank = deathRank(player.score ?? 0);
+    const colL = px + Math.round(30 * k), colR = px + Math.round(pw / 2) + Math.round(10 * k);
+    const valDx = Math.round(84 * k);
+    const stat = (label, value, cx, cy, valueColor) => {
+      ctx.font = fs(11);
       ctx.fillStyle = 'rgba(207,216,195,0.5)';
-      ctx.font = 'italic 13px system-ui, sans-serif';
-      ctx.fillText('No books read yet. Find them in the ruins.', px + 30, y);
+      ctx.fillText(label, cx, cy);
+      ctx.font = fsb(13);
+      ctx.fillStyle = valueColor || '#e8e0d0';
+      ctx.fillText(String(value), cx + valDx, cy);
+    };
+    const kills = (player.killLog || []).length;
+    stat('Score',       player.score ?? 0,                    colL, y, '#e8d27a');
+    stat('Islands',     `${hud.islandsReached ?? 0} / 5`,     colR, y);
+    y += row;
+    stat('Rank',        rank.title,                           colL, y, rank.color);
+    stat('OBs',         kills,                                colR, y);
+    y += row;
+    // The POSEIDON deadline lives here now rather than on the dashboard, where a
+    // ticking number became wallpaper. In play you feel it through his notices;
+    // this is where you come to check the actual figure.
+    stat('Deaths',      player.deaths || 0,                   colL, y);
+    // Bare clock: the label already says what it is counting down to, and the
+    // full "to POSEIDON" ran off the panel edge.
+    const deadline = (hud.timeLabel || '').replace(/\s*to\s+POSEIDON\s*$/i, '') || '—';
+    stat('Deadline',    deadline,                             colR, y, '#d88a6a');
+    y += Math.round(26 * k);
+
+    // PRACTICE, on ONE line. Three tracks at level 0 do not deserve three rows
+    // of a panel that was already running out of room.
+    ctx.font = fsb(12);
+    ctx.fillStyle = 'rgba(207,216,195,0.6)';
+    ctx.fillText('PRACTICE', px + pad, y); y += pad;
+    const tracks = [['Swordarm', 'melee'], ['Aim', 'guns'], ['Mind', 'knowledge']];
+    const tw3 = Math.floor((pw - pad * 2) / 3);
+    tracks.forEach(([label, key], i) => {
+      const tx = px + Math.round(30 * k) + i * tw3;
+      const lvl = player.xpLevel ? player.xpLevel(key) : 0;
+      ctx.font = fs(11);
+      ctx.fillStyle = 'rgba(207,216,195,0.5)';
+      ctx.fillText(label, tx, y);
+      const lw = ctx.measureText(label).width;
+      ctx.font = fsb(13);
+      ctx.fillStyle = '#e8d27a';
+      ctx.fillText(String(lvl), tx + lw + Math.round(6 * k), y);
+    });
+    y += Math.round(26 * k);   // the values sit ON y, so this is the gap to the next heading
+
+    ctx.font = fsb(12);
+    ctx.fillStyle = 'rgba(207,216,195,0.6)';
+    ctx.fillText('BOOKS READ', px + pad, y); y += pad;
+    if (!bookLog.length) {
+      ctx.fillStyle = 'rgba(207,216,195,0.5)';
+      ctx.font = `italic ${Math.round(12 * k)}px system-ui, sans-serif`;
+      ctx.fillText('No books read yet. Find them in the ruins.', px + Math.round(30 * k), y);
+      y += pad;
     } else {
       const NAMES = { woodcraft: 'Woodcraft', herbalism: 'Herbalism', tracking: 'Tracking', fleetfoot: 'Fleet foot' };
+      ctx.font = fs(12);
       let n = 1;
-      for (const e of log) {
-        if (y > py + ph - 16) break;
+      for (const e of bookLog) {
         ctx.fillStyle = '#e8e0d0';
-        ctx.fillText(`${n}. ${NAMES[e.skill] || e.skill}`, px + 30, y);
+        ctx.fillText(`${n}. ${NAMES[e.skill] || e.skill}`, px + Math.round(30 * k), y);
         if (e.day) {
           ctx.fillStyle = 'rgba(207,216,195,0.5)';
           ctx.textAlign = 'right';
-          ctx.fillText(`day ${e.day}`, px + pw - 24, y);
+          ctx.fillText(`day ${e.day}`, px + pw - pad, y);
           ctx.textAlign = 'left';
         }
-        y += 22; n += 1;
+        y += pad; n += 1;
       }
     }
+
     // Kill record: the obelisks you've brought down, by their hex code names.
-    if (player.killLog && player.killLog.length) {
-      y += 14;
-      ctx.font = 'bold 12px system-ui, sans-serif';
+    if (obLines.length) {
+      y += Math.round(12 * k);
+      ctx.font = fsb(12);
       ctx.fillStyle = 'rgba(207,216,195,0.6)';
-      ctx.fillText(`TOWERS DOWNED (${player.killLog.length})`, px + 20, y); y += 18;
-      ctx.font = '12px ui-monospace, monospace';
+      ctx.fillText(`OBs DOWNED (${player.killLog.length})`, px + pad, y); y += Math.round(18 * k);
+      ctx.font = `${Math.round(12 * k)}px ui-monospace, monospace`;
       ctx.fillStyle = '#e0503a';
-      const codes = player.killLog.join('  ');
-      for (const line of this._wrapText(ctx, codes, pw - 50)) {
-        if (y > py + ph - 12) break;
-        ctx.fillText(line, px + 30, y); y += 16;
-      }
+      for (const line of obLines) { ctx.fillText(line, px + Math.round(30 * k), y); y += Math.round(16 * k); }
     }
+
+    // AIs DEFEATED — the four daemons drawn as actual silicon, a row of DIP
+    // packages with their legs and their pin-1 notch, each one named on its
+    // back the way a real chip is. A defeated daemon's part is dead: struck
+    // through, its legs dulled, the body gone cold.
+    y += Math.round(16 * k);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    ctx.font = fsb(12);
+    ctx.fillStyle = 'rgba(207,216,195,0.6)';
+    ctx.fillText('AIs DEFEATED', px + pad, y);
+    y += Math.round(10 * k);
+
+    const down = new Set(player.aisDown || []);
+    const gap = Math.round(8 * k);
+    const cw = Math.floor((pw - pad * 2 - gap * (AI_ROSTER.length - 1)) / AI_ROSTER.length);
+    AI_ROSTER.forEach((name, i) => {
+      this.drawSiliconChip(px + pad + i * (cw + gap), y, cw, Math.round(30 * k), name, down.has(name));
+    });
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+  },
+
+  // One AI as a DIP-package chip: a dark body with silver legs down both long
+  // edges, a pin-1 notch bitten out of the left end, and the daemon's name
+  // silkscreened across the back. `dead` kills it — the body goes cold and
+  // green-black, the legs dull, and the name is struck through.
+  drawSiliconChip(x, y, w, h, label, dead) {
+    const ctx = this.ctx;
+    const legH = 4;                       // the legs stick out top and bottom
+    const by = y + legH, bh = h - legH * 2;
+
+    // Legs first, so the body sits over their roots.
+    const nLegs = Math.max(3, Math.floor((w - 10) / 11));
+    const step = (w - 12) / nLegs;
+    ctx.fillStyle = dead ? 'rgba(120,132,116,0.45)' : 'rgba(198,206,190,0.75)';
+    for (let i = 0; i < nLegs; i++) {
+      const lx = x + 6 + i * step + step * 0.5 - 2.5;
+      ctx.fillRect(Math.round(lx), y, 5, legH + 1);                 // top row
+      ctx.fillRect(Math.round(lx), by + bh - 1, 5, legH + 1);       // bottom row
+    }
+
+    // Body.
+    ctx.fillStyle = dead ? '#141a12' : '#22261d';
+    this.roundRect(x, by, w, bh, 3); ctx.fill();
+    ctx.strokeStyle = dead ? 'rgba(140,190,120,0.5)' : 'rgba(207,216,195,0.28)';
+    ctx.lineWidth = 1;
+    this.roundRect(x + 0.5, by + 0.5, w - 1, bh - 1, 3); ctx.stroke();
+
+    // Pin-1 notch, bitten out of the left end — the tell that says "chip".
+    ctx.fillStyle = 'rgba(6,8,5,0.95)';
+    ctx.beginPath();
+    ctx.arc(x, by + bh / 2, 3.5, -Math.PI / 2, Math.PI / 2);
+    ctx.fill();
+
+    // The name, silkscreened.
+    ctx.font = 'bold 8px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = dead ? 'rgba(150,200,130,0.9)' : 'rgba(207,216,195,0.7)';
+    const midY = by + bh / 2;
+    ctx.fillText(label, x + w / 2 + 1, midY);
+    if (dead) {
+      const tw = Math.min(ctx.measureText(label).width + 6, w - 10);
+      ctx.strokeStyle = 'rgba(150,200,130,0.9)';
+      ctx.beginPath();
+      ctx.moveTo(x + (w - tw) / 2 + 1, midY + 0.5);
+      ctx.lineTo(x + (w + tw) / 2 + 1, midY + 0.5);
+      ctx.stroke();
+    }
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
   },
 
   // A quiet now-playing toast, centred just above the dashboard: artist,
@@ -411,7 +566,7 @@ export const uiMethods = {
   drawNokiaToast(t, bars = 4, touch = false) {
     const ctx = this.ctx;
     const a = Math.min(Math.min(1, (t.total - t.ttl) / 0.22), Math.min(1, t.ttl / 0.8));
-    if (a <= 0) return;
+    if (a <= 0) { this._nokiaToastRect = null; return; }
     const W = 214, padX = 12, headH = 20, lineH = 15;
     ctx.save();
     ctx.globalAlpha = a;
@@ -423,6 +578,8 @@ export const uiMethods = {
     // edge above the dashboard — step the toast left of it.
     const x = this.w - W - 14 - (touch ? 90 : 0);
     const y = (this.hudTop != null ? this.hudTop : this.h - 100) - H - 40;
+    // Remembered so a tap on the handset can hurry it along (main.js).
+    this._nokiaToastRect = { x: x - 6, y: y - 6, w: W + 12, h: H + 12 };
     // Dark plastic bezel.
     ctx.fillStyle = '#191c14';
     ctx.fillRect(x - 6, y - 6, W + 12, H + 12);
@@ -625,6 +782,989 @@ export const uiMethods = {
     ctx.fillText('Copy', btnX + btnW / 2, btnY + 16);
     ctx.textAlign = 'left';
   },
+  // Where you are and who holds it — two plain labelled lines, no panel around
+  // them. (`rx, ry` is the block's top-RIGHT corner; `w` sets its left edge.)
+  //
+  // In a five-island game the HUD never said which island you were standing on
+  // or whose machines you were fighting, which is exactly what you need when you
+  // have just made landfall. It is drawn unboxed and grey because it is
+  // reference, not instrumentation: there to be glanced at, not watched.
+  // THE NARROWS — the Scylla/Charybdis run, drawn in a 16-bit register rather
+  // than a blocky 8-bit one: gradients on the water, shaded and outlined
+  // sprites, highlights and drop shadows. Still a hard cell grid underneath, so
+  // it reads as a SNES cabinet rather than an Atari one.
+  drawNarrows(n, touch = false) {
+    const ctx = this.ctx;
+    const W = NARROWS_W, ROWS = VIEW_ROWS;
+    const cell = Math.max(10, Math.floor(Math.min((this.w - 40) / W, (this.h - 190) / ROWS)));
+    const gw = W * cell, gh = ROWS * cell;
+    const ox = Math.round((this.w - gw) / 2), oy = Math.round((this.h - gh) / 2) - 10;
+    const calm = narrowsCalm(n);
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(3,5,9,0.90)';
+    ctx.fillRect(0, 0, this.w, this.h);
+
+    // --- the sea: a vertical gradient with a slow swell rolling down it ------
+    const sea = ctx.createLinearGradient(0, oy, 0, oy + gh);
+    sea.addColorStop(0, '#0a1830');
+    sea.addColorStop(0.5, '#123156');
+    sea.addColorStop(1, '#0b1e3a');
+    ctx.fillStyle = sea;
+    ctx.fillRect(ox, oy, gw, gh);
+    for (let r = 0; r < ROWS; r++) {
+      const swell = Math.sin((r + (n.frac || 0) + n.t * 0.06) * 0.7);
+      ctx.fillStyle = `rgba(120,190,235,${(0.05 + 0.045 * swell).toFixed(3)})`;
+      ctx.fillRect(ox, oy + r * cell + cell * 0.62 + (n.frac || 0) * cell, gw, Math.max(1, cell * 0.16));
+    }
+    // Foam crests, scrolling, so the channel obviously moves.
+    ctx.fillStyle = 'rgba(210,235,255,0.16)';
+    for (let r = 0; r < ROWS; r++) {
+      const k = (r * 5 + Math.floor(n.t * 0.5)) % W;
+      ctx.fillRect(ox + k * cell + cell * 0.2, oy + r * cell + cell * 0.3 + (n.frac || 0) * cell, cell * 0.5, 2);
+    }
+
+    // --- rocky crags framing the channel -------------------------------------
+    // Not playfield: the walls of the strait, outside the water on both hands.
+    // They scroll with the current so the whole picture moves as one thing, and
+    // they are what makes the channel read as a channel rather than a corridor.
+    const cragW = Math.max(10, Math.round(cell * 0.9));
+    const drawCrags = (edgeX, dir) => {
+      const g3 = ctx.createLinearGradient(edgeX, 0, edgeX + cragW * dir, 0);
+      g3.addColorStop(0, '#3a3a42'); g3.addColorStop(1, '#14161c');
+      ctx.fillStyle = g3;
+      ctx.fillRect(Math.min(edgeX, edgeX + cragW * dir), oy, cragW, gh);
+      // Jagged teeth along the water's edge, on a long scroll so they repeat
+      // slower than the swell.
+      const step = cell * 1.1;
+      const off = ((n.t * 0.9 + (n.frac || 0) * 6) % step);
+      ctx.fillStyle = '#4a4b55';
+      for (let y2 = oy - step + off; y2 < oy + gh + step; y2 += step) {
+        const h2 = cell * (0.5 + 0.35 * Math.abs(Math.sin(y2 * 0.07)));
+        ctx.beginPath();
+        ctx.moveTo(edgeX, y2);
+        ctx.lineTo(edgeX + cragW * 0.75 * dir, y2 + h2 * 0.45);
+        ctx.lineTo(edgeX, y2 + h2);
+        ctx.closePath();
+        ctx.fill();
+      }
+      // A pale line where rock meets water.
+      ctx.fillStyle = 'rgba(200,225,245,0.18)';
+      ctx.fillRect(edgeX - (dir < 0 ? 0 : 1), oy, 1.5, gh);
+    };
+    // On the way OUT the walls fall away astern: they slide off their own sides
+    // and fade, so the channel opens into sea before the run is counted up. You
+    // can see that you are through, which is the whole point of the run-out.
+    const outT = narrowsRunOutT(n);
+    ctx.save();
+    // Clipped to the cabinet, not to where the crags are going: as they slide
+    // outward they are cut off by the frame rather than floating out over the
+    // world behind it.
+    ctx.beginPath(); ctx.rect(ox - cragW, oy, gw + cragW * 2, gh); ctx.clip();
+    if (outT > 0) { ctx.globalAlpha = Math.max(0, 1 - outT * 1.25); }
+    const open = outT * cragW * 2.4;
+    drawCrags(ox - open, -1);       // port crag, falling away to port
+    drawCrags(ox + gw + open, 1);   // starboard crag, likewise
+    ctx.restore();
+
+    // --- the two of them, surfacing from their own sides ---------------------
+    // Both are IN THE WATER now: Scylla's necks break the surface on the left,
+    // Charybdis's maw on the right. Each is drawn with an outline, a lit top and
+    // a shaded underside, which is what separates a SNES sprite from a blob.
+    // A head that is actually alive: it blinks, its pupil tracks the ship, and
+    // its jaw works. Placid heads with a fixed dot for an eye read as furniture;
+    // the whole point of these two is that they are watching you.
+    const shipScreenX = ox + (n.xDraw != null ? n.xDraw : n.x) * cell + cell * 0.5;
+    const shipScreenY = oy + (n.yDraw != null ? n.yDraw : n.y) * cell + cell * 0.5;
+    const head = (cx, cy, rad, base, lit, dark, facing, seed) => {
+      const beat = n.t * 0.14 + seed * 2.3;
+      // Blink: shut for a few frames on an irregular cycle, so they do not all
+      // blink together like a row of lights.
+      const cyc = (n.t + seed * 37) % 150;
+      const blinkAmt = cyc < 7 ? 1 - Math.abs(cyc - 3.5) / 3.5 : 0;
+      const jaw = (Math.sin(beat) * 0.5 + 0.5) ** 2;              // 0..1, snappy
+
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.beginPath(); ctx.ellipse(cx, cy + rad * 0.55, rad * 1.15, rad * 0.42, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = base;
+      ctx.beginPath(); ctx.ellipse(cx, cy, rad, rad * 0.92, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = dark;
+      ctx.beginPath(); ctx.ellipse(cx, cy + rad * 0.25, rad * 0.92, rad * 0.55, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = lit;
+      ctx.beginPath(); ctx.ellipse(cx - rad * 0.2 * facing, cy - rad * 0.35, rad * 0.55, rad * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+
+      // the jaw, hinged at the front of the head and opening toward the channel
+      const gape = rad * (0.18 + 0.5 * jaw);
+      ctx.fillStyle = '#2a0912';
+      ctx.beginPath();
+      ctx.moveTo(cx + rad * 0.20 * facing, cy - gape * 0.5);
+      ctx.quadraticCurveTo(cx + rad * 1.15 * facing, cy, cx + rad * 0.20 * facing, cy + gape * 0.5);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#fdf6e0';                                   // teeth
+      for (let ti = 0; ti < 3; ti++) {
+        const tx = cx + (rad * 0.35 + ti * rad * 0.24) * facing;
+        const th = gape * (0.30 - ti * 0.06);
+        ctx.beginPath();
+        ctx.moveTo(tx, cy - gape * 0.42);
+        ctx.lineTo(tx + rad * 0.10 * facing, cy - gape * 0.42 + th);
+        ctx.lineTo(tx - rad * 0.06 * facing, cy - gape * 0.42 + th);
+        ctx.closePath(); ctx.fill();
+      }
+
+      ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = Math.max(1, cell * 0.08);
+      ctx.beginPath(); ctx.ellipse(cx, cy, rad, rad * 0.92, 0, 0, Math.PI * 2); ctx.stroke();
+
+      // eye: white shrinks to a slit on the blink, pupil leans toward the ship
+      const eyeX = cx + rad * 0.35 * facing, eyeY = cy - rad * 0.12;
+      const open = 1 - blinkAmt;
+      ctx.fillStyle = '#fdf6e0';
+      ctx.beginPath(); ctx.ellipse(eyeX, eyeY, rad * 0.26, rad * 0.26 * Math.max(0.06, open), 0, 0, Math.PI * 2); ctx.fill();
+      if (open > 0.3) {
+        const look = Math.max(-1, Math.min(1, (shipScreenX - cx) / (cell * 4)));
+        ctx.fillStyle = '#150a10';
+        ctx.beginPath();
+        ctx.arc(eyeX + look * rad * 0.1, eyeY, rad * 0.12 * (0.85 + 0.3 * jaw), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    };
+
+    // Everything from here is inside the frame: with the sub-row slide a row can
+    // sit a whole cell past the edge, and a rock hanging below the cabinet looks
+    // like a rendering fault.
+    ctx.save();
+    ctx.beginPath(); ctx.rect(ox, oy, gw, gh); ctx.clip();
+
+    // Rows are drawn at a sub-row offset so the channel FLOWS instead of jumping
+    // a whole cell per logic tick. The rules still run on whole rows; this only
+    // moves the picture between them.
+    const slide = (n.frac || 0) * cell;
+    for (let r = 0; r < ROWS; r++) {
+      const row = n.rows[r];
+      const y = oy + r * cell + cell * 0.5 + slide;
+      if (y < oy - cell || y > oy + gh + cell) continue;
+      if (row.rock >= 0) {
+        // A rock in the seam: wet granite with a lit crown and a wash of foam
+        // round its base. The thing that stops the middle of the channel being
+        // a free ride.
+        const rx = ox + row.rock * cell + cell * 0.5;
+        ctx.fillStyle = 'rgba(210,235,255,0.22)';
+        ctx.beginPath(); ctx.ellipse(rx, y + cell * 0.28, cell * 0.46, cell * 0.16, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#3b4048';
+        ctx.beginPath();
+        ctx.moveTo(rx - cell * 0.38, y + cell * 0.3);
+        ctx.lineTo(rx - cell * 0.16, y - cell * 0.34);
+        ctx.lineTo(rx + cell * 0.12, y - cell * 0.22);
+        ctx.lineTo(rx + cell * 0.38, y + cell * 0.3);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#5c636d';                          // lit face
+        ctx.beginPath();
+        ctx.moveTo(rx - cell * 0.16, y - cell * 0.34);
+        ctx.lineTo(rx + cell * 0.12, y - cell * 0.22);
+        ctx.lineTo(rx + cell * 0.02, y + cell * 0.3);
+        ctx.lineTo(rx - cell * 0.1, y + cell * 0.3);
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = Math.max(1, cell * 0.07);
+        ctx.beginPath();
+        ctx.moveTo(rx - cell * 0.38, y + cell * 0.3);
+        ctx.lineTo(rx - cell * 0.16, y - cell * 0.34);
+        ctx.lineTo(rx + cell * 0.12, y - cell * 0.22);
+        ctx.lineTo(rx + cell * 0.38, y + cell * 0.3);
+        ctx.stroke();
+      }
+      if (row.pick >= 0) {
+        // FLOTSAM: worth steering for, so it is drawn with a halo the hazards
+        // never get. Nothing else in this channel glows.
+        const px = ox + row.pick * cell + cell * 0.5;
+        const pulse = 0.55 + 0.45 * Math.sin(n.t * 0.16 + r);
+        const halo = ctx.createRadialGradient(px, y, cell * 0.1, px, y, cell * 0.7);
+        // Timber's halo is pushed harder than bronze's: a brown plank on dark
+        // blue water simply does not carry at a glance the way a lit bronze
+        // wedge does, and both have to read as "steer for this".
+        const beak = row.kind === 'beak';
+        const tint = beak ? '176,125,58' : '170,225,190';
+        halo.addColorStop(0, `rgba(${tint},${((beak ? 0.42 : 0.60) * pulse).toFixed(2)})`);
+        halo.addColorStop(1, `rgba(${tint},0)`);
+        ctx.fillStyle = halo;
+        ctx.beginPath(); ctx.arc(px, y, cell * 0.7, 0, Math.PI * 2); ctx.fill();
+        ctx.save();
+        ctx.translate(px, y);
+        ctx.rotate(Math.sin(n.t * 0.05 + r) * 0.25);      // rolling in the swell
+        if (row.kind === 'beak') {
+          ctx.fillStyle = '#8a5f28';
+          ctx.beginPath();
+          ctx.moveTo(-cell * 0.30, -cell * 0.14); ctx.lineTo(cell * 0.18, -cell * 0.10);
+          ctx.lineTo(cell * 0.34, 0); ctx.lineTo(cell * 0.18, cell * 0.10);
+          ctx.lineTo(-cell * 0.30, cell * 0.14);
+          ctx.closePath(); ctx.fill();
+          ctx.fillStyle = '#c08a3e';
+          ctx.beginPath();
+          ctx.moveTo(-cell * 0.30, -cell * 0.14); ctx.lineTo(cell * 0.18, -cell * 0.10);
+          ctx.lineTo(cell * 0.34, 0); ctx.lineTo(-cell * 0.30, -cell * 0.03);
+          ctx.closePath(); ctx.fill();
+        } else {
+          ctx.fillStyle = '#8a6437';                        // a spar, banded
+          ctx.fillRect(-cell * 0.34, -cell * 0.11, cell * 0.68, cell * 0.22);
+          ctx.fillStyle = '#b08a52';
+          ctx.fillRect(-cell * 0.34, -cell * 0.11, cell * 0.68, cell * 0.08);
+          ctx.strokeStyle = 'rgba(60,40,20,0.6)'; ctx.lineWidth = 1;
+          ctx.strokeRect(-cell * 0.34, -cell * 0.11, cell * 0.68, cell * 0.22);
+        }
+        ctx.restore();
+      }
+    }
+
+    // --- CHARYBDIS: one enormous whirlpool, coming down the channel ----------
+    // She is the water on the starboard hand, not a row property: a single maw
+    // spanning a band of rows, widening as she comes and shutting as she passes.
+    // Drawn before Scylla so a lunge crossing her rim reads as being in front.
+    const c = n.charybdis;
+    const cReach = c ? (c.reachDraw != null ? c.reachDraw : c.reach) : 0;
+    if (c && cReach > 0.05) {
+      // She DOES travel with the current, so she takes the channel's sub-row
+      // offset — that is what keeps her sliding rather than stepping.
+      const cyc = oy + (c.row + CHARYBDIS_ROWS / 2) * cell + slide;
+      const rad = cReach * cell;
+      const cxw = ox + gw;                        // her eye sits ON the far wall
+      const spin = n.t * 0.10;
+      // the drag: water bending into her for a good way outside the mouth
+      const drag = ctx.createRadialGradient(cxw, cyc, rad * 0.2, cxw, cyc, rad * 1.5);
+      drag.addColorStop(0, 'rgba(60,20,90,0.85)');
+      drag.addColorStop(0.6, 'rgba(70,40,120,0.35)');
+      drag.addColorStop(1, 'rgba(70,40,120,0)');
+      ctx.fillStyle = drag;
+      ctx.beginPath(); ctx.ellipse(cxw, cyc, rad * 1.5, rad * 1.25, 0, 0, Math.PI * 2); ctx.fill();
+      // three turns of the spiral, each running a little faster than the last
+      ctx.lineCap = 'round';
+      for (let a = 0; a < 3; a++) {
+        ctx.strokeStyle = `rgba(170,120,215,${0.55 - a * 0.13})`;
+        ctx.lineWidth = cell * (0.20 - a * 0.04);
+        ctx.beginPath();
+        ctx.ellipse(cxw, cyc, rad * (0.95 - a * 0.26), rad * (0.80 - a * 0.22), 0,
+          spin * (1 + a * 0.5), spin * (1 + a * 0.5) + Math.PI * 1.5);
+        ctx.stroke();
+      }
+      // the throat, and her one eye down in it
+      ctx.fillStyle = '#1a0726';
+      ctx.beginPath(); ctx.ellipse(cxw, cyc, rad * 0.5, rad * 0.42, 0, 0, Math.PI * 2); ctx.fill();
+      head(cxw - rad * 0.18, cyc, Math.min(cell * 0.9, rad * 0.42),
+        '#7b3fa8', '#c07fe0', '#3f1a5c', -1, 5);
+      // a bright lip where the pull begins, so the edge of her reach is visible
+      ctx.strokeStyle = 'rgba(220,190,255,0.35)';
+      ctx.lineWidth = Math.max(1.5, cell * 0.08);
+      ctx.beginPath(); ctx.ellipse(cxw, cyc, rad, rad * 0.86, 0, Math.PI * 0.5, Math.PI * 1.5);
+      ctx.stroke();
+    }
+
+    // --- SCYLLA: one creature on the port wall, keeping station on you --------
+    // She lurks half-submerged at your row, rears when you come inside her
+    // reach, and lunges. The three poses are the whole tell, so they are drawn
+    // as three distinct silhouettes rather than one neck of varying length.
+    const k = n.scylla;
+    const kReach = k ? Math.max(0.55, k.reachDraw != null ? k.reachDraw : k.reach) : 0;
+    const kVis = k ? (k.visDraw != null ? k.visDraw : (k.vis || 0)) : 0;
+    if (k && kVis > 0.03) {
+      // NO `slide`: she holds her station against the current while the channel
+      // runs past her, so borrowing the water's sub-row offset made her snap back
+      // a whole cell every tick. Her row is eased instead.
+      const ky = oy + (k.rowDraw != null ? k.rowDraw : k.row) * cell + cell * 0.5;
+      const striking = k.state === 'strike';
+      const reach = kReach * cell;
+      const tip = ox + reach;
+      const bob = Math.sin(n.t * 0.09) * cell * 0.10;
+      // She rises OUT of the water and sinks back into it: the fade is driven by
+      // the same eased reach, so there is no frame where she simply exists.
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, kVis);
+      // wake round her shoulders: she is a big thing coming up through moving water
+      ctx.fillStyle = 'rgba(210,235,255,0.13)';
+      ctx.beginPath(); ctx.ellipse(ox + cell * 0.2, ky + bob, cell * 1.1, cell * 0.55, 0, 0, Math.PI * 2); ctx.fill();
+      // the neck, out of the rock on the port hand
+      ctx.strokeStyle = striking ? '#8c2440' : '#5e1a2c';
+      ctx.lineWidth = cell * (striking ? 0.50 : 0.40);
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(ox - cell * 0.4, ky + bob + cell * 0.3);
+      ctx.quadraticCurveTo(tip - cell * 0.9, ky - cell * (striking ? 0.65 : 0.25), tip, ky + bob);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(200,100,130,0.42)';
+      ctx.lineWidth = cell * 0.11;
+      ctx.beginPath();
+      ctx.moveTo(ox - cell * 0.4, ky + bob + cell * 0.16);
+      ctx.quadraticCurveTo(tip - cell * 0.9, ky - cell * (striking ? 0.82 : 0.42), tip, ky + bob - cell * 0.14);
+      ctx.stroke();
+      // The tell is HER — rising out of the water where she was not a moment ago.
+      // A lit rectangle over the water she is about to take said the same thing
+      // and said it as a debug overlay: a hitbox drawn on the sea.
+      head(tip, ky + bob, cell * (striking ? 0.52 : 0.44), '#a8304c', '#d9668a', '#6d1730', 1, 0);
+      ctx.restore();
+    }
+
+    // --- gulls ---------------------------------------------------------------
+    // Every so often a few birds cross the channel. Nothing to do with the
+    // rules; they exist because a strait with two monsters and no birds reads as
+    // a test harness, and because something ordinary passing overhead makes the
+    // rest of it worse. Derived from n.t, so they need no state of their own.
+    const CYCLE = 520;                       // frames between flights
+    const phase = n.t % CYCLE;
+    if (phase < 190) {
+      const flight = Math.floor(n.t / CYCLE);
+      const dir = (flight % 2) ? -1 : 1;                       // alternate the crossing
+      const baseY = oy + gh * (0.15 + ((flight * 37) % 60) / 100);
+      const u = phase / 190;
+      const headX = dir > 0 ? ox - cell + u * (gw + cell * 2) : ox + gw + cell - u * (gw + cell * 2);
+      ctx.strokeStyle = 'rgba(232,238,245,0.75)';
+      ctx.lineWidth = Math.max(1.2, cell * 0.09);
+      ctx.lineCap = 'round';
+      for (let g4 = 0; g4 < 3; g4++) {
+        const gx = headX - dir * g4 * cell * 1.5;
+        const gy = baseY + Math.sin(n.t * 0.12 + g4 * 1.3) * cell * 0.35 + g4 * cell * 0.5;
+        if (gx < ox - cell * 2 || gx > ox + gw + cell * 2) continue;
+        const flap = Math.sin(n.t * 0.35 + g4 * 0.9) * 0.5 + 0.5;   // 0..1 wingbeat
+        const span = cell * (0.30 + 0.16 * flap);
+        const lift = cell * (0.16 * flap);
+        ctx.beginPath();
+        ctx.moveTo(gx - span, gy + lift);
+        ctx.quadraticCurveTo(gx - span * 0.4, gy - lift * 1.4, gx, gy);
+        ctx.quadraticCurveTo(gx + span * 0.4, gy - lift * 1.4, gx + span, gy + lift);
+        ctx.stroke();
+      }
+    }
+
+    ctx.restore();   // end playfield clip
+
+    // --- the ship ------------------------------------------------------------
+    const sx = shipScreenX;
+    const sy = shipScreenY;
+    // The grace flash must NOT keep running once the run is over: the card's
+    // clock still ticks so PRESS ANY KEY can blink, and the ship was flickering
+    // in and out underneath it.
+    const blink = !n.over && n.grace > 0 && (n.t & 1);
+    if (!blink) {
+      // A BOAT, not an insect. Two things were doing that: oars radiating at
+      // their own phases like legs, and a hull too narrow for its length. The
+      // oars now stroke in unison — one bank, one beat, the way a crew actually
+      // rows — and the beam is wide enough to read as a hull. Red outside,
+      // planked deck inside, matching the greek ship you sail in the world.
+      const L = cell * 0.92;                 // half-length, bow to midships
+      const B = cell * 0.40;                 // half-beam
+      // ONE phase for the whole crew, and a long slow one: a bank of oars at a
+      // twitchy rate was half of what made this read as an insect.
+      const stroke = Math.sin(n.t * 0.10);
+
+      ctx.fillStyle = 'rgba(0,0,0,0.32)';
+      ctx.beginPath(); ctx.ellipse(sx, sy + cell * 0.34, B * 1.1, L * 0.62, 0, 0, Math.PI * 2); ctx.fill();
+
+      // oars first, so they sit under the hull like real looms through ports
+      ctx.strokeStyle = 'rgba(196,158,96,0.9)';
+      ctx.lineWidth = Math.max(1.1, cell * 0.06);
+      ctx.lineCap = 'round';
+      for (let o = 0; o < 3; o++) {
+        const oy2 = sy - L * 0.28 + o * cell * 0.30;
+        const reach = cell * (0.30 + 0.13 * stroke);      // all together
+        const dropY = cell * (0.16 + 0.07 * stroke);
+        ctx.beginPath();
+        ctx.moveTo(sx - B * 0.85, oy2); ctx.lineTo(sx - B * 0.85 - reach, oy2 + dropY);
+        ctx.moveTo(sx + B * 0.85, oy2); ctx.lineTo(sx + B * 0.85 + reach, oy2 + dropY);
+        ctx.stroke();
+      }
+
+      // hull: red outside
+      const hull = new Path2D();
+      hull.moveTo(sx, sy - L);                                        // stem
+      hull.quadraticCurveTo(sx + B, sy - L * 0.35, sx + B * 0.92, sy + L * 0.35);
+      hull.quadraticCurveTo(sx + B * 0.7, sy + L * 0.80, sx, sy + L * 0.86);
+      hull.quadraticCurveTo(sx - B * 0.7, sy + L * 0.80, sx - B * 0.92, sy + L * 0.35);
+      hull.quadraticCurveTo(sx - B, sy - L * 0.35, sx, sy - L);
+      hull.closePath();
+      ctx.fillStyle = '#a3302c';
+      ctx.fill(hull);
+      ctx.fillStyle = '#7d1f1e';                                      // shaded starboard side
+      ctx.save(); ctx.clip(hull);
+      ctx.fillRect(sx + B * 0.25, sy - L, B, L * 2);
+      ctx.restore();
+      ctx.strokeStyle = '#2a1a2e'; ctx.lineWidth = Math.max(1.2, cell * 0.07);
+      ctx.stroke(hull);
+
+      // the deck inside it, planked
+      const deck = new Path2D();
+      deck.moveTo(sx, sy - L * 0.74);
+      deck.quadraticCurveTo(sx + B * 0.60, sy - L * 0.25, sx + B * 0.55, sy + L * 0.32);
+      deck.quadraticCurveTo(sx + B * 0.4, sy + L * 0.62, sx, sy + L * 0.66);
+      deck.quadraticCurveTo(sx - B * 0.4, sy + L * 0.62, sx - B * 0.55, sy + L * 0.32);
+      deck.quadraticCurveTo(sx - B * 0.60, sy - L * 0.25, sx, sy - L * 0.74);
+      deck.closePath();
+      ctx.fillStyle = '#c69a54'; ctx.fill(deck);
+      ctx.save(); ctx.clip(deck);
+      ctx.strokeStyle = 'rgba(120,84,40,0.55)'; ctx.lineWidth = 1;
+      for (let d2 = -3; d2 <= 3; d2++) {
+        ctx.beginPath(); ctx.moveTo(sx - B, sy + d2 * cell * 0.16); ctx.lineTo(sx + B, sy + d2 * cell * 0.16); ctx.stroke();
+      }
+      ctx.restore();
+
+      // stern post curling back over the steering oar
+      ctx.strokeStyle = '#a3302c'; ctx.lineWidth = Math.max(1.4, cell * 0.09);
+      ctx.beginPath();
+      ctx.moveTo(sx, sy + L * 0.84);
+      ctx.quadraticCurveTo(sx + B * 0.5, sy + L * 1.06, sx + B * 0.05, sy + L * 1.16);
+      ctx.stroke();
+
+      // mast and square sail, her eye on it
+      ctx.strokeStyle = '#6d4718'; ctx.lineWidth = Math.max(1.2, cell * 0.07);
+      ctx.beginPath(); ctx.moveTo(sx, sy + L * 0.2); ctx.lineTo(sx, sy - L * 0.6); ctx.stroke();
+      ctx.fillStyle = '#f2ead6';
+      ctx.beginPath();
+      ctx.moveTo(sx - B * 0.86, sy - L * 0.54);
+      ctx.lineTo(sx + B * 0.86, sy - L * 0.54);
+      ctx.lineTo(sx + B * 0.70, sy + L * 0.02);
+      ctx.lineTo(sx - B * 0.70, sy + L * 0.02);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = 'rgba(42,26,46,0.55)'; ctx.lineWidth = Math.max(1, cell * 0.05);
+      ctx.stroke();
+      ctx.fillStyle = '#2f4d8a';
+      ctx.beginPath(); ctx.ellipse(sx, sy - L * 0.26, B * 0.30, B * 0.21, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#f2ead6';
+      ctx.beginPath(); ctx.arc(sx, sy - L * 0.26, B * 0.09, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // --- frame + HUD ---------------------------------------------------------
+    ctx.strokeStyle = 'rgba(180,200,220,0.35)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(ox - 1, oy - 1, gw + 2, gh + 2);
+
+    // Their names, on their own sides, so you never have to guess which is which.
+    ctx.font = `bold ${Math.max(10, Math.round(cell * 0.62))}px ui-monospace, monospace`;
+    ctx.textAlign = 'left';
+    ctx.fillStyle = calm ? 'rgba(200,120,150,0.35)' : 'rgba(230,140,170,0.9)';
+    ctx.fillText(MONSTERS.scylla.name, ox + 4, oy - 8);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = calm ? 'rgba(170,120,210,0.35)' : 'rgba(200,150,240,0.9)';
+    ctx.fillText(MONSTERS.charybdis.name, ox + gw - 4, oy - 8);
+
+    const by = oy + gh + 14;
+    ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(232,224,208,0.9)';
+    ctx.font = `bold ${Math.max(10, Math.round(cell * 0.6))}px ui-monospace, monospace`;
+    ctx.fillText('THE NARROWS', ox, by);
+    ctx.textAlign = 'right';
+    const leaving = narrowsRunOut(n);
+    ctx.fillStyle = calm ? 'rgba(106,208,160,0.9)' : n.bites ? '#e0864a' : 'rgba(232,224,208,0.5)';
+    ctx.fillText(leaving ? 'SUCCESS!' : calm ? 'OPEN WATER' : n.bites ? `TAKEN ${n.bites}` : 'BEWARE!', ox + gw, by);
+    // Hull, as pips that go out — a number counting up never felt like damage.
+    const pip = Math.max(5, Math.round(cell * 0.34));
+    const hull = n.hull != null ? n.hull : HULL_MAX;
+    for (let i = 0; i < HULL_MAX; i++) {
+      const lit = i < hull;
+      ctx.fillStyle = lit ? (hull <= 2 ? '#e05548' : '#c9932f') : 'rgba(255,255,255,0.10)';
+      ctx.fillRect(ox + i * (pip + 3), by + 20, pip, pip);
+    }
+    // HULL and the controls share the strip, divided by a rule — without it the
+    // label ran straight into the first key and read as one word.
+    ctx.textAlign = 'left';
+    const labY = by + 20 + pip - 1;
+    let lx = ox + HULL_MAX * (pip + 3) + 6;
+    ctx.fillStyle = 'rgba(207,216,195,0.45)';
+    ctx.font = `${Math.max(8, Math.round(cell * 0.42))}px ui-monospace, monospace`;
+    ctx.fillText('HULL', lx, labY);
+    lx += ctx.measureText('HULL').width + Math.max(7, cell * 0.5);
+    // The bronze ram, if one is fitted: its own pips in bronze, and its own
+    // label, because it is not more hull — it is the thing that spends itself
+    // first so the hull does not have to.
+    if (n.ram != null && (n.ram > 0 || n.ramFitted)) {
+      ctx.fillStyle = 'rgba(207,216,195,0.22)';
+      ctx.fillRect(Math.round(lx), labY - pip + 1, 1, pip + 1);
+      lx += Math.max(7, cell * 0.5);
+      for (let i = 0; i < RAM_MAX; i++) {
+        ctx.fillStyle = i < n.ram ? '#b07d3a' : 'rgba(176,125,58,0.16)';
+        ctx.beginPath();
+        ctx.moveTo(lx + i * (pip + 3), labY);
+        ctx.lineTo(lx + i * (pip + 3) + pip, labY - pip * 0.5);
+        ctx.lineTo(lx + i * (pip + 3), labY - pip);
+        ctx.closePath(); ctx.fill();
+      }
+      lx += RAM_MAX * (pip + 3) + 4;
+      ctx.fillStyle = 'rgba(207,216,195,0.45)';
+      ctx.font = `${Math.max(8, Math.round(cell * 0.42))}px ui-monospace, monospace`;
+      ctx.fillText('RAM', lx, labY);
+      lx += ctx.measureText('RAM').width + Math.max(7, cell * 0.5);
+    }
+    ctx.fillStyle = 'rgba(207,216,195,0.22)';
+    ctx.fillRect(Math.round(lx), labY - pip + 1, 1, pip + 1);      // the divider
+    lx += Math.max(7, cell * 0.5);
+    // The controls line has to FIT: on a phone the strip is a third of the width
+    // it has on a desk, and the key list was being cut off mid-glyph at the
+    // frame's edge. On touch it is not a key list at all.
+    const ctrl = touch ? 'drag anywhere to steer' : 'WASD  or  ← → ↑ ↓  ·  or drag';
+    const room = Math.max(20, ox + gw - lx);
+    let cpx = Math.max(9, Math.round(cell * 0.46));
+    do {
+      ctx.font = `${cpx}px system-ui, sans-serif`;
+      if (ctx.measureText(ctrl).width <= room) break;
+      cpx -= 1;
+    } while (cpx > 7);
+    ctx.fillStyle = 'rgba(207,216,195,0.5)';
+    ctx.fillText(ctrl, lx, labY);
+    ctx.textAlign = 'right';
+    const pw2 = Math.round(narrowsProgress(n) * gw);
+    ctx.fillStyle = 'rgba(255,255,255,0.10)';
+    ctx.fillRect(ox, by + 8, gw, 6);
+    const grad = ctx.createLinearGradient(ox, 0, ox + gw, 0);
+    grad.addColorStop(0, '#6ad0a0'); grad.addColorStop(1, '#e8d27a');
+    ctx.fillStyle = grad;
+    ctx.fillRect(ox, by + 8, pw2, 6);
+    ctx.textAlign = 'left';
+    ctx.restore();
+  },
+
+  // GAME OVER, over the frozen channel. The run used to resolve the instant it
+  // ended: one frame you were steering, the next you were back in the world
+  // reading a line of prose about what had happened. A cabinet owes you the
+  // moment, and it owes you the numbers.
+  drawNarrowsGameOver(n, over) {
+    const ctx = this.ctx;
+    const W = NARROWS_W, ROWS = VIEW_ROWS;
+    const cell = Math.max(10, Math.floor(Math.min((this.w - 40) / W, (this.h - 190) / ROWS)));
+    const gw = W * cell, gh = ROWS * cell;
+    const ox = Math.round((this.w - gw) / 2), oy = Math.round((this.h - gh) / 2) - 10;
+    const cx = ox + gw / 2;
+    const won = over.outcome === 'through';
+
+    ctx.save();
+    // The field dims but stays visible: you want to see the water that got you.
+    ctx.fillStyle = 'rgba(3,5,9,0.72)';
+    ctx.fillRect(ox, oy, gw, gh);
+
+    const fitW = gw - cell * 1.4;
+    const fit = (text, startPx, weight = '') => {
+      let px = startPx;
+      do {
+        ctx.font = `${weight}${px}px ui-monospace, monospace`;
+        if (ctx.measureText(text).width <= fitW) break;
+        px -= 1;
+      } while (px > 7);
+      return px;
+    };
+    ctx.textAlign = 'center';
+
+    const title = won ? 'THROUGH' : 'GAME OVER';
+    const big = fit(title, Math.round(cell * 1.5), 'bold ');
+    const ty = oy + gh * 0.30;
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillText(title, cx + 3, ty + 3);
+    ctx.fillStyle = won ? '#6ad0a0' : '#e05548';
+    ctx.fillText(title, cx, ty);
+
+    const why = {
+      swallowed: 'CHARYBDIS TOOK THE SHIP',
+      wrecked: 'THE HULL CAME APART',
+      through: 'THE ROCK FALLS AWAY ASTERN',
+    }[over.outcome] || '';
+    fit(why, Math.round(cell * 0.62), 'bold ');
+    ctx.fillStyle = 'rgba(207,216,195,0.75)';
+    ctx.fillText(why, cx, ty + big * 0.95);
+
+    // The tally. An arcade cabinet always tells you what the run came to.
+    const lh = Math.max(15, Math.round(cell * 0.82));
+    let ly = ty + big * 0.95 + lh * 1.5;
+    const stat = (label, value, tone) => {
+      const px = Math.max(9, Math.round(cell * 0.52));
+      ctx.font = `${px}px ui-monospace, monospace`;
+      ctx.textAlign = 'left';
+      ctx.fillStyle = 'rgba(207,216,195,0.45)';
+      ctx.fillText(label, ox + cell * 1.6, ly);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = tone || 'rgba(232,224,208,0.92)';
+      ctx.fillText(String(value), ox + gw - cell * 1.6, ly);
+      ctx.textAlign = 'center';
+      ly += lh;
+    };
+    stat('DISTANCE', `${Math.round(narrowsProgress(n) * 100)}%`);
+    stat('TAKEN BY SCYLLA', n.bites || 0, n.bites ? '#e0864a' : null);
+    stat('ROCKS STRUCK', n.rocks || 0, n.rocks ? '#e0864a' : null);
+    if (n.picks) stat('TAKEN FROM THE SEA', n.picks, '#6ad0a0');
+    if (n.ramFitted) stat('RAM REMAINING', `${n.ram} / ${RAM_MAX}`, '#b07d3a');
+    stat('HULL', `${Math.max(0, n.hull)} / ${HULL_MAX}`,
+      n.hull <= 0 ? '#e05548' : n.hull <= 2 ? '#e0864a' : null);
+
+    // The ENTER key, drawn as a key. It does not appear until the hold is up, so
+    // there is nothing to hit early — the card cannot be skipped before it has
+    // been read, which is the whole reason it stops the game at all. The rect is
+    // stamped back onto the state so the hub can hit-test a tap against it
+    // without either side guessing at the other's layout.
+    over.enterRect = null;
+    if (over.ready) {
+      const bh = Math.max(26, Math.round(cell * 1.15));
+      const label = 'ENTER';
+      ctx.font = `bold ${Math.max(11, Math.round(cell * 0.6))}px ui-monospace, monospace`;
+      const bw = Math.max(cell * 4.2, ctx.measureText(label).width + cell * 2.2);
+      const bx = Math.round(cx - bw / 2), byy = Math.round(oy + gh * 0.84 - bh / 2);
+      const pulse = 0.55 + 0.45 * Math.sin(n.t * 0.12);
+
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';                 // the key's shadow: it stands up
+      this.roundRect(bx + 2, byy + 4, bw, bh, 5);
+      ctx.fill();
+      const kg = ctx.createLinearGradient(0, byy, 0, byy + bh);
+      kg.addColorStop(0, '#3a4050'); kg.addColorStop(1, '#232838');
+      ctx.fillStyle = kg;
+      this.roundRect(bx, byy, bw, bh, 5);
+      ctx.fill();
+      ctx.strokeStyle = `rgba(232,210,122,${(0.45 + 0.5 * pulse).toFixed(2)})`;
+      ctx.lineWidth = 2;
+      this.roundRect(bx, byy, bw, bh, 5);
+      ctx.stroke();
+      ctx.fillStyle = `rgba(232,210,122,${(0.7 + 0.3 * pulse).toFixed(2)})`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(label, bx + bw / 2, byy + bh / 2 + 1);
+      ctx.textBaseline = 'alphabetic';
+
+      over.enterRect = { x: bx, y: byy, w: bw, h: bh };
+      ctx.fillStyle = 'rgba(207,216,195,0.4)';
+      ctx.font = `${Math.max(9, Math.round(cell * 0.44))}px system-ui, sans-serif`;
+      ctx.fillText('press enter, or tap', cx, byy + bh + Math.max(14, cell * 0.62));
+    }
+
+    ctx.strokeStyle = won ? 'rgba(106,208,160,0.5)' : 'rgba(224,85,72,0.5)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(ox - 1, oy - 1, gw + 2, gh + 2);
+    ctx.textAlign = 'left';
+    ctx.restore();
+  },
+
+  // The cabinet's attract screen — see drawNarrows for why it exists.
+  drawNarrowsAttract(n, touch = false) {
+    const ctx = this.ctx;
+    const W = NARROWS_W, ROWS = VIEW_ROWS;
+    const cell = Math.max(10, Math.floor(Math.min((this.w - 40) / W, (this.h - 190) / ROWS)));
+    const gw = W * cell, gh = ROWS * cell;
+    const ox = Math.round((this.w - gw) / 2), oy = Math.round((this.h - gh) / 2) - 10;
+    const cx = ox + gw / 2;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(3,5,9,0.92)';
+    ctx.fillRect(0, 0, this.w, this.h);
+    const g2 = ctx.createLinearGradient(0, oy, 0, oy + gh);
+    g2.addColorStop(0, '#0a1830'); g2.addColorStop(1, '#07101f');
+    ctx.fillStyle = g2; ctx.fillRect(ox, oy, gw, gh);
+    ctx.strokeStyle = 'rgba(180,200,220,0.35)'; ctx.lineWidth = 2;
+    ctx.strokeRect(ox - 1, oy - 1, gw + 2, gh + 2);
+    ctx.textAlign = 'center';
+
+    const fitW = gw - cell * 1.2;
+    const fit = (text, startPx, weight = '') => {
+      let px = startPx;
+      do {
+        ctx.font = `${weight}${px}px ui-monospace, monospace`;
+        if (ctx.measureText(text).width <= fitW) break;
+        px -= 1;
+      } while (px > 7);
+      return px;
+    };
+
+    const big = fit('THE NARROWS', Math.round(cell * 1.3), 'bold ');
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillText('THE NARROWS', cx + 2, oy + gh * 0.15 + 2);
+    ctx.fillStyle = '#e8d27a';
+    ctx.fillText('THE NARROWS', cx, oy + gh * 0.15);
+    ctx.fillStyle = 'rgba(207,216,195,0.55)';
+    fit('AN ODYSSEY, IN ONE CHANNEL', Math.round(cell * 0.6));
+    ctx.fillText('AN ODYSSEY, IN ONE CHANNEL', cx, oy + gh * 0.15 + big * 0.95);
+
+    const lh = Math.max(14, Math.round(cell * 0.95));
+    let ly = oy + gh * 0.40;
+    const rule = (swatch, name, text) => {
+      ctx.textAlign = 'left';
+      ctx.fillStyle = swatch;
+      ctx.beginPath(); ctx.arc(ox + cell * 1.2, ly - lh * 0.2, cell * 0.28, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#e8e0d0';
+      fit(name, Math.round(cell * 0.66), 'bold ');
+      ctx.fillText(name, ox + cell * 1.9, ly);
+      ctx.fillStyle = 'rgba(207,216,195,0.72)';
+      fit(text, Math.round(cell * 0.52));
+      ctx.fillText(text, ox + cell * 1.9, ly + lh * 0.62);
+      ctx.textAlign = 'center';
+      ly += lh * 1.6;
+    };
+    rule('#a8304c', MONSTERS.scylla.name, 'lurks to port. come near and she lunges.');
+    rule('#7b3fa8', MONSTERS.charybdis.name, 'opens to starboard. takes the ship whole.');
+    rule('#5c636d', 'ROCKS', 'mid-channel, and late on they walk.');
+    rule('#6ad0a0', 'FLOTSAM', 'timber and bronze. steer FOR these.');
+    if (n.ram > 0) rule('#b07d3a', 'BRONZE RAM', `fitted. shoulders ${RAM_MAX} rocks aside.`);
+
+    ctx.fillStyle = 'rgba(207,216,195,0.6)';
+    const c1 = touch ? 'drag anywhere to steer her' : 'row her anywhere: WASD  or  ← → ↑ ↓';
+    const c2 = 'through clean costs you nothing';
+    fit(c1, Math.round(cell * 0.52)); ctx.fillText(c1, cx, ly);
+    fit(c2, Math.round(cell * 0.52)); ctx.fillText(c2, cx, ly + lh * 0.66);
+
+    if ((n.t >> 4) & 1) {
+      ctx.fillStyle = '#6ad0a0';
+      fit('INSERT COINS TO PLAY', Math.round(cell * 0.8), 'bold ');
+      ctx.fillText('INSERT COINS TO PLAY', cx, oy + gh * 0.88);
+    }
+    ctx.textAlign = 'left';
+    ctx.restore();
+  },
+
+  // CALYPSO's pong. The ball is the zeus-virus; she is the defence that never
+  // misses; the warmth (and the whole palette) rises with the rally. See
+  // game/calypso-pong.js for why you cannot win it.
+  drawCalypsoPong(g, touch = false) {
+    const ctx = this.ctx;
+    // Court: a wide rectangle, paddles left (you) and right (her).
+    const cw = Math.min(this.w - 80, 720);
+    const ch = Math.min(this.h - 220, cw * 0.62);
+    const ox = Math.round((this.w - cw) / 2);
+    const oy = Math.round((this.h - ch) / 2) - 6;
+    const w = g.warmth || 0;
+
+    // The palette warms with the rally: from a cool, lonely indigo dusk to a
+    // gold-and-rose hearth. That warming IS the seduction — the longer you stay,
+    // the nicer it gets to be here.
+    const lerp = (a, b, t) => Math.round(a + (b - a) * t);
+    const bg1 = `rgb(${lerp(14, 46, w)},${lerp(13, 26, w)},${lerp(30, 24, w)})`;
+    const bg2 = `rgb(${lerp(8, 30, w)},${lerp(9, 14, w)},${lerp(22, 16, w)})`;
+    const glow = `rgba(${lerp(150, 240, w)},${lerp(157, 180, w)},${lerp(255, 150, w)},`;
+    const paddleC = `rgb(${lerp(160, 245, w)},${lerp(170, 200, w)},${lerp(255, 170, w)})`;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(3,4,9,0.92)';
+    ctx.fillRect(0, 0, this.w, this.h);
+
+    // the court
+    const sea = ctx.createLinearGradient(0, oy, 0, oy + ch);
+    sea.addColorStop(0, bg1); sea.addColorStop(1, bg2);
+    ctx.fillStyle = sea;
+    ctx.fillRect(ox, oy, cw, ch);
+    // a soft radial hearth-glow from the centre, stronger as it warms
+    const hearth = ctx.createRadialGradient(ox + cw / 2, oy + ch / 2, 10, ox + cw / 2, oy + ch / 2, cw * 0.6);
+    hearth.addColorStop(0, glow + (0.04 + 0.16 * w).toFixed(3) + ')');
+    hearth.addColorStop(1, glow + '0)');
+    ctx.fillStyle = hearth;
+    ctx.fillRect(ox, oy, cw, ch);
+
+    // centre net, dashed
+    ctx.strokeStyle = glow + '0.25)';
+    ctx.lineWidth = 2; ctx.setLineDash([6, 10]);
+    ctx.beginPath(); ctx.moveTo(ox + cw / 2, oy + 6); ctx.lineTo(ox + cw / 2, oy + ch - 6); ctx.stroke();
+    ctx.setLineDash([]);
+
+    const px = ox + 22;                 // your paddle x
+    const hx = ox + cw - 22;            // her paddle x
+    const ph = PADDLE_H * ch;           // paddle half-height in px
+    const paddle = (x, cy, lit) => {
+      ctx.fillStyle = lit;
+      ctx.shadowColor = glow + '0.7)'; ctx.shadowBlur = 12 + 20 * w;
+      this.roundRect(x - 4, cy - ph, 8, ph * 2, 4); ctx.fill();
+      ctx.shadowBlur = 0;
+    };
+    paddle(px, oy + g.py * ch, paddleC);
+    paddle(hx, oy + (g.ay != null ? g.ay : 0.5) * ch, paddleC);
+
+    // the ball — the zeus-virus: a bright mote with a spark-tail.
+    if (g.served && !g.over) {
+      const bx = ox + g.ball.x * cw, by = oy + g.ball.y * ch;
+      ctx.strokeStyle = 'rgba(255,240,180,0.5)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(bx - g.ball.vx * 22, by - g.ball.vy * 22); ctx.lineTo(bx, by); ctx.stroke();
+      ctx.fillStyle = '#fff6d8';
+      ctx.shadowColor = '#ffe89a'; ctx.shadowBlur = 16;
+      ctx.beginPath(); ctx.arc(bx, by, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+
+    // frame + labels
+    ctx.strokeStyle = glow + '0.4)'; ctx.lineWidth = 2;
+    ctx.strokeRect(ox - 1, oy - 1, cw + 2, ch + 2);
+    ctx.font = `bold ${Math.max(11, Math.round(ch * 0.05))}px ui-monospace, monospace`;
+    ctx.textAlign = 'left'; ctx.fillStyle = glow + '0.85)';
+    ctx.fillText('YOU', ox + 4, oy - 8);
+    ctx.textAlign = 'right';
+    ctx.fillText('CALYPSO', ox + cw - 4, oy - 8);
+
+    // her voice — the exit's only signpost. Fades in and sits under the court.
+    const v = calypsoVoice(g);
+    if (v && g.served && !g.over) {
+      ctx.textAlign = 'center';
+      ctx.font = `italic ${Math.max(12, Math.round(ch * 0.055))}px Georgia, serif`;
+      ctx.fillStyle = `rgba(${lerp(180,255,w)},${lerp(190,210,w)},${lerp(255,190,w)},0.9)`;
+      ctx.fillText(v.line, ox + cw / 2, oy + ch + 26);
+    }
+
+    // control hint / the quiet truth that you can leave
+    const by2 = oy + ch + 48;
+    ctx.textAlign = 'center';
+    ctx.font = `${Math.max(10, Math.round(ch * 0.045))}px system-ui, sans-serif`;
+    ctx.fillStyle = 'rgba(210,210,225,0.4)';
+    const hint = g.hintT > 8
+      ? (touch ? 'let it past — drag away and stop tending it — to leave' : 'let it past — stop tending it — to leave')
+      : (touch ? 'drag up / down to rally' : 'W / S  or  ↑ ↓  to rally');
+    ctx.fillText(hint, ox + cw / 2, by2);
+
+    ctx.textAlign = 'left';
+    ctx.restore();
+  },
+
+  // Her invitation — the attract screen. Warm from the first, because she has
+  // never once thought you might say no.
+  drawCalypsoPongAttract(g, touch = false) {
+    const ctx = this.ctx;
+    const cw = Math.min(this.w - 80, 720);
+    const ch = Math.min(this.h - 220, cw * 0.62);
+    const ox = Math.round((this.w - cw) / 2);
+    const oy = Math.round((this.h - ch) / 2) - 6;
+    const cx = ox + cw / 2;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(3,4,9,0.94)'; ctx.fillRect(0, 0, this.w, this.h);
+    const gr = ctx.createLinearGradient(0, oy, 0, oy + ch);
+    gr.addColorStop(0, '#2a1a2e'); gr.addColorStop(1, '#160f1f');
+    ctx.fillStyle = gr; ctx.fillRect(ox, oy, cw, ch);
+    ctx.strokeStyle = 'rgba(240,180,150,0.4)'; ctx.lineWidth = 2;
+    ctx.strokeRect(ox - 1, oy - 1, cw + 2, ch + 2);
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#f0d0a0';
+    ctx.font = `bold ${Math.round(ch * 0.14)}px Georgia, serif`;
+    ctx.fillText('STAY A WHILE', cx, oy + ch * 0.34);
+    ctx.fillStyle = 'rgba(230,215,235,0.75)';
+    ctx.font = `italic ${Math.round(ch * 0.058)}px Georgia, serif`;
+    ctx.fillText('Rally with me. There is no clock on this island,', cx, oy + ch * 0.5);
+    ctx.fillText('and no war that cannot wait one more evening.', cx, oy + ch * 0.58);
+
+    ctx.fillStyle = 'rgba(210,210,225,0.5)';
+    ctx.font = `${Math.round(ch * 0.05)}px system-ui, sans-serif`;
+    ctx.fillText(touch ? 'the light is the message you carry. drag to play.'
+                       : 'the light is the message you carry. W / S or ↑ ↓ to play.', cx, oy + ch * 0.72);
+
+    if ((g.t >> 4) & 1) {
+      ctx.fillStyle = '#ffcf7a';
+      ctx.font = `bold ${Math.round(ch * 0.07)}px ui-monospace, monospace`;
+      ctx.fillText('PRESS TO BEGIN', cx, oy + ch * 0.88);
+    }
+    ctx.textAlign = 'left';
+    ctx.restore();
+  },
+
+  // The release. Not a GAME OVER — you did the one thing that frees you.
+  drawCalypsoPongOver(g, over) {
+    const ctx = this.ctx;
+    const cw = Math.min(this.w - 80, 720);
+    const ch = Math.min(this.h - 220, cw * 0.62);
+    const ox = Math.round((this.w - cw) / 2);
+    const oy = Math.round((this.h - ch) / 2) - 6;
+    const cx = ox + cw / 2;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(6,6,12,0.78)'; ctx.fillRect(ox, oy, cw, ch);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#9fd6ff';
+    ctx.font = `bold ${Math.round(ch * 0.13)}px Georgia, serif`;
+    ctx.fillText('YOU LEAVE', cx, oy + ch * 0.34);
+    ctx.fillStyle = 'rgba(220,225,235,0.82)';
+    ctx.font = `italic ${Math.round(ch * 0.05)}px Georgia, serif`;
+    ctx.fillText('You set the paddle down. The light drifts past,', cx, oy + ch * 0.5);
+    ctx.fillText('and she does not chase it. Her hold was only ever the game.', cx, oy + ch * 0.58);
+    ctx.fillText(`${g.rally} volleys, and the courage to end them.`, cx, oy + ch * 0.68);
+
+    if (over && over.ready) {
+      const bw = Math.max(cw * 0.28, 160), bh = Math.max(30, ch * 0.12);
+      const bx = cx - bw / 2, byy = oy + ch * 0.8;
+      ctx.fillStyle = 'rgba(40,46,64,0.9)';
+      this.roundRect(bx, byy, bw, bh, 5); ctx.fill();
+      ctx.strokeStyle = 'rgba(159,214,255,0.7)'; ctx.lineWidth = 2;
+      this.roundRect(bx, byy, bw, bh, 5); ctx.stroke();
+      ctx.fillStyle = '#cfe6ff';
+      ctx.font = `bold ${Math.round(ch * 0.06)}px ui-monospace, monospace`;
+      ctx.textBaseline = 'middle';
+      ctx.fillText('ENTER', cx, byy + bh / 2 + 1);
+      ctx.textBaseline = 'alphabetic';
+      over.enterRect = { x: bx, y: byy, w: bw, h: bh };
+    } else if (over) {
+      over.enterRect = null;
+    }
+    ctx.textAlign = 'left';
+    ctx.restore();
+  },
+
+  drawStatusCard(player, hud, rx, ry) {
+    const ctx = this.ctx;
+    ctx.textBaseline = 'alphabetic';
+
+    // Where you are and who holds it, as a labelled pair. ONE font and ONE tone
+    // throughout — same family, size, weight and colour for label and value
+    // alike, so the whole block sits at a single quiet level. Right-justified,
+    // so the values line up flush against the panel edge and the pair reads as a
+    // column rather than two loose strings.
+    const labelled = (label, value, ly, valueColor, strike) => {
+      ctx.font = '11px system-ui, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillStyle = valueColor;
+      ctx.fillText(value, rx, ly);
+      const vw = ctx.measureText(value).width;
+      ctx.fillText(label, rx - vw - 6, ly);
+      if (strike) {
+        ctx.strokeStyle = valueColor;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(rx - vw, ly - 3.5);
+        ctx.lineTo(rx, ly - 3.5);
+        ctx.stroke();
+      }
+    };
+    // Grey on purpose so the eye is not pulled here. A felled daemon is told by
+    // the strikethrough rather than by going green, so the state still reads
+    // without spending colour on it — the score is the only coloured thing on
+    // the whole dashboard.
+    const GREY = 'rgba(207,216,195,0.72)';
+    const GREY_DIM = 'rgba(207,216,195,0.42)';
+    // Labels shout, names are spoken: ISLAND/AI in caps, the names in Sentence
+    // case. The roster is stored in caps (AEGILIA, POLYPHEMUS) because that is
+    // how the terminals and the daemons address each other; on the dashboard
+    // they read better as places and people than as system identifiers.
+    labelled('ISLAND:', sentenceCase(hud.place || '—'), ry + 12, GREY);
+    const d = hud.daemon;
+    if (d) labelled('AI:', sentenceCase(d.name), ry + 27, d.fallen ? GREY_DIM : GREY, d.fallen);
+    else labelled('AI:', 'None', ry + 27, GREY_DIM);
+    ctx.textAlign = 'left';
+  },
+
+  // The score, pinned hard to the bottom-right corner of the dashboard. It is
+  // the one live figure worth watching, so it gets a corner of its own and the
+  // only colour on the panel. (The POSEIDON countdown that used to sit up here
+  // is gone from the HUD on purpose — a number ticking down in the corner is
+  // wallpaper within a minute. It arrives as escalating texts instead, see
+  // poseidonWarnings in main.js, and can be looked up in the Record panel.)
+  drawScoreCorner(player, rx, baselineY) {
+    const ctx = this.ctx;
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'alphabetic';
+    // A tiny SCORE over the figure — without it the number is just a number in
+    // a corner, and a new player has no idea what it counts.
+    // Label and figure share ONE line, the label tucked in to the left of the
+    // number. Stacked, the pair was tall enough to sit on top of the PHONE slot
+    // on a narrow screen; side by side it fits the strip above the slot row.
+    const txt = `${player.score ?? 0}`;
+    ctx.font = 'bold 13px system-ui, sans-serif';
+    ctx.fillStyle = '#e8d27a';
+    ctx.fillText(txt, rx, baselineY);
+    const numW = ctx.measureText(txt).width;
+    ctx.font = 'bold 7px system-ui, sans-serif';
+    ctx.fillStyle = 'rgba(232,210,122,0.55)';
+    ctx.fillText('SCORE', rx - numW - 5, baselineY);
+    ctx.textAlign = 'left';
+  },
+
+  // A rounded rectangle path (canvas 2D has roundRect only in newer engines, and
+  // this keeps one code path for all of them).
+  roundRect(x, y, w, h, r) {
+    const ctx = this.ctx;
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  },
+
   // RUN and JUMP buttons for touch play: two translucent circles above the
   // dashboard on the right, sized for thumbs. RUN is a hold (brightens while
   // held); JUMP fires on the tap. Registered in this.touchButtons each frame
@@ -647,13 +1787,22 @@ export const uiMethods = {
       ctx.strokeStyle = b.held ? 'rgba(232,224,208,0.9)' : 'rgba(207,216,195,0.45)';
       ctx.lineWidth = 1.5;
       ctx.stroke();
-      ctx.fillStyle = b.held ? '#eef2e2' : 'rgba(222,214,192,0.85)';
-      ctx.font = 'bold 20px system-ui, sans-serif';
+      // Glyph and word are a STACKED PAIR, balanced about the centre — the glyph
+      // a little above it, the word a little below. Drawing the glyph dead-centre
+      // and hanging the word off the rim (as this used to) reads bottom-heavy and
+      // makes the label look like it is sliding out of the circle.
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(b.label, b.x, b.y + 1);
-      ctx.font = 'bold 8px system-ui, sans-serif';
-      ctx.fillText(b.id.toUpperCase(), b.x, b.y + R - 7);
+      // A soft dark halo so both stay readable over bright sand or wall graffiti.
+      ctx.shadowColor = 'rgba(0,0,0,0.55)';
+      ctx.shadowBlur = 3;
+      ctx.fillStyle = b.held ? '#eef2e2' : 'rgba(222,214,192,0.9)';
+      ctx.font = 'bold 21px system-ui, sans-serif';
+      ctx.fillText(b.label, b.x, b.y - 6);
+      ctx.font = 'bold 9px system-ui, sans-serif';
+      ctx.fillText(b.id.toUpperCase(), b.x, b.y + 13);
+      ctx.shadowBlur = 0;
+      ctx.shadowColor = 'transparent';
       ctx.textBaseline = 'alphabetic';
       ctx.textAlign = 'left';
     }
@@ -818,22 +1967,12 @@ export const uiMethods = {
     else if (player.invisibleToRobots) { ctx.fillStyle = '#4fd8c3'; ctx.fillText(`HID ${Math.ceil((player.wifiPower || 0) / 60)}m`, cx, top + 39); }
     if (player.food <= 0) { ctx.fillStyle = '#e05548'; ctx.fillText('STARVING', cx, top + 57); }
     else if (player.food < 25) { ctx.fillStyle = '#d8a04f'; ctx.fillText('HUNGRY', cx, top + 57); }
-    // score + countdown, right-aligned on the top row
-    ctx.textAlign = 'right';
-    ctx.font = 'bold 13px system-ui, sans-serif';
-    ctx.fillStyle = '#e8d27a';
-    ctx.fillText(`Score ${player.score ?? 0}`, W - 12, top + 22);
-    if (hud.timeLabel) {
-      ctx.font = '10px system-ui, sans-serif';
-      ctx.fillStyle = 'rgba(207,216,195,0.8)';
-      ctx.fillText(hud.timeLabel, W - 12, top + 40);
-    }
-    // rank, under the countdown — parity with the desktop status block
-    const rankC = deathRank(player.score ?? 0);
-    ctx.font = 'bold 10px system-ui, sans-serif';
-    ctx.fillStyle = rankC.color;
-    ctx.fillText(rankC.title, W - 12, top + 56);
-    ctx.textAlign = 'left';
+  // The status card: where you are, who holds it, and how you are doing —
+    // boxed and tight so it reads as one panel rather than three loose lines
+    // floating over the terrain.
+    this.drawStatusCard(player, hud, W - 10, top + 8);
+    // Score hard into the bottom-right corner of the dashboard panel.
+    this.drawScoreCorner(player, W - 10, top + MDH - 63);   // in the clear band above the slot labels
 
     // --- Bottom row: the slot strip, full width — hands, pockets, backpack,
     // walkman, all visible and reachable. ---
@@ -1079,21 +2218,16 @@ export const uiMethods = {
       }
     }
 
-    // Stats block, right-aligned
-    ctx.font = '11px system-ui, sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillStyle = 'rgba(207,216,195,0.85)';
-    let line = top + 18;
-    const nameLine = hud.timeLabel ? `${player.name || ''} · ${hud.timeLabel}` : (player.name || '');
-    ctx.fillText(nameLine, this.w - 16, line); line += 18;
-    ctx.font = 'bold 13px system-ui, sans-serif';
-    ctx.fillStyle = '#e8d27a';
-    ctx.fillText(`Score ${player.score ?? 0}`, this.w - 16, line); line += 18;
-    const rank = deathRank(player.score ?? 0);
-    ctx.font = 'bold 10px system-ui, sans-serif';
-    ctx.fillStyle = rank.color;
-    ctx.fillText(rank.title, this.w - 16, line); line += 16;
-    ctx.textAlign = 'left';
+    // Stats block: the same status lines the compact HUD uses, so both
+    // dashboards say the same things about where you are and who holds it. They
+    // must sit inside DASH_H (78), hence the tight top offset.
+    //
+    // The player's name is NOT here. You know who you are; it never changed and
+    // never will, so it was costing a line of the dashboard to tell you
+    // something you cannot act on. It still appears where it earns its place —
+    // the title screen, the SMS threads, and the death certificate.
+    this.drawStatusCard(player, hud, this.w - 12, top + 6);
+    this.drawScoreCorner(player, this.w - 12, top + DASH_H - 10);
   },
 
   // Terse condition text tucked beside the vitals bars — the narrow-desktop

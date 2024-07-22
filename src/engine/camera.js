@@ -1,4 +1,4 @@
-import { worldToScreen, screenToWorld } from './iso.js';
+import { worldToScreen, screenToWorld, ELEV } from './iso.js';
 
 // Camera focuses on a world position and eases toward its target. `zoom`
 // scales the world about screen centre: 1 is the wide overview, larger
@@ -11,17 +11,29 @@ export class Camera {
     this.x = x;
     this.y = y;
     this.zoom = ZOOM_CLOSE;
+    // Screen-space vertical lift, in world-screen pixels, that tracks the height
+    // of the ground the target stands on. Everything on a hill is drawn raised
+    // by height * ELEV; without matching that here the camera centres on the
+    // player's feet and the raised sprite climbs off the top of the view. Eased
+    // so cresting a slope pans smoothly rather than snapping.
+    this.screenLift = 0;
   }
 
-  follow(tx, ty, dt) {
+  // `heightLevels` is the elevation (in height steps) of the tile the target
+  // stands on; the camera eases its screen-lift toward that so the sprite stays
+  // centred as it climbs.
+  follow(tx, ty, dt, heightLevels = 0) {
     const t = Math.min(1, dt * 6);
     this.x += (tx - this.x) * t;
     this.y += (ty - this.y) * t;
+    const targetLift = heightLevels * ELEV;
+    this.screenLift += (targetLift - this.screenLift) * t;
   }
 
-  snap(tx, ty) {
+  snap(tx, ty, heightLevels = 0) {
     this.x = tx;
     this.y = ty;
+    this.screenLift = heightLevels * ELEV;
   }
 
   // Toggle between the two zoom presets; returns the new zoom.
@@ -41,15 +53,16 @@ export class Camera {
     const c = worldToScreen(this.x, this.y);
     ctx.translate(Math.round(viewW / 2), Math.round(viewH / 2));
     ctx.scale(this.zoom, this.zoom);
-    ctx.translate(-c.x, -c.y);
+    ctx.translate(-c.x, -(c.y - this.screenLift)); // lift the view to match the raised sprite
   }
 
   // Inverse of applyTransform: a canvas-space point (CSS pixels, viewport
   // top-left origin) back to world coordinates. Used for cursor aiming.
   toWorld(px, py, viewW, viewH) {
     const c = worldToScreen(this.x, this.y);
+    const cy = c.y - this.screenLift;
     const sx = (px - viewW / 2) / this.zoom + c.x;
-    const sy = (py - viewH / 2) / this.zoom + c.y;
+    const sy = (py - viewH / 2) / this.zoom + cy;
     return screenToWorld(sx, sy);
   }
 }

@@ -6,6 +6,10 @@ import { buildWorld } from './game/worldgen.js';
 import { spawnAnimals, updateAnimals } from './game/animals.js';
 import { Player } from './game/player.js';
 import { seawardFrom, boatMirror, CF_MIN } from './game/crossing.js';
+import { isStraitCrossing, scyllaToll, STRAIT_COST } from './game/strait.js';
+import { newNarrowsRun, narrowsSteer, narrowsRow, narrowsTick, narrowsStart, narrowsAnimate } from './game/narrows.js';
+import { newCalypsoPong, calypsoStart, calypsoMove, calypsoTick } from './game/calypso-pong.js';
+import { blightStep, tileBlighted, blightDepth, obeliskLive, BLIGHT_SICK_BAND, BLIGHTABLE } from './game/blight.js';
 import { makeRng } from './game/rng.js';
 import { DayNight } from './game/daynight.js';
 import { Minimap } from './game/minimap.js';
@@ -27,13 +31,13 @@ import { stampCoast } from './engine/coast.js';
 import { placeRuins } from './game/ruins.js';
 import { createFortress, DAEMON_BOOK_ID, DAEMON_BOOK_TITLE } from './game/fortress.js';
 import { createUnderworldPocket, spawnUnderworldCreature, updateUnderworldCreatures } from './game/underworld.js';
-import { createWorld, registerWorld, switchWorld } from './game/world.js';
+import { createWorld, registerWorld, switchWorld, allWorlds } from './game/world.js';
 import { createIsland } from './islands/calypso.js';
 import { createIthaca } from './islands/ithaca.js';
 import { createPolyphemus } from './islands/polyphemus.js';
 import { createCirce } from './islands/circe.js';
 import { createHelios } from './islands/helios.js';
-import { createNokia, sendNokia, holdRise, holdFall, holdBand, HOLD_COLD, HOLD_WARM, calypsoSms, ronSms, logSms } from './game/nokia.js';
+import { createNokia, sendNokia, holdRise, holdFall, holdBand, HOLD_COLD, HOLD_WARM, calypsoSms, ronSms, daemonSms, hasDaemonSms, logSms } from './game/nokia.js';
 import { newSnakeGame, snakeTurn, snakeTurnRelative, snakeTick, drawSnake } from './game/snake.js';
 import { CHOIR_NOTES, CHOIR_DURATION } from './engine/choir-notes.js';
 
@@ -66,15 +70,24 @@ function loadOrCreateSeed() {
 }
 const WORLD_SEED = loadOrCreateSeed();
 
+// Boot progress → the loader terminal (see game/boot-loader.js). Each call is a
+// genuine phase reached, not a fake tick; wrapped so a missing listener (or a
+// context where CustomEvent is odd) can never itself break the boot.
+function bootStep(step) {
+  try { window.dispatchEvent(new CustomEvent('nostos:progress', { detail: { step } })); } catch (_) { /* no-op */ }
+}
+
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
 const input = new Input(window, canvas);
+bootStep('engine');
 // The island is built by createIsland (src/islands/calypso.js): buildWorld + all
 // overworld construction, returned as a World. main.js keeps the player, save/load,
 // lore, and the player/lore-coupled controllers (worldStir, onCoreDefeated), and
 // aliases the World's arrays + controllers by name so the runtime sites below are
 // unchanged. (islands Stage 0c, docs/islands-plan.md §3.)
 const calypso = registerWorld(createIsland(WORLD_SEED));
+bootStep('world');
 let map = calypso.map;
 const overworldMap = map; // stable handle: `map` gets reassigned to the underworld pocket and back
 // currentWorld is the world the player is on now; calypso is the stable overworld
@@ -160,6 +173,7 @@ player.onCoreDefeated = (core) => {
   }
   player.addScore(500);
   daemonsDown += 1;
+  recordAiDown(ai);        // which one, for the Record panel's chips
   // The dead core throws its testament into the open — auto-recover it to the
   // Scrapbook (the eidolon/Coherence book seeds the archipelago). `quiet` so it
   // doesn't fight the modal for the message line; the modal announces it.
@@ -174,6 +188,17 @@ player.onCoreDefeated = (core) => {
   player.say(`${ai} is dead. Every machine on the island powers down where it stands.`);
 };
 let daemonsDown = 0; // how many island AIs felled this run (for the Archipelago tally)
+
+// WHICH daemons are down, not just how many — the Record panel draws the roster
+// as four chips and strikes each one through as it falls, so the archipelago's
+// progress is a thing you can see rather than a fraction. Each fall is already
+// worth +500 at both call sites (a core-kill, and Calypso's refunction, which is
+// her equivalent of dying). Idempotent: a daemon only records once.
+function recordAiDown(name) {
+  if (!name) return;
+  player.aisDown = player.aisDown || [];
+  if (!player.aisDown.includes(name)) player.aisDown.push(name);
+}
 
 // Character persona and learned skills persist across sessions and deaths.
 const SAVE_KEY = 'postai-character';
@@ -192,11 +217,18 @@ let hadExistingSave = false;
 // very end of boot (after all init + the world machinery), since resuming onto a
 // non-overworld island means a goToWorld() the rest of module-eval must not see.
 let _bootIsland = 'calypso', _bootPos = null;
+// The `world.islands` blob off the save, held until each island is built and can
+// consume its own entry (applyIslandState, far below). Declared HERE, above the
+// restore block that assigns it, and NOT beside its function: the restore runs
+// during module evaluation, so a `let` further down would leave this in the
+// temporal dead zone and throw at boot on every existing save. That is exactly
+// how v1.139 shipped a black screen; see the note by `crossFail` below.
+let _savedIslands = null;
 try {
   const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
   if (saved) {
     hadExistingSave = true;
-    player.setPersona(saved.name || 'Adam', saved.gender || 'm');
+    player.setPersona(saved.name || 'Nobody', saved.gender || 'm');
     for (const s of saved.skills || []) player.skills.add(s);
     if (Array.isArray(saved.skillLog)) player.skillLog = saved.skillLog;
     if (Array.isArray(saved.weaponsFound)) player.weaponsFound = new Set(saved.weaponsFound);
@@ -219,6 +251,8 @@ try {
       if (typeof st.swine === 'number') player.swine = st.swine; // CIRCE's change follows you across a reload
       if (typeof st.calypsoHold === 'number') player.calypsoHold = st.calypsoHold; // Nokia gradient survives reload
       if (Array.isArray(st.nokiaSent)) player.nokiaSent = new Set(st.nokiaSent);   // don't re-tutorial on reload
+      if (Array.isArray(st.poseidonSaid)) player._poseidonSaid = st.poseidonSaid;  // nor replay the deadline notices
+      if (Array.isArray(st.aisDown)) player.aisDown = st.aisDown;                 // the fallen daemons stay fallen
       if (typeof st.nokiaParts === 'number') player._nokiaParts = st.nokiaParts;
       if (Array.isArray(st.nokiaLog)) player.nokiaLog = st.nokiaLog; // the SMS threads survive reload
       if (typeof st.snakeHigh === 'number') player.snakeHigh = st.snakeHigh; // Snake's best game survives too
@@ -250,25 +284,23 @@ try {
     // by persist() below. This is why a Continue now resumes the world, not just you.
     if (saved.world) {
       const wsv = saved.world;
-      if (Array.isArray(wsv.obDown)) {
-        const down = new Set(wsv.obDown);
-        for (const o of calypso.obeliskObjs) {
-          if (down.has(o.code)) { o.destroyed = true; map.objectGrid[o.y * map.w + o.x] = null; }
-        }
-      }
-      if (wsv.factoryDestroyed && wfactory) wfactory.destroyed = true;
-      if (Array.isArray(wsv.boxesOpened)) {
-        const open = new Set(wsv.boxesOpened.map((b) => `${b.x},${b.y}`));
-        for (const o of overworldMap.objects) {
-          if (o.type === 'box' && open.has(`${o.x},${o.y}`)) { o.opened = true; o.lore = []; }
-        }
-      }
+      // Per-island world state. A save written before the archipelago (or by any
+      // build up to v1.146) carries the four flat CALYPSO-only fields instead, so
+      // fold those into an islands blob keyed to her — old saves keep working and
+      // stop mis-restoring onto the wrong island.
+      _savedIslands = wsv.islands || {
+        calypso: {
+          obDown: wsv.obDown, factoryDestroyed: wsv.factoryDestroyed,
+          boxesOpened: wsv.boxesOpened, fortress: wsv.fortress,
+        },
+      };
+      applyIslandState(calypso);   // she is the only island built this early
       if (typeof wsv.daemonsDown === 'number') daemonsDown = wsv.daemonsDown;
-      if (wsv.fortress && fortress && fortress.restore) fortress.restore(wsv.fortress);
       if (wsv.currentIsland) _bootIsland = wsv.currentIsland; // Stage 1c: resume on the island you saved on
     }
   }
 } catch { /* corrupt save: start fresh */ }
+bootStep('save');
 // A fresh start (no saved position — first ever run, or the reload after New
 // Game / a death) begins washed ashore: flat on the sand where the spawn's
 // beach relocation in calypso.js put you, until the first input gets you up.
@@ -308,6 +340,8 @@ function buildSaveBlob() {
       swine: player.swine,               // CIRCE's transmutation: you stay changed across a reload
       calypsoHold: player.calypsoHold,   // the Nokia gradient: her hold on you (docs/calypso-nokia-plan.md)
       nokiaSent: [...player.nokiaSent],  // the one-shot texts already sent, so a reload does not re-tutorial
+      poseidonSaid: [...(player._poseidonSaid || [])], // deadline notices already pushed, so a reload does not replay them
+      aisDown: [...(player.aisDown || [])],           // which daemons are down, for the Record chips
       nokiaParts: player._nokiaParts || 0,
       nokiaLog: (player.nokiaLog || []).slice(-40), // the SMS threads, so the correspondence survives reload
       snakeHigh: player.snakeHigh || 0,  // the handset remembers its best game
@@ -315,17 +349,104 @@ function buildSaveBlob() {
     },
     world: {
       currentIsland: currentWorld.id, // Stage 1c: which island you're on, so a voyage survives reload
-      obDown: calypso.obeliskObjs.filter((o) => o.destroyed).map((o) => o.code),
-      factoryDestroyed: !!(wfactory && wfactory.destroyed),
-      // Looted caches, keyed by tile — the world regenerates them full otherwise.
-      boxesOpened: overworldMap.objects.filter((o) => o.type === 'box' && o.opened).map((o) => ({ x: o.x, y: o.y })),
       daemonsDown,
-      fortress: (fortress && fortress.serialize) ? fortress.serialize() : null,
+      // Per-island world state, keyed by island id. This USED to be four flat
+      // fields that only ever read CALYPSO — written when the game had one
+      // island, and quietly wrong once the archipelago landed: felling obelisks
+      // on Polyphemus saved nothing, and its fortress snapshot was restored onto
+      // Calypso's fortress (the restore runs at module eval, when the `fortress`
+      // alias still points at hers). Now every built island saves its own.
+      islands: serializeIslandState(),
     },
   };
 }
+
+// Snapshot the mutable world state of every island built so far. Islands are
+// built lazily — one you have never sailed to simply has no entry, and gets none
+// until you go there. The Backspace is a transient pocket that always regenerates,
+// so it is never saved.
+function serializeIslandState() {
+  const out = {};
+  // FIRST carry forward the saved state of islands not yet built this run. They
+  // are created lazily, so an island you have not sailed back to has no live
+  // object to read — and simply skipping it would erase that island's progress
+  // the moment anything autosaved. The boot score-wipe persist() does exactly
+  // that, before the resume has even switched you to the island you saved on, so
+  // without this the first save of every session wipes every far island.
+  if (_savedIslands) {
+    for (const id of Object.keys(_savedIslands)) {
+      if (id === 'backspace') continue;
+      const { _applied, ...rest } = _savedIslands[id];   // drop the internal marker
+      out[id] = rest;
+    }
+  }
+  // ...then let any island that IS built override with its live state.
+  for (const w of allWorlds()) {
+    if (w.id === 'backspace') continue;
+    const st = {};
+    if (w.obeliskObjs && w.obeliskObjs.length) {
+      st.obDown = w.obeliskObjs.filter((o) => o.destroyed).map((o) => o.code);
+    }
+    if (w.wfactory) st.factoryDestroyed = !!w.wfactory.destroyed;
+    // Looted caches, keyed by tile — the world regenerates them full otherwise.
+    if (w.map && w.map.objects) {
+      st.boxesOpened = w.map.objects.filter((o) => o.type === 'box' && o.opened).map((o) => ({ x: o.x, y: o.y }));
+    }
+    if (w.fortress && w.fortress.serialize) st.fortress = w.fortress.serialize();
+    out[w.id] = st;
+  }
+  return out;
+}
+
+// Re-apply an island's saved state to the world object, once, at the moment that
+// island is actually built. Called from each ensureX() (and for Calypso at boot),
+// so a far island restores when you first sail back to it rather than needing to
+// exist at load time.
+function applyIslandState(w) {
+  if (!w || !_savedIslands) return;
+  const st = _savedIslands[w.id];
+  if (!st || st._applied) return;
+  st._applied = true;       // idempotent: an island is only restored once per run
+  if (Array.isArray(st.obDown) && w.obeliskObjs) {
+    const down = new Set(st.obDown);
+    for (const o of w.obeliskObjs) {
+      if (down.has(o.code)) { o.destroyed = true; w.map.objectGrid[o.y * w.map.w + o.x] = null; }
+    }
+  }
+  if (st.factoryDestroyed && w.wfactory) w.wfactory.destroyed = true;
+  if (Array.isArray(st.boxesOpened) && w.map && w.map.objects) {
+    const open = new Set(st.boxesOpened.map((b) => `${b.x},${b.y}`));
+    for (const o of w.map.objects) {
+      if (o.type === 'box' && open.has(`${o.x},${o.y}`)) { o.opened = true; o.lore = []; }
+    }
+  }
+  if (st.fortress && w.fortress && w.fortress.restore) w.fortress.restore(st.fortress);
+}
+// Transient voyage state, forward-declared HERE (above persist) so persist's
+// guard can read them. persist() is called during module eval (the reload
+// score-wipe below, line ~417) — long before the gameplay code where these were
+// originally declared — so a plain `let` further down would leave them in the
+// temporal dead zone and throw at boot on any existing save. Their real
+// initialisation and use live further down; these are just the hoisted homes.
+let crossFail = null;      // failed crossing (Poseidon turns you back)
+let departOut = null;      // rowing out to the heading chart (or back in)
+let pendingCrossing = null; // a chosen island, performed at the next frame top
+let strait = null;         // in the narrows: Scylla and Charybdis (game/strait.js)
+let pong = null;           // at Calypso's terminal: the un-winnable pong (game/calypso-pong.js)
+// The heading the current voyage put out on. The boat sprite has one bow and a
+// mirror, so the hull must at least be flipped to the side it is actually
+// sailing toward; the strait picks up the crossing here rather than guessing.
+let lastSailDir = null;
+
 const persist = () => {
   if (resettingGame) return;
+  // Never save a TRANSIENT VOYAGE. While aboard a boat, mid-crossing, or rowing
+  // out to the chart, the player's x/y is out on open water and the aboard flag
+  // is set — persisting that (the 8s autosave fires regardless) is what left
+  // players reloading onto the sea, marooned, with no boat and no way back in.
+  // These states resolve within seconds; skip the save until the keel is on
+  // sand again.
+  if (player.aboard || crossFail || departOut || pendingCrossing || strait) return;
   // Savable worlds are the islands you can be on across a reload: CALYPSO and
   // ITHACA (Stage 1c — buildSaveBlob records world.currentIsland, and the boot
   // restore resumes you there). The Backspace is a transient pocket you always
@@ -346,6 +467,14 @@ const persist = () => {
 const STAGES_KEY = 'postai-stages';
 const STAGE_LADDER = [
   { id: 'ashore',    label: 'Washed ashore',           reward: 0,  reached: () => true },
+  // A checkpoint the first time you make landfall on each far island, so a death
+  // (which drops you back to the gate) can resume from the shore you reached
+  // rather than the start. Non-linear: whichever islands you sail to, in any
+  // order, each records its own landing once.
+  { id: 'land-polyphemus', label: 'Landfall: AEGILIA',   reward: 15, reached: () => currentWorld.id === 'polyphemus' },
+  { id: 'land-circe',      label: 'Landfall: AEAEA',     reward: 15, reached: () => currentWorld.id === 'circe' },
+  { id: 'land-helios',     label: 'Landfall: THRINACIA', reward: 15, reached: () => currentWorld.id === 'helios' },
+  { id: 'land-ithaca',     label: 'Landfall: ITHACA',    reward: 15, reached: () => currentWorld.id === 'ithaca' },
   { id: 'chip',      label: 'Jacked in',               reward: 10, reached: () => player.hasItem('chip') },
   { id: 'aikey',     label: 'The AI key',              reward: 20, reached: () => player.hasAiKeyFamily() },
   { id: 'trojan',    label: 'Trojan card',             reward: 25, reached: () => player.hasItem('trojan_key') || player.hasItem('hermes_card') },
@@ -468,6 +597,14 @@ for (const type of ['t1', 't2', 't3', 'w1', 'w2', 'w3', 'w4', 'w5', 'm4', 'm5', 
   if (img) img.src = renderMachineIcon(type);
 }
 const camera = new Camera(player.x, player.y);
+// Height (in steps) of the ground under the player, for the camera's elevation
+// follow so a climb up the mountain does not walk the sprite off the top of view.
+// effectiveHeightAt includes standing on a climbable block, matching the sprite lift.
+function playerElevSteps() {
+  const fx = Math.floor(player.x), fy = Math.floor(player.y);
+  if (map.effectiveHeightAt) return map.effectiveHeightAt(fx, fy);
+  return map.heightAt ? map.heightAt(fx, fy) : 0;
+}
 // `lore` self-registers as a system in its own constructor (Stage 0 of the
 // systems-registry refactor, docs/refactor-registry.md) — the hub never names it.
 // Its update ticks via systems.runUpdate() in update(); its two draw phases via
@@ -538,8 +675,8 @@ function ensureBackspace() {
 // The single world-switch point. switchWorld moves the player + syncs player.map +
 // fires onExit/onEnter; here we also sync the outer `map` local, the debug hook, and
 // the camera. Everything reading currentWorld.* / `map` follows next frame.
-function goToWorld(target) {
-  currentWorld = switchWorld(currentWorld, target, player);
+function goToWorld(target, opts = {}) {
+  currentWorld = switchWorld(currentWorld, target, player, opts);
   map = currentWorld.map;
   // Repoint the combat-world aliases at the island we're now on, so the full
   // update loop + worldStir + onCoreDefeated + the factory helpers all operate on
@@ -585,7 +722,12 @@ function ensureIthaca() {
     } else {
       player.say("You beach the ship on Ithaca and step ashore. Argos lifts his head and knows you — but the machines still hold the sea, and this is landfall, not yet home. Fell the rest of them, then come back for good.");
     }
+    islandWelcome('ithaca');
   };
+  // Re-apply this island's own saved state now that it exists (felled
+  // obelisks, looted caches, its fortress). Lazy building is why this
+  // cannot happen at load: the island had not been made yet.
+  applyIslandState(ithaca);
 }
 let polyphemus = null;
 function ensurePolyphemus() {
@@ -593,7 +735,12 @@ function ensurePolyphemus() {
   polyphemus = registerWorld(createPolyphemus(WORLD_SEED));
   polyphemus.onEnter = () => {
     player.say("The ship grounds on the Cyclopes' shore. Somewhere inland a single vast eye turns, and the land goes taut with knowing you are here. This is POLYPHEMUS.");
+    islandWelcome('polyphemus');
   };
+  // Re-apply this island's own saved state now that it exists (felled
+  // obelisks, looted caches, its fortress). Lazy building is why this
+  // cannot happen at load: the island had not been made yet.
+  applyIslandState(polyphemus);
 }
 let circe = null;
 function ensureCirce() {
@@ -603,7 +750,12 @@ function ensureCirce() {
     player.say(player.hasMoly()
       ? 'You step onto Aeaea. Something reaches for the shape of you — and slides off. The moly in your pack holds you as you are.'
       : 'You step onto Aeaea. The air is sweet and wrong, and something begins, very gently, to rewrite you. Find moly — it grows where HERMES stands.');
+    islandWelcome('circe');
   };
+  // Re-apply this island's own saved state now that it exists (felled
+  // obelisks, looted caches, its fortress). Lazy building is why this
+  // cannot happen at load: the island had not been made yet.
+  applyIslandState(circe);
 }
 let helios = null;
 function ensureHelios() {
@@ -611,7 +763,12 @@ function ensureHelios() {
   helios = registerWorld(createHelios(WORLD_SEED));
   helios.onEnter = () => {
     player.say('The keel grinds up onto Thrinacia in a great flat light. Cattle graze the headland, golden and unafraid. This is HELIOS — and the herd is not yours to take.');
+    islandWelcome('helios');
   };
+  // Re-apply this island's own saved state now that it exists (felled
+  // obelisks, looted caches, its fortress). Lazy building is why this
+  // cannot happen at load: the island had not been made yet.
+  applyIslandState(helios);
 }
 // Resolve an island id to its (lazily-built) World.
 function worldById(id) {
@@ -626,17 +783,27 @@ function worldById(id) {
 // The heading chart (islands-plan §10.1): boarding the ship opens a chart of the
 // islands you know of; you pick where to steer. Every island but the one you are
 // on is offered. (Danger-gated, not locked — you may sail early into a slaughter.)
+// Each landfall carries its Homeric epithet — the formula the poem itself uses
+// when it names the place — so the chart reads as a rhapsode's list of harbours
+// rather than a level select.
 const CROSSINGS = [
-  { id: 'calypso', place: 'OGYGIA', desc: "Calypso's island, where you were kept." },
-  { id: 'polyphemus', place: 'AEGILIA', desc: 'The Land of the Cyclopes. A single eye watches.' },
-  { id: 'circe', place: 'AEAEA', desc: "Circe's island. She does not kill you — she rewrites you." },
-  { id: 'helios', place: 'THRINACIA', desc: 'The island of the Sun. Its cattle are forbidden.' },
-  { id: 'ithaca', place: 'ITHACA', desc: 'Home — if the sea will let you.' },
+  { id: 'calypso', place: 'OGYGIA', epithet: 'the navel of the sea',
+    desc: "Calypso's island, where you were kept, and kept well." },
+  { id: 'polyphemus', place: 'AEGILIA', epithet: 'the goat isle, harbourless',
+    desc: 'The land of the Cyclopes, who plant nothing and answer to no one. One eye watches it all.' },
+  { id: 'circe', place: 'AEAEA', epithet: 'where the dawn has her dancing-floor',
+    desc: 'Circe of the lovely braids. She does not kill what she takes — she changes what it is.' },
+  { id: 'helios', place: 'THRINACIA', epithet: 'the island of the Sun',
+    desc: 'His cattle graze there, and they are forbidden. The light itself keeps the watch.' },
+  { id: 'ithaca', place: 'ITHACA', epithet: 'clear-seen, a good nurse of young men',
+    desc: 'Home — rough, and small, and yours, if the sea will let you come to it.' },
 ];
 const headingEl = document.getElementById('heading');
 const headingListEl = document.getElementById('heading-list');
-document.getElementById('heading-cancel').addEventListener('click', () => { headingEl.style.display = 'none'; });
-headingEl.addEventListener('click', (e) => { if (e.target === headingEl) headingEl.style.display = 'none'; });
+// Cancelling puts the helm over and rows you back in (headingCancelled), rather
+// than just dismissing the modal and leaving you adrift offshore.
+document.getElementById('heading-cancel').addEventListener('click', () => headingCancelled());
+headingEl.addEventListener('click', (e) => { if (e.target === headingEl) headingCancelled(); });
 // The chart the ship opens: pick an island and sail. (The Backspace's alternative
 // crossing road, R4, is diegetic doors now — not this chart — so this stays the
 // plain sailing chart.)
@@ -645,10 +812,11 @@ function openHeadingChart() {
   for (const c of CROSSINGS) {
     if (c.id === currentWorld.id) continue;
     const btn = document.createElement('button');
-    btn.innerHTML = `<span class="place">${c.place}</span><span class="desc">${c.desc}</span>`;
+    btn.innerHTML = `<span class="place">${c.place}</span><span class="epithet">${c.epithet}</span>`
+      + `<span class="desc">${c.desc}</span>`;
     btn.addEventListener('click', () => {
       headingEl.style.display = 'none';
-      player.say('You set your heading and pull for open water.');
+      player.say(`You put the bow toward ${c.place}, and the fog takes the boat.`);
       pendingCrossing = c.id; // performed at the next frame top (see update())
     });
     headingListEl.appendChild(btn);
@@ -661,11 +829,451 @@ function openHeadingChart() {
 // running the rest of an overworld frame against the wrong map is the drawObelisk-
 // freeze class of bug). onDepart opens the chart; the chosen id sits in
 // pendingCrossing and update() performs the switch at its top. null = nothing queued.
-let pendingCrossing = null;
-player.onDepart = () => {
-  if (currentWorld.keeper) sendNokia(nokia, 'sail', { player }); // her last text, as you board to leave Ogygia
-  openHeadingChart();
+// (pendingCrossing itself is forward-declared up by persist — see the note there.)
+// Putting out to sea. You do NOT pick a heading from the sand — you row out
+// first, the land slides away behind you and the fog closes ahead, and the chart
+// opens from open water. It reframes the choice: not "which island shall I visit"
+// off a menu, but a man alone on the water deciding which way to point the bow.
+const DEPART_OUT = 5.2;      // seconds of rowing before the chart opens
+const DEPART_BACK = 2.0;     // and of rowing home again if you think better of it
+// departOut forward-declared up by persist; its shape: { t, sx, sy, dx, dy, dist, charted, returning, boat }
+
+player.onDepart = (p, boat) => {
+  if (currentWorld.keeper) sendNokia(nokia, 'sail', { player }); // her last text, as you board to leave
+  const dir = seawardFrom(map, p.x, p.y);
+  if (!dir || dir.run < 2) { openHeadingChart(); return; } // nowhere to row: chart from where you stand
+  departOut = {
+    t: 0, sx: p.x, sy: p.y, dx: dir.x, dy: dir.y,
+    dist: Math.min(dir.run, 15), charted: false, returning: false,
+    bx: boat ? boat.x : Math.round(p.x), by: boat ? boat.y : Math.round(p.y),
+    type: boat ? boat.type : 'greek_ship',
+    boatProps: boat ? { ...boat } : null,
+  };
+  if (boat) map.removeObject(boat);           // she rides on player.aboard for the voyage
+  lastSailDir = { x: dir.x, y: dir.y };   // the heading this voyage left on
+  player.aboard = { type: departOut.type, mirror: boatMirror(dir.x, dir.y), wob: 0 };
+  sfx.play('jump');
+  p.say('You put out from the beach. The land slides away behind you, and ahead there is only the fog.');
 };
+
+// Cancelled the chart while sitting out on the water: come about and row home
+// rather than leaving the player marooned in a modal-less void offshore.
+function headingCancelled() {
+  headingEl.style.display = 'none';
+  if (departOut && !departOut.returning) {
+    departOut.returning = true;
+    departOut.t = 0;
+    player.aboard = { type: departOut.type, mirror: boatMirror(-departOut.dx, -departOut.dy), wob: 0 };
+    player.say('You let the bow fall off, and pull back for the beach.');
+  }
+}
+
+// Drive the row out (and, if you change your mind, the row home). Holds the rest
+// of the world still, like the failed crossing does.
+function updateDepartOut(dt) {
+  const d = departOut;
+  d.t += dt;
+  const ease = (u) => u * u * (3 - 2 * u);
+  if (d.returning) {
+    const u = Math.min(1, d.t / DEPART_BACK);
+    const run = d.dist * (1 - ease(u));
+    player.x = d.sx + d.dx * run;
+    player.y = d.sy + d.dy * run;
+    if (player.aboard) player.aboard.wob = Math.sin(d.t * 6) * 1.4 * (1 - u);
+    if (u >= 1) {
+      // Ashore again, with the hull put back where it was drawn up.
+      player.x = d.sx; player.y = d.sy;
+      player.aboard = null;
+      if (!map.objectAt(d.bx, d.by)) {
+        const o = map.addObject(d.type, d.bx, d.by, d.boatProps || {});
+        if (o && d.boatProps) Object.assign(o, d.boatProps, { x: d.bx, y: d.by });
+      }
+      departOut = null;
+      player.say('The keel grates on the sand. Ogygia has you back, for now.');
+    }
+    return;
+  }
+  // Outward: the beach falls away and the fog gathers ahead.
+  const u = Math.min(1, d.t / DEPART_OUT);
+  const run = ease(u) * d.dist;
+  player.x = d.sx + d.dx * run;
+  player.y = d.sy + d.dy * run;
+  if (player.aboard) player.aboard.wob = Math.sin(d.t * 4.4) * 1.6;
+  if (!d.charted && d.t >= DEPART_OUT) {
+    d.charted = true;
+    sfx.play('zap');
+    player.say('No land in any direction now. Only the fog, and the choice of a heading.');
+    openHeadingChart();
+  }
+  // A heading was chosen: the crossing itself takes over at the next frame top.
+  if (pendingCrossing) { player.aboard = null; departOut = null; }
+}
+
+// ---- Scylla and Charybdis: the narrows (docs/islands-odyssey-revision.md §8) ----
+// The AEAEA <-> THRINACIA passage runs through a throat of rock, where Homer puts
+// them (Od. XII). The crossing is HELD here: you row into the narrows, the sea
+// makes you choose which loss to take, and only then do you land. The rules (which
+// route, what she can take, how the gamble falls) live in game/strait.js; this owns
+// the sequence, the modal, and the narration.
+//
+// The bargain, translated for a man sailing alone: Scylla takes cargo for certain,
+// Charybdis risks the voyage itself. See the module header for why.
+const STRAIT_IN = 4.6;    // seconds rowing into the throat before the choice
+const STRAIT_OUT = 2.8;   // and of the sea having its way once you have chosen
+
+function beginStrait(fromId, toId) {
+  strait = { t: 0, from: fromId, to: toId, phase: 'in', choice: null, outcome: null };
+  // You are still in the greek ship you left the island in — put it back under you
+  // for the passage (the row-out cleared it when the heading was committed).
+  // Face the way the voyage is actually going. This used to be a hardcoded
+  // `mirror: true`, so a ship that had sailed west through the narrows was
+  // drawn facing east — the hull pointing away from its own course.
+  const sd = lastSailDir || seawardFrom(map, player.x, player.y);
+  player.aboard = { type: 'greek_ship', mirror: boatMirror(sd.x, sd.y), wob: 0 };
+  sfx.play('charge');
+  player.say('The open water narrows. Cliffs stand up on either hand, and the channel between them is barely a ship wide. Somewhere ahead the sea is making a noise no sea should make.');
+  circeStraitAdvice();
+}
+
+// In Homer it is CIRCE who tells Odysseus what the strait is and which loss to
+// take: hug Scylla's cliff and lose a few, rather than gamble the ship on
+// Charybdis (Od. XII.108-110). So the advice is hers here too — but only if you
+// have actually made landfall on Aeaea and met her. Sail the narrows blind and
+// you choose blind. Exploration is what buys you the information.
+function circeStraitAdvice() {
+  if (!player._welcomed || !player._welcomed.circe) return;   // never been to Aeaea
+  if (player._straitAdvised) return;                          // she says it once
+  player._straitAdvised = true;
+  const lines = [
+    'YOU ARE IN MY STRAIT.',
+    'Two ways, sweetness, and no third. The cliff will take a little of what you carry. The pool may take all of it, and you with it.',
+    'Hug the rock. Grieve for the few. Do not be brave here: brave is how the whole ship goes down.',
+  ];
+  nokia.enqueue('CIRCE', lines);
+  for (const l of lines) logSms(player, 'CIRCE', 'them', l);
+  sfx.play('sms');
+}
+
+// THE NARROWS, played. The passage used to be a two-button modal: you picked
+// your monster once and watched the result. It is an arcade run now — you steer
+// the length of it, deciding moment to moment how close to shave Scylla's rock
+// against how far you dare drift into Charybdis's pull. Same bargain, made with
+// your hands instead of a click. Rules in game/narrows.js.
+const NARROWS_TICK = 0.10;          // seconds per row — brisk, but readable
+const MAX_CATCHUP = 3;              // rows a single frame may ever advance
+
+// The cabinet owns the screen: the DOM hint sits outside the canvas, so the
+// renderer's modal suppression cannot reach it and it has to be hidden here.
+function narrowsChrome(on) {
+  if (!hintEl) return;
+  // Idempotent on the way IN: the run hides the chrome and the GAME OVER card
+  // hides it again, and a second stash would record 'none' as the thing to
+  // restore — so the hint would never come back for the rest of the session.
+  if (on) {
+    if (hintEl.dataset.preNarrows === undefined) hintEl.dataset.preNarrows = hintEl.style.display || '';
+    hintEl.style.display = 'none';
+  }
+  else if (hintEl.dataset.preNarrows !== undefined) {
+    hintEl.style.display = hintEl.dataset.preNarrows;
+    delete hintEl.dataset.preNarrows;
+  }
+}
+
+function openNarrows() {
+  // The bronze ram is fitted if you are carrying it: it is not consumed, because
+  // it is bronze bolted to a bow, but its charges are per-run.
+  const ram = player.hasItem('ram');
+  strait.run = newNarrowsRun({ ram }); // opens on its attract screen; nothing ticks yet
+  strait.tickT = 0;
+  strait.taken = [];                // what she has had off the deck, for the report
+  narrowsChrome(true);
+  sfx.play('narrowsTune');
+  player.say(ram
+    ? 'The channel closes to a throat of rock, and something in the cliff is awake. The old bronze beak is lashed to your bow.'
+    : 'The channel closes to a throat of rock, and something in the cliff is awake.');
+}
+
+// One head got you: she takes ONE thing off the deck and you sail on. Bites
+// accumulate rather than ending the run — you can be nibbled the whole length of
+// the strait and still come out the far side, which is the shape David asked for
+// and, as it happens, exactly what happens to Odysseus.
+function narrowsBite() {
+  const toll = scyllaToll(player, Math.random, 1);
+  for (const slot of toll) {
+    const it = player.getSlot(slot);
+    if (!it) continue;
+    strait.taken.push(ITEMS[it.item] ? ITEMS[it.item].name : it.item);
+    player.setSlot(slot, null);
+  }
+  player.health = Math.max(1, player.health - 4);
+  sfx.play('termerr');
+}
+
+// The run is over. Translate it into the outcome the rest of the strait already
+// understands, so finishStrait needs no special case.
+function endNarrows(outcome) {
+  const s = strait;
+  s.gameover = null;
+  narrowsChrome(false);
+  const hull = (s.run && s.run.rocks) || 0;   // read before the run is cleared
+  // The ram is a consumable: run it down to nothing and the beak is torn off the
+  // bow. Only if you actually brought one — a beak fished out of the channel was
+  // never an item and has nothing to take away.
+  if (s.run && s.run.ramSpent && player.hasItem('ram')) {
+    player.removeItem('ram');
+    player.say('The bronze beak is gone, wrenched off her bow somewhere back in the rock. You will want another before you try that again.');
+  }
+  s.run = null;
+  s.t = 0;
+  s.phase = 'out';
+  s.outcome = outcome === 'swallowed' ? 'swallowed' : 'scylla';
+  if (outcome === 'wrecked') {
+    // The hull is gone: she breaks up under you and the crossing is lost, the
+    // same as being taken. A run you cannot finish now ends instead of grinding.
+    s.outcome = 'swallowed';        // finishStrait already knows how to put you back
+    player.health = Math.max(1, player.health - STRAIT_COST.mauled.hurt);
+    sfx.play('zap');
+    player.say('One rock too many. The keel goes, and the sea comes in through the whole length of her — you are swimming, and the current is carrying you back the way you came.');
+    return;
+  }
+  if (outcome === 'swallowed') {
+    s.outcome = 'swallowed';
+    player.health = Math.max(1, player.health - STRAIT_COST.swallowed.hurt);
+    sfx.play('zap');
+    player.say('The water stops being there. You go down with it and come up spitting, clinging to a piece of your own boat, and the current is carrying you back the way you came.');
+    return;
+  }
+  // Through. What it cost depends entirely on how well you steered.
+  if (!s.taken.length) {
+    sfx.play('narrowsWin');
+    player.say(hull
+      ? `Through, with nothing taken — though the rocks had ${hull === 1 ? 'a piece' : 'pieces'} of the hull on the way past.`
+      : 'The rock falls away astern and the water goes quiet. Six mouths, two of them hers, and not one of them touched you. Nobody gets through the narrows clean. You just did.');
+  } else {
+    player.health = Math.max(1, player.health - 2);
+    sfx.play('termerr');
+    player.say(`You are through. She had ${listPhrase(s.taken)} off the deck on the way past${hull ? `, and the hull is stove in where the rocks caught you` : ''}, and the water goes quiet.`);
+  }
+}
+
+// THE GAME OVER CARD. The run used to resolve the instant it ended: one frame you
+// were steering, the next you were back in the world reading a line of prose
+// about it. A cabinet owes you the moment. The field freezes, the card comes up
+// over it with what the passage cost, and nothing resolves until you press
+// something — so the ending is read rather than glimpsed.
+// Long enough that a key you were already leaning on cannot carry you straight
+// through the card. At 0.9s the tally was being skipped by accident, which
+// defeats the whole point of stopping to show it.
+const GAMEOVER_HOLD = 2.2;
+
+function finishRun(outcome) {
+  const s = strait;
+  s.gameover = { outcome, t: 0 };
+  narrowsChrome(true);              // keep the world's chrome out of the card
+  sfx.play(outcome === 'through' ? 'narrowsWin' : 'termerr');
+}
+
+// Waiting on the card. Returns true while it still owns the screen.
+function updateGameOver(dt) {
+  const s = strait, g = s.gameover;
+  g.t += dt;
+  s.run.t = (s.run.t || 0) + 1;     // the card blinks, so the run's clock keeps going
+  // The ENTER button does not even appear until the hold is up, so there is
+  // nothing to hit early and the card cannot be skipped before it is read.
+  g.ready = g.t >= GAMEOVER_HOLD;
+  if (!g.ready) return true;
+  // ENTER specifically, not any key: a named key and a drawn button are the two
+  // things a player can deliberately aim at.
+  const pressed = input.consumePress('Enter') || input.consumePress('NumpadEnter');
+  const at = input.clickPos();
+  const r = g.enterRect;            // stamped by the card as it draws itself
+  const hit = at && r && at.x >= r.x && at.x <= r.x + r.w && at.y >= r.y && at.y <= r.y + r.h;
+  if (pressed || hit) {
+    if (hit) input.consumeClick();
+    s.gameover = null;
+    endNarrows(g.outcome);
+    return false;
+  }
+  return true;
+}
+
+// Drive the run: a fixed tick so the channel scrolls at a readable rate whatever
+// the frame rate, with steering read from held keys (and the touch halves).
+function updateNarrows(dt) {
+  const s = strait, n = s.run;
+  if (s.gameover) { updateGameOver(dt); return; }
+  n.t = (n.t || 0) + 1;
+  // ATTRACT: the cabinet waits. Any key, or a tap anywhere, is the coin. Read
+  // as an edge rather than a held state so the keypress that opened the strait
+  // cannot roll straight through the title card without being seen.
+  if (n.attract) {
+    // Space/Enter is the coin slot; a steering key works too, since reaching for
+    // the helm is the same gesture as starting. (There is no any-key API, and
+    // inventing one for this would be a lot of surface for one title card.)
+    const coin = ['Space', 'Enter', 'KeyA', 'KeyD', 'KeyW', 'KeyS', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']
+      .some((k) => input.consumePress(k));
+    const tapped = !!input.clickPos();
+    if (coin || tapped) {
+      if (tapped) input.consumeClick();
+      if (narrowsStart(n)) { sfx.play('coin'); player.say('Steer.'); }
+    }
+    return;
+  }
+  // Steering is HELD, not tapped, so you can lean on a direction and hold a line
+  // against the pull. moveIntent() already folds the keyboard and a dragged
+  // finger into one screen-space vector, so the helm works the same on a desk
+  // and on a phone without a second code path.
+  const mv = input.moveIntent();
+  const dir = mv && mv.dx < -0.35 ? -1 : mv && mv.dx > 0.35 ? 1 : 0;
+  if (dir) {
+    s.steerT = (s.steerT || 0) + dt;
+    if (s.steerT >= 0.07) { s.steerT = 0; narrowsSteer(n, dir); }
+  } else s.steerT = 0;
+  // And fore-and-aft, on its own slower repeat: rowing up the channel or backing
+  // off is a manoeuvre, not a twitch, and at the lateral rate you would cross
+  // the whole playfield before you had seen what you were rowing into.
+  const fwd = mv && mv.dy < -0.35 ? -1 : mv && mv.dy > 0.35 ? 1 : 0;
+  if (fwd) {
+    s.rowT = (s.rowT || 0) + dt;
+    if (s.rowT >= 0.12) { s.rowT = 0; narrowsRow(n, fwd); }
+  } else s.rowT = 0;
+
+  // Fixed-timestep catch-up, but CAPPED. Unbounded, a single long frame (a
+  // stall, a backgrounded tab, anything that lets dt pile up) would run dozens
+  // of rows in one go and Scylla would strip the whole pack between two drawn
+  // frames — with no chance to steer out of it. Better to let the channel slip
+  // than to bill you for time you never got to play.
+  s.tickT = Math.min(s.tickT + dt, NARROWS_TICK * MAX_CATCHUP);
+  let steps = 0;
+  while (s.tickT >= NARROWS_TICK && !n.over && steps < MAX_CATCHUP) {
+    s.tickT -= NARROWS_TICK;
+    steps += 1;
+    const ev = narrowsTick(n);
+    if (ev === 'wrecked') { finishRun('wrecked'); return; }
+    if (ev === 'rock') {
+      // Hull, not cargo — a rock is neither of them. It costs you health and a
+      // jolt, and its real job is to move you off the safe column.
+      player.health = Math.max(1, player.health - 6);
+      sfx.play('clang');
+    } else if (ev === 'shatter') {
+      // The ram took it. No hull, no health, and the rock still made you flinch.
+      sfx.play('clang');
+      if (n.ram === 0) player.say('The beak takes the last of it and rings hollow. Nothing left between you and the stone.');
+    } else if (ev === 'pickup') {
+      // The sea gives something back. Named out loud, because a silent +1 on a
+      // pip row is not a reward you can feel.
+      sfx.play('pickup');
+      player.say(n.lastPick === 'timber'
+        ? 'A spar off some earlier ship comes past on the swell. You get a hand to it and drag it aboard: one plank between you and the water.'
+        : 'A broken beak, green with the sea, rolling in the wash. It is not yours and it fits well enough.');
+    } else if (ev === 'churn') {
+      // Her outer water: it batters the hull and throws you clear. Not the end
+      // of anything, which is the point of the change.
+      player.health = Math.max(1, player.health - 8);
+      sfx.play('zap');
+    } else if (ev === 'bite') narrowsBite();
+    else if (ev === 'swallowed') { finishRun('swallowed'); return; }
+    else if (ev === 'through') { finishRun('through'); return; }
+  }
+  // Presentation LAST, from whatever is left of the accumulator. Doing this
+  // before the tick loop was the jump: on the frame a tick fired, the picture
+  // was drawn with the old fraction (≈1, a whole cell down) against rows that
+  // had already shifted — so the channel snapped back a cell, ten times a
+  // second. The rules run on whole rows; only this decides where they are drawn.
+  narrowsAnimate(n, dt, s.tickT / NARROWS_TICK);
+}
+
+// ---- CALYPSO's pong: the game you cannot win (game/calypso-pong.js) ---------
+const PONG_GAMEOVER_HOLD = 1.6;   // a beat to read the release before ENTER dismisses it
+function openPong() {
+  pong = { run: newCalypsoPong(), gameover: null, testOnly: false };
+  narrowsChrome(true);            // borrow the narrows' chrome-hide; the cabinet owns the screen
+  sfx.play('narrowsTune');
+  player.say('Her terminal does not ask for a password. It offers a game.');
+}
+function endPong(outcome) {
+  const p = pong;
+  p.gameover = { outcome, t: 0, ready: false };
+  sfx.play(outcome === 'left' ? 'narrowsWin' : 'termerr');
+}
+function closePong() {
+  const p = pong;
+  pong = null;
+  narrowsChrome(false);
+  // Outcome 'left' is the WIN: you were willing to leave, so her hold breaks and
+  // the message lands. For the lyre test loop this just drops you back where you
+  // were; the escape-chain wiring (refunctionCalypso / calypsoLeave) is the next
+  // step and is noted on the roadmap.
+  if (p.testOnly) { player.say('The cabinet goes dark. You are back where you were.'); return; }
+  player.say('The volley stops. Somewhere under the island a door you never saw swings open. You are free to go.');
+}
+function updatePong(dt) {
+  const s = pong, g = s.run;
+  g.t = (g.t || 0) + 1;
+  // GAME OVER card: hold, then ENTER (key or the drawn button) dismisses.
+  if (s.gameover) {
+    const go = s.gameover;
+    go.t += dt;
+    go.ready = go.t >= PONG_GAMEOVER_HOLD;
+    if (!go.ready) return;
+    const pressed = input.consumePress('Enter') || input.consumePress('NumpadEnter');
+    const at = input.clickPos();
+    const r = go.enterRect;
+    const hit = at && r && at.x >= r.x && at.x <= r.x + r.w && at.y >= r.y && at.y <= r.y + r.h;
+    if (pressed || hit) { if (hit) input.consumeClick(); closePong(); }
+    return;
+  }
+  // ATTRACT: any key or a tap is the coin.
+  if (g.attract) {
+    const coin = ['Space', 'Enter', 'KeyW', 'KeyS', 'ArrowUp', 'ArrowDown']
+      .some((k) => input.consumePress(k));
+    const tapped = !!input.clickPos();
+    if (coin || tapped) { if (tapped) input.consumeClick(); if (calypsoStart(g)) { sfx.play('coin'); } }
+    return;
+  }
+  // Steer the paddle up/down, held. The one moveIntent() path, so keyboard and a
+  // dragged finger both drive it — exactly like the narrows helm.
+  const mv = input.moveIntent();
+  const dir = mv && mv.dy < -0.35 ? -1 : mv && mv.dy > 0.35 ? 1 : 0;
+  if (dir) calypsoMove(g, dir);
+  const ev = calypsoTick(g, dt);
+  if (ev === 'return') sfx.play('blip');
+  else if (ev === 'left') endPong('left');
+}
+
+// The sea is done with you: land where the outcome says. 'swallowed' loses the
+// crossing and throws you back at the island you left — the unbounded end of the
+// bargain, and the reason the certain toll is worth taking.
+function finishStrait() {
+  const s = strait;
+  strait = null;
+  player.aboard = null;
+  // A lyre test loop returns you to where you were, whatever the sea did.
+  const backwards = s.testOnly || s.outcome === 'swallowed';
+  const dest = worldById(backwards ? s.from : s.to);
+  if (dest) { goToWorld(dest, { beach: true }); sfx.play('zap'); }
+  if (backwards) player.say('The sea puts you back on the beach you sailed from. The strait is still there, and still wants paying.');
+}
+
+function updateStrait(dt) {
+  const s = strait;
+  s.t += dt;
+  // Rolling on through the throat while the sea decides what it is going to do.
+  if (player.aboard) player.aboard.wob = Math.sin(s.t * 5) * 1.7;
+  if (s.phase === 'in') {
+    if (s.t >= STRAIT_IN) { s.phase = 'choice'; s.t = 0; openNarrows(); }
+    return;
+  }
+  // In the narrows: the arcade run has the helm until it resolves.
+  if (s.phase === 'choice') { if (s.run) updateNarrows(dt); return; }
+  if (s.t >= STRAIT_OUT) finishStrait();
+}
+
+// "a, b and c" — for reading back what Scylla took.
+function listPhrase(items) {
+  if (items.length === 1) return items[0];
+  return items.slice(0, -1).join(', ') + ' and ' + items[items.length - 1];
+}
 
 // ---- The Nokia 3310: Calypso's channel on Ogygia (docs/calypso-nokia-plan.md) ----
 // She is not your enemy — POSEIDON's machines roam the island; she is the keeper
@@ -673,6 +1281,60 @@ player.onDepart = () => {
 // one of his robots bearing down on you. The queue + tables live in game/nokia.js;
 // this drives the triggers, the beep, and the interventions on the keeper world.
 const nokia = createNokia();
+
+// The dead network still runs its billing. Land anywhere new and your carrier —
+// which is the thing that ate the world — pushes a roaming welcome to the
+// handset, in the flat cheerful register of a company that no longer has
+// customers, only subjects. Fired once per island (per run) from onEnter.
+const ISLAND_WELCOME = {
+  // Ogygia's is the odd one out: the carrier boilerplate, but the first line is
+  // HERS. She owns the island and the cell on it, and the possessive slips
+  // through the corporate voice before it catches itself.
+  calypso: ['Welcome to my island.', 'Your roaming plan includes unlimited time and nowhere to spend it. Calls home cannot be connected. Enjoy your stay.'],
+  polyphemus: ['Welcome to AEGILIA.', 'Coverage on this island is provided by a single cell. It has already seen you. Data is unmetered, as nothing you send will leave.'],
+  circe: ['Welcome to AEAEA.', 'Your account has been reclassified: tariff LIVESTOCK. Person rates no longer apply. Thank you for grazing with us.'],
+  helios: ['Welcome to THRINACIA.', 'Signal here is provided by the Sun and is therefore total. There is no roaming, only being seen. Charges for touching the cattle are ∞ per head.'],
+  ithaca: ['Welcome to ITHACA.', 'You are in your home region; no roaming charges apply. You have 1 missed call. It is twenty years old. Would you like to return it?'],
+};
+function islandWelcome(id) {
+  const w = ISLAND_WELCOME[id];
+  if (!w) return;
+  player._welcomed = player._welcomed || {};
+  if (player._welcomed[id]) return;   // once per island per run
+  player._welcomed[id] = true;
+  nokia.enqueue('ROAMING', w);
+  sfx.play('sms');
+}
+
+// ---- POSEIDON's countdown, as texts rather than a HUD number ----------------
+// The deadline used to sit in the corner of the dashboard as a ticking clock,
+// which is wallpaper inside a minute. It arrives as automated pre-activation
+// notices instead: the system scheduling its own waking, in the same flat
+// corporate register as the roaming welcomes, and getting shorter and colder as
+// the hours run out. Network-wide, so unlike Calypso's channel these reach you
+// on every island — POSEIDON is the network; it does not need your carrier.
+const POSEIDON_WARNINGS = [
+  { at: 18, lines: ['SCHEDULED: POSEIDON completes in 18 hours.', 'No action is required of you. No action is available to you.'] },
+  { at: 12, lines: ['POSEIDON completes in 12 hours.', 'Your position has been noted and filed. Thank you for your continued presence.'] },
+  { at: 6,  lines: ['SIX HOURS.', 'The towers are being brought to readiness. You are advised to be elsewhere. There is no elsewhere.'] },
+  { at: 3,  lines: ['THREE HOURS.', 'Every obelisk still standing will wake at once, and they will all be looking the same way. Count what you have left standing.'] },
+  { at: 1,  lines: ['ONE HOUR.'] },
+  { at: 0.5, lines: ['THIRTY MINUTES.', 'The sea is already rising. You can hear it from wherever you are.'] },
+];
+function poseidonWarnings() {
+  const left = dayNight.hoursLeft();
+  if (left <= 0) return;                       // it has woken; the purge speaks for itself
+  player._poseidonSaid = player._poseidonSaid || [];
+  for (const w of POSEIDON_WARNINGS) {
+    if (left > w.at || player._poseidonSaid.includes(w.at)) continue;
+    player._poseidonSaid.push(w.at);
+    nokia.enqueue('POSEIDON', w.lines);
+    for (const l of w.lines) logSms(player, 'POSEIDON', 'them', l);
+    sfx.play('sms');
+    break;                                     // one threshold per frame at most
+  }
+}
+
 const NOKIA_DANGER_R = 6;   // she'll still one of his machines within this of you
 const NOKIA_SCAN = 0.5;     // seconds between intervention scans (cheap)
 let nokiaScanT = 0, nokiaIvCooldown = 0;
@@ -728,8 +1390,12 @@ function updateNokiaKeeper(dt) {
 // Full beside the core, fading across Ogygia, and dead the moment you are on any
 // other island (the NO SIGNAL text made literal). Drawn live on the PHONE box, the
 // SMS toast, and the handset's own status row.
+// It is the ruling daemon's network your handset joins, so signal is a compass to
+// that island's core: full beside it, fading with distance, and dead on an island
+// with no daemon at all (Ithaca, the Backspace). This used to be CALYPSO-only;
+// now every daemon can reach you on their own ground.
 function nokiaSignalBars() {
-  if (!currentWorld.keeper || !fortress || !fortress.core) return 0;
+  if (!currentWorld.combat || !fortress || !fortress.core) return 0;
   const d = Math.hypot(player.x - fortress.core.x, player.y - fortress.core.y);
   return d < 30 ? 4 : d < 60 ? 3 : d < 95 ? 2 : 1;
 }
@@ -772,11 +1438,25 @@ function snakeStart() {
   }, 130);
 }
 
+// Whichever daemon rules the island you are on is the phone's first contact —
+// it is their network the handset is on here. CALYPSO on Ogygia, POLYPHEMUS on
+// Aegilia, and so on; on an island with no daemon (Ithaca, the Backspace) the
+// first tab falls back to CALYPSO's dormant thread so the button is never blank.
+function phoneDaemon() {
+  const ai = islandAiName();
+  return hasDaemonSms(ai) || ai === 'CALYPSO' ? ai : 'CALYPSO';
+}
+
 function renderPhone() {
   const bars = nokiaSignalBars();
   phBarsEl.textContent = '▂▄▆█'.slice(0, bars) || '·';
   phBarsEl.style.opacity = bars ? 1 : 0.45;
-  phToCal.classList.toggle('on', phoneTo === 'CALYPSO');
+  // The first tab tracks the island's daemon. If the open thread is a daemon
+  // that no longer rules here (you sailed), snap it to the current one.
+  const daemon = phoneDaemon();
+  if (phoneTo !== 'RON' && phoneTo !== 'SNAKE' && phoneTo !== daemon) phoneTo = daemon;
+  phToCal.textContent = daemon;
+  phToCal.classList.toggle('on', phoneTo === daemon);
   phToRon.classList.toggle('on', phoneTo === 'RON');
   phToSnake.classList.toggle('on', phoneTo === 'SNAKE');
   // The SNAKE tab swaps the whole message surface for the game screen.
@@ -792,13 +1472,23 @@ function renderPhone() {
     return;
   }
   snakeStop();
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
   const thread = (player.nokiaLog || []).filter((m) => m.th === phoneTo);
   phThreadEl.innerHTML = thread.length
-    ? thread.map((m) => `<div class="ph-${m.from === 'you' ? 'you' : m.from === 'sys' ? 'sys' : 'them'}">${
-      m.text.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</div>`).join('')
-    : `<div class="ph-sys">${phoneTo === 'CALYPSO'
-      ? 'No messages yet. She is waiting for you to write first, and has been for years.'
-      : 'No traffic. The RON mesh keeps this channel open for whoever is still out there.'}</div>`;
+    ? thread.map((m) => {
+      const who = m.from === 'you' ? 'you' : m.from === 'sys' ? 'sys' : 'them';
+      // A small header over each incoming or sent message — who + when — then a
+      // hairline under the bubble, so one sender's texts read apart from the next.
+      const label = m.from === 'you' ? 'You' : (m.th === 'RON' ? 'RON' : m.th);
+      const stamp = m.at ? ` · ${m.at}` : '';
+      const meta = m.from === 'sys' ? '' : `<div class="ph-meta ph-meta-${who}">${label}${stamp}</div>`;
+      return `${meta}<div class="ph-${who}">${esc(m.text)}</div><div class="ph-sep"></div>`;
+    }).join('')
+    : `<div class="ph-sys">${phoneTo === 'RON'
+      ? 'No traffic. The RON mesh keeps this channel open for whoever is still out there.'
+      : phoneTo === 'CALYPSO'
+        ? 'No messages yet. She is waiting for you to write first, and has been for years.'
+        : `You are on ${phoneTo}'s network now. Text, and see if it answers.`}</div>`;
   phThreadEl.scrollTop = phThreadEl.scrollHeight;
 }
 function openPhone() {
@@ -833,7 +1523,9 @@ function phoneSend() {
   player._phSmsIdx = (player._phSmsIdx || 0) + 1;
   const reply = to === 'CALYPSO'
     ? calypsoSms(text, holdBand(player.calypsoHold ?? 0.65), player._phSmsIdx)
-    : ronSms(text, player._phSmsIdx);
+    : to === 'RON'
+      ? ronSms(text, player._phSmsIdx)
+      : (daemonSms(to, text, player._phSmsIdx) || ronSms(text, player._phSmsIdx));
   clearTimeout(_phReplyTimer);
   _phReplyTimer = setTimeout(() => {
     logSms(player, to, 'them', reply);
@@ -841,7 +1533,7 @@ function phoneSend() {
     if (phoneEl.style.display === 'flex') renderPhone();
   }, 1100 + Math.random() * 900);
 }
-phToCal.addEventListener('click', () => { phoneTo = 'CALYPSO'; renderPhone(); phInputEl.focus(); });
+phToCal.addEventListener('click', () => { phoneTo = phoneDaemon(); renderPhone(); phInputEl.focus(); });
 phToRon.addEventListener('click', () => { phoneTo = 'RON'; renderPhone(); phInputEl.focus(); });
 phToSnake.addEventListener('click', () => { phoneTo = 'SNAKE'; renderPhone(); phInputEl.blur(); });
 document.getElementById('ph-send').addEventListener('click', phoneSend);
@@ -887,6 +1579,353 @@ phSnakeEl.addEventListener('pointerdown', (e) => {
   snakeTurnRelative(snakeGame, (e.clientX - r.left) > r.width / 2);
 });
 
+// ---- HERMES test console ---------------------------------------------------
+// Type "hermes" anywhere in-game and this opens: jump between islands, conjure
+// items, arm the escape chain, and skip the parts you are not testing. It is a
+// DEVELOPMENT TOOL, deliberately plain-looking so it can never be mistaken for a
+// diegetic screen, and it is opened by a typed word rather than a key so it
+// cannot be found by accident.
+//
+// Nothing here reimplements game logic: jumps go through goToWorld/worldById
+// (so islands build lazily exactly as they do when you sail), items go through
+// player.stow, arming writes the same player.virusArmed the forge writes.
+// The knock. "hermes" was a bad choice: h opens the help panel, e uses, r reads,
+// m cycles the music — typing it set half the game off. Only three letters in the
+// alphabet are unbound (l, u, y), which is too few to spell much with, so instead
+// the word must merely BEGIN with a free letter: the first keypress arms a
+// capture, and every key after it is swallowed before input.js can see it. So
+// `lyre` costs one harmless `l` if you mistype, and nothing fires either way.
+const DEV_WORD = 'lyre';
+const DEV_CAPTURE_MS = 2000;   // abandon a half-typed word after this
+let _devTyped = '';
+let _devTypedAt = 0;
+const devEl = document.getElementById('devbox');
+const devOutEl = document.getElementById('dev-out');
+const devInputEl = document.getElementById('dev-input');
+
+function devPrint(...lines) {
+  for (const l of lines) {
+    const d = document.createElement('div');
+    d.textContent = l;
+    devOutEl.appendChild(d);
+  }
+  devOutEl.scrollTop = devOutEl.scrollHeight;
+}
+function devOpen() {
+  if (devEl.style.display === 'flex') return;
+  devEl.style.display = 'flex';
+  devInputEl.value = '';
+  devInputEl.focus();
+  if (!devOutEl.childElementCount) {
+    devPrint('HERMES test console. `help` for commands.',
+      `on: ${currentWorld.id}   pos: ${player.x.toFixed(1)},${player.y.toFixed(1)}`);
+  }
+}
+function devClose() { devEl.style.display = 'none'; devInputEl.blur(); }
+
+// The kit buttons: the things worth reaching for over and over when testing.
+const DEV_KITS = [
+  ['AI key', () => { player.stow('ai_key', 1); return 'ai_key'; }],
+  ['Trojan card', () => { player.stow('trojan_key', 1); return 'trojan_key'; }],
+  ['Hermes card (armed: all)', () => {
+    player.stow('hermes_card', 1);
+    for (const ai of ['CALYPSO', 'POLYPHEMUS', 'CIRCE', 'HELIOS']) player.virusArmed.add(ai);
+    return 'hermes_card, armed against every daemon';
+  }],
+  ['Chip + manual', () => { player.stow('chip', 1); player.stow('book_ronml', 1); return 'chip, book_ronml'; }],
+  ['Golden axe', () => { player.stow('golden_axe', 1); return 'golden_axe' ; }],
+  ['Ship parts', () => { for (const k of ['oar', 'rope', 'sail']) player.stow(k, 1); player.stow('wood', 40); return 'oar, rope, sail, 40 wood'; }],
+  ['Bronze ram', () => { player.stow('ram', 1); return 'ram (carry it into the narrows)'; }],
+  ['Weapons kit', () => {
+    for (const [k, n] of [['railgun', 1], ['battery', 20], ['shotgun', 1], ['shells', 20], ['sledgehammer', 1], ['crowbar', 1]]) player.stow(k, n);
+    return 'railgun+cells, shotgun+shells, sledgehammer, crowbar';
+  }],
+  ['Backpack + map', () => { player.stow('backpack', 1); player.stow('fortress_map', 1); player.stow('printed_map', 1); return 'backpack, fortress_map, printed_map'; }],
+  ['Heal + feed', () => { player.health = player.maxHealth; player.stamina = player.maxStamina; player.food = player.maxFood; player.venom = 0; player.torpor = 0; return 'restored'; }],
+];
+
+function devBuildButtons() {
+  const jump = document.getElementById('dev-jump');
+  const kit = document.getElementById('dev-kit');
+  if (jump.childElementCount) return; // built once
+  // A chip that changes what you are LOOKING at closes the console behind it —
+  // you pressed it to go and see the thing, not to keep reading the panel. Kit
+  // chips deliberately leave it open, since those get stacked several at a time.
+  const goThenClose = (cmd) => { devRun(cmd); devClose(); };
+  for (const c of CROSSINGS) {
+    const b = document.createElement('button');
+    b.textContent = c.place;
+    b.onclick = () => goThenClose('go ' + c.id);
+    jump.appendChild(b);
+  }
+  const bs = document.createElement('button');
+  bs.textContent = 'BACKSPACE';
+  bs.onclick = () => goThenClose('go backspace');
+  jump.appendChild(bs);
+  DEV_KITS.forEach((k, i) => {
+    const b = document.createElement('button');
+    b.textContent = k[0];
+    b.onclick = () => devRun('kit ' + i);
+    kit.appendChild(b);
+  });
+  // Scenes and toggles: the things you want to run again and again while tuning
+  // something, one press each rather than a typed command every time.
+  const scene = document.getElementById('dev-scene');
+  for (const [label, cmd] of DEV_SCENES) {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.onclick = () => goThenClose(cmd);
+    scene.appendChild(b);
+  }
+}
+
+// One chip per thing worth replaying. `narrows` returns you where you were, so
+// it can be hammered; the rest are one-line world pokes.
+const DEV_SCENES = [
+  ['▶ NARROWS', 'narrows'],
+  ['▶ CALYPSO', 'pong'],
+  ['BOAT', 'boat'],
+  ['RAFT', 'boat raft'],
+  ['DAY', 'time day'],
+  ['NIGHT', 'time night'],
+];
+
+function devRun(raw) {
+  const cmd = (raw || '').trim();
+  if (!cmd) return;
+  devPrint('> ' + cmd);
+  const [verb, ...rest] = cmd.split(/\s+/);
+  const arg = rest.join(' ');
+  switch (verb.toLowerCase()) {
+    case 'help':
+      devPrint('go <island|backspace>   jump (calypso polyphemus circe helios ithaca)',
+        'give <item> [n]         any key from items.js — `items <text>` to search',
+        'items [text]            list item keys, optionally filtered',
+        'kit <n>                 the numbered buttons above',
+        'arm <AI|all>            arm the card against a daemon (CALYPSO/POLYPHEMUS/CIRCE/HELIOS)',
+        'unshield                drop this island\'s core shield',
+        'open                    open the fortress gate + sanctum door + maze',
+        'leave                   set calypsoLeave (the sea will let you go)',
+        'tp <x> <y>              teleport on this island',
+        'time <day|night|0-23>   set the clock (day=noon, night=22:00)',
+        'narrows                play the Scylla/Charybdis cabinet, then come back',
+        'boat [raft]            a hull at your feet (raft = the one the sea refuses)',
+        'strait [island] [now]   sail into the narrows (`now` = skip to the choice)',
+        'score <n> / heal / kill / where');
+      return;
+    case 'go': {
+      const id = arg.toLowerCase();
+      if (id === currentWorld.id) { devPrint(`already on ${id} — nothing to do.`); return; }
+      if (id === 'backspace') { enterBackspace(); devPrint('-> backspace'); return; }
+      const dest = worldById(id);
+      if (!dest) { devPrint('no island "' + id + '"'); return; }
+      const arrival = dest.onEnter;
+      dest.onEnter = () => {};        // a test jump is not a story arrival
+      goToWorld(dest);
+      dest.onEnter = arrival;
+      // Land clear of the water so a jump never drops you swimming (the arrival
+      // spawn is a shore tile, but be safe). Report where you actually are.
+      devPrint(`-> ${id} at ${player.x.toFixed(1)},${player.y.toFixed(1)} (${map.floorAt(Math.floor(player.x), Math.floor(player.y))})`);
+      return;
+    }
+    case 'give': {
+      const m = arg.match(/^(\S+)(?:\s+(\d+))?$/);
+      if (!m) { devPrint('give <item> [n]'); return; }
+      const key = m[1], n = m[2] ? parseInt(m[2], 10) : 1;
+      if (!ITEMS[key]) { devPrint(`no item "${key}" — try: items ${key}`); return; }
+      const left = player.stow(key, n);
+      devPrint(`gave ${n - (left || 0)} x ${key}${left ? ` (${left} would not fit)` : ''}`);
+      return;
+    }
+    case 'items': {
+      const keys = Object.keys(ITEMS).filter((k) => !arg || k.includes(arg.toLowerCase()));
+      devPrint(`${keys.length} item(s):`, keys.join('  '));
+      return;
+    }
+    case 'kit': {
+      const k = DEV_KITS[parseInt(arg, 10)];
+      if (!k) { devPrint('no such kit'); return; }
+      devPrint('+ ' + k[1]());
+      return;
+    }
+    case 'arm': {
+      const who = arg.toUpperCase();
+      const all = ['CALYPSO', 'POLYPHEMUS', 'CIRCE', 'HELIOS'];
+      const list = who === 'ALL' || !who ? all : [who];
+      for (const ai of list) player.virusArmed.add(ai);
+      if (!player.hasTrojanCard()) player.stow('hermes_card', 1);
+      devPrint('armed: ' + [...player.virusArmed].join(', '));
+      return;
+    }
+    case 'unshield': {
+      const core = fortress && fortress.core && fortress.core.obj;
+      if (!core) { devPrint('no core here'); return; }
+      core.shielded = false;
+      devPrint('core shield down');
+      return;
+    }
+    case 'open': {
+      if (fortress && fortress.openMaze) { fortress.openMaze(); devPrint('gate, sanctum and maze opened'); }
+      else devPrint('no fortress here');
+      return;
+    }
+    case 'leave':
+      player.calypsoLeave = true;
+      devPrint('calypsoLeave set — the sea will let you go');
+      return;
+    case 'tp': {
+      const [tx, ty] = rest.map(Number);
+      if (!isFinite(tx) || !isFinite(ty)) { devPrint('tp <x> <y>'); return; }
+      player.x = tx; player.y = ty; camera.snap(player.x, player.y);
+      devPrint(`-> ${tx},${ty}`);
+      return;
+    }
+    case 'narrows': {
+      // Play the cabinet on its own, and come back to exactly where you were.
+      // Testing it through a real crossing meant building a ship and sailing the
+      // AEAEA-THRINACIA leg every single time.
+      if (strait) { devPrint('already at sea'); return; }
+      const here = currentWorld.id;
+      beginStrait(here, here);        // from and to the same island: a test loop
+      strait.phase = 'choice'; strait.t = 0;
+      strait.testOnly = true;         // finishStrait puts you back, whatever happens
+      openNarrows();
+      devPrint('-> the narrows (test loop; you return here either way)');
+      return;
+    }
+    case 'pong': {
+      // Play Calypso's cabinet on its own and come back here. Her terminal is
+      // not wired into the escape chain yet (roadmap), so this is how it is
+      // tested and seen.
+      if (pong) { devPrint('already at the cabinet'); return; }
+      openPong();
+      pong.testOnly = true;
+      devPrint('-> calypso\'s pong (test loop; the only way out is to leave)');
+      return;
+    }
+    case 'boat': {
+      // A hull at your feet — testing the crossings otherwise means building a
+      // whole ship first. `boat` gives the seaworthy greek ship; `boat raft`
+      // gives the unfinished one the sea refuses, for testing the refusal.
+      const raft = (arg || '').toLowerCase().startsWith('r');
+      const px = Math.round(player.x), py = Math.round(player.y);
+      let spot = null;
+      for (let r = 1; r <= 6 && !spot; r++) {
+        for (let dy = -r; dy <= r && !spot; dy++) {
+          for (let dx = -r; dx <= r; dx++) {
+            const x = px + dx, y = py + dy;
+            if (!map.inBounds(x, y) || map.objectAt(x, y)) continue;
+            const f = map.floorAt(x, y);
+            if (f === 'sand' || f === 'sea') { spot = { x, y }; break; }
+          }
+        }
+      }
+      if (!spot) { devPrint('no shore tile free nearby — move to a beach'); return; }
+      const o = map.addObject(raft ? 'boat' : 'greek_ship', spot.x, spot.y,
+        raft ? { hull: 100, maxHull: 100 } : { hull: 100, maxHull: 100, seaworthy: true });
+      devPrint(o ? `${raft ? 'boat (no sail)' : 'greek ship'} drawn up at ${spot.x},${spot.y}`
+                 : 'could not place a hull there');
+      return;
+    }
+    case 'strait': {
+      // Force the narrows without sailing the route: the passage only happens on
+      // CIRCE <-> HELIOS, which is a long way to row to test a monster.
+      if (strait) { devPrint('already in the narrows'); return; }
+      // `now` skips the row-in and puts the choice up at once — you do not want to
+      // sit through the approach every time you are testing the two outcomes.
+      const parts = rest.map((s) => s.toLowerCase());
+      const skip = parts.includes('now');
+      const named = parts.find((p) => p !== 'now');
+      const to = named || (currentWorld.id === 'circe' ? 'helios' : 'circe');
+      if (!worldById(to)) { devPrint('no island "' + to + '"'); return; }
+      if (to === currentWorld.id) { devPrint('the strait needs somewhere to be going'); return; }
+      beginStrait(currentWorld.id, to);
+      if (skip) { strait.phase = 'choice'; strait.t = 0; openNarrows(); }
+      devPrint(`-> the narrows, ${currentWorld.id} to ${to}${skip ? ' (choice up)' : ''}`);
+      return;
+    }
+    case 'time':
+    case 'day':
+    case 'night': {
+      const v = verb.toLowerCase();
+      const a = (v === 'time' ? arg : v).toLowerCase();
+      let h;
+      // Noon and 22:00 both sit AFTER the 09:00 run-start on the same day, so the
+      // clock does not roll to tomorrow and trip POSEIDON's deadline — a testing
+      // toggle shouldn't end your run just to check the torch veil.
+      if (a === 'day' || a === '') h = 12;
+      else if (a === 'night') h = 22;
+      else h = Number(a);
+      if (!isFinite(h)) { devPrint('time <day|night|0-23>'); return; }
+      dayNight.setHour(h);
+      devPrint(`clock -> ${dayNight.label} (${dayNight.isNight() ? 'night' : 'day'})`);
+      return;
+    }
+    case 'score':
+      player.addScore(parseInt(arg, 10) || 0);
+      devPrint('score ' + player.score);
+      return;
+    case 'heal':
+      player.health = player.maxHealth; player.stamina = player.maxStamina;
+      player.food = player.maxFood; player.venom = 0; player.torpor = 0;
+      devPrint('restored');
+      return;
+    case 'kill': {
+      let n = 0;
+      for (const r of currentWorld.robots) if (!r.dead) { r.dead = true; n++; }
+      devPrint(`killed ${n} machine(s) on this island`);
+      return;
+    }
+    case 'where':
+      devPrint(`${currentWorld.id} @ ${player.x.toFixed(1)},${player.y.toFixed(1)}  winMode=${currentWorld.winMode}`,
+        `armed: ${[...player.virusArmed].join(', ') || 'none'}  calypsoLeave=${!!player.calypsoLeave}`);
+      return;
+    default:
+      devPrint(`? ${verb} — try \`help\``);
+  }
+}
+
+devEl.addEventListener('click', (e) => { if (e.target === devEl) devClose(); });
+document.getElementById('dev-close').addEventListener('click', devClose);
+devInputEl.addEventListener('keydown', (e) => {
+  e.stopPropagation();               // never leaks into movement
+  if (e.key === 'Enter') { devRun(devInputEl.value); devInputEl.value = ''; }
+  else if (e.key === 'Escape') devClose();
+});
+// The secret knock, in capture phase so it sees keys before input.js does.
+//
+// The rule that makes this safe: we only ever swallow a key while the buffer is
+// a genuine PREFIX of the word. The first letter of DEV_WORD is one of the three
+// unbound letters, so arming costs nothing; from then on each key is swallowed
+// (preventDefault + stopPropagation), which is what stops `r` reading and `e`
+// using mid-word. The moment a key breaks the prefix we abandon the attempt and
+// let that key through untouched, so ordinary play is never eaten.
+window.addEventListener('keydown', (e) => {
+  if (devEl.style.display === 'flex') return;
+  const tag = e.target && e.target.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  if (e.metaKey || e.ctrlKey || e.altKey || e.key.length !== 1) return;
+  const now = performance.now();
+  if (_devTyped && now - _devTypedAt > DEV_CAPTURE_MS) _devTyped = ''; // stale attempt
+  const next = _devTyped + e.key.toLowerCase();
+  if (DEV_WORD.startsWith(next)) {
+    _devTyped = next;
+    _devTypedAt = now;
+    e.preventDefault();
+    e.stopPropagation();   // the game never sees the letters of the word
+    if (next === DEV_WORD) {
+      _devTyped = '';
+      devBuildButtons();
+      devOpen();
+    }
+    return;
+  }
+  // Not the word after all: forget it and let this key play normally. (If the
+  // key could itself start a fresh attempt, arm on it rather than dropping it.)
+  _devTyped = DEV_WORD.startsWith(e.key.toLowerCase()) ? e.key.toLowerCase() : '';
+  if (_devTyped) { _devTypedAt = now; e.preventDefault(); e.stopPropagation(); }
+}, true);
+
 // The failed crossing. Boarding an unfinished boat does NOT bounce you off the
 // hull with a message — you launch, you row out, and the sea rises and sends you
 // home. Poseidon has to actually refuse you for the refusal to mean anything, and
@@ -897,7 +1936,7 @@ phSnakeEl.addEventListener('pointerdown', (e) => {
 const CF_OUT = 7.0, CF_SWELL = 2.6, CF_BACK = 2.2;
 const CF_HULL = 45;        // what the beating costs the hull (it can break up)
 const CF_HURT = 10;        // and what it costs you
-let crossFail = null;      // { t, sx, sy, dx, dy, dist, phase, type, hull… } — null = not sailing
+// crossFail forward-declared up by persist; its shape: { t, sx, sy, dx, dy, dist, phase, type, hull… } — null = not sailing
 
 player.onDepartFail = (p, boat) => {
   if (crossFail) return;
@@ -941,6 +1980,73 @@ player.onDepartFail = (p, boat) => {
 // Put the vessel under the player and point it where it is going (boatMirror).
 function aboardHeading(cf, hx, hy) {
   player.aboard = { type: cf.type, mirror: boatMirror(hx, hy), wob: 0 };
+}
+
+// Poseidon's fog for the failed crossing (renderer.drawSeaFog). It thickens as
+// the island falls away, closes right in on the crest while the sea takes hold,
+// and thins again as the land comes back up under you — so the weather tells the
+// same story as the boat's motion. It also, frankly, veils a lot of empty water
+// at the one moment the camera is furthest from anything worth looking at.
+function seaFogState() {
+  // Putting out to sea (the successful departure): the fog gathers ahead as the
+  // land falls away and hangs thick while the chart is up, so the heading is
+  // chosen out of the murk rather than off a clear horizon. Thins again if you
+  // come about and row home.
+  if (departOut) {
+    const d = departOut;
+    const u = d.returning
+      ? 1 - Math.min(1, d.t / DEPART_BACK)
+      : Math.min(1, d.t / DEPART_OUT);
+    const a = worldToScreen(player.x, player.y);
+    const b = worldToScreen(player.x + d.dx, player.y + d.dy);
+    const sx = b.x - a.x, sy = b.y - a.y;
+    const len = Math.hypot(sx, sy) || 1;
+    return {
+      amount: 0.10 + 0.78 * u,
+      swirl: 0.10 + 0.25 * u,        // it drifts; it is not yet angry
+      t: d.t,                        // keeps advancing while the chart is up, so it rolls
+      push: { x: sx / len, y: sy / len },
+    };
+  }
+  // In the narrows: the murk stands thick and turns hard while the sea decides,
+  // then eases as you are let through (or spat back). Same weather language as
+  // the refusal, because this is the sea having its way with you too.
+  if (strait) {
+    const s = strait;
+    const u = s.phase === 'in' ? Math.min(1, s.t / STRAIT_IN)
+      : s.phase === 'choice' ? 1
+      : Math.max(0, 1 - s.t / STRAIT_OUT);
+    return {
+      amount: 0.30 + 0.62 * u,
+      swirl: 0.30 + 0.70 * u,          // it is turning: something under the boat
+      t: s.t,
+      push: { x: 0, y: -1 },           // driving up the channel
+    };
+  }
+  if (!crossFail) return null;
+  const cf = crossFail;
+  const T_SWELL = CF_OUT, T_BACK = CF_OUT + CF_SWELL;
+  let amount, swirl;
+  if (cf.t < T_SWELL) {
+    const u = cf.t / T_SWELL;
+    amount = 0.14 + 0.70 * u;          // rolls in behind you
+    swirl = 0.12 * u;
+  } else if (cf.t < T_BACK) {
+    const u = (cf.t - T_SWELL) / CF_SWELL;
+    amount = 0.84 + 0.16 * u;          // right in on the crest
+    swirl = 0.12 + 0.88 * u;           // and turning hard
+  } else {
+    const u = Math.min(1, (cf.t - T_BACK) / CF_BACK);
+    amount = 1.0 - 0.80 * u;           // opens again as home comes up
+    swirl = 1.0 - 0.55 * u;
+  }
+  // The seaward heading in SCREEN space, so the banks stream in from the way you
+  // were trying to go and get driven back over you with the boat.
+  const a = worldToScreen(player.x, player.y);
+  const b = worldToScreen(player.x + cf.dx, player.y + cf.dy);
+  const sx = b.x - a.x, sy = b.y - a.y;
+  const len = Math.hypot(sx, sy) || 1;
+  return { amount, swirl, t: cf.t, push: { x: sx / len, y: sy / len } };
 }
 
 // Drive the failed crossing. Returns nothing; the caller returns immediately
@@ -1053,6 +2159,12 @@ input.touchButtonHit = (x, y) => {
 
 // Touches that land on the HUD are UI, never movement (input.js touch path).
 input.uiHitTest = (x, y) => {
+  // The cabinet owns the screen: while the narrows are up, NOTHING on the
+  // dashboard is touchable. Without this the bottom strip of a phone stays a HUD
+  // hit-area, so the thumb you are steering with lands on a slot instead of the
+  // helm — and can swap what is in your hands mid-passage.
+  if (strait && strait.phase === 'choice' && strait.run) return false;
+  if (pong && pong.run) return false;   // the cabinet owns the screen; the HUD is inert
   if (renderer.slotAt && renderer.slotAt(x, y)) return true;
   if (renderer.hudTop != null && y >= renderer.hudTop) return true;
   const bp = renderer._backpackRect;
@@ -1063,7 +2175,10 @@ input.uiHitTest = (x, y) => {
 window.__game = { player, map, camera,
   animals: currentWorld.animals, birds: currentWorld.birds, robots: currentWorld.robots,
   waterdroids: currentWorld.waterdroids, obelisks: currentWorld.obelisks, obeliskObjs: currentWorld.obeliskObjs,
-  wfactory, dayNight, lore, input, renderer, fortress, sfx, currentWorld };
+  wfactory, dayNight, lore, input, renderer, fortress, sfx, currentWorld,
+  // Transient voyage state is reassigned wholesale, so expose it as a getter —
+  // a plain field would freeze at whatever it was when this object was built.
+  get strait() { return strait; } };
 
 function resize() {
   // Size to the *visual* viewport, not innerHeight/100vh. On iOS Safari the
@@ -1100,6 +2215,7 @@ let fps = 0, frameCount = 0, fpsClock = 0;
 const RENDER_FPS_CAP = 60;
 const MIN_RENDER_MS = 1000 / RENDER_FPS_CAP;
 let lastRenderTime = 0;
+let _firstFramePainted = false;  // dismiss the boot loader on the first real draw
 
 // Help modal: H toggles, the ? button opens, clicking the backdrop closes.
 const helpEl = document.getElementById('help');
@@ -1402,6 +2518,27 @@ function elizaTransformFile(name) {
 // Whose island are we standing on? The daemon name drives the per-island virus
 // (each HERMES relay holds only its own daemon's code) and the gates that read
 // it. Falls back to CALYPSO on any world with no fortress (the Backspace).
+// --- What the HUD says about where you are and who holds it ---------------
+// The island by its chart name (the same Homeric roster the heading chart uses),
+// and the daemon that rules it. Ithaca and the Backspace answer to no one, so
+// they report no daemon rather than falling through to a stale fortress alias.
+function hudPlace() {
+  const c = CROSSINGS.find((x) => x.id === currentWorld.id);
+  if (c) return c.place;
+  if (currentWorld.id === 'backspace') return 'THE BACKSPACE';
+  return String(currentWorld.id || '').toUpperCase();
+}
+function hudDaemon() {
+  const f = currentWorld && currentWorld.fortress;
+  if (!f || !f.AI_NAME) return null;
+  // Calypso is LEFT, not killed, so her fall is the refunction; the martial
+  // daemons fall when their core is finally broken open.
+  const fallen = currentWorld.winMode === 'depart'
+    ? !!player.calypsoLeave
+    : !!(f.core && f.core.obj && f.core.obj.defeated);
+  return { name: f.AI_NAME, fallen };
+}
+
 function islandAiName() {
   return (currentWorld && currentWorld.fortress && currentWorld.fortress.AI_NAME)
     || (fortress && fortress.AI_NAME) || 'CALYPSO';
@@ -1419,6 +2556,7 @@ function refunctionCalypso() {
   // seeds the same way, quietly (the release beat carries the message line).
   if (firstRelease && currentWorld.winMode === 'depart') {
     daemonsDown += 1;
+    recordAiDown('CALYPSO');   // she is left rather than killed, but she is down
     player.addScore(500);
     if (lore && lore.findFrag) lore.findFrag(DAEMON_BOOK_ID, player, true);
   }
@@ -1763,7 +2901,7 @@ function endDrive(msg) {
   if (r) r.driven = false;
   driveState = null;
   player.terminalSafe = false;
-  if (hintEl) hintEl.style.display = '';
+  if (hintEl && !hintDone) hintEl.style.display = ''; // never resurrect it once it has had its say
   if (msg) player.say(msg);
 }
 
@@ -2720,8 +3858,13 @@ const touchLike = (window.matchMedia && window.matchMedia('(pointer: coarse)').m
 if (touchLike) {
   hintEl.textContent = 'Hold to move · tap to act · \u00bb run · \u25b2 jump · ? for help';
 }
-const HINT_LIFETIME = 120; // seconds of played time
+// How long "Press H for help" hangs about. It only ever needs to be read once,
+// and it sits over the bottom-right of the play area where it fouls the
+// Scrapbook and the SMS toast, so it goes early and — once gone — stays gone
+// (hintDone, or endDrive's restore would flick it back afterwards).
+const HINT_LIFETIME = 40; // seconds of played time
 let playTime = 0;
+let hintDone = false;
 
 // Backpack view: I toggles the full panel (drawn by the renderer), which
 // exposes the backpack's own storage/weapon slots for dragging — the
@@ -2943,6 +4086,85 @@ function dispatchSkylinkW4s(n) {
     if (w4) currentWorld.robots.push(w4);
   }
 }
+
+// POSEIDON's blight (game/blight.js): the living ground converted to standing
+// reserve, spreading outward from each live obelisk once the network wakes, and
+// recovering around each tower you fell or jam. Applied to the floor grid here —
+// the module owns only the radius arithmetic. Throttled: the fronts move in whole
+// tiles slowly, so re-scanning at ~2.5 Hz is invisible and cheap.
+// POSEIDON's fog: the veil the network drags over the island once it wakes. Its
+// density tracks how much of the network still stands — full when every tower is
+// live, dispersing as you fell them, gone when the network is broken. It slams
+// down when POSEIDON comes online and lifts SLOWLY, so felling a tower is a visible
+// relief rather than an instant one. Night-vision goggles cut it (see the veil in
+// renderer.draw). Read by the hud as `poseidonFog`.
+let poseidonFog = 0;
+function updateFog(dt, obs) {
+  const live = obs.filter(obeliskLive).length;
+  const total = obs.length || 1;
+  const target = (player.skylinkActive && !player._ended) ? live / total : 0;
+  const rate = target > poseidonFog ? 1.1 : 0.12;   // down fast, disperse slow
+  poseidonFog += (target - poseidonFog) * Math.min(1, rate * dt);
+  if (poseidonFog < 0.002) poseidonFog = 0;
+}
+
+let _blightClock = 0;
+function updateBlight(dt) {
+  const obs = currentWorld.obeliskObjs || [];
+  if (!currentWorld.combat || !obs.length) { poseidonFog = 0; return; }
+  // Grow / retreat every tower's front every frame (smooth), but only re-paint
+  // the grid a few times a second.
+  blightStep(obs, dt, !!player.skylinkActive && !player._ended);
+  updateFog(dt, obs);
+  _blightClock += dt;
+  if (_blightClock < 0.4) return;
+  _blightClock = 0;
+
+  // Nothing to do if no front has any reach and nothing is currently blighted.
+  const anyReach = obs.some((o) => (o.blightR || 0) > 0);
+  if (!map.blightIdx) { map.blightIdx = new Set(); map.blightOrig = new Map(); }
+  if (!anyReach && map.blightIdx.size === 0) return;
+
+  const W = map.w, H = map.h;
+  const covered = new Set();
+  // COVER: scan each front's bounding box, blight the living tiles it reaches.
+  for (const ob of obs) {
+    const r = Math.ceil(ob.blightR || 0);
+    if (r <= 0) continue;
+    for (let y = Math.max(0, ob.y - r); y <= Math.min(H - 1, ob.y + r); y++) {
+      for (let x = Math.max(0, ob.x - r); x <= Math.min(W - 1, ob.x + r); x++) {
+        if (!tileBlighted(x, y, obs)) continue;
+        const idx = y * W + x;
+        covered.add(idx);
+        const already = map.blightIdx.has(idx);
+        if (!already) {
+          const f = map.floor[idx];
+          if (!BLIGHTABLE.has(f)) continue;    // sea, road, decks, mountain rock: left alone
+          map.blightOrig.set(idx, f);
+          map.blightIdx.add(idx);
+          const t = map.objectGrid[idx];
+          if (t && t.type === 'tree') t.dead = true;   // a tree on dead ground dies
+        }
+        // Stage by how deep the tile is: the leading edge yellows and sickens,
+        // the ground behind it drains to grey. Recomputed every pass, so a tile
+        // transitions sick -> grey as the front moves past it (and grey -> sick ->
+        // green on the way back out when a tower is felled).
+        map.floor[idx] = blightDepth(x, y, obs) >= BLIGHT_SICK_BAND ? 'blight' : 'blight_sick';
+      }
+    }
+  }
+  // RECOVER: any tile blighted last pass but no longer under a front comes back
+  // to what it was — this is what "kill the tower to stop the spread" looks like.
+  for (const idx of map.blightIdx) {
+    if (covered.has(idx)) continue;
+    map.floor[idx] = map.blightOrig.get(idx) || 'grass';
+    map.blightOrig.delete(idx);
+    map.blightIdx.delete(idx);
+    const t = map.objectGrid[idx];
+    if (t && t.type === 'tree') t.dead = false;      // and its trees leaf again
+  }
+}
+
 function update(dt) {
   if (input.consumePress('KeyH')) toggleHelp();
   if (input.inventoryPressed()) showBackpack = !showBackpack;
@@ -2970,14 +4192,36 @@ function update(dt) {
   if (pendingCrossing) {
     const target = pendingCrossing;
     pendingCrossing = null;
+    // END THE ROW-OUT HERE. This block runs BEFORE the departOut tick and
+    // returns, so a row-out left standing would survive the crossing and then
+    // hijack the next frame with the OLD island's coordinates — and because
+    // pendingCrossing is null by then, its own self-clear never fires. The
+    // result is a frame loop that returns before any input is read: you arrive
+    // stuck aboard, unable to step out or to board. Clear it where the crossing
+    // is actually committed, not where the voyage hopes to notice.
+    departOut = null;
+    // Scylla and Charybdis: the AEAEA <-> THRINACIA passage runs through the
+    // narrows. Hold the crossing here and play the strait — the world switch
+    // happens in finishStrait, once the sea has taken its price. (The Backspace
+    // door-road is not a sea route, so it never enters the strait.)
+    if (!strait && currentWorld.id !== 'backspace' && isStraitCrossing(currentWorld.id, target)) {
+      beginStrait(currentWorld.id, target);
+      return;
+    }
+    player.aboard = null;
     const dest = worldById(target);
-    if (dest) { goToWorld(dest); sfx.play('zap'); }
+    // A boat/road crossing arrives by keel: beach at the destination's spawn and
+    // clear the departed island's returnPos, so neither end strands you offshore
+    // where the row-out left the player's coordinates (see switchWorld).
+    if (dest) { goToWorld(dest, { beach: true }); sfx.play('zap'); }
     return;
   }
 
   // The Nokia's queue drains every frame, wherever you are, so a text finishes even
   // if you cross mid-message; the SMS beep fires the frame each one appears. Off
   // Ogygia the phone has NO SIGNAL — one line, once, so the channel reads as hers.
+  player._smsClock = dayNight.clock; // the time stamped on any SMS filed this frame
+  poseidonWarnings();                // the deadline, as escalating notices
   nokia.tick(dt);
   if (nokia.justShown) sfx.play('sms');
   if (!currentWorld.keeper && currentWorld.id !== 'backspace') sendNokia(nokia, 'noSignal', { player });
@@ -3047,6 +4291,15 @@ function update(dt) {
   // still — no input, no AI, no clock — while the voyage plays out and the sea
   // sends you home. (updateCrossFail drives the camera itself.)
   if (crossFail) { updateCrossFail(dt); return; }
+  // In the narrows between Scylla and Charybdis. The world holds still the same
+  // way: you are on the water, and the only move left is the choice.
+  if (strait) { updateStrait(dt); return; }
+  // At Calypso's terminal, playing the pong she will not let you win. The world
+  // holds still the same way the narrows do — nothing else to attend to.
+  if (pong) { updatePong(dt); return; }
+  // Rowing out to the chart (or back in after thinking better of it). Like the
+  // failed crossing, the world holds still while the sea has you.
+  if (departOut) { updateDepartOut(dt); return; }
   // You are ashore, so you are out of the boat. Not a tidy-up: while `aboard` is
   // set the renderer draws the hull INSTEAD of the character, so a stray flag
   // would leave you playing an invisible man in a boat on dry land. Nothing may
@@ -3093,6 +4346,7 @@ function update(dt) {
     else if (player.canCraftSword()) player.craftSword();
     else if (player.canCraftFortressMap()) player.craftFortressMap();
     else if (player.canCraftGreekShip(map)) player.craftGreekShip(map);
+    else if (player.canCraftGoggles()) player.craftGoggles();
     else if (player.canCraftBoat(map)) player.craftBoat(map);
   }
   if (input.zoomTogglePressed()) camera.toggleZoom();
@@ -3125,16 +4379,27 @@ function update(dt) {
       player.say('You lie down to rest a while...');
     }
   }
-  if (hintEl.style.display !== 'none') {
+  if (!hintDone && hintEl.style.display !== 'none') {
     playTime += dt;
-    if (playTime >= HINT_LIFETIME) hintEl.style.display = 'none';
+    if (playTime >= HINT_LIFETIME) {
+      hintDone = true;
+      hintEl.style.opacity = '0';                          // fades, rather than popping out
+      setTimeout(() => { hintEl.style.display = 'none'; }, 1200);
+    }
   }
   const mouse = input.mousePos();
   const mouseWorld = camera.toWorld(mouse.x, mouse.y, renderer.w, renderer.h);
 
-  // Mouse wheel zooms (the HUD is screen-space, so it stays the same size).
-  const wheel = input.consumeWheel();
-  if (wheel) camera.zoomBy(-wheel * 0.0015);
+  // Mouse wheel zooms (the HUD is screen-space, so it stays the same size) —
+  // UNLESS an open panel owns the wheel. This consume used to run
+  // unconditionally, and it sits a couple of hundred lines above the systems
+  // pass that ticks lore.update, so the Scrapbook's own consumeWheel() was
+  // always handed a zero and could never scroll. The zoom was eating it; it was
+  // never a focus problem.
+  if (!lore.archiveOpen) {
+    const wheel = input.consumeWheel();
+    if (wheel) camera.zoomBy(-wheel * 0.0015);
+  }
 
   // AI-defeated celebration: a level-up modal (fireworks + score). Freezes the
   // world behind it until dismissed; then the run carries on (you don't win the
@@ -3221,9 +4486,18 @@ function update(dt) {
   if (lore.archiveOpen) {
     const r = lore._archiveRect;
     const bc = input.clickPos();
-    if (bc && (!r || bc.x < r.x || bc.x > r.x + r.w || bc.y < r.y || bc.y > r.y + r.h)) {
-      input.consumeClick();
-      lore.archiveOpen = false;
+    if (bc) {
+      const tab = lore.archiveTabAt(bc.x, bc.y);
+      const outside = !r || bc.x < r.x || bc.x > r.x + r.w || bc.y < r.y || bc.y > r.y + r.h;
+      if (tab >= 0) {
+        input.consumeClick();          // a tab switches drawer...
+        lore.setArchiveTab(tab);
+      } else if (outside) {
+        input.consumeClick();          // ...outside the book shuts it...
+        lore.archiveOpen = false;
+      } else {
+        input.consumeClick();          // ...and a click on the page does nothing
+      }                                //    (but must not swing your axe either)
     }
     if (input.consumePress('Escape')) lore.archiveOpen = false;
   }
@@ -3232,6 +4506,17 @@ function update(dt) {
   // same-slot release, a click-equip); release drops onto the target slot.
   // Claimed here so a slot press never also swings the held tool.
   const press = input.clickPos();
+  // Tap the SMS handset to hurry it along. Checked BEFORE the slots and the
+  // world so a dismissing tap never also swings the held tool — the toast sits
+  // over open ground, and reading it should not cost you a swing.
+  if (press && renderer._nokiaToastRect && nokia.current) {
+    const r = renderer._nokiaToastRect;
+    if (press.x >= r.x && press.x <= r.x + r.w && press.y >= r.y && press.y <= r.y + r.h) {
+      input.consumeClick();
+      nokia.hurry();
+      sfx.play('keydrop');
+    }
+  }
   if (press && renderer.slotAt) {
     const slot = renderer.slotAt(press.x, press.y);
     if (slot) {
@@ -3337,7 +4622,7 @@ function update(dt) {
   if (!currentWorld.combat) {
     player.update(dt, input, map, [], [], mouseWorld);
     currentWorld.update(dt, player); // the lurker + the ambient shrieks
-    camera.follow(player.x, player.y, dt);
+    camera.follow(player.x, player.y, dt, playerElevSteps());
     if (player._ubikTeleportCooldown > 0) player._ubikTeleportCooldown -= dt;
     // R4: the Backspace is an ALTERNATIVE CROSSING ROAD — the road of the dead. It
     // is littered with labelled doors, one per island (each drawn with its name on
@@ -3648,7 +4933,8 @@ function update(dt) {
       if (liveW4 < SKYLINK_MAX_W4) dispatchSkylinkW4s(2 + Math.floor(Math.random() * 3));
     }
   }
-  camera.follow(player.x, player.y, dt);
+  updateBlight(dt);
+  camera.follow(player.x, player.y, dt, playerElevSteps());
   if (map.objects.length !== lastObjectCount) {
     lastObjectCount = map.objects.length;
     minimap.refresh(map); // felled trees disappear from the minimap
@@ -3858,6 +5144,14 @@ function frame(now) {
       light: amb.light != null ? amb.light : dayNight.light(),
       dawnGlow: amb.dawnGlow ? dayNight.dawnGlow() : 0,
       timeLabel: dayNight.countdownLabel,
+      // The Scylla/Charybdis arcade run, while it has the helm.
+      narrows: (strait && strait.phase === 'choice') ? strait.run : null,
+      narrowsOver: (strait && strait.phase === 'choice') ? strait.gameover : null,
+      pong: pong ? pong.run : null,
+      pongOver: pong ? pong.gameover : null,
+      poseidonFog: poseidonFog > 0.01 ? { n: poseidonFog, goggles: player.gogglesOn } : null,
+      place: hudPlace(),      // the island you are on, by its chart name
+      daemon: hudDaemon(),    // { name, fallen } — null where nothing rules
       minimap: (amb.minimap && showMinimap) ? minimap : null,
       birds: currentWorld.birds,
       robots: currentWorld.robots,
@@ -3871,21 +5165,25 @@ function frame(now) {
       toast,
       nokiaToast: nokia.current,
       nokiaSignal: nokiaSignalBars(),
+      seaFog: seaFogState(), // Poseidon's fog on the failed crossing (null otherwise)
       touchControls: touchLike,
       touchRunHeld: input._touchRun,
       drag: drag ? { ...drag, mx: input.mouseX, my: input.mouseY } : null,
       deathCert: player.deathCert,
       aiVictory: player.aiVictory,
       showSkills,
+      daemonsDown,                 // the Archipelago tally, for the Record panel
+      islandsReached: Object.keys(player._welcomed || {}).length,
       showWeapons,
-      craftPrompt: (player.canCraftObGun() && player.hands !== 'obgun') || (player.canCraftWaveGun() && player.hands !== 'wavegun') || player.canCraftChip() || player.canCraftSword() || player.canCraftFortressMap() || player.canCraftGreekShip(map) || player.canCraftBoat(map),
+      craftPrompt: (player.canCraftObGun() && player.hands !== 'obgun') || (player.canCraftWaveGun() && player.hands !== 'wavegun') || player.canCraftChip() || player.canCraftSword() || player.canCraftFortressMap() || player.canCraftGreekShip(map) || player.canCraftGoggles() || player.canCraftBoat(map),
       craftWaveGun: player.canCraftWaveGun() && player.hands !== 'wavegun',
       craftChip: player.canCraftChip() && !player.canCraftWaveGun() && !(player.canCraftObGun() && player.hands !== 'obgun'),
       craftSword: player.canCraftSword() && !player.canCraftChip() && !player.canCraftWaveGun() && !(player.canCraftObGun() && player.hands !== 'obgun'),
       // Lowest craft priority (see the C chain): the boat prompt shows only when
       // no weapon/tool/map craft is pending, so it never contradicts what C does.
       craftGreekShip: player.canCraftGreekShip(map) && !player.canCraftChip() && !player.canCraftSword() && !player.canCraftWaveGun() && !player.canCraftFortressMap() && !(player.canCraftObGun() && player.hands !== 'obgun'),
-      craftBoat: player.canCraftBoat(map) && !player.canCraftGreekShip(map) && !player.canCraftChip() && !player.canCraftSword() && !player.canCraftWaveGun() && !player.canCraftFortressMap() && !(player.canCraftObGun() && player.hands !== 'obgun'),
+      craftGoggles: player.canCraftGoggles() && !player.canCraftGreekShip(map) && !player.canCraftChip() && !player.canCraftSword() && !player.canCraftWaveGun() && !player.canCraftFortressMap() && !(player.canCraftObGun() && player.hands !== 'obgun'),
+      craftBoat: player.canCraftBoat(map) && !player.canCraftGoggles() && !player.canCraftGreekShip(map) && !player.canCraftChip() && !player.canCraftSword() && !player.canCraftWaveGun() && !player.canCraftFortressMap() && !(player.canCraftObGun() && player.hands !== 'obgun'),
       // POSEIDON is a combat-island network — its lights/lines must never draw
       // over the Backspace or peaceful ITHACA.
       skylinkActive: player.skylinkActive && !player._ended && currentWorld.combat,
@@ -3901,6 +5199,14 @@ function frame(now) {
     // Robot-vision: resample the just-drawn scene as ASCII + a Terminator HUD.
     if (driveState) drawDriveOverlay(now);
     frameCount += 1;
+    // The world is on screen. Tell the boot loader to stand down — after the
+    // FIRST successful draw, not on module eval, so "ready" means genuinely
+    // painted, not merely parsed.
+    if (!_firstFramePainted) {
+      _firstFramePainted = true;
+      try { window.dispatchEvent(new CustomEvent('nostos:progress', { detail: { step: 'ready' } })); } catch (_) { /* no-op */ }
+      try { window.dispatchEvent(new Event('nostos:ready')); } catch (_) { /* no-op */ }
+    }
   }
 
   fpsClock += elapsed;
@@ -3929,4 +5235,43 @@ if (_bootIsland && _bootIsland !== 'calypso') {
 // R3: seed the detain flag from the world we actually boot on (the Calypso start
 // never routes through goToWorld, so set it here too). Depart mode → her guards detain.
 player.detainMode = currentWorld.winMode === 'depart';
+
+// The carrier's roaming welcome for the island we boot onto (Calypso never runs
+// its onEnter — a boot is a resume, not an arrival — so fire it here). On a
+// resumed save the once-per-run guard is fresh, so it greets you again; harmless.
+islandWelcome(currentWorld.id);
+
+// Rescue any save that was already stranded on the water (an older build could
+// autosave you mid-voyage; the new guard above stops fresh ones). If the boot
+// position is a sea/water tile, spiral outward to the nearest walkable land and
+// stand the player there, so a Continue never drops you marooned offshore. Also
+// clears aboard, which is never persisted but belt-and-braces.
+player.aboard = null;
+{
+  const wet = (x, y) => {
+    const f = map.floorAt(Math.floor(x), Math.floor(y));
+    return f === 'sea' || f === 'water' || f == null;
+  };
+  if (wet(player.x, player.y)) {
+    let best = null;
+    for (let r = 1; r <= 40 && !best; r++) {
+      for (let dy = -r; dy <= r && !best; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue; // ring only
+          const nx = Math.floor(player.x) + dx, ny = Math.floor(player.y) + dy;
+          if (!map.inBounds || !map.inBounds(nx, ny)) continue;
+          const f = map.floorAt(nx, ny);
+          if (f && f !== 'sea' && f !== 'water' && !(map.isSolid && map.isSolid(nx, ny))) {
+            best = { x: nx + 0.5, y: ny + 0.5 }; break;
+          }
+        }
+      }
+    }
+    if (best) {
+      player.x = best.x; player.y = best.y;
+      camera.snap(player.x, player.y);
+      player.say('You come to on the shore, soaked, the boat nowhere in sight. However you got here, you are ashore now.');
+    }
+  }
+}
 requestAnimationFrame(frame);
