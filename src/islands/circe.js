@@ -155,7 +155,7 @@ export function createCirce(seed) {
   const obeliskObjs = obelisks.map((o) => map.objectAt(o.x, o.y)).filter(Boolean);
   for (const ob of obeliskObjs) {
     ob.alert = 0; ob.blinkFlash = 0; ob._blinkT = 2 + Math.random() * 5; ob._nudgeT = 0;
-    ob.code = 'OB-' + ((ob.x * 4096 + ob.y * 31) & 0xffff).toString(16).toUpperCase().padStart(4, '0');
+    ob.code = 'OB_' + ((ob.x * 4096 + ob.y * 31) & 0xffff).toString(16).toUpperCase().padStart(4, '0');
   }
   const torPlacements = placeTors(map, makeRng((IS ^ 0x40b1e5) >>> 0), { spawn, count: 4 });
   const torObjs = torPlacements.map((t) => map.objectAt(t.x, t.y)).filter(Boolean);

@@ -653,7 +653,7 @@ export class Renderer {
                 ? 'You have five torches and a circuit board — press C to build night-vision goggles'
                 : hud.craftBoat
                   ? 'You have the wood and a cutting tool — press C to build a boat'
-                  : 'You hold a stun-gun, electro-gun and Wi-Fi block — press C to build an OB-gun';
+                  : 'You hold a stun-gun, electro-gun and Wi-Fi block — press C to build an OB_gun';
       ctx.font = 'bold 13px system-ui, sans-serif';
       const w = ctx.measureText(msg).width + 24;
       const x = (this.w - w) / 2, y = this.h - DASH_H - 40;
@@ -1204,6 +1204,22 @@ export class Renderer {
   drawFloor(map, tx, ty, type, shade) {
     const ctx = this.ctx;
     const def = FLOORS[type];
+    // Water the blight has run into (main.js map.blightWater): drawn as its
+    // normal sea/water tile, then a dark stagnant wash on top so it reads as
+    // poisoned rather than as a different floor. Render-only, so it stays swum.
+    const deadWater = (type === 'sea' || type === 'water' || type === 'stream')
+      && map.blightWater && map.blightWater.has(ty * map.w + tx);
+    const washDeadWater = (corners) => {
+      // Just recolour the water: the normal sea/water tile (with its own ripple
+      // texture) is already drawn underneath — lay a single flat sickly-green pall
+      // over it so the texture reads through, tinted dead. No scum blobs; the wash
+      // IS the colour, the water beneath IS the texture.
+      ctx.save();
+      this.diamondPath(corners); ctx.clip();
+      ctx.fillStyle = 'rgba(34,44,30,0.7)';   // dead, stagnant green-grey — clearly not the clean blue beyond
+      this.diamondPath(corners); ctx.fill();
+      ctx.restore();
+    };
     // Per-island ground palette (B2). `map.palette` overrides a floor's base
     // colour for THIS island only — FLOORS itself is a shared singleton, so
     // mutating it would repaint every island at once. Everything downstream
@@ -1217,6 +1233,7 @@ export class Renderer {
     // cast a dark, sea-coloured hillside skirt floating over the water.
     if (type === 'sea') {
       this.drawSeaTile(tx, ty);
+      if (deadWater) washDeadWater(this.tileCorners(tx, ty, 0));
       // Belt-and-braces against the black-wedge bug: a sea tile is pinned flat at
       // height 0, but if its south/east neighbour sits LOWER (a hollow carved to
       // the shore), the general skirt pass below never runs for sea — so nothing
@@ -1292,6 +1309,7 @@ export class Renderer {
         alpha = Math.max(0.12, Math.min(0.85, alpha + flow * 0.14 - 0.07));
       }
       this.drawTexturedQuad(corners, tex, shadeHex(baseColor, shade), tintColor, tintMode, alpha);
+      if (deadWater) washDeadWater(corners);      // river/stream the blight reached
     } else {
       this.diamondPath(corners);
       ctx.fillStyle = shadeHex(baseColor, shade);
@@ -1319,6 +1337,14 @@ export class Renderer {
         ctx2.beginPath(); ctx2.ellipse(cx, cy, 5 + 4 * hx, 3 + 2 * hy, 0, 0, Math.PI * 2); ctx2.fill();
       }
       ctx2.restore();
+    }
+    // Fortress decks read as a lit grid: a dim green floor-stud on every panel /
+    // quad / sanctum tile, so the maze is clear to move through rather than a dark
+    // guessing-game. The solved-maze "way out" trail (below) still burns brighter
+    // and animated on top, so it stays legible as the route.
+    if (type === 'panel' || type === 'quad' || type === 'sanctum') {
+      const cx = (corners[0].x + corners[2].x) / 2, cy = (corners[0].y + corners[2].y) / 2;
+      this.texturedGlow(cx, cy, 4.5, 2.3, 'rgba(70,200,120,0.30)', 3, 0.5, 'aigrate');
     }
     // The maze's "way out" trail: once solved, a lit floor-stud on each tile of
     // the solution path (a green guide, so it never reads as danger). Textured
@@ -2993,19 +3019,28 @@ export class Renderer {
     ctx.beginPath();
     ctx.ellipse(c.x, c.y, 15, 7, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = '#101014'; // south-west face
+    // Body faces: near-black by default (Calypso), or the island's theme colour
+    // darkened to a tower hue on every other island — the whole body carries the
+    // daemon's colour, not just the eye. SE face darkest, SW mid, cap lightest.
+    let swFace = '#101014', seFace = '#07070a', capFace = '#1a1a22';
+    if (this.obBodyTint) {
+      const [tr, tg, tb] = hexRgb(this.obBodyTint);
+      const mul = (f) => `rgb(${Math.round(tr * f)},${Math.round(tg * f)},${Math.round(tb * f)})`;
+      swFace = mul(0.42); seFace = mul(0.26); capFace = mul(0.58);
+    }
+    ctx.fillStyle = swFace; // south-west face
     ctx.beginPath();
     ctx.moveTo(c.x - W, c.y - 4); ctx.lineTo(c.x, c.y + 2);
     ctx.lineTo(c.x, c.y + 2 - H); ctx.lineTo(c.x - W, c.y - 4 - H);
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = '#07070a'; // south-east face
+    ctx.fillStyle = seFace; // south-east face
     ctx.beginPath();
     ctx.moveTo(c.x + W, c.y - 4); ctx.lineTo(c.x, c.y + 2);
     ctx.lineTo(c.x, c.y + 2 - H); ctx.lineTo(c.x + W, c.y - 4 - H);
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = '#1a1a22'; // cap
+    ctx.fillStyle = capFace; // cap
     ctx.beginPath();
     ctx.moveTo(c.x - W, c.y - 4 - H); ctx.lineTo(c.x, c.y + 2 - H);
     ctx.lineTo(c.x + W, c.y - 4 - H); ctx.lineTo(c.x, c.y - 10 - H);
@@ -3022,7 +3057,7 @@ export class Renderer {
     const alert = Math.max(obj.alert || 0, obj.stirred ? 1 : 0);
     const flash = obj.blinkFlash || 0;
     const ly = c.y - H + 8;
-    // RON-ML `loop`: an infinite loop pinned into it burns CPU instead of
+    // AI-ML `loop`: an infinite loop pinned into it burns CPU instead of
     // doing anything useful — the signal light runs a hot white-cyan
     // overload glow instead of the usual alert red, and it starts smoking,
     // more heavily the longer it's been looping, until a repair drone
@@ -3094,7 +3129,7 @@ export class Renderer {
       ctx.arc(c.x, ly, 2.6 + flash * 1.5, 0, Math.PI * 2);
       ctx.fill();
     }
-    // Flames licking up the shaft while it burns from an OB-gun hit.
+    // Flames licking up the shaft while it burns from an OB_gun hit.
     if (obj.burning > 0) {
       const t = performance.now() / 90;
       for (let i = 0; i < 5; i++) {
@@ -3121,9 +3156,14 @@ export class Renderer {
     for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.moveTo(sx - 4, sy - 3 + k * 3); ctx.lineTo(sx + 5, sy - 3 + k * 3); ctx.stroke(); }
     ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.strokeRect(sx - 5.5, sy - 6.5, 12, 14);
     const SCREEN_PAD = 8;
-    this.obeliskHits.push({ obj, x: sx - 5.5 - SCREEN_PAD, y: sy - 6.5 - SCREEN_PAD, w: 12 + 2 * SCREEN_PAD, h: 14 + 2 * SCREEN_PAD });
+    // Clickable target: the whole tower COLUMN, not just the little screen — the
+    // screen alone is a tiny target, and where an obelisk stands next to a HERMES
+    // relay the relay's tall hit-rect used to swallow every slightly-off click, so
+    // the obelisk terminal was near-impossible to open. The obelisk is tested
+    // before the relay (main.js), so a generous column target wins the overlap.
+    this.obeliskHits.push({ obj, x: sx - 7 - SCREEN_PAD, y: sy - 34 - SCREEN_PAD, w: 15 + 2 * SCREEN_PAD, h: 42 + 2 * SCREEN_PAD });
 
-    // Damage bar above a scorched obelisk when the player's near — five OB-gun
+    // Damage bar above a scorched obelisk when the player's near — five OB_gun
     // burns (or an insane bomb) to fell one, so it needs the heavy kit.
     const obDmg = obj.obDamage || 0;
     const pl = this.hudPlayer;
@@ -3704,7 +3744,7 @@ export class Renderer {
     if (fog) ctx.drawImage(fog, 0, 0, map.w, map.h);
     // Downloaded-map overlay: while a printed AI territory map is carried, its
     // obelisks (green), factory (blue) and mainframe (red) show through the
-    // fog — a schematic laid over the minimap, per the RON-ML `print` map.
+    // fog — a schematic laid over the minimap, per the AI-ML `print` map.
     if (player.hasItem && player.hasItem('printed_map')) {
       const m = 3 / k;
       for (const o of map.objects) {
@@ -3826,6 +3866,21 @@ export class Renderer {
     ctx.strokeRect(-11, -7, 22, 14);
     ctx.fillStyle = (itemDef && itemDef.color) || '#c9a44a'; // label strip
     ctx.fillRect(-9, -5.5, 18, 3);
+    // Handwritten label: tiny "artist — title" inked across the strip, shrunk to
+    // fit its 18-unit width so long names (Siegfried Kracauer — Eliza) still sit
+    // on one line. Only drawn when a label is passed (the title-screen rack), so
+    // inventory/deck cassettes stay clean.
+    if (itemDef && itemDef.label) {
+      ctx.save();
+      let fs = 2.1;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = `${fs}px ui-monospace, "Courier New", monospace`;
+      const w = ctx.measureText(itemDef.label).width;
+      if (w > 16.6) { fs *= 16.6 / w; ctx.font = `${fs}px ui-monospace, "Courier New", monospace`; }
+      ctx.fillStyle = 'rgba(24,18,10,0.82)'; // ballpoint ink on the coloured card
+      ctx.fillText(itemDef.label, 0, -3.9);
+      ctx.restore();
+    }
     ctx.fillStyle = '#1a1b1f'; // tape window
     ctx.fillRect(-7.5, -1, 15, 6);
     for (const rx of [-4, 4]) { // left reel at -4, right (take-up) at +4
@@ -3879,6 +3934,78 @@ export class Renderer {
       ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(2.5, 0); ctx.lineTo(-2.5, 0); ctx.closePath(); ctx.fill();
       ctx.fillStyle = '#cfd8c3';
       ctx.beginPath(); ctx.moveTo(0, 6); ctx.lineTo(2.5, 0); ctx.lineTo(-2.5, 0); ctx.closePath(); ctx.fill();
+      ctx.restore();
+      return;
+    }
+    if (key === 'ob_spoofer') {
+      // A transmitter that impersonates a tower: a small case with a stub aerial
+      // and, on its face, the obelisk silhouette it is pretending to be — lit in
+      // the same violet as the case, because the lie is the whole device.
+      const ctx2 = ctx;
+      ctx2.fillStyle = '#3a2a4a';                       // the case
+      this.roundRect(-7.5, -4.5, 15, 13, 2); ctx2.fill();
+      ctx2.strokeStyle = 'rgba(0,0,0,0.5)'; ctx2.lineWidth = 1;
+      this.roundRect(-7.5, -4.5, 15, 13, 2); ctx2.stroke();
+      ctx2.strokeStyle = itemDef.color; ctx2.lineWidth = 1.2;   // the stub aerial
+      ctx2.beginPath(); ctx2.moveTo(4.5, -4.5); ctx2.lineTo(6.5, -10); ctx2.stroke();
+      ctx2.fillStyle = itemDef.color;
+      ctx2.beginPath(); ctx2.arc(6.5, -10.6, 1.3, 0, Math.PI * 2); ctx2.fill();
+      // the fake tower on the faceplate
+      ctx2.fillStyle = itemDef.color;
+      ctx2.beginPath();
+      ctx2.moveTo(-2.2, 6); ctx2.lineTo(-1.4, -2.4); ctx2.lineTo(1.4, -2.4); ctx2.lineTo(2.2, 6);
+      ctx2.closePath(); ctx2.fill();
+      ctx2.fillStyle = '#f0dcff';                        // its eye, mimicked
+      ctx2.beginPath(); ctx2.arc(0, -0.6, 1.15, 0, Math.PI * 2); ctx2.fill();
+      // broadcast arcs coming off the aerial
+      ctx2.strokeStyle = 'rgba(181,111,216,0.55)'; ctx2.lineWidth = 0.9;
+      for (const r of [3, 5]) {
+        ctx2.beginPath(); ctx2.arc(6.5, -10.6, r, -Math.PI * 0.85, -Math.PI * 0.15); ctx2.stroke();
+      }
+      ctx2.restore();
+      return;
+    }
+    if (itemDef.kind === 'laptop') {
+      // ONE routine draws every laptop (docs/laptop-plan.md): an open clamshell
+      // seen three-quarters on, the body taking the model's colour and the SCREEN
+      // taking the OS — grey-white phosphor for UNIX, amber for RON-DOS, the
+      // machines' green for a salvaged node, near-black for a sealed one. Damage
+      // is drawn over the top. Four variables, not a dozen icons.
+      const body = itemDef.color;
+      const os = itemDef.os || (this.laptopOs || 'unix');
+      const screen = os === 'ctss' ? '#d7d2c4' : os === 'rondos' ? '#d8a54a'
+        : os === 'machine' ? '#4fe07a' : os === 'sealed' ? '#1a1d20' : '#cfe6d8';
+      // the lid, tilted back
+      ctx.fillStyle = body;
+      ctx.beginPath();
+      ctx.moveTo(-8, -9); ctx.lineTo(8, -9); ctx.lineTo(7, 1); ctx.lineTo(-7, 1);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = 1; ctx.stroke();
+      // the screen, glowing in its OS colour
+      ctx.fillStyle = '#12171a';
+      ctx.fillRect(-6.2, -7.6, 12.4, 7.6);
+      ctx.fillStyle = screen;
+      ctx.globalAlpha = os === 'sealed' ? 0.35 : 0.85;
+      ctx.fillRect(-5.4, -6.9, 10.8, 6.2);
+      ctx.globalAlpha = 1;
+      // a couple of scanlines so it reads as a CRT-ish panel, not a white box
+      ctx.fillStyle = 'rgba(0,0,0,0.18)';
+      for (let sy = -6.2; sy < -1.2; sy += 1.8) ctx.fillRect(-5.4, sy, 10.8, 0.6);
+      // the base/keyboard wedge
+      ctx.fillStyle = body;
+      ctx.beginPath();
+      ctx.moveTo(-9.5, 1); ctx.lineTo(9.5, 1); ctx.lineTo(8, 6.5); ctx.lineTo(-8, 6.5);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.stroke();
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';   // key rows
+      for (let ky = 0; ky < 2; ky++) ctx.fillRect(-6.5 + ky * 0.6, 2.2 + ky * 1.6, 13 - ky * 1.2, 0.9);
+      if (itemDef.damage === 'cracked') {   // a crack across the panel
+        ctx.strokeStyle = 'rgba(20,25,30,0.8)'; ctx.lineWidth = 0.8;
+        ctx.beginPath(); ctx.moveTo(-4.5, -6.5); ctx.lineTo(-0.5, -3.4); ctx.lineTo(1.5, -5.2); ctx.lineTo(5, -1.6); ctx.stroke();
+      } else if (itemDef.damage === 'scorched') {   // heat blooming out of the vent
+        ctx.fillStyle = 'rgba(30,20,14,0.55)';
+        ctx.beginPath(); ctx.ellipse(6, 4, 3.2, 1.6, 0, 0, Math.PI * 2); ctx.fill();
+      }
       ctx.restore();
       return;
     }
@@ -4231,6 +4358,44 @@ export class Renderer {
         ctx.fillStyle = '#f2d060';
         ctx.beginPath(); ctx.arc(4.5, -6, 2, 0, Math.PI * 2); ctx.fill();
         break;
+      case 'bluebox': {
+        // A phreaker's blue box: a blue case with a keypad and a green "armed"
+        // LED (the same green the eye flushes on a converted machine).
+        ctx.fillStyle = '#2f5f95';
+        this.roundRect(-8, -9, 16, 18, 2.5); ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = 1;
+        this.roundRect(-8, -9, 16, 18, 2.5); ctx.stroke();
+        // speaker/screen strip near the top
+        ctx.fillStyle = '#12283f';
+        ctx.fillRect(-5.5, -7, 11, 3.5);
+        // 2x3 keypad of little buttons
+        ctx.fillStyle = '#9fc4e6';
+        for (let ky = 0; ky < 3; ky++) for (let kx = 0; kx < 2; kx++) {
+          ctx.fillRect(-4.5 + kx * 5, -1.5 + ky * 3.4, 3.2, 2.2);
+        }
+        // green armed LED, bottom-right
+        ctx.fillStyle = '#46d95f';
+        ctx.beginPath(); ctx.arc(4.5, -7.2, 1.1, 0, Math.PI * 2); ctx.fill();
+        break;
+      }
+      case 'grass_seed': {
+        // A little pinch of seed throwing up green sprouts — life against the
+        // standing reserve. A brown mound with three blades rising from it.
+        ctx.fillStyle = '#7a5a34';
+        ctx.beginPath();
+        ctx.moveTo(-7, 7); ctx.quadraticCurveTo(0, 2, 7, 7); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = '#8fbf5a';
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(-3, 6); ctx.quadraticCurveTo(-6, -2, -4, -7); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, 6); ctx.quadraticCurveTo(0, -3, 1, -9); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(3, 6); ctx.quadraticCurveTo(6, -1, 5, -6); ctx.stroke();
+        // a couple of seed grains scattered at the base
+        ctx.fillStyle = '#d8c060';
+        ctx.beginPath(); ctx.ellipse(-1.5, 8, 1.3, 0.8, 0.3, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(2.5, 8.5, 1.3, 0.8, -0.3, 0, Math.PI * 2); ctx.fill();
+        break;
+      }
       case 'oar':
       case 'rope':
       case 'sail': {
@@ -4402,6 +4567,27 @@ export class Renderer {
         }
         ctx.fillStyle = itemDef.color;
         ctx.beginPath(); ctx.arc(-3.5, -2.5, 1, 0, Math.PI * 2); ctx.fill();
+        break;
+      }
+      case 'screwdriver': {
+        // Flat-blade: moulded handle with grip flutes, a steel shank, and a tip
+        // drawn as a wedge so the blade reads as flat rather than as a spike.
+        ctx.fillStyle = itemDef.color;
+        ctx.beginPath();
+        ctx.moveTo(-2, -8); ctx.lineTo(2, -8); ctx.lineTo(2.6, -1); ctx.lineTo(-2.6, -1);
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 0.8;
+        for (let f = -6; f <= -2; f += 2) { ctx.beginPath(); ctx.moveTo(-2.2, f); ctx.lineTo(2.2, f); ctx.stroke(); }
+        ctx.fillStyle = '#9aa3ad';                       // the collar under the handle
+        ctx.fillRect(-2.2, -1, 4.4, 1.6);
+        ctx.fillStyle = '#c3ccd6';                       // shank
+        ctx.fillRect(-0.9, 0.6, 1.8, 5.4);
+        ctx.fillStyle = '#e2e8ee';                       // the flat tip, wider than the shank
+        ctx.beginPath();
+        ctx.moveTo(-1.6, 6); ctx.lineTo(1.6, 6); ctx.lineTo(1.2, 8.4); ctx.lineTo(-1.2, 8.4);
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 0.7;  // a highlight down the shank
+        ctx.beginPath(); ctx.moveTo(-0.4, 1.2); ctx.lineTo(-0.4, 5.6); ctx.stroke();
         break;
       }
       case 'chip_fragment':

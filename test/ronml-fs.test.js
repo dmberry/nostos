@@ -15,7 +15,7 @@ import { runRonml } from '../src/game/ronml.js';
 // two files, and a writable `ob` scratch. cwd + scratch live in the closure the
 // way replSession holds them in the real terminal.
 function fakeCtx() {
-  const files = { aikey: ['access-ai-code.ml', 'factory-id.ml'], ob: [] };
+  const files = { aikey: ['access_ai_code.ml', 'factory_id.ml'], ob: [] };
   let cwd = 'aikey';
   return {
     station: 'ob',
@@ -40,16 +40,16 @@ function fakeCtx() {
 }
 
 test('a filename lexes to a file value (not a node)', () => {
-  const r = runRonml('factory-id.ml', fakeCtx());
+  const r = runRonml('factory_id.ml', fakeCtx());
   assert.ok(r.ok, r.text);
-  assert.equal(r.text, 'factory-id.ml');
+  assert.equal(r.text, 'factory_id.ml');
 });
 
 test('ls lists the card files on the default (aikey) drive', () => {
   const r = runRonml('ls', fakeCtx());
   assert.ok(r.ok, r.text);
-  assert.match(r.text, /factory-id\.ml/);
-  assert.match(r.text, /access-ai-code\.ml/);
+  assert.match(r.text, /factory_id\.ml/);
+  assert.match(r.text, /access_ai_code\.ml/);
 });
 
 test('cd ob then ls shows the (empty) scratch, not the card', () => {
@@ -60,13 +60,13 @@ test('cd ob then ls shows the (empty) scratch, not the card', () => {
 
 test('copy moves a file from the card to the ob scratch', () => {
   const ctx = fakeCtx();
-  const c = runRonml('copy factory-id.ml ob', ctx);
+  const c = runRonml('copy factory_id.ml ob', ctx);
   assert.ok(c.ok, c.text);
-  assert.equal(c.text, 'factory-id.ml');
-  assert.deepEqual(ctx._files.ob, ['factory-id.ml']);
+  assert.equal(c.text, 'factory_id.ml');
+  assert.deepEqual(ctx._files.ob, ['factory_id.ml']);
   // and now it lists on the ob drive
   runRonml('cd ob', ctx);
-  assert.match(runRonml('ls', ctx).text, /factory-id\.ml/);
+  assert.match(runRonml('ls', ctx).text, /factory_id\.ml/);
 });
 
 test('copy aikey still binds the sealed key token (polymorphism preserved)', () => {
@@ -76,16 +76,16 @@ test('copy aikey still binds the sealed key token (polymorphism preserved)', () 
 });
 
 test('copying to the sealed card is refused with a teaching error', () => {
-  const r = runRonml('copy factory-id.ml aikey', fakeCtx());
+  const r = runRonml('copy factory_id.ml aikey', fakeCtx());
   assert.ok(!r.ok);
   assert.match(r.text, /ERR:/);
   assert.match(r.text, /sealed/);
 });
 
 test('copy with no device left of it reports the file usage, not the key one', () => {
-  const r = runRonml('copy factory-id.ml', fakeCtx());
+  const r = runRonml('copy factory_id.ml', fakeCtx());
   assert.ok(!r.ok);
-  assert.match(r.text, /copy factory-id\.ml ob|a file to a device/);
+  assert.match(r.text, /copy factory_id\.ml ob|a file to a device/);
 });
 
 test('cd to an unknown drive errors', () => {
@@ -94,21 +94,21 @@ test('cd to an unknown drive errors', () => {
   assert.match(r.text, /ERR:/);
 });
 
-test('a hyphen-only identifier is still a node (OB-XXXX unaffected)', () => {
-  const r = runRonml('OB-BB05', fakeCtx());
+test('a hyphen-only identifier is still a node (OB_XXXX unaffected)', () => {
+  const r = runRonml('OB_BB05', fakeCtx());
   assert.ok(r.ok, r.text);
-  assert.equal(r.text, 'OB-BB05');
+  assert.equal(r.text, 'OB_BB05');
 });
 
 // ---- S2: the ELIZA transform (eliza <file>) --------------------------------
 
 test('eliza <file> runs the transform via ctx and returns the output file', () => {
   let called = null;
-  const ctx = { station: 'ob', session: {}, elizaTransform: (n) => { called = n; return { ok: true, out: 'root-access.ml' }; } };
-  const r = runRonml('eliza factory-id.ml', ctx);
+  const ctx = { station: 'ob', session: {}, elizaTransform: (n) => { called = n; return { ok: true, out: 'root_access.ml' }; } };
+  const r = runRonml('eliza factory_id.ml', ctx);
   assert.ok(r.ok, r.text);
-  assert.equal(called, 'factory-id.ml');
-  assert.equal(r.text, 'root-access.ml');
+  assert.equal(called, 'factory_id.ml');
+  assert.equal(r.text, 'root_access.ml');
 });
 
 test('eliza needs a file, not a bare word (bare eliza is a REPL mode, tested live)', () => {
@@ -119,8 +119,8 @@ test('eliza needs a file, not a bare word (bare eliza is a REPL mode, tested liv
 });
 
 test('eliza transform failure surfaces the ctx message', () => {
-  const ctx = { station: 'ob', session: {}, elizaTransform: () => ({ ok: false, msg: 'no factory-id.ml on the ob bench — copy it here first' }) };
-  const r = runRonml('eliza factory-id.ml', ctx);
+  const ctx = { station: 'ob', session: {}, elizaTransform: () => ({ ok: false, msg: 'no factory_id.ml on the ob bench — copy it here first' }) };
+  const r = runRonml('eliza factory_id.ml', ctx);
   assert.ok(!r.ok);
   assert.match(r.text, /ob bench/);
 });
@@ -129,23 +129,23 @@ test('eliza transform failure surfaces the ctx message', () => {
 
 test('forge <file> runs the ctx forge and returns the output file', () => {
   let called = null;
-  const ctx = { station: 'hermes', session: {}, forge: (n) => { called = n; return { ok: true, out: 'zeus-lightning.ml' }; } };
-  const r = runRonml('forge zeus-virus.ml', ctx);
+  const ctx = { station: 'hermes', session: {}, forge: (n) => { called = n; return { ok: true, out: 'zeus_lightning.ml' }; } };
+  const r = runRonml('forge zeus_virus.ml', ctx);
   assert.ok(r.ok, r.text);
-  assert.equal(called, 'zeus-virus.ml');
-  assert.equal(r.text, 'zeus-lightning.ml');
+  assert.equal(called, 'zeus_virus.ml');
+  assert.equal(r.text, 'zeus_lightning.ml');
 });
 
 test('forge failure surfaces the ctx message', () => {
   const ctx = { station: 'hermes', session: {}, forge: () => ({ ok: false, msg: 'forge needs a Trojan card in hand' }) };
-  const r = runRonml('forge zeus-virus.ml', ctx);
+  const r = runRonml('forge zeus_virus.ml', ctx);
   assert.ok(!r.ok);
   assert.match(r.text, /Trojan card/);
 });
 
 test('forge is a HERMES verb — refused at an obelisk', () => {
   const ctx = { station: 'ob', session: {}, forge: () => ({ ok: true, out: 'x' }) };
-  const r = runRonml('forge zeus-virus.ml', ctx);
+  const r = runRonml('forge zeus_virus.ml', ctx);
   assert.ok(!r.ok);
   assert.match(r.text, /isn't a command on this terminal/);
 });

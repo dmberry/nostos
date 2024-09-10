@@ -7,7 +7,7 @@ const TRACKED = new Set([
   'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
   'ShiftLeft', 'ShiftRight',
   'KeyE', 'Slash', 'Space', 'KeyQ', 'KeyH', 'KeyR', 'KeyG', 'KeyF', 'KeyI', 'KeyP', 'KeyZ', 'KeyJ',
-  'KeyK', 'KeyC', 'KeyM', 'KeyO', 'KeyV', 'KeyN', 'KeyB', 'KeyX', 'KeyT', 'BracketRight', 'Escape',
+  'KeyK', 'KeyC', 'KeyM', 'KeyO', 'KeyV', 'KeyN', 'KeyB', 'KeyX', 'KeyT', 'KeyU', 'KeyL', 'BracketRight', 'Escape',
   // ENTER was being asked for by the narrows (the coin slot, and the GAME OVER
   // card) but was never tracked, so consumePress('Enter') could not fire. Typing
   // into an HTML control is already guarded above, so this cannot eat a form.
@@ -269,6 +269,11 @@ export class Input {
     return this.consumePress('KeyR');
   }
 
+  // U: bluebox a downed machine into a gardener (see player.bluebox).
+  blueboxPressed() {
+    return this.consumePress('KeyU');
+  }
+
   // Which pocket slot (0-3) was just picked, or -1 if none this frame.
   pocketSelectPressed() {
     for (let i = 0; i < POCKET_KEYS.length; i++) {
@@ -279,6 +284,12 @@ export class Input {
 
   swapPressed() {
     return this.consumePress('KeyG');
+  }
+
+  // X: the OB spoofer — transmit as the tower you are standing under and take
+  // its garrison. Beside U (bluebox), the game's other in-world machine hack.
+  spooferPressed() {
+    return this.consumePress('KeyX');
   }
 
   dropPressed() {
@@ -336,8 +347,10 @@ export class Input {
     return this.consumePress('KeyC');
   }
 
-  phonePressed() {
-    return this.consumePress('KeyM');
+  // L: the laptop. Opens the machine you carry (docs/laptop-plan.md) — the one
+  // console that isn't bolted to a tower or a hilltop.
+  laptopPressed() {
+    return this.consumePress('KeyL');
   }
 
   weaponChartPressed() {

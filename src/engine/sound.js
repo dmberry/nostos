@@ -169,6 +169,33 @@ class Sound {
           [0.85, 0.96, 1.07].forEach((a) => beep(a, 0.05));   // S = · · ·
           break;
         }
+        // The laptop's keyboard: a dry mechanical CLICK, not a chime. The obelisk
+        // and HERMES answer every command with a musical verdict (keydrop /
+        // termerr / hermesok) because they are THEIR machines talking back at you.
+        // Your own laptop should not editorialise — it just takes the keystroke.
+        // A tiny noise tick for the contact plus a low thock for the keycap
+        // bottoming out; no pitch, so nothing reads as approval or refusal.
+        case 'keyclick': {
+          this._noiseBurst({ when: t, dur: 0.018, gain: 0.16, attack: 0.001, freq: 2600 * v, end: 1100 });
+          this._tone({ when: t, dur: 0.03, type: 'triangle', freq: 180 * v, end: 120, gain: 0.05, attack: 0.001 });
+          break;
+        }
+        // Per-keystroke tick while typing at the laptop. Much quieter than the
+        // click above and slightly random in pitch, so a fast line sounds like a
+        // keyboard rather than a metronome.
+        case 'keytype': {
+          const j = 0.9 + Math.random() * 0.25;
+          this._noiseBurst({ when: t, dur: 0.012, gain: 0.055, attack: 0.001, freq: 3000 * v * j, end: 1400 });
+          break;
+        }
+        // The same click, fractionally duller — the shell's answer landing. Used
+        // where a chime would otherwise fire, so a failed command still feels
+        // different without a machine tutting at you.
+        case 'keyclick_soft': {
+          this._noiseBurst({ when: t, dur: 0.022, gain: 0.10, attack: 0.001, freq: 1500 * v, end: 700 });
+          this._tone({ when: t, dur: 0.035, type: 'triangle', freq: 140 * v, end: 100, gain: 0.045, attack: 0.001 });
+          break;
+        }
         case 'blip': { // a soft rally touch for Calypso's pong — gentle, warm, a
           // sine not a square, so a long rally soothes rather than rattles.
           this._tone({ when: t, dur: 0.09, type: 'sine', freq: 620 * v, gain: 0.06, attack: 0.004 });
@@ -650,7 +677,7 @@ class Sound {
 
   // ---- synthesis helpers -------------------------------------------------
 
-  // The robot choir (RON-ML `sing`): schedules the opening of Dowland's
+  // The robot choir (AI-ML `sing`): schedules the opening of Dowland's
   // "Flow My Tears" as soft synth voices. Records the start time (both audio
   // and wall clock) so the robots' red lights can be flashed in time — see
   // choirElapsed() and the flash sync in main.js. Returns the piece length.

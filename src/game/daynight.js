@@ -53,7 +53,12 @@ export class DayNight {
     this.elapsed = ((total - this.startHour) / 24) * this.dayLength;
   }
 
-  // RON-ML `rewind`: the inverse of advance — claws elapsed game *hours*
+  // Testing helper (the lyre console): run the POSEIDON deadline to zero, so the
+  // purge and the whole blight/fog/shared-sight system can be exercised on demand
+  // without waiting out the clock. The natural activation in the hub then fires.
+  expire() { this.elapsed = DEADLINE_DAYS * this.dayLength; }
+
+  // AI-ML `rewind`: the inverse of advance — claws elapsed game *hours*
   // back out of the clock, pushing the POSEIDON deadline further off.
   // Clamped at `elapsed <= 0` (can't rewind before the run started), which
   // in turn naturally caps hoursLeft() at a full DEADLINE_DAYS*24 — no need

@@ -71,15 +71,18 @@ Leave the network up and the fronts meet and the island disappears under them
 from the towers outward. This is the core loop the feedback is asking for, and it
 is per-tower on purpose:
 
-> **Killing (or jamming) an obelisk freezes ITS front and lets that ground
-> recover.** Each tower you deal with visibly halts and reverses its own patch of
-> blight. So felling a tower is not an abstract objective — you watch the grey
-> stop spreading and the green come back around the wreck. Nine towers, nine
-> fronts; the island's survival is the sum of how many you stop.
+> **Killing (or jamming) an obelisk FREEZES its front where it stands — it does
+> NOT heal the ground.** (Decision, 2026-07-25: felling one tower must heal
+> nothing on its own, or the towers feel disposable.) The spread stops dead, but
+> the dead ground stays a scar until it is *actively* brought back — by the
+> player's grass seed or the W5 gardeners (below). So felling a tower is not an
+> abstract objective — you watch the grey stop spreading, and the scar it left is
+> yours to heal. Nine towers, nine frozen fronts; the island's survival is the
+> sum of how many you stop AND how much you reseed.
 
 Blighted ground also **stops restocking caches** and **stops the temples
 healing**, so the spread is not only cosmetic dread — it takes the map's
-resources with it. And a **tree standing on blighted ground dies** — its canopy
+resources with it. The blight also **runs off the coast into the water**: sea and river within a front go dark and stagnant (a poisoned green-grey wash), kept swimmable — only their look changes. And a **tree standing on blighted ground dies** — its canopy
 greys and drops, so the woods that gave you cover and firewood go bare as the
 grey reaches them. Not a number in the corner: the ground itself dying outward
 from every tower you have not yet dealt with.
@@ -96,7 +99,7 @@ its own, but the player also gets hands in it:
   grey and bring the green back behind them.
 
 ### 3. The knots — destroy, or JAM (this is where circuits live)
-- **Destroy** stays as it is: 5 OB-gun burns or an insane bomb fells a tower.
+- **Destroy** stays as it is: 5 OB_gun burns or an insane bomb fells a tower.
   Permanent, expensive, and it drops **one circuit board**. But W3 repair drones
   raise felled towers again (`robots.js:1495`), so destruction alone is a
   treadmill.
@@ -115,7 +118,7 @@ that already fired.
 
 ## Distinct from what already exists
 
-There is already a terminal freeze: RON-ML `loop OB-XXXX` pins a node in an
+There is already a terminal freeze: RON-ML `loop OB_XXXX` pins a node in an
 infinite loop, freezing it and its guards, no AI key needed (`ronml.js:443`), and
 obelisks carry a `frozen` flag. That is the **hacker's** way — it needs console
 access (an access chip) and it is about *combat/stealth* around one tower before
@@ -150,7 +153,7 @@ is online. They should coexist and read as two tools for two situations.
   tower halts its radius and lets the ground recover to what it was. Then hang the
   resource cost on it (blighted tiles suppress cache restock + temple healing).
   A terrain-mutation pass, and the most thematically load-bearing — but it
-  **stands alone**: it uses the OB-felling that already exists, so "kill the tower
+  **stands alone**: it uses the OB_felling that already exists, so "kill the tower
   to stop the spread" is a complete loop without J1 or J2. Core first (spread +
   recover + render), resource cost second.
 - **J5 — grass seed + gardener recovery.** A `grass_seed` item (found in caches
@@ -173,7 +176,7 @@ independent of J1–J5.
 
 **Build order (revised).** J3 first — it is the consequence that matters, and the
 per-tower "kill it to stop the spread" loop is complete on its own using existing
-OB-felling. Then J1 (jammer) gives a cheaper temporary way to halt a front and
+OB_felling. Then J1 (jammer) gives a cheaper temporary way to halt a front and
 puts circuits to work, and J2 (shared sight) makes cutting a tower felt in a
 second sense.
 
@@ -189,3 +192,43 @@ second sense.
   ends by the existing conditions.
 - **Reversibility of the terrain.** Fully reversible (halts + recovers) keeps it a
   pressure, not a permanent scar that makes a slow start unwinnable.
+  *(Superseded 2026-07-25: felling now FREEZES, does not auto-recover; recovery is
+  active only, grass seed or W5 gardener — see the build log. Not a slow-start trap
+  because felling still halts the spread; only the scar remains.)*
+
+## Design notes raised 2026-07-25 (to think through, not yet built)
+
+### J1 rethink — a "bluebox" robot-hack instead of a jammer
+The jammer as specced (a physical item that drops a tower offline) is **redundant**:
+we can already bring a tower down for real (destroy / RON-ML `crash` / RON-ML `loop`),
+so a temporary-offline item adds little. Better use for circuits, and it plugs
+straight into the blight system just built:
+
+- Build a **bluebox** from circuit boards — a reprogrammer, not a jammer.
+- The existing **`R` reprogram is broken** (David: "doesn't actually work") — replace
+  that flow. You cannot bluebox a hunting robot mid-fight; you first make it inert —
+  **stun it** (stun-gun), or catch it while it is **recharging / drained / otherwise
+  inert** — and then apply the bluebox.
+- A blueboxed robot is **turned to the blight**: its eyes go **GREEN** and it becomes
+  a gardener, tending/reseeding the dead ground. So circuits let you **build an army
+  of converted machines to fight the blight** — the enemy's own hunters refunctioned
+  into gardeners (thematically of a piece with standing down Calypso's guards, and
+  with the W5s already reseeding).
+- Open: does a blueboxed hunter reseed like a W5, or do something distinct? Cost in
+  circuits per conversion? Does it wear off (needs re-boxing) or is it permanent?
+  How does it read against the felled-tower/network-down gate the gardeners use?
+
+### Per-island networks — POSEIDON is Calypso-only right now
+The whole POSEIDON package (deadline → fog + shared sight + blight + W4 purge) is
+realized on **Ogygia (Calypso) only**. The other four daemons each rule their own
+island with their own network, and we have not designed what "their network wakes"
+does for each. Sketch per daemon, in character:
+- **POLYPHEMUS** (Aegilia) — a single vast **eye**, line-of-sight already. Its network
+  waking might be about *sight* (the whole island one cone) rather than blight.
+- **CIRCE** (Aeaea) — she **rewrites** what she takes (moly holds your shape). Her
+  network's threat could be transformation/terrain-rewrite, not greying.
+- **HELIOS** (Thrinacia) — the **sun** and the forbidden cattle. Heat / exposure /
+  a scorch rather than a blight?
+- **ITHACA** — home; likely no hostile network (the endgame).
+Decide whether each island reuses the blight system with a reskin, or gets its own
+consequence. Until then, the blight/fog/shared-sight code is Ogygia-gated in play.

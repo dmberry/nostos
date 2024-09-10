@@ -18,7 +18,7 @@ import { sfx } from '../engine/sound.js';
 // and tougher kills are worth more.
 export const SCORE = { tree: 1, animal: 3, robot: 10, wreck: 2, cache: 2, book: 5, fragment: 5 };
 
-// A robot the OB-gun's beam has corrupted into a "zombie" shrugs off every
+// A robot the OB_gun's beam has corrupted into a "zombie" shrugs off every
 // weapon except the bow and the wave gun — the only two builds precise
 // enough to hit whatever in it is still killable.
 export function zombieImmune(target, tool) {
@@ -31,7 +31,7 @@ function burnObelisk(player, tool, map, range) {
   let i = player.pockets.findIndex((s) => s && s.item === 'battery');
   let slots = player.pockets;
   if (i < 0 && player.backpack) { i = player.backpack.slots.findIndex((s) => s && s.item === 'battery'); slots = player.backpack.slots; }
-  if (i < 0) { player.say('The OB-gun needs a battery.'); return; }
+  if (i < 0) { player.say('The OB_gun needs a battery.'); return; }
   slots[i].qty -= 1; if (slots[i].qty <= 0) slots[i] = null;
   player.swingTimer = tool.swingCooldown;
   sfx.play('zap');
@@ -138,7 +138,7 @@ export function fire(player, tool, map, animals, robots) {
   // Gun practice steadies the hand: range grows a little with the level.
   const range = tool.range + player.xpLevel('guns') * 0.3;
 
-  // The OB-gun burns an obelisk if one is in front; otherwise it fires a
+  // The OB_gun burns an obelisk if one is in front; otherwise it fires a
   // piercing beam that cuts through every enemy in its path. The railgun
   // always pierces.
   if (tool.effect === 'burn') {
@@ -160,7 +160,7 @@ export function fire(player, tool, map, animals, robots) {
   for (const r of robots) consider(r, true);
 
   // The electro-gun's arc bites obelisks too — a slower way to fell a tower
-  // than the OB-gun, but it works. If one's in front and no closer than any
+  // than the OB_gun, but it works. If one's in front and no closer than any
   // machine, it takes the shot instead.
   let obTarget = null;
   let facTarget = null;
@@ -233,7 +233,7 @@ export function fire(player, tool, map, animals, robots) {
   }
 
   // Obelisk in the arc's path (electro-gun only): the bolt flies to it and
-  // scorches it, same as an OB-gun burn but from the electro-gun's cell.
+  // scorches it, same as an OB_gun burn but from the electro-gun's cell.
   if (obTarget) {
     const bx = obTarget.x + 0.5, by = obTarget.y + 0.5;
     map.projectiles = map.projectiles || [];

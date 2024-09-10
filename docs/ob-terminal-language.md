@@ -1,9 +1,50 @@
-# RON-ML — the obelisk terminal language (design)
+# AI-ML — the obelisk terminal language (design)
+
+*Renamed 2026-07-25 from **RON-ML** to **AI-ML**: the obelisk console is the machines'
+own OS (green), not RON's — the RON access chip only lets you IN. The module file is
+still `src/game/ronml.js` and the error class `RonmlError` (internal names unchanged).*
+
+*Additions v1.187 (on top of the original minimal spec):*
+- ***string literals** `"…"` (with `\"` / `\\` escapes) and an **`echo`** verb, so
+  `echo "hello world"` — or a bare `"hello world"` — is the language's hello-world;*
+- *the **`*command`** form (BBC-Micro filing-system style): `*verb arg arg` runs a verb
+  with LITERAL arguments (no `let`, no pipes, no variable lookup), which is what
+  separates a command from the ML — and fixes `*print map` (the topic `map` is literal,
+  not the `map` verb). Bare (non-`*`) lines are still full AI-ML expressions;*
+- *a bare plain-word typo now returns **"no such command"** with the error chime instead
+  of echoing back as an atom.*
+
+*Additions v1.188: **lambdas** — `fn x => e` (anonymous) and the `let f x = …` sugar,
+first-class and closing over their scope, so higher-order functions and top-level
+recursion work.*
+
+*Additions v1.196: **arithmetic + `if`**, which close the loop on "recursion for
+looping". Infix `+ - * /` (and `^` to join text), comparisons `== != < > <= >=` giving
+`true`/`false`, and `if c then a else b`. `-` lexes as the subtraction operator now
+that node codes and filenames are underscored (`OB_1A2B`, `factory_id.ml`), so `n - 1`
+parses cleanly. With a test and a base case, recursion terminates — e.g.
+`let fact n = if n == 0 then 1 else n * fact (n - 1)` then `fact 5` → 120. This keeps
+the spec's ethos intact: no mutable state, no imperative loops; a `while`/`ref` route
+is still deliberately NOT taken — the loop is the recursion.*
+
+*Additions v1.197: **sequencing + a side-effecting `echo`** (David's call — a deliberate
+step past "pure expression only"). `echo` is now ML's `print`: it emits a line to the
+run's output buffer AS IT EVALUATES and returns unit, rather than returning a string
+shown only at the top level. The `;` operator sequences — `e1 ; e2` runs `e1` for its
+effect, discards its value, then evaluates `e2`. Together they give live, step-by-step
+output from a recursion, the real-ML idiom the pure-value form could not express:
+`let go n = if n == 0 then echo "liftoff" else (echo n ; go (n - 1))` then `go 3`
+prints `3` / `2` / `1` / `liftoff` on their own lines (the terminal screen is
+`white-space: pre-wrap`, so the buffer's newlines render). This is a real move toward
+the imperative: `echo`/`;` are effects and statements in all but name. The rest of the
+language stays pure; only these two are effectful, and only the top-level run collects
+their output. (`while`/`ref`/mutable bindings are still NOT added — sequencing effects
+is as far as this goes.)*
 
 *Status: implemented in v0.84 (`src/game/ronml.js` + the REPL wired into `#obterminal`
 in `main.js`). The terminal UI + click-to-open shipped in v0.80 as a read-only VT220
 shell; this doc was the plan for making it do something, and is now also the reference
-for how it actually works. Shipped without lambdas, per §8. `sing` deviates from the
+for how it actually works. Originally shipped without lambdas, per §8 (now being added). `sing` deviates from the
 "kicked out on a hit" plan below: instead of an interrupt-on-hit mechanic, being
 jacked in keeps you fully hidden from the machines the whole time (`player.terminalSafe`),
 and typing `sing` deliberately drops you straight out of the terminal so you can watch
@@ -18,7 +59,7 @@ floppy disks and dead machines. A survivor who collects those fragments, finds a
 **AI key** (dropped by a destroyed W-factory), and jacks into an obelisk can type
 those fragments back in to make the machines do things they were never meant to.
 
-The language is **RON-ML**: a tiny, functional, ML-flavoured console language. It is
+The language is **AI-ML**: a tiny, functional, ML-flavoured console language. It is
 deliberately small enough that a player can *learn* it — not copy-paste blindly, but
 come to understand `let ... in`, function application, and the pipe, and start
 composing their own commands. That understanding is the real reward: late game, the
@@ -39,14 +80,14 @@ The whole language is ~7 primitives + 3 syntactic forms. That's the entire surfa
 area a player must learn.
 
 ### Values (implicit types — never written)
-- **node** — an obelisk/robot id, written as its hex, e.g. `OB-BB05`, `T2-1F` .
+- **node** — an obelisk/robot id, written as its hex, e.g. `OB_BB05`, `T2-1F` .
 - **key** — an access token (from `hack`, or the physical AI key you hold).
 - **num** — `30`, `0`.
-- **list** — `[OB-BB05, OB-1C0E]` (what `scan` returns).
+- **list** — `[OB_BB05, OB_1C0E]` (what `scan` returns).
 - **unit** — `()`, the result of an effect.
 
 ### Syntactic forms (all a player must learn)
-1. **Application by juxtaposition** — `sleep 30`, `hack OB-BB05`. (Not `sleep(30)`,
+1. **Application by juxtaposition** — `sleep 30`, `hack OB_BB05`. (Not `sleep(30)`,
    though we accept parens too, so beginners aren't punished.)
 2. **`let name = expr in expr`** — bind a result to reuse it. This is the one real
    idea to teach, and the HACK→CRASH chain forces it.
@@ -83,8 +124,8 @@ Two more worth adding once the base works:
 So the first real program the player writes is the two-step:
 
 ```ml
-let k = hack OB-BB05 in
-crash OB-BB05 k
+let k = hack OB_BB05 in
+crash OB_BB05 k
 ```
 
 Once they've typed that a few times, the pipe version is a small, satisfying step up:
@@ -169,8 +210,8 @@ Small and self-contained. Suggested new module `src/game/ronml.js`:
    lines.
 4. **Terminal REPL** — wire the existing `#obterminal` modal to accept typed input:
    an input line, an output log, command history (up/down). Print results/errors
-   RON-DOS style. Errors are *teaching* errors: `crash OB-BB05` alone →
-   `ERR: crash needs a key. try: let k = hack OB-BB05 in crash OB-BB05 k`.
+   RON-DOS style. Errors are *teaching* errors: `crash OB_BB05` alone →
+   `ERR: crash needs a key. try: let k = hack OB_BB05 in crash OB_BB05 k`.
 5. **Interrupt hook** — `player.takeDamage` (while a terminal is open) closes it with
    `CONNECTION LOST`.
 
@@ -212,7 +253,7 @@ original design and are kept for history.
 `sleep`, `repel`, `rewind`. None needs the AI key.
 
 - **`name` (new verb):** `name -> node`. Prints the code of the obelisk you are
-  jacked into (e.g. `OB-1A2B`) — a free read, like `scan`, so you can see which
+  jacked into (e.g. `OB_1A2B`) — a free read, like `scan`, so you can see which
   node you're on without scrolling the boot banner. Obelisk console only; at a
   HERMES relay it can echo the relay id (or stay ob-only — TBD).
 
@@ -229,7 +270,7 @@ key.
 
 ```ml
 copy aikey
-let k = hack OB-1A2B
+let k = hack OB_1A2B
 let d = decrypt aikey
 unlock k d
 ```
@@ -247,7 +288,7 @@ unlock k d
   alone — too easy.)
 
 Once `aikey` is in scope from `copy`, the tail can also be the single-expression
-form `let k = hack OB-1A2B in let d = decrypt aikey in unlock k d`; or line by
+form `let k = hack OB_1A2B in let d = decrypt aikey in unlock k d`; or line by
 line as above (persistent top-level `let`). Three real steps — copy, decrypt,
 unlock — is the point: the endgame key is earned, not typed.
 
@@ -303,7 +344,7 @@ the operator-scrawl voice of the existing code fragments:
 
 ```
 copy aikey
-let k = hack OB-XXXX
+let k = hack OB_XXXX
 let d = decrypt aikey
 unlock k d
 ```
@@ -325,7 +366,7 @@ echoes the binding (ML-style `val x = …`). So the fortress program can be ente
 as three sequential lines that follow one another:
 
 ```ml
-let k = hack OB-1A2B
+let k = hack OB_1A2B
 let d = decrypt aikey
 unlock k d
 ```
@@ -352,5 +393,5 @@ else is verb-level.
    Also add the AI key to the critical-uniques never-decay set (items.js / the
    decay list, per v0.91), and fire a one-off pickup toast on the AI key (the
    pickup handler in player.js) pointing at `copy aikey`.
-6. Help table, `read ronml` (hermes.js), the RON-ML manual (items.js), and §3/§4
+6. Help table, `read ronml` (hermes.js), the AI-ML manual (items.js), and §3/§4
    here updated to match.

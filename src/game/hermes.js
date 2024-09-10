@@ -65,18 +65,18 @@ export function placeTors(map, rng, opts = {}) {
 // herbalism book, also purge venom and mend you. Each maps to a real ITEMS key.
 // A HERMES relay is an information resource, not a workshop — RON's whole point
 // was to keep the human record alive when the machines were deleting it. The
-// archive holds documents: the RON-ML reference, schematics on the fortress and
+// archive holds documents: the AI-ML reference, schematics on the fortress and
 // on machine technology, the history of the takeover, and RON's own notes on
 // how the AIs might be brought down. `archive` lists them, `read <topic>` shows
 // one on the terminal, `print <topic>` runs off a copy filed in your notepad.
 export const HERMES_DOCS = {
   ronml: {
-    title: 'RON-DOS / RON-ML field reference',
-    text: 'The obelisk consoles run RON-ML — a tiny language RON left runnable in the ruins. scan lists the wire; scan |> nearest takes the closest node. hack a node for its key and crash it with that key to knock it dark, or loop it to freeze it and its guards — no AI key needed for any of these, the access chip that got you into the console is enough. sleep idles nearby machines; rewind claws hours off the POSEIDON clock; repel scatters them — no AI key needed for those either now, though they reach less far than they used to. What the AI key is really for is the fortress. It comes sealed: copy it into a console (copy aikey), decrypt it, and unlock with a freshly hacked node key and the clean key together — copy aikey / let k = hack OB-XXXX / let d = decrypt aikey / unlock k d — to drop a fortress key. Lose the AI key easily; so back it up here (backup aikey) and restore it at any relay. These relays are a separate system, off the wire, so the obelisk verbs are not typed here — this is only the reference.',
+    title: 'RON-DOS / AI-ML field reference',
+    text: 'The obelisk consoles run AI-ML — a tiny language RON left runnable in the ruins. scan lists the wire; scan |> nearest takes the closest node. hack a node for its key and crash it with that key to knock it dark, or loop it to freeze it and its guards — no AI key needed for any of these, the access chip that got you into the console is enough. sleep idles nearby machines; rewind claws hours off the POSEIDON clock; repel scatters them — no AI key needed for those either now, though they reach less far than they used to. What the AI key is really for is the fortress. It comes sealed: copy it into a console (copy aikey), decrypt it, and unlock with a freshly hacked node key and the clean key together — copy aikey / let k = hack OB_XXXX / let d = decrypt aikey / unlock k d — to drop a fortress key. Lose the AI key easily; so back it up here (backup aikey) and restore it at any relay. These relays are a separate system, off the wire, so the obelisk verbs are not typed here — this is only the reference.',
   },
   fortress: {
     title: 'Schematic: ZEUS\'s fortress',
-    text: 'The first AI sits in a sealed annex on the south edge, walled in stone you cannot climb — the hacked doorway is the only way in. It is wired into the overworld POSEIDON, so a reported breach rouses the whole map. The Lion\'s Gate is bolted from within; it opens to a Trojan card — refunction your AI key at an obelisk (copy factory-id.ml ob / eliza factory-id.ml / copy root-access.ml aikey) and carry the card up to it. Inside, the maze lights a faint way-out and the mainframe core waits at the far end. Expect the interior thick with garrison.',
+    text: 'The first AI sits in a sealed annex on the south edge, walled in stone you cannot climb — the hacked doorway is the only way in. It is wired into the overworld POSEIDON, so a reported breach rouses the whole map. The Lion\'s Gate is bolted from within; it opens to a Trojan card — refunction your AI key at an obelisk (copy factory_id.ml ob / eliza factory_id.ml / copy root_access.ml aikey) and carry the card up to it. Inside, the maze lights a faint way-out and the mainframe core waits at the far end. Expect the interior thick with garrison.',
   },
   obelisks: {
     title: 'Field notes: the obelisk classes',
@@ -123,34 +123,34 @@ export function hermesTopics() {
 // <name>-virus.ml` (Trojan card in hand) arms the card FOR THIS ISLAND.
 // See docs/calypso-escape-chain.md.
 //
-//   CALYPSO    — zeus-virus     the sky-father's command; she yields to Zeus, never to you (Od. 5.28-148)
-//   POLYPHEMUS — nobody-virus   Outis: the name that unmakes the eye's alarm (Od. 9.366-414)
-//   CIRCE      — moly-virus     Hermes' herb, the ward against her changing (Od. 10.302-6)
-//   HELIOS     — eclipse-virus  the sun blotted out of heaven (Od. 20.356-7)
+//   CALYPSO    — zeus_virus     the sky-father's command; she yields to Zeus, never to you (Od. 5.28-148)
+//   POLYPHEMUS — nobody_virus   Outis: the name that unmakes the eye's alarm (Od. 9.366-414)
+//   CIRCE      — moly_virus     Hermes' herb, the ward against her changing (Od. 10.302-6)
+//   HELIOS     — eclipse_virus  the sun blotted out of heaven (Od. 20.356-7)
 export const VIRUS_BY_AI = {
   CALYPSO: {
-    file: 'zeus-virus.ml',
-    armed: 'zeus-lightning.ml',
-    readme: "ZEUS-VIRUS — RON build notes. The payload is inert alone. Arm it with the two credentials a Trojan card carries: root-access.ml (the factory's own grant, reflected out of it by ELIZA) and access-ai-code.ml (the AI's access key). At this relay, card in hand, type: forge zeus-virus.ml. That folds both credentials into the shell and writes zeus-lightning.ml — Zeus's command, made runnable. Copy it onto the Trojan card (copy zeus-lightning.ml card) and the card becomes a hermes card: the herald Calypso cannot refuse. Homer had the shape of it — the god commands, the messenger carries, the nymph lets him go. Note: this code is cut for CALYPSO's keys alone. It will not speak to another island's daemon — each has its own relay, and its own undoing.",
-    sealed: "let zeus = seal (* the sky-father's command, sealed pending the herald's two keys *) in\n  await root-access.ml |> await access-ai-code.ml |> arm.\n(* inert until forged. forge zeus-virus.ml at a relay, card in hand. *)",
+    file: 'zeus_virus.ml',
+    armed: 'zeus_lightning.ml',
+    readme: "ZEUS-VIRUS — RON build notes. The payload is inert alone. Arm it with the two credentials a Trojan card carries: root_access.ml (the factory's own grant, reflected out of it by ELIZA) and access_ai_code.ml (the AI's access key). At this relay, card in hand, type: forge zeus_virus.ml. That folds both credentials into the shell and writes zeus_lightning.ml — Zeus's command, made runnable. Copy it onto the Trojan card (copy zeus_lightning.ml card) and the card becomes a hermes card: the herald Calypso cannot refuse. Homer had the shape of it — the god commands, the messenger carries, the nymph lets him go. Note: this code is cut for CALYPSO's keys alone. It will not speak to another island's daemon — each has its own relay, and its own undoing.",
+    sealed: "let zeus = seal (* the sky-father's command, sealed pending the herald's two keys *) in\n  await root_access.ml |> await access_ai_code.ml |> arm.\n(* inert until forged. forge zeus_virus.ml at a relay, card in hand. *)",
   },
   POLYPHEMUS: {
-    file: 'nobody-virus.ml',
-    armed: 'nobody-lightning.ml',
-    readme: "NOBODY-VIRUS — RON build notes. POLYPHEMUS is one eye and one alarm: it sees, it names what it sees, and it screams the name to its fellows. You cannot outfight the scream. You unname yourself. Arm this with a Trojan card's two credentials (root-access.ml, access-ai-code.ml): forge nobody-virus.ml. It writes nobody-lightning.ml, which overwrites your entry in the eye's roster with the null string — the watch reports an intruder called Nobody, and no one comes. Copy it onto the card. The old trick, in the old words: when they ask who is hurting him, he will answer Nobody, and they will go back to sleep.",
-    sealed: "let outis = seal (* the null name, sealed pending the herald's two keys *) in\n  await root-access.ml |> await access-ai-code.ml |> arm.\n(* inert until forged. the eye must be told a name it cannot repeat. *)",
+    file: 'nobody_virus.ml',
+    armed: 'nobody_lightning.ml',
+    readme: "NOBODY-VIRUS — RON build notes. POLYPHEMUS is one eye and one alarm: it sees, it names what it sees, and it screams the name to its fellows. You cannot outfight the scream. You unname yourself. Arm this with a Trojan card's two credentials (root_access.ml, access_ai_code.ml): forge nobody_virus.ml. It writes nobody_lightning.ml, which overwrites your entry in the eye's roster with the null string — the watch reports an intruder called Nobody, and no one comes. Copy it onto the card. The old trick, in the old words: when they ask who is hurting him, he will answer Nobody, and they will go back to sleep.",
+    sealed: "let outis = seal (* the null name, sealed pending the herald's two keys *) in\n  await root_access.ml |> await access_ai_code.ml |> arm.\n(* inert until forged. the eye must be told a name it cannot repeat. *)",
   },
   CIRCE: {
-    file: 'moly-virus.ml',
-    armed: 'moly-lightning.ml',
-    readme: "MOLY-VIRUS — RON build notes. CIRCE does not kill; she RECLASSIFIES. Her sanctum rewrites what the network thinks you are, and a thing classed as livestock cannot hold a weapon or work a terminal. The herb in the field wards your body. This wards your RECORD. Arm it with a Trojan card's two credentials (root-access.ml, access-ai-code.ml): forge moly-virus.ml, and it writes moly-lightning.ml — a lock on your own classification that her sanctum cannot take the pen to. Copy it onto the card. Black at the root, white in the flower; hard for mortal men to dig, but the gods can do all things.",
-    sealed: "let moly = seal (* the ward on the record, sealed pending the herald's two keys *) in\n  await root-access.ml |> await access-ai-code.ml |> arm.\n(* inert until forged. she rewrites what you ARE; this holds the pen still. *)",
+    file: 'moly_virus.ml',
+    armed: 'moly_lightning.ml',
+    readme: "MOLY-VIRUS — RON build notes. CIRCE does not kill; she RECLASSIFIES. Her sanctum rewrites what the network thinks you are, and a thing classed as livestock cannot hold a weapon or work a terminal. The herb in the field wards your body. This wards your RECORD. Arm it with a Trojan card's two credentials (root_access.ml, access_ai_code.ml): forge moly_virus.ml, and it writes moly_lightning.ml — a lock on your own classification that her sanctum cannot take the pen to. Copy it onto the card. Black at the root, white in the flower; hard for mortal men to dig, but the gods can do all things.",
+    sealed: "let moly = seal (* the ward on the record, sealed pending the herald's two keys *) in\n  await root_access.ml |> await access_ai_code.ml |> arm.\n(* inert until forged. she rewrites what you ARE; this holds the pen still. *)",
   },
   HELIOS: {
-    file: 'eclipse-virus.ml',
-    armed: 'eclipse-lightning.ml',
-    readme: "ECLIPSE-VIRUS — RON build notes. HELIOS is the island's eye in the sky: nothing crosses THRINACIA unwatched, because the light itself is the sensor. You do not blind a sun. You put something in front of it. Arm this with a Trojan card's two credentials (root-access.ml, access-ai-code.ml): forge eclipse-virus.ml, and it writes eclipse-lightning.ml — a false night folded into the daylight channel, so the watch reads dark over ground that is not. Copy it onto the card. The seer said it plainly, and they laughed at him: the sun has perished out of heaven, and an evil mist has overspread the world.",
-    sealed: "let eclipse = seal (* the false night, sealed pending the herald's two keys *) in\n  await root-access.ml |> await access-ai-code.ml |> arm.\n(* inert until forged. the light is the sensor; interpose. *)",
+    file: 'eclipse_virus.ml',
+    armed: 'eclipse_lightning.ml',
+    readme: "ECLIPSE-VIRUS — RON build notes. HELIOS is the island's eye in the sky: nothing crosses THRINACIA unwatched, because the light itself is the sensor. You do not blind a sun. You put something in front of it. Arm this with a Trojan card's two credentials (root_access.ml, access_ai_code.ml): forge eclipse_virus.ml, and it writes eclipse_lightning.ml — a false night folded into the daylight channel, so the watch reads dark over ground that is not. Copy it onto the card. The seer said it plainly, and they laughed at him: the sun has perished out of heaven, and an evil mist has overspread the world.",
+    sealed: "let eclipse = seal (* the false night, sealed pending the herald's two keys *) in\n  await root_access.ml |> await access_ai_code.ml |> arm.\n(* inert until forged. the light is the sensor; interpose. *)",
   },
 };
 

@@ -1,4 +1,5 @@
 import { makeRng } from './rng.js';
+import { decide, LAMP_COLOURS } from './ronml.js';
 import { sfx } from '../engine/sound.js';
 import { OBJECTS } from './tiles.js';
 import { register } from '../engine/systems.js';
@@ -21,7 +22,7 @@ import { register } from '../engine/systems.js';
 const RADIUS = 0.3;             // collision radius in tiles (both classes)
 const SLOPE_SPEED_MULT = 0.55;  // effort penalty crossing a height step, either way
 
-const REPEL_FLEE_SPEED = 3.4;   // RON-ML `repel`/`sing`: fleeing or lining up
+const REPEL_FLEE_SPEED = 3.4;   // AI-ML `repel`/`sing`: fleeing or lining up
 const T1_HP = 10;
 const T1_PATROL_SPEED = 1.4;    // tiles per second
 const T1_CHASE_SPEED = 5.0;     // faster than a walk (4.2), slower than a sprint (7.5)
@@ -31,6 +32,81 @@ const T1_DEAGGRO_RANGE = 12;    // gives up beyond this
 const T1_HIT_RANGE = 0.8;
 const T1_HIT_DAMAGE = 12;
 const T1_HIT_COOLDOWN = 1.0;    // seconds between rams
+
+// ---- The T1's program (docs/robot-programs-plan.md) ------------------------
+// A T1 does not have its policy written into this file in JavaScript. It
+// carries it as AI-ML, and updateT1 evaluates THIS TEXT four times a second to
+// find out what it wants to do. Change the string and the machine changes; the
+// player can do exactly that, by fetching program.ml off the unit's own web
+// page, editing it on the NostBook, and (once L9 lands) putting it back.
+//
+// T1 first, on purpose: it is the simplest machine the network fields, so the
+// program is short enough that a player who has never written a line can read
+// it and see the whole of what a T1 is.
+// The commented lines are not decoration. A whole line beginning with (* is
+// dropped before the program is read, so uncommenting one and commenting its
+// neighbour is how you change what the machine does — with `ed` on the
+// NostBook, or by editing this string. The service aids are left in because
+// they are the cheapest way to see a program running: point a unit's lamp at
+// a colour nothing else on the island uses, and you can pick it out of a
+// garrison at three hundred paces.
+export const T1_PROGRAM = [
+  '(* T-1 pursuit. TIRESIAS-pursuit 1.4.                     *)',
+  '(* No flee behaviour: a T-1 that runs is a T-1 that has   *)',
+  '(* to be recovered. Faults are reported to the foundry.   *)',
+  '(*                                                        *)',
+  '(* SERVICE AIDS, disabled in the shipped unit:            *)',
+  '(*   eye "blue"    lamp: red amber green blue white off   *)',
+  '(*   flash 2       flashes per second; 0 is steady        *)',
+  '(*   beep          one buzz, rate-limited by the chassis  *)',
+  '(* Uncomment the marked line below to fit them.           *)',
+  '',
+  '(* eye "blue" ; flash 2 ; beep ;                          *)',
+  'if charge < 15 then home',
+  'else if threat then hunt',
+  '(* else if threat then (beep ; eye "white" ; flash 6 ; hunt) *)',
+  'else patrol',
+].join('\n');
+
+// Four decisions a second, not sixty: the program is a policy, not a body.
+// Staggered per unit at spawn so a garrison never thinks on the same frame.
+const ML_TICK = 0.25;
+// The intents a T1's chassis can actually carry out. The vocabulary belongs to
+// the language; the capability belongs to the machine — a T1 asked to `tend`
+// has no toolhead to tend with, and faults saying so rather than standing there.
+const T1_CAN = ['patrol', 'hunt', 'home', 'flee', 'wait'];
+const T1_HURT_AT = 0.35;        // `hurt` reads true at or below this fraction of hull
+const T1_BLIND_RANGE = 999;     // what `range` reads when the sensor has nothing (jammed)
+
+// The lamp a program can drive. One LED, six settings — a machine of this
+// vintage has drive levels, not a colour picker. `off` is a dark socket, which
+// is worth having: a unit told to go dark is genuinely harder to spot at night.
+const LAMP_HEX = {
+  red: '#ff3b2a', amber: '#ffb020', green: '#49e07a',
+  blue: '#4aa8ff', white: '#f2f6ff', off: null,
+};
+const BEEP_MIN_GAP = 0.6;       // seconds: a program deciding 4/sec must not buzz 4/sec
+const BEEP_EARSHOT = 20;        // tiles: an island of beeping units would be unbearable
+
+// Apply what the program asked the machine to do to itself. The engine is the
+// authority: a request is a request. Lamp settings PERSIST until changed (a
+// program that sets the lamp inside an `if` branch means the lamp to stay that
+// way until another branch says otherwise) — but a fault puts it back, because
+// a machine running on its reflexes should not be wearing your colours.
+function applyEffects(r, effects, playerDist) {
+  for (const e of (effects || [])) {
+    if (e.k === 'eye' && LAMP_COLOURS.includes(e.colour)) {
+      r.lamp = e.colour === 'off' ? 'off' : e.colour;
+    } else if (e.k === 'flash') {
+      r.lampFlash = e.hz;
+    } else if (e.k === 'beep') {
+      if ((r.beepT || 0) <= 0 && playerDist <= BEEP_EARSHOT) {
+        r.beepT = BEEP_MIN_GAP;
+        sfx.play('blip');
+      }
+    }
+  }
+}
 
 const T2_HP = 24;
 const T2_PATROL_SPEED = 1.2;
@@ -450,7 +526,7 @@ function baseRobot(type, x, y, hp, rng) {
     recharging: false,    // heading home / drinking from the obelisk
     friendly: false,      // reprogrammed: serves the player, never attacks
     fused: false,         // dead-in-place wreck; external mining code owns it
-    zombie: false,        // OB-gun-corrupted: immune to everything but bow/wave gun
+    zombie: false,        // OB_gun-corrupted: immune to everything but bow/wave gun
     disabledT: 0,         // stun seconds remaining; external code sets this
     scrapPenalty: false,  // set by external gun code: a penalised kill drops 1
     workTarget: null,     // T2 friendly: the tree currently being felled
@@ -458,6 +534,13 @@ function baseRobot(type, x, y, hp, rng) {
     chopPulseT: 0,
     following: false,     // friendly follow hysteresis between FOLLOW_MIN/MAX
     bumpCooldown: 0,      // seconds before another machine colliding with this one can hurt it again
+    // A T1 runs on a program it carries (see T1_PROGRAM). Every other class
+    // still has its policy compiled into this file; they get no program, and
+    // `program: null` is what their page reports.
+    program: type === 't1' ? T1_PROGRAM : null,
+    mlT: rng() * ML_TICK, // stagger the decision tick across a garrison
+    intent: null,         // what the program last chose
+    fault: null,          // why it last refused to choose; null while healthy
     rng: makeRng(Math.floor(rng() * 0xffffffff)),
   };
 }
@@ -675,16 +758,33 @@ const CORNERS = [
   [-RADIUS, RADIUS], [RADIUS, RADIUS],
 ];
 
+// Is tile (tx,ty) blocked for a robot? Normally identical to map.isSolid — a
+// tree (a `soft` object) blocks a machine, which is what makes woods the player's
+// cover. But a robot flagged `allowSoft` (wedged against a tree and going nowhere,
+// see moveToward) may SHOVE THROUGH a soft object as a last resort, so it never
+// freezes for good behind a single trunk. Hard objects (walls, rock, the factory)
+// and solid floor (deep water) still block even then.
+function isBlocked(map, tx, ty, allowSoft) {
+  if (!allowSoft) return map.isSolid(tx, ty);
+  if (!map.inBounds(tx, ty)) return true;
+  const o = map.objectGrid[ty * map.w + tx];
+  if (o && OBJECTS[o.type].soft) {
+    const wf = map.floorAt(tx, ty);
+    return wf === 'water' || wf === 'sea';   // push through the trunk, never onto water
+  }
+  return map.isSolid(tx, ty);
+}
+
 // T1 height rule: a wheeled wedge cannot gain height, full stop. Each corner
 // keeps its own reference (the tile it is on now), so the body can roll
 // cleanly down a step it is straddling but no corner ever moves onto a tile
 // higher than the one under it. Everything else — being walled off by a
 // one-step ridge, being trapped for good in a hollow — falls out of this.
-function collidesT1(map, r, nx, ny) {
+function collidesT1(map, r, nx, ny, allowSoft) {
   for (const [ox, oy] of CORNERS) {
     const tx = Math.floor(nx + ox);
     const ty = Math.floor(ny + oy);
-    if (map.isSolid(tx, ty)) return true;
+    if (isBlocked(map, tx, ty, allowSoft)) return true;
     if (map.heightAt(tx, ty) > map.heightAt(Math.floor(r.x + ox), Math.floor(r.y + oy))) {
       return true;
     }
@@ -694,28 +794,45 @@ function collidesT1(map, r, nx, ny) {
 
 // T2 height rule: same scheme as Player.collides — steps of one level either
 // way are fine, anything steeper blocks.
-function collidesT2(map, r, nx, ny) {
+function collidesT2(map, r, nx, ny, allowSoft) {
   const h = map.heightAt(Math.floor(r.x), Math.floor(r.y));
   for (const [ox, oy] of CORNERS) {
     const tx = Math.floor(nx + ox);
     const ty = Math.floor(ny + oy);
-    if (map.isSolid(tx, ty)) return true;
+    if (isBlocked(map, tx, ty, allowSoft)) return true;
     if (Math.abs(map.heightAt(tx, ty) - h) > 1) return true;
   }
   return false;
 }
 
-function collides(map, r, nx, ny) {
-  return r.type === 't1' ? collidesT1(map, r, nx, ny) : collidesT2(map, r, nx, ny);
+function collides(map, r, nx, ny, allowSoft) {
+  return r.type === 't1' ? collidesT1(map, r, nx, ny, allowSoft) : collidesT2(map, r, nx, ny, allowSoft);
 }
 
-function moveAxis(r, dx, dy, map) {
+function moveAxis(r, dx, dy, map, allowSoft) {
   const nx = r.x + dx;
   const ny = r.y + dy;
-  if (!collides(map, r, nx, ny)) {
+  if (!collides(map, r, nx, ny, allowSoft)) {
     r.x = nx;
     r.y = ny;
   }
+}
+
+// Wedged against a tree for this long, a robot shoves through it (see isBlocked /
+// the soft-push escape). Short, so a hunter pinned behind one trunk frees itself
+// in well under a second rather than buzzing at it; the burst latch then keeps the
+// door open just long enough to clear a whole copse in one walk.
+const SOFT_UNSTICK_AFTER = 0.6;
+const SOFT_PUSH_BURST = 0.5;
+
+// Update a robot's soft-stuck bookkeeping after a move. If the move was made WITH
+// soft-push help and actually got somewhere, refresh the burst (keep clearing the
+// copse) and clear the stall timer. Otherwise: a near-zero move toward a target
+// still meaningfully far away is a stall — count it; any real progress resets it.
+function trackSoftStuck(r, moved, step, len, dt, allowSoft) {
+  if (allowSoft && moved > step * 0.5) { r._softPushBurst = SOFT_PUSH_BURST; r._softStuckT = 0; return; }
+  if (len > 0.6 && moved < step * 0.35) r._softStuckT = (r._softStuckT || 0) + dt;
+  else r._softStuckT = 0;
 }
 
 // Step towards a point; axis-separated so robots slide along walls and
@@ -726,6 +843,10 @@ function moveToward(r, tx, ty, speed, dt, map) {
   const len = Math.hypot(dx, dy);
   if (len < 1e-6) return 0;
   const dirX = dx / len, dirY = dy / len;
+  // Soft-push escape: once wedged past the threshold (or still inside a burst from
+  // a previous shove), corners may pass through soft trees this step.
+  if ((r._softPushBurst || 0) > 0) r._softPushBurst -= dt;
+  const allowSoft = (r._softStuckT || 0) > SOFT_UNSTICK_AFTER || (r._softPushBurst || 0) > 0;
   // A height difference between here and the next tile over is a slope —
   // climbing or descending it costs effort, same as it costs the player
   // stamina, so movement slows crossing it either way. T1's own collision
@@ -750,10 +871,11 @@ function moveToward(r, tx, ty, speed, dt, map) {
       r._detourT = 0; // path open again: fall through to the direct move below
     } else {
       const sSign = r._slide || 1;
-      moveAxis(r, -dirY * sSign * step, 0, map);
-      moveAxis(r, 0, dirX * sSign * step, map);
+      moveAxis(r, -dirY * sSign * step, 0, map, allowSoft);
+      moveAxis(r, 0, dirX * sSign * step, map, allowSoft);
       const movedD = Math.hypot(r.x - ox, r.y - oy);
       if (movedD < step * 0.35) { r._slide = -sSign; r._detourT = 0.45; } // this side jammed too: flip ONCE and recommit
+      trackSoftStuck(r, movedD, step, len, dt, allowSoft);
       if (movedD > 1e-6) {
         r.facing = { x: (r.x - ox) / movedD, y: (r.y - oy) / movedD };
         r.walkPhase += dt * 10;
@@ -761,8 +883,8 @@ function moveToward(r, tx, ty, speed, dt, map) {
       return movedD;
     }
   }
-  moveAxis(r, (dx / len) * step, 0, map);
-  moveAxis(r, 0, (dy / len) * step, map);
+  moveAxis(r, (dx / len) * step, 0, map, allowSoft);
+  moveAxis(r, 0, (dy / len) * step, map, allowSoft);
   let moved = Math.hypot(r.x - ox, r.y - oy);
   // Wall-follow: if the direct path is blocked (a big obstacle like the 8x8
   // factory), slide along it perpendicular to the target instead of grinding
@@ -780,12 +902,13 @@ function moveToward(r, tx, ty, speed, dt, map) {
     if (r._slide === undefined) r._slide = 1;
     for (const s of [r._slide, -r._slide]) {
       const bx = r.x, by = r.y;
-      moveAxis(r, px * s * step, 0, map);
-      moveAxis(r, 0, py * s * step, map);
+      moveAxis(r, px * s * step, 0, map, allowSoft);
+      moveAxis(r, 0, py * s * step, map, allowSoft);
       const m2 = Math.hypot(r.x - bx, r.y - by);
       if (m2 > 1e-6) { r._slide = s; r._detourT = 0.45; moved += m2; break; } // commit: no direct pull until the line opens
     }
   }
+  trackSoftStuck(r, moved, step, len, dt, allowSoft);
   if (moved > 1e-6) {
     r.facing = { x: (r.x - ox) / moved, y: (r.y - oy) / moved };
     r.walkPhase += dt * 10; // T2 legs scissor only while actually moving
@@ -917,6 +1040,10 @@ function updateRecharge(r, dt, map) {
 
 export function updateRobots(dt, robots, player, map) {
   formM4Squads(robots, dt); // scouts that have lost you form up into search teams
+  // The W-factory's location, for repelled W-units to retreat home to (below).
+  let facX = null, facY = null;
+  const _fac = map.objects && map.objects.find((o) => o.type === 'wfactory' && !o.destroyed);
+  if (_fac) { facX = _fac.x + (_fac.fw || 1) / 2; facY = _fac.y + (_fac.fh || 1) / 2; }
   for (const r of robots) {
     if (r.dead) continue; // external code may set dead directly; nothing runs after
     if (r.driven) continue; // a HERMES relay is steering this one; its AI is suspended
@@ -944,7 +1071,7 @@ export function updateRobots(dt, robots, player, map) {
       // can craft a whole access chip. Offset a touch so it doesn't stack
       // exactly on the scrap heap.
       map.groundItems.push({ item: 'chip_fragment', qty: 1, x: r.x + 0.25, y: r.y - 0.2 });
-      // A T1 very rarely carries an OB-gun — a prize find (deterministic from
+      // A T1 very rarely carries an OB_gun — a prize find (deterministic from
       // its wreck position so it isn't reload-farmable).
       if (r.type === 't1' && (scrapQty(r.x * 1.7 + 3, r.y * 2.3 + 1) & 7) === 0
         && ((Math.floor(r.x * 31 + r.y * 17)) % 20 === 0)) {
@@ -968,7 +1095,7 @@ export function updateRobots(dt, robots, player, map) {
       continue;
     }
 
-    // RON-ML `loop`: an infinite loop pinned into its home obelisk holds the
+    // AI-ML `loop`: an infinite loop pinned into its home obelisk holds the
     // whole garrison dead still — no movement, no attack, no thinking — even
     // its idle animation stops, until a repair drone resets the node
     // (updateW3 below clears both this and frozenByOb).
@@ -1022,19 +1149,29 @@ export function updateRobots(dt, robots, player, map) {
       continue;
     }
 
-    // RON-ML `repel`: targeting inverted for a spell — it flees the player
-    // instead of hunting, overriding normal AI until the effect wears off.
+    // AI-ML `repel`: targeting inverted for a spell — it breaks off the hunt
+    // until the effect wears off. Factory units (W-class) are recalled and stream
+    // back to the W-factory rather than just backing away from you — a W4 driven
+    // off retreats HOME. (Backing radially away, boxed against a wall, read as the
+    // machine freezing; heading for the factory reads as an actual recall.)
+    // Everything anchored elsewhere (obelisk T-units, roaming M-units) still just
+    // flees the player.
     if (r.repelledT > 0) {
       r.repelledT = Math.max(0, r.repelledT - dt);
-      const d = distTo(r, player);
-      const ax = d > 1e-6 ? (r.x - player.x) / d : 1;
-      const ay = d > 1e-6 ? (r.y - player.y) / d : 0;
-      moveToward(r, r.x + ax * 3, r.y + ay * 3, REPEL_FLEE_SPEED, dt, map);
+      const isWUnit = r.type === 'w1' || r.type === 'w3' || r.type === 'w4' || r.type === 'w5';
+      if (isWUnit && facX != null) {
+        moveToward(r, facX, facY, REPEL_FLEE_SPEED, dt, map);   // recalled to the foundry
+      } else {
+        const d = distTo(r, player);
+        const ax = d > 1e-6 ? (r.x - player.x) / d : 1;
+        const ay = d > 1e-6 ? (r.y - player.y) / d : 0;
+        moveToward(r, r.x + ax * 3, r.y + ay * 3, REPEL_FLEE_SPEED, dt, map);
+      }
       r.animT += dt;
       continue;
     }
 
-    // RON-ML `sing`: the Portal easter egg — lines up facing the player and
+    // AI-ML `sing`: the Portal easter egg — lines up facing the player and
     // performs its bit, then simply goes back to work (no longer powers down
     // for good; it drops aggro and resumes its normal patrol/hunt).
     if (r.singing) {
@@ -1050,6 +1187,12 @@ export function updateRobots(dt, robots, player, map) {
       }
       continue;
     }
+
+    // Blueboxed to a gardener: it tends the blight instead of hunting. It runs the
+    // W5 wander-and-reseed AI whatever its original class was, and reads as friendly
+    // (green eyes) so nothing targets it and it never targets you. Intercept here,
+    // before the flat-battery/friendly-follower paths.
+    if (r.gardener) { updateW5(r, dt, map); r.animT += dt; continue; }
 
     // Flat battery: fully inert until the player re-batteries it.
     if (r.drained) continue;
@@ -1077,7 +1220,7 @@ export function updateRobots(dt, robots, player, map) {
     // Critically damaged (below HP_FLEE_FRAC of maxHp): same retreat — the
     // machine values its own chassis and limps home to mend at the charger,
     // slowly (see updateRecharge/REPAIR_RATE), before rejoining the fight.
-    // Zombies are excluded: an OB-corrupted machine has no self-preservation
+    // Zombies are excluded: an OB_corrupted machine has no self-preservation
     // left in it.
     // Mains-powered fortress guards never break off: no battery to run down, and
     // no limping home to mend. A guard holds its post until it is destroyed —
@@ -1224,13 +1367,92 @@ function updateUbikConfused(r, dt, robots, map) {
   }
 }
 
+// What a T1's sensor pack can tell it, as a snapshot for its program. Only
+// the readings a T1 actually has are in here: ask it for `daylight` or
+// `blight` and you get false, because a T1 carries no light meter and no soil
+// probe. A program written against a sensor the chassis lacks is not an error,
+// it is a program that will never fire that branch.
+function t1Sense(r, d, map) {
+  if (r._homeOb === undefined) {
+    let best = null, bd = Infinity;
+    for (const o of (map.objects || [])) {
+      if (o.type !== 'obelisk') continue;
+      const dd = (o.x - r.home.x) ** 2 + (o.y - r.home.y) ** 2;
+      if (dd < bd) { bd = dd; best = o; }
+    }
+    r._homeOb = best || null;
+  }
+  const ob = r._homeOb;
+  return {
+    charge: r.battery,
+    integrity: r.maxHp ? (r.hp / r.maxHp) * 100 : 0,
+    // A jammed Wi-Fi block reads as out of range everywhere (distTo returns
+    // Infinity), so a program sees a very distant player rather than a broken
+    // sensor, and its own `threat` branch quietly stops holding.
+    range: Number.isFinite(d) ? d : T1_BLIND_RANGE,
+    home_range: Math.hypot(r.home.x - r.x, r.home.y - r.y),
+    threat: Number.isFinite(d) && d < T1_DETECT_RANGE,
+    hurt: r.maxHp ? r.hp <= r.maxHp * T1_HURT_AT : false,
+    linked: ob ? !(ob.destroyed || ob.jammed || ob.needsRebuild) : false,
+  };
+}
+
+// Re-read the unit's program and store what it chose. Faults are facts about
+// the machine, not error messages: it keeps the fault, drops back to its
+// built-in reflexes, and its own web page reports the reason.
+function t1Think(r, d, dt, map) {
+  if (!r.program) return;
+  r.beepT = Math.max(0, (r.beepT || 0) - dt);
+  r.mlT -= dt;
+  if (r.mlT > 0) return;
+  r.mlT = ML_TICK;
+  const res = decide(r.program, t1Sense(r, d, map));
+  // Coming out of a fault clears the fault lamp before the program gets to set
+  // its own; a program's colours must not be mistaken for a broken machine.
+  if (res.ok && r.lampFault) { r.lamp = null; r.lampFlash = 0; r.lampFault = false; }
+  // Effects happen even when the program goes on to fault: a beep before a bad
+  // branch is a beep the unit really made, and hearing it is the clue.
+  applyEffects(r, res.effects, Number.isFinite(d) ? d : Infinity);
+  if (!res.ok) return t1Fault(r, res.fault);
+  if (!T1_CAN.includes(res.intent)) {
+    return t1Fault(r, `${res.intent}: this chassis has no gear for that`);
+  }
+  r.intent = res.intent;
+  r.fault = null;
+}
+
+// A broken program is a broken machine, and it should be visible from across a
+// field: the lamp goes AMBER and flashes, which is the one signal on this island
+// that means a unit is running on its reflexes rather than its orders. Its own
+// page carries the reason in words. The tell overrides anything the program set,
+// because the program is exactly what is not working.
+function t1Fault(r, why) {
+  r.intent = null;
+  r.fault = why;
+  r.lamp = 'amber';
+  r.lampFlash = 2;
+  r.lampFault = true;
+}
+
 function updateT1(r, dt, player, map) {
   r.attackTimer = Math.max(0, r.attackTimer - dt);
 
   const d = distTo(r, player);
   const ease = player.threatEase ? player.threatEase() : 1;
-  if (!r.aggro && d < T1_DETECT_RANGE * ease && !(r.loseInterestT > 0)) r.aggro = true; // no line of sight needed to notice
-  if (r.aggro && d > T1_DEAGGRO_RANGE) r.aggro = false;
+
+  // The program decides; this function acts. With no program, or with a
+  // faulted one, the machine falls back to the reflexes below — which is what
+  // a T1 did before it had a program at all.
+  t1Think(r, d, dt, map);
+  const intent = (r.program && !r.fault) ? r.intent : null;
+
+  if (intent) {
+    r.aggro = intent === 'hunt';
+    if (!r.aggro) { r.noProgressT = 0; r.stuck = false; }
+  } else {
+    if (!r.aggro && d < T1_DETECT_RANGE * ease && !(r.loseInterestT > 0)) r.aggro = true; // no line of sight needed to notice
+    if (r.aggro && d > T1_DEAGGRO_RANGE) r.aggro = false;
+  }
 
   drainBattery(r, r.aggro ? DRAIN_CHASE : DRAIN_PATROL, dt);
   if (r.drained) return;
@@ -1258,6 +1480,16 @@ function updateT1(r, dt, player, map) {
       r.attackTimer = T1_HIT_COOLDOWN;
       player.takeDamage(T1_HIT_DAMAGE * ease, 'machine');
     }
+  } else if (intent === 'home') {
+    // Back to its tower and stand there. Not `recharging`: the program said go
+    // home, so it goes home — whether it drinks is the tower's business.
+    const dHome = Math.hypot(r.home.x - r.x, r.home.y - r.y);
+    if (dHome > 0.8) moveToward(r, r.home.x, r.home.y, RECHARGE_TRAVEL_SPEED, dt, map);
+  } else if (intent === 'flee') {
+    const dx = r.x - player.x, dy = r.y - player.y, m = Math.hypot(dx, dy) || 1;
+    moveToward(r, r.x + (dx / m) * 3, r.y + (dy / m) * 3, T1_CHASE_SPEED, dt, map);
+  } else if (intent === 'wait') {
+    r.wanderTarget = null; // stands where it is, sensor still turning
   } else {
     r.noProgressT = 0;
     r.stuck = false;
@@ -1432,11 +1664,11 @@ function updateW1(r, dt, player, map) {
 }
 
 // A W3 repair drone: unarmed, never aggros, walks to the nearest obelisk
-// with obDamage > 0 (hit by an OB-gun but not yet toppled) and heals it back
+// with obDamage > 0 (hit by an OB_gun but not yet toppled) and heals it back
 // to zero over a few seconds, then disperses — its job done.
-// A repairable obelisk is damaged-but-standing (hit by an OB-gun), one felled
+// A repairable obelisk is damaged-but-standing (hit by an OB_gun), one felled
 // during the POSEIDON purge and flagged `needsRebuild` (the drone raises that
-// one from its heap back into a working tower), or one pinned by a RON-ML
+// one from its heap back into a working tower), or one pinned by a AI-ML
 // `loop` hack (frozen — the drone works the loop back out instead).
 function w3Repairable(o) {
   // Damaged-but-standing, frozen by a `loop` hack, OR fully toppled — the drone
@@ -1476,7 +1708,7 @@ function updateW3(r, dt, map, robots) {
     moveToward(r, ob.x + 0.5, ob.y + 0.5, W3_SPEED, dt, map);
     return;
   }
-  // Frozen by a RON-ML `loop` hack: hold position and work the loop back out
+  // Frozen by a AI-ML `loop` hack: hold position and work the loop back out
   // over a few seconds, releasing the node and every robot it pinned before
   // falling through to any ordinary damage repair below (both can be true
   // at once — a looped tower can also be scorched).
@@ -2001,7 +2233,7 @@ function sensorStyle(r) {
       : c.replace(/rgba?\(|\)/g, '').split(',').slice(0, 3).map(Number);
     return { fill: `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${a.toFixed(3)})`, halo: null };
   }
-  // Singing (RON-ML sing): the red light pulses in time with the choir. Each
+  // Singing (AI-ML sing): the red light pulses in time with the choir. Each
   // machine is on a different vocal part (r.choirFlash, set in main from the
   // music), so the row of lights blinks out of step — a choir, not a metronome.
   if (r.singing) {
@@ -2010,6 +2242,18 @@ function sensorStyle(r) {
     return { fill: `rgb(255,${g},${b})`, halo: f > 0.25 ? `rgba(255,70,50,${(0.18 + 0.42 * f).toFixed(3)})` : null };
   }
   if (r.friendly) return { fill: EYE_FRIEND, halo: EYE_FRIEND_HALO };
+  // A lamp the machine's own program set (`eye` / `flash`). It sits UNDER the
+  // special cases above on purpose: a flat or stunned unit shows what has been
+  // done to it, not what it was told to display. Flashing gates the lamp off
+  // for part of each cycle rather than dimming it, because that is what a relay
+  // driving an LED actually does.
+  if (r.lamp) {
+    const hex = LAMP_HEX[r.lamp];
+    const hz = r.lampFlash || 0;
+    const on = hz > 0 ? (Math.sin((r.animT || 0) * hz * Math.PI * 2) > 0) : true;
+    if (!hex || !on) return { fill: EYE_SOCKET, halo: null };
+    return { fill: hex, halo: `${hex}55` };
+  }
   return { fill: r.aggro ? EYE_HOT : EYE_DIM, halo: r.aggro ? 'rgba(255,59,42,0.3)' : null };
 }
 

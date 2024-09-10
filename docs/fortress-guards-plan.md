@@ -183,7 +183,7 @@ a `daemonsDown` tally counts felled daemons. Then a **fireworks level-up modal**
 count, score, dismissable (click/space) — it does NOT end the run. Verified: 24
 machines powered down, score +700, alarm cleared, modal draws (77 particles).
 *Still to come (the richer confrontation): ZEUS speaks, the secret word, and
-letting bombs/electro-gun/OB-gun damage the core too (melee-only for now).*
+letting bombs/electro-gun/OB_gun damage the core too (melee-only for now).*
 
 Original plan: **Stage 4** — the core confrontation (the AI speaks; break it → "1 of 4").
 

@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { createWorld, registerWorld, getWorld, allWorlds, switchWorld } from '../src/game/world.js';
 
 test('createWorld stores entity arrays BY REFERENCE, not copies', () => {
-  const robots = [{ id: 'r1' }], animals = [], obeliskObjs = [{ code: 'OB-0001' }];
+  const robots = [{ id: 'r1' }], animals = [], obeliskObjs = [{ code: 'OB_0001' }];
   const w = createWorld('calypso', { robots, animals, obeliskObjs });
   assert.equal(w.robots, robots);            // same object, not a clone
   assert.equal(w.animals, animals);

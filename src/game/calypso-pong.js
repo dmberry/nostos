@@ -1,6 +1,6 @@
 // CALYPSO — the pong you are not allowed to win.
 //
-// The ball is the zeus-virus. You are trying to put it past her, into her core:
+// The ball is the zeus_virus. You are trying to put it past her, into her core:
 // deliver the message and you are free of Ogygia. She is the defence, and she
 // NEVER misses — because your winning means losing you from the island, and that
 // is the one thing she will not permit. So she keeps the volley going, gentle and

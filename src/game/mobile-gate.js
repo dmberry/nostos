@@ -1,9 +1,9 @@
-// Mobile fallback. postAI is a keyboard/mouse game and isn't playable on a
+// Mobile fallback. NostOS is a keyboard/mouse game and isn't playable on a
 // phone, so on a touch device we skip loading the game (main.js never runs)
 // and show this gate: a friendly note plus a working Walkman for the
 // soundtrack. Everything visual is drawn with the SAME code the game uses —
 // real cassettes (Renderer.drawCassette) in the deck and rack, real machines
-// (robots.js drawRobot) dancing above — so it looks like postAI, not a
+// (robots.js drawRobot) dancing above — so it looks like NostOS, not a
 // mock-up. Switchable World / Backspace / Fortress colour themes.
 
 import { TAPES } from './items.js';
@@ -452,7 +452,7 @@ export function initMobileGate(mode = 'gate') {
     const r = new Renderer(cv);
     const ctx = cv.getContext('2d');
     ctx.save(); ctx.translate(120, 78); ctx.scale(5.2, 5.2);
-    r.drawCassette({ color: t.color || '#c9a44a' }, 0);
+    r.drawCassette({ color: t.color || '#c9a44a', label: `${t.artist} — ${t.title}` }, 0);
     ctx.restore();
     card.appendChild(cv);
     const a = document.createElement('div'); a.className = 'mg-artist'; a.textContent = t.artist;

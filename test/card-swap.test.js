@@ -37,7 +37,7 @@ test('swapItem: card IN HAND with pockets full — swaps in place, nothing lost'
 });
 
 test('swapItem: the HERMES-side final refunction (trojan->hermes) in hand, full — safe too', () => {
-  // copy zeus-lightning.ml card at a relay runs the SAME fsRefunctionCard path,
+  // copy zeus_lightning.ml card at a relay runs the SAME fsRefunctionCard path,
   // so the "no room / lost card" failure can't happen there either.
   const p = stub({
     hands: 'trojan_key',

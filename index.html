@@ -179,15 +179,47 @@
   /* Obelisk terminal — a VT220-ish green CRT. */
   #obterminal { display: none; position: fixed; inset: 0; z-index: 20;
     background: rgba(0,0,0,0.72); align-items: center; justify-content: center; }
-  /* RON's own OS — warm amber. One shell drives both faces of it: the obelisk
-     console (RON-ML, jacked into POSEIDON's hardware with a chip) and the HERMES
-     relays (RON's own hilltop stations). It is the same operating system, the
-     resistance's, so it wears one colour. Cold green belongs to the AIs — see
-     #aios, the no-key POSEIDON OS, which is untouched by this. */
+  /* These are TWO DIFFERENT operating systems and wear different colours on
+     purpose, so a player reads at a glance which they are at. The OBELISK console
+     is the AI's OWN OS, running on the machines' hardware — GREEN phosphor. The
+     RON access-key hack is only what lets you IN to it; it does not make it RON's.
+     (With no chip you get the same AI system locked out: #aios, the untouchable
+     MAGENTA wall of data.) The HERMES relays ARE RON's own kit, a separate OS,
+     and wear warm AMBER — the .hermes overrides below repaint the CRT. Green =
+     the machines' terminals; amber = the resistance's. */
+  /* The NostBook wears its own chassis: the same beige lid, bezel, badge and
+     deck that Netscape and pico sit in, because it is the same machine. The
+     green CRT bezel belongs to the obelisks' consoles, not to a laptop on your
+     knees. Applied as a class so only the laptop gets it. */
+  /* The chassis wrappers are in the terminal's markup always, and do NOTHING
+     until the NostBook is the terminal: an obelisk console is a green tube in a
+     stone tower and must not grow a beige lid. `display: contents` makes the
+     wrappers vanish from layout entirely, so the OB/HERMES CRT is laid out
+     exactly as it was before the chassis existed. */
+  #obterminal .lap, #obterminal .lap-lid, #obterminal .lap-bezel { display: contents; }
+  #obterminal .lap-brand, #obterminal .lap-led, #obterminal .lap-base { display: none; }
+  #obterminal.nostbook { background: #0a0d12; }
+  /* THE FIX: the inert rule above sets `display: contents`, and the shared
+     chassis rules set background/padding but never a display — so the lid box
+     stayed removed from layout and the screen ran edge to edge with a deck
+     floating under it. Wearing the chassis means putting the boxes back. */
+  #obterminal.nostbook .lap { display: flex; flex-direction: column; align-items: center; }
+  #obterminal.nostbook .lap-lid, #obterminal.nostbook .lap-bezel { display: block; }
+  #obterminal.nostbook .lap-brand, #obterminal.nostbook .lap-led { display: block; }
+  #obterminal.nostbook .lap-base { display: block; }
+  /* A laptop panel is not a tube: no scanlines over the NostBook's own screen. */
+  #obterminal.nostbook .crt::after { display: none; }
+  /* Inside the lid it is a flat screen, not a tube: no thick tube border, no
+     barrel, and the phosphor glow goes with it. The scanline/curve furniture
+     that sells a CRT reads as wrong on a laptop panel. */
+  #obterminal.nostbook .crt { width: min(880px, 84vw); height: min(560px, 66vh);
+    background: #0d1512; border: 0; border-radius: 2px;
+    box-shadow: inset 0 0 40px rgba(0,0,0,0.55); }
+  #obterminal.nostbook .crt-hint { color: #6f7f76; }
   #obterminal .crt {
     width: min(680px, 88vw); height: min(460px, 76vh);
-    background: #140c02; border: 14px solid #15150f; border-radius: 20px;
-    box-shadow: 0 0 0 2px #000, inset 0 0 70px rgba(0,0,0,0.9), inset 0 0 130px rgba(232,150,40,0.09);
+    background: #04120a; border: 14px solid #15150f; border-radius: 20px;
+    box-shadow: 0 0 0 2px #000, inset 0 0 70px rgba(0,0,0,0.9), inset 0 0 130px rgba(40,255,120,0.08);
     padding: 24px 28px; position: relative; overflow: hidden;
     display: flex; flex-direction: column;
   }
@@ -196,35 +228,48 @@
   #obterminal-body { display: flex; flex-direction: column; flex: 1; min-height: 0; }
   #obterminal-screen { flex: 1; min-height: 0; overflow-y: auto; margin: 0 0 8px; padding-right: 4px;
     user-select: text; -webkit-user-select: text; cursor: text;
-    color: #e6a53a; white-space: pre-wrap;
-    font: 13px/1.55 ui-monospace, 'Courier New', monospace; text-shadow: 0 0 4px rgba(230,150,40,0.7); }
+    color: #4fe07a; white-space: pre-wrap;
+    font: 13px/1.55 ui-monospace, 'Courier New', monospace; text-shadow: 0 0 4px rgba(80,230,130,0.7); }
   #obterminal-inputrow { display: flex; align-items: baseline; flex-shrink: 0; position: relative; }
   /* Autocomplete ghost: the typed prefix is transparent (spacer), the
-     suggested suffix is faded amber. Only shown once the manual's been read. */
+     suggested suffix is faded phosphor. Only shown once the manual's been read. */
   #obterminal-ghost { position: absolute; top: 0; left: 0; pointer-events: none;
     white-space: pre; font: 13px ui-monospace, 'Courier New', monospace;
-    color: rgba(230,175,90,0.32); text-shadow: 0 0 4px rgba(230,150,40,0.35); }
+    color: rgba(120,230,160,0.32); text-shadow: 0 0 4px rgba(80,230,130,0.35); }
   #obterminal-ghost .typed { color: transparent; }
-  #obterminal-prompt { color: #e6a53a; margin-right: 6px;
-    font: 13px ui-monospace, 'Courier New', monospace; text-shadow: 0 0 4px rgba(230,150,40,0.7); }
+  #obterminal-prompt { color: #4fe07a; margin-right: 6px;
+    font: 13px ui-monospace, 'Courier New', monospace; text-shadow: 0 0 4px rgba(80,230,130,0.7); }
   #obterminal-input { flex: 1; background: transparent; border: none; outline: none;
-    color: #f4c987; font: 13px ui-monospace, 'Courier New', monospace; text-shadow: 0 0 4px rgba(230,150,40,0.7); caret-color: #e6a53a; }
+    color: #8ff0a8; font: 13px ui-monospace, 'Courier New', monospace; text-shadow: 0 0 4px rgba(80,230,130,0.7); caret-color: #4fe07a; }
   #obterminal .crt-hint { position: absolute; bottom: 12px; right: 20px;
-    color: rgba(230,150,40,0.4); font: 11px ui-monospace, monospace; }
-  #obterminal-connect { display: none; color: #e6a53a; font: 14px ui-monospace, monospace;
-    text-shadow: 0 0 4px rgba(230,150,40,0.7); }
+    color: rgba(80,230,130,0.4); font: 11px ui-monospace, monospace; }
+  #obterminal-connect { display: none; color: #4fe07a; font: 14px ui-monospace, monospace;
+    text-shadow: 0 0 4px rgba(80,230,130,0.7); }
   #obterminal-connect .connect-label { margin-bottom: 12px; letter-spacing: 0.1em; }
-  #obterminal-connect .connect-track { height: 16px; border: 1px solid rgba(230,150,40,0.5);
-    background: rgba(230,150,40,0.06); }
-  #obterminal-bar { height: 100%; width: 0%; background: rgba(230,150,40,0.55);
-    box-shadow: 0 0 8px rgba(230,150,40,0.6); transition: none; }
-  /* HERMES relays run the same OS as the obelisk console; the .hermes class now
-     carries only the relay-only solar-cell gauge, top-right of the CRT. */
+  #obterminal-connect .connect-track { height: 16px; border: 1px solid rgba(80,230,130,0.5);
+    background: rgba(80,230,130,0.06); }
+  #obterminal-bar { height: 100%; width: 0%; background: rgba(80,230,130,0.55);
+    box-shadow: 0 0 8px rgba(80,230,130,0.6); transition: none; }
+  /* HERMES relays wear amber — RON's own kit, told apart from the green obelisk
+     console at a glance. The .hermes class repaints the CRT and carries the
+     relay-only solar-cell gauge, top-right. */
+  #obterminal.hermes .crt {
+    background: #140c02;
+    box-shadow: 0 0 0 2px #000, inset 0 0 70px rgba(0,0,0,0.9), inset 0 0 130px rgba(232,150,40,0.09);
+  }
+  #obterminal.hermes #obterminal-screen { color: #e6a53a; text-shadow: 0 0 4px rgba(230,150,40,0.7); }
+  #obterminal.hermes #obterminal-ghost { color: rgba(230,175,90,0.32); text-shadow: 0 0 4px rgba(230,150,40,0.35); }
+  #obterminal.hermes #obterminal-prompt { color: #e6a53a; text-shadow: 0 0 4px rgba(230,150,40,0.7); }
+  #obterminal.hermes #obterminal-input { color: #f4c987; text-shadow: 0 0 4px rgba(230,150,40,0.7); caret-color: #e6a53a; }
+  #obterminal.hermes .crt-hint { color: rgba(230,150,40,0.4); }
+  #obterminal.hermes #obterminal-connect { color: #e6a53a; text-shadow: 0 0 4px rgba(230,150,40,0.7); }
+  #obterminal.hermes #obterminal-connect .connect-track { border-color: rgba(230,150,40,0.5); background: rgba(230,150,40,0.06); }
+  #obterminal.hermes #obterminal-bar { background: rgba(230,150,40,0.55); box-shadow: 0 0 8px rgba(230,150,40,0.6); }
   #obterminal-batt { display: none; }
   #obterminal.hermes #obterminal-batt { display: block; position: absolute; top: 14px; right: 22px; z-index: 2;
     font: 11px ui-monospace, 'Courier New', monospace; color: #e6a53a; letter-spacing: 0.04em;
     text-shadow: 0 0 4px rgba(230,150,40,0.6); pointer-events: none; }
-  /* RON-ML map readout — a green schematic of the AI's territory. */
+  /* AI-ML map readout — a green schematic of the AI's territory. */
   #ronmap { display: none; position: fixed; inset: 0; z-index: 22;
     background: rgba(0,0,0,0.82); align-items: center; justify-content: center; }
   #ronmap .crt { width: min(560px, 92vw); background: #04120a;
@@ -242,7 +287,7 @@
   #ronmap-legend b { font-weight: 700; }
   #ronmap .crt-hint { color: rgba(80,230,130,0.45); font: 11px ui-monospace, monospace; margin-top: 6px; text-align: right; }
   /* Notepad — a real paper notebook you flip through (not a console dump),
-     collecting any lore fragment flagged worth keeping (not just RON-ML),
+     collecting any lore fragment flagged worth keeping (not just AI-ML),
      opened by the `notes` command or the N key. Deliberately NOT green-CRT
      styled, so it reads as your own scrawled reference rather than the
      machine's. */
@@ -328,6 +373,20 @@
   #nokiaphone #ph-close { font: bold 12px ui-monospace, monospace; background: transparent;
     color: #2b3420; border: none; padding: 0 2px; cursor: pointer; line-height: 1; }
   #nokiaphone #ph-close:hover { color: #10120c; }
+  /* Silent mode wears the SCREEN's own look: a bell drawn as inline SVG in the
+     same dark-on-green as the bars, the battery and the X. It is SVG rather than
+     a bell character on purpose — every Unicode bell (U+1F514 and friends) is an
+     emoji and renders as a full-colour sticker on a monochrome LCD, which is the
+     thing this replaced. Crossed through when silent. */
+  #nokiaphone #ph-mute { background: transparent; color: #2b3420; border: none;
+    padding: 0 2px; cursor: pointer; line-height: 1; opacity: 0.85;
+    position: relative; display: flex; align-items: center; }
+  #nokiaphone #ph-mute svg { display: block; width: 12px; height: 12px; fill: currentColor; }
+  #nokiaphone #ph-mute:hover { opacity: 1; }
+  #nokiaphone #ph-mute.muted { opacity: 0.55; }
+  /* The slash: a rotated rule across the bell, so it reads at LCD size. */
+  #nokiaphone #ph-mute.muted::after { content: ''; position: absolute; left: 50%; top: 50%;
+    width: 15px; height: 1.5px; background: #2b3420; transform: translate(-50%, -50%) rotate(-45deg); }
   #nokiaphone .ph-tabs { display: flex; gap: 7px; margin: 7px 0 5px; }
   #nokiaphone .ph-tabs button { flex: 1; font: bold 11px ui-monospace, monospace; letter-spacing: 0.08em;
     background: transparent; color: #2b3420; border: 1px solid rgba(43,52,32,0.5);
@@ -529,9 +588,12 @@
       <tr><td>Click the forcefield</td><td>Arm or disarm it in place, wherever it's carried — no need to hold it</td></tr>
       <tr><td>Click the electro-compass</td><td>Arm or disarm it in place — stays on until you drop it</td></tr>
       <tr><td>Click the pack badge</td><td>Opens the full backpack panel (same as <kbd>I</kbd>)</td></tr>
-      <tr><td><kbd>Enter</kbd> (in a terminal)</td><td>Runs the typed RON-ML command; <kbd>&uarr;</kbd>/<kbd>&darr;</kbd> recall previous commands</td></tr>
+      <tr><td><kbd>Enter</kbd> (in a terminal)</td><td>Runs the typed AI-ML command; <kbd>&uarr;</kbd>/<kbd>&darr;</kbd> recall previous commands</td></tr>
       <tr><td><kbd>R</kbd></td><td>Reprogram a drained (battery-flat) robot standing next to you — costs a battery; otherwise reads the first book in your pockets</td></tr>
-      <tr><td><kbd>C</kbd></td><td>Craft (OB-gun, or a wave gun once you have eight circuit boards)</td></tr>
+      <tr><td><kbd>U</kbd></td><td>Bluebox a <b>downed</b> machine (stunned, drained, or recharging) beside you into a green-eyed gardener — costs a circuit board; needs a bluebox built first</td></tr>
+      <tr><td><kbd>X</kbd></td><td>Transmit as the obelisk you are standing under (<b>OB spoofer</b> + a battery) — every unit <b>homed to that tower</b> takes its orders from you</td></tr>
+      <tr><td><kbd>L</kbd></td><td>Open the <b>NostBook</b> (its UNIX shell, AI-ML, and Netscape)</td></tr>
+      <tr><td><kbd>C</kbd></td><td>Craft (OB_gun; wave gun with eight circuit boards; night-vision goggles; bluebox; repair a broken NostBook with three circuit boards)</td></tr>
     </table>
 
     <h3>Survival</h3>
@@ -611,13 +673,15 @@
       <tr><td>T3</td><td>Rare, and unlike a T1/T2 it never chases: a <b>wheeled sentinel</b> — a T2's trunk on a T1's undercarriage — that camps near its tower with a pair of <b>always-lit orange laser eyes</b>. It waits, unnoticed, until it actually gets a clear shot; the eyes flare, a charge-line joins them, and the twin volley lands at roughly double a W4's bolt, then a long quiet recovery. Get in close and it only rolls back far enough to keep the shot lined up; at point-blank range it claws instead.</td></tr>
     </table>
     <p>Every hunting machine — T1, T2, T3, W1, W4 — genuinely needs to <b>see</b> you: break its line of sight behind a wall or a hill for a few seconds straight and it gives up the chase and wanders off, only re-noticing you later if you wander back within range. Hiding is a real tactic, not just running far enough. The <b>T3</b> takes this furthest: unlike the others it never notices you by proximity alone, only by an actual clear line of sight, so staying out of its sight lines in the first place is the whole game against it.</p>
-    <p>Whatever is in your hand can be swung at them, even nothing at all — bare fists land a weak hit, a proper tool or blade lands a much harder one. Your penknife barely scratches them. <b>RON</b> — a resistance calling itself Reality or Nothing, whether or not it's still out there — hid weapons in crates inside the buildings: search them (<kbd>E</kbd>) for crowbars, bats, machetes, and if you are lucky the guns: a <b>stun-gun</b> (drops a machine cold for a while), an <b>electro-gun</b> (destroys a machine outright in a shower of sparks, scares off nearby animals, and its arc even scorches <b>obelisks</b> — a slower way to fell a tower than the OB-gun, but it works; its internal cell slowly self-charges while carried, so it never stays flat for long), a <b>pistol</b> or a <b>shotgun</b> (holes in anything, but gunfire ruins the salvage). Guns are dead weight without <b>batteries, ammo, or shells</b>, hidden in the same crates. None of them shoot through a wall — a solid object blocks a shot exactly like it blocks a step. Pulling the trigger with nothing in your sights still fires — and still spends the round.</p>
+    <p>Whatever is in your hand can be swung at them, even nothing at all — bare fists land a weak hit, a proper tool or blade lands a much harder one. Your penknife barely scratches them. <b>RON</b> — a resistance calling itself Reality or Nothing, whether or not it's still out there — hid weapons in crates inside the buildings: search them (<kbd>E</kbd>) for crowbars, bats, machetes, and if you are lucky the guns: a <b>stun-gun</b> (drops a machine cold for a while), an <b>electro-gun</b> (destroys a machine outright in a shower of sparks, scares off nearby animals, and its arc even scorches <b>obelisks</b> — a slower way to fell a tower than the OB_gun, but it works; its internal cell slowly self-charges while carried, so it never stays flat for long), a <b>pistol</b> or a <b>shotgun</b> (holes in anything, but gunfire ruins the salvage). Guns are dead weight without <b>batteries, ammo, or shells</b>, hidden in the same crates. None of them shoot through a wall — a solid object blocks a shot exactly like it blocks a step. Pulling the trigger with nothing in your sights still fires — and still spends the round.</p>
     <p>On defence, the crates sometimes hide <b>shields</b>. Just <b>carrying</b> one protects you — no need to hold it, and a faint deflector ring shows around you while it's up. A <b>riot shield</b> absorbs a laser from any direction, but it is only sheet metal: enough blows and it caves in to scrap. A rarer <b>mirror shield</b> throws the shot straight back to <b>destroy the machine that fired it</b>, but every reflection heats it — press it under sustained fire and it glows red, stops bouncing shots back, and finally melts into a lump of scrap (let the fire ease and it cools off again). Rarest of all is the <b>forcefield</b> — but it's the one exception that needs a deliberate switch: <b>click it</b> in whichever slot it's sitting in (hand, pocket, or pack) to <b>arm</b> it. Once armed and carried, a green energy shell wraps right around you that nothing — shot or blow — can get through, burning a battery a minute (faster under heavy fire, since every blow it eats costs extra charge) and pulling a fresh one from your kit when a cell dies; with none left, the field drops until you feed it one. Click it again any time to disarm it and stop the drain.</p>
     <p>Every machine runs on a battery: hunting drains it and they crawl home to their obelisk to recharge. One that gets stuck runs flat where it stands. A flat machine can be <b>reprogrammed</b> (<kbd>R</kbd>, costs a battery) — it turns friendly, follows you, and a friendly T2 fells trees for you — or, if you'd rather just be rid of it, it can be <b>destroyed</b> like any other kill: it can't fight back while flat, and it still drops scrap.</p>
-    <p>The obelisks <b>can</b> be brought down. Carry a stun-gun, an electro-gun and a Wi-Fi block together and you're prompted to build an <b>OB-gun</b> (<kbd>C</kbd>): five burns topple a tower into a heap of circuit boards, batteries, scrap, and an <b>access chip</b> — every tower you fell always leaves a chip, so bringing one down hands you the means to jack into the others. A rare <b>insane bomb</b> can level one on its own (and it, too, drops the chip). Every tower is assigned one of eight circuit numbers when the world is built, so toppling every obelisk always gets you a complete set of one to eight — collect them and you can build a <b>wave gun</b> (<kbd>C</kbd>), which fans laser fire through a whole crowd at once. <b>Clear an island's towers and you have broken its network</b> — but the island is not finished until its <b>daemon</b> is (see <b>The sea</b>), and the run is not finished until every daemon is down and you have come home to Ithaca. Run out the countdown first and POSEIDON wakes: every surviving tower lights up and links to its neighbours in a web of bright blue lasers, and the factory throws wave after wave of W4s at you. But it isn't hopeless — <b>topple a tower while POSEIDON is blazing and the whole web collapses</b>, shutting the purge down for a reprieve, until a <b>repair drone</b> reaches the wreck and raises the tower again. Keep knocking towers down faster than they can be rebuilt and you can still win outright, even during the purge.</p>
-    <p>Each obelisk has a small <b>terminal screen</b> on it. Walk up and <b>click the screen itself</b> to jack in — but you need an <b>access chip</b> to do anything. You get chips two ways: felling any obelisk always drops one, and every machine you destroy sheds a <b>chip fragment</b> — collect eight and press <kbd>C</kbd> to assemble a whole chip. Carry a chip (you don't have to hold it) and clicking opens a channel: a connect bar runs, then a live <b>amber console</b> — RON's own operating system, the same one the hilltop HERMES relays run — and while you're logged in the obelisk <b>hides you from the machines</b>. Click a terminal with no chip and you get the AI's own magenta console instead — a wall of moving data you can't use. Carry the <b>electro-compass</b> and <b>click it</b> to arm it — it stays armed until you drop it. Once armed, your aim marker becomes a small cluster of needles, one for each nearest thing worth finding, colour-coded: blue for the factory, green for an obelisk, yellow for a dropped backpack, orange for a dropped OB-gun.</p>
-    <p>The console at the terminal runs <b>RON-ML</b> — a tiny language the resistance left scattered through the ruins as runnable scraps, half command and half operator's note. It is a little <b>ML top-level</b>: type a command and it runs, and a bare <code>let x = e</code> (no <code>in</code>) binds a value that lasts the rest of your visit, so you can build a program line by line. <b>Reading and hacking need no AI key</b> — the chip that got you in is enough. Type <code>scan</code> to list the obelisks on the wire, <code>scan |&gt; nearest</code> to pipe that straight to the closest, <code>name</code> for the node you're on. <code>loop node</code> pins an infinite loop into a tower, freezing it and its garrison where they stand until a repair drone works the loop back out. <code>hack node</code> hands you that node's own key, and only with it does <code>crash node key</code> knock it dark for a while — <code>let k = hack OB-XXXX in crash OB-XXXX k</code> is the two-step spelled out. <code>sleep 30</code>, <code>repel</code>, and <code>rewind 3</code> (only before POSEIDON comes online) buy you room, though they reach less far than they used to. The <b>AI key</b> (from a wrecked W-factory) is now needed for one thing only, the <b>fortress</b>: it comes sealed, so <code>copy aikey</code> to bring it into the console, <code>decrypt</code> it, and <code>unlock</code> with a hacked node key and the clean key together to drop a <b>fortress key</b> — <code>copy aikey</code> / <code>let k = hack OB-XXXX</code> / <code>let d = decrypt aikey</code> / <code>unlock k d</code>. That recipe is <b>not</b> in <code>help</code>; you find it on a scrap in the ruins. <code>print aikey</code> stamps a spare key at your feet, and an AI key <b>never rots on the ground</b>, so you can stash copies. The fragments you find teach the rest one idea at a time, and each real command copies itself into your <b>notepad</b> — a general page-collector: type <code>notes</code>, or press <kbd>N</kbd> anywhere, to flip through it (arrow keys, the <b>&lsaquo; &rsaquo;</b> on the top bar, or the <b>Contents</b> drop-down). Find and read <b>the RON-DOS Operator's Manual</b> and the console starts <b>autocompleting</b> verbs — faded ghost text you accept with <kbd>Tab</kbd> (or <kbd>&rarr;</kbd> at the line end). <code>map</code> pulls up a schematic of the AI's whole territory; <code>print map</code> runs off a <b>physical copy</b> you pick up and <b>click in your inventory</b> to unfold anywhere. On a <b>HERMES relay</b> you can <code>backup aikey</code> and <code>restore aikey</code>: RON keeps a copy of your key off the AI's hardware, so a bad death needn't cost you it. Get something wrong and the terminal tells you what to try — it's built to teach, not to gatekeep. There's also a secret word, never spelled out anywhere — find it and the terminal drops you back into the world to watch what it does.</p>
-    <p>The OB-gun's beam is just as final against a machine as against a tower: any robot caught in the line is <b>wiped out on the spot</b>, whatever its class — though, like any gunfire, it ruins most of the salvage. The limit is ammunition: every burn spends a battery, and batteries are better saved for the towers themselves.</p>
+    <p>There is a second way to turn a machine, and it is what <b>circuit boards</b> are for once POSEIDON's blight is loose: the <b>bluebox</b>, soldered from a couple of boards (<kbd>C</kbd>). You cannot bluebox a machine that is still hunting — <b>stun</b> one first (the stun-gun), or catch one <b>drained</b> or <b>recharging</b> — then press <kbd>U</kbd> beside it. It spends a circuit board, its eye flushes <b>green</b>, and it turns into a <b>gardener</b>: it stops fighting for good and walks the dead ground reseeding it, the same as a W5. So the boards a felled tower drops become a way to raise a green army against the blight — the machines that wrecked the island set to healing it. (It is a real drain on circuits, one board a splice, weighed against the wave gun that wants all eight.)</p>
+    <p>The <b>OB spoofer</b> takes the opposite trade. Where the bluebox is surgical and safe — one machine at a time, and it has to be down already — the spoofer is a transmitter that impersonates a whole tower. Stand under an obelisk, press <kbd>X</kbd>, and it spends a battery to speak in that tower's voice: every unit <b>homed to that node</b> turns and takes its orders from you. Standing in the open under a live eye is the cost, and knowing whether the garrison is worth a cell is what the <b>NostBook</b> is for — a tower's own page on the machines' web lists the units homed to it, so you read first and transmit second.</p>
+    <p>The obelisks <b>can</b> be brought down. Carry a stun-gun, an electro-gun and a Wi-Fi block together and you're prompted to build an <b>OB_gun</b> (<kbd>C</kbd>): five burns topple a tower into a heap of circuit boards, batteries, scrap, and an <b>access chip</b> — every tower you fell always leaves a chip, so bringing one down hands you the means to jack into the others. A rare <b>insane bomb</b> can level one on its own (and it, too, drops the chip). And the <b>robot-sword</b> cuts a tower down in melee — about ten strokes, slower than the electro-gun's arc, and you have to stand right under the eye to do it; no other blade bites the alloy. Every tower is assigned one of eight circuit numbers when the world is built, so toppling every obelisk always gets you a complete set of one to eight — collect them and you can build a <b>wave gun</b> (<kbd>C</kbd>), which fans laser fire through a whole crowd at once. <b>Clear an island's towers and you have broken its network</b> — but the island is not finished until its <b>daemon</b> is (see <b>The sea</b>), and the run is not finished until every daemon is down and you have come home to Ithaca. Run out the countdown first and <b>POSEIDON</b> wakes (on Calypso's island of Ogygia at least — the other daemons run their own networks) and the towers stop being separate machines and become one organism. A <b>fog</b> drops over the whole island so you can see only a short way — <b>night-vision goggles</b> (found, or crafted from five torches and a circuit board) are the one thing that pierces it. The towers <b>pool their sight</b>, so stepping into any one tower's view turns every hunter that can reach you toward you at once. And a <b>blight</b> creeps outward from every live tower, greying the living ground to dead "standing reserve", killing the trees on it and darkening the water it runs into — while the factory throws wave after wave of W4s. It isn't hopeless: <b>felling or jamming a tower freezes its blight and cuts it from the net</b> — break the chain and the fog thins, the shared sight loosens, and the spread stops. But felling heals nothing on its own; the dead ground stays a scar until you sow <b>grass seed</b> on it a square at a time, or the reprogrammed <b>W5 gardeners</b> reseed it once the network link is down. Keep knocking towers down faster than the repair drones raise them and you win outright, even mid-purge.</p>
+    <p>Each obelisk has a small <b>terminal screen</b> on it. Walk up and <b>click the screen itself</b> to jack in — but you need an <b>access chip</b> to do anything. You get chips two ways: felling any obelisk always drops one, and every machine you destroy sheds a <b>chip fragment</b> — collect eight and press <kbd>C</kbd> to assemble a whole chip. Carry a chip (you don't have to hold it) and clicking opens a channel: a connect bar runs, then a live <b>green console</b> — the AI's <b>own</b> operating system, running on the machines' hardware; the access chip is only what gets you <i>in</i> to it (the warm-<b>amber</b> HERMES relays up on the hilltops are a <b>separate</b> system, RON's own — the colour tells them apart). While you're logged in the obelisk <b>hides you from the machines</b>. Click a terminal with no chip and you get the same AI system locked down — an untouchable <b>magenta</b> wall of moving data. Carry the <b>electro-compass</b> and <b>click it</b> to arm it — it stays armed until you drop it. Once armed, your aim marker becomes a small cluster of needles, one for each nearest thing worth finding, colour-coded: blue for the factory, green for an obelisk, yellow for a dropped backpack, orange for a dropped OB_gun.</p>
+    <p>The console at the terminal runs <b>AI-ML</b> — a tiny language the resistance left scattered through the ruins as runnable scraps, half command and half operator's note. It is a little <b>ML top-level</b>: type a command and it runs, and a bare <code>let x = e</code> (no <code>in</code>) binds a value that lasts the rest of your visit, so you can build a program line by line. Prefix a line with <code>*</code> to run it as a plain command with literal arguments, BBC-Micro style (<code>*scan</code>, <code>*timer</code>, <code>*print map</code>); everything without a <code>*</code> is an AI-ML expression. Strings work too — <code>echo "hello world"</code>. And you can write your own functions: <code>fn x =&gt; x</code> is a lambda, <code>let inc = fn n =&gt; ...</code> names one, and <code>let f x = ...</code> is the shorthand — a named function can call itself, so recursion is the way to loop (arithmetic and <code>if</code> are coming to make it bite). <b>Reading and hacking need no AI key</b> — the chip that got you in is enough. Type <code>scan</code> to list the obelisks on the wire, <code>scan |&gt; nearest</code> to pipe that straight to the closest, <code>name</code> for the node you're on. <code>loop node</code> pins an infinite loop into a tower, freezing it and its garrison where they stand until a repair drone works the loop back out. <code>hack node</code> hands you that node's own key, and only with it does <code>crash node key</code> knock it dark for a while — <code>let k = hack OB_XXXX in crash OB_XXXX k</code> is the two-step spelled out. <code>sleep 30</code>, <code>repel</code>, and <code>rewind 3</code> (only before POSEIDON comes online) buy you room, though they reach less far than they used to. The <b>AI key</b> (from a wrecked W-factory) is now needed for one thing only, the <b>fortress</b>: it comes sealed, so <code>copy aikey</code> to bring it into the console, <code>decrypt</code> it, and <code>unlock</code> with a hacked node key and the clean key together to drop a <b>fortress key</b> — <code>copy aikey</code> / <code>let k = hack OB_XXXX</code> / <code>let d = decrypt aikey</code> / <code>unlock k d</code>. That recipe is <b>not</b> in <code>help</code>; you find it on a scrap in the ruins. <code>print aikey</code> stamps a spare key at your feet, and an AI key <b>never rots on the ground</b>, so you can stash copies. The fragments you find teach the rest one idea at a time, and each real command copies itself into your <b>notepad</b> — a general page-collector: type <code>notes</code>, or press <kbd>N</kbd> anywhere, to flip through it (arrow keys, the <b>&lsaquo; &rsaquo;</b> on the top bar, or the <b>Contents</b> drop-down). Find and read <b>the RON-DOS Operator's Manual</b> and the console starts <b>autocompleting</b> verbs — faded ghost text you accept with <kbd>Tab</kbd> (or <kbd>&rarr;</kbd> at the line end). <code>map</code> pulls up a schematic of the AI's whole territory; <code>print map</code> runs off a <b>physical copy</b> you pick up and <b>click in your inventory</b> to unfold anywhere. On a <b>HERMES relay</b> you can <code>backup aikey</code> and <code>restore aikey</code>: RON keeps a copy of your key off the AI's hardware, so a bad death needn't cost you it. Get something wrong and the terminal tells you what to try — it's built to teach, not to gatekeep. There's also a secret word, never spelled out anywhere — find it and the terminal drops you back into the world to watch what it does.</p>
+    <p>The OB_gun's beam is just as final against a machine as against a tower: any robot caught in the line is <b>wiped out on the spot</b>, whatever its class — though, like any gunfire, it ruins most of the salvage. The limit is ammunition: every burn spends a battery, and batteries are better saved for the towers themselves.</p>
     <p>Somewhere on the map sits a <b>W-factory</b>: a huge 8×8 foundry where everything mechanical that isn't an obelisk-side T1/T2 is actually built, not at the towers. You can bring it down — hammer its hull with a weapon (a damage bar shows over it when you're close) or catch it in a bomb blast; after many blows it collapses into a walkable heap and drops an <b>AI key</b>, a way into one AI's mainframe (more use for that to come). Kill the factory and its waves and repair drones stop. Topple a tower and the factory dispatches a <b>revenge squad of W1 hunters</b>, tougher and faster than a T2, but strictly melee — a hit needs one standing right on top of you, not just nearby. W1s attack in real waves — each one closes in and strikes, then falls back to regroup, then closes in again — and a squad spreads out to surround you rather than piling onto one spot. They track a position <b>triangulated from the obelisk network</b>, refreshed every few seconds rather than live, so even a jammed Wi-Fi block only slows them down, not stops them. The factory also fields fresh W1 waves on its own clock, an unarmed <b>W3 repair drone</b> whenever a damaged tower is left standing, and a <b>W4 laser hunter-killer</b> — unlike a W1 it never closes to melee, holding its range and firing on you instead, both the instant you attack an obelisk and, independently, every half hour of game time.</p>
     <p>Out on the water, <b>W2 droids</b> hover in squads just above the river. Idle, they drift; but come near them and the whole squad turns and fires on you in waves. Their shots only reach you <b>while you're in the water</b> though — stay on dry land or a bridge and you can pick the squad off from the bank in safety.</p>
     <p>Deep in the south, past a hacked doorway and a maze, stands a walled <b>fortress</b> — the seat of one of the island's AI minds. It fields its own <b>M-class</b> guard. In peacetime only a drone or two patrol: the <b>M4</b> is an unarmed <b>report drone</b> — it never fights, it just holds you in sight and reports the breach — and if it loses sight of you it heads for the spot it last saw you and sweeps there before giving up, so ducking behind a wall isn't enough; you have to actually move on. Slipping past its cone unseen in the first place is how you stay quiet. Get spotted and the fortress core rouses into a relentless <b>violation response</b>: it manufactures wave after wave and throws them down the maze at you. <b>M6</b> are <b>pack robots</b> — they attack in threes to fives, closing to strike then falling back to regroup, and a lone one hangs back until the pack forms. <b>M5</b> are <b>snipers</b> — they hold back out on the open quad and plink you with a low-power orange laser, annoying rather than deadly. Break the core's hull down (heavy kit only) and the AI dies: every machine on the whole island powers down where it stands — and every obelisk goes dark with it.</p>
@@ -693,6 +757,9 @@
   </div>
 </div>
 <div id="obterminal">
+ <div class="lap">
+  <div class="lap-lid">
+   <div class="lap-bezel">
   <div class="crt">
     <div id="obterminal-batt"></div>
     <div id="obterminal-connect">
@@ -705,6 +772,12 @@
     </div>
     <div class="crt-hint">click outside to disconnect</div>
   </div>
+   </div>
+   <div class="lap-brand">NostBook</div>
+   <div class="lap-led"></div>
+  </div>
+  <div class="lap-base"></div>
+ </div>
 </div>
 <div id="aios">
   <div class="crt aios-crt">
@@ -756,7 +829,7 @@
   <div class="ph-shell">
     <img class="ph-handset" src="assets/textures/nokia-3310.png" alt="">
     <div class="ph-lcd">
-      <div class="ph-status"><span id="ph-bars"></span><span id="ph-title">MESSAGES</span><span class="ph-status-right"><span class="ph-batt">&#9646;&#9646;&#9646;</span><button id="ph-close" type="button" aria-label="Close">&#10005;</button></span></div>
+      <div class="ph-status"><span id="ph-bars"></span><span id="ph-title">MESSAGES</span><span class="ph-status-right"><button id="ph-mute" type="button" aria-label="Mute" title="Mute the phone"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.6a1 1 0 0 1 1 1v.5c1.9.45 3.2 2.05 3.2 4.1 0 2.4.5 3.3 1.1 4 .3.35.05.9-.4.9H3.1c-.45 0-.7-.55-.4-.9.6-.7 1.1-1.6 1.1-4 0-2.05 1.3-3.65 3.2-4.1v-.5a1 1 0 0 1 1-1z"/><path d="M6.3 12.9h3.4a1.7 1.7 0 0 1-3.4 0z"/></svg></button><span class="ph-batt">&#9646;&#9646;&#9646;</span><button id="ph-close" type="button" aria-label="Close">&#10005;</button></span></div>
       <div class="ph-tabs">
         <button id="ph-to-calypso" class="on" type="button">CALYPSO</button>
         <button id="ph-to-ron" type="button">RON</button>
@@ -777,5 +850,269 @@
   if (isMobile()) initMobileGate();
   else initTitleScreen();
 </script>
+
+<!-- Netscape Navigator (docs/laptop-plan.md §8b). A real DOM browser rather than
+     text on the CRT, because net.js already serves real HTML — so the pages the
+     machines are still publishing render natively here, links and all. The chrome
+     is 4.x: title bar, menus, the toolbar, Location, the personal bar, and the
+     status line that always said Document: Done. -->
+<style>
+  /* The browser runs ON THE LAPTOP, so it is framed by one: beige plastic in the
+     item's own colour, a dark bezel, and the deck below. The machine is the point
+     — you are sitting on a hillside with a salvaged computer open on your knees,
+     not looking at a browser floating in the void. */
+  /* ---- pico(1) -----------------------------------------------------------
+     The friendly editor of the period (1992, shipped with Pine), and the
+     answer to ed being unusable: a full screen you type into, and the two rows
+     of ^-keys along the bottom that tell you how to get out. Same beige
+     chassis as Netscape, because it is the same machine. */
+  #pico { display: none; position: fixed; inset: 0; z-index: 27; background: #0a0d12;
+    align-items: center; justify-content: center; }
+  #pico .pico-screen { width: min(920px, 84vw); height: min(600px, 72vh); display: flex; flex-direction: column;
+    background: #0d1512; color: #cfe6d8; font: 14px/1.35 'Courier New', Courier, monospace; }
+  #pico .pico-top { background: #cfe6d8; color: #0d1512; padding: 1px 6px; display: flex; gap: 18px; }
+  #pico .pico-top .pico-file { flex: 1; }
+  #pico textarea { flex: 1; resize: none; border: 0; outline: 0; padding: 6px 8px;
+    background: transparent; color: inherit; font: inherit; white-space: pre; overflow: auto; }
+  /* A real pico has no close box: it has ^X, and a terminal to press it on.
+     A phone has neither, so without this the editor is a room with no door.
+     Styled as part of the status line rather than as window chrome, since the
+     screen it sits on is a text console, not a window manager. */
+  #pico .pico-top button { font: inherit; line-height: 1; margin-left: 10px; padding: 0 7px;
+    background: #0d1512; color: #cfe6d8; border: 0; cursor: pointer; }
+  #pico .pico-top button:hover { background: #23312b; }
+  #pico .pico-msg { min-height: 20px; padding: 1px 6px; color: #0d1512; background: #cfe6d8; }
+  #pico .pico-msg:empty { background: transparent; }
+  #pico .pico-msg button { font: inherit; margin-left: 8px; padding: 0 10px; cursor: pointer;
+    background: #0d1512; color: #cfe6d8; border: 0; }
+  #pico .pico-keys { padding: 2px 4px 4px; display: grid; grid-template-columns: repeat(5, auto); gap: 2px 14px;
+    justify-content: start; font-size: 13px; }
+  /* Each label is a fixed pair — a key and its name — and must never wrap:
+     "UnCut" over "Text" reads as two entries rather than one. */
+  #pico .pico-keys button { white-space: nowrap; font: inherit; color: inherit;
+    background: none; border: 0; padding: 1px 0; cursor: pointer; text-align: left; }
+  #pico .pico-keys button:hover b { background: #7fd2a8; }
+  #pico .pico-keys button:active b { background: #4fa77e; }
+  #pico .pico-keys b { background: #cfe6d8; color: #0d1512; font-weight: normal; padding: 0 2px; margin-right: 4px; }
+  /* ---- the document reader ------------------------------------------------
+     A PDF viewer is not a thing to write from scratch, so the window is ours
+     and the page rendering is the browser's, in an iframe. That is also why it
+     needs its own X: on a phone the native viewer swallows every key, so a
+     keyboard escape is not enough on its own. */
+  #pdfr { display: none; position: fixed; inset: 0; z-index: 28; background: #0a0d12;
+    align-items: center; justify-content: center; }
+  #pdfr .pdf-win { width: min(920px, 84vw); height: min(600px, 72vh); display: flex; flex-direction: column;
+    background: #c0c0c0; border: 2px solid; border-color: #dfdfdf #4f4f4f #4f4f4f #dfdfdf; }
+  #pdfr .pdf-title { display: flex; align-items: center; gap: 6px; padding: 2px 3px;
+    background: linear-gradient(90deg, #7a1010, #c03a2a); color: #fff; font-weight: bold; font-size: 11px; }
+  #pdfr .pdf-title .pdf-a { width: 14px; height: 14px; background: #fff; color: #b02010;
+    font: bold 11px Georgia, serif; display: flex; align-items: center; justify-content: center; }
+  #pdfr .pdf-title .grow { flex: 1; }
+  #pdfr .pdf-title button { width: 18px; height: 15px; font: bold 10px Tahoma, sans-serif; line-height: 1;
+    background: #c0c0c0; color: #000; border: 1px solid; border-color: #dfdfdf #4f4f4f #4f4f4f #dfdfdf; cursor: pointer; }
+  #pdfr .pdf-bar { padding: 2px 6px; font: 11px Tahoma, sans-serif; background: #c0c0c0;
+    border-bottom: 1px solid #8a8a8a; display: flex; gap: 10px; align-items: center; }
+  #pdfr .pdf-bar .grow { flex: 1; }
+  #pdfr iframe { flex: 1; border: 0; background: #6b6b6b; width: 100%; }
+  #pdfr .pdf-foot { padding: 2px 6px; font: 11px Tahoma, sans-serif; background: #c0c0c0;
+    border-top: 1px solid #8a8a8a; }
+  #pdfr .pdf-foot a { color: #00a; }
+  /* The hand-off panel, for handsets where an inline scan will not render. */
+  #pdfr .pdf-drop { display: none; flex: 1; flex-direction: column; align-items: center;
+    justify-content: center; gap: 14px; background: #6b6b6b; color: #fff; padding: 20px; text-align: center; }
+  #pdfr .pdf-drop .pdf-open { display: block; padding: 14px 26px; background: #c0c0c0; color: #000;
+    font: bold 14px Tahoma, sans-serif; text-decoration: none;
+    border: 2px solid; border-color: #dfdfdf #4f4f4f #4f4f4f #dfdfdf; }
+  #pdfr .pdf-drop .pdf-open:active { border-color: #4f4f4f #dfdfdf #dfdfdf #4f4f4f; }
+  #netscape { display: none; position: fixed; inset: 0; z-index: 26; background: #0a0d12;
+    align-items: center; justify-content: center; font: 12px Tahoma, Verdana, 'MS Sans Serif', sans-serif; }
+  :is(#netscape, #pico, #pdfr, #obterminal.nostbook) .lap { display: flex; flex-direction: column; align-items: center; }
+  :is(#netscape, #pico, #pdfr, #obterminal.nostbook) .lap-lid { position: relative; background: linear-gradient(#cec2a6, #bdb197);
+    border-radius: 12px 12px 5px 5px; padding: 13px 13px 24px;
+    box-shadow: inset 0 1px 0 #e9e0cb, inset 0 -1px 0 #8e8672, 0 14px 40px rgba(0,0,0,0.65); }
+  :is(#netscape, #pico, #pdfr, #obterminal.nostbook) .lap-bezel { background: #23211d; padding: 9px; border-radius: 3px;
+    box-shadow: inset 0 0 0 1px #14120f, inset 0 2px 6px rgba(0,0,0,0.8); }
+  /* A faint diagonal sheen across the glass, so it reads as a screen. */
+  :is(#netscape, #pico, #pdfr, #obterminal.nostbook) .lap-bezel::after { content: ''; position: absolute; inset: 13px 13px 24px; pointer-events: none;
+    border-radius: 3px; background: linear-gradient(115deg, rgba(255,255,255,0.07) 0 22%, transparent 42%); }
+  :is(#netscape, #pico, #pdfr, #obterminal.nostbook) .lap-brand { position: absolute; left: 0; right: 0; bottom: 6px; text-align: center;
+    font: bold 9px Tahoma, sans-serif; letter-spacing: 0.22em; color: #8b8371; text-shadow: 0 1px 0 #e0d7c2; }
+  :is(#netscape, #pico, #pdfr, #obterminal.nostbook) .lap-led { position: absolute; right: 16px; bottom: 8px; width: 5px; height: 5px; border-radius: 50%;
+    background: #6fe08a; box-shadow: 0 0 5px #6fe08a; }
+  /* The deck: a shallow trapezoid so the lid reads as standing up from it. */
+  :is(#netscape, #pico, #pdfr, #obterminal.nostbook) .lap-base { width: min(1040px, 96vw); height: 30px; margin-top: -2px;
+    background: linear-gradient(#c4b89d, #9b937e);
+    clip-path: polygon(1.5% 0, 98.5% 0, 100% 100%, 0 100%);
+    box-shadow: 0 10px 24px rgba(0,0,0,0.55); position: relative; }
+  /* Suggested key rows and a trackpad — enough to read as a keyboard, no more. */
+  :is(#netscape, #pico, #pdfr, #obterminal.nostbook) .lap-base::before { content: ''; position: absolute; inset: 5px 12% 12px;
+    background: repeating-linear-gradient(90deg, rgba(60,55,45,0.5) 0 7px, transparent 7px 10px),
+                repeating-linear-gradient(0deg, rgba(60,55,45,0.35) 0 4px, transparent 4px 7px); border-radius: 2px; }
+  :is(#netscape, #pico, #pdfr, #obterminal.nostbook) .lap-base::after { content: ''; position: absolute; left: 50%; bottom: 2px; transform: translateX(-50%);
+    width: 70px; height: 6px; background: rgba(70,64,52,0.45); border-radius: 2px; }
+  #netscape .ns-win { width: min(920px, 84vw); height: min(600px, 72vh); display: flex; flex-direction: column;
+    background: #c0c0c0; border: 2px solid; border-color: #dfdfdf #4f4f4f #4f4f4f #dfdfdf; box-shadow: 2px 2px 0 rgba(0,0,0,0.4); }
+  /* Title bar: the gradient blue and the three boxes on the right. */
+  #netscape .ns-title { display: flex; align-items: center; gap: 6px; padding: 2px 3px;
+    background: linear-gradient(90deg, #000080, #1084d0); color: #fff; font-weight: bold; font-size: 11px; }
+  #netscape .ns-title .ns-n { width: 14px; height: 14px; background: #04123f; color: #fff; font: bold 11px Georgia, serif;
+    display: flex; align-items: center; justify-content: center; }
+  #netscape .ns-title .ns-grow { flex: 1; }
+  #netscape .ns-title button { width: 16px; height: 14px; font: bold 9px Tahoma, sans-serif; line-height: 1;
+    background: #c0c0c0; color: #000; border: 1px solid; border-color: #dfdfdf #4f4f4f #4f4f4f #dfdfdf; cursor: pointer; padding: 0; }
+  /* Menus + toolbars */
+  #netscape .ns-menu { display: flex; gap: 12px; padding: 2px 6px; border-bottom: 1px solid #9a9a9a;
+    font-size: 11px; position: relative; }
+  #netscape .ns-menu span { padding: 1px 5px; cursor: pointer; user-select: none; }
+  #netscape .ns-menu span u { text-decoration: underline; }
+  #netscape .ns-menu span.open, #netscape .ns-menu span:hover { background: #000080; color: #fff; }
+  #netscape .ns-menu .ns-right { margin-left: auto; }
+  /* Drop-down menus: the sunken-bevel panel, the highlight bar, greyed items for
+     everything this machine was never going to be able to do. */
+  #netscape .ns-drop { display: none; position: absolute; top: 100%; z-index: 5; min-width: 168px;
+    background: #c0c0c0; border: 1px solid; border-color: #dfdfdf #4f4f4f #4f4f4f #dfdfdf;
+    box-shadow: 2px 2px 0 rgba(0,0,0,0.35); padding: 2px; font-size: 11px; }
+  #netscape .ns-drop.open { display: block; }
+  #netscape .ns-drop button { display: flex; justify-content: space-between; gap: 20px; width: 100%;
+    background: none; border: none; text-align: left; font: 11px Tahoma, sans-serif; color: #000;
+    padding: 3px 8px; cursor: pointer; }
+  #netscape .ns-drop button:hover:not(:disabled) { background: #000080; color: #fff; }
+  #netscape .ns-drop button:disabled { color: #808080; text-shadow: 1px 1px 0 #dfdfdf; cursor: default; }
+  #netscape .ns-drop button .k { opacity: 0.75; font-size: 10px; }
+  #netscape .ns-drop hr { border: none; border-top: 1px solid #9a9a9a; border-bottom: 1px solid #dfdfdf; margin: 3px 2px; }
+  #netscape .ns-page pre { font: 12px 'Courier New', monospace; white-space: pre-wrap; margin: 0; }
+  #netscape .ns-tools { display: flex; align-items: stretch; gap: 2px; padding: 3px 4px; border-bottom: 1px solid #9a9a9a; }
+  #netscape .ns-tools button { min-width: 46px; display: flex; flex-direction: column; align-items: center; gap: 1px;
+    background: #c0c0c0; border: 1px solid; border-color: #dfdfdf #4f4f4f #4f4f4f #dfdfdf;
+    font: 10px Tahoma, sans-serif; color: #000; padding: 2px 4px 1px; cursor: pointer; }
+  #netscape .ns-tools button:active { border-color: #4f4f4f #dfdfdf #dfdfdf #4f4f4f; }
+  #netscape .ns-tools button:disabled { color: #808080; text-shadow: 1px 1px 0 #dfdfdf; cursor: default; }
+  #netscape .ns-tools .ns-ico { font-size: 14px; line-height: 14px; }
+  #netscape .ns-tools .ns-logo { margin-left: auto; width: 46px; background: #04123f; color: #fff;
+    font: bold 22px Georgia, serif; display: flex; align-items: center; justify-content: center;
+    border: 1px solid; border-color: #4f4f4f #dfdfdf #dfdfdf #4f4f4f; }
+  #netscape .ns-loc { display: flex; align-items: center; gap: 6px; padding: 3px 5px; border-bottom: 1px solid #9a9a9a; font-size: 11px; }
+  #netscape .ns-loc .ns-tag { display: flex; align-items: center; gap: 3px; }
+  #netscape .ns-loc input { flex: 1; font: 11px Tahoma, sans-serif; padding: 2px 4px; background: #fff; color: #000;
+    border: 1px solid; border-color: #4f4f4f #dfdfdf #dfdfdf #4f4f4f; }
+  #netscape .ns-personal { display: flex; gap: 14px; padding: 3px 8px; border-bottom: 1px solid #9a9a9a; font-size: 11px; }
+  #netscape .ns-personal span { display: flex; align-items: center; gap: 3px; cursor: pointer; }
+  /* The page itself: white, serif, and blue underlined links — as it was. */
+  #netscape .ns-page { flex: 1; min-height: 0; overflow: auto; background: #fff; color: #000;
+    font: 15px 'Times New Roman', Times, serif; padding: 12px 18px; }
+  #netscape .ns-page h1 { font-size: 26px; margin: 0 0 6px; font-weight: bold; }
+  #netscape .ns-page h2 { font-size: 19px; margin: 16px 0 5px; font-weight: bold;
+    border-bottom: 1px solid #ddd; padding-bottom: 2px; }
+  #netscape .ns-page p { margin: 3px 0; max-width: 62em; line-height: 1.45; }
+  #netscape .ns-page small { font-size: 12px; color: #444; }
+  #netscape .ns-page hr { border: none; border-top: 1px solid #999; margin: 10px 0; }
+  /* Dotted-leader data rows only align in a fixed pitch. */
+  #netscape .ns-page .kv { font: 13px 'Courier New', Courier, monospace; white-space: pre; margin: 1px 0; }
+  /* Every link on these pages stands alone, so give each one its own bulleted
+     line. Inline they ran together into an unreadable wall of blue. */
+  #netscape .ns-page a { color: #0000ee; text-decoration: underline; cursor: pointer;
+    display: list-item; list-style: square inside; margin: 2px 0 2px 10px; width: fit-content; }
+  #netscape .ns-page a:visited { color: #551a8b; }
+  #netscape .ns-page a.ns-dead { color: #888; }
+  /* Form widgets on a served page: the chunky grey controls of the period.
+     Rendered by the browser, so they get the browser's chrome font, not the
+     page's serif. */
+  #netscape .ns-page .ns-form { display: flex; gap: 6px; align-items: center; margin: 6px 0 4px; flex-wrap: wrap; }
+  #netscape .ns-page .ns-form select,
+  #netscape .ns-page .ns-form input { font: 12px Tahoma, Verdana, 'MS Sans Serif', sans-serif;
+    background: #c0c0c0; color: #000; padding: 2px 8px;
+    border: 2px solid; border-color: #dfdfdf #4f4f4f #4f4f4f #dfdfdf; }
+  #netscape .ns-page .ns-form input:active { border-color: #4f4f4f #dfdfdf #dfdfdf #4f4f4f; }
+  /* PERIOD MARKUP. These pages were written when a page could set its own
+     background and make text flash, and both were used. <blink> was a Netscape
+     extension and nothing else ever supported it, which is exactly why it
+     belongs here; <font color> and <center> are the rest of the vocabulary. */
+  @keyframes ns-blink { 0%, 49% { visibility: visible; } 50%, 100% { visibility: hidden; } }
+  #netscape .ns-page blink { animation: ns-blink 1.1s steps(1, end) infinite; }
+  #netscape .ns-page center { text-align: center; display: block; }
+  #netscape .ns-page marquee { display: block; }
+  /* A page that sets its own background. The grey is the Mosaic/Navigator
+     default that everyone kept, and the black-with-lime is what happened the
+     moment people could choose. */
+  #netscape .ns-page.bg-grey { background: #c0c0c0; }
+  #netscape .ns-page.bg-black { background: #000; color: #d8d8d8; }
+  #netscape .ns-page.bg-black a { color: #7f7fff; }
+  #netscape .ns-page.bg-black a:visited { color: #c080ff; }
+  #netscape .ns-page.bg-black h1, #netscape .ns-page.bg-black h2 { color: #00ff00; }
+  #netscape .ns-page.bg-navy { background: #000080; color: #ffffcc; }
+  #netscape .ns-page.bg-navy a { color: #66ccff; }
+  #netscape .ns-page.bg-navy h1, #netscape .ns-page.bg-navy h2 { color: #ffff00; }
+  #netscape .ns-status { display: flex; align-items: center; gap: 8px; padding: 2px 6px; font-size: 11px;
+    border-top: 1px solid #dfdfdf; }
+  #netscape .ns-status .ns-sunk { flex: 1; padding: 1px 4px; border: 1px solid; border-color: #4f4f4f #dfdfdf #dfdfdf #4f4f4f; }
+</style>
+<div id="pico">
+ <div class="lap">
+  <div class="lap-lid">
+   <div class="lap-bezel">
+    <div class="pico-screen">
+      <div class="pico-top"><span>UW PICO(tm) 2.5</span><span class="pico-file" id="pico-file">File: </span><span id="pico-mod"></span><button id="pico-close" type="button" title="Close (^X)">&#10005;</button></div>
+      <textarea id="pico-text" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
+      <div class="pico-msg" id="pico-msg"></div>
+      <div class="pico-keys" id="pico-keys"></div>
+    </div>
+   </div>
+   <div class="lap-brand">NostBook</div>
+   <div class="lap-led"></div>
+  </div>
+  <div class="lap-base"></div>
+ </div>
+</div>
+<div id="pdfr">
+ <div class="lap">
+  <div class="lap-lid">
+   <div class="lap-bezel">
+    <div class="pdf-win">
+      <div class="pdf-title"><span class="pdf-a">A</span><span id="pdf-name">Document</span><span class="grow"></span>
+        <button id="pdf-close" type="button" title="Close (Esc)">&#10005;</button></div>
+      <div class="pdf-bar"><span id="pdf-meta"></span><span class="grow"></span><span>Acrobat Reader 3.0</span></div>
+      <iframe id="pdf-frame" title="document"></iframe>
+      <div id="pdf-drop" class="pdf-drop"></div>
+      <div class="pdf-foot" id="pdf-foot"></div>
+    </div>
+   </div>
+   <div class="lap-brand">NostBook</div>
+   <div class="lap-led"></div>
+  </div>
+  <div class="lap-base"></div>
+ </div>
+</div>
+<div id="netscape">
+ <div class="lap">
+  <div class="lap-lid">
+   <div class="lap-bezel">
+  <div class="ns-win">
+    <div class="ns-title"><span class="ns-n">N</span><span class="ns-titletext" id="ns-title">Netscape</span><span class="ns-grow"></span>
+      <button type="button" tabindex="-1">_</button><button type="button" tabindex="-1">□</button><button id="ns-close" type="button" title="Close">✕</button></div>
+    <div class="ns-menu" id="ns-menu"><span data-menu="File"><u>F</u>ile</span><span data-menu="Edit"><u>E</u>dit</span><span data-menu="View"><u>V</u>iew</span><span data-menu="Go"><u>G</u>o</span><span data-menu="Window"><u>W</u>indow</span><span class="ns-right" data-menu="Help"><u>H</u>elp</span><div class="ns-drop" id="ns-drop"></div></div>
+    <div class="ns-tools">
+      <button id="ns-back" type="button"><span class="ns-ico">◀</span>Back</button>
+      <button id="ns-fwd" type="button"><span class="ns-ico">▶</span>Forward</button>
+      <button id="ns-reload" type="button"><span class="ns-ico">⟳</span>Reload</button>
+      <button id="ns-home" type="button"><span class="ns-ico">⌂</span>Home</button>
+      <button id="ns-search" type="button"><span class="ns-ico">🔍</span>Search</button>
+      <button type="button" disabled><span class="ns-ico">📖</span>Guide</button>
+      <button type="button" disabled><span class="ns-ico">🖨</span>Print</button>
+      <button type="button" disabled><span class="ns-ico">🔒</span>Security</button>
+      <button id="ns-stop" type="button"><span class="ns-ico">✖</span>Stop</button>
+      <div class="ns-logo">N</div>
+    </div>
+    <div class="ns-loc"><span class="ns-tag">📑 Bookmarks</span><span class="ns-tag">📍 Location:</span><input id="ns-url" type="text" spellcheck="false" autocomplete="off"></div>
+    <div class="ns-personal"><span id="ns-pb-home">📁 Bookmarks</span><span id="ns-pb-search">📁 Net Search</span><span id="ns-pb-dir">📁 Directory</span><span id="ns-pb-new">📁 New&amp;Cool</span></div>
+    <div class="ns-page" id="ns-page"></div>
+    <div class="ns-status"><span>🔓</span><span class="ns-sunk" id="ns-msg">Document: Done</span></div>
+  </div>
+   </div>
+   <div class="lap-brand">NostBook</div>
+   <div class="lap-led"></div>
+  </div>
+  <div class="lap-base"></div>
+ </div>
+</div>
 </body>
 </html>

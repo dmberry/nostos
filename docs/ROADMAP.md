@@ -1,8 +1,8 @@
-# postAI — outstanding work, phased
+# NostOS — outstanding work, phased
 
 A living list of everything raised across our sessions that isn't built yet,
 grouped into phases by size and dependency. Shipped features live in the README
-version table and `PAI-version-plan.md`; this file is only what's *ahead*.
+version table and `VERSION-PLAN.md`; this file is only what's *ahead*.
 
 Order within a phase is rough priority. Nothing here is committed to — it's a
 map, not a schedule.
@@ -160,5 +160,5 @@ long time and are now in the game:
 
 ---
 
-*Maintained alongside `PAI-version-plan.md` (design detail + shipped changelog).
+*Maintained alongside `VERSION-PLAN.md` (design detail + shipped changelog).
 When something here ships, move it there and delete it from this list.*

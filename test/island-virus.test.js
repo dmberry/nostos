@@ -25,18 +25,18 @@ test('every daemon has its own distinct payload and armed file', () => {
   assert.equal(new Set(files).size, ais.length, 'no two islands share a payload');
   assert.equal(new Set(armed).size, ais.length, 'no two islands share an armed file');
   // the Homeric counter-forces
-  assert.equal(virusFor('CALYPSO').file, 'zeus-virus.ml');
-  assert.equal(virusFor('POLYPHEMUS').file, 'nobody-virus.ml');
-  assert.equal(virusFor('CIRCE').file, 'moly-virus.ml');
-  assert.equal(virusFor('HELIOS').file, 'eclipse-virus.ml');
+  assert.equal(virusFor('CALYPSO').file, 'zeus_virus.ml');
+  assert.equal(virusFor('POLYPHEMUS').file, 'nobody_virus.ml');
+  assert.equal(virusFor('CIRCE').file, 'moly_virus.ml');
+  assert.equal(virusFor('HELIOS').file, 'eclipse_virus.ml');
 });
 
 test("a relay lists only its own island's payload", () => {
-  assert.deepEqual(virusFilesFor('POLYPHEMUS'), ['readme.md', 'nobody-virus.ml']);
-  assert.ok(!virusFilesFor('POLYPHEMUS').includes('zeus-virus.ml'), "Ogygia's code is not on Aegilia's bench");
+  assert.deepEqual(virusFilesFor('POLYPHEMUS'), ['readme.md', 'nobody_virus.ml']);
+  assert.ok(!virusFilesFor('POLYPHEMUS').includes('zeus_virus.ml'), "Ogygia's code is not on Aegilia's bench");
   const docs = virusDocsFor('CIRCE');
-  assert.ok(docs['moly-virus.ml'], 'the sealed payload reads');
-  assert.ok(!docs['zeus-virus.ml']);
+  assert.ok(docs['moly_virus.ml'], 'the sealed payload reads');
+  assert.ok(!docs['zeus_virus.ml']);
 });
 
 test('a card armed on one island is armed against that daemon ALONE', () => {

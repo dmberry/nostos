@@ -4,7 +4,7 @@
 // joined only by doorways, its own faded-yellow palette, and one wrong,
 // lurking thing wandering it. Generated once (lazily, on first entry) and
 // kept for the rest of the session rather than regenerated per visit — a
-// deliberate v1 scope cut (see PAI-version-plan.md). Self-contained: main.js
+// deliberate v1 scope cut (see VERSION-PLAN.md). Self-contained: main.js
 // calls createUnderworldPocket() once, then updateUnderworldCreatures() and
 // drawUnderworldCreature() every frame while the player is down there, same
 // shape as every other creature/AI module in this codebase.
@@ -166,7 +166,7 @@ function carveWorld(map, rng) {
   // and nowhere else (every other tape is out in the overworld, doubled). It
   // sits in the spawn room where you land, with a couple of extra copies sparse
   // through the further rooms so a run can never miss it.
-  const wardNum = TAPES.some((t) => t.num === 3) ? 3 : TAPES[0].num;
+  const wardNum = (TAPES.find((t) => t.backspaceOnly) || TAPES[0]).num;
   boxAt(spawn.cx + 2, spawn.cy, wardNum);
   for (let i = 1; i < rooms.length; i++) {
     if (rng() >= 0.25) continue;

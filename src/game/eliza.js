@@ -4,7 +4,7 @@
 // table, decomposition patterns with wildcards, cycling reassembly rules, the
 // pronoun reflection that turns "my mother" into "your mother", and the MEMORY
 // queue that lets the doctor bring an earlier remark back later. It is a period
-// artefact — deliberately shallow — and in postAI it runs inside the RON-DOS
+// artefact — deliberately shallow — and in NostOS it runs inside the RON-DOS
 // terminal, a machine reading a human the way the machines read everything.
 
 // Words the doctor flips when it echoes your sentence back at you.

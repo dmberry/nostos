@@ -5,11 +5,11 @@
 // impassable boundary; the fortress is a sealed ANNEX grown onto the south edge
 // of that boundary, so it costs the overworld no space and can be as large as
 // we like. The only way in is a grand doorway in the rampart, thrown open by a
-// fortress key that the boundary terminal spits out when you hack it in RON-ML.
+// fortress key that the boundary terminal spits out when you hack it in AI-ML.
 //
 // Self-contained by design: almost all fortress state lives in the controller
 // this module returns. main.js wires a handful of hooks (a click to open the
-// gate console, a RON-ML `unlock` primitive, an update tick, and two map
+// gate console, a AI-ML `unlock` primitive, an update tick, and two map
 // markers); the renderer draws the new object/floor kinds generically.
 
 import { makeRng } from './rng.js';
@@ -516,7 +516,7 @@ export function createFortress(map, seed, spawn, opts = {}) {
       return guards;
     },
 
-    // RON-ML `unlock`, run at the gate console. Requires the AI key (one AI's
+    // AI-ML `unlock`, run at the gate console. Requires the AI key (one AI's
     // key cracks the next AI's gate) and drops a single fortress key.
     hack(player) {
       if (!nearTerminal(player.x, player.y, 3.2)) {
@@ -539,7 +539,7 @@ export function createFortress(map, seed, spawn, opts = {}) {
       // maze sconces stop strobing. (The island power-down itself is handled by
       // main.js's onCoreDefeated hook, kept island-agnostic there.)
       if (core.defeated) { state.alarm = false; map.fortressAlarm = false; return; }
-      // The Lion's Gate opens to a Trojan card (its factory-id.ml + root-access.ml
+      // The Lion's Gate opens to a Trojan card (its factory_id.ml + root_access.ml
       // read at the gate) — the escape-chain hack IS the way in now; the old
       // fortress_key is retired. Bare ai_key won't do it; refunction it first.
       if (!state.open && player.hasTrojanCard && player.hasTrojanCard()) {
@@ -651,7 +651,7 @@ export function createFortress(map, seed, spawn, opts = {}) {
       if (snap.jammed) state.jammed = true;
     },
 
-    // Markers for the RON-ML `map` overlay.
+    // Markers for the AI-ML `map` overlay.
     markers() {
       return {
         gate: { x: doorX0 + DOOR_W / 2, y: seamY, open: state.open, hacked: state.hacked },

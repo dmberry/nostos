@@ -90,6 +90,21 @@ export class GameMap {
   }
 
   // Out-of-bounds counts as solid so the map edge is a wall.
+  // Which building a tile belongs to, or null for open ground. The list is put
+  // here by worldgen (each entry carries its `type`, see buildings.js) and is
+  // small — a dozen or so lots — so a linear scan is the right amount of
+  // machinery. The lot rectangle INCLUDES its walls, so standing in a doorway
+  // still counts as being at that building, which is what a caller asking "what
+  // is this place?" means by the question.
+  buildingAt(x, y) {
+    const list = this.buildings;
+    if (!list) return null;
+    for (const b of list) {
+      if (x >= b.x0 && x < b.x0 + b.w && y >= b.y0 && y < b.y0 + b.h) return b;
+    }
+    return null;
+  }
+
   isSolid(x, y) {
     if (!this.inBounds(x, y)) return true;
     const f = FLOORS[this.floor[y * this.w + x]];

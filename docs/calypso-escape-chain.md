@@ -30,11 +30,11 @@ You do not receive the gods' authority. You refunction the machines' own apparat
 
 | State | Gained by | Carries |
 |---|---|---|
-| **ai-key** | wreck the W-factory (or reprint at an OB) | `access-ai-code.ml`, `factory-id.ml` |
-| **Trojan key** | copy `root-access.ml` onto the ai-key | + `root-access.ml` |
-| **hermes card** | copy `zeus-lightning.ml` onto the Trojan key | + `zeus-lightning.ml` |
+| **ai-key** | wreck the W-factory (or reprint at an OB) | `access_ai_code.ml`, `factory_id.ml` |
+| **Trojan key** | copy `root_access.ml` onto the ai-key | + `root_access.ml` |
+| **hermes card** | copy `zeus_lightning.ml` onto the Trojan key | + `zeus_lightning.ml` |
 
-Files are **copied, never moved** — `factory-id.ml` and `access-ai-code.ml` each do
+Files are **copied, never moved** — `factory_id.ml` and `access_ai_code.ml` each do
 double duty downstream, so they must persist on the card.
 
 ---
@@ -45,10 +45,10 @@ double duty downstream, so they must persist on the card.
 |---|---|---|
 | 1 | W-factory | wreck it → **ai-key** |
 | 2 | any OB | insert → **auto-registers** the access code across the OB net (backup) |
-| 3 | OB | `ELIZA factory-id.ml` → `root-access.ml`; copy onto key → **Trojan key** |
+| 3 | OB | `ELIZA factory_id.ml` → `root_access.ml`; copy onto key → **Trojan key** |
 | 4 | Lion's Gate → Calypso terminal | Trojan key admits you; recce, but she rejects commands and holds you soporific |
-| 5 | HERMES | read `readme.md`; forge `zeus-virus.ml` + `root-access.ml` + `access-ai-code.ml` → `zeus-lightning.ml`; copy onto card → **hermes card** |
-| 6 | Calypso terminal | run `zeus-lightning.ml` → refunction Calypso (Zeus's command) → set `calypsoLeave` |
+| 5 | HERMES | read `readme.md`; forge `zeus_virus.ml` + `root_access.ml` + `access_ai_code.ml` → `zeus_lightning.ml`; copy onto card → **hermes card** |
+| 6 | Calypso terminal | run `zeus_lightning.ml` → refunction Calypso (Zeus's command) → set `calypsoLeave` |
 | 7 | shore | raft break-out under Poseidon (R3) → **escape** |
 
 Acyclic and complete: every file is in hand before it is used; with the step-2 autocopy
@@ -59,7 +59,7 @@ there is no softlock at any stage.
 ## 4. Three access tiers at Calypso
 
 1. **Lion's Gate** — opens to the **Trojan key**. The rename is the threshold: a bare
-   aikey carries `factory-id.ml` but is not a Trojan key, so it cannot open the gate.
+   aikey carries `factory_id.ml` but is not a Trojan key, so it cannot open the gate.
 2. **Terminal access** — the Trojan key jacks you in to scout.
 3. **Command / release** — the **hermes card** only. Without the virus, Calypso rejects
    your commands, drops you into torpor, and murmurs *stay* — `kalyptō` at the console,
@@ -74,7 +74,7 @@ there is no softlock at any stage.
 - **OB** — transform-and-backup workbench: the ELIZA transform, the autocopy backup, the
   aikey reprint.
 - **HERMES** — the virus forge: read the recipe, combine the three files into
-  `zeus-lightning.ml`. Off-grid still (no network verb — that would expose the relay),
+  `zeus_lightning.ml`. Off-grid still (no network verb — that would expose the relay),
   but now a maker's bench as well as an archive. **The charter comment at
   `ronml.js:~251` ("an INFORMATION resource, not a workshop… nothing fabricated") must be
   revised** to license local forging while keeping the no-network stealth rule, e.g.:
@@ -109,7 +109,7 @@ Line references are approximate — firm against the text.
 | Trojan key at the **Lion's Gate** | — (Ogygia is a cave-island, no citadel) | Game overlay: the daemon-fortress. The Trojan-through-the-gate reaches to the fall of Troy, not Book 5 |
 | Recce the terminal under **torpor**; she says *stay* | Seven years' detention; the offer of immortality; Odysseus weeping on the shore (~5.151–158) | *kalyptō* — detention by comfort, not force |
 | Forge the virus at **HERMES** → **hermes card** | Hermes carries Zeus's command to Ogygia (~5.28–148) | **Inversion:** Homer's Hermes *delivers*; the player *forges* the command |
-| Run `zeus-lightning.ml` → Calypso released | Compelled by Zeus, Calypso lets him go (~5.160–170) | She yields to Zeus, never to Odysseus |
+| Run `zeus_lightning.ml` → Calypso released | Compelled by Zeus, Calypso lets him go (~5.160–170) | She yields to Zeus, never to Odysseus |
 | **Raft break-out** under Poseidon | The raft built over four days, launched, wrecked by Poseidon's storm (~5.243–261, ~5.291–332) | Decision #8: without "her leave," Poseidon turns you back |
 | The turn-back storm | Poseidon's grudge — Odysseus blinded Polyphemus | POSEIDON = the net / the sea, the nostos's standing antagonist |
 | Autocopy / OB reprint | — | Game-only: a mercy of the save system, no Homeric beat |
@@ -133,7 +133,7 @@ walking in past the open Lion's Gate). It is her voice, not a RON-DOS console
 (`terminalKind === 'calypso'` routes to `calypsoRun`): she is soporific — she lets you
 `look`/`help` but meets almost every command with a cycled Lotus/Ogygia deflection, and
 refuses the refunction in-voice without the thunder. With the hermes card in hand, `run`
-speaks zeus-lightning.ml and fires the shared `refunctionCalypso()` (guards → gardeners,
+speaks zeus_lightning.ml and fires the shared `refunctionCalypso()` (guards → gardeners,
 `calypsoLeave` set, her release beat). The OB `retire` verb calls the same function, so the
 payoff reads the same wherever it fires.
 
@@ -150,7 +150,7 @@ terminal only, and per-island voice/colour (R5).
 **New:**
 - device/drive filesystem — `cd <device>`, `ls`, `copy <file> <device>`; files as carriable objects
 - `eliza <file>` as a deterministic transform (arity-1 overload of today's arity-0 DOCTOR)
-- the HERMES forge/combine verb (three files → `zeus-lightning.ml`), station-gated
+- the HERMES forge/combine verb (three files → `zeus_lightning.ml`), station-gated
 - card-rename triggers (ai → Trojan → hermes)
 - Calypso's terminal + a run-virus verb that sets `calypsoLeave` and fires the R3 release
 - autocopy-on-insert + OB reprint-from-backup (extends `print aikey`, which today needs a held key)

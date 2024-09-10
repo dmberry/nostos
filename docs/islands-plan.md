@@ -317,7 +317,7 @@ The point of this structure is contention-free parallel work. Discipline:
 |---|---|
 | `src/islands/<yours>.js` | Yours alone. Edit freely. |
 | `world.js` registry, one import line in main.js | One-line touches; fetch first, push immediately. |
-| `islandkit.js`, `robots.js`, `renderer.js`, `player.js`, `items.js` | **Coordinate**: announce in PAI-version-plan.md before editing; keep additions to surgical blocks (a new machine type block, a new item entry). |
+| `islandkit.js`, `robots.js`, `renderer.js`, `player.js`, `items.js` | **Coordinate**: announce in VERSION-PLAN.md before editing; keep additions to surgical blocks (a new machine type block, a new item entry). |
 | `main.js` game loop, `world.js` contract | Frozen outside Stage 0 except by agreement. |
 
 **Standing discipline** (from WORKING.md, restated because it has bitten us):
@@ -326,7 +326,7 @@ before pushing; never touch files another session has open with uncommitted
 changes; commit surgically by filename, never `git add -A`; push after every
 biggish change; **browser-verify, not just headless** — a headless-passing
 change can still throw on the first live frame (the `drawObelisk` freeze).
-Log every suggestion into PAI-version-plan.md as it arrives.
+Log every suggestion into VERSION-PLAN.md as it arrives.
 
 **Sequencing constraint:** Stage 0 must not start while another session has
 main.js / robots.js / fortress.js open with uncommitted changes — check

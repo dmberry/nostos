@@ -14,25 +14,29 @@
 
 export const BLIGHT_MAX = 9;        // tiles a single tower's front reaches at full spread
 export const BLIGHT_GROW = 0.28;    // radius tiles/sec while the tower is live + networked
-export const BLIGHT_RECOVER = 0.5;  // radius tiles/sec the front retreats once the tower is stopped
 
 // A tower contributes a growing front only while it is standing, networked, and
 // not jammed. `destroyed`/`needsRebuild`/`frozen`/`jammed` all stop it. When it
-// is not contributing, its radius retreats toward zero (the ground recovers).
+// is not contributing, its radius FREEZES where it is — felling a tower stops the
+// spread but does NOT green the ground back. The dead ground is a scar, and it
+// stays a scar: recovery is per-tile and active only, by the player's grass seed
+// or a W5 gardener (the hub owns that). Felling one tower must heal nothing.
 export function obeliskLive(ob) {
   return !ob.destroyed && !ob.needsRebuild && !ob.frozen && !ob.jammed;
 }
 
 // Advance every obelisk's blight radius one step. `active` is whether POSEIDON is
-// online at all — no blight grows before the network wakes. Mutates `ob.blightR`.
+// online at all — no blight grows before the network wakes. A live tower widens
+// its front; a stopped one HOLDS its radius (the scar persists), it never
+// retreats. Mutates `ob.blightR`.
 export function blightStep(obeliskObjs, dt, active) {
   for (const ob of obeliskObjs) {
     if (ob.blightR == null) ob.blightR = 0;
     if (active && obeliskLive(ob)) {
       ob.blightR = Math.min(BLIGHT_MAX, ob.blightR + BLIGHT_GROW * dt);
-    } else {
-      ob.blightR = Math.max(0, ob.blightR - BLIGHT_RECOVER * dt);
     }
+    // else: FROZEN. The front holds; the ground it took stays taken until the
+    // player or a gardener works it back tile by tile. No automatic recovery.
   }
 }
 

@@ -17,6 +17,15 @@ const CHIP_FRAGMENTS_PER_CHIP = 8; // fragments shed by machines to craft one ch
 const FORTRESS_MAP_FRAGMENTS = 5; // scattered map quarters pieced into a fortress map
 const SCRAP_PER_SWORD = 10; // scrap beaten into a robot sword
 const TORCHES_PER_GOGGLES = 5; // torch-heads stripped for phosphor + a board -> goggles
+const BLUEBOX_CRAFT_CIRCUITS = 2;  // circuit boards soldered into a bluebox
+// Reviving the machine you wash ashore with. Deliberately CHEAP and made of
+// early scavenge — batteries and chip fragments turn up in caches from the first
+// hour — because the NostBook is a tool you want in the player's hands early,
+// not a late reward. Circuit boards were wrong for it: those come off felled
+// towers, which is hours away.
+const LAPTOP_REPAIR = [['battery', 2], ['chip_fragment', 2]];
+const SPOOF_RANGE = 6;             // how close you must stand to impersonate a tower
+const BLUEBOX_CONVERT_COST = 1;    // circuit board spent to splice one machine to a gardener
 const WOOD_PER_BOAT = 12;   // wood felled and lashed into a boat (Player.craftBoat)
 const BOAT_HULL = 100;      // a beached boat's starting hull HP (Stage 1b spends it crossing)
 const BOAT_LAUNCH_RADIUS = 2; // must be right at the sea's edge to launch (within ~2 tiles of the shore)
@@ -96,7 +105,7 @@ const SWIM_HEALTH_DRAIN = 1.2; // health/sec: swimming a river is exhausting
 
 
 // Item kinds that can occupy the hands slot.
-const HOLDABLE = new Set(['tool', 'gun', 'gadget', 'bomb', 'map', 'spray']);
+const HOLDABLE = new Set(['tool', 'gun', 'gadget', 'bomb', 'map', 'spray', 'seed']);
 const UBIK_SPRAYS = 20; // charges in a Ubik can before it runs dry
 // Every so often the can does something stranger than settle a patch of
 // reality — a beat of PKD's Ubik itself leaking through: a chapter-heading
@@ -147,7 +156,7 @@ export class Player {
     this.mirrorHeat = 0;       // 0..1 mirror-shield overheat; reflects while cool, melts at 1
     this.compassArmed = false; // toggled by clicking the electro-compass in any slot
     this.gogglesOn = false;    // night-vision goggles worn: they cut POSEIDON's fog
-    this.ronmlKeys = new Set(); // node ids RON-ML's `hack` has cracked open this session
+    this.ronmlKeys = new Set(); // node ids AI-ML's `hack` has cracked open this session
     this.ammoFrac = {};        // accumulated fractional ammo per gun
     this.electroCharge = (ITEMS.electrogun && ITEMS.electrogun.internalMax) || 4; // electro-gun's self-charging internal cell
     this.terminalSafe = false;  // true while jacked into an obelisk terminal (invisible to machines)
@@ -201,10 +210,18 @@ export class Player {
     this.nokiaSent = new Set();
     this._nokiaIvIdx = 0;                     // cycles her intervention lines
     this.phone = { item: 'nokia_3310', qty: 1 }; // the PHONE box beside the walkman (swappable in a later build)
+    // The laptop you carry (docs/laptop-plan.md): its own slot beside the phone and
+    // the walkman, because a laptop is almost nothing but per-instance state and
+    // inventory slots hold only {item, qty}. Null until you find one.
+    //   { model: 'laptop', os: 'unix', fs: <disk>, heat: 0, damage: null }
+    this.laptop = null;
     this.lying = false;  // washed ashore: a fresh game starts face-up on the sand (main.js sets it; first input gets you up)
     this.snakeHigh = 0;  // the 3310's Snake high score (persisted with the save)
     this.nokiaLog = [];                       // the SMS threads: { th: 'CALYPSO'|'RON', from: 'you'|'them', text }
-    this.pockets = [{ item: 'note_home', qty: 1 }, null, null, null]; // start with the Odyssey note in-pocket
+    // Washed ashore with it: a dead machine in your pocket from the first minute.
+    // It is the promise the opening makes — something of yours, that does not
+    // work yet, and that a few hours of scavenging will bring back.
+    this.pockets = [{ item: 'note_home', qty: 1 }, { item: 'laptop_broken', qty: 1 }, null, null];
     this.backpack = null;                    // {slots: [16], weapon} once found; dropped on death
     this.selectedPocket = null;              // 0-3 (pockets), 'bw' (backpack weapon), or null
     // The walkman, worn on a carry strap: its own dashboard slot that only
@@ -295,7 +312,7 @@ export class Player {
   }
 
   // The refunctioned card — a Trojan key or the Hermes card — carries the
-  // Lion's-Gate credential (factory-id.ml + root-access.ml); a bare ai_key does
+  // Lion's-Gate credential (factory_id.ml + root_access.ml); a bare ai_key does
   // not. This is what opens the fortress gate now (fortress_key is retired).
   hasTrojanCard() {
     return this.hasItem('trojan_key') || this.hasItem('hermes_card');
@@ -367,7 +384,7 @@ export class Player {
     return n;
   }
 
-  // Can the OB-gun be crafted right now? (Stun-gun + electro-gun + Wi-Fi block.)
+  // Can the OB_gun be crafted right now? (Stun-gun + electro-gun + Wi-Fi block.)
   canCraftObGun() {
     return this.hasItem('stungun') && this.hasItem('electrogun') && this.hasItem('wifiblock');
   }
@@ -437,6 +454,164 @@ export class Player {
     sfx.play('zap');
     this.say('You strip five torch-heads for their phosphor and wire them to a board: night-vision goggles. Click them to wear them.');
     return true;
+  }
+
+  // The bluebox — a reprogrammer soldered from circuit boards. One per player.
+  canCraftBluebox() {
+    return !this.hasItem('bluebox') && this.countItem('circuit') >= BLUEBOX_CRAFT_CIRCUITS;
+  }
+
+  craftBluebox() {
+    if (!this.canCraftBluebox()) {
+      this.say(this.hasItem('bluebox') ? 'You already carry a bluebox.' : `A bluebox needs ${BLUEBOX_CRAFT_CIRCUITS} circuit boards.`);
+      return false;
+    }
+    for (let n = 0; n < BLUEBOX_CRAFT_CIRCUITS; n++) this.removeItem('circuit');
+    if (!this.stow('bluebox', 1)) { this.say('No room for the bluebox.'); return false; }
+    sfx.play('zap');
+    this.say('You solder the boards into a bluebox. Stun a machine, then press U beside it to rewrite it into a gardener.');
+    return true;
+  }
+
+  // Repairing the broken laptop (docs/laptop-plan.md §3a). There is one machine
+  // in this game and this is how you come by it: find a dead one, solder circuit
+  // boards into it, and it is yours. The disk always survived — what died was the
+  // board — so the files and the manual come back with it.
+  canRepairLaptop() {
+    if (!this.hasItem('laptop_broken') || this.laptop) return false;
+    return LAPTOP_REPAIR.every(([k, n]) => this.countItem(k) >= n);
+  }
+
+  // What the repair still wants, for the message and the HUD hint. Pluralised,
+  // because "2 more battery" is the kind of small wrongness that makes a game
+  // read as unfinished.
+  laptopRepairShort() {
+    return LAPTOP_REPAIR.filter(([k, n]) => this.countItem(k) < n)
+      .map(([k, n]) => {
+        const short = n - this.countItem(k);
+        const name = (ITEMS[k] ? ITEMS[k].name.toLowerCase() : k);
+        // battery -> batteries, not batterys. A consonant before a final y takes
+        // -ies; everything else in this recipe takes a plain s.
+        const many = /[^aeiou]y$/.test(name) ? `${name.slice(0, -1)}ies` : `${name}s`;
+        return `${short} more ${short === 1 ? name : many}`;
+      });
+  }
+
+  repairLaptop(makeDisk) {
+    if (!this.canRepairLaptop()) {
+      if (this.laptop) this.say('You already carry a working NostBook.');
+      else if (this.hasItem('laptop_broken')) this.say(`The board is scorched. It needs ${this.laptopRepairShort().join(' and ')}.`);
+      return false;
+    }
+    for (const [k, n] of LAPTOP_REPAIR) for (let i = 0; i < n; i++) this.removeItem(k);
+    this.removeItem('laptop_broken');
+    this.laptop = { model: 'laptop', os: 'unix', fs: makeDisk(), heat: 0, damage: null, netUp: true };
+    sfx.play('zap');
+    this.say('You strip the cells and the chip fragments into the burnt board, and the screen catches. The disk was never the problem. Press L.');
+    return true;
+  }
+
+  // The OB SPOOFER (docs/laptop-plan.md): stand under a tower, transmit, and the
+  // machine's own control wire hears an obelisk that is not there. Every unit
+  // HOMED TO THAT TOWER takes its orders from you from then on.
+  //
+  // This is deliberately the opposite trade to the bluebox. The bluebox is
+  // surgical and safe: one machine at a time, and it must already be down. The
+  // spoofer takes a whole garrison at once, standing in the open, under the eye,
+  // and costs a battery — and you only know whether the garrison is worth the
+  // charge because you read the tower's own page first. The web is the recon;
+  // this is what the recon was for.
+  spoofObelisk(obeliskObjs = [], robots = [], map) {
+    if (!this.hasItem('ob_spoofer')) { this.say('You have no OB spoofer.'); return false; }
+    let best = null, bd = SPOOF_RANGE * SPOOF_RANGE;
+    for (const ob of obeliskObjs) {
+      if (ob.destroyed) continue;
+      const d = (ob.x + 0.5 - this.x) ** 2 + (ob.y + 0.5 - this.y) ** 2;
+      if (d < bd) { bd = d; best = ob; }
+    }
+    if (!best) { this.say('No tower in range. The spoofer only reaches a few squares — you have to stand under it.'); return false; }
+    if (best.spoofed) { this.say(`${best.code} already answers to you.`); return false; }
+    if (!this.removeItem('battery')) { this.say('The spoofer needs a battery.'); return false; }
+
+    best.spoofed = true;
+    // Its garrison is whoever the network homed to this tower — the same list the
+    // tower publishes on its own page.
+    let turned = 0;
+    for (const r of robots) {
+      if (r.dead || r.friendly || r.hardened) continue;
+      if (r._netHome !== best.code) continue;
+      r.friendly = true;
+      r.aggro = false;
+      r.spoofedBy = best.code;
+      turned += 1;
+    }
+    sfx.play('zap');
+    this.say(turned
+      ? `The spoofer takes ${best.code}'s voice. ${turned} unit${turned === 1 ? '' : 's'} homed to it turn and wait for your orders.`
+      : `The spoofer takes ${best.code}'s voice — but nothing is homed to it. Read a tower's page before you spend a cell.`);
+    return true;
+  }
+
+  // Install a found machine into the slot (E while holding one).
+  installLaptop(makeDisk) {
+    if (!this.removeItem('laptop')) return false;
+    this.laptop = { model: 'laptop', os: 'unix', fs: makeDisk(), heat: 0, damage: null, netUp: true };
+    sfx.play('keydrop');
+    this.say('The lid comes up and it boots on the first try. Press L.');
+    return true;
+  }
+
+  // Salvage a dead machine's disk onto yours (E while holding one). The board is
+  // gone; the platter is not. Each archive lands in its OWN FOLDER under
+  // /salvage, named for whoever owned it, so your own /home stays yours and the
+  // dead keep their names on their work.
+  //
+  // This is why found machines are not swapped for yours: yours has your files
+  // on it. A found one is somebody else's files, and that is the whole value.
+  salvageLaptop(archives, graft) {
+    if (!this.hasItem('dead_laptop')) return false;
+    if (!this.laptop) { this.say('Nothing to read it ON. Repair your own machine first.'); return false; }
+    if (!this.laptop.fs) { this.say('Your machine has no disk mounted.'); return false; }
+    if (!this.salvaged) this.salvaged = [];
+    const next = archives.find((x) => !this.salvaged.includes(x.owner));
+    if (!next) { this.say('You have already read everything these disks had on them.'); return false; }
+    const names = graft(this.laptop.fs, next);
+    this.salvaged.push(next.owner);
+    this.removeItem('dead_laptop');
+    sfx.play('keydrop');
+    this.say(`The disk reads. ${names.length} file(s) copied to /salvage/${next.owner} — open the NostBook (L) and: ls /salvage/${next.owner}`);
+    return true;
+  }
+
+  // Bluebox a downed machine (U): splice new orders into a robot that has been
+  // stunned, or is drained / recharging, turning it into a green-eyed GARDENER
+  // that tends the blight. Costs a circuit board a splice — the constant use for
+  // circuits. Refuses a live hunter (stun it first) and a hardened fortress guard.
+  bluebox(robots = [], map) {
+    if (!this.hasItem('bluebox')) { this.say('You have no bluebox — build one from circuit boards (C).'); return; }
+    const near = (r) => Math.hypot(r.x - this.x, r.y - this.y) < 1.6;
+    const inert = (r) => (r.disabledT || 0) > 0 || r.drained || r.recharging;
+    const candidate = robots.filter((r) => !r.dead && !r.fused && !r.friendly && !r.gardener && near(r));
+    const bot = candidate.find((r) => !r.hardened && inert(r));
+    if (!bot) {
+      if (candidate.some((r) => r.hardened)) { this.say('Its firmware is sealed — a fortress guard takes no new orders.'); return; }
+      if (candidate.length) { this.say('It is still live — the bluebox only takes a machine that is down. Stun it first, or catch it recharging.'); return; }
+      this.say('No downed machine within reach to splice.');
+      return;
+    }
+    if (this.countItem('circuit') < BLUEBOX_CONVERT_COST) { this.say('The bluebox needs a circuit board to write with. Fell a tower for one.'); return; }
+    for (let n = 0; n < BLUEBOX_CONVERT_COST; n++) this.removeItem('circuit');
+    bot.gardener = true;
+    bot.friendly = true;      // reads friendly: green eye, nothing targets it, it targets nothing
+    bot.aggro = false;
+    bot.hurt = false;
+    bot.drained = false;
+    bot.disabledT = 0;
+    bot.recharging = false;
+    bot.battery = 100;
+    sfx.play('zap');
+    if (map) this.sparkAt(map, bot.x, bot.y);
+    this.say(`You splice the bluebox into the ${bot.type.toUpperCase()}. Its eye flushes green and it turns to the dead ground — a gardener now.`);
   }
 
   craftSword() {
@@ -613,7 +788,7 @@ export class Player {
     return true;
   }
 
-  // Combine the three into the OB-gun and take it in hand. The Wi-Fi block is
+  // Combine the three into the OB_gun and take it in hand. The Wi-Fi block is
   // consumed, so main respawns a fresh one somewhere random.
   craftObGun(map) {
     if (!this.canCraftObGun()) { this.say('You need a stun-gun, an electro-gun and a Wi-Fi block.'); return false; }
@@ -624,7 +799,7 @@ export class Player {
     this.hands = 'obgun';
     this.discoverWeapon('obgun');
     sfx.play('zap');
-    this.say('You wire the three together into an OB-gun. It hums, hungry for a tower.');
+    this.say('You wire the three together into an OB_gun. It hums, hungry for a tower.');
     return true;
   }
 
@@ -787,6 +962,19 @@ export class Player {
       this.say(this.gogglesOn ? 'Goggles on. The fog goes green and thin, and you can see.' : 'Goggles up. The fog closes back in.');
       return;
     }
+    // Clicking the dead NostBook says what its board still wants, from whatever
+    // slot it is in. This is the one item in the game whose entire purpose is a
+    // recipe you cannot see, and until now a tap on it silently moved it to your
+    // hand and told you nothing — so the machine the rest of the game hangs off
+    // could sit in a pocket, unbuilt, because nothing ever said what it took.
+    if (held && held.item === 'laptop_broken') {
+      if (this.laptop) { this.say('You already carry a working NostBook. This one is spares.'); return; }
+      const short = this.laptopRepairShort();
+      this.say(short.length
+        ? `The board is burnt through. It needs ${short.join(' and ')}, soldered in with C. Both come out of wrecked machines.`
+        : 'You have what the board needs: two cells and two chip fragments. Press C to rebuild it.');
+      return;
+    }
     // Clicking a printed map (in any slot) just unfolds it — no need to move
     // it to the hand first.
     if (held && held.item === 'printed_map') {
@@ -909,11 +1097,20 @@ export class Player {
       // runs faster — the stones remember being sacred (map.temples is set
       // from placeRuins' grove centres in main.js).
       let regen = HEALTH_REGEN;
+      // Dead ground does not heal you. On POSEIDON's blight the temple's stillness
+      // is broken and even ordinary recovery crawls — so you cannot simply wait it
+      // out in the grey, you have to take the tower that made it.
+      const gf = map.floorAt ? map.floorAt(Math.floor(this.x), Math.floor(this.y)) : null;
+      const onBlight = gf === 'blight' || gf === 'blight_sick';
       const temples = map.temples;
-      if (temples && temples.some((t) => Math.hypot(t.x - this.x, t.y - this.y) < TEMPLE_HEAL_R)) {
+      if (!onBlight && temples && temples.some((t) => Math.hypot(t.x - this.x, t.y - this.y) < TEMPLE_HEAL_R)) {
         regen *= TEMPLE_HEAL_MULT;
         if (!this._templeSaid) { this._templeSaid = true; this.say('A stillness among the old stones. Your wounds knit faster here.'); }
       } else if (this._templeSaid) this._templeSaid = false;
+      if (onBlight) {
+        regen *= 0.2;
+        if (!this._blightSaid) { this._blightSaid = true; this.say('The dead ground gives nothing back. You will not mend here.'); }
+      } else if (this._blightSaid) this._blightSaid = false;
       this.health = Math.min(this.maxHealth, this.health + regen * dt);
     }
 
@@ -1342,7 +1539,7 @@ export class Player {
       this.say(`You read ${def.name} and fold it into your notepad (N).`);
       return;
     }
-    // The RON-ML manual and its torn pages teach the console language, not a
+    // The AI-ML manual and its torn pages teach the console language, not a
     // survival skill — just show their text and count as a little knowledge.
     if (def.manual) {
       this.gainXp('knowledge', def.tip ? 3 : 8);
@@ -1372,7 +1569,7 @@ export class Player {
   _fileBookNote(def) {
     if (!this.onFileNote) return;
     // A def can supply notepadText for a hand-written, literal page (used by
-    // the RON-ML manuals, which are complex enough to warrant a clean, fully
+    // the AI-ML manuals, which are complex enough to warrant a clean, fully
     // spelled-out reference rather than an auto-assembled blurb).
     let body;
     if (def.notepadText) {
@@ -1486,6 +1683,32 @@ export class Player {
       else if (tool.kind === 'spray') this.sprayUbik(map);
       return;
     }
+    // A working machine found in a box: put it in the slot. If you already carry
+    // one, the spare stays in the pack — swapping is pointless now that a found
+    // machine's VALUE is its disk, and a disk is read across rather than carried
+    // (see salvageLaptop). Your own machine keeps your own work on it.
+    if (tool.kind === 'laptop' && !tool.dead && !tool.broken) {
+      if (this.laptop) { this.say('You already carry a working NostBook. Keep this one as a spare.'); return; }
+      if (this.onInstallLaptop) this.onInstallLaptop();
+      return;
+    }
+    // A dead machine in hand: read its disk onto yours. The hub supplies the
+    // archives and the graft, so this file stays free of disk-format knowledge.
+    if (tool.dead && tool.kind === 'laptop') {
+      if (this.onSalvageLaptop) this.onSalvageLaptop();
+      else this.say('You turn it over. Nothing here can read it.');
+      return;
+    }
+    // Grass seed: sow it into the dead ground ahead to green one blighted tile
+    // back. The blight/obelisk knowledge lives in the hub, so route it there —
+    // it heals the tile, or refuses if a live tower still stands over it.
+    if (tool.kind === 'seed') {
+      const stx = Math.floor(this.x + this.facing.x * REACH);
+      const sty = Math.floor(this.y + this.facing.y * REACH);
+      if (this.onPlantSeed) this.onPlantSeed(stx, sty);
+      else this.say('There is nothing to sow here.');
+      return;
+    }
     if (this.stamina < tool.staminaCost) {
       this.say('Too exhausted to swing.');
       return;
@@ -1582,6 +1805,29 @@ export class Player {
     // The mainframe core: the AI itself. Break its hull down (heavy kit only)
     // and the island's controlling mind dies — every machine goes dark.
     if (obj && obj.type === 'mainframe') { this.hitCore(obj, map, tool); return; }
+
+    // An obelisk: only a blade meant for machines bites the alloy. The
+    // robot-sword cuts it down — but slower than the electro-gun's arc (half a
+    // burn a stroke, so about ten strokes to the gun's five), and you must
+    // stand right under the eye to do it, in range of whatever it has called.
+    // Any lighter blade just rings off it.
+    if (obj && obj.type === 'obelisk' && !obj.destroyed) {
+      if (this.hands === 'robot_sword') {
+        this.swingTimer = tool.swingCooldown;
+        this.stamina = Math.max(0, this.stamina - (tool.staminaCost ?? 0));
+        sfx.play('clang', { pitch: 0.7 });
+        this.sparkAt(map, obj.x + 0.5, obj.y + 0.5);
+        obj.shake = 0.15;
+        this.damageObelisk(obj, map, 0.5);
+      } else {
+        this.swingTimer = tool.swingCooldown;
+        this.stamina = Math.max(0, this.stamina - (tool.staminaCost ?? 0) * 0.5);
+        sfx.play('clang', { pitch: 0.5 });
+        obj.shake = 0.1;
+        this.say(`The ${(tool.name || 'weapon').toLowerCase()} rings off the obelisk's alloy — only the robot-sword cuts it, or the electro-gun.`);
+      }
+      return;
+    }
 
     // Shovel: dig a pit in the open ground ahead. A steep pit (height -2)
     // is a trap — a wheeled T1 rolls in and can't climb out, and you can
@@ -2098,7 +2344,7 @@ export class Player {
 
   // Land `amount` burns on an obelisk: scorch/shrink it, report the attack up
   // the network (a W4 is dispatched), and fell it once it reaches five. Shared
-  // by the OB-gun (`burnObelisk`) and the electro-gun's arc.
+  // by the OB_gun (`burnObelisk`) and the electro-gun's arc.
   damageObelisk(ob, map, amount = 1) {
     ob.obDamage = (ob.obDamage || 0) + amount;
     ob.burning = 3; // seconds of visible flame, ticked by the renderer/main
@@ -2113,7 +2359,9 @@ export class Player {
       this.spillObeliskSalvage(ob, map);
       this.say(`Obelisk ${ob.code || ''} buckles and comes down in a shower of sparks and circuitry.`);
     } else {
-      this.say(`The obelisk catches fire. ${5 - ob.obDamage} more should finish it.`);
+      // Round UP so a fractional chip (the robot-sword lands half a burn a
+      // stroke) still reads as whole hits to go, never "4.5 more".
+      this.say(`The obelisk catches fire. ${Math.ceil(5 - ob.obDamage)} more should finish it.`);
     }
   }
 
@@ -2159,7 +2407,7 @@ export class Player {
   // numbered circuit board (1-8, guaranteed spread across the towers — collect
   // all eight for a wave gun), batteries, scrap, and — always — an access chip,
   // so felling any tower hands you the means to jack into the others. Shared by
-  // the OB-gun and the insane bomb. (Not called by RON-ML `crash`, which only
+  // the OB_gun and the insane bomb. (Not called by AI-ML `crash`, which only
   // knocks a tower dark temporarily and leaves nothing behind.)
   spillObeliskSalvage(ob, map) {
     this.addScore(20);
@@ -2271,7 +2519,7 @@ export class Player {
   // While the electro-compass is armed and carried, the facing chevron
   // becomes a cluster of pointers — one per category of notable thing,
   // each to the nearest of its kind, colour-coded: factory (blue), obelisk
-  // (green), a dropped backpack (yellow), a dropped OB-gun (orange). The AI
+  // (green), a dropped backpack (yellow), a dropped OB_gun (orange). The AI
   // mainframe (red) will slot in here once it exists. Returns an array of
   // {x, y, color}, one entry per category that has something to point at.
   compassTargets() {

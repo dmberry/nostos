@@ -34,6 +34,21 @@ export const ITEMS = {
     staminaCost: 4,
     color: '#aab2b8',
   },
+  // A flat-blade screwdriver. Salvage, not a weapon: it goes in the hands and
+  // it will swing, but the numbers say what it is — it barely marks an animal
+  // and does nothing to armour. Its use is that a machine's casing is held on
+  // with screws, and the things worth reaching are inside the casing.
+  screwdriver: {
+    name: 'Screwdriver',
+    kind: 'tool',
+    tier: 1,
+    treeDamage: 0,     // it is not a blade; a tree simply ignores it
+    animalDamage: 2,
+    robotDamage: 1,
+    swingCooldown: 0.5,
+    staminaCost: 3,
+    color: '#c8582f',  // the red plastic handle every toolbox has one of
+  },
   crowbar: {
     name: 'Crowbar',
     kind: 'tool',
@@ -155,12 +170,25 @@ export const ITEMS = {
     swingCooldown: 0.45,
     staminaCost: 4,
     color: '#b8c0c8',
+    // The one blade whose edge bites obelisk alloy: it fells a tower in melee,
+    // slower than the electro-gun's arc (half a burn a stroke). See player.use.
+    cutsObelisk: true,
   },
   scrap: {
     name: 'Scrap',
     kind: 'resource',
     stack: 64,
     color: '#7a7f88',
+  },
+  // A pinch of grass seed, found in caches and huts. Used (E) while facing dead
+  // ground, it greens one blighted tile back — the player's own hands against the
+  // standing reserve, one square at a time. Felling a tower no longer heals on its
+  // own; this and the W5 gardener are the only ways back. See player.plantSeed.
+  grass_seed: {
+    name: 'Grass seed',
+    kind: 'seed',
+    stack: 32,
+    color: '#8fbf5a',
   },
   // Timed bombs: use (E) while holding one to drop it ticking. It goes off
   // after `fuse` seconds in a cloud of fire, hurting everything in `radius`.
@@ -247,6 +275,57 @@ export const ITEMS = {
     kind: 'phone',
     color: '#2b3350',
   },
+  // ---- Laptops (docs/laptop-plan.md) --------------------------------------
+  // The first computer in the game that is YOURS: every other console is bolted
+  // down (obelisks stand where the towers stand, HERMES sits on a hilltop). This
+  // one you carry, and it runs off the network — which is what makes it the place
+  // to LEARN AI-ML rather than perform it under fire.
+  //
+  // It lives in a dedicated dashboard slot beside the phone and the walkman,
+  // because inventory slots are {item, qty} with no per-instance data and a
+  // laptop is almost nothing BUT per-instance data (its OS, its disk, its
+  // damage). So the DEF here is only the MODEL — the body colour and how much
+  // machine it is — and the state lives on player.laptop.
+  //
+  // `cpu`/`ram` gate what will run and how fast it heats (L6+). One icon routine
+  // draws them all, tinted by `color` and by the OS on the screen.
+  // The OB spoofer: a transmitter that pretends to BE a tower. Not the laptop's
+  // card (that one is built in and only reaches the web) — this one talks on the
+  // machines' own control wire, which is why it is a separate object you carry
+  // and use in the open, standing under the tower you are impersonating.
+  //
+  // It is the payoff for browsing: a tower's page lists the units homed to IT, so
+  // the web tells you which garrison is worth taking before you spend the charge.
+  // Point it at a tower and its robots take their orders from you instead.
+  ob_spoofer: {
+    name: 'OB spoofer',
+    kind: 'gadget',
+    tier: 5,
+    ammoType: 'battery',
+    color: '#b56fd8',
+    blurb: 'A transmitter in a lunchbox, tuned to sound exactly like an obelisk.',
+  },
+  // A dead machine somebody else carried. You do not swap it for yours — yours
+  // has your work on it — you read its disk and copy what is on it across (E).
+  // Found ones are content, not equipment: somebody's files, and the last thing
+  // they were doing.
+  dead_laptop: {
+    name: 'Dead laptop', kind: 'laptop', color: '#8a8272', dead: true, damage: 'cracked',
+    blurb: "Not yours. The board is gone, but a disk is a disk — it will still read.",
+  },
+  // ONE machine (docs/laptop-plan.md §3a). The roster of alternative OSes was cut:
+  // this one grew into a complete computer, and an acquisition arc beats variety.
+  laptop: {
+    name: 'NostBook', kind: 'laptop', color: '#c9bda1', cpu: 1, ram: 1,
+    blurb: 'Yellowed plastic, a stiff hinge, a keyboard worn shiny. It works.',
+  },
+  // Found dead. Solder circuit boards into it (C) and it becomes the machine
+  // above — which is also why circuits keep mattering after the bluebox.
+  laptop_broken: {
+    name: 'Broken NostBook', kind: 'laptop', color: '#9d947f', cpu: 1, ram: 1,
+    broken: true, damage: 'cracked',
+    blurb: 'Dead. The board is scorched, but the disk inside it is intact.',
+  },
   // Access chip: carried (not held), it's your interface into the obelisk
   // terminals — the RON-DOS console only opens for someone holding one. While
   // you're jacked in, the obelisk masks you: the machines lose you entirely.
@@ -265,7 +344,7 @@ export const ITEMS = {
     stack: 64,
     color: '#8fe0c0',
   },
-  // Printed map: the RON-ML `print` command runs one off at a terminal and it
+  // Printed map: the AI-ML `print` command runs one off at a terminal and it
   // drops as a physical object you can pick up. Hold it and use it (E / click)
   // to unfold the POSEIDON territory map anywhere, away from a terminal.
   printed_map: {
@@ -294,7 +373,7 @@ export const ITEMS = {
     color: '#9a7038',
   },
   // Calypso's shipwright recipe — the "golden axe". Dropped when you refunction
-  // her at the fortress (RON-ML `retire`). Holding it unlocks the greek_ship
+  // her at the fortress (AI-ML `retire`). Holding it unlocks the greek_ship
   // craft; it is not consumed, so you can build more than one ship.
   golden_axe: {
     name: "Golden axe (Calypso's recipe)",
@@ -334,6 +413,18 @@ export const ITEMS = {
     tier: 2,
     color: '#4fd06a',
   },
+  // The bluebox — a phreaker's reprogrammer built from circuit boards. It cannot
+  // touch a machine that is still hunting: stun one (stun-gun) or catch it
+  // drained / recharging, then press U beside it to splice new orders — its eye
+  // flushes GREEN and it turns into a gardener that tends the blight. Each splice
+  // spends a circuit board, so it is a constant use for circuits, not a one-off.
+  // Carried, never held (key-triggered). See player.bluebox / canCraftBluebox.
+  bluebox: {
+    name: 'Bluebox',
+    kind: 'device',
+    tier: 3,
+    color: '#3a6ea5',
+  },
   // Held defensive gear (kind 'shield'): while it's in your hands a laser
   // coming at you from roughly the front is stopped. A plain shield absorbs
   // it; a mirror shield throws it straight back at whoever fired. Holding one
@@ -366,7 +457,7 @@ export const ITEMS = {
   // Crafted from a stun-gun + electro-gun + Wi-Fi block (press C when you
   // hold all three). Sets an obelisk ablaze; five hits bring one down.
   obgun: {
-    name: 'OB-gun',
+    name: 'OB_gun',
     kind: 'gun',
     tier: 6,
     range: 7,
@@ -408,11 +499,11 @@ export const ITEMS = {
     stack: 4,
     color: '#e6d24a',
     // RON-DOS files the card carries (cd aikey / ls at a terminal). Refunctioning
-    // the card adds files and renames it: trojan_key (+root-access.ml), then
-    // hermes_card (+zeus-lightning.ml). See docs/calypso-escape-chain.md.
-    files: ['access-ai-code.ml', 'factory-id.ml'],
+    // the card adds files and renames it: trojan_key (+root_access.ml), then
+    // hermes_card (+zeus_lightning.ml). See docs/calypso-escape-chain.md.
+    files: ['access_ai_code.ml', 'factory_id.ml'],
   },
-  // The AI key refunctioned (Benjamin) once root-access.ml is written onto it:
+  // The AI key refunctioned (Benjamin) once root_access.ml is written onto it:
   // a Trojan card that opens the Lion's Gate. Same physical object as ai_key,
   // one step on. hasAiKeyFamily() keeps it counting as the AI key.
   trojan_key: {
@@ -420,9 +511,9 @@ export const ITEMS = {
     kind: 'key',
     stack: 1,
     color: '#b5892e',
-    files: ['access-ai-code.ml', 'factory-id.ml', 'root-access.ml'],
+    files: ['access_ai_code.ml', 'factory_id.ml', 'root_access.ml'],
   },
-  // The Trojan card armed with Zeus's command (zeus-lightning.ml, forged at
+  // The Trojan card armed with Zeus's command (zeus_lightning.ml, forged at
   // HERMES): the herald that gets you obeyed at Calypso's terminal. The card's
   // final state.
   hermes_card: {
@@ -430,9 +521,9 @@ export const ITEMS = {
     kind: 'key',
     stack: 1,
     color: '#a9e0ff',
-    files: ['access-ai-code.ml', 'factory-id.ml', 'root-access.ml', 'zeus-lightning.ml'],
+    files: ['access_ai_code.ml', 'factory_id.ml', 'root_access.ml', 'zeus_lightning.ml'],
   },
-  // Spat out by the fortress gate terminal once you hack it with RON-ML. Its
+  // Spat out by the fortress gate terminal once you hack it with AI-ML. Its
   // bolts throw the grand doorway in the southern rampart open — the only way
   // into ZEUS's fortress. A one-way trophy; carried, not held.
   fortress_key: {
@@ -567,7 +658,7 @@ export const ITEMS = {
   torch: {
     name: 'Torch',
     kind: 'resource',
-    stack: 3,
+    stack: 20,   // torches stack freely — you gather a lot, and goggles want five
     color: '#e0a030',
   },
   // Books: read (R) to gain a permanent skill. Knowledge survives death.
@@ -611,7 +702,7 @@ export const ITEMS = {
     author: 'a long-distance runner',
     abstract: 'On breath, cadence, and the economy of a body that has to keep going.',
   },
-  // The RON-ML manual and its torn pages: readable like a skill book (kind
+  // The AI-ML manual and its torn pages: readable like a skill book (kind
   // 'book' so R / walk-onto reads them), but flagged `manual` so they teach
   // the console language instead of a survival skill (Player.learnFromBook).
   book_ronml: {
@@ -621,12 +712,12 @@ export const ITEMS = {
     author: 'RON',
     stack: 1,
     color: '#3fbf6a',
-    text: 'RON-ML is a small functional language — an old ML dialect — that the obelisks answer to. The full guide, with worked examples, is now in your notepad (N); type help at any console for the command list.',
-    // A proper little primer, filed to the notepad — RON-ML is fiddly, so the
+    text: 'AI-ML is a small functional language — an old ML dialect — that the obelisks answer to. The full guide, with worked examples, is now in your notepad (N); type help at any console for the command list.',
+    // A proper little primer, filed to the notepad — AI-ML is fiddly, so the
     // page explains how the language THINKS (functional, expression-based) and
     // shows worked examples, not just a verb list.
     notepadText:
-      'RON-ML is the language the black obelisks answer to. It is a small FUNCTIONAL language — an antique of the late twentieth century, a dialect of ML, the "meta-language" the old programmers built to reason about other programs. RON kept it alive to speak to the machines in their own idiom.\n\n' +
+      'AI-ML is the language the black obelisks answer to. It is a small FUNCTIONAL language — an antique of the late twentieth century, a dialect of ML, the "meta-language" the old programmers built to reason about other programs. RON kept it alive to speak to the machines in their own idiom.\n\n' +
       'HOW IT THINKS\n' +
       'There are no steps, only expressions: every word returns a value, and you build a command by feeding small values into larger ones until one expression describes the result you want. Two joints hold it together:\n\n' +
       '  a |> f            the PIPE — take value a and feed it to f.\n' +
@@ -655,7 +746,7 @@ export const ITEMS = {
       'You can’t crash blind — a node only dies to its own key, so hack first. Type help at any console for the whole list, or help <verb> for one.',
   },
   ronml_page: {
-    name: 'a torn page of RON-ML',
+    name: 'a torn page of AI-ML',
     kind: 'book',
     manual: true,
     author: 'RON',
@@ -700,18 +791,17 @@ export const TAPES = [
   {
     num: 1, artist: 'meme', title: 'compilation', dir: 'Tape-01 meme - compilation', color: '#c9a44a',
     a: { label: 'resonance', tracks: ['01 resonance.mp3'] },
-    b: { label: 'eliza · slip', tracks: ['02 eliza.mp3', '03 slip.mp3'] },
+    b: { label: 'slip', tracks: ['02 slip.mp3'] },
   },
   {
-    num: 2, artist: 'meme', title: 'maieutics', dir: 'Tape-02 meme - maieutics', color: '#9aa45a',
-    a: { label: 'maieutics 1 · 2', tracks: ['01 maieutics 1.mp3', '02 maieutics 2.mp3'] },
-    b: { label: 'maieutics 3', tracks: ['03 maieutics 3.mp3'] },
+    num: 2, artist: '0x0', title: 'Mythologies', dir: 'Tape-02 0x0 - Mythologies', color: '#5a8f9a',
+    a: { label: 'Edge · Core (Overture) · Cloud', tracks: ['01 Edge.mp3', '02 Core (Overture).mp3', '03 Cloud.mp3'] },
+    b: { label: 'Mythologies · Core (Original)', tracks: ['04 Mythologies.mp3', '05 Core (Original).mp3'] },
   },
   {
-    num: 3, artist: 'WARD', title: 'bear stanhope', dir: 'Tape-03 WARD - bear stanhope', color: '#b06a4a',
-    cover: 'album-covers/bear stanhope.jpg',
-    a: { label: 'five · glock', tracks: ['01 five.mp3', '02 glock.mp3'] },
-    b: { label: 'tau bootis', tracks: ['03 tau bootis.mp3'] },
+    num: 3, artist: 'Siegfried Kracauer', title: 'Eliza', dir: 'Tape-03 Siegfried Kracauer - Eliza', color: '#8a6ea0',
+    a: { label: 'eliza', tracks: ['01 eliza.mp3'] },
+    b: { label: 'untitled', tracks: ['02 untitled.mp3'] },
   },
   {
     num: 4, artist: 'Meme vs Xan', title: '24 EP', dir: 'Tape-04 Meme vs Xan - 24 EP', color: '#7a8fb0',
@@ -719,9 +809,18 @@ export const TAPES = [
     b: { label: 'Release · Världen · Incognito', tracks: ['03 Release.mp3', '04 Världen.mp3', '05 Incognito.mp3'] },
   },
   {
-    num: 5, artist: '0x0', title: 'Mythologies', dir: 'Tape-05 0x0 - Mythologies', color: '#5a8f9a',
-    a: { label: 'Edge · Core (Overture) · Cloud', tracks: ['01 Edge.mp3', '02 Core (Overture).mp3', '03 Cloud.mp3'] },
-    b: { label: 'Mythologies · Core (Original)', tracks: ['04 Mythologies.mp3', '05 Core (Original).mp3'] },
+    num: 5, artist: 'meme', title: 'maieutics', dir: 'Tape-05 meme - maieutics', color: '#9aa45a',
+    a: { label: 'maieutics 1 · 2', tracks: ['01 maieutics 1.mp3', '02 maieutics 2.mp3'] },
+    b: { label: 'maieutics 3', tracks: ['03 maieutics 3.mp3'] },
+  },
+  {
+    // The Backspace's own tape: placed ONLY down in the underworld, never scattered
+    // in the overworld. Flagged (not hardcoded by number) so re-ordering the tapes
+    // never strands it — placement reads `backspaceOnly`, see calypso.js/underworld.js.
+    num: 6, artist: 'WARD', title: 'bear stanhope', dir: 'Tape-06 WARD - bear stanhope', color: '#b06a4a',
+    cover: 'album-covers/bear stanhope.jpg', backspaceOnly: true,
+    a: { label: 'five · glock', tracks: ['01 five.mp3', '02 glock.mp3'] },
+    b: { label: 'tau bootis', tracks: ['03 tau bootis.mp3'] },
   },
 ];
 for (const t of TAPES) {

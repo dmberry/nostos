@@ -91,7 +91,7 @@ export function createIsland(seed) {
         }
       }
     }
-    // Torn pages of the RON-ML manual, scattered — mostly in the ruins, a couple
+    // Torn pages of the AI-ML manual, scattered — mostly in the ruins, a couple
     // out in the woods — as loose scraps that echo the bound manual in the caches.
     for (let i = 0; i < 4; i++) drop(boards, 'ronml_page', 1);
     // Fortress-map fragments: quarters of a ZEUS-era survey, scattered hard and
@@ -112,7 +112,7 @@ export function createIsland(seed) {
     // one out in the forest) so a lost tape is always recoverable. WARD is the
     // Backspace's own — it turns up only down there (see underworld.js).
     for (const t of TAPES) {
-      if (t.num === 3) continue; // WARD: Backspace only
+      if (t.backspaceOnly) continue; // WARD "bear stanhope": Backspace only (flagged, not by number)
       drop(boards, `tape_${t.num}`, 1);
       drop(forestGrass, `tape_${t.num}`, 1);
     }
@@ -218,8 +218,21 @@ export function createIsland(seed) {
       [{ item: 'wifiblock', qty: 1 }, { item: 'battery', qty: 4 }],
       // A shovel for digging robot traps.
       [{ item: 'shovel', qty: 1 }],
+      // Two working machines, boxed and forgotten, and the parts to bring your
+      // own one back. You wash ashore carrying a dead NostBook; these are the
+      // reason that is a promise rather than a dead weight.
+      [{ item: 'battery', qty: 2 }, { item: 'chip_fragment', qty: 2 }],
+      [{ item: 'laptop', qty: 1 }],
+      [{ item: 'laptop', qty: 1 }, { item: 'battery', qty: 2 }],
+      // Somebody else's machine. The board is gone; the disk still reads (E).
+      [{ item: 'dead_laptop', qty: 1 }],
+      [{ item: 'dead_laptop', qty: 1 }, { item: 'chip_fragment', qty: 2 }],
       // A saw: fells trees fast and scores more per tree.
       [{ item: 'saw', qty: 1 }],
+      // A screwdriver, in with the parts it belongs beside. No use of its own
+      // yet; it is here so that when there is one, the tool is already out in
+      // the world and already familiar rather than arriving with its mechanic.
+      [{ item: 'screwdriver', qty: 1 }, { item: 'chip_fragment', qty: 1 }],
       // Demolition caches: a couple of bombs to get you started.
       [{ item: 'bomb_small', qty: 1 }, { item: 'bomb_small', qty: 1 }],
       [{ item: 'bomb_medium', qty: 1 }],
@@ -230,7 +243,7 @@ export function createIsland(seed) {
       [{ item: 'sledgehammer', qty: 1 }],
       [{ item: 'railgun', qty: 1 }, { item: 'battery', qty: 14 }],
       // Every remaining tool/weapon in ITEMS gets at least one guaranteed
-      // spawn too — except the wave gun and OB-gun, which stay crafting-only.
+      // spawn too — except the wave gun and OB_gun, which stay crafting-only.
       [{ item: 'penknife', qty: 1 }],
       [{ item: 'seatbelt', qty: 1 }],
       [{ item: 'bat', qty: 1 }],
@@ -245,7 +258,7 @@ export function createIsland(seed) {
       [{ item: 'compass', qty: 1 }],
       // The access chip: your interface into the obelisk terminals.
       [{ item: 'chip', qty: 1 }],
-      // The RON-ML manual: teaches the terminal console language.
+      // The AI-ML manual: teaches the terminal console language.
       [{ item: 'book_ronml', qty: 1 }],
       // A single battered can of Ubik, somewhere in the ruins.
       [{ item: 'ubik', qty: 1 }],
@@ -349,7 +362,7 @@ export function createIsland(seed) {
   for (const ob of obeliskObjs) {
     ob.alert = 0; ob.blinkFlash = 0; ob._blinkT = 2 + Math.random() * 5; ob._nudgeT = 0;
     // A hex code name identifying this tower, so the kill record can list it.
-    ob.code = 'OB-' + ((ob.x * 4096 + ob.y * 31) & 0xffff).toString(16).toUpperCase().padStart(4, '0');
+    ob.code = 'OB_' + ((ob.x * 4096 + ob.y * 31) & 0xffff).toString(16).toUpperCase().padStart(4, '0');
   }
   // RON's hilltop TOR relays — the friendly HERMES terminals, the counter-system
   // to the AI obelisks. Placed on the summits (see placeTors); their objects live
@@ -373,14 +386,14 @@ export function createIsland(seed) {
   // ZEUS's fortress — one of the four AI daemons. Grown as a sealed annex onto the
   // south edge of the map (all overworld spawning above has already happened on
   // the 128x128 grid, so the annex stays clean). Reached only by hacking the
-  // boundary gate terminal in RON-ML. `mainframe` points at the core so the
+  // boundary gate terminal in AI-ML. `mainframe` points at the core so the
   // existing map overlay marks it; `fortress` owns the gate/door logic. (fortress.js
   // now names the AI ZEUS at source, so no override is needed here.)
   // Depart mode (R3): Calypso is the daemon you leave, not the one you kill. Her
   // core is indestructible and her fortress guards detain rather than slay; the
   // win is launching the ship, not razing the mind.
   const fortress = createFortress(map, seed, spawn, { aiName: 'CALYPSO', winMode: 'depart' });
-  const mainframe = fortress.core; // { x, y } of the core, for the RON-ML map star
+  const mainframe = fortress.core; // { x, y } of the core, for the AI-ML map star
   // Ring the island in sea: stamp a dithered sand+water coast into the border
   // tiles now that the towers, relays and fortress are placed (so it leaves them
   // standing). Beyond the outer water band the map edge is still the hard bound,

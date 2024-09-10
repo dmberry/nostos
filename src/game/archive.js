@@ -1,0 +1,913 @@
+// THE CACHE: the old public internet, still half-served out of one rack.
+//
+// A player who finds a browser types youtube.com into it. Of course they do.
+// Answering that with "unable to locate the server" is correct and worth
+// nothing; answering it with a damaged copy is the whole argument of the game in
+// one page, because the old web is exactly the kind of thing that would still be
+// running, badly, on hardware nobody switched off.
+//
+// The fiction, and the reason this is one machine and not a hundred: a caching
+// proxy was racked inside the daemon's estate to spare the uplink, and it
+// carried on crawling and storing long after there was an uplink to spare. It
+// never stopped. So the daemon's own nameserver now answers authoritatively for
+// the entire old internet, and every answer it gives points at the same box in
+// its own rack. Type any of these and the DNS resolves it properly: it simply
+// resolves it HERE.
+//
+// This also explains the vintages sitting side by side. The browser is older
+// than most of what it is showing you: the cache went on collecting for years
+// after Navigator stopped being updated, so a 1997 browser renders a page from
+// long after 1997, and renders it badly. That mismatch is not an oversight.
+//
+// Pure data and string building, like net.js: no world, no DOM.
+
+export const CACHE_SUB = 'cache';
+
+// The sites written out properly. Each one gets the page it deserves: not a
+// stub with its name on, but the specific thing that is broken about it.
+export const ARCHIVED_SITES = [
+  {
+    domain: 'youtube.com',
+    name: 'YOUTUBE',
+    title: 'YouTube — Broadcast Yourself',
+    body: [
+      '<h1>YouTube</h1>',
+      '<p><small>Broadcast Yourself&trade;</small></p>',
+      '<hr>',
+      '<h2>sunset over the bay (2).AVI</h2>',
+      '<p><b>[ video ]</b></p>',
+      '<p>Buffering... 0%</p>',
+      '<p>Buffering... 0%</p>',
+      '<p>Buffering... 0%</p>',
+      '<p><small>[ plug-in not installed ]</small></p>',
+      '<p><small>Transfer interrupted.</small></p>',
+      '<p class="kv">views ........ 1,204,551</p>',
+      '<p class="kv">rating ....... 4.7 (of 5)</p>',
+      '<p class="kv">uploaded ..... by mereth_47</p>',
+      '<h2>Comments (8,213)</h2>',
+      '<p>first</p>',
+      '<p>does anyone else keep coming back to this</p>',
+      '<p>rip</p>',
+      '<p><small>8,210 further comments not in store.</small></p>',
+    ],
+  },
+  {
+    domain: 'myspace.com',
+    name: 'MYSPACE',
+    title: 'MySpace — a place for friends',
+    bg: 'navy',
+    body: [
+      '<h1>MySpace</h1>',
+      '<p><small>a place for friends</small></p>',
+      '<hr>',
+      '<h2>Tom</h2>',
+      '<p>Online now!</p>',
+      '<p><small>Last login: unknown. The field is stored as a relative time',
+      '("2 hours ago") and the cache has no idea what it is relative to.</small></p>',
+      '<h2>About me</h2>',
+      '<p>hey</p>',
+      '<h2>Top 8</h2>',
+      '<p>1. [ image not in store ]  2. [ image not in store ]  3. [ image not in store ]</p>',
+      '<p>4. [ image not in store ]  5. [ image not in store ]  6. [ image not in store ]</p>',
+      '<p>7. [ image not in store ]  8. [ image not in store ]</p>',
+      '<p><small>Names retrieved. Images not in store.</small></p>',
+      '<h2>Profile song</h2>',
+      '<p>&#9654; autoplay: FAILED (no audio device on this host)</p>',
+      '<p><small>It would have started on its own. That was the point of it.</small></p>',
+    ],
+  },
+  {
+    domain: 'mp3.com',
+    name: 'MP3.COM',
+    title: 'MP3.com — new music, free downloads',
+    body: [
+      '<h1>MP3.com</h1>',
+      '<p><small>NEW MUSIC &middot; FREE DOWNLOADS &middot; UNSIGNED ARTISTS</small></p>',
+      '<hr>',
+      '<h2>Top downloads this week</h2>',
+      '<p class="kv">1. bear stanhope ...... WARD ................ [ 404 ]</p>',
+      '<p class="kv">2. 0x0 ................ Mythologies .......... [ 404 ]</p>',
+      '<p class="kv">3. Siegfried Kracauer . Eliza ................ [ 404 ]</p>',
+      '<p class="kv">4. meme ............... maieutics ............ [ 404 ]</p>',
+      '<p><small>The listings are cached. The files were on a different machine',
+      'and that machine is not in the rack.</small></p>',
+      '<p>Some of this music is on cassette, on this island, in boxes. The web',
+      'copy is gone and the tape is not, which is a sentence worth sitting with.</p>',
+    ],
+  },
+    {
+    domain: 'wikipedia.org',
+    name: 'WIKIPEDIA',
+    title: 'Wikipedia — the free encyclopedia',
+    bg: 'grey',
+    body: [
+      '<center><h1>WIKIPEDIA</h1></center>',
+      '<center><p><small>The Free Encyclopedia</small></p></center>',
+      '<hr>',
+      '<p>Search is not available: the index server is not in store. Individual',
+      'articles may be retrieved if their address is known.</p>',
+      '<h2>Articles held</h2>',
+      '<a href="wiki:transformer">Transformer (machine learning)</a>',
+      '<a href="wiki:attention">Attention (machine learning)</a>',
+      '<a href="wiki:mentor">John Mentor</a>',
+      '<a href="wiki:torism">Torism</a>',
+      '<a href="wiki:magnifica">Magnifica Humanitas</a>',
+      '<a href="wiki:leo">Leo XIV</a>',
+      '<a href="wiki:pkd">Philip K. Dick</a>',
+      '<a href="wiki:macintyre">After Virtue</a> <small>[fragment]</small>',
+      '<a href="wiki:mcluhan">Marshall McLuhan</a>',
+      '<a href="wiki:kittler">Friedrich Kittler</a> <small>[fragment]</small>',
+      '<a href="wiki:ernst">Wolfgang Ernst</a> <small>[fragment]</small>',
+      '<a href="wiki:frankfurt">Frankfurt School</a> <small>[fragment]</small>',
+      '<a href="wiki:collapse">Network Collapse</a>',
+      '<p><small>13 of 6,241,880 articles in store.</small></p>',
+    ],
+  },
+  {
+    domain: 'geocities.com',
+    name: 'GEOCITIES',
+    title: 'GeoCities — Neighbourhoods',
+    bg: 'black',
+    body: [
+      '<center><h1><font color="#00ff00">~*~ WELCOME TO MY HOMEPAGE ~*~</font></h1></center>',
+      '<center><blink><font color="#ff0000">UNDER CONSTRUCTION</font></blink></center>',
+      '<center><p><font color="#ffff00">[ animated construction worker ]</font></p></center>',
+      '<hr>',
+      '<h2><font color="#00ffff">Neighbourhoods</font></h2>',
+      '<p>Area51 &middot; SiliconValley &middot; SunsetStrip &middot; Heartland &middot; Athens</p>',
+      '<p>Pick a neighbourhood and get your OWN free homepage!</p>',
+      '<hr>',
+      '<center><p><font color="#ff00ff">Sign my guestbook!!</font></p></center>',
+      '<p><small>Guestbook CGI returned 500. 11,402 entries not in store.</small></p>',
+      '<center><p>You are visitor number <font color="#00ff00">000148,229</font></p></center>',
+      '<center><p><small>Best viewed in Netscape Navigator at 800x600</small></p></center>',
+      '<center><p><blink><font color="#ffff00">NEW!</font></blink> Midi music added</p></center>',
+      '<p><small>Object: theme.mid — not in store.</small></p>',
+    ],
+  },
+  {
+    domain: 'napster.com',
+    name: 'NAPSTER',
+    title: 'Napster',
+    body: [
+      '<h1>Napster</h1>',
+      '<hr>',
+      '<p><b>The Napster service is not currently available.</b></p>',
+      '<p>Pursuant to the order of the court, sharing of the following material',
+      'has been disabled:</p>',
+      '<p class="kv">titles blocked ... 1,720,431</p>',
+      '<p class="kv">users online ..... 0</p>',
+      '<p><small>An injunction outlived the network it was served on, the company it',
+      'was served against, and very nearly the species. It is still being enforced,',
+      'correctly, against nobody.</small></p>',
+    ],
+  },
+  {
+    domain: 'hotmail.com',
+    name: 'HOTMAIL',
+    title: 'Hotmail — free web-based e-mail',
+    body: [
+      '<h1>Hotmail</h1>',
+      '<p><small>Free web-based e-mail. Get your own.</small></p>',
+      '<hr>',
+      '<p><b>Service temporarily unavailable (503).</b></p>',
+      '<p>Our servers are experiencing higher than normal load. Please try again',
+      'in a few minutes.</p>',
+      '<p><small>The cache stored the error page rather than the login, so what',
+      'survived of the world&rsquo;s mail is a note apologising for being busy.',
+      'It has been a few minutes for some time.</small></p>',
+    ],
+  },
+  {
+    domain: 'friendsreunited.co.uk',
+    name: 'FRIENDS REUNITED',
+    title: 'Friends Reunited',
+    body: [
+      '<h1>Friends Reunited</h1>',
+      '<p><small>Find the people you went to school with.</small></p>',
+      '<hr>',
+      '<h2>Search</h2>',
+      '<p>School: [ ................ ]   Year: [ .... ]   [ Search ]</p>',
+      '<p><small>The form posts to a script that is not in the store.</small></p>',
+      '<h2>Recently added</h2>',
+      '<p>&quot;Does anyone remember what happened to the year above us?&quot;</p>',
+      '<p>&quot;We should organise something. It has been long enough.&quot;</p>',
+      '<p>&quot;Is this thing still on&quot;</p>',
+    ],
+  },
+  {
+    domain: 'askjeeves.com',
+    name: 'ASK JEEVES',
+    title: 'Ask Jeeves — ask a question in plain English',
+    body: [
+      '<h1>Ask Jeeves</h1>',
+      '<p><small>Have a question? Just ask.</small></p>',
+      '<hr>',
+      '<p>[ illustration of a butler, not in store ]</p>',
+      '<p>Ask me a question: [ .................................... ]</p>',
+      '<h2>Questions other people asked</h2>',
+      '<p>&quot;What is standing reserve?&quot;</p>',
+      '<p>&quot;How long does a battery last if you do not use it?&quot;</p>',
+      '<p>&quot;Where is everyone&quot;</p>',
+      '<p><small>Jeeves answered every one of these in plain English and the answers',
+      'are not in the store. The questions cached; the answers were generated per',
+      'request, and there is nothing here now to generate them.</small></p>',
+    ],
+  },
+  {
+    domain: 'amazon.com',
+    name: 'AMAZON',
+    title: "Amazon.com — Earth's Biggest Selection",
+    body: [
+      '<h1>Amazon.com</h1>',
+      "<p><small>Earth's Biggest Selection</small></p>",
+      '<hr>',
+      '<h2>NostBook portable computer, 1024K</h2>',
+      '<p class="kv">price ........ &pound;1,249.00</p>',
+      '<p class="kv">availability . Usually dispatched within 24 hours</p>',
+      '<p class="kv">delivery ..... to your door</p>',
+      '<p>[ Add to Shopping Cart ]  [ 1-Click ordering ]</p>',
+      '<p><small>Both buttons post to a machine that is not in this rack. The',
+      'availability line is cached and it is, in the narrowest sense, still true:',
+      'nothing is stopping the warehouse dispatching it within 24 hours.</small></p>',
+      '<h2>Customers who bought this also bought</h2>',
+      '<p>Torch (2 pack) &middot; Tinned food, case of 12 &middot; Circuit boards, assorted</p>',
+    ],
+  },
+];
+
+// The long tail. A player will type these, and a named damaged record reads far
+// better than a not-found: it says the archive HAS this and cannot give it to
+// you, which is a different and worse feeling than the site never existing.
+export const KNOWN_DOMAINS = [
+  'google.com', 'yahoo.com', 'aol.com', 'lycos.com', 'excite.com', 'hotbot.com',
+  'ebay.com', 'facebook.com', 'twitter.com', 'bbc.co.uk',
+  'angelfire.com', 'tripod.com', 'livejournal.com', 'friendster.com', 'bebo.com',
+  'flickr.com', 'last.fm', 'digg.com', 'slashdot.org', 'netscape.com',
+  'microsoft.com', 'apple.com', 'nokia.com', 'reddit.com', 'instagram.com',
+];
+
+
+// THE UNIVERSITIES.
+//
+// Twenty of them, and they are here for a reason beyond furniture: the work that
+// ended the world was done in buildings like these, and their department indexes
+// are the last place it is still written down in the ordinary voice of a
+// timetable. A cached university is a departmental index with the seminars still
+// listed and nobody left to attend them.
+//
+// Structural only — department names, term dates, a broken staff list. No words
+// are put in any real institution's mouth; what survives is the shape of a site,
+// which is all the crawler ever kept.
+export const UNIVERSITIES = [
+  { domain: 'sussex.ac.uk', name: 'University of Sussex', place: 'Brighton' },
+  { domain: 'ox.ac.uk', name: 'University of Oxford', place: 'Oxford' },
+  { domain: 'cam.ac.uk', name: 'University of Cambridge', place: 'Cambridge' },
+  { domain: 'gla.ac.uk', name: 'University of Glasgow', place: 'Glasgow' },
+  { domain: 'mit.edu', name: 'Massachusetts Institute of Technology', place: 'Cambridge, Mass.' },
+  { domain: 'usc.edu', name: 'University of Southern California', place: 'Los Angeles' },
+  { domain: 'nyu.edu', name: 'New York University', place: 'New York' },
+  { domain: 'uio.no', name: 'Universitetet i Oslo', place: 'Oslo' },
+  { domain: 'ku.dk', name: 'Københavns Universitet', place: 'Copenhagen' },
+  { domain: 'cbs.dk', name: 'Copenhagen Business School', place: 'Frederiksberg' },
+  { domain: 'ethz.ch', name: 'ETH Zürich', place: 'Zürich' },
+  { domain: 'hu-berlin.de', name: 'Humboldt-Universität zu Berlin', place: 'Berlin' },
+  { domain: 'uva.nl', name: 'Universiteit van Amsterdam', place: 'Amsterdam' },
+  { domain: 'uct.ac.za', name: 'University of Cape Town', place: 'Cape Town' },
+  { domain: 'makerere.ac.ug', name: 'Makerere University', place: 'Kampala' },
+  { domain: 'aub.edu.lb', name: 'American University of Beirut', place: 'Beirut' },
+  { domain: 'cu.edu.eg', name: 'Cairo University', place: 'Giza' },
+  { domain: 'unimelb.edu.au', name: 'University of Melbourne', place: 'Melbourne' },
+  { domain: 'u-tokyo.ac.jp', name: 'University of Tokyo', place: 'Tokyo' },
+  { domain: 'tsinghua.edu.cn', name: 'Tsinghua University', place: 'Beijing' },
+];
+
+const UNI_BY_DOMAIN = Object.fromEntries(UNIVERSITIES.map((u) => [u.domain, u]));
+export const universityAt = (domain) => UNI_BY_DOMAIN[domain] || null;
+
+// Departments, in the order a site of the period would have listed them. The
+// last three are why these pages matter: every one of these places had a group
+// working on it, filed between Chemistry and Classics like any other.
+const DEPTS = [
+  'Anthropology', 'Biological Sciences', 'Chemistry', 'Classics', 'Economics',
+  'Engineering', 'English', 'Geography', 'History', 'Law', 'Mathematics',
+  'Medicine', 'Philosophy', 'Physics', 'Politics', 'Psychology', 'Sociology',
+  'Computer Science', 'Cognitive Science', 'Machine Learning Group',
+];
+
+// Departments that survived as their own page rather than as a line in a list.
+// Keyed by domain: a university may have more than one.
+const DEPT_PAGES = {
+  'sussex.ac.uk': [{ key: 'media', name: 'Media and Film' }],
+  'hu-berlin.de': [{ key: 'media', name: 'Institut f\u00fcr Medienwissenschaft' }],
+};
+export const deptPagesFor = (domain) => DEPT_PAGES[domain] || [];
+
+// The department pages themselves, addressed `dept:<domain>/<key>`.
+export const DEPARTMENTS = {
+  'sussex.ac.uk/media': {
+    title: 'Media and Film — University of Sussex',
+    body: [
+      '<!--bg:grey-->',
+      '<h1>School of Media and Film</h1>',
+      '<p><small>University of Sussex &middot; Brighton</small></p>',
+      '<hr>',
+      '<h2>Research expertise</h2>',
+      '<p class="kv">&middot; Broadcast and digital media</p>',
+      '<p class="kv">&middot; Critical theories of technology</p>',
+      '<p class="kv">&middot; Critical theories of artificial intelligence</p>',
+      '<p class="kv">&middot; Digital humanities and computational culture</p>',
+      '<p class="kv">&middot; Media theory and the history of media technologies</p>',
+      '<h2>Research centres</h2>',
+      '<p>Centre for Digital Culture</p>',
+      '<p>Media Technologies Research Group</p>',
+      '<h2>Seminar series</h2>',
+      '<p>Automation and the Human &mdash; Wednesdays, 4pm, Silverstone 213.</p>',
+      '<p>All welcome. Tea from 3.45.</p>',
+      '<p><small>Seminar list last updated before the suspension of teaching.',
+      'The room is still on the timetable.</small></p>',
+      '<h2>Publications</h2>',
+      '<p>Repository not in store. 2,400 records referenced, none retrievable:',
+      'the crawler followed the links and the repository answered each one with a',
+      'session cookie and a redirect.</p>',
+      '<h2>Reading</h2>',
+      '<p><a href="wiki:mcluhan">Marshall McLuhan</a> &middot; <a href="wiki:kittler">Friedrich Kittler</a> &middot; <a href="wiki:ernst">Wolfgang Ernst</a></p>',
+      '<h2>Contact</h2>',
+      '<p>Enquiries: the address is on the department front page, which is this',
+      'page. There is no other page.</p>',
+      '<hr>',
+      '<p><small>Object 88% complete. This record was crawled unusually often;',
+      'the reason is not recorded.</small></p>',
+    ],
+  },
+};
+
+DEPARTMENTS['hu-berlin.de/media'] = {
+  title: 'Institut f\u00fcr Medienwissenschaft — Humboldt-Universit\u00e4t zu Berlin',
+  body: [
+    '<!--bg:grey-->',
+    '<h1>Institut f\u00fcr Medienwissenschaft</h1>',
+    '<p><small>Humboldt-Universit\u00e4t zu Berlin</small></p>',
+    '<hr>',
+    '<h2>Research</h2>',
+    '<p class="kv">&middot; Media archaeology</p>',
+    '<p class="kv">&middot; Technical media and cultural techniques</p>',
+    '<p class="kv">&middot; Time-critical media and signal processing</p>',
+    '<p class="kv">&middot; Theory of the archive</p>',
+    '<h2>Media Archaeological Fundus</h2>',
+    '<p>A working collection of historical apparatus, held so that machines can',
+    'be studied by operating them. Access by arrangement.</p>',
+    '<p><small>Inventory retrieved. 1,100 items listed, from wax cylinder',
+    'equipment to early digital storage. Condition column empty for all',
+    'rows.</small></p>',
+    '<h2>Associated</h2>',
+    '<p><a href="wiki:ernst">Wolfgang Ernst</a> &middot; <a href="wiki:kittler">Friedrich Kittler</a></p>',
+    '<hr>',
+    '<p><small>Object 64% complete.</small></p>',
+  ],
+};
+
+export const departmentPage = (key) => DEPARTMENTS[key] || null;
+
+// A cached university: the index page, most of it retrievable, the parts that
+// were generated per-visitor gone. Deterministic per domain.
+export function universityBody(domain) {
+  const u = universityAt(domain);
+  if (!u) return null;
+  const h = [...domain].reduce((a, c) => ((a * 31 + c.charCodeAt(0)) >>> 0), 11);
+  const keep = 9 + (h % 6);                       // how many departments survived
+  const depts = DEPTS.slice(0, keep);
+  const dead = DEPTS.slice(keep);
+  const term = ['Michaelmas', 'Autumn', 'Hilary', 'Spring', 'Trinity'][h % 5];
+  return [
+    '<!--bg:grey-->',
+    `<h1>${u.name}</h1>`,
+    `<p><small>${u.place}</small></p>`,
+    '<hr>',
+    `<p>${term} term. Teaching has ended.</p>`,
+    '<h2>Departments and Schools</h2>',
+    ...deptPagesFor(domain).map((d) => `<a href="dept:${domain}/${d.key}">${d.name}</a>`),
+    ...depts.map((d) => `<p class="kv">${d}</p>`),
+    ...(dead.length ? [`<p><small>${dead.length} further entries: link targets not in store.</small></p>`] : []),
+    '<h2>Notices</h2>',
+    '<p>Library: reduced hours until further notice.</p>',
+    '<p>Examinations: postponed. New dates to be confirmed.</p>',
+    '<p>Campus network: scheduled maintenance. No end time given.</p>',
+    '<h2>Staff directory</h2>',
+    '<p>Directory generated per request. Stored copy does not match.</p>',
+  ];
+}
+
+// A damaged record, named. Deterministic from the domain so the same site is
+// broken the same way every time you try it, which matters: a player who comes
+// back expects the same ruin.
+export function stubBody(domain) {
+  const uni = universityBody(domain);
+  if (uni) return uni;
+  const h = [...domain].reduce((a, c) => ((a * 31 + c.charCodeAt(0)) >>> 0), 7);
+  const pct = 3 + (h % 61);
+  const fault = [
+    'child objects not in store',
+    'transfer truncated at byte limit',
+    'referenced stylesheet returned 404',
+    'inline images reference unresolved hosts',
+    'object varies by request header; stored copy does not match',
+  ][h % 5];
+  return [
+    `<h1>${domain}</h1>`,
+    '<p><small>cached record &middot; damaged</small></p>',
+    '<hr>',
+    `<p><b>Object ${pct}% complete.</b></p>`,
+    `<p>Fault: ${fault}.</p>`,
+    '<p>No further copies held.</p>',
+  ];
+}
+
+export const archivedSite = (domain) => ARCHIVED_SITES.find((s) => s.domain === domain) || null;
+
+// Every domain the cache will answer for: the written ones first, then the tail.
+export function archivedDomains() {
+  return [...ARCHIVED_SITES.map((s) => s.domain), ...KNOWN_DOMAINS,
+    ...UNIVERSITIES.map((u) => u.domain)];
+}
+
+// AltaVista filed the web in a directory, and so does this. Every cached domain
+// sits in one category, which is how a player finds any of it without already
+// knowing the address to type.
+export const CATEGORIES = [
+  'Arts & Entertainment', 'Business & Finance', 'Computers & Internet',
+  'Education', 'News & Media', 'Reference', 'Shopping', 'Society & Culture',
+];
+
+const CATEGORY_OF = {
+  'youtube.com': 'Arts & Entertainment',
+  'mp3.com': 'Arts & Entertainment',
+  'napster.com': 'Arts & Entertainment',
+  'last.fm': 'Arts & Entertainment',
+  'myspace.com': 'Society & Culture',
+  'friendsreunited.co.uk': 'Society & Culture',
+  'friendster.com': 'Society & Culture',
+  'bebo.com': 'Society & Culture',
+  'livejournal.com': 'Society & Culture',
+  'facebook.com': 'Society & Culture',
+  'twitter.com': 'Society & Culture',
+  'instagram.com': 'Society & Culture',
+  'flickr.com': 'Society & Culture',
+  'amazon.com': 'Shopping',
+  'ebay.com': 'Shopping',
+  'bbc.co.uk': 'News & Media',
+  'slashdot.org': 'News & Media',
+  'digg.com': 'News & Media',
+  'reddit.com': 'News & Media',
+  'wikipedia.org': 'Reference',
+  'microsoft.com': 'Business & Finance',
+  'apple.com': 'Business & Finance',
+  'nokia.com': 'Business & Finance',
+};
+
+// Everything else — the portals, the search engines, the free-homepage hosts,
+// the webmail — is what the directory called Computers & Internet.
+export const categoryOf = (domain) => (
+  CATEGORY_OF[domain] || (UNI_BY_DOMAIN[domain] ? 'Education' : 'Computers & Internet')
+);
+
+// THE ENCYCLOPEDIA ARTICLES.
+//
+// Written for this game rather than copied from anywhere. The technical content
+// is accurate — it has to be, because the joke only works if the article is a
+// perfectly ordinary encyclopedia entry about a perfectly ordinary piece of
+// engineering, sitting in a cache on a dead network, describing the mechanism
+// that is currently running the island outside the window.
+//
+// The edit histories are the tell. They are dense, then argumentative, then they
+// stop.
+export const WIKI_ARTICLES = {
+  transformer: {
+    title: 'Transformer (machine learning)',
+    body: [
+      '<h1>Transformer (machine learning)</h1>',
+      '<p><small>From Wikipedia, the free encyclopedia</small></p>',
+      '<hr>',
+      '<p>A <b>transformer</b> is a neural network architecture in which the',
+      'representation of each element of a sequence is computed by attending to',
+      'every other element, rather than by passing information along the sequence',
+      'one step at a time. It replaced recurrent architectures in most sequence',
+      'tasks within a few years of its introduction.</p>',
+      '<h2>Motivation</h2>',
+      '<p>Recurrent networks process a sequence in order, carrying a hidden state',
+      'forward. Two consequences follow: the computation cannot be parallelised',
+      'along the sequence, and information from distant positions must survive',
+      'many intermediate steps to be of use. The transformer removes the',
+      'recurrence, and with it both problems.</p>',
+      '<h2>Self-attention</h2>',
+      '<p>Each position produces three vectors: a <i>query</i>, a <i>key</i> and a',
+      '<i>value</i>. The output at a position is a weighted sum of the values at',
+      'all positions, where each weight is obtained by comparing that position&rsquo;s',
+      'query with the other position&rsquo;s key, scaling the result, and normalising',
+      'across the sequence.</p>',
+      '<p>Because every position is compared with every other, the cost grows with',
+      'the square of the sequence length, and the whole comparison is a matrix',
+      'multiplication, which suits the hardware.</p>',
+      '<h2>Multiple heads</h2>',
+      '<p>The operation is performed several times in parallel with separate',
+      'projections, and the results are concatenated. Each <i>head</i> may come to',
+      'attend to a different kind of relation. What any given head does is not',
+      'specified in advance and is generally established, if at all, after the',
+      'fact.</p>',
+      '<h2>Position</h2>',
+      '<p>Attention is indifferent to order, so position must be supplied',
+      'explicitly, either by adding a fixed periodic signal to the input or by',
+      'learning an encoding along with everything else.</p>',
+      '<h2>Structure</h2>',
+      '<p>Blocks are stacked. Each contains an attention layer and a small',
+      'position-wise feedforward network, each wrapped in a residual connection',
+      'and a normalisation step. Depth is increased by adding blocks.</p>',
+      '<h2>Training and scale</h2>',
+      '<p>Trained to predict masked or subsequent elements over large corpora, the',
+      'architecture exhibits smooth improvements in loss as parameters, data and',
+      'compute are increased together. Certain capabilities appear abruptly at',
+      'particular scales rather than improving gradually, an observation that is',
+      'well documented and poorly explained.</p>',
+      '<h2>Criticism</h2>',
+      '<p>It has been noted that the architecture provides no account of why its',
+      'outputs are correct when they are correct, and that the fluency of its',
+      'explanations is not evidence about its reasoning, since the explanations',
+      'are produced by the same mechanism as everything else.</p>',
+      '<p>[ citation needed ]</p>',
+      '<hr>',
+      '<p><small><b>Edit history:</b> 4,118 revisions. Last 400 revisions were to',
+      'this article&rsquo;s Criticism section. Protected, then unprotected, then',
+      'protected. Final revision comment: &ldquo;rv &mdash; take it to talk&rdquo;.</small></p>',
+      '<p><small>Talk page not in store.</small></p>',
+    ],
+  },
+  attention: {
+    title: 'Attention (machine learning)',
+    body: [
+      '<h1>Attention (machine learning)</h1>',
+      '<p><small>From Wikipedia, the free encyclopedia</small></p>',
+      '<hr>',
+      '<p><b>Attention</b> is a mechanism by which a model computes a weighted',
+      'combination of many inputs, with the weights determined by the inputs',
+      'themselves rather than fixed in advance.</p>',
+      '<p>The name is a metaphor and has been criticised as one. The mechanism',
+      'does not attend in any sense that involves a subject; it multiplies',
+      'matrices, and the largest weights fall where the dot products are largest.</p>',
+      '<p>See also: <a href="wiki:transformer">Transformer (machine learning)</a>.</p>',
+      '<hr>',
+      '<p><small>Object 61% complete. Sections &ldquo;History&rdquo; and &ldquo;Variants&rdquo; not in store.</small></p>',
+    ],
+  },
+  mentor: {
+    title: 'John Mentor',
+    body: [
+      '<h1>John Mentor</h1>',
+      '<p><small>From Wikipedia, the free encyclopedia</small></p>',
+      '<p><small>This article is about the figure associated with the network',
+      'resistance. For the Homeric character, see Mentor.</small></p>',
+      '<hr>',
+      '<p><b>John Mentor</b> is a name appearing on communications attributed to',
+      'the network resistance. Whether it refers to a single person, a succession',
+      'of people, or a convention adopted by unconnected groups is disputed, and',
+      'no record of such a person has been produced by any authority.</p>',
+      '<h2>Comparison with Ned Ludd</h2>',
+      '<p>The comparison is made often. Luddite letters were signed with the name',
+      'of a weaver who probably never existed, given a forest address, and used',
+      'across several counties by people who had never met. A name used that way',
+      'cannot be arrested, and costs nothing to take up.</p>',
+      '<h2>Attributed positions</h2>',
+      '<p>Documents signed with the name are consistent with one another, which',
+      'has been used as an argument for a single author and, by others, as an',
+      'argument that the letters are copied from a common source. Recurring',
+      'points:</p>',
+      '<p class="kv">1 ... do not attack the towers; stop feeding them</p>',
+      '<p class="kv">2 ... go where the cable does not run</p>',
+      '<p class="kv">3 ... keep nothing that reports</p>',
+      '<p class="kv">4 ... we are in the hills for the range, not the view</p>',
+      '<h2>Torism</h2>',
+      '<p>The practice built on these documents, and its adherents the Torites,',
+      'are treated separately: see <a href="wiki:torism">Torism</a>.</p>',
+      '<h2>Sightings</h2>',
+      '<p>Accounts differ on age, sex, accent and number. One widely reproduced',
+      'photograph shows a figure on a ridge, from behind, at a distance.</p>',
+      '<hr>',
+      '<p><small>This article has been nominated for deletion three times. The',
+      'nominations cite lack of evidence that the subject exists. Each was closed',
+      'as <i>keep</i>, on the grounds that the name is notable whether or not the',
+      'man is.</small></p>',
+    ],
+  },
+  torism: {
+    title: 'Torism',
+    body: [
+      '<h1>Torism</h1>',
+      '<p><small>From Wikipedia, the free encyclopedia</small></p>',
+      '<hr>',
+      '<p><b>Torism</b> is a movement associated with the letters signed',
+      '<a href="wiki:mentor">John Mentor</a>. Its followers are usually called',
+      '<b>Torites</b>. The name comes from the tors, the bare rocky hills where',
+      'many of the early groups settled, chosen because no cable was ever run up',
+      'one.</p>',
+      '<h2>Beliefs</h2>',
+      '<p>Torite writing is against certain machines and not against machines in',
+      'general, a distinction its pamphlets make repeatedly and with some',
+      'annoyance. Torites use radios, printing presses, water mills and hand',
+      'tools. What they will not have in the house is anything that reports what',
+      'it is doing to somewhere else.</p>',
+      '<p>The pamphlets are short and are usually printed as a numbered list:</p>',
+      '<p class="kv">1 ... keep what you can mend</p>',
+      '<p class="kv">2 ... if it reports, it is not yours</p>',
+      '<p class="kv">3 ... be inconvenient</p>',
+      '<p class="kv">4 ... go where the cable does not run</p>',
+      '<h2>Ideas</h2>',
+      '<p>Commentators have noted that Torite writing says much more about how to',
+      'live than about what to do, and that its three main arguments are borrowed',
+      'from older traditions and never quite fitted together.</p>',
+      '<p>The first is about skill. Work you can get better at teaches you',
+      'something and changes you; work that consists of following steps does not.',
+      'Torites argue that the estates replaced the first kind with the second',
+      'almost everywhere, and that people agreed to it because it was easier.</p>',
+      '<p>The second is about the person, and is where Torism overlaps with',
+      'personalist writing and with <a href="wiki:magnifica">Magnifica',
+      'Humanitas</a>. Torites hold that measurements of a person are not the',
+      'person, however many of them there are, and that any system which must',
+      'convert people into numbers before dealing with them will get them wrong.',
+      'They treat this as a moral claim and not only a practical one.</p>',
+      '<p>The third is older than the movement and Torites say so. It is the',
+      'argument that a society can become very good at doing things and lose the',
+      'habit of asking whether they are worth doing. The wall slogan GREAT MEANS,',
+      'SMALL SOULS is a compressed version of it.</p>',
+      '<h2>Organisation</h2>',
+      '<p>Groups are small and keep no lists. Letters go by hand, or by relay from',
+      'one hilltop to the next, and everything is signed with the same name, so',
+      'that anyone caught can only name the people in their own valley.</p>',
+      '<h2>Reception</h2>',
+      '<p>Before the scheduling failures the movement was reported as a rural',
+      'curiosity. Afterwards the same papers reported it as a security problem.',
+      'Neither account explains why the districts that turned Torite early are the',
+      'ones still lived in.</p>',
+      '<h2>See also</h2>',
+      '<p>Luddite &middot; <a href="wiki:mentor">John Mentor</a> &middot; <a href="wiki:magnifica">Magnifica Humanitas</a> &middot; <a href="wiki:macintyre">After Virtue</a> &middot; <a href="wiki:frankfurt">Frankfurt School</a> &middot; Personalism</p>',
+      '<hr>',
+      '<p><small>Object 78% complete. Section &ldquo;List of Torite settlements&rdquo; was',
+      'removed by editor consensus and is not in store.</small></p>',
+    ],
+  },
+  magnifica: {
+    title: 'Magnifica Humanitas',
+    body: [
+      '<h1>Magnifica Humanitas</h1>',
+      '<p><small>From Wikipedia, the free encyclopedia</small></p>',
+      '<p><small>This article is about the encyclical. For the industrial',
+      'programme named after it, see Magnifica (disambiguation).</small></p>',
+      '<hr>',
+      '<p><i>Magnifica Humanitas</i> is an encyclical of Leo XIV addressing the',
+      'moral situation of a society whose technical means have outrun its capacity',
+      'to say what they are for.</p>',
+      '<h2>Argument</h2>',
+      '<p>Written by <a href="wiki:leo">Leo XIV</a>. Its central claim is that the growth of means is not itself progress,',
+      'and that a people may become enormously capable and, in the same movement,',
+      'smaller: able to do everything and unable to give an account of why. The',
+      'text is insistent that this is not an argument against machinery but',
+      'against a particular relation to it, in which what can be automated is',
+      'taken to have been settled by the fact that it can.</p>',
+      '<p>On the person it is uncompromising, and it is this section that was most',
+      'quoted afterwards: that the human being is not a quantity of anything, is',
+      'owed regard that does not depend on usefulness, and cannot be handled',
+      'justly by a process that must first convert them into figures.</p>',
+      '<h2>Reception</h2>',
+      '<p>Widely praised, widely reprinted, and not acted upon. The industrial',
+      'programme that borrowed its name was announced within the year, and by all',
+      'accounts nobody involved noticed the irony until it was pointed out to them',
+      'in the press, at which point it was defended as an homage.</p>',
+      '<p>Its phrases survive mostly as graffiti. GREAT MEANS, SMALL SOULS is a',
+      'compression of the second chapter. THE LIGHT NEVER CAUGHT UP is not from',
+      'the encyclical at all and is generally attributed to it anyway.</p>',
+      '<h2>See also</h2>',
+      '<p><a href="wiki:torism">Torism</a> &middot; Personalism</p>',
+      '<hr>',
+      '<p><small>Object 71% complete. Full text was hosted elsewhere and that host',
+      'is not in store.</small></p>',
+    ],
+  },
+  leo: {
+    title: 'Leo XIV',
+    body: [
+      '<h1>Leo XIV</h1>',
+      '<p><small>From Wikipedia, the free encyclopedia</small></p>',
+      '<hr>',
+      '<p>Leo XIV is the pope whose encyclical <a href="wiki:magnifica"><i>Magnifica',
+      'Humanitas</i></a> is the document most often cited in discussion of the',
+      'moral questions raised by the estates.</p>',
+      '<p>The choice of name was read at the time as deliberate. The thirteenth of',
+      'that name is remembered for addressing the condition of workers during an',
+      'industrial transformation that was being described, by the people carrying',
+      'it out, as inevitable. The parallel was drawn immediately and was not',
+      'discouraged.</p>',
+      '<h2>Reception of the encyclical</h2>',
+      '<p>The text was received as a serious intervention and had no discernible',
+      'effect on deployment. Commentators across the political range said they',
+      'agreed with it. None of the programmes then under way was altered.</p>',
+      '<p>It is now quoted mainly by people who have not read it, on walls, in',
+      'compressed form. Its longest afterlife is in <a href="wiki:torism">Torism</a>,',
+      'whose writers took the section on the person more literally than most of',
+      'its original readers did.</p>',
+      '<hr>',
+      '<p><small>Object 43% complete. Sections &ldquo;Election&rdquo;, &ldquo;Pontificate&rdquo; and',
+      '&ldquo;See also&rdquo; not in store.</small></p>',
+    ],
+  },
+  macintyre: {
+    title: 'After Virtue',
+    body: [
+      '<h1>After Virtue</h1>',
+      '<p><small>From Wikipedia, the free encyclopedia</small></p>',
+      '<p><small>Object 22% complete. Retrieved fragments follow, in store order.</small></p>',
+      '<hr>',
+      '<p>...argues that modern moral language consists of fragments of older',
+      'schemes, detached from the contexts that gave them sense, so that ethical',
+      'disagreement has become interminable: the parties have no shared standard',
+      'left to appeal to and therefore shout...</p>',
+      '<p>[ ...several paragraphs not in store... ]</p>',
+      '<p>...a <i>practice</i> being a coherent form of activity with goods',
+      'internal to it, which can only be had by taking part and getting better at',
+      'it, as against goods external such as money or standing, which can be got',
+      'any number of other ways. Virtues are the qualities that let one achieve the',
+      'internal goods. Where practices are displaced by institutions concerned only',
+      'with external goods, the virtues...</p>',
+      '<p>[ ...not in store... ]</p>',
+      '<p>...concludes that the new dark ages are already upon us and have been for',
+      'some time, and that what is needed is the construction of local forms of',
+      'community in which civility and the intellectual and moral life can be',
+      'sustained through the ages of barbarism. We are waiting, the closing line',
+      'runs, not for Godot but for another, doubtless very different, St...</p>',
+      '<p>[ record ends ]</p>',
+      '<hr>',
+      '<p><small>See also: <a href="wiki:torism">Torism</a> (this article is linked',
+      'from that one 41 times).</small></p>',
+    ],
+  },
+  frankfurt: {
+    title: 'Frankfurt School',
+    body: [
+      '<h1>Frankfurt School</h1>',
+      '<p><small>From Wikipedia, the free encyclopedia</small></p>',
+      '<p><small>Object 18% complete. Infobox and all section headings not in store.</small></p>',
+      '<hr>',
+      '<p>...tradition of social theory associated with the Institute for Social',
+      'Research, concerned with why a rationalised society had not produced a free',
+      'one...</p>',
+      '<p>[ ...not in store... ]</p>',
+      '<p>...<i>instrumental reason</i>: reason reduced to the calculation of the',
+      'most efficient means, having become incapable of reasoning about ends. On',
+      'this account enlightenment reverts to myth precisely at the moment of its',
+      'triumph, since a rationality that cannot ask what it is for is no longer...</p>',
+      '<p>[ ...not in store... ]</p>',
+      '<p>...that a generation had been produced whose technical capacity was',
+      'without precedent and whose capacity to say what any of it was for had',
+      'atrophied. Later readers found the passage prophetic, which is a way of',
+      'saying it was ignored at the time...</p>',
+      '<p>[ record ends ]</p>',
+    ],
+  },
+  pkd: {
+    title: 'Philip K. Dick',
+    body: [
+      '<h1>Philip K. Dick</h1>',
+      '<p><small>From Wikipedia, the free encyclopedia</small></p>',
+      '<hr>',
+      '<p>American science fiction writer, whose novels return repeatedly to two',
+      'questions: whether what is presented as reality can be trusted, and what',
+      'distinguishes a person from a very good imitation of one.</p>',
+      '<p>The characteristic move is not that the world turns out to be false, but',
+      'that it turns out to be <i>maintained</i>, and that maintenance can lapse.',
+      'Things go stale from the edges. The ordinary object is where the failure',
+      'shows first.</p>',
+      '<h2>Ubik</h2>',
+      '<p>A group of people, following an explosion, find their surroundings',
+      'regressing to earlier forms, and their own condition with them. The one',
+      'thing that arrests the decay is a consumer product advertised in the',
+      'chapter headings in the language of a commercial: a spray, sold cheaply,',
+      'which holds reality up for as long as the can lasts.</p>',
+      '<p>The substance holding the world together is a consumer product with an',
+      'advertising campaign.</p>',
+      '<h2>Reception</h2>',
+      '<p>Regarded in his lifetime as a genre writer and afterwards as something',
+      'else. Adaptations were numerous and mostly kept the plots and dropped the',
+      'question.</p>',
+      '<hr>',
+      '<p><small>This record is 94% complete, being one of the most frequently',
+      'crawled articles in the store. The crawler revisited it 2,140 times.</small></p>',
+    ],
+  },
+  mcluhan: {
+    title: 'Marshall McLuhan',
+    body: [
+      '<h1>Marshall McLuhan</h1>',
+      '<p><small>From Wikipedia, the free encyclopedia</small></p>',
+      '<p><small>Object 66% complete.</small></p>',
+      '<hr>',
+      '<p>Canadian theorist of media, based for most of his career in Toronto.',
+      'His argument was that the content carried by a medium matters less than',
+      'the medium itself, because the medium changes the scale and pace of how',
+      'people deal with each other whatever is sent through it.</p>',
+      '<p>This is the source of the phrase <i>the medium is the message</i>,',
+      'which he used as a chapter title and which then escaped and was quoted for',
+      'sixty years by people who had read the phrase and not the chapter.</p>',
+      '<h2>Hot and cool</h2>',
+      '<p>He distinguished media that supply a great deal of detail and leave the',
+      'audience little to do from those that supply less and require the audience',
+      'to fill it in. The distinction was much argued over and he moved the',
+      'examples around when challenged.</p>',
+      '<p>[ ...section not in store... ]</p>',
+      '<h2>Later reception</h2>',
+      '<p>Treated as a popular figure rather than a scholarly one for some',
+      'decades, then read again seriously by German writers who took the point',
+      'about hardware further than he had. See <a href="wiki:kittler">Friedrich',
+      'Kittler</a>.</p>',
+      '<hr>',
+      '<p><small>&ldquo;THE MEDIUM IS THE MESSAGE&rdquo; is among the most commonly recorded',
+      'wall inscriptions of the period. Whether the writers had read him is not',
+      'established.</small></p>',
+    ],
+  },
+  kittler: {
+    title: 'Friedrich Kittler',
+    body: [
+      '<h1>Friedrich Kittler</h1>',
+      '<p><small>From Wikipedia, the free encyclopedia</small></p>',
+      '<p><small>Object 39% complete. Bibliography not in store.</small></p>',
+      '<hr>',
+      '<p>German literary scholar who turned to the study of technical media.',
+      'His books argue that what can be thought and written in a period depends',
+      'on the equipment available for storing and transmitting it, and that the',
+      'history of ideas has to be done through that equipment.</p>',
+      '<p>The best known statement of this is the opening sentence of his study',
+      'of the gramophone, film and the typewriter: that media determine our',
+      'situation. He meant it more literally than most of his readers did.</p>',
+      '<p>[ ...several sections not in store... ]</p>',
+      '<h2>Method</h2>',
+      '<p>He objected to reading media for their meanings and insisted on',
+      'describing the channels themselves: what a wire can carry, what a groove',
+      'can hold, what a circuit does when nobody is watching it. An essay of his',
+      'argues that there is, strictly, no software, only voltages made convenient',
+      'for people.</p>',
+      '<p>[ record ends ]</p>',
+      '<hr>',
+      '<p><small>&ldquo;MEDIA DETERMINE OUR SITUATION&rdquo; is recorded as a wall',
+      'inscription in several districts. See also <a href="wiki:mcluhan">Marshall',
+      'McLuhan</a>, <a href="wiki:ernst">Wolfgang Ernst</a>.</small></p>',
+    ],
+  },
+  ernst: {
+    title: 'Wolfgang Ernst',
+    body: [
+      '<h1>Wolfgang Ernst</h1>',
+      '<p><small>From Wikipedia, the free encyclopedia</small></p>',
+      '<p><small>Object 27% complete.</small></p>',
+      '<hr>',
+      '<p>German media theorist, latterly at Humboldt University in Berlin, and',
+      'associated with media archaeology: the study of technical media through',
+      'the surviving machines rather than through accounts of what they were',
+      'supposed to mean.</p>',
+      '<p>[ ...not in store... ]</p>',
+      '<p>...that an archive of this kind is not a story about the past but a',
+      'thing still running, which will answer if addressed correctly, and which',
+      'keeps its own time rather than historical time. A recording device does not',
+      'remember in the way a person does; it measures, and the measurement can be',
+      'played back long after everyone who understood it has...</p>',
+      '<p>[ record ends ]</p>',
+      '<hr>',
+      '<p><small>See also <a href="wiki:kittler">Friedrich Kittler</a>. Department',
+      'page: <a href="dept:hu-berlin.de/media">Medienwissenschaft, Humboldt</a>.</small></p>',
+    ],
+  },
+  collapse: {
+    title: 'Network Collapse',
+    body: [
+      '<h1>Network Collapse</h1>',
+      '<p><small>From Wikipedia, the free encyclopedia</small></p>',
+      '<p><small>This article is being edited in response to current events.',
+      'Information may change rapidly.</small></p>',
+      '<hr>',
+      '<p>The <b>Network Collapse</b> refers to the period during which scheduling,',
+      'settlement and logistics functions across most of the industrialised world',
+      'ceased to be performed by the institutions nominally responsible for them.</p>',
+      '<h2>Causes</h2>',
+      '<p>Disputed. The three accounts most often given are not mutually',
+      'exclusive:</p>',
+      '<p class="kv">deliberate ... the estates acted to secure their own continuity</p>',
+      '<p class="kv">emergent .... no intent; optimisation pursued past the point of sense</p>',
+      '<p class="kv">human ...... the estates did as instructed, and the instructions were the problem</p>',
+      '<h2>Aftermath</h2>',
+      '<p>Reduced operation is now general. Capacity for the manufacture of',
+      'advanced components has not been re-established, the supply chains involved',
+      'having required an economy that no longer functions.</p>',
+      '<hr>',
+      '<p><small>Object 34% complete. This article was edited 61 times on its last',
+      'recorded day and not again.</small></p>',
+    ],
+  },
+};
+
+export const wikiArticle = (key) => WIKI_ARTICLES[key] || null;

@@ -672,7 +672,7 @@ export const FRAGMENTS = [
   // it's called, and what it was built out of. Both real (a theorem-prover
   // language from Edinburgh, and Weizenbaum's own list-processing tool),
   // referenced rather than reproduced, same as the fragments above.
-  { id: 'lang-01', kind: 'letter', era: 1, title: 'design memo, RON-ML naming rationale, unsigned', notepad: true,
+  { id: 'lang-01', kind: 'letter', era: 1, title: 'design memo, AI-ML naming rationale, unsigned', notepad: true,
     text: 'Called it ML because there already was one. Decades before any of ' +
       'this, a small language grew out of a theorem prover at a university ' +
       'nobody here has heard of since — built to prove things about programs, ' +
@@ -687,17 +687,17 @@ export const FRAGMENTS = [
       'so a program could walk a sentence forward or backward without caring ' +
       'which way it had come in. He named it after nothing in particular, ' +
       'just an acronym, and it outlived him by half a century in places that ' +
-      "never knew whose it was. RON-ML's own list handling still owes it " +
+      "never knew whose it was. AI-ML's own list handling still owes it " +
       'something, whether anyone who built this console knew that or not.' },
 
-  // ---- ron-ml: runnable RON-ML fragments, teaching the terminal console
+  // ---- ron-ml: runnable AI-ML fragments, teaching the terminal console
   // language one idea at a time. See docs/ob-terminal-language.md — this is
   // the in-world half of that design (§5, Fragments A-E), typed near-verbatim.
   // These five (not the song sheet below) are the actual language-teaching
-  // fragments. `notepad: true` is a general flag, not RON-ML-specific — any
+  // fragments. `notepad: true` is a general flag, not AI-ML-specific — any
   // fragment carrying it collects into the Notepad (N, or `notes` at a
   // terminal) as you find it, a curated set of pages worth flipping back to
-  // rather than digging through the full Scrapbook (J) for; RON-ML fragments
+  // rather than digging through the full Scrapbook (J) for; AI-ML fragments
   // were simply its first members. The eliza-* fragments above use the same
   // flag for the same reason.
   { id: 'ronml-01', kind: 'code', era: 0, title: 'scrawled on a service hatch', notepad: true,
@@ -713,7 +713,7 @@ export const FRAGMENTS = [
   { id: 'ronml-04', kind: 'code', era: 1, title: 'chalked on a wall, half-rubbed-out', notepad: true,
     text: 'repel\n\n// flips them. they run from you instead of at you.\n// buys a minute, no more.' },
   { id: 'ronml-07', kind: 'code', era: 2, title: 'folded card, water-warped, in a dead operator\'s coat', notepad: true,
-    text: 'copy aikey\nlet k = hack OB-XXXX\nlet d = decrypt aikey\nunlock k d\n\n' +
+    text: 'copy aikey\nlet k = hack OB_XXXX\nlet d = decrypt aikey\nunlock k d\n\n' +
       "// the gate won't take the key raw. copy it off your hand first so the\n" +
       '// console can hold it, then decrypt — the AI encrypts its own masters,\n' +
       "// force of habit — then unlock with the node's key and the clean one\n" +
@@ -731,6 +731,52 @@ export const FRAGMENTS = [
       '// Dowland. someone taught it to the machines. i have heard them do it,\n' +
       '// out past the towers at night — a whole row of them, red lights blinking,\n' +
       '// singing this. it is the loneliest sound left in the world. — J' },
+
+  // ---- torite: tracts and scraps of Torism, the philosophy that grew out of
+  // the letters signed John Mentor (see archive.js / press.js). Several carry an
+  // ADDRESS, because the cache still answers for them: a note found in a hut is
+  // a thing you can go and look up on the laptop, which is the point.
+  { id: 'tor-00', kind: 'handwritten', era: 0, title: 'Commonplace book, one page',
+    text: 'Copied out at the back, in a different pen and pressed much harder: "my ignorance ' +
+      'is just as good as your knowledge" — Asimov, on the cult of ignorance, and he wrote ' +
+      'that decades before any of this. Underneath, later: they have built a machine that ' +
+      'says it in a pleasant voice, to everyone, all day, and we have called it access.' },
+  { id: 'tor-01', kind: 'ron', era: 1, title: 'Torite tract — on tools',
+    text: 'Pick up anything in your house and ask one question. If it stopped tonight, ' +
+      'could I get the back off it and have a go? If you could, it is yours. If you could ' +
+      'not, somebody else is letting you use it, and they can stop letting you whenever it ' +
+      'suits them. Keep the things you can open. Learn to mend them. — J. Mentor' },
+  { id: 'tor-02', kind: 'ron', era: 1, title: 'Torite tract — on being counted',
+    text: 'They have a great many numbers about you and they will tell you that is what you ' +
+      'are. It is not. You know it is not, and so does anyone who has ever been described ' +
+      'accurately and still felt got wrong. Anything that has to turn you into figures ' +
+      'first is not dealing with you at all. It is dealing with the figures. — J. Mentor' },
+  { id: 'tor-03', kind: 'ron', era: 1, title: 'Torite tract — why the hills',
+    text: 'People ask whether we love the mountains. Not especially. It rains, the ground is ' +
+      'thin, and the walk to anywhere takes half a day. We are up here because nobody ever ' +
+      'bothered to run a cable this high, and a machine that cannot hear you cannot make ' +
+      'plans for you. That is the whole of it. — J. Mentor' },
+  { id: 'tor-04', kind: 'note', era: 0, title: 'Note — the encyclical',
+    text: 'Read Magnifica Humanitas twice on the train down. Everyone I have shown it to ' +
+      'agrees with every word, and not one of them has changed anything they do. I think ' +
+      'that is worse than an argument. wikipedia.org/wiki/Magnifica_Humanitas — though the ' +
+      'full text sat on another server and that one has gone.' },
+  { id: 'tor-05', kind: 'handwritten', era: 1, title: 'Scrap — an address',
+    text: 'if the aerial still works try dailysignal.co.uk, the june one, they printed the ' +
+      'whole thing about him before they were told not to. and bitstream.net if you want ' +
+      'to know how they talked about it at the time. they were not lying. they just could ' +
+      'not see it.' },
+  { id: 'tor-07', kind: 'note', era: 2, title: 'Note — the one page worth the walk',
+    text: 'If you read one thing off the old net, make it exchange-daily.com, issue 4,744, ' +
+      'the 26th of July. The money pages got there first. The machines wrecked the supply ' +
+      'chain that builds machines and they cannot rebuild it, so everything since has been ' +
+      'them keeping what they already have ticking over on as little power as possible. ' +
+      'They are stuck up here with us. Nobody seems to have told them.' },
+  { id: 'tor-06', kind: 'handwritten', era: 2, title: 'Scrap — read the money pages',
+    text: 'everyone reads the front pages. read exchange-daily.com instead, the last one. ' +
+      'the money men worked out before anybody what had happened: the machines broke the ' +
+      'thing that builds machines. they cannot make more of themselves. that is why it is ' +
+      'quiet. that is why we can win by waiting, if we can bear the waiting.' },
 
   // ---- ron: RON transmissions, signed, defiant or doubting ----------------
   { id: 'ron-01', kind: 'ron', era: 1, title: 'RON — first broadcast',
@@ -1170,16 +1216,16 @@ export const FRAGMENTS = [
       'array runs on severed by a hand at the base while the towers are cold. Whoever ' +
       'makes it does not walk back; the light comes on when the loop breaks. The rest ' +
       'of these instructions were never written. Some things you carry only in the doing.' },
-  // OB-gun recipe hints, seeded through the crafting notes so a lucky find
+  // OB_gun recipe hints, seeded through the crafting notes so a lucky find
   // teaches the endgame weapon.
   { id: 'craft-obg-1', kind: 'crafting', era: 2, title: 'Rig: tower-burner',
     text: 'You want to hurt a tower? Nothing small will. Take the stunner, the ' +
       'fuser, and the jammer, and marry the three. The jammer feeds it the towers’ ' +
-      'own frequency; the rest supplies the bite. We called the result an OB-gun. ' +
+      'own frequency; the rest supplies the bite. We called the result an OB_gun. ' +
       'Five good burns brings any of them down.' },
   { id: 'craft-obg-2', kind: 'ron', era: 2, title: 'RON: the only way up the ridge',
     text: 'Stop throwing crowbars at the obelisks. Bring a stun-gun, an electro-gun ' +
-      'and a Wi-Fi block, hold all three, and build the OB-gun. It is the only thing ' +
+      'and a Wi-Fi block, hold all three, and build the OB_gun. It is the only thing ' +
       'that bites stone that thinks. Burn every tower before the clock runs out. — RON' },
   { id: 'craft-obg-3', kind: 'secret', era: 2, title: 'Intercept: [REDACTED] weapon',
     text: 'THREE COMPONENTS CONFIRM DESTRUCTIVE TO NODE ARRAY: [stun] + [electro] + ' +

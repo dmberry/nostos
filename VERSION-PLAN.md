@@ -1,4 +1,4 @@
-# postAI — Version Plan
+# NostOS — Version Plan
 
 This file is the shared planning board for the game. **Henrik: add your ideas and suggestions in the section at the bottom (or anywhere) and push — everything here gets read when the next version is planned.**
 

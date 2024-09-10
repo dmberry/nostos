@@ -87,7 +87,7 @@ export const OBJECTS = {
   // The grand doorway in the rampart: solid until the terminal hack drops a
   // fortress key and the key throws its bolts. Removed from the grid when open.
   fortdoor: { solid: true },
-  // The console kiosk beside the doorway: walk up and click to open its RON-ML
+  // The console kiosk beside the doorway: walk up and click to open its AI-ML
   // hack. A low pillar you bump into, not climb.
   gateterm: { solid: true },
   // ZEUS's mainframe core: the multi-tile structure at the far end.

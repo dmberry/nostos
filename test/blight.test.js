@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   blightStep, tileBlighted, blightDepth, obeliskLive, blightExtent, BLIGHT_SICK_BAND,
-  BLIGHT_MAX, BLIGHT_GROW, BLIGHT_RECOVER,
+  BLIGHT_MAX, BLIGHT_GROW,
 } from '../src/game/blight.js';
 
 const ob = (x, y, extra = {}) => ({ x, y, destroyed: false, needsRebuild: false, frozen: false, jammed: false, blightR: 0, ...extra });
@@ -32,40 +32,41 @@ test('the front covers tiles within its radius and no further', () => {
   assert.equal(tileBlighted(24, 20, obs), false, 'four out, past r=3');
 });
 
-test('KILLING A TOWER STOPS ITS FRONT: the radius retreats to zero', () => {
+test('KILLING A TOWER FREEZES ITS FRONT: the radius holds, it does not retreat', () => {
   const obs = [ob(10, 10, { blightR: BLIGHT_MAX })];
   // it stands, so it holds its ground
   blightStep(obs, 1, true);
   assert.equal(obs[0].blightR, BLIGHT_MAX);
-  // fell it
+  // fell it — the scar stays put; felling heals nothing on its own
   obs[0].destroyed = true;
   const before = obs[0].blightR;
   blightStep(obs, 1, true);
-  assert.ok(obs[0].blightR < before, 'a felled tower loses ground');
+  assert.equal(obs[0].blightR, before, 'a felled tower stops spreading but does not lose its front');
   for (let i = 0; i < 1000; i++) blightStep(obs, 1, true);
-  assert.equal(obs[0].blightR, 0, 'and recovers fully');
+  assert.equal(obs[0].blightR, BLIGHT_MAX, 'the dead ground stays dead until it is actively healed');
 });
 
-test('one felled tower does not heal a still-live neighbour’s front', () => {
+test('felling a tower stops ITS spread without touching a live neighbour’s front', () => {
   const live = ob(5, 5, { blightR: 6 });
   const dead = ob(40, 40, { blightR: 6, destroyed: true });
   const obs = [live, dead];
   for (let i = 0; i < 200; i++) blightStep(obs, 0.1, true);
   assert.equal(live.blightR, BLIGHT_MAX, 'the live one keeps growing');
-  assert.equal(dead.blightR, 0, 'the dead one’s ground came back');
-  // and coverage reflects it: the live tower still blights around itself
+  assert.equal(dead.blightR, 6, 'the felled one’s front is frozen where it stood — no auto-heal');
+  // both still cover their own ground; the kill only halted the spread
   assert.equal(tileBlighted(5, 5, obs), true);
-  assert.equal(tileBlighted(40, 40, obs), false);
+  assert.equal(tileBlighted(40, 40, obs), true);
+  assert.equal(tileBlighted(47, 40, obs), false, 'the frozen front never grew past r=6');
 });
 
-test('jam or freeze stops a front just as a kill does', () => {
+test('jam or freeze halts a front (holds it) just as a kill does', () => {
   assert.equal(obeliskLive(ob(0, 0)), true);
   assert.equal(obeliskLive(ob(0, 0, { jammed: true })), false);
   assert.equal(obeliskLive(ob(0, 0, { frozen: true })), false);
   assert.equal(obeliskLive(ob(0, 0, { needsRebuild: true })), false);
   const obs = [ob(10, 10, { blightR: 5, jammed: true })];
   blightStep(obs, 1, true);
-  assert.ok(obs[0].blightR < 5, 'a jammed tower recovers its ground too');
+  assert.equal(obs[0].blightR, 5, 'a jammed tower stops growing but holds its front');
 });
 
 test('blightExtent counts the footprint without double-counting overlaps', () => {

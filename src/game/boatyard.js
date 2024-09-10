@@ -10,8 +10,9 @@
 // caller falls back to the scatter so the parts can never be unobtainable.
 
 import { makeRng } from './rng.js';
+import { rollBuildingLoot } from './buildings.js';
 
-export function placeBoatYard(map, seed, spawn = null) {
+function placeOneYard(map, seed, spawn, withParts) {
   const rng = makeRng((seed ^ 0x0badf00d) >>> 0);
   const W = map.w, H = map.h;
   const floorAt = (x, y) => (map.inBounds(x, y) ? map.floorAt(x, y) : null);
@@ -79,11 +80,17 @@ export function placeBoatYard(map, seed, spawn = null) {
     }
 
     // Loot: the three parts split across three boxes, each with sea salvage.
-    const boxLoot = [
+    // The three greek-ship parts live in the FIRST yard and only there: a second
+    // yard must not hand out a second sail, or the crossing stops being a thing
+    // you had to find. Later yards hold what a working yard holds, rolled off
+    // the boatyard table in buildings.js — the first real consumer of it.
+    const boxLoot = withParts ? [
       [{ item: 'sail', qty: 1 }, { item: 'tin', qty: 2 }],
       [{ item: 'oar', qty: 1 }, { item: 'torch', qty: 2 }, { item: 'wood', qty: 3 }],
       [{ item: 'rope', qty: 1 }, { item: 'tin', qty: 1 }, { item: 'tape_1', qty: 1 }],
-    ];
+    ] : [0, 1, 2].map(() => [
+      { item: rollBuildingLoot('boatyard', rng), qty: 1 + Math.floor(rng() * 3) },
+    ]);
     const interior = [];
     for (let di = 1; di < HD - 1; di++) for (let wi = 1; wi < WIDTH - 1; wi++) interior.push(rows[di][wi]);
     for (let i = interior.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [interior[i], interior[j]] = [interior[j], interior[i]]; }
@@ -91,6 +98,20 @@ export function placeBoatYard(map, seed, spawn = null) {
       const [tx, ty] = interior[b];
       map.addObject('box', tx, ty, { loot: boxLoot[b], opened: false });
     }
+
+    // The yard is a BUILDING with a kind of its own (buildings.js), so
+    // map.buildingAt answers for it exactly as it does for a town lot — and its
+    // type is `sited`, meaning it is placed here on the shore beside its
+    // slipway and can never be rolled onto a lot two hundred tiles inland.
+    const xs = [], ys = [];
+    for (let di = 0; di < HD; di++) for (let wi = 0; wi < WIDTH; wi++) { xs.push(rows[di][wi][0]); ys.push(rows[di][wi][1]); }
+    const bx0 = Math.min(...xs), by0 = Math.min(...ys);
+    (map.buildings ??= []).push({
+      x0: bx0, y0: by0,
+      w: Math.max(...xs) - bx0 + 1,
+      h: Math.max(...ys) - by0 + 1,
+      type: 'boatyard',
+    });
 
     // ---- the jetty: planks from the beach tile out over the sea (stop at the
     // map edge or where the sea runs out). The root tile (the beach) planks too.
@@ -103,4 +124,22 @@ export function placeBoatYard(map, seed, spawn = null) {
     return true;
   }
   return false;
+}
+
+// An island may have MORE THAN ONE yard: a coast with one boat-builder on it is
+// a coast with a plot device on it, and several read as a place where people put
+// to sea. `count` is how many to try for; each finds its own site (a yard's own
+// walls and boards stop the next one landing on top of it), and only the first
+// carries the ship parts.
+//
+// Returns HOW MANY placed, so the existing `if (!placeBoatYard(...)) scatter()`
+// fallback still reads correctly: zero yards is falsy, and the caller scatters
+// the parts as it always did.
+export function placeBoatYard(map, seed, spawn = null, count = 1) {
+  let placed = 0;
+  for (let i = 0; i < Math.max(1, count); i++) {
+    // A different seed per yard, or every one of them picks the same site.
+    if (placeOneYard(map, (seed ^ (0x1f7 * (i + 1))) >>> 0, spawn, placed === 0)) placed += 1;
+  }
+  return placed;
 }

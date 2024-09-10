@@ -1,5 +1,6 @@
 import { GameMap } from './map.js';
 import { makeRng } from './rng.js';
+import { assignLotTypes } from './buildings.js';
 
 // Phase 2 world generator: a 128x128 seeded overworld with a meandering
 // river, two bridged road crossings, a ruined main town east of the river,
@@ -79,8 +80,20 @@ export function buildWorld(seed, cfg = {}) {
   // Buildings, tracking a small margin around each so scatter and meadows
   // never blockade a doorway or fill a yard.
   const keepClear = [];
-  for (const lot of buildingLots(t.lots, rng)) {
+  // Every lot gets a KIND (buildings.js): ironmonger, warehouse, clinic, house.
+  // Recorded on the map so anything downstream can ask what a building was for —
+  // the loot inside it and the colour of it are both meant to follow from this,
+  // and both should read it from here rather than deciding again.
+  map.buildings = [];
+  // A SEPARATE, derived rng for the type assignment. Drawing lot types from the
+  // main stream shifted every draw after it, so adding building types silently
+  // regenerated the terrain of every existing seed (measured: hills, streams and
+  // scatter all moved). Kinds are a layer over the town, not part of how the
+  // land is made, so they get their own stream and the land stays put — and
+  // changing the type rules later can never move a hill again.
+  for (const lot of assignLotTypes(buildingLots(t.lots, rng), makeRng((seed ^ 0x5b1d) >>> 0))) {
     placeBuilding(map, rng, lot);
+    map.buildings.push({ x0: lot.x0, y0: lot.y0, w: lot.w, h: lot.h, type: lot.type });
     keepClear.push({
       x0: lot.x0 - 2, y0: lot.y0 - 2,
       x1: lot.x0 + lot.w + 1, y1: lot.y0 + lot.h + 1,

@@ -40,10 +40,17 @@ changes.
 
 | # | Folder | Artist | Title | Side A | Side B | Where |
 |---|--------|--------|-------|--------|--------|-------|
-| 1 | `Tape-01 meme - compilation` | meme | compilation | resonance | eliza · slip | walkman starter |
-| 2 | `Tape-02 meme - maieutics` | meme | maieutics | maieutics 1 · 2 | maieutics 3 | scattered in the ruins |
-| 3 | `Tape-03 WARD - bare stanhope` | WARD | bare stanhope | five · glock | tau bootis | yellow box, first underworld room |
-| 4 | `Tape-04 Meme vs Xan - 24 EP` | Meme vs Xan | 24 EP | 24 · High | Release · Världen · Incognito | underworld / scatter |
+| 1 | `Tape-01 meme - compilation` | meme | compilation | resonance | slip | walkman starter |
+| 2 | `Tape-02 0x0 - Mythologies` | 0x0 | Mythologies | Edge · Core (Overture) · Cloud | Mythologies · Core (Original) | scattered in the ruins |
+| 3 | `Tape-03 Siegfried Kracauer - Eliza` | Siegfried Kracauer | Eliza | eliza | untitled | scattered in the ruins |
+| 4 | `Tape-04 Meme vs Xan - 24 EP` | Meme vs Xan | 24 EP | 24 · High | Release · Världen · Incognito | scattered in the ruins |
+| 5 | `Tape-05 meme - maieutics` | meme | maieutics | maieutics 1 · 2 | maieutics 3 | scattered in the ruins |
+| 6 | `Tape-06 WARD - bear stanhope` | WARD | bear stanhope | five · glock | tau bootis | yellow box, first underworld room (`backspaceOnly`) |
+
+> The **order is display-only** — playback and placement are keyed off each tape's
+> `num`/flags, not its position, so tapes can be re-numbered freely. The one tape
+> tied to a place, WARD "bear stanhope", is marked `backspaceOnly: true` (not by
+> number), so it stays the Backspace's own however the list is shuffled.
 
 > Note: the folder format could later be read from a manifest at runtime (so
 > non-coders can add tapes without touching JS). For now the JS array is the

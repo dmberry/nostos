@@ -1504,7 +1504,7 @@ export const uiMethods = {
     ctx.restore();
   },
 
-  // CALYPSO's pong. The ball is the zeus-virus; she is the defence that never
+  // CALYPSO's pong. The ball is the zeus_virus; she is the defence that never
   // misses; the warmth (and the whole palette) rises with the rally. See
   // game/calypso-pong.js for why you cannot win it.
   drawCalypsoPong(g, touch = false) {
@@ -1559,7 +1559,7 @@ export const uiMethods = {
     paddle(px, oy + g.py * ch, paddleC);
     paddle(hx, oy + (g.ay != null ? g.ay : 0.5) * ch, paddleC);
 
-    // the ball — the zeus-virus: a bright mote with a spark-tail.
+    // the ball — the zeus_virus: a bright mote with a spark-tail.
     if (g.served && !g.over) {
       const bx = ox + g.ball.x * cw, by = oy + g.ball.y * ch;
       ctx.strokeStyle = 'rgba(255,240,180,0.5)'; ctx.lineWidth = 2;
@@ -2021,6 +2021,26 @@ export const uiMethods = {
     this.drawLabel('PHONE', sx, sy - 5);
     this.drawSignalBars(sx + 34, sy - 5, hud && hud.nokiaSignal || 0);
     this.drawPhoneBox(sx, sy, P, player);
+    // The LAPTOP box, next along: the machine you carry (docs/laptop-plan.md).
+    // Empty until you find one. Click it to open the shell (slot kind 'laptop').
+    sx += P + 10;
+    this.drawLabel('LAPTOP', sx, sy - 5);
+    this.drawLaptopBox(sx, sy, P, player);
+  },
+
+  // The LAPTOP box: the one console that isn't bolted down. Draws the model you
+  // carry with its own body colour and OS screen tint (drawItemIcon, kind
+  // 'laptop'); an empty cradle when you have none.
+  drawLaptopBox(x, y, s, player) {
+    this.drawSlot(x, y, s, null, 0);
+    const lap = player.laptop;
+    if (lap && ITEMS[lap.model]) {
+      // Pass the instance's OS/damage through to the icon so the screen tint and
+      // any cracking match THIS machine, not just its model.
+      const def = { ...ITEMS[lap.model], os: lap.os, damage: lap.damage };
+      this.drawItemIcon(def, x + s / 2, y + s / 2, s / 26);
+    }
+    this.uiSlots.push({ x, y, w: s, h: s, kind: 'laptop' });
   },
 
   // The PHONE box: the Nokia 3310 in its cradle beside the walkman. Click it to
@@ -2195,6 +2215,11 @@ export const uiMethods = {
       this.drawLabel('PHONE', phX, top + 14);
       this.drawSignalBars(phX + 34, top + 14, hud.nokiaSignal || 0);
       this.drawPhoneBox(phX, top + 20, ws, player);
+      // The LAPTOP box next along, on this layout too — otherwise the machine you
+      // are carrying is invisible here and looks as though it was never given.
+      const lapX = phX + ws + 14;
+      this.drawLabel('LAPTOP', lapX, top + 14);
+      this.drawLaptopBox(lapX, top + 20, ws, player);
     }
 
     // Thin dividers between the kit groups: HANDS | POCKETS | PACK | WALKMAN,

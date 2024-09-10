@@ -39,7 +39,7 @@ lifting the attract/hold/card furniture out of `narrows.js` into a small shell
 the rules modules plug into.
 
 **A unifying frame worth considering:** every cabinet is the same delivery
-problem wearing different clothes — you are firing `zeus-lightning.ml` past a
+problem wearing different clothes — you are firing `zeus_lightning.ml` past a
 defence, and each AI defends in the way that AI defends. That gives the four
 games a common spine and a reason to exist inside the escape chain rather than
 beside it.
