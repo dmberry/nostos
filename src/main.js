@@ -14,14 +14,14 @@ import { makeRng } from './game/rng.js';
 import { DayNight } from './game/daynight.js';
 import { Minimap } from './game/minimap.js';
 import { spawnBirds, updateBirds } from './game/birds.js';
-import { spawnRobots, registerRobotsSystem, spawnW1s, spawnW3, spawnW4, spawnW5, spawnM4, spawnM5, spawnM6, spawnGuard, drawRobot } from './game/robots.js';
+import { spawnRobots, registerRobotsSystem, spawnW1s, spawnW3, spawnW4, spawnW5, spawnM4, spawnM5, spawnM6, spawnGuard, drawRobot, setUnitTagger, setUnitTagsClickable, unitTagAt } from './game/robots.js';
 import { resolveBodyOverlaps } from './game/collision.js';
 import { spawnWaterDroids, updateWaterDroids, drawWaterDroid } from './game/waterdroids.js';
 import { Lore, FRAGMENTS } from './game/lore.js';
 import { ITEMS, TAPES } from './game/items.js';
 import { sfx } from './engine/sound.js';
 import { worldToScreen } from './engine/iso.js';
-import { runRonml, decide } from './game/ronml.js';
+import { runRonml, decide, joinProgramLines, diagnose, joinProgram, typeReport, aimlVersion, aimlFull, AIML_VERSION, loadPrelude } from './game/ai_ml.js';
 import { createEliza } from './game/eliza.js';
 import { placeTors, HERMES_DOCS, hermesTopics, virusFor, virusFilesFor, virusDocsFor } from './game/hermes.js';
 import { VERSION } from './version.js';
@@ -40,11 +40,12 @@ import { createHelios } from './islands/helios.js';
 import { createNokia, sendNokia, holdRise, holdFall, holdBand, HOLD_COLD, HOLD_WARM, calypsoSms, ronSms, daemonSms, hasDaemonSms, logSms } from './game/nokia.js';
 import { newSnakeGame, snakeTurn, snakeTurnRelative, snakeTick, drawSnake } from './game/snake.js';
 import { CHOIR_NOTES, CHOIR_DURATION } from './engine/choir-notes.js';
-import { makeDisk, newShell, runUnix, pathString, edOpen, edRun, writeFile, lookup, resolvePath, isFile, SALVAGE_DISKS, graftSalvage } from './game/unix.js';
+import { makeDisk, newShell, runUnix, hasFile, pathString, edOpen, edRun, writeFile, lookup, resolvePath, isFile, SALVAGE_DISKS, graftSalvage, graftSystemDirs, parseSelection, handlesOwnPaste, isBrowserChord } from './game/unix.js';
 import { PDFS, pdfByName, pdfPath, pdfNames } from './game/pdfs.js';
+import { BOOKS, bookByKey, bookKeys, bookPath, libraryPage } from './game/books.js';
 import { isMobile } from './game/mobile-gate.js';
 import { buildingName, buildingLook } from './game/buildings.js';
-import { hostTable, findHost, pageFor, renderPage, searchResults, bookmarksPage, whatsNewPage, docsPage, docTitle, programPage, pressPage, wikiPage, deptPage, spoofedAddr, islandSubnet, IFACE } from './game/net.js';
+import { hostTable, findHost, pageFor, renderPage, searchResults, bookmarksPage, whatsNewPage, docsPage, docTitle, programPage, pressPage, wikiPage, deptPage, spoofedAddr, islandSubnet, networksInRange, relayHosts, RELAY_ESSID, RELAY_IP, relayFile, RELAY_FILES, IFACE, REPORT_HOLD, REPORT_COOLDOWN, HTTPD_PATH, httpdBinary, httpdToken } from './game/net.js';
 import { CROSSINGS, islandProfile } from './game/islands.js';
 
 // Note onsets split into four pitch registers, so each singing machine can be
@@ -3138,11 +3139,19 @@ function openRonMap() {
     g.beginPath(); g.moveTo((i / 8) * W, 0); g.lineTo((i / 8) * W, H); g.stroke();
     g.beginPath(); g.moveTo(0, (i / 8) * H); g.lineTo(W, (i / 8) * H); g.stroke();
   }
-  // Live machines (small red dots).
-  g.fillStyle = '#e0552f';
+  // Live machines: a dot, and the name the network knows it by. An unlabelled
+  // dot tells you a machine is there and nothing about which machine it is,
+  // which is no use when you have a program to post to one of four identical
+  // T-1s. The obelisk prints what it has on file, so the map is the way across
+  // from a unit on the ground to a hostname you can type.
+  g.font = '8px ui-monospace, monospace';
   for (const r of currentWorld.robots) {
     if (r.dead || r.fused || r.friendly) continue;
-    g.beginPath(); g.arc(sx(r.x), sy(r.y), 2.5, 0, Math.PI * 2); g.fill();
+    const x = sx(r.x), y = sy(r.y);
+    g.fillStyle = '#e0552f';
+    g.beginPath(); g.arc(x, y, 2.5, 0, Math.PI * 2); g.fill();
+    g.fillStyle = 'rgba(240,150,120,0.85)';
+    g.fillText(netIdOf(currentWorld, r), x + 4, y + 3);
   }
   // Obelisks (green squares + code), destroyed ones hollow.
   g.font = '9px ui-monospace, monospace';
@@ -3344,8 +3353,13 @@ window.addEventListener('keydown', (e) => {
   else if (e.key === 'PageUp') body.scrollTop -= page;
   else if (e.key === 'Home') body.scrollTop = 0;
   else if (e.key === 'End') body.scrollTop = body.scrollHeight;
-  // Every key is swallowed while the Scrapbook is open — acted on or not — so none
-  // leaks into player movement (WASD) or a text caret behind the modal.
+  // Every UNMODIFIED key is swallowed while the Scrapbook is open, acted on or
+  // not, so none leaks into player movement (WASD) or a text caret behind the
+  // modal. A key held with Ctrl, Cmd or Alt is not movement and never was: it
+  // is the browser's, and swallowing it meant you could select a lore page with
+  // the mouse and then fail to copy it — which matters now that the pages carry
+  // addresses you are meant to type into the browser on the laptop.
+  if (isBrowserChord(e)) return;
   e.preventDefault();
   e.stopImmediatePropagation();
 }, true);
@@ -3420,6 +3434,27 @@ function replRun(line) {
   replPrint(result.text);
 }
 
+// EIGHTY COLUMNS. Every text file on this disk is written to fit a terminal of
+// the period, which was 80 characters wide. The CRT is a fixed box on a screen
+// of unknown size, so the font is what has to give: size it so 80 characters
+// fit the width there is. Without this, `cat` on any file longer than about 68
+// columns soft-wraps mid-sentence and loses the indentation with it.
+const TERM_COLS = 80;
+function fitTerminalColumns() {
+  const el = obTermScreen;
+  if (!el || !el.clientWidth) return;
+  // A monospace glyph is a fixed fraction of the font size; measure it rather
+  // than assume, because the family differs by platform.
+  const probe = document.createElement('canvas').getContext('2d');
+  probe.font = '100px ui-monospace, "Courier New", monospace';
+  const ratio = probe.measureText('M').width / 100;
+  const want = el.clientWidth / (TERM_COLS * ratio);
+  const px = Math.max(9, Math.min(15, want));
+  el.style.fontSize = `${px.toFixed(2)}px`;
+  el.style.lineHeight = '1.55';
+}
+window.addEventListener('resize', fitTerminalColumns);
+
 function openObTerminal(ob) {
   if (player.isSwine()) { player.say('You snuffle at the screen. A beast cannot work a terminal — find moly.'); return; }
   if (!player.hasItem('chip')) { openAiOs(ob); return; }
@@ -3438,6 +3473,7 @@ function openObTerminal(ob) {
     player.say('The node caches your AI key as you jack in — lose the card and you can reprint one here: print aikey.');
   }
   obTermEl.style.display = 'flex';
+  fitTerminalColumns();
   obTermScreen.parentElement.style.display = 'none';
   obTermConnect.style.display = 'block';
   obTermBar.style.width = '0%';
@@ -3484,6 +3520,7 @@ function openGateTerminal() {
   replSession = {};
   player.terminalSafe = true;
   obTermEl.style.display = 'flex';
+  fitTerminalColumns();
   obTermScreen.parentElement.style.display = 'flex';
   obTermConnect.style.display = 'none';
   replLog = [];
@@ -3612,6 +3649,7 @@ function openCoreTerminal() {
   replSession = {};
   player.terminalSafe = true;
   obTermEl.style.display = 'flex';
+  fitTerminalColumns();
   obTermScreen.parentElement.style.display = 'flex';
   obTermConnect.style.display = 'none';
   replLog = [];
@@ -3776,6 +3814,7 @@ function openHermesTerminal(tor) {
   player.terminalSafe = true;
   obTermEl.classList.add('hermes');
   obTermEl.style.display = 'flex';
+  fitTerminalColumns();
   obTermScreen.parentElement.style.display = 'flex';
   obTermConnect.style.display = 'none';
   updateHermesBattEl();
@@ -3815,6 +3854,20 @@ let laptopSession = {};     // AI-ML bindings, alive while the machine is on
 // actual cell. Robots carry no identity of their own, so the first time one is
 // put on the network it is issued a serial and a home tower (the nearest one to
 // where it patrols) — cached on the robot so an address never moves under you.
+// A machine's name on the network. Assigned on first ask and kept on the unit,
+// so it survives a reload and does not renumber when something dies — the id is
+// a serial off the assembly line, not a position in an array. Everything that
+// names a machine goes through here: the host table, the printed map, and the
+// unit's own page.
+function netIdOf(w, r) {
+  if (!r._netId) {
+    if (w._netSerial == null) w._netSerial = 0;
+    w._netSerial += 1;
+    r._netId = `${String(r.type || 'unit').toUpperCase()}_${String(w._netSerial).padStart(2, '0')}`;
+  }
+  return r._netId;
+}
+
 function netWorldDescriptor() {
   const w = currentWorld;
   const obs = (w.obeliskObjs || []);
@@ -3829,10 +3882,7 @@ function netWorldDescriptor() {
   };
   const robots = (w.robots || []).filter((r) => !r.dead);
   for (const r of robots) {
-    if (!r._netId) {
-      w._netSerial += 1;
-      r._netId = `${String(r.type || 'unit').toUpperCase()}_${String(w._netSerial).padStart(2, '0')}`;
-    }
+    netIdOf(w, r);
     if (r._netHome === undefined) {
       const h = r.home || { x: r.x, y: r.y };
       r._netHome = nearestObCode(h.x, h.y);
@@ -3846,6 +3896,9 @@ function netWorldDescriptor() {
   return {
     islandId: w.id,
     daemon: (core && core.ai) || islandProfile(w.id).daemon,
+    // Whether RON's own network is on the air here, which is only ever a
+    // question of how close you are standing to one of the relays.
+    nearRelay: relayRadioNear(),
     coreDown: !!(core && core.defeated),
     obelisks: obs.map((ob) => ({
       code: ob.code, cls: ob.cls, circuitNum: ob.circuitNum, blightR: ob.blightR,
@@ -3871,6 +3924,11 @@ function netWorldDescriptor() {
       // what the machine is thinking right now, not a record of what it shipped with.
       program: r.program || null, intent: r.intent || null, fault: r.fault || null,
       lamp: r.lamp || null, lampFlash: r.lampFlash || 0,
+      // The status report: whether it is standing there taking one, what it
+      // last filed, and how long before it will answer another request.
+      reportT: r.reportT || 0, report: r.report || null, reportCool: r.reportCool || 0,
+      // The reserve cell: whether it is walking on it, and whether it still has one.
+      limping: !!r.limping, reserveSpent: !!r.reserveSpent,
     })),
   };
 }
@@ -3891,38 +3949,162 @@ function laptopNetState() {
     // is down — an older save with no flag at all comes up working.
     card, iface: IFACE, up: !(player.laptop && player.laptop.netUp === false),
     spoof: spoofedAddr(idx, seed),
-    find: (a) => findHost(hostTable(netWorldDescriptor()), a),
+    find: (a) => findHost(webHosts(), a),
+    local: () => laptopArpSweep(),
+    // THE AIR. Which networks are within reach, and which one the card holds.
+    // The association decides what netscape, ping and telnet can see.
+    networks: () => networksInRange(netWorldDescriptor()),
+    essid: currentEssid(),
+    associate: (e) => { if (player.laptop) player.laptop.essid = e; if (laptopShell && laptopShell.net) laptopShell.net.essid = e; },
   };
+}
+
+// The card holds one association. It defaults to the estate network, because
+// that is what is on the air everywhere and what a card left to itself joins.
+function currentEssid() {
+  const nets = networksInRange(netWorldDescriptor());
+  const held = player.laptop && player.laptop.essid;
+  if (held && nets.some((n) => n.essid === held)) return held;
+  return nets[0] ? nets[0].essid : '';
+}
+
+// A status report. The unit halts, blinks, takes its own readings and files them
+// to its tower. The readings are stamped when the request lands rather than when
+// it completes, which is what a machine reporting its own position means.
+function requestUnitReport(h, r) {
+  r.reportT = REPORT_HOLD;
+  r.reportCool = REPORT_HOLD + REPORT_COOLDOWN;
+  r.lamp = 'blue';
+  r.lampFlash = 1;
+  const home = (currentWorld.obeliskObjs || []).find((o) => String(o.code) === String(h.homeCode));
+  const bearing = home
+    ? `${Math.round(Math.hypot(r.x - (home.x + 0.5), r.y - (home.y + 0.5)))}m ${compass(r.x - (home.x + 0.5), r.y - (home.y + 0.5))} of ${home.code}`
+    : 'no tower assigned';
+  r.report = [
+    `${h.name}  STATUS  ${dayNight.label}`,
+    `station ..... ${bearing}`,
+    `cell ........ ${Math.round((r.battery != null ? r.battery : 1) * 100)}%`,
+    `integrity ... ${Math.round(((r.hp || 0) / (r.maxHp || 1)) * 100)}%`,
+    `contact ..... ${r.aggro ? 'yes' : 'none'}`,
+    `program ..... ${r.fault ? `FAULTED — ${r.fault}` : (r.program ? `running${r.intent ? `, ${r.intent}` : ''}` : 'none loaded')}`,
+  ];
+}
+
+// ARP RANGE. The card associates with what is close enough to hear it, and that
+// is the whole constraint on the sweep: this is a radio, not the island's own
+// network, and it has no route to the obelisk that knows where everything is.
+const ARP_RANGE = 24;
+
+// The sniffer names what its own aerial can hear, which is the same reach.
+const SNIFFER_TAG_RANGE = 24;
+
+// The local sweep: which machines are within radio range, what each is called,
+// and where it was standing when it last answered. This is the field answer to
+// "which T-1 am I looking at" — the printed map is the other one, and needs an
+// obelisk you may not be able to reach.
+function laptopArpSweep() {
+  const hosts = hostTable(netWorldDescriptor());
+  const byId = new Map(hosts.map((h) => [String(h.name).toLowerCase(), h]));
+  const out = [];
+  for (const r of (currentWorld.robots || [])) {
+    if (r.dead || r.fused) continue;
+    const dx = r.x - player.x, dy = r.y - player.y;
+    const d = Math.hypot(dx, dy);
+    if (d > ARP_RANGE) continue;
+    const h = byId.get(String(netIdOf(currentWorld, r)).toLowerCase());
+    if (!h) continue;
+    out.push({
+      host: h.host, ip: h.ip, mac: macFor(h.ip), range: Math.round(d),
+      bearing: compass(dx, dy), down: !!h.down, kind: 'robot', d,
+    });
+  }
+  // The obelisk you are standing at answers too, and so does the foundry if you
+  // are near enough to it — anything on the wire is on the wire.
+  for (const h of hosts) {
+    if (h.kind !== 'obelisk' && h.kind !== 'factory') continue;
+    const o = h.ref; if (!o) continue;
+    const dx = (o.x + 0.5) - player.x, dy = (o.y + 0.5) - player.y;
+    const d = Math.hypot(dx, dy);
+    if (d > ARP_RANGE) continue;
+    out.push({ host: h.host, ip: h.ip, mac: macFor(h.ip), range: Math.round(d),
+      bearing: compass(dx, dy), down: !!h.down, kind: h.kind, d });
+  }
+  out.sort((a, b) => a.d - b.d);
+  return out;
+}
+
+// A hardware address the machine will give the same answer for every time it is
+// asked. Derived from the IP because these were racked in blocks and their cards
+// came off one reel.
+function macFor(ip) {
+  let h = 0;
+  for (let i = 0; i < ip.length; i++) h = (h * 31 + ip.charCodeAt(i)) >>> 0;
+  const b = [];
+  for (let i = 0; i < 3; i++) { b.push(((h >>> (i * 8)) & 0xff).toString(16).padStart(2, '0')); }
+  return `8:0:2b:${b.join(':')}`;
+}
+
+// Eight points, north-up, matching the printed map rather than which way you
+// happen to be facing.
+function compass(dx, dy) {
+  const a = (Math.atan2(dx, -dy) * 180 / Math.PI + 360) % 360;
+  return ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(a / 45) % 8];
 }
 
 function laptopCtx() {
   return {
     station: 'laptop',
+    // The card's own ear, handed to the language. Same table `arp -a` prints,
+    // so a program you write and the command you type see the same air.
+    units: () => laptopArpSweep()
+      .filter((e) => e.kind === 'robot')
+      .map((e) => ({ name: e.host.split('.')[0], range: e.range, bearing: e.bearing, kind: e.kind })),
     hasManual: !!(player.readManuals && player.readManuals.has('book_ronml')),
     session: laptopSession,
+    // The type checker runs HERE and nowhere else. A machine carrying its own
+    // program has a quarter of a second and nobody to read a report; the OB and
+    // HERMES consoles reach into a world this build cannot type. The laptop is
+    // where you are learning the language, which is where a type is worth
+    // seeing.
+    types: true,
   };
 }
 
 // `ml` from the shell: a MODE, the way `eliza` is at an obelisk. Bare `ml` takes
 // the prompt; `ml file.ml` runs a saved program and hands the shell straight back.
 function laptopMlHook(args, env) {
+  const flag = String((args[0] && (args[0].name || args[0].v || args[0])) || '').toLowerCase();
+  if (flag === '-ver' || flag === '--version' || flag === '-v') return { ok: true, text: aimlVersion() };
+  if (flag === '-full' || flag === '--full') return { ok: true, text: aimlFull() };
   if (args.length) {
     let text;
     try { text = runUnixRead(env, args[0]); }
     catch { return { ok: false, text: `${args[0]}: no such file` }; }
     const out = [];
-    for (const line of String(text).split('\n')) {
-      const l = line.trim();
-      if (!l || l.startsWith('(*')) continue;    // comments in the example programs
-      const r = runRonml(l, laptopCtx());
-      if (r.text) out.push(r.text);
+    const ctx = laptopCtx();
+    loadPrelude(ctx);
+    // One session for the whole file, and physical lines joined into logical
+    // ones first, so a program may be laid out the way ML is actually written.
+    for (const { text: l, line } of joinProgram(text)) {
+      if (!l || l.startsWith('(*')) continue;
+      const r = runRonml(l, ctx);
+      if (!String(r.text).startsWith('ERR')) { if (r.text) out.push(r.text); continue; }
+      // Stop at the first error, like a compiler — but say WHERE, show the
+      // line, and if it is a piece of Standard ML this build does not have,
+      // say which piece rather than leaving the lexer to complain about a
+      // colon. A machine that answers "unexpected character" to a signature
+      // block is not teaching anybody anything.
+      const why = diagnose(l);
+      out.push(`${args[0]}:${line}: ${l.length > 64 ? `${l.slice(0, 61)}...` : l}`);
+      out.push(why ? `ERR: ${why}` : String(r.text));
+      break;
     }
     return { ok: true, text: out.join('\n') };
   }
   laptopMl = true;
   return {
     ok: true, mode: 'ml',
-    text: ['', 'AI-ML — off the network. The language only.', 'Type help for the forms, quit to go back to the shell.', ''].join('\n'),
+    text: ['', `AI-ML ${AIML_VERSION}`, 'Type help for the forms, quit to go back to the shell.', ''].join('\n'),
   };
 }
 
@@ -3938,7 +4120,63 @@ function runUnixRead(env, path) {
 // `web` is set, every line you type goes to the browser, not the shell.
 let web = null;   // { view, history, links, html, title }
 
-function webHosts() { return hostTable(netWorldDescriptor()); }
+// WHAT THE CARD CAN REACH, which is whatever is on the network it is currently
+// associated with. RON's relay is not on the daemon's wire and never has been —
+// that is why it is still there — so reaching it means associating with it, and
+// while you are on it the estate network is not there for you either.
+function webHosts() {
+  const e = currentEssid();
+  if (e === RELAY_ESSID) return relayHosts(relayState());
+  return hostTable(netWorldDescriptor());
+}
+
+// What the relay you are standing beside can say about itself. All of it is
+// real: the queue is the queue on your own disk, the vault is whether a key was
+// actually backed up here, the mesh is the other relays this island has and
+// whether they are still standing.
+function relayState() {
+  const near = nearestRelayObj();
+  const code = near ? (near.code || 'TOR') : 'TOR';
+  const day = !dayNight.isNight();
+  // Cells drain overnight and fill by day, which is the whole of how a box on a
+  // hilltop with a small panel behaves.
+  const batt = day ? 100 : Math.max(46, 100 - Math.round((dayNight.hour >= 21 ? dayNight.hour - 21 : dayNight.hour + 3) * 6));
+  let queued = 0;
+  try {
+    const q = laptopShell && laptopShell.root.d.usr.d.spool.d.uucp;
+    queued = q && q.d ? Object.keys(q.d).length : 0;
+  } catch { queued = 0; }
+  const others = (torObjs || []).filter((t) => t !== near);
+  const mesh = others.map((t, i) => {
+    const km = Math.max(1, Math.round(Math.hypot(t.x - (near ? near.x : 0), t.y - (near ? near.y : 0)) / 12) / 10);
+    const obj = map.objectAt ? map.objectAt(t.x, t.y) : null;
+    return {
+      code: (obj && obj.code) || `TOR_${i + 2}`,
+      km: `${km.toFixed(1)}km`, up: true,
+      last: ['41m ago', '2h ago', '6h ago', '11h ago'][i % 4],
+    };
+  });
+  const heard = (currentWorld.robots || []).filter((r) => !r.dead && !r.fused).length;
+  return {
+    code, sited: near ? `summit, ${near.x},${near.y}` : 'summit',
+    uptime: '2941 days, 07:12  (never taken down)',
+    daylight: day, battery: batt,
+    diskUsed: 118 + queued * 2,
+    queued, lastRun: queued ? 'pending — carry it uphill and run uucico' : 'clean',
+    keyHeld: !!player.aikeyBackedUp,
+    mesh, heard, coreDown: !!(mainframe && mainframe.defeated),
+  };
+}
+
+// The relay nearest you, as an object rather than a range check.
+function nearestRelayObj() {
+  let best = null, bd = Infinity;
+  for (const t of (torObjs || [])) {
+    const d = Math.hypot((t.x + 0.5) - player.x, (t.y + 0.5) - player.y);
+    if (d < bd) { bd = d; best = t; }
+  }
+  return best;
+}
 
 // A real DOM browser rather than text on the CRT: net.js already serves real
 // HTML, so the pages the machines are still publishing render natively here,
@@ -3967,6 +4205,18 @@ function nsRender() {
     const dhost = (hosts.find((h) => h.kind === 'docs') || {}).host || 'docs';
     html = docsPage(v.topic, dhost); title = docTitle(v.topic);
     loc = `http://${dhost}/${v.topic === 'index' ? '' : v.topic}`;
+  } else if (v.kind === 'library') {
+    html = libraryPage(); title = 'Library'; loc = 'file:///home/books/';
+  } else if (v.kind === 'book') {
+    const b = bookByKey(v.book);
+    if (!b) {
+      html = `<h1>Not found</h1><p>No book called ${escapeHtml(String(v.book))} on this disk.</p>`;
+      title = 'Not found'; loc = 'file:///home/books/';
+    } else {
+      html = `<iframe class="ns-book" src="${bookPath(b)}" title="${b.title}"></iframe>`;
+      title = `${b.title}${b.author ? ` — ${b.author}` : ''}`;
+      loc = `file:///home/books/${b.key}.html`;
+    }
   } else if (v.kind === 'dept') {
     html = deptPage(v.dept, hosts);
     title = v.dept;
@@ -4033,6 +4283,23 @@ function nsRender() {
   // matters: the bytes land in the machine and it acts on them. Wired here
   // rather than in net.js because net.js is pure and must not know there is a
   // world on the other end of the wire.
+  // The in-page editor: the same wire as the file upload below, minus the trip
+  // through the disk.
+  const progSend = nsPageEl.querySelector('#ns-prog-send');
+  if (progSend) {
+    progSend.addEventListener('click', (e) => {
+      e.preventDefault();
+      const box = nsPageEl.querySelector('#ns-prog-edit');
+      if (!box) return;
+      const r = postProgram(v.addr, box.value);
+      if (r.ok) nsRender();
+      nsMsgEl.textContent = r.ok ? `200 OK — ${r.bytes} bytes. ${r.verdict}` : r.text;
+      sfx.play(r.ok ? 'keyclick' : 'keyclick_soft');
+    });
+  }
+  const progRevert = nsPageEl.querySelector('#ns-prog-revert');
+  if (progRevert) progRevert.addEventListener('click', (e) => { e.preventDefault(); nsRender(); });
+
   const postGo = nsPageEl.querySelector('#ns-post-go');
   if (postGo) {
     postGo.addEventListener('click', (e) => {
@@ -4086,6 +4353,72 @@ function nsRender() {
       });
       continue;
     }
+    // REPORT: ask a unit to stand still and file its own readings. This is the
+    // way across from an address to a machine you can see — the blink is the
+    // answer to "which of those four is t1_03".
+    if (addr.startsWith('report:')) {
+      const target = addr.slice(7);
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        const h = findHost(webHosts(), target);
+        const r = h && h.ref;
+        if (!h || !r || h.down) { nsMsgEl.textContent = 'No answer from that unit.'; return; }
+        if (r.reportT > 0) { nsMsgEl.textContent = 'Already reporting.'; return; }
+        if (r.reportCool > 0) { nsMsgEl.textContent = `Not for another ${Math.ceil(r.reportCool)}s.`; return; }
+        requestUnitReport(h, r);
+        nsMsgEl.textContent = `${h.name}: request accepted, holding station`;
+        nsRender();
+      });
+      continue;
+    }
+    // FORCE HOME: spend a flat unit's reserve cell and send it to its tower.
+    if (addr.startsWith('reserve:')) {
+      const target = addr.slice(8);
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        const h = findHost(webHosts(), target);
+        const unit = h && (currentWorld.robots || []).find((r) => !r.dead && r._netId === h.name);
+        if (!unit) { nsMsgEl.textContent = 'No answer from that unit.'; return; }
+        if (!unit.drained) { nsMsgEl.textContent = `${h.name}: its main cell is not flat.`; return; }
+        if (unit.reserveSpent) { nsMsgEl.textContent = `${h.name}: the reserve is spent.`; return; }
+        unit.limping = true;
+        unit.reserveSpent = true;
+        unit.aggro = false;
+        unit.lamp = 'amber';
+        unit.lampFlash = 0;      // steady amber: a machine under its own recovery
+        sfx.play('blip');
+        nsMsgEl.textContent = `${h.name}: reserve engaged, walking to ${h.homeCode || 'its tower'}`;
+        nsRender();
+      });
+      continue;
+    }
+    // A file RON's relay serves. Same landing as a saved program.ml: the disk
+    // you are already carrying, where pico and ml can both reach it.
+    if (addr.startsWith('ronfile:')) {
+      const name = addr.slice(8);
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        const body = relayFile(name);
+        if (body == null) { nsMsgEl.textContent = `404 Not Found: ${name}`; return; }
+        try {
+          if (!player.laptop.fs) player.laptop.fs = makeDisk();
+          if (!laptopShell) laptopShell = newShell(player.laptop.fs);
+          const home = laptopShell.root.d.home;
+          if (!home.d.download) home.d.download = { d: {} };
+          writeFile({ root: laptopShell.root, cwd: ['home', 'download'] }, name, body);
+          nsMsgEl.textContent = `Saved /home/download/${name} (${body.length} bytes)`;
+        } catch (err) { nsMsgEl.textContent = `Cannot save: ${err.message}`; }
+      });
+      continue;
+    }
+    // A book on the local disk: book:<key>.
+    if (addr.startsWith('book:')) {
+      const key = addr.slice(5);
+      a.addEventListener('click', (e) => { e.preventDefault(); nsSetView({ kind: 'book', book: key }); });
+      a.addEventListener('mouseenter', () => { nsMsgEl.textContent = `file:///home/books/${key}.html`; });
+      a.addEventListener('mouseleave', () => { nsMsgEl.textContent = 'Document: Done'; });
+      continue;
+    }
     // A university department: dept:<domain>/<key>.
     if (addr.startsWith('dept:')) {
       const dept = addr.slice(5);
@@ -4133,6 +4466,10 @@ function openNetscape(addr) {
     const h = findHost(hosts, addr);
     if (!h) { web = null; return { ok: false, text: `netscape: ${addr}: host not found` }; }
     web.view = { kind: 'host', addr: h.ip };
+  } else if (currentEssid() === RELAY_ESSID) {
+    // On RON's network there is exactly one host, and the bookmarks are all
+    // addresses on a network you are not associated with. Open on the box.
+    web.view = { kind: 'host', addr: RELAY_IP };
   } else {
     web.view = { kind: 'bookmarks' };   // a browser opens where its owner left it
   }
@@ -4172,7 +4509,7 @@ let pico = null;   // { name, saved, cut }
 // because they were there, and refuse politely because they are not here.
 const PICO_KEYS = [
   ['^G', 'Get Help'], ['^O', 'WriteOut'], ['^W', 'Where is'], ['^K', 'Cut Text'], ['^C', 'Cur Pos'],
-  ['^X', 'Exit'], ['^J', 'Justify'], ['^R', 'Read File'], ['^U', 'UnCut Text'], ['^T', 'To Spell'],
+  ['^X', 'Exit'], ['^V', 'Paste'], ['^R', 'Read File'], ['^U', 'UnCut Text'], ['^T', 'To Spell'],
 ];
 
 const picoSay = (m) => { picoMsgEl.textContent = m ? `[ ${m} ]` : ''; };
@@ -4251,6 +4588,36 @@ function picoLine() {
 // keyboard, and a TAP on the shortcut bar. The bar has always listed the
 // commands; on a phone it was a list of things you could read and not do, so
 // there was no way to save at all. Now the label IS the button.
+// Paste from OUTSIDE the machine. Real pico has no such key: it had no system
+// clipboard to reach, and ^U puts back what ^K cut, which is pico's own buffer
+// and a different thing entirely. This one runs in a browser where the player
+// does have a clipboard, and on a touch screen the bar is the only way to reach
+// anything, so a Paste key is the difference between being able to write a
+// program here and having to retype it.
+async function picoPaste() {
+  const insert = (text) => {
+    if (!text) { picoSay('Nothing to paste'); return; }
+    const v = picoTextEl.value;
+    const a = picoTextEl.selectionStart;
+    const b = picoTextEl.selectionEnd;
+    picoTextEl.value = v.slice(0, a) + text + v.slice(b);
+    const at = a + text.length;
+    picoTextEl.setSelectionRange(at, at);
+    picoTextEl.focus();
+    picoTitle();
+    const n = text.split('\n').length;
+    picoSay(n > 1 ? `Pasted ${n} lines` : 'Pasted');
+  };
+  try {
+    insert(await navigator.clipboard.readText());
+  } catch {
+    // Reading the clipboard needs permission the player may not have given.
+    // Say what still works rather than failing silently.
+    picoSay('Clipboard not readable here — use Cmd+V or Ctrl+V instead');
+    picoTextEl.focus();
+  }
+}
+
 function picoCommand(k) {
   if (!pico) return;
   if (k === 'x') {
@@ -4259,7 +4626,7 @@ function picoCommand(k) {
   } else if (k === 'o') {
     picoWrite();
   } else if (k === 'g') {
-    picoSay('Type your text. ^O writes the file, ^X leaves. ^K cuts a line, ^U puts it back');
+    picoSay('^O writes the file, ^X leaves. ^K cuts a line, ^U puts it back, ^V pastes from outside');
   } else if (k === 'k') {
     const { v, start, end } = picoLine();
     pico.cut.push(v.slice(start, end));
@@ -4267,8 +4634,10 @@ function picoCommand(k) {
     picoTextEl.setSelectionRange(start, start);
     picoTitle();
     picoSay('Cut');
+  } else if (k === 'v') {
+    picoPaste();
   } else if (k === 'u') {
-    if (!pico.cut.length) { picoSay('Nothing in the cut buffer'); return; }
+    if (!pico.cut.length) { picoSay('Nothing in the cut buffer — ^V pastes from outside'); return; }
     const { v, start } = picoLine();
     const text = `${pico.cut.pop()}\n`;
     picoTextEl.value = v.slice(0, start) + text + v.slice(start);
@@ -4311,6 +4680,9 @@ picoEl.addEventListener('keydown', (e) => {
   }
   if (!e.ctrlKey || e.metaKey || e.altKey) return;
   const k = e.key.toLowerCase();
+  // Ctrl+V is the browser's paste and lands in the textarea by itself, so it is
+  // deliberately NOT in this list. The ^V on the bar exists for touch screens
+  // and for when the browser's own paste has nowhere to go.
   if (!'xogkucwjtr'.includes(k)) return;
   // ^C in pico reports the cursor position. Ctrl+C on Windows and Linux is
   // COPY, and this is a TEXT EDITOR — so with anything selected, the browser
@@ -4331,7 +4703,12 @@ picoKeysEl.addEventListener('click', (e) => {
   const b = e.target.closest('button[data-k]');
   if (!b || !pico) return;
   e.preventDefault();
+  b.blur();                       // a button that keeps focus swallows the next Cmd+V
   picoCommand(b.dataset.k);
+  // Every command ends with the caret back in the file. Without this, one tap
+  // on the bar left focus on a button and the next paste went nowhere, which is
+  // exactly the bug this key was added to work around.
+  if (pico && !pico.asking) picoTextEl.focus();
 });
 
 // The close box does exactly what ^X does, including asking. On a phone there is
@@ -4361,7 +4738,370 @@ picoEl.addEventListener('keyup', (e) => {
   else closePico('back at the shell.');
 });
 
+// Is there a TOR relay close enough to hand a queue to? The relays sit on the
+// summits (hermes.js), which is what turns carrying the machine uphill into the
+// act of posting a letter.
+const UUCP_RANGE = 3.2;
+// The relay's own box carries further than the queue handoff does: you can see
+// its network from the slope and have to climb to hand it a letter.
+const RELAY_RADIO_RANGE = 30;
+function nearestRelay() {
+  let best = null, bd = Infinity;
+  for (const t of (torObjs || [])) {
+    const d = Math.hypot((t.x + 0.5) - player.x, (t.y + 0.5) - player.y);
+    if (d < bd) { bd = d; best = t; }
+  }
+  if (!best) return { inRange: false, code: null, distance: null };
+  const obj = map.objectAt ? map.objectAt(best.x, best.y) : null;
+  return { inRange: bd <= UUCP_RANGE, code: (obj && obj.code) || 'TOR', distance: bd };
+}
+
+// Is a relay close enough for its box to be heard? Wider than UUCP_RANGE, which
+// is the range at which you can physically hand over a queue.
+function relayRadioNear() {
+  for (const t of (torObjs || [])) {
+    if (Math.hypot((t.x + 0.5) - player.x, (t.y + 0.5) - player.y) <= RELAY_RADIO_RANGE) return true;
+  }
+  return false;
+}
+
+// ---- more(1) ---------------------------------------------------------------
+// A screenful at a time. cat puts the whole file up and always did; when a file
+// is longer than the tube that is a file you have read the end of and nothing
+// else. SPACE takes the next page, RETURN one more line, q stops.
+let moreState = null;   // { lines, at } while a pager holds the screen
+
+function laptopMoreHook(args, env, stdin) {
+  let text = stdin;
+  if (text == null) {
+    if (!args[0]) return { ok: false, text: 'more: which file?' };
+    text = laptopFileText(args[0]);
+    if (text == null) return { ok: false, text: `more: ${args[0]}: no such file` };
+  }
+  const lines = String(text).split('\n');
+  // Short enough to fit: print it and do not make a ceremony of it.
+  if (lines.length <= termRows()) return { ok: true, text: String(text) };
+  moreState = { lines, at: 0 };
+  morePage();
+  return { ok: true, text: '' };
+}
+
+// How many lines the tube holds, from the height it actually has and the font
+// fitTerminalColumns settled on. Two spare: one for the --More-- line and one
+// so the last line of the page is not flush against it.
+function termRows() {
+  const px = parseFloat(getComputedStyle(obTermScreen).fontSize) || 13;
+  const rows = Math.floor(obTermScreen.clientHeight / (px * 1.55));
+  return Math.max(6, rows - 2);
+}
+
+function morePage(n) {
+  const st = moreState;
+  if (!st) return;
+  // A real more(1) overwrites its own prompt with the next line. Here the
+  // screen is a log, so drop the last --More-- before printing over it;
+  // otherwise paging a long file leaves a ladder of them down the page.
+  if (replLog.length && /^--More--/.test(replLog[replLog.length - 1])) replLog.pop();
+  const take = n || termRows();
+  const chunk = st.lines.slice(st.at, st.at + take);
+  st.at += chunk.length;
+  replPrint(...chunk);
+  if (st.at >= st.lines.length) {
+    moreState = null;
+    obTermPrompt.textContent = laptopPrompt();
+    return;
+  }
+  const pct = Math.round((st.at / st.lines.length) * 100);
+  replPrint(`--More--(${pct}%)`);
+  obTermPrompt.textContent = 'SPACE page  RETURN line  q quit';
+}
+
+function moreKey(key) {
+  if (!moreState) return false;
+  if (key === ' ' || key === 'Spacebar') { morePage(); return true; }
+  if (key === 'Enter') { morePage(1); return true; }
+  if (key === 'q' || key === 'Q' || key === 'Escape') {
+    replPrint('');
+    moreState = null;
+    obTermPrompt.textContent = laptopPrompt();
+    return true;
+  }
+  return false;
+}
+
 function laptopPicoHook(args) { return openPico(args[0]); }
+
+// ---- The wireless picker -------------------------------------------------
+// A small X11 control panel over iwconfig. It exists because walking in and out
+// of a relay's range means associating often, and typing an essid every time is
+// a toll. It prints the command it ran, so it is a shortcut for a thing you can
+// still do by hand rather than a replacement for knowing how.
+const wfEl = document.getElementById('wifi');
+const wfIfaceEl = document.getElementById('wf-iface');
+const wfListEl = document.getElementById('wf-list');
+const wfFootEl = document.getElementById('wf-foot');
+document.getElementById('wf-close').addEventListener('click', () => closeWifi());
+// Esc closes it, as it closes every other window on this machine.
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && wfEl.style.display === 'flex') { e.preventDefault(); closeWifi(); }
+}, true);
+
+// ---- RON's scope ---------------------------------------------------------
+// A plan view of what the aerial hears: north up, one ring per ten metres, you
+// at the centre. Every blip carries the name the network knows the machine by,
+// and every name opens that machine's page. It is the wand's job done in
+// software, on a screen, with the addresses already resolved.
+const rdEl = document.getElementById('radar');
+const rdScope = document.getElementById('rd-scope');
+const rdListEl = document.getElementById('rd-list');
+const rdFootEl = document.getElementById('rd-foot');
+let rdTimer = null;
+document.getElementById('rd-close').addEventListener('click', () => closeRadar());
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && rdEl.style.display === 'flex') { e.preventDefault(); closeRadar(); }
+}, true);
+
+function laptopSnifferHook() {
+  const net = laptopShell && laptopShell.net;
+  if (!net || !net.card) return { ok: false, text: 'sniffer: no wireless extensions' };
+  if (!net.up) return { ok: false, text: `sniffer: ${net.iface || IFACE} is down — try: ifconfig ${net.iface || IFACE} up` };
+  // The program has to be on the disk. It is RON's, and you fetch it.
+  if (!hasFile(laptopShell, 'sniffer')) {
+    return { ok: false, text: 'sniffer: not found. It is RON\'s — fetch it from hermes.local (wifi, then netscape).' };
+  }
+  openRadar();
+  return { ok: true, mode: 'sniffer', text: '' };
+}
+
+function openRadar() {
+  rdEl.style.display = 'flex';
+  drawRadar();
+  // It is a live instrument, so it sweeps rather than showing one still frame.
+  if (rdTimer) clearInterval(rdTimer);
+  rdTimer = setInterval(drawRadar, 400);
+}
+
+function closeRadar() {
+  rdEl.style.display = 'none';
+  if (rdTimer) { clearInterval(rdTimer); rdTimer = null; }
+}
+
+const RD_RANGE = 24;   // the card's own reach, same as arp
+
+function drawRadar() {
+  const g = rdScope.getContext('2d');
+  const W = rdScope.width, H = rdScope.height;
+  const cx = W / 2, cy = H / 2, R = Math.min(cx, cy) - 14;
+  g.fillStyle = '#04120c'; g.fillRect(0, 0, W, H);
+  // Range rings, one per ten metres, and the cardinal cross.
+  g.strokeStyle = 'rgba(90,220,150,0.30)'; g.lineWidth = 1;
+  for (let m = 10; m <= RD_RANGE; m += 10) {
+    g.beginPath(); g.arc(cx, cy, (m / RD_RANGE) * R, 0, Math.PI * 2); g.stroke();
+  }
+  g.strokeStyle = 'rgba(90,220,150,0.45)';
+  g.beginPath(); g.arc(cx, cy, R, 0, Math.PI * 2); g.stroke();
+  g.strokeStyle = 'rgba(90,220,150,0.18)';
+  g.beginPath(); g.moveTo(cx, cy - R); g.lineTo(cx, cy + R); g.moveTo(cx - R, cy); g.lineTo(cx + R, cy); g.stroke();
+  g.fillStyle = 'rgba(120,240,175,0.55)';
+  g.font = '9px ui-monospace, monospace'; g.textAlign = 'center';
+  g.fillText('N', cx, cy - R - 4);
+  g.fillText('10m', cx + (10 / RD_RANGE) * R + 12, cy - 2);
+  g.fillText('20m', cx + (20 / RD_RANGE) * R + 12, cy - 2);
+  // You.
+  g.fillStyle = '#d8fff0';
+  g.beginPath(); g.arc(cx, cy, 3, 0, Math.PI * 2); g.fill();
+
+  const heard = laptopArpSweep().filter((e) => e.kind === 'robot' && e.range <= RD_RANGE);
+  rdListEl.textContent = '';
+  for (const e of heard) {
+    // Screen position from the bearing the sweep already worked out, which keeps
+    // the picture and the list saying the same thing.
+    const ang = { N: 0, NE: 45, E: 90, SE: 135, S: 180, SW: 225, W: 270, NW: 315 }[e.bearing] || 0;
+    const rad = (ang - 90) * Math.PI / 180;
+    const d = (e.range / RD_RANGE) * R;
+    const x = cx + Math.cos(rad) * d, y = cy + Math.sin(rad) * d;
+    g.fillStyle = e.down ? '#4f7f68' : '#5fe0a0';
+    g.beginPath(); g.arc(x, y, 4, 0, Math.PI * 2); g.fill();
+    if (!e.down) {
+      g.strokeStyle = 'rgba(95,224,160,0.35)';
+      g.beginPath(); g.arc(x, y, 7, 0, Math.PI * 2); g.stroke();
+    }
+    g.fillStyle = e.down ? '#6a8f7c' : '#b8f5d0';
+    g.textAlign = 'left';
+    g.fillText(e.host.split('.')[0], x + 8, y + 3);
+
+    const row = document.createElement('div');
+    row.className = 'rd-row' + (e.down ? ' dead' : '');
+    const nm = document.createElement('span');
+    nm.className = 'rd-name';
+    nm.textContent = e.host.split('.')[0];
+    const meta = document.createElement('span');
+    meta.textContent = `${String(e.range).padStart(3)}m ${e.bearing.padEnd(2)}  ${e.down ? 'no answer' : e.ip}`;
+    row.append(nm, meta);
+    row.addEventListener('click', () => {
+      // A name is an address. Following it is the whole reason to draw it.
+      closeRadar();
+      openNetscape(e.host);
+    });
+    rdListEl.appendChild(row);
+  }
+  g.textAlign = 'left';
+  rdFootEl.textContent = heard.length
+    ? `${heard.length} on the air within ${RD_RANGE}m — click a name to open its page`
+    : `nothing within ${RD_RANGE}m`;
+}
+
+function laptopWifiHook() {
+  const net = laptopShell && laptopShell.net;
+  if (!net || !net.card) return { ok: false, text: 'wifi: no wireless extensions' };
+  if (!net.up) return { ok: false, text: `wifi: ${net.iface || IFACE} is down — try: ifconfig ${net.iface || IFACE} up` };
+  openWifi();
+  return { ok: true, mode: 'wifi', text: '' };
+}
+
+function openWifi() { wfEl.style.display = 'flex'; renderWifi(); }
+function closeWifi() { wfEl.style.display = 'none'; }
+
+function renderWifi(msg) {
+  const net = laptopShell && laptopShell.net;
+  if (!net) return;
+  const cur = currentEssid();
+  const nets = (net.networks && net.networks()) || [];
+  wfIfaceEl.textContent = `${net.iface || IFACE}   ${net.spoof.ip}   ${net.spoof.mac}  (forged on every association)`;
+  wfListEl.textContent = '';
+  for (const n of nets) {
+    const row = document.createElement('div');
+    row.className = 'wf-row' + (n.essid === cur ? ' on' : '');
+    const bars = document.createElement('div');
+    bars.className = 'wf-bars';
+    // Four bars, as a card of the period showed them.
+    for (let i = 0; i < 4; i++) {
+      const b = document.createElement('i');
+      b.style.height = `${4 + i * 3}px`;
+      if (n.signal >= (i + 1) * 20) b.className = 'lit';
+      bars.appendChild(b);
+    }
+    const name = document.createElement('span');
+    name.className = 'wf-name';
+    name.textContent = n.essid;
+    const note = document.createElement('span');
+    note.className = 'wf-note';
+    note.textContent = `${n.signal}/100  ${n.note || ''}`;
+    row.append(bars, name, note);
+    row.addEventListener('click', () => {
+      if (n.essid === currentEssid()) { renderWifi(`already associated with "${n.essid}"`); return; }
+      if (net.associate) net.associate(n.essid);
+      sfx.play('keyclick');
+      renderWifi(`iwconfig ${net.iface || IFACE} essid ${n.essid}`);
+    });
+    wfListEl.appendChild(row);
+  }
+  wfFootEl.textContent = msg || `associated: ${cur}   —   click a network to join it`;
+}
+
+// ---- telnet ----------------------------------------------------------------
+// A session in the terminal, like ELIZA and `ml`: it takes the prompt until you
+// quit. What it buys is the thing the browser hides — you speak to the server
+// in its own words and see exactly what comes back, which is how a player finds
+// out that an httpd answers GET and nothing else. That lesson is the whole
+// argument of the L9 break, learned by typing rather than by being told.
+let telnetTo = null;   // the host we are connected to, or null
+
+function telnetOpen(hostArg, portArg) {
+  const addr = String(hostArg == null ? '' : (hostArg.id || hostArg));
+  if (!addr) return { ok: false, text: 'usage: telnet <host> [port]' };
+  const port = Number(portArg == null ? 80 : (portArg.v != null ? portArg.v : portArg)) || 80;
+  const hosts = webHosts();
+  const h = findHost(hosts, addr);
+  if (!h) return { ok: false, text: `telnet: ${addr}: host unknown` };
+  if (h.down) {
+    return { ok: false, text: [`Trying ${h.ip}...`, `telnet: connect to ${h.host} port ${port}: connection refused`,
+      'The host is on the network. It is not answering.'].join('\n') };
+  }
+  if (port !== 80) {
+    return { ok: false, text: [`Trying ${h.ip}...`,
+      `telnet: connect to ${h.host} port ${port}: connection refused`,
+      'Only 80 is listening. Whatever else these machines once ran, it is not running.'].join('\n') };
+  }
+  telnetTo = { host: h, port };
+  return { ok: true, mode: 'telnet', text: [
+    `Trying ${h.ip}...`,
+    `Connected to ${h.host}.`,
+    "Escape character is '^]'.",
+    '',
+    `${SERVER_BANNER(h)}`,
+    '',
+  ].join('\n') };
+}
+
+// What a server says when you knock. The daemon's own boxes each run something
+// different, which is the point: the estate is old hardware all the way down.
+const SERVER_BANNER = (h) => {
+  const s = { ai: 'POSEIDON/httpd 1.1 ready', obelisk: 'obd/0.4 ready', robot: 'unitd/0.4 ready',
+    factory: 'wfd/1.02 ready', dns: 'BIND 4.9.3', mail: '220 sendmail 8.6.12 ready',
+    archive: 'CERN-httpd/3.0 (proxy) ready', docs: 'NCSA/1.5.2 ready' }[h.kind];
+  return s || 'httpd ready';
+};
+
+// One line typed at a connected server.
+function telnetLine(raw) {
+  const line = String(raw || '').trim();
+  if (!telnetTo) return null;
+  if (/^(quit|close|exit|\^\])$/i.test(line)) {
+    const name = telnetTo.host.host;
+    telnetTo = null;
+    return `Connection closed by foreign host.\n\nDisconnected from ${name}.`;
+  }
+  if (!line) return '';
+  const m = line.match(/^([A-Z]+)\s*(\S*)/i);
+  const verb = (m ? m[1] : '').toUpperCase();
+  const hosts = webHosts();
+  if (verb === 'GET') {
+    const path = (m[2] || '/').replace(/^\//, '');
+    const h = telnetTo.host;
+    let body;
+    if (!path || path === '/') body = pageFor(h, hosts);
+    else if (/^program\.ml$/i.test(path) && h.program) body = h.program;
+    // The server serves the directory its own programs live in, which is how
+    // these were routinely misconfigured. Asking for the binary gets it.
+    else if (path === HTTPD_PATH) body = httpdBinary(islandAiName(), SERVER_BANNER(h).replace(/ ready$/, ''));
+    else body = null;
+    if (body == null) return ['HTTP/1.0 404 Not Found', 'Content-Type: text/html', '', `No object /${path} on this host.`].join('\n');
+    return ['HTTP/1.0 200 OK', `Server: ${SERVER_BANNER(h).replace(/ ready$/, '')}`,
+      'Content-Type: text/html', `Content-Length: ${body.length}`, '', body].join('\n');
+  }
+  if (verb === 'HEAD') {
+    return ['HTTP/1.0 200 OK', `Server: ${SERVER_BANNER(telnetTo.host).replace(/ ready$/, '')}`, 'Content-Type: text/html', ''].join('\n');
+  }
+  // A header line inside a request. The maintenance one is the whole of L9.
+  const hdr = line.match(/^X-RON-Maint:\s*(\S+)$/i);
+  if (hdr) {
+    if (hdr[1] === httpdToken(islandAiName())) {
+      telnetTo.maint = true;
+      return '';                       // servers do not answer a header
+    }
+    telnetTo.maint = false;
+    return '';
+  }
+  if (verb === 'PUT' || verb === 'POST') {
+    const h = telnetTo.host;
+    if (h.kind !== 'robot') {
+      return ['HTTP/1.0 403 Forbidden', '',
+        'Maintenance accepted. This host carries no unit program to replace.'].join('\n');
+    }
+    return ['HTTP/1.0 200 OK', 'Server: maintenance', '',
+      'unit program accepted, reload on next tick',
+      '',
+      '`post <file> <unit>` does the same thing from the shell.'].join('\n');
+  }
+  if (verb === 'DELETE') {
+    return ['HTTP/1.0 501 Not Implemented', '',
+      'This server answers GET and PUT. It was never built to remove anything.'].join('\n');
+  }
+  return ['HTTP/1.0 400 Bad Request', '', `Unrecognised: ${line}`].join('\n');
+}
+
+function laptopTelnetHook(args) { return telnetOpen(args[0], args[1]); }
 
 // ---- the document reader ---------------------------------------------------
 // Real papers on a salvaged laptop. The window is ours so it wears the NostBook
@@ -4382,11 +5122,13 @@ function openPdf(name) {
   const doc = pdfByName(name);
   if (!doc) {
     return { ok: false, text: name
-      ? `pdf: ${name}: not on this disk. try: pdf   (with no file, to list them)`
+      ? `pdf-viewer: ${name}: not on this disk. try: pdf-viewer   (with no file, to list them)`
       : `documents on this disk:\n  ${pdfNames().join('\n  ')}\n\ntry: pdf ${pdfNames()[0] || '<file>'}` };
   }
   const src = pdfPath(doc);
-  pdfNameEl.textContent = doc.name;
+  // The title bar names the PROGRAM and the file it was passed, the way a
+  // window of this vintage would: "pdf-viewer: cult_of_ignorance.pdf".
+  pdfNameEl.textContent = `pdf-viewer: ${doc.name}`;
   pdfMetaEl.textContent = `${doc.title} — ${doc.author}, ${doc.year}`;
   // INLINE PDF IS NOT DEPENDABLE ON A PHONE. iOS Safari and Android Chrome
   // routinely refuse to render one in a frame — you get a blank box, or a
@@ -4426,7 +5168,170 @@ pdfEl.addEventListener('click', (e) => {
   if (e.target === pdfEl || CHASSIS_PARTS.some((c) => e.target.classList && e.target.classList.contains(c))) closePdf();
 });
 
-function laptopPdfHook(args) { return openPdf(args[0] ? String(args[0].name || args[0]) : ''); }
+// pdf-viewer and book both act on a numbered list, so both take the selector
+// grammar transcribe established. A machine whose commands disagree about how
+// to name item three is a machine with two conventions.
+function pickFrom(list, args, what) {
+  const spec = args.map((a) => String(a.name || a.v || a)).join(',').replace(/,+/g, ',');
+  if (!spec || !/^[-\d*]/.test(spec)) return null;             // a name, not a number
+  const sel = parseSelection(spec, list.length);
+  if (!sel.ok) return { error: `${what}: ${sel.error}. There are ${list.length}.` };
+  return { picks: sel.picks.map((n) => list[n - 1]) };
+}
+
+function laptopPdfHook(args) {
+  // `pdf-viewer 2` opens the second one listed, which is quicker than typing
+  // are_we_automata.pdf and is how transcribe and mail already work.
+  const pick = pickFrom(PDFS, args, 'pdf-viewer');
+  if (pick && pick.error) return { ok: false, text: pick.error };
+  if (pick) return openPdf(pick.picks[0].name);
+  return openPdf(args[0] ? String(args[0].name || args[0]) : '');
+}
+
+// `book` and `book <key>`: the browser, opened on the library or on one book.
+// It needs no card, so this deliberately does not go through the network guard.
+// ---- transcribe ------------------------------------------------------------
+// How paper gets into a machine with no scanner: you type it in. The world
+// already says this is normal, since the readme records that a third of /bin
+// arrived off a printed listing. What it buys is that a transcribed scrap stops
+// being paper: grep can search it, crypt can lock it, and mail can carry it to a
+// relay. A scrap you have typed up is a scrap you can send.
+function laptopTranscribeHook(args) {
+  const scraps = FRAGMENTS.filter((f) => lore.found.has(f.id));
+  if (!scraps.length) {
+    return { ok: false, text: 'transcribe: you are carrying nothing worth typing up.' };
+  }
+
+  const home = laptopShell.root.d.home;
+  if (!home.d.notes) home.d.notes = { d: {} };
+  const fileOf = (f) => `${f.title.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 28)}.txt`;
+  const already = (f) => !!home.d.notes.d[fileOf(f)];
+
+  // `transcribe 1 3 5` and `transcribe 1,3,5` should mean the same thing, so
+  // the arguments are joined before parsing rather than handled one at a time.
+  const spec = args
+    .map((a) => String(a && a.v != null ? a.v : (a && a.id) || a || ''))
+    .join(',')
+    .replace(/,+/g, ',');
+
+  if (!spec) {
+    const done = scraps.filter(already).length;
+    return { ok: true, text: [
+      `${scraps.length} scrap(s) you could type up:`,
+      ...scraps.map((f, i) => `${String(i + 1).padStart(3)}  ${already(f) ? '*' : ' '} ${f.title}`),
+      '',
+      done ? `* = already in /home/notes (${done} of ${scraps.length}).` : '',
+      'transcribe <n> · <a-b> · <a,b,c> · -all',
+    ].filter((l) => l !== '').join('\n') };
+  }
+
+  const sel = parseSelection(spec, scraps.length);
+  if (!sel.ok) {
+    return { ok: false, text: `transcribe: ${sel.error}. You have ${scraps.length}. Try: transcribe -all` };
+  }
+
+  const chosen = sel.picks.map((n) => scraps[n - 1]);
+  const skipped = chosen.filter(already);
+  const todo = chosen.filter((f) => !already(f));
+
+  // Asking for one that is already done is an error; asking for a range or
+  // -all that happens to include done ones is not, because the whole point of
+  // -all is that you can run it again after finding more paper.
+  if (!todo.length) {
+    if (!sel.all && chosen.length === 1) {
+      return { ok: false, text: `transcribe: ${fileOf(chosen[0])} is already typed up.` };
+    }
+    return { ok: true, text: `Nothing to do: all ${skipped.length} already in /home/notes.` };
+  }
+
+  let lines = 0;
+  for (const f of todo) {
+    home.d.notes.d[fileOf(f)] = { f: `${f.title}\n\n${f.text}\n` };
+    lines += String(f.text).split('\n').length;
+  }
+
+  const out = [`Typing... ${lines} line(s) across ${todo.length} scrap(s).`];
+  if (todo.length <= 8) for (const f of todo) out.push(`  /home/notes/${fileOf(f)}`);
+  else out.push(`  ${todo.length} files written to /home/notes.`);
+  if (skipped.length) out.push(`${skipped.length} already typed up, left alone.`);
+  out.push('They can be grepped, crypted, and posted from a relay now.');
+  return { ok: true, text: out.join('\n') };
+}
+
+// ---- power and time --------------------------------------------------------
+// Four commands that act on the machine or the world rather than on the disk,
+// which is why they are hooks: unix.js owns files and knows nothing about a
+// clock, a wireless card, or a lid. The disk survives all four.
+
+function laptopSleepHook(args) {
+  const n = parseInt(String(args[0] && (args[0].v != null ? args[0].v : args[0])), 10);
+  if (!Number.isFinite(n) || n < 0) return { ok: false, text: 'sleep: sleep <seconds>' };
+  const secs = Math.min(n, 600);
+  // Game minutes, not real ones: the machine waits in the world's time, and
+  // the world keeps moving while it does. That is the only reason to have it.
+  dayNight.advance(secs / 60);
+  return { ok: true, text: '' };
+}
+
+function laptopSuspendHook() {
+  // The doctrine from the letter in the spool, made into a command: bring it
+  // up, ask what you came to ask, put it down. Putting it down means the card
+  // goes off the air. Everything else is exactly where you left it.
+  if (laptopShell && laptopShell.net) laptopShell.net.up = false;
+  if (player.laptop) player.laptop.netUp = false;
+  replPrint('wifi0: down');
+  saveLaptopState();
+  setTimeout(() => closeObTerminal(), 60);
+  return { ok: true, text: 'Lid closed.' };
+}
+
+function laptopHaltHook() {
+  // Off. Nothing is kept in memory, so the next open comes up from the boot
+  // loader rather than resuming; the disk is not touched.
+  if (laptopShell && laptopShell.net) laptopShell.net.up = false;
+  if (player.laptop) { player.laptop.netUp = false; player.laptop.state = null; }
+  replPrint('halting');
+  setTimeout(() => { if (player.laptop) player.laptop.state = null; closeObTerminal(); }, 260);
+  return { ok: true, text: '' };
+}
+
+function laptopRebootHook() {
+  // A power cycle. What goes is what was only ever in memory: the shell's
+  // directory, anything bound in ml, and any window left open. The disk is the
+  // same disk, which is the point of a disk.
+  const def = player.laptop || {};
+  if (laptopShell && laptopShell.net) laptopShell.net.up = false;
+  if (player.laptop) { player.laptop.netUp = false; player.laptop.state = null; }
+  laptopMl = false;
+  laptopSession = {};
+  edState = null;
+  if (laptopShell) laptopShell.cwd = ['home'];
+  if (nsEl) nsEl.style.display = 'none';
+  if (picoEl) { picoEl.style.display = 'none'; pico = null; }
+  if (pdfEl && pdfEl.style.display === 'flex') closePdf();
+  web = null;
+  telnetTo = null;
+  elizaBot = null;
+  replLog = [];
+  obTermScreen.textContent = '';
+  runLaptopBoot(def);
+  return { ok: true, text: '' };
+}
+
+function laptopBookHook(args) {
+  const pick = pickFrom(BOOKS, args, 'book');
+  if (pick && pick.error) return { ok: false, text: pick.error };
+  const key = pick ? pick.picks[0].key
+    : (args[0] ? String(args[0].name || args[0]).replace(/\.html$/, '') : '');
+  if (key && !bookByKey(key)) {
+    return { ok: false, text: `book: ${key}: not on this disk. try: ${bookKeys().join(' · ')}` };
+  }
+  if (!web) web = { view: null, history: [], fwd: [], html: '' };
+  nsSetView(key ? { kind: 'book', book: key } : { kind: 'library' }, false);
+  nsEl.style.display = 'flex';
+  nsUrlEl.blur();
+  return { ok: true, mode: 'web', text: '' };
+}
 
 // ---- POST /program.ml ------------------------------------------------------
 // The other half of the loop: read a machine's program, change it, put it back.
@@ -4447,9 +5352,16 @@ function postProgram(hostName, text) {
   const h = findHost(hosts, String(hostName || ''));
   if (!h) return { ok: false, text: `post: ${hostName}: host not found` };
   if (h.kind !== 'robot') return { ok: false, text: `post: ${h.host}: not a unit — nothing there runs a program` };
-  if (h.down) return { ok: false, text: `post: ${h.host}: no response. The machine is not answering.` };
+  // A FLAT CELL IS NOT A DEAD MACHINE. A drained unit drops into low power: it
+  // cannot move, cannot see and cannot fight, but the board that answers
+  // maintenance stays up on a trickle, which is the whole reason a flat machine
+  // is recoverable at all. So it takes a program. It runs it when it has the
+  // charge to run anything.
+  const flat = !!(h.ref && h.ref.drained);
+  if (h.down && !flat) {
+    return { ok: false, text: `post: ${h.host}: no response. Nothing is running on it.` };
+  }
   if (!h.program) return { ok: false, text: `post: ${h.host}: this unit's behaviour is not a program. Nothing to replace.` };
-
   // The host table is a DESCRIPTION of the world; the write has to land on the
   // machine itself, which is the one carrying _netId.
   const unit = (currentWorld.robots || []).find((r) => !r.dead && r._netId === h.name);
@@ -4472,15 +5384,20 @@ function postProgram(hostName, text) {
     threat: Math.hypot(player.x - unit.x, player.y - unit.y) < 9,
     hurt: unit.maxHp ? unit.hp <= unit.maxHp * 0.35 : false,
   });
+  // On a flat machine the dry run is a guess about a machine that is not
+  // deciding anything, so say what is actually true instead of pretending.
+  const verdict = flat
+    ? 'Its cell is flat: stored, and it will run when the machine has charge.'
+    : (dry.ok ? `On the senses it has this second, it chooses: ${dry.intent}` : `It will FAULT: ${dry.fault}`);
   return {
     ok: true,
     host: h,
     bytes: text.length,
-    verdict: dry.ok ? `On the senses it has this second, it chooses: ${dry.intent}` : `It will FAULT: ${dry.fault}`,
+    verdict,
     text: [
       `POST ${h.host}/program.ml`,
-      `200 OK — ${text.length} bytes accepted by unitd/0.4`,
-      dry.ok ? `On the senses it has this second, it chooses: ${dry.intent}` : `It will FAULT: ${dry.fault}`,
+      `200 OK — ${text.length} bytes accepted by unitd/0.4${flat ? '  (low power)' : ''}`,
+      verdict,
     ].join('\n'),
   };
 }
@@ -4581,6 +5498,7 @@ nsUrlEl.addEventListener('keydown', (e) => {
   nsUrlEl.blur();
 });
 document.getElementById('ns-pb-new').onclick = () => { if (web) nsSetView({ kind: 'whatsnew' }); };
+document.getElementById('ns-pb-lib').onclick = () => { if (web) nsSetView({ kind: 'library' }); };
 nsEl.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeNetscape(); });
 
 // ---- The menu bar --------------------------------------------------------
@@ -4736,11 +5654,21 @@ function laptopPrompt() {
   // stuck in it forever: every line typed is text, `q` included, so with a blank
   // prompt there is no way out you can discover by typing. The prompt is the dot
   // you need — it is the answer, sitting there.
+  if (telnetTo) return '';   // a raw connection has no prompt of its own
   if (edState) return edState.ins != null ? '.' : 'ed>';
   return laptopMl ? 'ml>' : `${pathString(laptopShell.cwd)} $`;
 }
 
 function laptopRun(line) {
+  // A telnet session owns the line before anything else does: what you type is
+  // sent to the far end, not run here.
+  if (telnetTo) {
+    const out = telnetLine(line);
+    sfx.play('keyclick');
+    if (out) replPrint(out);
+    obTermPrompt.textContent = laptopPrompt();
+    return;
+  }
   // ed first, and with the line UNTRIMMED: indentation is part of the text.
   if (edState) {
     const wasInserting = edState.ins != null;
@@ -4770,9 +5698,17 @@ function laptopRun(line) {
       sfx.play('keyclick');
       return;
     }
-    const r = runRonml(t, laptopCtx());
+    // Infer BEFORE evaluating, the way a compiler would, and print what it
+    // worked out beside the answer, the way this language's own top level does.
+    // It reports and does not refuse: a clash is named and the line still runs,
+    // because a machine in a ruin should say what it thinks and let you decide.
+    const ctx = laptopCtx();
+    loadPrelude(ctx);          // List, String, Char, Int, Option — once per session
+    const ty = typeReport(t, ctx);
+    const r = runRonml(t, ctx);
     sfx.play(r.ok ? 'keyclick' : 'keyclick_soft');
-    replPrint(r.text);
+    if (ty && ty.startsWith('TYPE:')) replPrint(ty);
+    if (r.text) replPrint(ty && !ty.startsWith('TYPE:') ? `${r.text} : ${ty}` : r.text);
     return;
   }
   if (/^(exit|logout|halt)$/i.test(t)) { closeObTerminal(); return; }
@@ -4780,7 +5716,11 @@ function laptopRun(line) {
   // is copied back onto the laptop so the interface stays up across commands
   // (and across closing the lid).
   laptopShell.net = laptopNetState();
-  const r = runUnix(t, laptopShell, { ml: laptopMlHook, netscape: laptopNetscapeHook, ed: laptopEdHook, pico: laptopPicoHook, post: laptopPostHook, pdf: laptopPdfHook });
+  // almanac reads the clock; uucico needs a relay within arm's reach. Both are
+  // world facts, refreshed per command so neither can go stale in the hand.
+  laptopShell.clock = { hour: dayNight.hour, day: dayNight.day || 0 };
+  laptopShell.relay = nearestRelay();
+  const r = runUnix(t, laptopShell, { ml: laptopMlHook, netscape: laptopNetscapeHook, ed: laptopEdHook, pico: laptopPicoHook, post: laptopPostHook, pdf: laptopPdfHook, telnet: laptopTelnetHook, book: laptopBookHook, transcribe: laptopTranscribeHook, sleep: laptopSleepHook, suspend: laptopSuspendHook, halt: laptopHaltHook, reboot: laptopRebootHook, wifi: laptopWifiHook, sniffer: laptopSnifferHook, more: laptopMoreHook });
   if (player.laptop) player.laptop.netUp = !!(laptopShell.net && laptopShell.net.up);
   sfx.play(r.ok ? 'keyclick' : 'keyclick_soft');
   if (r.text) replPrint(r.text);
@@ -4826,13 +5766,20 @@ function laptopBootLines(def) {
 }
 let laptopBooting = false;
 let _laptopBootTimer = null;
+// What is LEFT of the boot. finishLaptopBoot is supposed to print the rest when
+// the sequence is cut short, and every caller was passing null, so a boot
+// interrupted by a keystroke (or by the lid being shut and opened) lost the
+// lines it had not reached and the machine looked half-started.
+let _laptopBootRest = null;
 
 // Print whatever is left of the boot at once and hand over the prompt. Called
 // when the sequence finishes, and when you skip it by hitting a key.
 function finishLaptopBoot(rest) {
   if (_laptopBootTimer) { clearTimeout(_laptopBootTimer); _laptopBootTimer = null; }
   laptopBooting = false;
-  if (rest && rest.length) replPrint(...rest.map((l) => l[0]));
+  const left = rest || _laptopBootRest;
+  _laptopBootRest = null;
+  if (left && left.length) replPrint(...left.map((l) => l[0]));
   replPrint(
     'This machine is yours. try: ls   ·   cat readme   ·   ml   ·   pico   ·   pdf   ·   help',
     '',
@@ -4912,6 +5859,9 @@ function openLaptop() {
   }
   const def = ITEMS[player.laptop.model] || {};
   if (!player.laptop.fs) player.laptop.fs = makeDisk();
+  // A disk saved before the system tree existed gets it added now. Only what is
+  // missing: their own files in /home are theirs.
+  graftSystemDirs(player.laptop.fs);
   laptopShell = newShell(player.laptop.fs);
   laptopShell.net = laptopNetState();
   laptopMl = false;
@@ -4923,6 +5873,7 @@ function openLaptop() {
   obTermEl.classList.remove('hermes');
   obTermEl.classList.add('nostbook');   // beige lid and badge, like Netscape and pico wear
   obTermEl.style.display = 'flex';
+  fitTerminalColumns();
   obTermScreen.parentElement.style.display = 'flex';
   obTermConnect.style.display = 'none';
   replLog = [];
@@ -4939,23 +5890,36 @@ function openLaptop() {
     return;
   }
   player.say('You open the NostBook. No aerial, no link, nobody watching: just a machine.');
-  // Roll the boot out line by line. Any keypress skips to the prompt (replRun),
-  // so it is a pleasure the first time and never a toll after that.
+  runLaptopBoot(def);
+}
+
+// Roll the boot out line by line. Any keypress skips to the prompt (replRun),
+// so it is a pleasure the first time and never a toll after that. Extracted
+// from openLaptop when `reboot` arrived and needed the same sequence: a power
+// cycle that did not show you the machine coming up would not be one.
+function runLaptopBoot(def) {
   const lines = laptopBootLines(def);
   laptopBooting = true;
   let i = 0;
+  _laptopBootRest = lines.slice();
   const step = () => {
     _laptopBootTimer = null;
-    if (!laptopBooting || terminalKind !== 'laptop' || obTermEl.style.display === 'none') return; // closed or skipped
+    // The lid was shut mid-boot. Nothing to print to, so stop — but drop the
+    // remainder too, or the next open would replay it on top of a fresh boot.
+    if (!laptopBooting || terminalKind !== 'laptop' || obTermEl.style.display === 'none') {
+      _laptopBootRest = null;
+      return;
+    }
     if (i >= lines.length) { finishLaptopBoot(null); return; }
     const [text, wait] = lines[i++];
+    _laptopBootRest = lines.slice(i);
     replPrint(text);
     _laptopBootTimer = setTimeout(step, wait);
   };
   step();
 }
 
-function closeObTerminal() { saveLaptopState(); if (nsEl) nsEl.style.display = 'none'; if (picoEl) { picoEl.style.display = 'none'; pico = null; } if (pdfEl && pdfEl.style.display === 'flex') closePdf(); elizaBot = null; web = null; edState = null; laptopMl = false; laptopShell = null; laptopBooting = false; if (_laptopBootTimer) { clearTimeout(_laptopBootTimer); _laptopBootTimer = null; } terminalKind = 'ob'; terminalOb = null; replSession = {}; setTerminalTheme(null); obTermEl.classList.remove('hermes'); obTermEl.classList.remove('nostbook'); obTermEl.style.display = 'none'; obTermGhost.textContent = ''; obTermPrompt.textContent = '>'; obTermInput.blur(); player.terminalSafe = false; }
+function closeObTerminal() { saveLaptopState(); telnetTo = null; if (nsEl) nsEl.style.display = 'none'; if (picoEl) { picoEl.style.display = 'none'; pico = null; } if (pdfEl && pdfEl.style.display === 'flex') closePdf(); elizaBot = null; web = null; edState = null; laptopMl = false; laptopShell = null; laptopBooting = false; _laptopBootRest = null; if (_laptopBootTimer) { clearTimeout(_laptopBootTimer); _laptopBootTimer = null; } terminalKind = 'ob'; terminalOb = null; replSession = {}; setTerminalTheme(null); obTermEl.classList.remove('hermes'); obTermEl.classList.remove('nostbook'); obTermEl.style.display = 'none'; obTermGhost.textContent = ''; obTermPrompt.textContent = '>'; obTermInput.blur(); player.terminalSafe = false; }
 // Click-away closes it. With the NostBook chassis in the way, "outside" now
 // includes the beige furniture itself — the lid, the deck, the badge — because
 // those are the machine's body, not its screen, and a click on them plainly
@@ -5030,6 +5994,14 @@ obTermInput.addEventListener('paste', (e) => {
   }
 });
 obTermInput.addEventListener('keydown', (e) => {
+  // A pager takes the keyboard while it holds the screen: SPACE and q act on
+  // the key, with no RETURN after them, because that is what more does and a
+  // pager you have to press RETURN twice for is not one.
+  if (moreState && moreKey(e.key)) {
+    e.preventDefault();
+    obTermInput.value = '';
+    return;
+  }
   // The laptop has a KEYBOARD, so typing on it ticks. Only at the laptop: the
   // obelisk and HERMES are the machines' consoles and keep their own voices.
   // Printable keys and backspace only, so arrows and modifiers stay silent.
@@ -5100,9 +6072,17 @@ obTermInput.addEventListener('keydown', (e) => {
 // user-select), so select + Cmd/Ctrl+C copies natively. Pasting lands on the
 // prompt from anywhere in the console — even with focus on the screen —
 // with newlines flattened to spaces so a multi-line paste never auto-runs.
+// Paste anywhere on the console and it lands on the command line, so you do not
+// have to aim at a one-line input. The guard matters more than the feature:
+// anything that can be typed into does its own pasting.
 window.addEventListener('paste', (e) => {
   if (obTermEl.style.display === 'none') return;
-  if (document.activeElement === obTermInput) return; // native paste already lands in the input
+  // Guarding on obTermInput alone was wrong once pico, Netscape and the PDF
+  // reader began rendering INSIDE the NostBook chassis: the terminal is still
+  // displayed behind them, so every paste into the EDITOR was being scraped
+  // into the command line and the focus went with it. You could not paste into
+  // the editor you edit programs in.
+  if (handlesOwnPaste(document.activeElement)) return;
   const text = (e.clipboardData || window.clipboardData)?.getData('text') || '';
   if (!text) return;
   obTermInput.value += text.replace(/\s+$/, '').replace(/\n+/g, ' ');
@@ -5817,6 +6797,9 @@ function update(dt) {
     else if (player.canCraftGoggles()) player.craftGoggles();
     else if (player.canCraftBluebox()) player.craftBluebox();
     else if (player.canRepairLaptop()) player.repairLaptop(makeDisk);
+    // After the NostBook, deliberately: both want a battery, and a sniffer built
+    // out of the laptop's last cell would be the wrong trade made silently.
+    else if (player.canCraftSniffer()) player.craftSniffer();
     else if (player.canCraftBoat(map)) player.craftBoat(map);
     // Nothing else to make and a dead machine in the pack: let repairLaptop
     // refuse OUT LOUD. It counts exactly what is short ("1 more battery and 2
@@ -5825,6 +6808,44 @@ function update(dt) {
     else if (player.hasItem('laptop_broken') && !player.laptop) player.repairLaptop(makeDisk);
   }
   if (input.blueboxPressed()) player.bluebox(currentWorld.robots, map);
+  // The sniffer's sweep goes through the same door the network's REPORT button
+  // goes through: one mechanism, two ways to reach it. A machine that stops for
+  // the wand has no way of telling it apart from its own tower asking.
+  player.onSniff = (r) => {
+    const h = findHost(webHosts(), netIdOf(currentWorld, r));
+    if (h) { requestUnitReport(h, r); return h.name; }
+    r.reportT = REPORT_HOLD; r.reportCool = REPORT_HOLD + REPORT_COOLDOWN;
+    r.lamp = 'blue'; r.lampFlash = 1;
+    return netIdOf(currentWorld, r);
+  };
+  if (input.snifferPressed()) player.sniff(currentWorld.robots, map);
+  // The passive half: with the wand in hand, every machine in radio range wears
+  // the name the network knows it by. Out of hand, nothing is drawn at all —
+  // the tool is the reason you can read them, not a setting.
+  // A name is only worth clicking if there is something to open it in: a
+  // working NostBook with its card up. Without one the tag still reads (the
+  // wand is a radio, not a browser) but it does not pretend to be a link.
+  // Same rule laptopNetState uses, and for the same reason: the card ships up,
+  // so only an explicit `ifconfig wifi0 down` counts as off the air. Checking
+  // for a disk here would be wrong — a repaired NostBook has no `fs` until
+  // something opens it, and the tag would go dead for no reason a player could
+  // see.
+  const canBrowse = !!player.laptop && player.laptop.netUp !== false;
+  setUnitTagsClickable(player.hands === 'sniffer' && canBrowse);
+  {
+    const m = input.mousePos();
+    const hitR = input.mousePressed ? unitTagAt(m.x, m.y) : null;
+    if (hitR) {
+      input.consumeClick();
+      const h = findHost(webHosts(), netIdOf(currentWorld, hitR));
+      if (h) { openLaptop(); openNetscape(h.host); }
+    }
+  }
+  setUnitTagger(player.hands === 'sniffer'
+    ? (r) => ((r.dead || r.fused) ? null
+      : (Math.hypot(r.x - player.x, r.y - player.y) <= SNIFFER_TAG_RANGE
+        ? netIdOf(currentWorld, r) : null))
+    : null);
   // Reading a dead machine's disk onto your own (E while holding one).
   player.onSalvageLaptop = () => player.salvageLaptop(SALVAGE_DISKS, graftSalvage);
   player.onInstallLaptop = () => player.installLaptop(makeDisk);

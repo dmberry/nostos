@@ -34,7 +34,7 @@ plan that only says what to change is half a plan.
 | `src/game/robots.js` | 2,640 | yes | 2 files | Small, targeted. §3.2 |
 | `src/engine/ui.js` | 2,376 | no | none | Leave. §5 |
 | `src/game/lore.js` | 1,709 | no | none | Leave — data. §5 |
-| `src/game/ronml.js` | 1,325 | yes | 3 files | Leave. §5 |
+| `src/game/ai_ml.js` | 1,325 | yes | 3 files | Leave. §5 |
 | `src/game/worldgen.js` | 1,153 | yes | 1 file | Leave. §5 |
 
 Two measurements decide most of what follows.
@@ -78,7 +78,7 @@ wiring over modules that are already pure and already tested:
 |---|---|---|
 | Netscape (3933–4557) | `net.js` | 31 tests |
 | Laptop shell (3798–3932, 4557–4790) | `unix.js` | 39 tests |
-| `ronmlCtx` (2667–2844) | `ronml.js` | 3 files |
+| `ronmlCtx` (2667–2844) | `ai_ml.js` | 3 files |
 | ELIZA session (3366–3382) | `eliza.js` | none |
 
 The language, the filesystem, the host table and the page rendering are not in
@@ -236,7 +236,7 @@ like a candidate.
 - **`worldgen.js` (1,153)** — one algorithm, already parameterised per island
   (Stage B1). Splitting terrain generation across files makes it harder to read,
   not easier.
-- **`ronml.js` (1,325)** — a tokeniser, parser and evaluator for one language.
+- **`ai_ml.js` (1,325)** — a tokeniser, parser and evaluator for one language.
   Three phases, one subject, three test files. Textbook cohesion; leave it.
 - **`ui.js` (2,376)** — the result of the last refactor. Leave it alone and let
   it prove itself.
@@ -273,6 +273,20 @@ preference:
 
 Do (2) regardless; it costs nothing and the script has already earned its place.
 
+**DONE, v1.231.** `tools/lint.mjs` implements both rules with no dependencies:
+63 files in 0.3 seconds, clean. It is a heuristic at file scope rather than a
+parser, which is coarser than ESLint and enough for this bug class.
+
+It was **proved against the real bugs** before being trusted, which matters more
+than the implementation: reintroduce `worldSeed` for `WORLD_SEED` and a second
+`notesPressed` in one class, and the linter reports both while `node --check`
+passes them silently. Writing it also produced four rounds of its own false
+positives — prose leaking out of nested template interpolations (396),
+multi-declarator statements (249), a regex swallowing across statement
+boundaries (55), destructuring defaults and static class fields (5) — and one
+outright hang, from running `/\w+$/` against the whole output on every
+character. Each of those is a thing it now knows about.
+
 ## 7. The plan
 
 Each stage ships on its own, is verifiable on its own, and is ordered so that the
@@ -280,7 +294,7 @@ riskiest work happens when the safety net is largest.
 
 | # | Stage | Moves | Risk | Buys |
 |---|---|---|---:|---|
-| **0** | `tools/sweep.mjs` + a linter pass (§6) | 0 | none | Catches the §4 bug class permanently |
+| **0** | ~~`tools/sweep.mjs` + a linter pass (§6)~~ **DONE v1.231** — `tools/lint.mjs` | 0 | none | Catches the §4 bug class permanently |
 | **0b** | `persist()` gets `canSave()`; delete the five hoisted `let`s (§3.1) | ~30 | low | Removes the TDZ hazard before anything moves |
 | **1a** | `src/ui/terminal-session.js` — name the session object | ~200 | medium | The precondition for everything else |
 | **1b** | `src/ui/netscape.js` + `src/ui/editors.js` | ~870 | low | Biggest, newest, best-isolated region |

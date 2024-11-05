@@ -4,7 +4,7 @@
 // soundtrack. Everything visual is drawn with the SAME code the game uses —
 // real cassettes (Renderer.drawCassette) in the deck and rack, real machines
 // (robots.js drawRobot) dancing above — so it looks like NostOS, not a
-// mock-up. Switchable World / Backspace / Fortress colour themes.
+// mock-up. Switchable World / Backspace / AI colour themes.
 
 import { TAPES } from './items.js';
 import { VERSION } from '../version.js';
@@ -31,7 +31,7 @@ export function initTitleScreen() { return initMobileGate('title'); }
 const THEMES = {
   World: { bg1: '#3f5730', bg2: '#26331b', accent: '#dce8c8', deck: '#e6b422', edge: 'rgba(20,18,8,0.9)', bezel: 'rgba(255,240,180,0.75)' },
   Backspace: { bg1: '#8f8250', bg2: '#5c5330', accent: '#211d0c', deck: '#b9a862', edge: 'rgba(34,28,10,0.9)', bezel: 'rgba(240,230,170,0.6)' },
-  Fortress: { bg1: '#4a5563', bg2: '#2b333d', accent: '#e2ecf4', deck: '#828d99', edge: 'rgba(8,10,13,0.92)', bezel: 'rgba(210,224,236,0.55)' },
+  AI: { bg1: '#4a5563', bg2: '#2b333d', accent: '#e2ecf4', deck: '#828d99', edge: 'rgba(8,10,13,0.92)', bezel: 'rgba(210,224,236,0.55)' },
 };
 
 // A minimal-but-complete machine object for drawRobot — the fields its body
@@ -87,7 +87,7 @@ export function initMobileGate(mode = 'gate') {
   const themesHtml = `<div class="mg-themes" id="mg-themes">
       <button data-theme="World" class="on">World</button>
       <button data-theme="Backspace">Backspace</button>
-      <button data-theme="Fortress">Fortress</button>
+      <button data-theme="AI">AI</button>
     </div>`;
   // On the phone gate the vertical space is tight, so the theme switch lives
   // behind a hamburger (fixed, top-right) instead of a row at the bottom that

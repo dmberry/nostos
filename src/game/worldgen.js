@@ -1,6 +1,6 @@
 import { GameMap } from './map.js';
 import { makeRng } from './rng.js';
-import { assignLotTypes } from './buildings.js';
+import { assignLotTypes, rollBuildingLoot } from './buildings.js';
 
 // Phase 2 world generator: a 128x128 seeded overworld with a meandering
 // river, two bridged road crossings, a ruined main town east of the river,
@@ -91,9 +91,25 @@ export function buildWorld(seed, cfg = {}) {
   // scatter all moved). Kinds are a layer over the town, not part of how the
   // land is made, so they get their own stream and the land stays put — and
   // changing the type rules later can never move a hill again.
+  // Loot draws from a THIRD stream, for the same reason kinds got the second:
+  // a draw taken from the main rng would shift every draw after it and move the
+  // hills. Measured once already (v1.220); not doing it twice.
+  const lootRng = makeRng((seed ^ 0x1007) >>> 0);
   for (const lot of assignLotTypes(buildingLots(t.lots, rng), makeRng((seed ^ 0x5b1d) >>> 0))) {
     placeBuilding(map, rng, lot);
     map.buildings.push({ x0: lot.x0, y0: lot.y0, w: lot.w, h: lot.h, type: lot.type });
+    // What a building WAS decides what is left in it. An ironmonger has tools,
+    // a clinic has bandages, a house has whatever a house has. The table has
+    // been in buildings.js since v1.220 with nothing calling it.
+    const drops = 1 + Math.floor(lootRng() * 3);
+    for (let d = 0; d < drops; d++) {
+      const item = rollBuildingLoot(lot.type, lootRng);
+      if (!item) continue;
+      const ix = lot.x0 + 1 + Math.floor(lootRng() * Math.max(1, lot.w - 2));
+      const iy = lot.y0 + 1 + Math.floor(lootRng() * Math.max(1, lot.h - 2));
+      if (map.floorAt(ix, iy) !== 'boards') continue;      // a ruined lot may have no floor there
+      map.groundItems.push({ item, qty: 1, x: ix + 0.5, y: iy + 0.5, keep: true });
+    }
     keepClear.push({
       x0: lot.x0 - 2, y0: lot.y0 - 2,
       x1: lot.x0 + lot.w + 1, y1: lot.y0 + lot.h + 1,

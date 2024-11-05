@@ -13,9 +13,9 @@
 // rendering, because a PDF viewer is not a thing to write from scratch.
 //
 // TO ADD ONE: drop the file in assets/media/pdfs/ and add a row here. The
-// filesystem entry and the `pdf` command follow automatically.
+// filesystem entry and the `pdf-viewer` command follow automatically.
 
-export const PDF_DIR = 'assets/media/pdfs';
+export const PDF_DIR = 'assets/media/laptop/pdfs';
 
 export const PDFS = [
   {
@@ -26,13 +26,29 @@ export const PDFS = [
     year: '1980',
     note: 'Two pages, cut from a magazine and scanned badly.',
   },
+  {
+    file: 'JAMES 1879 - Are We Automata?.pdf',
+    name: 'are_we_automata.pdf',
+    title: 'Are We Automata?',
+    author: 'William James',
+    year: '1879',
+    note: 'A journal offprint. Somebody has gone through it with a pencil.',
+  },
+  {
+    file: 'GONSETH 1956 - The Humanization of Technics.pdf',
+    name: 'humanization_of_technics.pdf',
+    title: 'The Humanization of Technics',
+    author: 'Ferdinand Gonseth',
+    year: '1956',
+    note: 'A conference paper, stapled at the corner.',
+  },
 ];
 
 const BY_NAME = Object.fromEntries(PDFS.map((p) => [p.name, p]));
 
 export const pdfNames = () => PDFS.map((p) => p.name);
 export const pdfByName = (name) => BY_NAME[String(name || '').trim()] || null;
-export const pdfPath = (p) => `${PDF_DIR}/${p.file}`;
+export const pdfPath = (p) => `${PDF_DIR}/${encodeURIComponent(p.file)}`;
 
 // What `cat` shows if you try to read one at the shell: a PDF is not text, and
 // saying so in the machine's own voice is better than printing binary.
@@ -41,6 +57,6 @@ export function pdfStub(p) {
     `%PDF-1.2  ${p.title} — ${p.author}, ${p.year}`,
     '',
     'This file is not text. Open it with:',
-    `    pdf ${p.name}`,
+    `    pdf-viewer ${p.name}`,
   ].join('\n');
 }

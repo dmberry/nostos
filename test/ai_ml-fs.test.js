@@ -9,7 +9,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { runRonml } from '../src/game/ronml.js';
+import { runRonml } from '../src/game/ai_ml.js';
 
 // A minimal stand-in for main.js's fs ctx: an `aikey` drive holding the card's
 // two files, and a writable `ob` scratch. cwd + scratch live in the closure the

@@ -5,6 +5,7 @@
 // BEFORE either exists, so that when they land they cannot quietly disagree
 // about what a building is.
 
+import { buildWorld } from '../src/game/worldgen.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -12,7 +13,6 @@ import {
   buildingPalette, assignLotTypes, rollBuildingLoot,
 } from '../src/game/buildings.js';
 import { makeRng } from '../src/game/rng.js';
-import { buildWorld } from '../src/game/worldgen.js';
 import { placeBoatYard } from '../src/game/boatyard.js';
 import { ITEMS } from '../src/game/items.js';
 import { itemClass } from '../src/game/item-classes.js';
@@ -194,4 +194,48 @@ test('every item a building can hold is a real item, of a sensible class', () =>
   assert.ok(iron.filter((c) => c === 'tool').length >= 3, 'an ironmonger is mostly tools');
   const grocer = BUILDING_TYPES.grocer.loot.map(([k]) => itemClass(ITEMS[k]));
   assert.ok(grocer.every((c) => c === 'consumable'), 'a grocer sells nothing you keep');
+});
+
+// ---- the registry's two payoffs (v1.259) -----------------------------------
+//
+// buildingProfile has carried a loot table and a palette per type since v1.220
+// with nothing reading either. Written-and-unused code that looks finished is
+// worse to inherit than no code, so both are wired now and both are tested.
+test('what a building was decides what is left in it', () => {
+  const { map } = buildWorld(12345);
+  const byType = {};
+  for (const b of map.buildings) {
+    const items = map.groundItems
+      .filter((g) => g.x > b.x0 && g.x < b.x0 + b.w && g.y > b.y0 && g.y < b.y0 + b.h)
+      .map((g) => g.item);
+    if (items.length) (byType[b.type] = byType[b.type] || []).push(...items);
+  }
+  const total = Object.values(byType).flat().length;
+  assert.ok(total > 0, 'buildings have something in them');
+  // and it is not the same everywhere: a workshop and a grocer differ
+  const kinds = Object.keys(byType);
+  assert.ok(kinds.length > 1, 'more than one type got loot');
+  const sets = kinds.map((k) => new Set(byType[k]));
+  const allSame = sets.every((s) => [...s].every((i) => sets[0].has(i)));
+  assert.ok(!allSame, 'different building types leave different things behind');
+});
+
+test('loot draws from its own rng, so adding it never moves a hill', () => {
+  // v1.220 learned this the hard way: a draw from the main stream shifted every
+  // draw after it and silently regenerated the terrain of every existing seed.
+  const a = buildWorld(999).map;
+  const b = buildWorld(999).map;
+  let same = true;
+  for (let y = 0; y < a.h; y += 5) for (let x = 0; x < a.w; x += 5) {
+    if (a.floorAt(x, y) !== b.floorAt(x, y)) same = false;
+    if (a.heightAt(x, y) !== b.heightAt(x, y)) same = false;
+  }
+  assert.ok(same, 'the same seed makes the same land');
+});
+
+test('every building type has a wall colour of its own', () => {
+  const types = ['ironmonger', 'clinic', 'warehouse', 'domestic', 'workshop', 'civic', 'grocer'];
+  const walls = types.map((t) => buildingPalette(t).wall);
+  for (const w of walls) assert.match(w, /^#[0-9a-f]{6}$/, 'a hex colour the renderer can use');
+  assert.ok(new Set(walls).size > 2, 'they are not all the same colour');
 });

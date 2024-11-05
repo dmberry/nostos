@@ -96,7 +96,7 @@ pruned; the README table is the record now.)
 
 **Handoff for the other session (read before you touch the terminal or the AI key):**
 the whole RON-ML gating model changed. Full spec: [docs/ob-terminal-language.md §9](docs/ob-terminal-language.md).
-Files touched: `src/game/ronml.js`, `src/main.js`, `src/game/player.js`,
+Files touched: `src/game/ai_ml.js`, `src/main.js`, `src/game/player.js`,
 `src/game/lore.js`, `src/game/hermes.js`, `index.html`, `README.md`,
 `src/version.js`, this file. **Rebased onto the islands refactor** — my ctx
 effect loops use `currentWorld.robots`/`currentWorld.obeliskObjs` to match 0a/0b.

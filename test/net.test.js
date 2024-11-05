@@ -3,7 +3,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { hostTable, findHost, pageFor, renderPage, searchResults, bookmarksPage, whatsNewPage, docsPage, programPage, DOC_TOPICS, ipFor, aiIp, domainFor, spoofedAddr, IFACE } from '../src/game/net.js';
+import { hostTable, findHost, pageFor, renderPage, searchResults, bookmarksPage, whatsNewPage, docsPage, programPage, DOC_TOPICS, ipFor, aiIp, domainFor, spoofedAddr, IFACE, httpdBinary, httpdToken, HTTPD_PATH } from '../src/game/net.js';
 
 const world = () => ({
   islandId: 'ogygia',
@@ -387,4 +387,71 @@ test("New&Cool carries the papers, so the collapse is findable by browsing", () 
     assert.ok(links.some((l) => l.addr === paper), `${paper} is listed`);
   }
   assert.match(text, /cache/i);
+});
+
+// ---- L9: the way into the write path ---------------------------------------
+//
+// Reading a machine is free and rewriting one is not. The httpd answers GET to
+// anybody and PUT to nobody, and the token that changes that is compiled into
+// the server's own binary, which the server will hand you because it serves
+// the directory its programs sit in. That misconfiguration was the commonest
+// hole of the decade and it is the way in here.
+test('the token is in the binary, and the binary is fetchable', () => {
+  const bin = httpdBinary('CALYPSO', 'obd/0.4');
+  const tok = httpdToken('CALYPSO');
+  assert.match(bin, new RegExp(`X-RON-Maint: ${tok}`), 'the token is readable in it');
+  // The token is in the binary and nothing checks it: the auth was never
+  // finished, and the comment left behind is how you learn that.
+  assert.match(bin, /TODO: auth/, 'the unfinished half is legible too');
+  assert.match(bin, /PUT/, 'and the verb it unlocks');
+  // It has to look like a binary, or nobody reaches for strings.
+  assert.match(bin, /ELF/);
+  const printable = bin.split('\n').filter((l) => /^[\x20-\x7e]{4,}$/.test(l)).length;
+  assert.ok(printable < bin.split('\n').length, 'most of it is not readable text');
+});
+
+test('the token is per-island, so one break does not open the next', () => {
+  const names = ['CALYPSO', 'POLYPHEMUS', 'CIRCE', 'HELIOS', 'POSEIDON'];
+  const tokens = names.map(httpdToken);
+  assert.equal(new Set(tokens).size, names.length, 'every daemon has its own');
+  for (const t of tokens) assert.match(t, /^RON-[A-Z]{3}-\d{5}$/);
+});
+
+test('the same daemon gives the same token twice', () => {
+  assert.equal(httpdToken('CIRCE'), httpdToken('CIRCE'), 'or it could not be written down');
+});
+
+
+// A FLAT MACHINE IS NOT A DEAD ONE. It drops to low power: the maintenance board
+// stays up on a trickle, so its page still says what it is and still takes a
+// program. Reporting it as OFFLINE would send a player away from a machine they
+// could still have.
+test('a drained unit reads as low power, not offline', () => {
+  const hosts = hostTable({ id: 'ogygia', daemon: 'calypso', obelisks: [{ code: 'OB_1A2B' }],
+    robots: [{ id: 'T1_01', type: 't1', battery: 0, drained: true, down: true, hp: 20, maxHp: 30,
+      homeCode: 'OB_1A2B', program: 'patrol' }] });
+  const h = hosts.find((x) => x.kind === 'robot');
+  const page = pageFor(h, hosts);
+  assert.match(page, /LOW POWER/);
+  assert.doesNotMatch(page, /OFFLINE/);
+  assert.match(page, /will take a program/, 'and it says what you can still do with it');
+});
+
+
+// THE RESERVE. A flat machine can be walked home on a second small cell, once.
+// The page has to say all three states, because "FORCE HOME" on a unit that has
+// already spent its reserve is a button that does nothing.
+test('a flat unit offers its reserve, once', () => {
+  const page = (extra) => {
+    const hosts = hostTable({ id: 'ogygia', daemon: 'calypso', obelisks: [{ code: 'OB_1A2B' }],
+      robots: [{ id: 'T1_01', type: 't1', battery: 0, drained: true, down: true, hp: 20, maxHp: 30,
+        homeCode: 'OB_1A2B', program: 'patrol', ...extra }] });
+    return pageFor(hosts.find((x) => x.kind === 'robot'), hosts);
+  };
+  assert.match(page({}), /FORCE HOME/);
+  assert.match(page({}), /reserve:t1_01\.calypso\.com/, 'and it is a control, not a sentence');
+  assert.match(page({ limping: true }), /ON RESERVE/);
+  assert.doesNotMatch(page({ limping: true }), /FORCE HOME/, 'no second push while it walks');
+  assert.match(page({ reserveSpent: true }), /SPENT/);
+  assert.doesNotMatch(page({ reserveSpent: true }), /FORCE HOME/, 'and none after it is gone');
 });

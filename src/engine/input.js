@@ -292,6 +292,12 @@ export class Input {
     return this.consumePress('KeyX');
   }
 
+  // Y: the bot sniffer's active sweep. Held in hand it names machines for free;
+  // this is the half that makes one stop and answer.
+  snifferPressed() {
+    return this.consumePress('KeyY');
+  }
+
   dropPressed() {
     return this.consumePress('KeyF');
   }

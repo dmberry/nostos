@@ -91,6 +91,36 @@ const tourismOf = (islandId, daemon) => islandProfile(islandId || daemon).touris
 //                   knows its code, its circuit and how much ground it has taken;
 //                   it does not know the island. That is why its page is thin and
 //                   the daemon's is not.
+// THE AIR. The card can hear more than one network, and it can only be
+// associated with one at a time. The daemon's own is everywhere its towers
+// stand. RON's is a relay's own box, link-local, and carries about thirty
+// metres — which is why it has survived: nothing on the daemon's wire has ever
+// heard it, because nothing on the daemon's wire has ever been close enough.
+export const RELAY_ESSID = 'ron-relay';
+export const RELAY_IP = '169.254.4.1';
+
+export function networksInRange(world) {
+  const prof = islandProfile(world.islandId || world.daemon);
+  const nets = [{
+    essid: prof.domain, kind: 'daemon', signal: world.coreDown ? 41 : 78,
+    note: `${lc(prof.daemon, 'poseidon').toUpperCase()} estate network`,
+  }];
+  if (world.nearRelay) {
+    nets.push({ essid: RELAY_ESSID, kind: 'relay', signal: 96, note: 'unlisted' });
+  }
+  return nets;
+}
+
+// What RON's relay serves to anyone standing beside it. One box, one page, and
+// the tools on it.
+export function relayHosts(state = {}) {
+  return [{
+    ip: RELAY_IP, host: 'hermes.local', kind: 'relay', net: RELAY_ESSID,
+    name: 'HERMES', title: 'HERMES RELAY — LOCAL', down: false, ref: null,
+    relay: state,
+  }];
+}
+
 export function hostTable(world) {
   const prof = islandProfile(world.islandId || world.daemon);
   const idx = prof.subnet;
@@ -418,7 +448,7 @@ function robotPage(host, hosts) {
   const fac = hosts.find((h) => h.kind === 'factory');
   const home = hosts.find((h) => h.kind === 'obelisk' && String(h.code) === String(host.homeCode));
   const out = [
-    ...header(host, `${host.down ? 'OFFLINE' : (r.gardener ? 'HORTICULTURAL' : 'IN SERVICE')}.`,
+    ...header(host, `${r.drained ? 'LOW POWER — maintenance board only.' : host.down ? 'OFFLINE' : (r.gardener ? 'HORTICULTURAL' : 'IN SERVICE')}${r.drained ? '' : '.'}`,
       `${String(host.type).toUpperCase()} — ${spec.role}`),
     '<h2>Unit</h2>',
     row('model', String(host.type).toUpperCase()),
@@ -447,6 +477,45 @@ function robotPage(host, hosts) {
       '<h2>Contacts</h2>',
       '<p>Log truncated. Retention policy applies.</p>',
     );
+  }
+  // WHICH ONE IS IT. Four T-1s homed to one tower are four identical machines
+  // on a hillside, and the address of the wrong one is worse than no address.
+  // A status report is ordinary fleet maintenance: the tower asks, the unit
+  // stops, blinks, takes its readings and files them. You watch for the blink.
+  out.push('<h2>Status report</h2>');
+  if (r.drained) {
+    out.push('<p>Its cell is flat. It answers maintenance and nothing else, so it',
+      'will take a program but cannot get up to file a report.</p>');
+    // THE RESERVE. A second small cell, fitted to every one of these, that does
+    // nothing but walk the machine home when the main one is flat. It is a
+    // recovery feature and it was never meant for anyone outside the estate to
+    // reach — but the maintenance board answers, and this is one of the things
+    // the maintenance board does.
+    if (r.limping) {
+      out.push('<p><b>ON RESERVE</b> — walking to '
+        + `${host.homeCode || 'its tower'}. It will not stop and it will not see you.</p>`);
+    } else if (r.reserveSpent) {
+      out.push('<p>reserve ...... SPENT. It has one and it has used it. This unit',
+        'moves again when somebody puts a cell in it by hand.</p>');
+    } else {
+      out.push(`<p><a href="reserve:${host.host}">FORCE HOME</a> — spend the reserve`,
+        `cell and walk it to ${host.homeCode || 'its tower'} to charge. It goes slowly,`,
+        'it goes blind, and it goes whether or not the way is clear. One charge,',
+        'and it does not come back.</p>');
+    }
+  } else if (host.down) {
+    out.push('<p>This unit is not answering. Nothing to request.</p>');
+  } else if (r.reportT > 0) {
+    out.push(`<p><b>REPORTING</b> — holding station, ${Math.ceil(r.reportT)}s remaining. Its lamp is on a slow blue blink for as long as it stands there.</p>`);
+  } else {
+    if (r.report) {
+      out.push('<pre>' + r.report.map((l) => l.replace(/&/g, '&amp;').replace(/</g, '&lt;')).join('\n') + '</pre>');
+    }
+    if (r.reportCool > 0) {
+      out.push(`<p>Filed. This unit returns to duty and will not answer another request for ${Math.ceil(r.reportCool)}s.</p>`);
+    } else {
+      out.push(`<p><a href="report:${host.host}">Request status report</a> — the unit halts for ${REPORT_HOLD}s, blinks, and files its position and condition to ${host.homeCode || 'its tower'}.</p>`);
+    }
   }
   if (host.program) {
     // The whole point of P4: the machine's reasoning is a document, and the
@@ -484,22 +553,30 @@ export function programPage(host, hosts, opts = {}) {
   return [
     `<h1>${host.name} · program.ml</h1>`,
     `<p><small>${host.host} · ${SERVER.robot} · text/plain · ${src.length} bytes</small></p>`,
-    `<pre>${esc(src)}</pre>`,
+    // EDIT IN PLACE. Saving it, opening pico, editing, and posting it back is
+    // four steps for a one-word change, and three of them are ceremony. The
+    // program is served as text and the browser is running on the machine that
+    // would hold the copy, so it is a text area: change it here and send it.
+    // (Save is still there for anything you want to keep or diff.)
+    `<textarea id="ns-prog-edit" class="ns-prog" spellcheck="false" rows="${Math.max(8, src.split('\n').length + 1)}">${esc(src)}</textarea>`,
+    '<p><input id="ns-prog-send" type="button" value="Send to unit"> <input id="ns-prog-revert" type="button" value="Revert"> <small>The unit takes it on its next decision.</small></p>',
     '<h2>Notes</h2>',
     r.fault
       ? `<p><b>This program is not running.</b> ${esc(String(r.fault))}. The unit is on its built-in reflexes until the program is replaced.</p>`
       : `<p>Running${r.intent ? `. Last decision: <b>${esc(String(r.intent))}</b>` : ''}.</p>`,
     '<p>The words this unit answers to are its own: what it can sense, and what',
     'it can be told to do. Anything else evaluates, and then faults.</p>',
-    row('sensors', 'charge · integrity · range · home_range · threat · hurt · linked'),
-    row('intents', 'patrol · hunt · home · flee · wait'),
-    row('service', 'beep · eye <colour> · flash <rate>'),
-    `<p><a href="save:${host.host}">Save to the NostBook</a> — lands in <code>/home/download</code>, where <code>pico</code> can open it.</p>`,
+    row('sensors', 'charge · integrity · range · home_range · threat · hurt · linked · blight · daylight'),
+    row('fire control', 'sight · armed · shielded · contact · lost_for'),
+    row('intents', 'patrol · hunt · home · flee · tend · wait'),
+    row('weapon', 'fire · hold · reload — answer [hunt, fire] to say both at once'),
+    row('service', 'beep · eye &lt;colour&gt; · flash &lt;rate&gt;'),
+    `<p><a href="save:${host.host}">SAVE</a></p>`,
     // The upload form. A file chooser and a button, which is all a 1995 page
     // needed and all this one needs: the browser is running ON the machine that
     // holds the files, so it offers what is actually on the disk rather than
     // asking the operating system to open a dialog.
-    '<h2>Replace this program</h2>',
+    '<h2>Send a file instead</h2>',
     (opts.files && opts.files.length)
       ? [
         '<form class="ns-form" onsubmit="return false">',
@@ -508,7 +585,7 @@ export function programPage(host, hosts, opts = {}) {
         '</select>',
         '<input id="ns-post-go" type="submit" value="Upload">',
         '</form>',
-        '<p><small>The unit takes it on its next decision, a quarter of a second later. A program that will not run is not refused: the machine accepts it, faults, and stands there with its lamp flashing amber.</small></p>',
+        '<p><small>A program that will not run is not refused: the machine accepts it, faults, and stands there with its lamp flashing amber.</small></p>',
       ].join('\n')
       : '<p>No AI-ML files on this machine to send. Save this one first, edit it, then come back.</p>',
     docs ? `<p>${link(docs, 'AI-ML reference')} — the language this is written in.</p>` : '',
@@ -756,6 +833,221 @@ export function whatsNewPage(hosts) {
   ].filter(Boolean).join('\n');
 }
 
+// THE SERVER'S OWN BINARY, and the flaw in it.
+//
+// Servers of this vintage were routinely misconfigured to serve the directory
+// their own programs sat in, so asking for the binary got you the binary. That
+// is the way in here: the httpd is fetchable, and a maintenance token the
+// vendor left compiled into it is readable with `strings`. Hardcoded
+// credentials in a shipped binary was the commonest hole of the decade.
+//
+// The token is per-island, derived from the daemon's name, so breaking one
+// island's servers teaches you nothing about the next.
+// How long a unit stands still to take and file its own readings. Short enough
+// to be worth walking toward, long enough to find the machine on a hillside.
+export const REPORT_HOLD = 30;
+export const REPORT_COOLDOWN = 90;
+
+export const HTTPD_PATH = 'cgi-bin/httpd';
+
+export function httpdToken(aiName) {
+  const n = String(aiName || 'POSEIDON').toUpperCase();
+  let h = 0;
+  for (let i = 0; i < n.length; i++) h = (h * 31 + n.charCodeAt(i)) >>> 0;
+  return `RON-${n.slice(0, 3)}-${(h % 100000).toString().padStart(5, '0')}`;
+}
+
+// What `GET /cgi-bin/httpd` returns: mostly junk, with the printable runs a
+// real binary carries. The token is in there, and so is the header name that
+// uses it, which is what makes the find actionable rather than a curiosity.
+export function httpdBinary(aiName, banner) {
+  const tok = httpdToken(aiName);
+  const junk = (n) => Array.from({ length: n }, (_, i) => String.fromCharCode(1 + ((i * 37) % 26))).join('');
+  return [
+    `\x7fELF\x02\x01\x01${junk(9)}`,
+    junk(24),
+    banner,
+    junk(18),
+    'GET', junk(4), 'HEAD', junk(6), 'PUT', junk(3), 'POST', junk(5), 'DELETE',
+    junk(31),
+    'Content-Type: text/html',
+    'HTTP/1.0 200 OK',
+    'HTTP/1.0 404 Not Found',
+    'HTTP/1.0 501 Not Implemented',
+    junk(22),
+    // The maintenance interface was specified, half-built, and shipped open:
+    // the token is in here as a string and nothing ever checked it. That is not
+    // a puzzle, it is the ordinary way these were left, and reading the binary
+    // is how you find out that the lock on the front of it was never fitted.
+    'maintenance interface, factory use only',
+    `X-RON-Maint: ${tok}`,
+    'TODO: auth. -- jdm',
+    junk(40),
+    'unit program accepted, reload on next tick',
+    junk(17),
+    '/usr/src/httpd/main.c',
+    junk(28),
+  ].join('\n');
+}
+
+// WHAT THE RELAY SERVES. A table, not a special case: RON's box is a disk with
+// files on it, and adding one later is a row here. Every entry is text, lands in
+// /home/download, and is readable with the same eyes as everything else.
+const SNIFFER_ML = [
+  '(* sniffer.ml \u2014 RON field build. Runs on a NostBook, nowhere else. *)',
+  '(* Every machine tells its tower where it is, four times a second,     *)',
+  '(* whether or not the tower is listening. This reads that off the air  *)',
+  '(* and prints what it hears. It sends nothing, so nothing knows it     *)',
+  '(* ran. Change it: it is six lines and it is yours now.                *)',
+  '',
+  'fun pad s n = if size s >= n then s else pad (s ^ " ") n',
+  '',
+  'fun line u =',
+  '  pad (#name u) 16 ^ pad (Int.toString (#range u) ^ "m") 6 ^ #bearing u',
+  '',
+  'fun each nil = ()',
+  '  | each (u :: rest) = (echo (line u) ; each rest)',
+  '',
+  'fun show l = if length l == 0 then echo "nothing on the air" else each l',
+  '',
+  'show units',
+].join('\n');
+
+const WATCH_ML = [
+  '(* watch.ml \u2014 the same ear, listening for less. *)',
+  '(* sniffer.ml names everything. This names only what is close enough  *)',
+  '(* to matter, which on a bad night is the only line you want. Change  *)',
+  '(* the 10 and it is a different tool.                                 *)',
+  '',
+  'fun near nil = nil',
+  '  | near (u :: rest) = if #range u <= 10 then u :: near rest else near rest',
+  '',
+  'fun each nil = ()',
+  '  | each (u :: rest) = (echo (#name u ^ " " ^ Int.toString (#range u) ^ "m " ^ #bearing u) ; each rest)',
+  '',
+  'each (near units)',
+].join('\n');
+
+const RELAY_README = [
+  'HERMES relay, local disk.',
+  '',
+  'These are tools, not secrets. Everything here listens; nothing here',
+  'transmits. That is the rule the relays were built on and it is why they',
+  'are still standing while the towers that hunted us are not.',
+  '',
+  'sniffer.ml   names every machine the card can hear',
+  'watch.ml     names only the ones inside ten metres',
+  '',
+  'Both run on a NostBook: ml sniffer.ml. They read the same air `arp -a`',
+  'reads. Read them before you run them; they are short on purpose.',
+  '',
+  '-- RON',
+].join('\n');
+
+// The scope. An application rather than a source file: you install it by
+// downloading it, which is what installing software was. The shell will not run
+// `sniffer` until this is on the disk, so the relay is a place you actually get
+// something from rather than a page that tells you about one.
+const SNIFFER_APP = [
+  '#!/bin/exec  tord a.out  ron/sniffer 1.0',
+  '',
+  'A plan view of what the aerial can hear. North up, one ring per ten',
+  'metres, you at the centre. Every machine within range is a blip with its',
+  'name on it, and every name is a link to the page that machine serves.',
+  '',
+  'It listens. It does not transmit, it does not associate, and it leaves',
+  'nothing behind on anything it hears. Run it from the shell: sniffer',
+  '',
+  '(This file is the program. The NostBook loads it from wherever it sits on',
+  'the disk; there is no install step and there never was on a machine this',
+  'small.)',
+  '',
+  '-- RON',
+].join('\n');
+
+export const SNIFFER_APP_NAME = 'sniffer';
+
+export const RELAY_FILES = [
+  { name: 'sniffer', body: SNIFFER_APP,
+    blurb: 'a scope: what the aerial hears, drawn, with every name a link' },
+  { name: 'sniffer.ml', body: SNIFFER_ML,
+    blurb: 'names every machine the card can hear, with a bearing and a range' },
+  { name: 'watch.ml', body: WATCH_ML,
+    blurb: 'the same ear, narrowed to ten metres' },
+  { name: 'readme', body: RELAY_README,
+    blurb: 'what this box is for, in RON\'s own words' },
+];
+
+export function relayFile(name) {
+  const f = RELAY_FILES.find((x) => x.name === name);
+  return f ? f.body : null;
+}
+
+// The relay's own status, the way a box built to be left alone reports itself:
+// what it is running on, what it is holding, and who else it can still hear.
+// Everything here is real state — the queue, the backup, the mesh, the light.
+function relayRows(r) {
+  const bar = (pct) => {
+    const n = Math.max(0, Math.min(10, Math.round((pct / 100) * 10)));
+    return `[${'#'.repeat(n)}${'.'.repeat(10 - n)}] ${pct}%`;
+  };
+  const out = [
+    '<h2>Station</h2>',
+    row('node', r.code || 'TOR'),
+    row('sited', r.sited || 'summit'),
+    row('uptime', r.uptime || 'not recorded'),
+    row('system', 'TOR-DOS 2.7  (tord/0.2)'),
+    '<h2>Power</h2>',
+    row('array', r.daylight ? 'solar, charging' : 'solar, dark — on cells'),
+    row('cells', bar(r.battery == null ? 100 : r.battery)),
+    row('draw', r.daylight ? '0.4W  (surplus to array)' : '0.4W  (from cells)'),
+    '<h2>Store</h2>',
+    row('disk', `${r.diskUsed || 0}K used of 720K`),
+    row('queue', r.queued ? `${r.queued} item${r.queued === 1 ? '' : 's'} waiting for the next carrier` : 'empty'),
+    row('last run', r.lastRun || 'no traffic this session'),
+    row('key vault', r.keyHeld ? 'ONE AI KEY HELD — restore aikey' : 'empty'),
+  ];
+  if (r.mesh && r.mesh.length) {
+    out.push('<h2>Mesh</h2>');
+    out.push('<p>Other relays this one can still hear. They pass a beacon down the',
+      'chain every few hours; a node that stops answering is a node somebody',
+      'found.</p>');
+    for (const m of r.mesh) {
+      out.push(row(m.code, m.up ? `${m.km} away, last beacon ${m.last}` : `${m.km} away, SILENT`));
+    }
+  }
+  if (r.heard != null) {
+    out.push('<h2>Log</h2>');
+    out.push(row('machines heard', `${r.heard} in the last hour`));
+    out.push(row('estate network', r.coreDown ? 'quiet — their core is down' : 'busy'));
+    out.push('<p>The log is a count and nothing else. It keeps no addresses,',
+      'because a list of who was where is the one thing on this box worth',
+      'taking off it.</p>');
+  }
+  return out;
+}
+
+function relayPage(host) {
+  return [
+    '<h1>HERMES</h1>',
+    `<p><small>hermes.local \u00b7 tord/0.2 \u00b7 not on any wire \u00b7 ${host.ip}</small></p>`,
+    '<p>This box is thirty metres of radio and a disk. It is not on the estate',
+    'network and never has been, which is the only reason it is still here. If',
+    'you are reading this you are standing next to it.</p>',
+    ...relayRows(host.relay || {}),
+    '<h2>Index of /</h2>',
+    ...RELAY_FILES.map((f) => `<p><a href="ronfile:${f.name}">${f.name}</a> \u2014 ${f.blurb} <small>(${f.body.length} bytes)</small></p>`),
+    '<p>Saved files land in <code>/home/download</code>. The programs run on the',
+    'NostBook: <code>ml sniffer.ml</code>.</p>',
+    '<h2>The air</h2>',
+    '<p>The estate network is on the air wherever their towers stand, so it is',
+    'what your card joins if you leave it alone. Come back to this one with',
+    '<code>iwconfig wifi0 essid ron-relay</code>; go back to theirs the same way.</p>',
+    '<p>Do not post anything from here. Ours is the network they have never',
+    'heard, and it stays that way by being quiet.</p>',
+  ].join('\n');
+}
+
 export function pageFor(host, hosts) {
   if (!host) return null;
   if (host.kind === 'docs') return docsPage('index', host.host);
@@ -768,6 +1060,7 @@ export function pageFor(host, hosts) {
   if (host.kind === 'ai') return aiPage(host, hosts);
   if (host.kind === 'factory') return factoryPage(host, hosts);
   if (host.kind === 'obelisk') return obeliskPage(host, hosts);
+  if (host.kind === 'relay') return relayPage(host);
   if (host.kind === 'robot') return robotPage(host, hosts);
   return `<h1>${host.title}</h1>${foot(host)}`;
 }

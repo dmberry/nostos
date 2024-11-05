@@ -119,7 +119,7 @@ that already fired.
 ## Distinct from what already exists
 
 There is already a terminal freeze: RON-ML `loop OB_XXXX` pins a node in an
-infinite loop, freezing it and its guards, no AI key needed (`ronml.js:443`), and
+infinite loop, freezing it and its guards, no AI key needed (`ai_ml.js:443`), and
 obelisks carry a `frozen` flag. That is the **hacker's** way — it needs console
 access (an access chip) and it is about *combat/stealth* around one tower before
 POSEIDON. The **jammer** is deliberately different: a **physical** item you plant

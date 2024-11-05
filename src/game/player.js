@@ -17,6 +17,8 @@ const CHIP_FRAGMENTS_PER_CHIP = 8; // fragments shed by machines to craft one ch
 const FORTRESS_MAP_FRAGMENTS = 5; // scattered map quarters pieced into a fortress map
 const SCRAP_PER_SWORD = 10; // scrap beaten into a robot sword
 const TORCHES_PER_GOGGLES = 5; // torch-heads stripped for phosphor + a board -> goggles
+const SNIFFER_CRAFT_CIRCUITS = 2;   // an aerial, a receiver, a screen
+const SNIFFER_RANGE = 24;           // tiles: the same radio reach the laptop's card has
 const BLUEBOX_CRAFT_CIRCUITS = 2;  // circuit boards soldered into a bluebox
 // Reviving the machine you wash ashore with. Deliberately CHEAP and made of
 // early scavenge — batteries and chip fragments turn up in caches from the first
@@ -612,6 +614,48 @@ export class Player {
     sfx.play('zap');
     if (map) this.sparkAt(map, bot.x, bot.y);
     this.say(`You splice the bluebox into the ${bot.type.toUpperCase()}. Its eye flushes green and it turns to the dead ground — a gardener now.`);
+  }
+
+  // THE BOT SNIFFER. Two boards and a cell: an aerial, a receiver and a screen.
+  // It is the cheapest thing in the game that changes how the island reads,
+  // because after it every machine on the hillside has a name on it.
+  canCraftSniffer() {
+    return !this.hasItem('sniffer') && this.countItem('circuit') >= SNIFFER_CRAFT_CIRCUITS
+      && this.countItem('battery') >= 1;
+  }
+
+  craftSniffer() {
+    if (!this.canCraftSniffer()) {
+      this.say(this.hasItem('sniffer') ? 'You already carry a sniffer.'
+        : `A bot sniffer needs ${SNIFFER_CRAFT_CIRCUITS} circuit boards and a battery.`);
+      return false;
+    }
+    for (let n = 0; n < SNIFFER_CRAFT_CIRCUITS; n++) this.removeItem('circuit');
+    this.removeItem('battery');
+    if (!this.stow('sniffer', 1)) { this.say('No room for the sniffer.'); return false; }
+    sfx.play('blip');
+    this.say('You build a bot sniffer. Hold it and every machine in range wears its name; press Y to make one stand still and say it.');
+    return true;
+  }
+
+  // The active sweep. It sends the same maintenance interrogation the tower
+  // sends over the network, and the unit cannot tell the two apart — which is
+  // the whole reason it works. `onSniff` files the report; the caller owns that,
+  // because the wording of a status report belongs with the network code.
+  sniff(robots = [], map) {
+    if (!this.hasItem('sniffer')) { this.say('You have no bot sniffer — build one from circuit boards and a battery (C).'); return; }
+    const inRange = (robots || []).filter((r) => !r.dead && !r.fused && !r.friendly
+      && Math.hypot(r.x - this.x, r.y - this.y) <= SNIFFER_RANGE);
+    if (!inRange.length) { this.say('Nothing on the air within range.'); return; }
+    const target = inRange
+      .filter((r) => (r.reportT || 0) <= 0 && (r.reportCool || 0) <= 0)
+      .sort((a, b) => Math.hypot(a.x - this.x, a.y - this.y) - Math.hypot(b.x - this.x, b.y - this.y))[0];
+    if (!target) { this.say('Every machine in range has just answered one. They will not answer another yet.'); return; }
+    if (target.hardened) { this.say('A fortress guard does not take maintenance traffic. It ignores the wand.'); return; }
+    sfx.play('blip');
+    if (map) this.sparkAt(map, target.x, target.y);
+    const name = this.onSniff ? this.onSniff(target) : target.type.toUpperCase();
+    this.say(`${name} stops where it stands, and its lamp goes to a slow blue blink.`);
   }
 
   craftSword() {

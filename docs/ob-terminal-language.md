@@ -2,7 +2,7 @@
 
 *Renamed 2026-07-25 from **RON-ML** to **AI-ML**: the obelisk console is the machines'
 own OS (green), not RON's — the RON access chip only lets you IN. The module file is
-still `src/game/ronml.js` and the error class `RonmlError` (internal names unchanged).*
+still `src/game/ai_ml.js` and the error class `RonmlError` (internal names unchanged).*
 
 *Additions v1.187 (on top of the original minimal spec):*
 - ***string literals** `"…"` (with `\"` / `\\` escapes) and an **`echo`** verb, so
@@ -41,7 +41,7 @@ language stays pure; only these two are effectful, and only the top-level run co
 their output. (`while`/`ref`/mutable bindings are still NOT added — sequencing effects
 is as far as this goes.)*
 
-*Status: implemented in v0.84 (`src/game/ronml.js` + the REPL wired into `#obterminal`
+*Status: implemented in v0.84 (`src/game/ai_ml.js` + the REPL wired into `#obterminal`
 in `main.js`). The terminal UI + click-to-open shipped in v0.80 as a read-only VT220
 shell; this doc was the plan for making it do something, and is now also the reference
 for how it actually works. Originally shipped without lambdas, per §8 (now being added). `sing` deviates from the
@@ -196,7 +196,7 @@ motif), then `drained = true`.
 
 ## 7. Implementation plan
 
-Small and self-contained. Suggested new module `src/game/ronml.js`:
+Small and self-contained. Suggested new module `src/game/ai_ml.js`:
 
 1. **Tokenizer** — identifiers/hex, numbers, `let`/`in`/`|>`/`=`/parens, `(* *)`
    comments. ~40 lines.
@@ -376,11 +376,11 @@ the terminal closes or resets. This is the one real evaluator change; everything
 else is verb-level.
 
 ### Implementation touch-points
-1. `ronml.js`: drop `requireAiKey` from `sleep`/`repel`/`rewind`; add `decrypt`,
+1. `ai_ml.js`: drop `requireAiKey` from `sleep`/`repel`/`rewind`; add `decrypt`,
    `copy`, and `name` (free, reads the current node from ctx); extend `print` to
    take `aikey` (drop a physical key copy when `aikey` is in scope); rework
    `unlock` to arity-2 (`k`, `d`). `crash` stays.
-2. `ronml.js` + `main.js` REPL: a session environment that bare top-level `let`
+2. `ai_ml.js` + `main.js` REPL: a session environment that bare top-level `let`
    writes and later lines read; parser accepts `let x = e` with no `in` at the
    top level; echo `val x = …`.
 3. Effect tuning for `sleep`/`repel`/`rewind` (radius/duration) in their ctx
@@ -395,3 +395,82 @@ else is verb-level.
    pickup handler in player.js) pointing at `copy aikey`.
 6. Help table, `read ronml` (hermes.js), the AI-ML manual (items.js), and §3/§4
    here updated to match.
+
+## Datatypes, case and tuples (v1.243)
+
+The language can now declare its own kinds of value, and take them apart.
+
+```
+datatype colour = Red | Blue | Yellow
+datatype shape  = Circle of num | Rect of num * num
+datatype tree   = Leaf of num | Node of tree * tree
+
+case s of Circle r => 3 * r * r | Rect w h => w * h
+let size t = case t of Leaf n => 1 | Node a b => size a + size b
+let map f l = case l of nil => nil | x :: r => f x :: map f r
+```
+
+Patterns: constructor (`Red`, `Circle r`), variable (`x`), wildcard (`_`),
+constant (`0`, `"go"`, `true`), list (`nil`, `x :: rest`, `[a, b]`), and tuple
+(`(a, b)`). They nest, and a constructor argument does **not** collect arguments
+of its own, so `Node a b` is two arguments and `Node (Leaf a) r` is how you nest.
+
+**The `of` annotation is not checked.** It is read for one thing: how many
+arguments the constructor takes, counted by the `*` between components. This
+build has no type checker, which is stated on the Restrictions page rather than
+implied away. Two consequences a writer should know:
+
+- **A misspelled constructor becomes a variable pattern** and matches everything,
+  so the arms after it are never reached. There is nothing to catch it.
+- **Nothing checks a case is exhaustive.** A value no arm fits is found when it
+  arrives. Cover every constructor or end with `_`.
+
+Design reference throughout: Harper, R. (1993) *Introduction to Standard ML*,
+CMU. Section 2.7 for the datatype binding, section 2.4 for what a pattern is,
+section 2.2.6 for tuples, section 2.2.7 for lists. The in-game documentation
+server quotes him by page on the Lists and Datatypes pages, and carries a
+References page.
+
+## Types, modules and exceptions (v1.252–v1.253) — AI-ML 1.0
+
+The language is versioned separately from the game now. `ml -ver` prints the
+line, `ml -full` the survey.
+
+**Type inference** (`src/game/types.js`) is Hindley-Milner: unification with an
+occurs check, let-polymorphism, fresh instantiation at each use.
+
+```
+let map f l = case l of nil => nil | x :: r => f x :: map f r
+> val map = fn : ('a -> 'b) -> 'a list -> 'b list
+```
+
+**It reports and does not refuse.** A clash is named and the line still runs.
+The reason is the machine: it is in a ruin, and a thing that refuses to run what
+you typed is no use to you. It runs on the **laptop only** — a unit carrying its
+own program has 2,000 steps and nobody aboard to read a report, and the tower
+consoles reach into a world the checker knows nothing about.
+
+**Annotations are checked**, in bindings, parameters, `(e : t)` and on results.
+`fun sq (n:int):int` peels one arrow per parameter before comparing. An
+annotation read and discarded would be the same lie as no annotation.
+
+**Modules**: `structure`, `signature`, `sig`/`struct`/`end`, opaque `:>`, and
+qualified names. A signature restricts which **names** are visible; without a
+checker enforcing abstraction it cannot make a *representation* opaque, and the
+Modules page says so rather than implying the guarantee.
+
+**Exceptions**: `exception`, `raise`, `handle` with full pattern arms.
+
+**Also**: `=` as equality (a declaration eats its own `=` first), `andalso` /
+`orelse`, `()` as value and pattern, `type` abbreviations.
+
+**Result**: Harper's `optexccont.sml` runs — four implementations of N-queens
+over one `Board` structure, all four returning the same correct placement.
+
+### The correction that made this happen
+
+This document previously said there was no type checker because inference needs
+a whole program and a console has one line at a time. That was wrong. Standard
+ML's own top level infers and prints a type for every declaration entered, which
+is how the manuals display everything. There was no barrier; there was no
+implementation.

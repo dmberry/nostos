@@ -129,7 +129,7 @@ export const PAPERS = [
             head: 'Ministers back national rollout',
             by: 'Political Staff',
             body: [
-              'The Chancellor described the programme as the largest single productivity measure of the decade, and confirmed that departments failing to adopt would have budgets adjusted accordingly.',
+              'The Prime Minister described the programme as the largest single productivity measure of the decade, and confirmed that departments failing to adopt would have budgets adjusted accordingly.',
               'The Opposition welcomed the ambition and questioned the timetable.',
               'A minority of members raised the question of what would happen if the systems were ever to be switched off. The Minister replied that they would be switched off in the ordinary way.',
             ],

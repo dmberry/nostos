@@ -1,5 +1,5 @@
 import { makeRng } from './rng.js';
-import { decide, LAMP_COLOURS } from './ronml.js';
+import { decide, LAMP_COLOURS } from './ai_ml.js';
 import { sfx } from '../engine/sound.js';
 import { OBJECTS } from './tiles.js';
 import { register } from '../engine/systems.js';
@@ -528,6 +528,10 @@ function baseRobot(type, x, y, hp, rng) {
     fused: false,         // dead-in-place wreck; external mining code owns it
     zombie: false,        // OB_gun-corrupted: immune to everything but bow/wave gun
     disabledT: 0,         // stun seconds remaining; external code sets this
+    reportT: 0,           // seconds left holding station for a status report (net.js REPORT)
+    reportCool: 0,        // seconds until it will answer another request
+    limping: false,       // on the reserve cell, crawling home (net.js FORCE HOME)
+    reserveSpent: false,  // the reserve is one charge and it does not come back
     scrapPenalty: false,  // set by external gun code: a penalised kill drops 1
     workTarget: null,     // T2 friendly: the tree currently being felled
     workScanT: 0,
@@ -1000,6 +1004,29 @@ function scrapQty(x, y) {
 // Burn charge; at zero the machine goes flat where it stands. Flat is
 // permanent until external code re-batteries it (battery = 100, drained =
 // false); a friendly stays friendly while flat.
+// THE RESERVE. Every one of these carries a second small cell that does nothing
+// but walk the machine home when the main one is flat — a recovery feature, so
+// that a unit that ran itself down in a field is a unit somebody can get back
+// rather than a unit somebody has to carry. It is slow, it is one charge, and it
+// does not come back.
+const LIMP_SPEED = 0.55;        // tiles/sec: a crawl, well under RECHARGE_TRAVEL_SPEED
+const LIMP_ARRIVE = 1.4;        // tiles: close enough to the charger to be on it
+
+// Walk a flat machine home on its reserve. It cannot see, cannot fight and does
+// not aggro; it goes to its tower and nothing else. Arriving puts it on the
+// charger, which is the ordinary recharge path from there.
+function updateLimpHome(r, dt, map) {
+  const dHome = Math.hypot(r.home.x - r.x, r.home.y - r.y);
+  if (dHome <= LIMP_ARRIVE) {
+    r.limping = false;
+    r.drained = false;
+    r.recharging = true;    // the charger takes it from here, battery and hull
+    r.battery = 1;          // just off the floor: the tower does the rest
+    return;
+  }
+  moveToward(r, r.home.x, r.home.y, LIMP_SPEED, dt, map);
+}
+
 function drainBattery(r, rate, dt) {
   if (r.mains) return; // fortress guards run off the fortress: no drain, never flat
   r.battery = Math.max(0, r.battery - rate * dt);
@@ -1128,6 +1155,29 @@ export function updateRobots(dt, robots, player, map) {
     // a violation response relentlessly threads the whole maze to reach you
     // rather than freezing beyond the CPU cull range like ordinary machines.
     const relentless = (r.type === 'm5' || r.type === 'm6' || r.type === 'm4') && r.aggro;
+
+    // A STATUS REPORT requested over the network. The unit stops where it is,
+    // puts its lamp on a slow blue blink, takes its own readings and files them
+    // to its tower. It runs above the distance cull because a report requested
+    // from the far side of the island has to complete whether or not you get
+    // there to watch — the point of the blink is that you CAN get there.
+    if (r.reportCool > 0) r.reportCool = Math.max(0, r.reportCool - dt);
+    if (r.reportT > 0) {
+      r.reportT = Math.max(0, r.reportT - dt);
+      r.animT += dt;
+      if (r.reportT === 0) {
+        r.reportDone = true;
+        if (!r.lampFault) { r.lamp = null; r.lampFlash = 0; }
+      }
+      continue;
+    }
+
+    // ON THE RESERVE. Above the cull for the same reason the report is: you send
+    // a flat machine home and then walk away, and it has to actually get there.
+    // Culling it would strand it out of sight and leave its page claiming it was
+    // on its way.
+    if (r.drained && r.limping) { updateLimpHome(r, dt, map); r.animT += dt; continue; }
+
     if (!r.friendly && r.type !== 'w3' && !relentless && !nearPlayer(r, player)) continue;
 
     // Stunned: frozen in place, battery preserved. Only the timer and the
@@ -1194,7 +1244,9 @@ export function updateRobots(dt, robots, player, map) {
     // before the flat-battery/friendly-follower paths.
     if (r.gardener) { updateW5(r, dt, map); r.animT += dt; continue; }
 
-    // Flat battery: fully inert until the player re-batteries it.
+    // Flat battery: fully inert until the player re-batteries it. (The reserve
+    // walk is handled above the distance cull — a machine sent home keeps going
+    // whether or not you stay to watch it.)
     if (r.drained) continue;
 
     r.animT += dt;
@@ -1298,7 +1350,7 @@ function separateRobots(robots, map, dt, player) {
   // Only robots near the player can overlap in a way that matters (and only
   // they moved this frame — the rest were culled). Resolving separation over
   // just this subset turns the O(n^2) pass from all-machines-on-the-map into
-  // a handful, which is the whole point of the culling.
+  // a handful, which is what the culling is for.
   const active = robots.filter((r) => !r.dead && !r.fused && (!player || nearPlayer(r, player)));
   for (let pass = 0; pass < SEPARATION_PASSES; pass++) {
     let moved = false;
@@ -2269,6 +2321,68 @@ function t3SensorStyle(r) {
   return s;
 }
 
+// WHO IS THIS. The body plate carries the class ('T1') and nothing else, which
+// is all a machine needs to know about itself and no use at all to somebody
+// holding one unit's address and looking at four of them. The sniffer sets a
+// tagger here; when it is set, each unit wears the name the network knows it by.
+let unitTagger = null;
+export function setUnitTagger(fn) { unitTagger = fn; }
+
+// The tags are also targets. A name is an address, and an address you can see
+// but not follow is a worse tool than one you can. The rects are collected as
+// they are drawn and read back by the click handler on the next frame.
+let tagRects = [];
+let tagClickable = false;
+export function setUnitTagsClickable(on) { tagClickable = !!on; }
+export function beginUnitTags() { tagRects = []; }
+export function unitTagAt(sx, sy) {
+  if (!tagClickable) return null;
+  for (const t of tagRects) {
+    if (sx >= t.x && sx <= t.x + t.w && sy >= t.y && sy <= t.y + t.h) return t.r;
+  }
+  return null;
+}
+
+function drawUnitTag(ctx, r, c) {
+  if (!unitTagger) return;
+  const tag = unitTagger(r);
+  if (!tag) return;
+  ctx.save();
+  ctx.font = 'bold 8px ui-monospace, monospace';
+  ctx.textAlign = 'center';
+  const w = ctx.measureText(tag).width + 8;
+  const x = c.x - w / 2, y = c.y - 40;   // under the health bar band, over the head
+  ctx.fillStyle = 'rgba(10,24,32,0.78)';
+  ctx.fillRect(x, y, w, 12);
+  ctx.strokeStyle = 'rgba(90,190,235,0.7)'; ctx.lineWidth = 1;
+  ctx.strokeRect(x, y, w, 12);
+  ctx.fillStyle = tagClickable ? '#7fd0ff' : '#9fe4ff';
+  ctx.fillText(tag, c.x, y + 9);
+  // Underlined when it will actually go somewhere, which is the 1995 way of
+  // saying so and needs no explaining to anyone who used a browser then.
+  if (tagClickable) {
+    ctx.strokeStyle = '#7fd0ff';
+    ctx.beginPath(); ctx.moveTo(x + 4, y + 10.5); ctx.lineTo(x + w - 4, y + 10.5); ctx.stroke();
+  }
+  ctx.textAlign = 'left';
+  // Record where the box ACTUALLY landed on screen, not where it was asked to
+  // go. Everything here is drawn through the camera's transform (pan, zoom, the
+  // per-entity elevation lift, the device pixel ratio), so the numbers handed to
+  // fillRect are several transforms away from the numbers a mouse event carries.
+  // Push them through the live matrix and back down to CSS pixels, which is the
+  // space input.mousePos() speaks.
+  const m = ctx.getTransform();
+  const dpr = (typeof devicePixelRatio === 'number' && devicePixelRatio) || 1;
+  const a = m.transformPoint(new DOMPoint(x, y));
+  const b = m.transformPoint(new DOMPoint(x + w, y + 12));
+  ctx.restore();
+  tagRects.push({
+    r,
+    x: Math.min(a.x, b.x) / dpr, y: Math.min(a.y, b.y) / dpr,
+    w: Math.abs(b.x - a.x) / dpr, h: Math.abs(b.y - a.y) / dpr,
+  });
+}
+
 // Body plate colour for the current state.
 function bodyTone(base, r) {
   if (r.fused) return FUSED_BODY;
@@ -2351,6 +2465,7 @@ export function drawRobot(ctx, robot, worldToScreen) {
       ctx.fill();
     }
   }
+  drawUnitTag(ctx, robot, c);
   if (flickered) ctx.restore();
 }
 

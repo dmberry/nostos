@@ -551,7 +551,7 @@ export function createFortress(map, seed, spawn, opts = {}) {
       }
       // The SANCTUM DOOR at the maze's mouth onto the quad. It reads the card
       // for THIS island's virus — a card armed elsewhere gets you all the way
-      // here and no further, which is the whole point of the per-island code.
+      // here and no further; that is what the per-island code is for.
       if (sanctumDoors.length && !state.sanctumOpen) {
         const nearSanctum = sanctumTiles.some((t) => Math.abs(player.y - t.y) <= 2.2 && Math.abs(player.x - t.x) <= 2.2);
         if (nearSanctum) {

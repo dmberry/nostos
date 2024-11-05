@@ -273,7 +273,7 @@ mattered, and its own page will say so.
 
 ## 9. Stages
 
-- **P1** — step budget in `ronml.js`, with tests. **DONE v1.213.**
+- **P1** — step budget in `ai_ml.js`, with tests. **DONE v1.213.**
 - **P2** — the `'robot'` station and its sensors; a pure `decide(program, senses)`
   that returns an intent. Tested with no world attached. **DONE v1.213.**
 - **P3** — engine: robots take an intent from their program on a staggered tick,
@@ -287,6 +287,10 @@ mattered, and its own page will say so.
 - **P5** — write access. **HALF DONE.** The upload itself works both ways —
   `post <file> <unit>` at the shell (v1.216) and a chooser + Upload button on the
   unit's own page (v1.218), sharing one core (`postProgram` in main.js). What is
+  DONE as of v1.258: L9 is the gate. `post` returns 401 until you have opened
+  that island's maintenance interface through its own httpd. The original note
+  follows.
+
   NOT done is the GATE: it is deliberately ungated so it could be tested. L9
   (breaking the httpd) is what should buy it, and `postProgram` is the seam.
 - **P6** — obelisk programs (alert policy, blight policy, what it calls and when).
@@ -294,8 +298,11 @@ mattered, and its own page will say so.
 - **P8** *(new, from the fire-control study)* — `engage.ml`: the level below
   `hunt`, where lock-on and firing live. Needs sensors `sight`/`armed`/`shielded`/
   `contact`/`lost_for` and a **list return** (`[back, fire]`), because a W-4 moves
-  and shoots in the same frame and one intent per tick cannot say that. Prototyped
-  and verified against the interpreter; not built.
+  and shoots in the same frame and one intent per tick cannot say that.
+  **DONE v1.261.** The five sensors are in `MACHINE_ONLY` and served by `SENSE()`;
+  `decide()` reads either a bare intent or `[feet, weapon]` and returns
+  `{ok, intent, fire, effects}`; `FIRE` is `fire hold reload`; `demos/engage.ml`
+  on the laptop disk is the worked example, with all six branches under test.
 
 ## 10. The reason to build it
 

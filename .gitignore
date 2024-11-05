@@ -5,3 +5,4 @@
 # assets/textures/characters/), one-off scripts, local experiments. The game
 # ships only its baked outputs, so nothing here is needed at runtime.
 _tmp/
+tools/.isml-cache/

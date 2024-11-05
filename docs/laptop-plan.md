@@ -105,7 +105,9 @@ What makes it read as UNIX rather than a themed menu:
 - a real **path filesystem**: `/bin`, `/usr/games`, `/usr/man`, `/home`, `/etc`, with
   `.`, `..` and `~`;
 - about fifteen commands: `ls -l`, `cd`, `pwd`, `cat`, `echo`, `man`, `rm`, `mv`, `cp`,
-  `mkdir`, `uname`, `grep`, `wc`, `head`, `sh`, `help`;
+  `mkdir`, `uname`, `grep`, `wc`, `head`, `sh`, `help`; **`more`** since v1.271,
+  because a file longer than the tube was a file you had read the end of. `ls`
+  marks directories with a slash (v1.270), which V7 kept behind `-F`;
 - **real pipes** (`cat notes | grep ml | wc`) and `>` redirect. The machinery is the
   same as AI-ML's existing `|>`;
 - `sh file` runs a file of commands, so **a saved program is a real object in the
@@ -255,7 +257,7 @@ web."
 - **L4** — the AI-ML sandbox: station `'laptop'`, the `ml` mode and `ml file.ml`.
 - **L5** — the carry slot, save/load, ground pickup with instance data, the terminal
   wiring and boot banner, and a lyre dev-kit entry for testing.
-- **L6** *(next)* — the **CTSS machine**: runs the DOCTOR and little else, with its
+- **L6** — ~~the CTSS machine~~ **DROPPED (2026-07-26).** The idea was a machine that runs the DOCTOR and little else. ELIZA already runs at the obelisk consoles, and a second machine to host one program it can already host was not worth the surface. The historical notes below are kept because they are still true about where ELIZA came from. Original entry: the **CTSS machine**: runs the DOCTOR and little else, with its
   source listing on the disk to read. Nearly free, since ELIZA already exists
   (`createEliza`, and the obelisk console's mode-switch pattern).
 - **L7** *(later)* — the **PDP-10 machine** and `/usr/games`: ADVENTURE as a room graph,
@@ -272,7 +274,7 @@ web."
 
 - `docs/laptop-plan.md` — this.
 - `src/game/unix.js` — filesystem + shell, pure.
-- `src/game/ronml.js` — the `'laptop'` station and its offline builtin set.
+- `src/game/ai_ml.js` — the `'laptop'` station and its offline builtin set.
 - `src/game/items.js` — laptop model defs.
 - `src/engine/renderer.js` — `drawItemIcon` laptop case.
 - `src/main.js` — the carry slot, terminal wiring, boot banner, lyre kit entry.
@@ -353,6 +355,170 @@ wikipedia article, and the cache answers for it. Reading becomes a reason to go
 back to the laptop. Typing a real URL works too —
 `en.wikipedia.org/wiki/Transformer_(deep_learning)` resolves.
 
-**Not done:** the papers are not yet seeded into `whatsNewPage`; no lore entry
-points at a specific *edition* URL yet; the universities' AI-lab traces are
-implied by the missing departments rather than written.
+**Not done at the time of writing; since resolved in v1.226:** the papers are in
+`whatsNewPage`, AltaVista has a News & Media channel, the cache is bookmarked,
+and a lore scrap names `exchange-daily.com` No 4,744 by issue. Still open: the
+universities' AI-lab traces are implied by which departments are missing rather
+than written.
+
+---
+
+## The machine itself (v1.229–v1.232)
+
+The laptop stopped being a shell with a browser bolted on and became a computer
+you can look around.
+
+**Documents.** Real PDFs in `assets/media/pdfs/`, listed in `/home/documents`,
+opened with `pdf <file>`. `cat` on one prints a `%PDF` header and points at the
+reader. The window is ours (NostBook chassis, Acrobat-red bar, an X); the page
+rendering is the browser's own viewer. That split is why the X matters: inside
+the viewer the native control takes every keystroke, so Escape alone would
+strand a phone user. And because iOS Safari and Android Chrome routinely refuse
+to render a PDF in a frame at all, a coarse pointer gets a hand-off — a
+full-width OPEN DOCUMENT target — instead of a frame that would be blank.
+
+Three papers so far, each arriving at the game's own argument from a long way
+off: Asimov on the cult of ignorance, **James, *Are We Automata?* (1879)** —
+which asks the consciousness question the newspapers keep declining to answer —
+and **Gonseth on the humanization of technics**, which is the ground *Magnifica
+Humanitas* and the Torites stand on.
+
+**The system tree.** V7's, not Linux's: `/dev /etc /lib /mnt /tmp /usr /usr/src`
+and the kernel at the root as a file called `unix`. No `/var`, `/opt`, `/proc`
+or `/sbin` — all later, and a test enforces both halves. Every file earns its
+place: `/etc/passwd` names the previous owner, `/etc/rc` has `ifconfig wifi0 up`
+commented out, `/dev/wifi0` is the card the forging happens on, `/usr/src` holds
+the source, `/tmp/core` is a Netscape crash from rendering a shop.
+
+**Tools:** `tail sort uniq who ps df uptime`, all pipeable.
+
+**`telnet`** is the important one. `telnet calypso.com 80` then `GET /` returns
+real headers and the page; `PUT`/`POST` return **501 Not Implemented**. A player
+learns what an httpd will and will not do by typing at one, which is the L9
+lesson arrived at rather than announced.
+
+**`/readme.txt`** explains the build: a 1979 kernel, a Berkeley networking tape,
+a third of `/bin` typed in from a printed listing. Old on purpose — no update
+service, no telemetry, no vendor, nothing written after the estates were built
+and so no accommodation for them anywhere in it. Small enough for one person to
+read, and honest that it will never reach the control wire.
+
+**Migration:** `graftSystemDirs` adds only what is missing to an older save's
+disk and never touches `/home`.
+
+### Still open here
+
+- The papers are in New&Cool now (v1.226) but **no lore scrap points at a
+  specific newspaper edition** except `exchange-daily.com` No 4,744.
+- `telnet` speaks GET/HEAD only. **L9 is the seam**: the break should make some
+  verb other than GET answer, on one machine, once.
+- The universities' AI-lab traces are still implied by which departments are
+  missing rather than written.
+
+---
+
+## The tube (v1.270–v1.271)
+
+Every text file on the disk is written to **80 columns**, which is what a
+terminal of the period was. The CRT gave 68 at a common window size, so `cat` on
+anything longer soft-wrapped mid-sentence and lost the indentation with it. The
+font is sized from the screen width so 80 fit, measured per platform rather than
+assumed, clamped 9–15px, recomputed on open and on resize. Anything authored to
+80 now displays as written.
+
+`more` pages: SPACE, RETURN, `q`, a percentage, and it takes a pipe. It
+overwrites its own `--More--`. `cat` still does not page.
+
+**A boot that finishes.** `finishLaptopBoot` was written to print whatever the
+sequence had not reached, and every caller passed `null`, so a boot interrupted
+by a keystroke discarded the rest and left you at a prompt on a machine that
+looked half-started. The remainder is kept where that function can reach it.
+
+## The library, the toolkit, and transcribe (v1.233–v1.235)
+
+**The Torite toolkit.** Four programs chosen by one rule: keep what you can mend,
+nothing that reports, go where the cable does not run.
+
+- **`uucp` / `mail` / `uustat` / `uucico`** — store-and-forward, and the only
+  system on the machine that cares where the player is standing. Compose
+  anywhere; the queue leaves only next to a TOR relay, and the relays are on the
+  summits. A hilltop becomes a post office. Mail to `ithaca!` is **held**, never
+  lost, because it has never answered. `/usr/spool/mail/e.marsh` holds the
+  previous owner's three messages.
+- **`strings`** — the way into anything that will not talk, and the feeder for L9.
+- **`crypt`** — V7's, a Beaufort step, so one command goes both ways.
+- **`almanac`** — sun, moon and tide from the machine's own clock, asking nobody.
+
+**`transcribe`** answers how paper gets into a machine with no scanner: you type
+it in, which `/readme.txt` already establishes as normal. The payoff is that a
+transcribed scrap stops being paper — `grep` searches it, `crypt` locks it,
+`mail` carries it to a relay. It is what gives `uucp` something worth carrying
+uphill.
+
+**The library.** Seven complete works in `/home/books`, opened in Netscape (a
+**Library** button on the toolbar, `book <key>` at the shell). They need no card.
+**Framed, not injected**: the Shakespeare is 7 MB, which through `innerHTML`
+stalls the browser, and a frame keeps each book's stylesheet, cover and internal
+chapter links working against its own directory.
+
+All seven are Project Gutenberg editions, carrying their own licence headers
+unaltered, credited in the README and the in-game About box.
+
+### Lessons this stretch, worth keeping
+
+Twice now a **broken asset path has hidden behind a plausible blank**: an empty
+frame looks identical to a large document still loading. Once when the PDFs moved
+to `assets/media/laptop/`, once waiting to happen if a book row and the disk
+disagreed. There is now a test asserting every registered book and cover exists.
+The general rule: when a viewer shows nothing, check the fetch before blaming the
+viewer.
+
+Copy goes stale as data grows. The books module said "three of them" and the
+library page said "chose these three" after the shelf reached seven. Counts in
+prose should be computed, not written.
+
+### Still open here
+
+- `telnet` speaks GET and HEAD. **L9 is the seam**: the break should make one
+  other verb answer, on one machine, once.
+- The universities' AI-lab traces are still implied by which departments are
+  missing rather than written.
+- Nothing yet **reads** a transcribed note back into the world: the loop ends at
+  the relay. Whether a posted scrap should have a consequence is an open design
+  question.
+
+## L9 — through the HTTP server (v1.258)
+
+**Done.** Reading a machine was always free; rewriting one is now earned.
+
+The chain, in the order a player finds it:
+
+1. ~~`telnet <unit> 80`, then `PUT /program.ml` → **401 Unauthorized**~~ **GATE REMOVED (2026-07-27).** The write path is open: `post` and `PUT` both work, and the httpd binary now says why — the auth was specified, the token was compiled in, and nothing ever checked it. Original entry: naming a
+   header it will not give you a token for.
+2. `GET /cgi-bin/httpd` → **the server's own binary**. It serves the directory
+   its programs sit in, which is how these were routinely misconfigured.
+3. Save it, `strings` it. Among the junk: `X-RON-Maint: RON-CAL-17825`, the
+   header name, the verbs the server knows, and `/usr/src/httpd/main.c`.
+4. Send `X-RON-Maint: <token>` in the session, then `PUT` → **200**.
+5. `post <file> <unit>` works from the shell from then on.
+
+> **SUPERSEDED (2026-07-27, v1.266).** The gate is gone: `post` and `PUT` both
+> work with no token. The binary still carries the token and now also carries
+> `TODO: auth. -- jdm`, so `strings` teaches what was actually true of these
+> machines — the lock was specified, the token compiled in, and nothing ever
+> checked it. **Open: a payoff for `telnet` and `strings` somewhere off the
+> write path.** The steps below are kept as the record of what was built.
+
+**The token is derived from the daemon's name**, so it is per-island. Opening
+Calypso's machines teaches you nothing about Polyphemus's. `player.httpdBroken`
+is a list of island names, saved and restored with everything else.
+
+This closes **P5** in `docs/robot-programs-plan.md`, where `post` shipped
+deliberately ungated so it could be tested, with L9 named as the gate it was
+waiting for. It also gives `strings` the job it was built for.
+
+### What it is not
+
+The break is knowledge, not an item. Nothing is consumed and nothing carried. A
+player who writes the token down could type it on a fresh save, which is true of
+a real password and is left alone.

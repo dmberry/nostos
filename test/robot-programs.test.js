@@ -4,8 +4,9 @@
 // senses to what it intends, and the engine does the intending.
 
 import { test } from 'node:test';
+import { newShell, runUnix } from '../src/game/unix.js';
 import assert from 'node:assert/strict';
-import { decide, runRonml, INTENTS, LAMP_COLOURS } from '../src/game/ronml.js';
+import { decide, runRonml, INTENTS, LAMP_COLOURS } from '../src/game/ai_ml.js';
 import { T1_PROGRAM } from '../src/game/robots.js';
 
 // The program a W4 hunter-killer leaves the foundry carrying.
@@ -20,11 +21,13 @@ const FACTORY_W4 = [
 test('a machine chooses an intent from what it senses', () => {
   const run = (sense) => decide(FACTORY_W4, sense);
   // `effects` rides along with every decision (beep/eye/flash); this program asks
-  // for none, so it is empty.
-  assert.deepEqual(run({ charge: 90, threat: false, hurt: false }), { ok: true, intent: 'patrol', effects: [] });
-  assert.deepEqual(run({ charge: 90, threat: true, hurt: false }), { ok: true, intent: 'hunt', effects: [] });
-  assert.deepEqual(run({ charge: 90, threat: true, hurt: true }), { ok: true, intent: 'flee', effects: [] });
-  assert.deepEqual(run({ charge: 12, threat: true, hurt: false }), { ok: true, intent: 'home', effects: [] });
+  // for none, so it is empty. `fire` is null because this program answers with
+  // one word rather than a pair — see the fire-control tests below.
+  const F = { ok: true, effects: [], fire: null };
+  assert.deepEqual(run({ charge: 90, threat: false, hurt: false }), { ...F, intent: 'patrol' });
+  assert.deepEqual(run({ charge: 90, threat: true, hurt: false }), { ...F, intent: 'hunt' });
+  assert.deepEqual(run({ charge: 90, threat: true, hurt: true }), { ...F, intent: 'flee' });
+  assert.deepEqual(run({ charge: 12, threat: true, hurt: false }), { ...F, intent: 'home' });
 });
 
 test('a program is ONE expression, however many lines it is laid out over', () => {
@@ -152,4 +155,55 @@ test('the service verbs are the machine\'s own: not available at a console', () 
   assert.equal(at('robot').ok, true);
   assert.equal(at('laptop').ok, false, 'a NostBook has no buzzer to sound');
   assert.equal(at('ob').ok, false);
+});
+
+// ---- P8: fire control ------------------------------------------------------
+//
+// A unit moves and shoots in the same quarter-second, so one intent per tick
+// cannot describe it. A program may return a PAIR: what to do with its feet,
+// and what to do with its weapon.
+test('a program may answer with a pair, feet and weapon', () => {
+  const sense = { threat: true, sight: true, armed: true };
+  const one = decide('if threat then hunt else patrol', sense);
+  assert.equal(one.intent, 'hunt');
+  assert.equal(one.fire, null, 'a single intent leaves the weapon alone');
+  const two = decide('if threat then [hunt, fire] else [patrol, hold]', sense);
+  assert.equal(two.intent, 'hunt');
+  assert.equal(two.fire, 'fire');
+});
+
+test('the five fire-control sensors reach a program', () => {
+  const on = { sight: true, armed: true, shielded: true, contact: true, lost_for: 9 };
+  for (const s of ['sight', 'armed', 'shielded', 'contact']) {
+    assert.equal(decide(`if ${s} then wait else patrol`, on).intent, 'wait', s);
+    assert.equal(decide(`if ${s} then wait else patrol`, {}).intent, 'patrol', `${s} off`);
+  }
+  assert.equal(decide('if lost_for > 8 then home else hunt', on).intent, 'home');
+  assert.equal(decide('if lost_for > 8 then home else hunt', {}).intent, 'hunt');
+});
+
+test('a weapon word the chassis does not have is a fault, not a silent hold', () => {
+  const r = decide('[hunt, detonate]', { threat: true });
+  assert.equal(r.ok, false);
+  assert.match(r.fault, /weapon/);
+  // and a bad FOOT word is still caught the way it always was
+  assert.match(decide('[dance, fire]', {}).fault, /is not something this unit can do/);
+});
+
+test('engage.ml on the disk answers correctly in every situation', () => {
+  const disk = newShell();
+  const src = runUnix('cat demos/engage.ml', disk, {}).text;
+  const at = (sense) => {
+    const r = decide(src, { armed: false, ...sense });
+    assert.ok(r.ok, `faulted: ${r.fault}`);
+    return `${r.intent}/${r.fire}`;
+  };
+  assert.equal(at({}), 'patrol/reload', 'nothing about: reload, do not hunt');
+  assert.equal(at({ threat: true, sight: true }), 'flee/reload', 'dry and hunted: back off first');
+  assert.equal(at({ threat: true, sight: true, armed: true }), 'hunt/fire');
+  assert.equal(at({ threat: true, sight: true, armed: true, shielded: true }), 'hunt/hold',
+    'behind cover: close, do not waste it');
+  assert.equal(at({ threat: true, sight: true, armed: true, contact: true }), 'flee/fire',
+    'grappled: break off and shoot on the way');
+  assert.equal(at({ lost_for: 12, armed: true }), 'home/hold', 'lost you: give up and go back');
 });

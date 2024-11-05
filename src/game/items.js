@@ -468,6 +468,17 @@ export const ITEMS = {
     stack: 1,
     color: '#e0642f',
   },
+  // RON's field sniffer: a wand with a whip aerial and a two-line LCD. It does
+  // one thing the machines were never built to refuse — it listens to what they
+  // say to their towers, and says it back. Held in hand it names every unit
+  // within range; pressed (Y) it sends the maintenance interrogation the tower
+  // sends, and the unit stops to answer it.
+  sniffer: {
+    name: 'Bot sniffer',
+    kind: 'tool',
+    stack: 1,
+    color: '#3a7fa8',
+  },
   circuit: {
     name: 'Circuit board',
     kind: 'resource',

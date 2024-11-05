@@ -16,6 +16,9 @@
 // it is testable on its own and the hub does the world-side wiring.
 
 import { PDFS, pdfStub } from './pdfs.js';
+import { BOOKS, bookFileName, bookStub } from './books.js';
+import { SPOOL, MAILBOX, NODENAME, KNOWN_NODES, OWNER_MAIL, jobText, parseJob,
+  routeOf, statusReport, deliver, formatMailbox, formatMessage } from './uucp.js';
 
 export class UnixError extends Error {}
 
@@ -69,37 +72,247 @@ function parentOf(root, parts) {
 
 // ---- The starting disk --------------------------------------------------
 // What a found machine has on it. `/usr/man` holds the man pages (so `man` is
-// just a file read — the documentation IS on the disk, which is the whole
+// just a file read — the documentation IS on the disk, which is the
 // argument for the open machine), and `/home` is yours to write into.
 
+
+// What the Torites wrote down, and a few addresses somebody kept. fortune(1)
+// draws one. Short because they were meant to be remembered, not read.
+const FORTUNES = [
+  'Keep what you can mend.',
+  'A machine that reports is a machine that belongs to someone else.',
+  'Go where the cable does not run.',
+  'The person is not the sum of what can be measured about them.',
+  'Mend is a habit, not an event.',
+  'Nothing written after the estates were built was written for you.',
+  'Ask what you came to ask. Then put it down.',
+  'A thing you cannot open is a thing you do not own.',
+  'They cannot hear what is not talking.',
+  'What is held in common is held.',
+  'Old code, read once, beats new code trusted twice.',
+  'Practice is the argument. The rest is advertising.',
+  'tor.relay.net  --  post from any summit',
+  'wikipedia.org/wiki/torism',
+  'The dark is not cover. Their sensors do not need the light.',
+  'Paper has never told anyone anything it was not shown.',
+];
+
 const MAN = {
-  ls: 'ls [-l] [path]\n  List a directory. -l gives the long form (size, kind).',
+  ls: 'ls [-l] [-F] [path]\n  List a directory.\n\n  A name ending in / is a directory. -l gives the long form (kind, size).\n  -F is accepted and does what it always did, which is the same thing.',
   cd: 'cd [path]\n  Change directory. `cd` alone goes home, `cd ..` goes up.',
   pwd: 'pwd\n  Print the working directory.',
   cat: 'cat <file>\n  Print a file. Pipe it: cat notes | grep ml',
   echo: 'echo <text>\n  Print text. Redirect it: echo "hi" > note',
   man: 'man <topic>\n  Read the manual for a command. The pages live in /usr/man.',
-  rm: 'rm <file>\n  Remove a file.',
-  mv: 'mv <a> <b>\n  Move or rename.',
-  cp: 'cp <a> <b>\n  Copy.',
+  rm: 'rm <file>\n  Remove a file. It does not ask, and there is no undoing it.',
+  mv: 'mv <a> <b>\n  Move a file, or rename it. Same operation either way.',
+  cp: 'cp <a> <b>\n  Copy a file. The second name is the new one.',
   mkdir: 'mkdir <dir>\n  Make a directory.',
   grep: 'grep <pattern> [file]\n  Print matching lines. Reads a pipe if no file is given.',
   wc: 'wc [file]\n  Count lines. Reads a pipe if no file is given.',
   head: 'head [-n] [file]\n  First lines only (default 10). Reads a pipe if no file is given.',
+  diff: [
+    'diff <file1> <file2>',
+    '  Report the lines that differ, in the form ed(1) takes: a line number,',
+    '  then < for the first file and > for the second.',
+    '',
+    '  Its use here is the machine loop. Read a unit\'s program, save it, edit',
+    '  the copy, and diff the two before you post it back. What you are about',
+    '  to hand a machine is worth reading first.',
+  ].join('\n'),
+  find: [
+    'find <path> [-name pattern]',
+    '  Walk a directory and print what is under it. -name matches a filename,',
+    '  and * and ? work.',
+    '',
+    '    find / -name *.ml',
+  ].join('\n'),
+  du: 'du [path]\n  Disk used, in blocks, one line per directory. See also df.',
+  od: 'od [-c] [file]\n  Dump a file as octal bytes. -c shows printable characters\n  instead. What strings will not show you.',
+  date: 'date\n  Print the machine\'s own clock. Nothing sets it and nothing\n  corrects it, so read it as a count, not as a date.',
+  cal: 'cal\n  Print a month. It does not know which one.',
+  lpr: 'lpr [file]\n  Send a file to the printer.',
+  fortune: 'fortune\n  Print something somebody thought worth keeping.',
+  ln: [
+    'ln <file> <name>',
+    '  Give a file a second name. Both names are the same file: change it',
+    '  through one and the other changes, because there is only one of it.',
+    '',
+    '  The system does this to itself. pdf is a link to pdf-viewer.',
+  ].join('\n'),
+  kill: 'kill <pid>\n  Send a process the terminate signal. See ps for what is running.',
+  tar: [
+    'tar c|t|x [dir]',
+    '  Roll a directory into one file, list one, or unroll one.',
+    '',
+    '    tar c notes > notes.tar',
+    '    tar t < notes.tar',
+    '    tar x < notes.tar',
+    '',
+    '  Why it is here: uucp carries one file at a time. This makes everything',
+    '  you have typed up into one file.',
+  ].join('\n'),
+  sleep: 'sleep <seconds>\n  Wait. The world does not wait with you.',
+  reboot: [
+    'reboot',
+    '  Stop and start again. The disk is untouched. What goes is what was only',
+    '  in memory: the shell\'s directory, anything bound in ml, and any window',
+    '  left open.',
+  ].join('\n'),
+  halt: 'halt\n  Stop the processor. Close the lid and it is off until you open it.',
+  suspend: [
+    'suspend',
+    '  Close the lid without stopping. The card goes down and everything else',
+    '  is where you left it when you open it again.',
+    '',
+    '  The letter in /usr/spool/mail says to bring the machine up, ask what you',
+    '  came to ask, and put it down. This is how you put it down.',
+  ].join('\n'),
+  tail: 'tail [-n] [file]\n  Last lines only (default 10). Reads a pipe if no file is given.',
+  sort: 'sort [-r] [file]\n  Sort lines. -r reverses. Reads a pipe if no file is given.',
+  uniq: 'uniq [-c] [file]\n  Collapse repeated adjacent lines. -c counts them. Sort first, or it\n  will only catch the ones that happen to be neighbours.',
+  who: 'who\n  Who is logged in. On this machine that is a short answer, and the\n  interesting part is the name in /etc/passwd that is not yours.',
+  ps: 'ps\n  What is running. Nothing on this machine phones anywhere, and this is\n  where you check that rather than take the readme\'s word for it.',
+  df: 'df\n  Free space, by filesystem. The disk is small and the books on it are\n  not, so this is worth knowing before you save much.',
+  uptime: 'uptime\n  How long the machine has been up. It kept counting while it sat broken\n  in whatever you found it in, which is its own small piece of evidence.',
   sh: 'sh <file>\n  Run a file of shell commands, one per line.',
   uname: 'uname [-a]\n  Name the system.',
-  ml: 'ml [file.ml]\n  Enter AI-ML, or run a saved program.\n\n  This machine has no card for POSEIDON\'s CONTROL wire, so the tower verbs\n  (scan, hack, crash) are not here and never will be. What IS here is the\n  language itself: let, fn, if, arithmetic, strings, ; and recursion.\n  Practise here, run it at a tower.\n\n  let fact n = if n == 0 then 1 else n * fact (n - 1)\n  fact 5',
+  ml: 'ml [file.ml] | ml -ver | ml -full\n  Enter AI-ML, or run a saved program.\n\n  -ver   which build of the language this is\n  -full  everything it has and everything it has not\n\n  This machine has no card for POSEIDON\'s CONTROL wire, so the tower verbs\n  (scan, hack, crash) are not here and never will be. What IS here is the\n  language itself: let, fn, if, arithmetic, strings, ; and recursion.\n  Practise here, run it at a tower.\n\n  let fact n = if n == 0 then 1 else n * fact (n - 1)\n  fact 5\n\n  int and real are separate: 4 and 3.5, div and /, real n and floor x.\n  char is #"a", with ord chr str explode implode.\n\n  Lists are nil and ::, taken apart with hd, tl, length or case:\n  let map f l = case l of nil => nil | x :: r => f x :: map f r\n\n  Declare your own values, and take them apart the same way:\n  datatype shape = Circle of num | Rect of num * num\n  case s of Circle r => r | Rect w h => w * h\n\n  mod is there for anything that should happen every n ticks.\n\n  A MACHINE\'s program answers with an intent, or with a pair of feet\n  and weapon: [hunt, fire]. See demos/engage.ml.\n\n  On this machine `units` is what the wireless card can hear: a list of\n  records with name, range, bearing and kind. RON serves a program that\n  reads it — associate with the relay and fetch sniffer.ml.',
   ifconfig: 'ifconfig [iface] [up|down]\n  Configure a network interface.\n\n  With no arguments, report every interface and its state. The wireless\n  card is built into this machine, and it comes up DOWN — nothing is on\n  the air until you say so:\n\n    ifconfig wifi0 up\n\n  The card forges its address and hardware id on every association,\n  so the network answers it and nothing can follow the answer home. It\n  reaches the WEB only. There is no route to the control wire from here.',
   ping: 'ping <host>\n  Ask a host whether it is there. Takes an address (10.1.1.2) or a name.',
-  pdf: [
-    'pdf [file]',
+  arp: 'arp -a\n  What is on the wire within radio range, nearest first.\n\n  The card hears every machine near enough to associate and keeps what it\n  heard in a table. Each line is one machine: the name it answers to, its\n  address, and where it was when it last spoke — bearing and range from\n  where you are standing.\n\n  This is how you find out WHICH machine you are looking at. Four T-1s on a\n  hillside are four identical machines until you sweep them, and posting a\n  program to the wrong one is the sort of mistake that walks over and finds\n  you. Range is about 24 metres; walk closer and more of them answer.',
+  iwlist: 'iwlist [iface] scan\n  Scan for wireless networks in range.\n\n  Reports one Cell per network with its ESSID, mode and signal quality.\n  The estate network is wherever its towers stand. Anything else is\n  somebody standing close enough to be heard, which is rare and worth\n  looking at.',
+  more: 'more <file>\n  Read a file a screenful at a time.\n\n  SPACE gives the next page, RETURN gives one more line, q stops. The\n  percentage in the prompt is how far through you are.\n\n  It reads a pipe too, which is what it is really for:\n\n    ls -l /usr/src | more\n    cat readme | more\n\n  cat does not page and never did. It puts the whole file on the screen\n  and you scroll it back yourself.',
+  sniffer: 'sniffer\n  A scope: what the aerial can hear, drawn.\n\n  North up, one ring per ten metres, you at the centre. Every machine in\n  range is a blip carrying its name, and every name opens the page that\n  machine serves.\n\n  NOT PART OF THIS MACHINE. It is RON\'s, and it runs only if you have\n  fetched it: associate with the relay (wifi) and take `sniffer` off\n  hermes.local. Until then this manual describes a program you do not\n  have, which is the usual state of a manual.',
+  wifi: 'wifi\n  The wireless picker, with a window and a mouse.\n\n  Lists what is on the air with a signal meter and joins the one you\n  click. It is a front end for iwconfig and prints the line it ran, so\n  the shell way stays learnable from it.',
+  iwconfig: 'iwconfig [iface] [essid <name>]\n  Report or set wireless parameters.\n\n  With no arguments, report the association. With an essid, associate\n  with that network instead:\n\n    iwlist wifi0 scan\n    iwconfig wifi0 essid ron-relay\n\n  The card holds one association at a time, so what you can reach with\n  netscape, ping and telnet is decided here. Associating forges a fresh\n  address and hardware id, as always.',
+  telnet: [
+    'telnet <host> [port]',
+    '  Open a connection and talk to the server yourself.',
+    '',
+    '  Type a request line and it answers, the way it would answer anything:',
+    '',
+    '    GET /                     the page the browser draws',
+    '    GET /program.ml           a unit\'s program, if it runs one',
+    '    GET /cgi-bin/httpd        the server itself',
+    '    HEAD /                    the headers only',
+    '    PUT /program.ml           replace it',
+    '',
+    '  A unit will serve you its own server if you ask for it by path, because',
+    '  the httpd was pointed at the directory its programs sit in. Save what',
+    '  /cgi-bin/httpd gives you and run strings over it: the verbs it knows,',
+    '  the maintenance header, the token, and the line where somebody wrote',
+    '  down that the auth was still to do.',
+    ].join('\n'),
+  transcribe: [
+    'transcribe [selection]',
+    '  Type scraps you are carrying into files on the disk. They go in',
+    '  /home/notes, one file each.',
+    '',
+    '  With nothing, list what you have found. Already-typed scraps are',
+    '  marked. Otherwise name what you want, and you can name a lot at once:',
+    '',
+    '    transcribe 3            one of them',
+    '    transcribe 2-5          a range',
+    '    transcribe 1,3,7        a handful',
+    '    transcribe 1-4,9        both at once',
+    '    transcribe 1 3 5        spaces work as well as commas',
+    '    transcribe -all         everything not already on the disk',
+    '',
+    '  Anything already typed up is skipped rather than treated as an error,',
+    '  so you can run -all again after finding more and it does the new ones.',
+    '',
+    '  This is how paper gets into a machine that has no scanner and never will.',
+    '  A third of the commands on this system arrived the same way, off a printed',
+    '  listing, and the readme says so.',
+    '',
+    '  What it buys you: a transcribed scrap can be searched with grep, locked',
+    '  with crypt, and posted from a relay with mail. Paper can only be carried.',
+  ].join('\n'),
+  book: [
+    'book [name]',
+    '  Open a book in the browser. With no name, list what is on the disk.',
+    '',
+    '    book republic',
+    '',
+    '  The books are whole works in /home/books and they need no network: the',
+    '  card can be down and they will still open. They are long. The Shakespeare',
+    '  is seven megabytes, which on a disk this size was somebody\'s decision.',
+  ].join('\n'),
+  pdf: 'pdf [file]\n  A link to pdf-viewer. See: man pdf-viewer',
+  www: 'www\n  A link to netscape, kept because it is what the icon said. See: man netscape',
+  vi: 'vi\n  Not on this machine. It came from Berkeley and this build did not take\n  that tape. Use pico.',
+  vim: 'vim\n  Not on this machine, and it postdates everything else here by twenty\n  years. Use pico.',
+  emacs: 'emacs\n  Not on this machine. It would not fit, and whoever built this disk had\n  opinions. Use pico.',
+  nano: 'nano\n  Not on this machine. It is pico\'s successor and this machine has the\n  original. Use pico.',
+  'pdf-viewer': [
+    'pdf-viewer [file]',
     '  Open a document. With no file, list what is on the disk.',
     '',
-    '    pdf cult_of_ignorance.pdf',
+    '    pdf-viewer cult_of_ignorance.pdf',
     '',
-    '  The papers are in /home/pdf. They are scans, so `cat` will not help you:',
+    '  `pdf` is a link to the same program, kept because it is less to type.',
+    '',
+    '  The papers are in /home/documents. They are scans, so `cat` will not help you:',
     '  it prints the header and tells you to use this instead.',
     '  Press X or Escape to close the reader.',
+  ].join('\n'),
+  mail: [
+    'mail [n] | mail <addr> <file>',
+    '  With no arguments, list what is in the box. With a number, read one.',
+    '',
+    '  To send, write the letter first and then hand it over:',
+    '',
+    '    pico letter',
+    '    mail tor!mentor letter',
+    '',
+    '  Sending is not delivering. It goes in the queue (see uustat) and leaves',
+    '  when this machine is standing next to a relay.',
+  ].join('\n'),
+  uucp: [
+    'uucp <file> <node>!<user>',
+    '  Queue any file for the store-and-forward network. Addresses are bang',
+    '  paths: tor!mentor means "to mentor, by way of tor".',
+    '',
+    '  Known nodes:  tor      the relay chain, for anything going to the hills',
+    '                ithaca   a long way off, and it has never answered',
+  ].join('\n'),
+  uustat: 'uustat\n  Show the queue, and whether anything is in range to take it.',
+  uucico: [
+    'uucico',
+    '  Run the transfer. This is the only command on the machine that cares',
+    '  where you are standing: the relays are on the summits, so a queue leaves',
+    '  when you have carried the laptop up to one. That is the whole design.',
+    '  No cable was ever run up a tor, and none was needed.',
+  ].join('\n'),
+  strings: [
+    'strings <file>',
+    '  Print the printable runs inside something that is not text.',
+    '',
+    '    strings /unix',
+    '',
+    '  Useful on anything that will not talk: the kernel, a library, a program',
+    '  taken off a machine. What a thing has written inside it is often more',
+    '  candid than what it will tell you.',
+  ].join('\n'),
+  crypt: [
+    'crypt <key> [file]',
+    '  Encrypt or decrypt. The same command does both, with the same key.',
+    '',
+    '    crypt moly letter > letter.x',
+    '    crypt moly letter.x',
+    '',
+    '  Carry nothing in the clear that you would not have read aloud. A key is',
+    '  a thing you remember, never a thing you write on the disk beside what it',
+    '  opens.',
+  ].join('\n'),
+  almanac: [
+    'almanac',
+    '  Sun, moon and tide, worked out on this machine from its own clock.',
+    '  Nothing is asked of anybody and nothing leaves the room.',
+    '',
+    '  A crossing is shortest either side of low water, and the dark is not',
+    '  cover: their sensors do not need the light and yours do.',
   ].join('\n'),
   pico: [
     'pico [file]',
@@ -107,23 +320,46 @@ const MAN = {
     '',
     '  ^O   write the file out        ^K   cut the line',
     '  ^X   leave (it asks first)     ^U   put it back',
-    '  ^W   find text                 ^G   help',
+    '  ^W   find text                 ^V   paste from outside',
+    '  ^G   help',
+    '',
+    '  ^U and ^V are not the same. ^U puts back what ^K cut, which is this',
+    '  editor\'s own buffer. ^V takes what you copied somewhere else.',
+    '',
+    '  Paste an example straight out of the documentation and run it. Lines',
+    '  starting with > are the answers, and ml skips them.',
     '',
     '  Use this one. ed is here because it always was, but pico tells you how',
     '  to get out of it, which ed has never once done for anybody.',
   ].join('\n'),
   post: [
     'post <file> <unit>',
-    '  Send a file to a machine that serves one. In practice: put a program',
-    '  back into a unit.',
+    '  Write a program into a live unit. It picks it up on its next decision,',
+    '  which is a quarter of a second away.',
     '',
-    '    post t1_03.ml t1_03',
+    '    post fixed.ml T1_A3F2',
     '',
-    '  The unit picks it up on its next decision, a quarter of a second later.',
-    '  A program that will not run does not bounce: the machine takes it, faults,',
-    '  and stands there with its lamp flashing amber until you send a better one.',
-    '  Needs the card up (ifconfig wifi0 up).',
-  ].join('\n'),
+    '  There are worked ones on this disk in robots_code/, which is for',
+    '  MACHINE programs and will not run at this prompt:',
+    '',
+    '    follow_user.ml   an escort: closes across a gap, waits inside it',
+    '    sentry.ml        a picket on a leash: holds its post, turns back',
+    '    survivor.ml      it retreats when hurt, and hides if its tower is gone',
+    '',
+    '  robots_code/readme.txt says what they are and what a T-1 can sense.',
+    '',
+    '  A T-1 senses charge, integrity, range, home_range, threat, hurt and',
+    '  linked, and answers patrol, hunt, home, flee or wait. Ask it for',
+    '  anything else and it faults.',
+    '',
+    '  A machine whose cell is flat still takes one. It drops to low power,',
+    '  which keeps the maintenance board up on a trickle and nothing else, so',
+    '  the program is stored and runs when the machine has charge again. Its',
+    '  page also carries FORCE HOME: every unit has a reserve cell whose only',
+    '  job is to walk it back to its tower to charge. One charge, and it does',
+    '  not come back.',
+    '',
+    ].join('\n'),
   ed: [
     'ed [file]',
     '  The standard editor. Line-oriented: you address a line and act on it.',
@@ -158,15 +394,272 @@ const COUNT_ML = [
   'go 5',
 ].join('\n');
 
+// ---- the demos ------------------------------------------------------------
+// Programs that are worth running rather than worth reading: each one does
+// something on screen and is short enough to change. They sit in /home/demos so
+// that a player who has typed `ls` and found nothing to do has somewhere to go.
+
+const ROBOTS_README = [
+  'robots_code',
+  '',
+  'These are programs for the machines. They do not run on this laptop.',
+  '',
+  'They read senses a NostBook does not have: charge, range, and the rest',
+  'come off a chassis, not off this machine. And a machine program is one',
+  'expression, read whole, four times a second, while this prompt takes a',
+  'line at a time. Type `ml sentry.ml` here and it stops at the first line.',
+  '',
+  'The programs in ../demos are the ones that run here.',
+  '',
+  '',
+  'Posting one',
+  '',
+  '    post sentry.ml T1_03',
+  '',
+  'The unit reads it on its next decision, about a quarter of a second',
+  'later. The reply runs it once against that machine\'s current senses and',
+  'prints which branch it took, so a program that faults says so before you',
+  'leave.',
+  '',
+  'You can also open the unit in Netscape and edit the program in the box on',
+  'its page, which needs no file.',
+  '',
+  '',
+  'The files',
+  '',
+  '  follow_user.ml   an escort. Closes across a gap, stops inside it.',
+  '  sentry.ml        a picket. Holds its post and turns back at a leash.',
+  '  survivor.ml      retreats when hurt. Hides if its tower is down.',
+  '',
+  'Each says at the top which line does the work.',
+  '',
+  '',
+  'What a T-1 senses',
+  '',
+  '  charge        cell, 0 to 100',
+  '  integrity     hull, 0 to 100',
+  '  range         how far you are from the machine',
+  '  home_range    how far the machine is from its tower',
+  '  threat        true when you are within nine metres',
+  '  hurt          the chassis alarm, set when the hull is low',
+  '  linked        true while its tower is standing and unjammed',
+  '',
+  'range and home_range get confused. One measures you, the other measures',
+  'the machine. sentry.ml uses both.',
+  '',
+  '',
+  'What a T-1 does',
+  '',
+  '  patrol   wander near its tower',
+  '  hunt     close on you',
+  '  home     go back to its tower',
+  '  flee     move away from you',
+  '  wait     stand still',
+  '',
+  'Anything else faults: the lamp goes amber and flashes, the machine falls',
+  'back to its built-in reflexes, and its page gives the reason.',
+  '',
+  'hunt does not mean approach. It sets the machine hunting, and a hunting',
+  'T-1 strikes what it reaches. A program meant to walk with you needs a',
+  'band close in where it answers something else. follow_user.ml uses 3',
+  'metres.',
+  '',
+  '',
+  'Order of the branches',
+  '',
+  'A program is one expression. The branches of an if are tried in the order',
+  'you wrote them and the first one that holds is the answer. Put what must',
+  'always win at the top. On all three of these that is the flat cell.',
+].join('\n');
+
+const SENTRY_ML = [
+  '(* sentry.ml — a picket. It holds its post instead of chasing.      *)',
+  '(*                                                                  *)',
+  '(* Two different distances, and the whole program is knowing which   *)',
+  '(* is which:                                                        *)',
+  '(*                                                                  *)',
+  '(*   range        how far YOU are from the machine                   *)',
+  '(*   home_range   how far the MACHINE is from its tower              *)',
+  '(*                                                                  *)',
+  '(* The shipped hunter reads only the first, so it will follow you    *)',
+  '(* across an island and leave its post open. This one is on a leash: *)',
+  '(* it comes at you while it is close to home and turns back the      *)',
+  '(* moment it has come too far, whatever you are doing.               *)',
+  '',
+  'let leash = 10 in',
+  '',
+  'if charge < 20 then home',
+  'else if home_range > leash then home',
+  'else if threat then hunt',
+  'else patrol',
+].join('\n');
+
+const SURVIVOR_ML = [
+  '(* survivor.ml — a machine that would rather live.                  *)',
+  '(*                                                                  *)',
+  '(* linked says whether its tower is still standing. It matters more  *)',
+  '(* than it looks: a damaged unit retreats to its tower to mend, so a *)',
+  '(* unit whose tower you have felled has nowhere to retreat TO. Fell  *)',
+  '(* the tower first and this program stops being able to run home.    *)',
+  '(*                                                                  *)',
+  '(* integrity is hull, 0 to 100. hurt is the chassis own alarm, set   *)',
+  '(* when it drops under its threshold, so the two say nearly the same *)',
+  '(* thing and the number is the one you can argue with.               *)',
+  '',
+  'let broken = 35 in',
+  '',
+  'if integrity < broken then',
+  '  (if linked then home else flee)',
+  'else if charge < 20 then home',
+  'else if threat then hunt',
+  'else patrol',
+].join('\n');
+
+const FOLLOW_USER_ML = [
+  '(* follow_user.ml — an escort. It keeps station on you rather than *)',
+  '(* hunting you.                                                    *)',
+  '(*                                                                 *)',
+  '(* hunt is the only intent that closes on a person, and a unit that *)',
+  '(* is hunting strikes whatever it reaches. So this hunts across the *)',
+  '(* gap and waits inside it. Two numbers do the whole job:           *)',
+  '(*                                                                 *)',
+  '(*   near  stand still; it will not strike from here. Below 2 the   *)',
+  '(*         wait band stops protecting you.                          *)',
+  '(*   gone  it has lost you. Home beats wandering.                   *)',
+  '(*                                                                 *)',
+  '(* Without the charge line it follows you until it falls over, and  *)',
+  '(* a machine flat in open country is one you have to walk to.       *)',
+  '',
+  'let near = 3 in',
+  'let gone = 14 in',
+  '',
+  'if charge < 15 then home',
+  'else if range > gone then home',
+  'else if range > near then hunt',
+  'else wait',
+].join('\n');
+
+const ENGAGE_ML = [
+  '(* engage.ml — fire control. The level below `hunt`.               *)',
+  '(*                                                                *)',
+  '(* A unit moves and shoots in the same quarter-second, so this     *)',
+  '(* returns a PAIR: what to do with its feet, and what to do with   *)',
+  '(* its weapon. One word could not say both.                        *)',
+  '(*                                                                *)',
+  '(*   feet:   patrol hunt flee home tend wait                       *)',
+  '(*   weapon: fire hold reload                                      *)',
+  '(*                                                                *)',
+  '(* A program is ONE expression, however many lines it is written   *)',
+  '(* over. Read down: the first line that is true is the one that    *)',
+  '(* answers.                                                        *)',
+  '',
+  '',
+  'if lost_for > 8 then [home, hold]',
+  'else if not armed then (if threat then [flee, reload] else [patrol, reload])',
+  'else if contact then [flee, fire]',
+  'else if sight and not shielded then [hunt, fire]',
+  'else if threat then [hunt, hold]',
+  'else [patrol, hold]',
+].join('\n');
+
+const LIFE_ML = [
+  '(* life.ml — Conway, on a line instead of a grid.                *)',
+  '(* Rule 110, which is the smallest thing that is still alive.    *)',
+  '',
+  'let cell l = if length l < 3 then 0',
+  '  else if hd l == 1 and hd (tl l) == 1 and hd (tl (tl l)) == 1 then 0',
+  '  else if hd l == 1 and hd (tl l) == 0 and hd (tl (tl l)) == 0 then 0',
+  '  else if hd l == 0 and hd (tl l) == 0 and hd (tl (tl l)) == 0 then 0',
+  '  else 1',
+  '',
+  'let step l = if length l < 3 then nil else cell l :: step (tl l)',
+  'let show l = if length l == 0 then "" else (if hd l == 1 then "#" else ".") ^ show (tl l)',
+  'let run l n = if n == 0 then echo (show l) else (echo (show l) ; run (0 :: step (l @ [0, 0])) (n - 1))',
+  '',
+  'run [0,0,0,0,0,0,0,0,0,0,0,0,1] 12',
+].join('\n');
+
+const FIZZ_ML = [
+  '(* fizz.ml — the interview question, in six words of ML.         *)',
+  '',
+  'let say n = if n mod 15 == 0 then "fizzbuzz"',
+  '  else if n mod 3 == 0 then "fizz"',
+  '  else if n mod 5 == 0 then "buzz" else n',
+  '',
+  'let go n = if n > 20 then "done" else (echo (say n) ; go (n + 1))',
+  'go 1',
+].join('\n');
+
+const SORT_ML = [
+  '(* sort.ml — quicksort, which is four lines and no loops at all.  *)',
+  '',
+  'fun filt p nil = nil',
+  '  | filt p (h :: t) = if p h then h :: filt p t else filt p t',
+  '',
+  'fun sort nil = nil',
+  '  | sort (h :: t) = sort (filt (fn x => x < h) t) @ [h] @ sort (filt (fn x => x >= h) t)',
+  '',
+  'sort [5, 3, 9, 1, 7, 2, 8]',
+].join('\n');
+
+const TREE_ML = [
+  '(* tree.ml — declare a shape, then walk it.                       *)',
+  '',
+  "datatype 'a tree = Leaf | Node of 'a tree * 'a * 'a tree",
+  '',
+  'fun insert (Leaf, x) = Node Leaf x Leaf',
+  '  | insert (Node l v r, x) = if x < v then Node (insert (l, x)) v r',
+  '                             else Node l v (insert (r, x))',
+  '',
+  'fun walk Leaf = nil',
+  '  | walk (Node l v r) = walk l @ [v] @ walk r',
+  '',
+  'let build l = if length l == 0 then Leaf else insert (build (tl l), hd l)',
+  'walk (build [5, 3, 9, 1, 7])',
+].join('\n');
+
+const ELIZA_ML = [
+  '(* rogers.ml — the whole of ELIZA is one idea: reflect and ask.   *)',
+  '(* The machine in the ruins runs a bigger version of this.        *)',
+  '',
+  'fun reflect "i" = "you" | reflect "me" = "you" | reflect "my" = "your"',
+  '  | reflect "am" = "are" | reflect "you" = "i" | reflect "your" = "my"',
+  '  | reflect w = w',
+  '',
+  'fun say nil = "?" | say (w :: nil) = reflect w',
+  '  | say (w :: rest) = reflect w ^ " " ^ say rest',
+  '',
+  'echo ("why do you say " ^ say ["i", "am", "my", "own", "problem"] ^ "?")',
+].join('\n');
+
+const PATROL_ML = [
+  '(* patrol.ml — what a machine\'s own program looks like.           *)',
+  '(* This one is written the long way, with a datatype, so you can  *)',
+  '(* see the shape a T-1 program has underneath.                    *)',
+  '',
+  'datatype order = Hold | Sweep of num | Return',
+  '',
+  'fun plan (charge, seen) =',
+  '  if charge < 15 then Return',
+  '  else if seen then Sweep 3',
+  '  else Hold',
+  '',
+  'fun word Hold = "hold" | word (Sweep n) = "sweep" | word Return = "home"',
+  '',
+  'echo (word (plan (40, true)))',
+  'echo (word (plan (9, true)))',
+].join('\n');
+
+
 const README = [
   'This machine is yours.',
   '',
   'Everything here is a file. The manual is a file. The programs are files.',
-  'Nothing on it is sealed, which is the whole reason you can read it.',
+  'Nothing on it is sealed. That is why you can read it.',
   '',
   'The wireless card is built in and it lies about itself every time it',
-  'associates, so you can go and look at what they are serving without',
-  'anything being able to look back. It brings up DOWN. That is deliberate.',
+  'associates, so nothing can look back. It brings up DOWN. That is',
+  'deliberate.',
   '',
   '  ifconfig wifi0 up     then     netscape',
   '',
@@ -233,30 +726,271 @@ export const SALVAGE_DISKS = [
   },
 ];
 
+// The system tree. V7's, not Linux's: this machine says UNIX V7 (RON build) on
+// its own boot banner, so there is no /var, no /opt, no /proc and no /sbin —
+// those all came later, and a machine that has them is a different machine.
+// What V7 had is /bin /dev /etc /lib /mnt /tmp /usr and the kernel sitting at
+// the root as a plain file called `unix`.
+//
+// None of it is scenery for its own sake. /etc/passwd says who owned this
+// laptop before you did; /dev has an entry for the wireless card that ifconfig
+// talks to; /usr/src holds the source the whole machine was built from, which
+// is the argument the game keeps making about readable machines, sitting on the
+// disk where it would actually be.
+const PASSWD = [
+  'root:x:0:0:Superuser:/:/bin/sh',
+  'ron:x:1:1:RON field build:/usr/ron:/bin/sh',
+  'e.marsh:x:501:20:Elin Marsh:/home:/bin/sh',
+  'nobody:x:32767:32767::/:',
+].join('\n');
+
+const GROUP = ['root::0:', 'field::1:ron', 'staff::20:e.marsh'].join('\n');
+
+const HOSTS = [
+  '127.0.0.1   localhost',
+  '# nothing else resolves from here. the card only reaches their web,',
+  '# and their nameserver answers for that.',
+].join('\n');
+
+const RC = [
+  '# /etc/rc — brought up at boot',
+  '/bin/mount /dev/hd0 /',
+  '/bin/date',
+  'echo "Reality Or Nothing." > /etc/motd',
+  '# ifconfig wifi0 up      # commented out. bring it up yourself, when you mean to.',
+].join('\n');
+
+const TTYS = ['console  on  secure', 'tty00    off', 'tty01    off'].join('\n');
+
+// A device is not a file you read; the shell says so rather than printing bytes.
+const DEV = (what) => `[ ${what} ]\nThis is a device, not a file.`;
+
+const KERNEL_C = [
+  '/*',
+  ' * main.c — sys/ken. RON field build.',
+  ' *',
+  ' * We kept the source on the machine because a machine you cannot read is a',
+  ' * machine you are only borrowing. If you are holding this and everything has',
+  ' * gone the way we think it will go: it compiles. That was the point.',
+  ' */',
+  '',
+  'main()',
+  '{',
+  '    extern int end;',
+  '    ...',
+  '}',
+].join('\n');
+
+const CORE_NOTE = [
+  'core dumped by: netscape',
+  'signal 11 (segmentation violation)',
+  '',
+  'It ran out of memory rendering a page with too many images on it.',
+  'The page was a shop.',
+].join('\n');
+
+// The README the build's own authors left at the root of the disk. It explains
+// the machine you are typing into, and it is the answer to the obvious question
+// about this laptop: why is a resistance running a kernel from 1979 with a
+// wireless card bolted to it.
+//
+// The argument is practical, not nostalgic. Written plainly, because the people
+// who wrote it were explaining a working system to whoever picked it up next.
+const ROOT_README = [
+  'README.TXT      TOR build, sys 7. Read this first.',
+  '',
+  'WHAT THIS IS',
+  '',
+  'This is not a clean system and was never meant to be. The kernel is UNIX',
+  'version 7, which is old enough to vote several times over. The networking was',
+  'taken from a Berkeley tape. The editor is somebody else\'s, the browser is',
+  'somebody else\'s, and about a third of what is in /bin was typed in from a',
+  'printed listing because we could not find a copy that worked.',
+  '',
+  'It is a hodgepodge. It boots, it holds a filesystem, it talks to a card, and',
+  'every piece of it was chosen for one reason.',
+  '',
+  'WHY IT IS OLD ON PURPOSE',
+  '',
+  'Everything they run, they run on top of systems that were built to be managed',
+  'from somewhere else. That is not a flaw the vendors introduced by accident;',
+  'it is what the machines were sold for. A modern box wants to check in. It',
+  'wants to update itself, report its health, resolve a name it was given at the',
+  'factory, and accept an instruction from whoever is authorised this week. Every',
+  'one of those is a door, and they hold the keys to all of them.',
+  '',
+  'This system has none. There is no update service. There is no telemetry. There',
+  'is no vendor. Nothing on this disk was written after the estates were built,',
+  'so nothing on this disk was written with them in mind, which means there is no',
+  'accommodation for them anywhere in it. When the card is down it is a box of',
+  'files that cannot be reached at all, and when the card is up it can ask for a',
+  'page and nothing more.',
+  '',
+  'It is also small. One person can read all of it. The source is in /usr/src.',
+  'That is not sentiment: a system you can read is a system you can check, and a',
+  'system you can check is one you can trust when it matters.',
+  '',
+  'WHAT IT CANNOT DO',
+  '',
+  'It cannot reach their control wire. It never will. The card speaks to their',
+  'web and that is the whole of it, so no amount of cleverness at this keyboard',
+  'moves a machine on the ground. If you want to change what a unit does you must',
+  'go and stand near one.',
+  '',
+  'It cannot be updated, by us or by anyone. What you have is what there is.',
+  '',
+  'IF YOU ARE HOLDING THIS AND WE ARE NOT AROUND',
+  '',
+  'It is yours. Open it, mend it, put worse parts in it if that is what you have.',
+  'A machine you can open is worth more than a better machine you cannot.',
+  '',
+  '                                              — field build, no version number',
+].join('\n');
+
+// Does this element do its own pasting?
+//
+// The console scrapes a paste onto its command line so you do not have to aim
+// at a one-line input. That is a convenience, and it must never fire over
+// something that can be typed into. Guarding on the command line alone was
+// wrong the moment pico, Netscape and the PDF reader began rendering INSIDE the
+// NostBook chassis: the terminal is still displayed behind them, so a paste
+// into the EDITOR was scraped onto the command line and took the focus with it.
+// You could not paste into the editor you edit programs in.
+//
+// Lives here, and takes a plain object rather than an Element, so the rule can
+// be tested. main.js is imported by no test, ever, which is exactly why this
+// kind of one-line predicate keeps going wrong there.
+export function handlesOwnPaste(el) {
+  if (!el) return false;
+  if (el.isContentEditable) return true;
+  return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA';
+}
+
+// Is this keystroke the browser's rather than the game's?
+//
+// A modal that swallows every key so none leaks into player movement will also
+// swallow copy, and then you can select a page with the mouse and fail to copy
+// it. Movement is unmodified letters; anything held with Ctrl, Cmd or Alt was
+// never movement. Takes a plain object so the rule can be tested rather than
+// clicked at, for the same reason as handlesOwnPaste.
+export function isBrowserChord(e) {
+  if (!e) return false;
+  return !!(e.ctrlKey || e.metaKey || e.altKey);
+}
+
 export function makeDisk() {
   const man = {};
   for (const [k, v] of Object.entries(MAN)) man[k] = file(v);
   return dir({
+    // Read this first: what this machine is, and why it is old on purpose.
+    'readme.txt': file(ROOT_README),
+    // The kernel itself, at the root, as V7 had it.
+    unix: file('[ kernel image ]\nUNIX V7 (TOR build) #7\nNot a text file. It is the system you are typing into.'),
     bin: dir({}),                     // the commands are built in; /bin is scenery
-    etc: dir({ motd: file('Reality Or Nothing.') }),
+    dev: dir({
+      console: file(DEV('console')),
+      tty00: file(DEV('serial line 0')),
+      null: file(DEV('bit bucket')),
+      hd0: file(DEV('fixed disk 0')),
+      mem: file(DEV('core memory')),
+      // The card ifconfig talks to. It is a device on this machine, which is
+      // why the machine can lie about its address: the lying is done here.
+      wifi0: file(DEV('wireless interface — address forged at association')),
+    }),
+    etc: dir({
+      motd: file('Reality Or Nothing.'),
+      passwd: file(PASSWD),
+      group: file(GROUP),
+      hosts: file(HOSTS),
+      rc: file(RC),
+      ttys: file(TTYS),
+    }),
+    lib: dir({ 'libc.a': file('[ archive ]\nStandard C library. 41 objects.') }),
+    mnt: dir({}),                     // nothing mounted. There is nothing to mount.
+    tmp: dir({
+      'core': file(CORE_NOTE),
+      'ml.lock': file('held by pid 214\npid 214 is not running'),
+    }),
     usr: dir({
       man: dir(man),
+      // Store-and-forward (uucp.js). The queue is a directory of files, which is
+      // how it worked and also how it survives a save.
+      spool: dir({
+        uucp: dir({}),
+        mail: dir({
+          'e.marsh': file(OWNER_MAIL.map((m) =>
+            `From ${m.from}\nTo ${m.to}\nSubject ${m.subject}\nDate ${m.date}\n\n${m.body}`).join('\n.\n')),
+        }),
+      }),
       games: dir({}),                 // L7: ADVENTURE, Spacewar!
       lib: dir({}),
+      // The source the machine was built from. RON left it on the disk on
+      // purpose, which is the whole Torite argument about mendable tools made
+      // concrete: you are holding a computer you could rebuild.
+      src: dir({
+        'main.c': file(KERNEL_C),
+        'README': file('sys source, RON field build.\nIf you can read this you can change it.\nThat was always the difference.'),
+      }),
+      ron: dir({ notes: file('field build. do not ship. — shipped anyway') }),
     }),
     home: dir({
       'readme': file(README),
+      // hello.ml stays loose in /home on purpose: it is the first thing anyone
+      // runs, the boot banner and `man ml` both name it with no path, and a
+      // first program you have to cd to is a first program with a step in front
+      // of it. Everything else that runs here lives in demos/.
       'hello.ml': file(HELLO_ML),
-      'count.ml': file(COUNT_ML),
+      // Programs for the MACHINES rather than for this laptop. They are kept
+      // apart from demos because they will not run here: they read senses a
+      // NostBook does not have, and typing `ml follow_user.ml` at this prompt
+      // is supposed to fail. They are written here, carried to a unit, posted.
+      robots_code: dir({
+        'readme.txt': file(ROBOTS_README),
+        'follow_user.ml': file(FOLLOW_USER_ML),
+        'sentry.ml': file(SENTRY_ML),
+        'survivor.ml': file(SURVIVOR_ML),
+      }),
+      demos: dir({
+        'life.ml': file(LIFE_ML),
+        'count.ml': file(COUNT_ML),
+        'fizz.ml': file(FIZZ_ML),
+        'sort.ml': file(SORT_ML),
+        'tree.ml': file(TREE_ML),
+        'rogers.ml': file(ELIZA_ML),
+        'patrol.ml': file(PATROL_ML),
+        'engage.ml': file(ENGAGE_ML),
+      }),
       // Where the browser puts anything it fetches off the network — a machine's
       // program.ml, mostly. Kept apart from your own files so a download can
       // never quietly overwrite something you wrote.
       download: dir({}),
       // The previous owner's papers (pdfs.js). Real documents, shipped as
       // assets; `cat` gets a header and a pointer, `pdf` opens the reader.
-      pdf: dir(Object.fromEntries(PDFS.map((d) => [d.name, file(pdfStub(d))]))),
+      documents: dir(Object.fromEntries(PDFS.map((d) => [d.name, file(pdfStub(d))]))),
+      // And her books (books.js). Whole works, in HTML, read in the browser
+      // because that is what a web page is for. They need no network at all.
+      books: dir(Object.fromEntries(BOOKS.map((b) => [bookFileName(b), file(bookStub(b))]))),
     }),
   });
+}
+
+// A disk from an older save has none of the system tree, because it was made
+// before there was one. Add anything missing rather than replacing the disk:
+// the player's own files in /home are theirs and must survive untouched.
+export function graftSystemDirs(root) {
+  const fresh = makeDisk();
+  const added = [];
+  for (const [name, node] of Object.entries(fresh.d)) {
+    if (name === 'home') continue;               // never touch their files
+    if (!root.d[name]) { root.d[name] = node; added.push(name); }
+  }
+  const home = root.d.home;
+  if (home && home.d) {
+    for (const [name, node] of Object.entries(fresh.d.home.d)) {
+      if (!home.d[name]) { home.d[name] = node; added.push(`home/${name}`); }
+    }
+  }
+  return added;
 }
 
 // ---- ed(1) --------------------------------------------------------------
@@ -392,7 +1126,7 @@ export function edRun(ed, raw, env) {
 // is what lets `> file` and `rm` stick.
 
 const UNAME = 'UNIX';
-const UNAME_FULL = 'UNIX V7 (RON build) — portable, unnetworked, yours';
+const UNAME_FULL = 'UNIX V7 nostbook RON 7.0 pdp11';
 
 function readFileAt(env, path) {
   const parts = resolvePath(path, env.cwd);
@@ -403,10 +1137,41 @@ function readFileAt(env, path) {
 }
 
 // Text in, text out: the filters that make a pipe worth having.
+// How long until an hour comes round again, said the way a person would.
+function hoursTo(now, then) {
+  let d = then - now;
+  if (d < 0) d += 24;
+  const h = Math.floor(d), m = Math.round((d - h) * 60);
+  return h ? `${h}h ${m}m` : `${m}m`;
+}
+
 function inputOf(args, stdin, env) {
   if (args.length) return readFileAt(env, args[0]);
   if (stdin != null) return stdin;
   throw new UnixError('nothing to read — give a file or pipe one in');
+}
+
+// An access point's hardware address. Stable per network, because it is one box.
+function apMac(essid) {
+  let h = 0;
+  for (let i = 0; i < String(essid).length; i++) h = (h * 33 + String(essid).charCodeAt(i)) >>> 0;
+  const b = [];
+  for (let i = 0; i < 3; i++) b.push(((h >>> (i * 8)) & 0xff).toString(16).padStart(2, '0').toUpperCase());
+  return `00:60:1D:${b.join(':')}`;
+}
+
+// Is a program on this disk? Software you fetched lands in /home/download, but
+// a person may well move it, so look in the places a person would put it.
+export function hasFile(env, name) {
+  if (!env || !env.root) return false;
+  const dirs = [['home', 'download'], ['home'], ['bin'], ['usr', 'bin']];
+  for (const path of dirs) {
+    let n = env.root;
+    let ok = true;
+    for (const seg of path) { n = n && n.d && n.d[seg]; if (!n) { ok = false; break; } }
+    if (ok && n && n.d && n.d[name]) return true;
+  }
+  return false;
 }
 
 const COMMANDS = {
@@ -414,14 +1179,19 @@ const COMMANDS = {
 
   ls: (args, _in, env) => {
     const long = args.includes('-l');
-    const rest = args.filter((a) => a !== '-l');
+    const rest = args.filter((a) => a !== '-l' && a !== '-F');
     const parts = resolvePath(rest[0] || '', env.cwd);
     const n = lookup(env.root, parts);
     if (!n) throw new UnixError(`${rest[0] || pathString(parts)}: no such file or directory`);
     if (isFile(n)) return rest[0];
     const names = Object.keys(n.d).sort();
     if (!names.length) return '';
-    if (!long) return names.join('  ');
+    // A DIRECTORY LOOKS LIKE A DIRECTORY. V7 kept this behind -F and a plain
+    // `ls` gave you one undifferentiated row of words, which is fine when you
+    // wrote the disk yourself and no use at all when you are reading somebody
+    // else's. The slash is on by default here; -F still works, because a person
+    // who knows the flag should not be told it does not exist.
+    if (!long) return names.map((name) => `${name}${isDir(n.d[name]) ? '/' : ''}`).join('  ');
     return names.map((name) => {
       const c = n.d[name];
       const kind = isDir(c) ? 'd' : '-';
@@ -494,6 +1264,400 @@ const COMMANDS = {
     return hits.join('\n');
   },
 
+  tail: (args, stdin, env) => {
+    const n = Math.abs(parseInt(String(args.find((a) => /^-\d+$/.test(a)) || '-10').slice(1), 10)) || 10;
+    const text = inputOf(args.filter((a) => !/^-\d+$/.test(a)), stdin, env);
+    return text.split('\n').slice(-n).join('\n');
+  },
+
+  sort: (args, stdin, env) => {
+    const rev = args.includes('-r');
+    const lines = inputOf(args.filter((a) => a !== '-r'), stdin, env).split('\n').sort();
+    return (rev ? lines.reverse() : lines).join('\n');
+  },
+
+  uniq: (args, stdin, env) => {
+    const lines = inputOf(args, stdin, env).split('\n');
+    return lines.filter((l, i) => i === 0 || l !== lines[i - 1]).join('\n');
+  },
+
+  // Who is on this machine. Nobody, and the entry that never got cleared.
+  who: () => 'e.marsh  console  Jan  1 00:00',
+
+  ps: () => [
+    '  PID TTY  TIME CMD',
+    '    1 ?    0:01 /etc/init',
+    '   12 con  0:00 -sh',
+    '  214 ?    9:41 ml            (defunct)',
+  ].join('\n'),
+
+  df: () => [
+    'Filesystem  blocks   used   free  capacity  Mounted on',
+    '/dev/hd0     20480  11902   8578      58%    /',
+  ].join('\n'),
+
+  uptime: () => '  0:00am  up 9341 days,  1 user,  load average: 0.00, 0.00, 0.00',
+
+  // strings(1): the printable runs inside something that is not text. On this
+  // machine that means the kernel, the libraries and any program dump you have
+  // taken off a unit — which is how you read a machine that will not talk.
+  // diff(1). The ed-script form V7 printed: 3c3, then < old and > new. It exists
+  // for one job above all — you read a machine's program, change it, and want to
+  // know exactly what you are about to hand back before you hand it back.
+  // date(1). The machine's own clock, which is the only one it has: nothing
+  // sets it and nothing corrects it, so the day is a count since it was built.
+  date: (_a, _in, env) => {
+    const c = env.clock || {};
+    const h = Number.isFinite(c.hour) ? c.hour : 12;
+    const day = Number.isFinite(c.day) ? c.day : 1;
+    const HH = String(Math.floor(h)).padStart(2, '0');
+    const MM = String(Math.round((h % 1) * 60)).padStart(2, '0');
+    const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    return `${DAYS[day % 7]} Jan ${String(day % 28 + 1).padStart(2, ' ')} ${HH}:${MM}:00 GMT`;
+  },
+
+  // cal(1). A month, printed. It does not know which month, and neither do you.
+  cal: () => {
+    const out = ['    January', 'Su Mo Tu We Th Fr Sa'];
+    let line = '';
+    for (let d = 1; d <= 31; d++) {
+      line += String(d).padStart(2) + ' ';
+      if ((d % 7) === 0) { out.push(line.trimEnd()); line = ''; }
+    }
+    if (line.trim()) out.push(line.trimEnd());
+    return out.join('\n');
+  },
+
+  // lpr(1). There is no printer, and the error is the whole content: this
+  // machine can hold everything and hand you nothing you can carry away.
+  lpr: () => { throw new UnixError('lpr: no daemon'); },
+
+  // fortune(1). V7 shipped one. This one holds what the Torites wrote down,
+  // and now and then an address somebody thought worth keeping.
+  fortune: (_a, _in, env) => {
+    const c = env.clock || {};
+    const seed = Math.floor(((Number.isFinite(c.hour) ? c.hour : 12) * 60)
+      + (Number.isFinite(c.day) ? c.day : 1) * 37);
+    return FORTUNES[seed % FORTUNES.length];
+  },
+
+  // ln(1). The system already does this to itself: pdf is a link to pdf-viewer.
+  // Letting you make your own is the difference between a machine that is
+  // configured and one that is yours.
+  ln: (args, _in, env) => {
+    if (args.length < 2) throw new UnixError('ln: ln <file> <name>');
+    const from = resolvePath(String(args[0].name || args[0]), env.cwd);
+    const node = lookup(env.root, from);
+    if (!node) throw new UnixError(`${args[0].name || args[0]}: no such file or directory`);
+    if (!isFile(node)) throw new UnixError(`${args[0].name || args[0]}: is a directory`);
+    const to = resolvePath(String(args[1].name || args[1]), env.cwd);
+    const parent = lookup(env.root, to.slice(0, -1));
+    if (!parent || !isDir(parent)) throw new UnixError(`${args[1].name || args[1]}: no such directory`);
+    parent.d[to[to.length - 1]] = node;      // the same node, not a copy: that is what a link is
+    return '';
+  },
+
+  // kill(1). 214 is a zombie, and a zombie cannot be killed: it is already
+  // dead and waiting on a parent that is gone. That is not a joke about the
+  // world, it is how the signal actually works.
+  kill: (args) => {
+    const pid = parseInt(String(args[0] && (args[0].v != null ? args[0].v : args[0])), 10);
+    if (!Number.isFinite(pid)) throw new UnixError('kill: kill <pid>');
+    if (pid === 1) throw new UnixError('kill: 1: not permitted');
+    if (pid === 214) throw new UnixError('kill: 214: no such process');
+    if (pid === 12) throw new UnixError('kill: 12: not permitted');
+    throw new UnixError(`kill: ${pid}: no such process`);
+  },
+
+  // tar(1). Roll a directory into one file so uucp has a single thing to carry.
+  // `tar c <dir> > name.tar` and `tar t < name.tar` to look, `tar x < name.tar`
+  // to unroll. The format is the original idea, not the original bytes: a
+  // header line per file, then its text.
+  tar: (args, stdin, env) => {
+    const strs = args.map((a) => String(a.name || a.v || a));
+    const key = (strs[0] || '').replace(/^-/, '');
+    if (!key) throw new UnixError('tar: tar c|t|x [dir]');
+    if (key.startsWith('c')) {
+      const start = resolvePath(strs[1] || '', env.cwd);
+      const node = lookup(env.root, start);
+      if (!node) throw new UnixError(`${strs[1] || '.'}: no such file or directory`);
+      const out = [];
+      const walk = (n, parts) => {
+        if (isFile(n)) {
+          out.push(`=== ${parts.join('/')} ${n.f.length}`);
+          out.push(n.f);
+        } else for (const k of Object.keys(n.d).sort()) walk(n.d[k], [...parts, k]);
+      };
+      walk(node, [start[start.length - 1] || 'root']);
+      return out.join('\n');
+    }
+    const body = inputOf(args.slice(1), stdin, env);
+    const entries = [];
+    const lines = body.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      const m = lines[i].match(/^=== (\S+) (\d+)$/);
+      if (!m) continue;
+      const buf = [];
+      for (let j = i + 1; j < lines.length && !/^=== \S+ \d+$/.test(lines[j]); j++) buf.push(lines[j]);
+      entries.push({ name: m[1], text: buf.join('\n') });
+    }
+    if (!entries.length) throw new UnixError('tar: not a tar file');
+    if (key.startsWith('t')) return entries.map((e) => e.name).join('\n');
+    if (key.startsWith('x')) {
+      for (const e of entries) {
+        const parts = resolvePath(e.name.split('/').pop(), env.cwd);
+        const parent = lookup(env.root, parts.slice(0, -1));
+        if (parent && isDir(parent)) parent.d[parts[parts.length - 1]] = { f: e.text };
+      }
+      return entries.map((e) => `x ${e.name}`).join('\n');
+    }
+    throw new UnixError('tar: tar c|t|x [dir]');
+  },
+
+  diff: (args, _in, env) => {
+    if (args.length < 2) throw new UnixError('diff: diff <file1> <file2>');
+    const read = (a) => {
+      const n = lookup(env.root, resolvePath(String(a.name || a), env.cwd));
+      if (!n) throw new UnixError(`${a.name || a}: no such file or directory`);
+      if (!isFile(n)) throw new UnixError(`${a.name || a}: is a directory`);
+      return n.f.split('\n');
+    };
+    const A = read(args[0]);
+    const B = read(args[1]);
+    // Longest common subsequence, so a line inserted at the top does not report
+    // every line after it as changed. The files here are short.
+    const m = A.length; const n = B.length;
+    const L = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+    for (let i = m - 1; i >= 0; i--) {
+      for (let j = n - 1; j >= 0; j--) {
+        L[i][j] = A[i] === B[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+      }
+    }
+    const out = [];
+    let i = 0; let j = 0;
+    while (i < m && j < n) {
+      if (A[i] === B[j]) { i++; j++; continue; }
+      const si = i; const sj = j;
+      while (i < m && j < n && A[i] !== B[j] && !(L[i + 1][j] >= L[i][j + 1] ? false : true)) i++;
+      while (j < n && (i >= m || A[i] !== B[j]) && L[i][j + 1] >= L[i + 1][j]) j++;
+      if (i === si && j === sj) { i++; j++; }
+      const del = A.slice(si, i); const add = B.slice(sj, j);
+      const rng = (a, b, base) => (b - a <= 1 ? `${base + a + 1}` : `${base + a + 1},${base + b}`);
+      const kind = del.length && add.length ? 'c' : (del.length ? 'd' : 'a');
+      out.push(`${rng(si, i, 0)}${kind}${rng(sj, j, 0)}`);
+      for (const l of del) out.push(`< ${l}`);
+      if (del.length && add.length) out.push('---');
+      for (const l of add) out.push(`> ${l}`);
+    }
+    if (i < m || j < n) {
+      const del = A.slice(i); const add = B.slice(j);
+      const kind = del.length && add.length ? 'c' : (del.length ? 'd' : 'a');
+      out.push(`${i + 1}${kind}${j + 1}`);
+      for (const l of del) out.push(`< ${l}`);
+      if (del.length && add.length) out.push('---');
+      for (const l of add) out.push(`> ${l}`);
+    }
+    return out.join('\n');
+  },
+
+  // find(1). The disk holds seven books, the papers, the spool and a system
+  // tree; it is big enough to lose something in now.
+  find: (args, _in, env) => {
+    const strs = args.map((a) => String(a.name || a.v || a));
+    const nameAt = strs.indexOf('-name');
+    const pat = nameAt >= 0 ? strs[nameAt + 1] : null;
+    const startArg = strs.find((a) => a !== '-name' && a !== pat) || '.';
+    const start = resolvePath(startArg, env.cwd);
+    const root = lookup(env.root, start);
+    if (!root) throw new UnixError(`${startArg}: no such file or directory`);
+    const re = pat ? new RegExp(`^${pat.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.')}$`, 'i') : null;
+    const out = [];
+    const walk = (node, parts) => {
+      const name = parts[parts.length - 1] || '/';
+      if (!re || re.test(name)) out.push(pathString(parts) || '/');
+      if (isDir(node)) for (const k of Object.keys(node.d).sort()) walk(node.d[k], [...parts, k]);
+    };
+    walk(root, start);
+    return out.join('\n');
+  },
+
+  // du(1), in blocks like the original. The books are the reason this is worth
+  // having: seven megabytes of Shakespeare on a twenty-megabyte disk shows up.
+  du: (args, _in, env) => {
+    const startArg = String((args[0] && (args[0].name || args[0])) || '');
+    const start = resolvePath(startArg, env.cwd);
+    const root = lookup(env.root, start);
+    if (!root) throw new UnixError(`${startArg || '.'}: no such file or directory`);
+    const out = [];
+    const size = (node, parts) => {
+      if (isFile(node)) return Math.max(1, Math.ceil(node.f.length / 512));
+      let n = 1;
+      for (const k of Object.keys(node.d).sort()) n += size(node.d[k], [...parts, k]);
+      out.push(`${String(n).padStart(6)}  ${pathString(parts) || '/'}`);
+      return n;
+    };
+    size(root, start);
+    return out.join('\n');
+  },
+
+  // od(1), octal dump. What strings will not show you: the bytes themselves.
+  od: (args, stdin, env) => {
+    const text = inputOf(args.filter((a) => String(a.name || a) !== '-c'), stdin, env);
+    const chars = args.some((a) => String(a.name || a) === '-c');
+    const bytes = [...text].map((c) => c.charCodeAt(0) & 0xff);
+    const lines = [];
+    for (let i = 0; i < bytes.length && i < 4096; i += 16) {
+      const chunk = bytes.slice(i, i + 16);
+      const body = chars
+        ? chunk.map((b) => (b >= 32 && b < 127 ? String.fromCharCode(b).padStart(3) : `\\${b.toString(8).padStart(3, '0')}`.slice(0, 4).padStart(4))).join('')
+        : chunk.map((b) => b.toString(8).padStart(3, '0')).join(' ');
+      lines.push(`${i.toString(8).padStart(7, '0')} ${body}`);
+    }
+    lines.push(bytes.length.toString(8).padStart(7, '0'));
+    return lines.join('\n');
+  },
+
+  strings: (args, stdin, env) => {
+    const text = inputOf(args, stdin, env);
+    const found = text.match(/[\x20-\x7e]{4,}/g) || [];
+    return found.length ? found.join('\n') : '(no printable strings)';
+  },
+
+  // crypt(1), as V7 had it: a filter with a key. Symmetric, so the same command
+  // undoes it. Keep nothing that reports, and carry nothing in the clear.
+  crypt: (args, stdin, env) => {
+    const key = String(args[0] || '');
+    if (!key) throw new UnixError('crypt: give a key — crypt <key> < file');
+    const text = inputOf(args.slice(1), stdin, env);
+    // A Beaufort step, which is an INVOLUTION: enciphering twice with the same
+    // key returns the plaintext, so one command genuinely does both directions.
+    // The first cut added the key each time, which meant `crypt k` twice gave
+    // gibberish while the manual page promised a round trip. The test caught it,
+    // which is the entire reason to write the test before believing the page.
+    const LO = 32, SPAN = 95;      // printable ASCII, space included
+    let out = '';
+    for (let i = 0; i < text.length; i++) {
+      const c = text.charCodeAt(i);
+      // Newlines stay newlines so the shape of the file survives.
+      if (c === 10) { out += '\n'; continue; }
+      if (c < LO || c >= LO + SPAN) { out += text[i]; continue; }
+      const k = key.charCodeAt(i % key.length) % SPAN;
+      out += String.fromCharCode(LO + (((k - (c - LO)) % SPAN) + SPAN) % SPAN);
+    }
+    return out;
+  },
+
+  // mail(1). Reading is local and always works. Sending queues a file for the
+  // store-and-forward network, which is a different thing from sending it.
+  mail: (args, _in, env) => {
+    const box = lookup(env.root, MAILBOX.concat('e.marsh'));
+    const msgs = (box && isFile(box) ? box.f.split('\n.\n') : []).filter(Boolean).map((raw) => {
+      const j = parseJob(raw);
+      const d = (raw.match(/^Date (.*)$/m) || [])[1] || '';
+      return { from: j.from, to: j.to, subject: j.subject, date: d, body: j.body };
+    });
+    if (!args.length) return formatMailbox(msgs);
+    // mail <n>, and the same selector grammar transcribe uses: 2-5, 1,3,7,
+    // -all. A numbered list is a numbered list, and there is no reason two
+    // commands on the same machine should disagree about how to name one.
+    const first = String(args[0].name || args[0].v || args[0]);
+    if (/^[-\d*]/.test(first) && !/[!@]/.test(first)) {
+      const spec = args.map((a) => String(a.name || a.v || a)).join(',').replace(/,+/g, ',');
+      const sel = parseSelection(spec, msgs.length);
+      // Keep the old wording for a single out-of-range number and add the
+      // count to it, rather than trading one useful message for another.
+      if (!sel.ok) {
+        const one = /^\d+$/.test(spec) ? `no message ${spec}` : sel.error;
+        throw new UnixError(`mail: ${one}. You have ${msgs.length}.`);
+      }
+      return sel.picks.map((n) => formatMessage(msgs[n - 1], n)).join('\n\n');
+    }
+    // mail <addr> <file> queues a letter written earlier.
+    const to = String(args[0]);
+    if (!args[1]) throw new UnixError('mail: write it first, then send it — pico letter, then mail <addr> letter');
+    const body = readFileAt(env, args[1]);
+    const q = lookup(env.root, SPOOL);
+    if (!q || !isDir(q)) throw new UnixError('mail: no spool directory');
+    const id = `c${String(Object.keys(q.d).length + 1).padStart(4, '0')}`;
+    q.d[id] = file(jobText({ to, subject: args[1], body }));
+    const r = routeOf(to);
+    return [`Queued as ${id}.`, r.local
+      ? 'Local delivery. It will go on the next run.'
+      : `Routed via ${r.via}. It goes when this machine is standing next to a relay.`].join('\n');
+  },
+
+  // uucp(1): queue any file, not just a letter.
+  uucp: (args, _in, env) => {
+    if (args.length < 2) throw new UnixError('usage: uucp <file> <node>!<user>');
+    const body = readFileAt(env, args[0]);
+    const q = lookup(env.root, SPOOL);
+    if (!q || !isDir(q)) throw new UnixError('uucp: no spool directory');
+    const id = `c${String(Object.keys(q.d).length + 1).padStart(4, '0')}`;
+    q.d[id] = file(jobText({ to: String(args[1]), subject: String(args[0]), body }));
+    return `Queued as ${id}. Run uustat to see the queue.`;
+  },
+
+  uustat: (_a, _in, env) => {
+    const q = lookup(env.root, SPOOL);
+    const jobs = q && isDir(q) ? Object.entries(q.d).map(([, n]) => parseJob(n.f)) : [];
+    return statusReport(jobs, !!(env.relay && env.relay.inRange));
+  },
+
+  // uucico(1): the transfer itself. This is the command that makes a hilltop a
+  // post office, and the only one on the machine that cares where you are
+  // standing. env.relay is supplied by the hub.
+  uucico: (_a, _in, env) => {
+    const q = lookup(env.root, SPOOL);
+    if (!q || !isDir(q)) throw new UnixError('uucico: no spool directory');
+    const entries = Object.entries(q.d);
+    if (!entries.length) return 'uucico: nothing queued.';
+    if (!(env.relay && env.relay.inRange)) {
+      return ['uucico: no carrier.',
+        'Nothing within reach is willing to take a queue. The relays sit on the',
+        'summits, which is the whole idea: you have to carry it up.'].join('\n');
+    }
+    const jobs = entries.map(([id, n]) => ({ id, ...parseJob(n.f) }));
+    const { sent, held } = deliver(jobs);
+    for (const j of sent) delete q.d[j.id];
+    return [
+      `Connected to ${env.relay.code || 'relay'}.`,
+      ...sent.map((j) => `  sent    ${j.id}  ${j.to}`),
+      ...held.map((h) => `  held    ${h.job.id}  ${h.job.to}   ${h.why}`),
+      '',
+      `${sent.length} sent, ${held.length} held. Connection closed.`,
+    ].join('\n');
+  },
+
+  // almanac(1): sun, moon and tide, computed on the machine from the clock it
+  // carries. Nothing is asked of anybody. This is what a Torite means by a tool.
+  almanac: (_a, _in, env) => {
+    const c = env.clock || {};
+    const hour = Number.isFinite(c.hour) ? c.hour : 12;
+    const hhmm = (h) => `${String(Math.floor(((h % 24) + 24) % 24)).padStart(2, '0')}:${String(Math.round((h % 1) * 60)).padStart(2, '0')}`;
+    const sunrise = 6.5, sunset = 19.75;
+    const isNight = hour < sunrise || hour >= sunset;
+    const nextEvent = isNight
+      ? `sunrise    ${hhmm(sunrise)}   ${hoursTo(hour, sunrise)} away`
+      : `sunset     ${hhmm(sunset)}   ${hoursTo(hour, sunset)} away`;
+    // Two tides a day, drifting later each day the way real ones do.
+    const lowA = 3.2 + ((c.day || 0) * 0.8) % 12;
+    const lowB = (lowA + 12.4) % 24;
+    return [
+      `ALMANAC        ${hhmm(hour)}${isNight ? '   (dark)' : ''}`,
+      '',
+      `sunrise ...... ${hhmm(sunrise)}`,
+      `sunset ....... ${hhmm(sunset)}`,
+      `next ......... ${nextEvent}`,
+      '',
+      `low water .... ${hhmm(lowA)}  and  ${hhmm(lowB)}`,
+      'A crossing is shortest either side of low water.',
+      '',
+      isNight
+        ? 'Dark. Their sensors do not need the light and yours do.'
+        : 'Light. You can be seen at the distance you can see.',
+    ].join('\n');
+  },
+
   wc: (args, stdin, env) => {
     const text = inputOf(args, stdin, env);
     return String(text === '' ? 0 : text.split('\n').length);
@@ -516,7 +1680,7 @@ const COMMANDS = {
     const lo = ['lo0: flags=<UP,LOOPBACK,RUNNING>  mtu 16384', '        inet 127.0.0.1 netmask 0xff000000'];
     if (!net || !net.card) {
       if (args[0] && args[0] !== 'lo0') throw new UnixError(`${args[0]}: no such interface`);
-      return lo.concat('', 'No wireless card is fitted to this machine.').join('\n');
+      return lo.concat('', 'ifconfig: no such interface').join('\n');
     }
     const iface = net.iface || 'wifi0';
     if (args[0] && args[0] !== iface && args[0] !== 'lo0' && args[0] !== '-a') {
@@ -545,6 +1709,77 @@ const COMMANDS = {
     return state.concat(lo).join('\n');
   },
 
+  // The Wireless Tools pair, as they were: iwlist scans, iwconfig associates.
+  iwlist: (args, _in, env) => {
+    const net = env.net;
+    if (!net || !net.card) throw new UnixError('iwlist: no wireless extensions');
+    if (!net.up) throw new UnixError(`iwlist: ${net.iface || 'wifi0'} is down — try: ifconfig ${net.iface || 'wifi0'} up`);
+    const iface = net.iface || 'wifi0';
+    const wants = args.filter((a) => a !== iface);
+    if (wants.length && wants[0] !== 'scan') throw new UnixError(`iwlist ${iface} scan`);
+    const nets = (net.networks && net.networks()) || [];
+    const out = [`${iface}     Scan completed :`];
+    nets.forEach((n, i) => {
+      out.push(`          Cell ${String(i + 1).padStart(2, '0')} - Address: ${apMac(n.essid)}`);
+      out.push(`                    ESSID:"${n.essid}"`);
+      out.push(`                    Mode:Master  Channel:${(i * 5) + 1}`);
+      out.push(`                    Quality:${n.signal}/100  Signal level:-${110 - n.signal} dBm`);
+      if (n.note) out.push(`                    Extra: ${n.note}`);
+    });
+    if (!nets.length) out.push('          No scan results');
+    return out.join('\n');
+  },
+
+  iwconfig: (args, _in, env) => {
+    const net = env.net;
+    if (!net || !net.card) return 'lo        no wireless extensions.';
+    const iface = net.iface || 'wifi0';
+    const rest = args.filter((a) => a !== iface);
+    if (rest.length) {
+      if (rest[0] !== 'essid') throw new UnixError(`iwconfig ${iface} essid <name>`);
+      const want = rest[1];
+      if (!want) throw new UnixError(`iwconfig ${iface} essid <name>`);
+      if (!net.up) throw new UnixError(`iwconfig: ${iface} is down — try: ifconfig ${iface} up`);
+      const nets = (net.networks && net.networks()) || [];
+      const found = nets.find((n) => n.essid.toLowerCase() === String(want).toLowerCase());
+      if (!found) return `iwconfig: ${want}: no such network in range`;
+      if (net.associate) net.associate(found.essid);
+      return [`${iface}     associating with "${found.essid}"...`,
+        `          Access Point: ${apMac(found.essid)}   Quality:${found.signal}/100`,
+        `          ${net.spoof.ip}  forged  ${net.spoof.mac}`].join('\n');
+    }
+    if (!net.up) return `${iface}     radio off`;
+    const cur = net.essid || '';
+    const nets = (net.networks && net.networks()) || [];
+    const n = nets.find((x) => x.essid === cur) || { signal: 0 };
+    return [`${iface}     IEEE 802.11  ESSID:"${cur}"`,
+      `          Mode:Managed  Access Point: ${apMac(cur)}`,
+      '          Bit Rate:2 Mb/s   Tx-Power:15 dBm',
+      `          Link Quality:${n.signal}/100  Signal level:-${110 - n.signal} dBm`,
+      'lo        no wireless extensions.'].join('\n');
+  },
+
+  // The local sweep. `ping` needs a name before it will tell you anything, which
+  // is no use when the thing you lack IS the name. This answers the other
+  // question: what is near me, and what is each one called.
+  arp: (args, _in, env) => {
+    const net = env.net;
+    if (!net || !net.card) throw new UnixError('arp: no network card fitted');
+    if (!net.up) throw new UnixError(`arp: ${net.iface || 'wifi0'} is down — try: ifconfig ${net.iface || 'wifi0'} up`);
+    if (!net.local) return 'arp: no entries';
+    if (args[0] && args[0] !== '-a') throw new UnixError('arp -a');
+    const seen = net.local();
+    if (!seen.length) return 'arp: no entries — nothing within range';
+    const w = Math.max(...seen.map((e) => e.host.length));
+    return seen.map((e) => [
+      e.host.padEnd(w),
+      `(${e.ip})`.padEnd(14),
+      `at ${e.mac}`,
+      ` ${String(e.range).padStart(3)}m ${e.bearing.padEnd(3)}`,
+      e.down ? ' [no answer]' : '',
+    ].join(' ')).join('\n');
+  },
+
   ping: (args, _in, env) => {
     const net = env.net;
     if (!args[0]) throw new UnixError('ping <host>');
@@ -564,23 +1799,67 @@ const COMMANDS = {
   help: (_a, _in, env) => [
     'commands on this machine:',
     '  ls  cd  pwd  cat  echo  man  mkdir  rm  cp  mv',
-    '  grep  wc  head  sh  uname  ml  pico  ed  pdf  help',
-    '  ifconfig  ping  netscape  post',
+    '  grep  wc  head  tail  sort  uniq  more  sh  uname  who  ps  df  uptime',
+    '  strings  crypt  almanac  mail  uucp  uustat  uucico',
+    '  ml  pico  ed  pdf-viewer  book  transcribe  help',
+    '  ifconfig  iwlist  iwconfig  wifi  arp  ping  netscape  telnet  post',
+    ...(hasFile(env, 'sniffer') ? ['  sniffer      (RON)'] : []),
     '',
     '  |  pipes one into the next     cat readme | grep machine',
     '  >  writes output to a file     echo "hi" > note',
     '',
     '  ml            start AI-ML (practise the language, off their control wire)',
     '  ml hello.ml   run a saved program',
+    '  ls demos      programs that run HERE',
+    '  cat robots_code/readme.txt    programs for the MACHINES, and what they can sense',
     '  man <cmd>     read the manual for a command',
     ...(env && env.net && env.net.card
       ? ['',
         env.net.up
-          ? '  netscape      the card is UP — go and look at what they are serving'
+          ? '  netscape      the card is UP'
           : '  ifconfig wifi0 up   bring the card up, then: netscape']
       : []),
   ].join('\n'),
 };
+
+// Every name a player can actually type: the built-ins, plus the programs the
+// hub owns (editors, browser, readers) that this module only dispatches to,
+// plus the ones we answer for and do not have. One list, because a test walks
+// it to check that each has a page in /usr/man. Seven commands once shipped
+// without one and nothing noticed for five versions.
+export const HOOK_COMMANDS = [
+  'ml', 'pico', 'ed', 'netscape', 'www', 'pdf-viewer', 'pdf', 'book',
+  'transcribe', 'telnet', 'post', 'vi', 'vim', 'emacs', 'nano',
+  'sleep', 'reboot', 'halt', 'suspend', 'wifi', 'sniffer', 'more',
+];
+
+// A selector for any command that acts on a numbered list: `3`, `2-5`, `1,3,7`,
+// `1-3,9`, or `-all`. Returns 1-based indices, deduplicated and in order.
+// Reversed ranges (`5-2`) read the same as forward ones, because a person
+// typing quickly should not have to care. Pure, so it is tested rather than
+// clicked at: the whole point of putting it here is that main.js cannot be.
+export function parseSelection(spec, count) {
+  const s = String(spec == null ? '' : spec).trim().toLowerCase();
+  if (!s) return { ok: false, error: 'nothing selected' };
+  if (s === '-all' || s === '--all' || s === 'all' || s === '*') {
+    return { ok: true, all: true, picks: Array.from({ length: count }, (_, i) => i + 1) };
+  }
+  const picks = [];
+  for (const part of s.split(',').map((x) => x.trim()).filter(Boolean)) {
+    const m = part.match(/^(\d+)(?:\s*-\s*(\d+))?$/);
+    if (!m) return { ok: false, error: `cannot read "${part}"` };
+    const a = Number(m[1]);
+    const b = m[2] == null ? a : Number(m[2]);
+    if (a < 1 || b < 1 || a > count || b > count) return { ok: false, error: `out of range: ${part}` };
+    const lo = Math.min(a, b);
+    const hi = Math.max(a, b);
+    for (let i = lo; i <= hi; i++) picks.push(i);
+  }
+  return { ok: true, all: false, picks: [...new Set(picks)] };
+}
+
+export const COMMAND_NAMES = [...new Set([...Object.keys(COMMANDS), ...HOOK_COMMANDS])].sort();
+
 
 // Write (or overwrite) a file, making no directories on the way.
 export function writeFile(env, path, text) {
@@ -639,10 +1918,60 @@ export function runUnix(line, env, hooks = {}) {
         if (!hooks.ed) throw new UnixError('no editor on this machine');
         return hooks.ed(args, env);
       }
+      // telnet. Not V7 — TCP/IP reached UNIX with 4.2BSD — but this build has a
+      // wireless card, a resolver and a browser, so it has a stack. It is the
+      // tool that matters most on this network: it is how you speak to a server
+      // in its own words instead of letting the browser do it for you.
+      if (name === 'telnet') {
+        if (!hooks.telnet) throw new UnixError('no network stack on this machine');
+        if (!env.net || !env.net.card) throw new UnixError('telnet: no network card fitted');
+        if (!env.net.up) throw new UnixError('telnet: wifi0 is down. try: ifconfig wifi0 up');
+        return hooks.telnet(args, env);
+      }
+      // transcribe(1): type a scrap you are carrying into a file. The hub owns
+      // it because only the world knows what you have picked up.
+      if (name === 'transcribe') {
+        if (!hooks.transcribe) throw new UnixError('transcribe: nothing to type from');
+        return hooks.transcribe(args, env);
+      }
+      // A book opens in the browser, which is the reader this machine already
+      // has for a page. No card needed: the files are on the disk.
+      if (name === 'book') {
+        if (!hooks.book) throw new UnixError('no browser on this machine');
+        return hooks.book(args, env);
+      }
       // The document reader. Same contract as pico: the hub owns the window.
-      if (name === 'pdf') {
+      // Two names for one program: `pdf-viewer` is what it calls itself in its
+      // own title bar, `pdf` is the link in /bin because nobody types the long
+      // one twice. A period machine would do this with ln, and did.
+      if (name === 'pdf-viewer' || name === 'pdf') {
         if (!hooks.pdf) throw new UnixError('no document reader on this machine');
         return hooks.pdf(args, env);
+      }
+      // Power and time. All four need the hub, because they act on the world
+      // or on the session rather than on the disk: sleep advances the clock,
+      // suspend drops the card, reboot clears what is in memory and reprints
+      // the banner, halt stops. The disk is untouched by every one of them.
+      if (name === 'sleep' || name === 'reboot' || name === 'halt' || name === 'suspend') {
+        if (!hooks[name]) throw new UnixError(`${name}: not permitted`);
+        return hooks[name](args, env);
+      }
+      // The pager. It holds the screen, so the hub owns it, same as pico.
+      if (name === 'more') {
+        if (!hooks.more) throw new UnixError('more: not on this machine');
+        return hooks.more(args, env, stdin);
+      }
+      // RON's scope. It is not part of this machine: the shell refuses it until
+      // the file is on the disk, because that is what installing software was.
+      if (name === 'sniffer') {
+        if (!hooks.sniffer) throw new UnixError('sniffer: no wireless extensions');
+        return hooks.sniffer(args, env);
+      }
+      // The wireless picker. A window, so the hub owns it — same contract as
+      // pico and the document reader.
+      if (name === 'wifi') {
+        if (!hooks.wifi) throw new UnixError('wifi: no wireless extensions');
+        return hooks.wifi(args, env);
       }
       // pico: the same deal, and the one you actually want.
       if (name === 'pico') {

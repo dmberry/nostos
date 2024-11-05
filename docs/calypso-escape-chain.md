@@ -76,7 +76,7 @@ there is no softlock at any stage.
 - **HERMES** — the virus forge: read the recipe, combine the three files into
   `zeus_lightning.ml`. Off-grid still (no network verb — that would expose the relay),
   but now a maker's bench as well as an archive. **The charter comment at
-  `ronml.js:~251` ("an INFORMATION resource, not a workshop… nothing fabricated") must be
+  `ai_ml.js:~251` ("an INFORMATION resource, not a workshop… nothing fabricated") must be
   revised** to license local forging while keeping the no-network stealth rule, e.g.:
 
   > HERMES is off-grid: it never touches the network (that would expose the relay), but it

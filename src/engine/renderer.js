@@ -2,10 +2,11 @@ import { worldToScreen, screenToWorld, TILE_W, ELEV } from './iso.js';
 import { runDrawWorld, runDrawScreen } from './systems.js';
 import { uiMethods, DASH_H } from './ui.js';
 import { FLOORS } from '../game/tiles.js';
+import { buildingPalette } from '../game/buildings.js';
 import { ITEMS, WEAPON_ORDER } from '../game/items.js';
 import { drawAnimal } from '../game/animals.js';
 import { drawBird } from '../game/birds.js';
-import { drawRobot } from '../game/robots.js';
+import { drawRobot, beginUnitTags } from '../game/robots.js';
 import { drawWaterDroid } from '../game/waterdroids.js';
 import { drawUnderworldCreature } from '../game/underworld.js';
 import { FLOOR_TEXTURES, WALL_TEXTURES, GRASS_PATCH_TEXTURE, ROCK_TEXTURES, BOX_TEXTURES, BOAT_TEXTURES, SHIP_SPRITES, PART_SPRITES, CHARACTER_SPRITE_SETS, CHAR_COMPASS_DIRS, TREE_SHEET, TREE_SPRITES, EDGE_TEXTURE, SEA_TEXTURE, CAR_SPRITES, CAR_MODEL_KEYS, CAR_DIR_KEYS, CAR_RUIN_TEXTURE, FACTORY_TEXTURE, MARBLE_TEXTURE, PAPER_TEXTURE, GRAFFITI_TEXTURES } from './textures.js';
@@ -329,6 +330,9 @@ export class Renderer {
     // climbing a hill already does.
     const elevOf = (x, y) => (map.effectiveHeightAt ? map.effectiveHeightAt(Math.floor(x), Math.floor(y))
       : map.heightAt ? map.heightAt(Math.floor(x), Math.floor(y)) : 0) * ELEV;
+    // The sniffer's name tags are collected as they are drawn, so the click
+    // handler can hit-test them next frame. Cleared here, once per pass.
+    beginUnitTags();
     for (const d of drawables) {
       const lift = d.player ? elevOf(player.x, player.y)
         : d.animal ? elevOf(d.animal.x, d.animal.y)
@@ -2551,8 +2555,21 @@ export class Renderer {
     const jag = decay >= 4 ? (tileHash(tx * 3 + 1, ty * 3 + 7) - 0.5) * 0.22 : 0;
     const hf = (decay >= 5 ? 0.6 : decay >= 4 ? 0.82 : 1) + jag;
     const H = WALL_H * hf;
-    // Red brick or grey stone; either weathers (darkens) as it ages.
-    const matBase = obj.material === 'brick' ? [150, 74, 58] : WALL_BASE;
+    // Red brick or grey stone; either weathers (darkens) as it ages. A wall
+    // that belongs to a KNOWN building takes that building's colour instead:
+    // buildings.js has carried a palette per type since v1.220 with nothing
+    // reading it, and a clinic ought to look different from an ironmonger
+    // before you are close enough to read the sign.
+    let matBase = obj.material === 'brick' ? [150, 74, 58] : WALL_BASE;
+    // hudMap, not `this.map`: the renderer is handed the map per frame and
+    // keeps it under that name. `this.map` is undefined and the lookup would
+    // have silently done nothing, which is how this nearly shipped.
+    const owner = this.hudMap && this.hudMap.buildingAt ? this.hudMap.buildingAt(tx, ty) : null;
+    if (owner && owner.type) {
+      const pal = buildingPalette(owner.type, this.islandTint || null);
+      const hex = pal.wall;
+      matBase = [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
+    }
     const base = [
       matBase[0] * (1 - age * 0.26),
       matBase[1] * (1 - age * 0.14),
@@ -4358,6 +4375,29 @@ export class Renderer {
         ctx.fillStyle = '#f2d060';
         ctx.beginPath(); ctx.arc(4.5, -6, 2, 0, Math.PI * 2); ctx.fill();
         break;
+      case 'sniffer': {
+        // RON's field sniffer: a slim grey handset with a whip aerial, a
+        // two-line LCD and one button. Held out ahead of you it names whatever
+        // is talking to a tower.
+        ctx.strokeStyle = '#8d949c'; ctx.lineWidth = 1.2;   // the whip, angled back
+        ctx.beginPath(); ctx.moveTo(3.5, -6); ctx.lineTo(7.5, -13.5); ctx.stroke();
+        ctx.fillStyle = '#8d949c';
+        ctx.beginPath(); ctx.arc(7.5, -13.8, 1.2, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#4a5158';                          // the case
+        this.roundRect(-5, -7, 11, 16, 2); ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = 1;
+        this.roundRect(-5, -7, 11, 16, 2); ctx.stroke();
+        ctx.fillStyle = '#7ee0c8';                          // the LCD, lit
+        ctx.fillRect(-3.4, -5.2, 7.8, 6);
+        ctx.fillStyle = 'rgba(20,60,52,0.85)';              // two lines of readout
+        ctx.fillRect(-2.6, -4.2, 6.2, 1);
+        ctx.fillRect(-2.6, -2.4, 4.2, 1);
+        ctx.fillStyle = '#c8ced4';                          // the one button
+        ctx.beginPath(); ctx.arc(0.5, 4.5, 2.2, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#3a7fa8';
+        ctx.beginPath(); ctx.arc(0.5, 4.5, 1.1, 0, Math.PI * 2); ctx.fill();
+        break;
+      }
       case 'bluebox': {
         // A phreaker's blue box: a blue case with a keypad and a green "armed"
         // LED (the same green the eye flushes on a converted machine).
