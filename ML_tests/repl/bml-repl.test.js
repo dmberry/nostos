@@ -1,3 +1,12 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 // The standalone REPL, driven the way a person drives it: through stdin and
 // argv, in a real process.
 //
@@ -130,8 +139,29 @@ test('nothing typed at the prompt can make the REPL leak a JavaScript error', { 
 });
 
 test('the REPL survives every one of those and still evaluates', { skip: !HAVE_BML }, () => {
-  const { out } = bml([], '(\nval kept = 3\n[1,\nkept + 1\n:quit\n');
-  assert.match(out, /val it = 4 : int/, 'a binding made between two errors is still there');
+  // Errors that are COMPLETE — a type clash, a raise, an unbound name — run,
+  // report, and leave the session standing.
+  const { out } = bml([], 'val kept = 3\n1 + "a"\nhd nil\nnosuch 1\nkept + 1\n:quit\n');
+  assert.match(out, /val it = 4 : int/, 'a binding made between three errors is still there');
+});
+
+test('an unfinished line is HELD, and a blank line lets it go', { skip: !HAVE_BML }, () => {
+  // 0.38.0 gave the prompt line continuation, so a declaration can be written
+  // over two lines. The cost is that a line which cannot have ended holds the
+  // ones after it — `(` is unfinished by every test there is — so there has to
+  // be a way out that is not killing the process.
+  const { out } = bml([], 'val before = 1\n(\nval swallowed = 2\n\nbefore + 1\n:quit\n');
+  assert.match(out, /\(abandoned\)/, 'a blank line says so rather than silently dropping it');
+  assert.match(out, /val it = 2 : int/, 'and the session is fine afterwards');
+  assert.doesNotMatch(out, /val swallowed/, 'the line after the held one went with it, as it must');
+});
+
+test('leaving works while a line is held', { skip: !HAVE_BML }, () => {
+  // A prompt you cannot leave is not a prompt. `:quit` is checked before the
+  // buffer, so an open bracket cannot trap anyone in it.
+  const { out, signal } = bml([], 'fun f x =\n:quit\n');
+  assert.ok(!signal, 'it left on its own rather than being killed');
+  assert.ok(!JS_LEAK.test(out), out);
 });
 
 test('a runaway program at the prompt faults instead of hanging', { skip: !HAVE_BML }, () => {

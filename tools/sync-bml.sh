@@ -37,8 +37,12 @@ for t in lang-interp bml-repl isml-splitter; do
 done
 
 echo "synced into $DEST"
+echo "BML_VERSION now reads: $(sed -n "s/.*BML_VERSION = '\(.*\)';.*/\1/p" "$DEST/src/index.js")"
 echo "still yours to do: package.json version, README, CHANGELOG, then"
 echo "  and if this sync CLOSED a gap, take it off the BML vs SML modal in"
 echo "  index.html — that list is the page's answer to what SML has and this"
 echo "  does not, and nothing checks it but you."
+echo "  BUMP BML_VERSION IN src/lang/index.js HERE, not in $DEST/src/index.js:"
+echo "  this script overwrites that file, so a bump made over there is undone"
+echo "  by the next sync. 0.36.0 shipped printing 0.35.0 that way."
 echo "  cd $DEST && node --test test/*.test.js"

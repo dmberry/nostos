@@ -1,3 +1,12 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 // The underworld: a Ubik tear doesn't just brighten reality any more — walk
 // into one and it tears clean through into a liminal pocket, Backrooms-style:
 // a block of huge, echoing rooms with furniture stacked around at random,
@@ -266,6 +275,7 @@ export function createUnderworldPocket(seed, destinations = []) {
   map.bombs = [];
   map.explosions = [];
   map.explored = new Uint8Array(map.w * map.h).fill(1);
+  map.exploredAll = true;   // nothing to remember: the save skips a fog that is already whole
   map.newlyRevealed = [];
   return {
     map, spawnX: spawn.x, spawnY: spawn.y, exits,

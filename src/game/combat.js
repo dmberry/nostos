@@ -1,3 +1,12 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 // Ranged weapon fire, factored out of player.js to keep that file navigable
 // (part of the systems-registry refactor's file-size split; see
 // docs/refactor-registry.md). These are the player's gun actions: they read and
@@ -17,6 +26,12 @@ import { sfx } from '../engine/sound.js';
 // Survival score awards. A felled tree is the baseline point; skilled tools
 // and tougher kills are worth more.
 export const SCORE = { tree: 1, animal: 3, robot: 10, wreck: 2, cache: 2, book: 5, fragment: 5 };
+
+// What a KILL is worth to your aim, wherever it happens. Every ranged path
+// pays this, and the melee path pays the same into swordarm: the single-shot
+// case had it and the beam and the fan did not, so felling a machine outright
+// with the electro-gun sharpened you less than grazing one with a pistol.
+export const KILL_XP = 5;
 
 // A robot the OB_gun's beam has corrupted into a "zombie" shrugs off every
 // weapon except the bow and the wave gun — the only two builds precise
@@ -69,7 +84,11 @@ function pierceShot(player, tool, map, animals, robots) {
       e.hp = 0; e.hurt = true; wiped = true;
       e.scrapPenalty = true; // gunfire ruins the salvage, this most of all
       player.sparkAt(map, e.x, e.y);
-      player.gainXp('guns', 2);
+      // A KILL IS A KILL, whatever fired it. This paid a flat 2, so wiping a
+      // machine out with the beam sharpened your aim less than grazing one
+      // with a pistol did. The single-shot path has always paid 5 for a kill;
+      // every path pays it now.
+      player.gainXp('guns', KILL_XP);
       player.addScore(SCORE.robot);
       return;
     }
@@ -77,7 +96,7 @@ function pierceShot(player, tool, map, animals, robots) {
     e.hp -= robot ? (tool.robotDamage + player.xpLevel('guns')) : (tool.animalDamage + player.xpLevel('guns'));
     e.hurt = true;
     if (robot) { e.scrapPenalty = true; player.sparkAt(map, e.x, e.y); }
-    player.gainXp('guns', 2);
+    player.gainXp('guns', e.hp <= 0 ? KILL_XP : 2);
     if (e.hp <= 0 && !robot) { e.dead = true; map.groundItems.push({ item: 'meat', qty: 1, x: e.x, y: e.y }); player.addScore(SCORE.animal); }
     else if (e.hp <= 0 && robot) player.addScore(SCORE.robot);
   };
@@ -104,6 +123,7 @@ function coneShot(player, tool, map, animals, robots) {
   const rng = tool.range + player.xpLevel('guns') * 0.3;
   const HALF = Math.cos(Math.PI / 5); // ~36° half-angle cone
   let hitCount = 0;
+  let killCount = 0;
   const hit = (e, robot) => {
     if (e.dead || e.fused || e.friendly) return;
     const dx = e.x - player.x, dy = e.y - player.y;
@@ -115,12 +135,15 @@ function coneShot(player, tool, map, animals, robots) {
     e.hurt = true;
     if (robot) { e.scrapPenalty = true; player.sparkAt(map, e.x, e.y); }
     hitCount++;
+    if (e.hp <= 0) killCount++;
     if (e.hp <= 0 && !robot) { e.dead = true; map.groundItems.push({ item: 'meat', qty: 1, x: e.x, y: e.y }); player.addScore(SCORE.animal); }
     else if (e.hp <= 0 && robot) player.addScore(SCORE.robot);
   };
   for (const a of animals) hit(a, false);
   for (const r of robots) hit(r, true);
-  player.gainXp('guns', 2 + hitCount);
+  // Kills counted separately from hits: the fan can drop a whole crowd, and it
+  // paid the same whether it did or merely scratched them.
+  player.gainXp('guns', 2 + hitCount + killCount * KILL_XP);
   // Three visible fan beams.
   map.projectiles = map.projectiles || [];
   for (const ang of [-0.5, 0, 0.5]) {
@@ -291,7 +314,7 @@ export function fire(player, tool, map, animals, robots) {
     target.hp -= tool.robotDamage + player.xpLevel('guns');
     target.hurt = true;
     player.sparkAt(map, target.x, target.y);
-    player.gainXp('guns', target.hp <= 0 ? 5 : 1);
+    player.gainXp('guns', target.hp <= 0 ? KILL_XP : 1);
     if (target.hp <= 0) player.addScore(SCORE.robot);
     player.say(target.hp <= 0
       ? 'The machine collapses in a shower of sparks.'
@@ -300,7 +323,7 @@ export function fire(player, tool, map, animals, robots) {
     sfx.play('shot');
     target.hp -= tool.animalDamage + player.xpLevel('guns');
     target.hurt = true;
-    player.gainXp('guns', target.hp <= 0 ? 5 : 1);
+    player.gainXp('guns', target.hp <= 0 ? KILL_XP : 1);
     if (target.hp <= 0) {
       target.dead = true;
       map.groundItems.push({ item: 'meat', qty: 1, x: target.x, y: target.y });

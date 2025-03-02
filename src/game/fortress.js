@@ -1,3 +1,12 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 // The daemon fortress — a reusable per-island module (createFortress opts, R2).
 // One of the four Odyssey daemons (CALYPSO, POLYPHEMUS, CIRCE, HELIOS; POSEIDON
 // is the net strung between them). The daemon "took the high country and

@@ -1,4 +1,14 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 import { worldToScreen, screenToWorld, TILE_W, ELEV } from './iso.js';
+import { tileHash, fogNoise, FOG_BANK, FOG_WIND_X, FOG_WIND_Y, FOG_STEP } from './noise.js';
 import { runDrawWorld, runDrawScreen } from './systems.js';
 import { uiMethods, DASH_H } from './ui.js';
 import { FLOORS } from '../game/tiles.js';
@@ -114,11 +124,8 @@ function hexRgb(hex) {
 
 // Cheap deterministic hash for per-tile pseudo-randomness (grass blades)
 // that stays put frame to frame instead of shimmering like Math.random().
-function tileHash(x, y) {
-  let h = (x * 374761393 + y * 668265263) ^ (x * 3266489917);
-  h = (h ^ (h >>> 13)) * 1274126177;
-  return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
-}
+// tileHash, the fog's noise field and its constants live in ./noise.js, which
+// is importable under `node --test` as this file is not.
 
 // Ubik patch ageing: a patch (main.js ages `p.t` and culls past
 // UBIK_PATCH_LIFE, currently 75s) holds at full brightness, then spends its
@@ -349,6 +356,13 @@ export class Renderer {
         // stand on top, but adding that to the object's own lift would float
         // the whole block up off the ground by its climb height.
         : (map.heightAt ? map.heightAt(d.obj.x, d.obj.y) : 0) * ELEV;
+      // NOTE for anything that records a HIT RECT while drawing: this lift is a
+      // canvas translate, so a rect built from worldToScreen alone is left at
+      // ground level under a sprite drawn `lift` pixels above it. drawTor and
+      // drawObelisk both subtract it. Getting that wrong is why the obelisk
+      // terminal could not be clicked on a rise — the click hit the green
+      // screen, missed the rect, was never consumed, and fell through to the
+      // tool in your hand, so an electro-gun shot the tower instead.
       if (lift) { ctx.save(); ctx.translate(0, -lift); }
       // In the underworld there's no map edge to face — it's boundless yellow,
       // so the grey edge-rock cliffs are suppressed (nothing drawn out there).
@@ -563,11 +577,62 @@ export class Renderer {
       // The clear pool shrinks as the fog thickens: wide when the network is
       // nearly broken, close and blinding when every tower still stands.
       const radius = (260 - 150 * fog) * z;
-      const veil = ctx.createRadialGradient(px, py, radius * 0.3, px, py, radius);
-      veil.addColorStop(0, `rgba(150,158,166,${(0.05 * fog).toFixed(3)})`);
-      veil.addColorStop(1, `rgba(150,158,166,${(0.9 * fog).toFixed(3)})`);
-      ctx.fillStyle = veil;
-      ctx.fillRect(0, 0, this.w, this.h - DASH_H);
+      const hh = this.h - DASH_H;
+      // It DRIFTS. `fog` still carries the meaning it always had — how much of
+      // the network is up — but it is the density of a moving field now rather
+      // than one flat wash, so there are pockets you can see through and banks
+      // you cannot, and they travel. The field is sampled in PROJECTION units
+      // offset by the camera, so a bank sits over a piece of ground and stays
+      // there while you walk; only the wind moves it.
+      //
+      // Sampled every FOG_STEP px into a small buffer and scaled back up, which
+      // is what makes it affordable at full density over a 128x128 map: a few
+      // thousand cells a frame instead of a few hundred thousand pixels.
+      const bw = Math.max(2, Math.ceil(this.w / FOG_STEP) + 1);
+      const bh = Math.max(2, Math.ceil(hh / FOG_STEP) + 1);
+      if (!this._fogBuf) { this._fogBuf = document.createElement('canvas'); this._fogBufCtx = this._fogBuf.getContext('2d'); }
+      if (this._fogBuf.width !== bw || this._fogBuf.height !== bh) {
+        this._fogBuf.width = bw; this._fogBuf.height = bh;
+        this._fogImg = this._fogBufCtx.createImageData(bw, bh);
+      }
+      const img = this._fogImg, d = img.data;
+      const t = performance.now() / 1000;
+      const cw = worldToScreen(camera.x, camera.y);
+      // screen px -> projection units, then into noise space, with the wind.
+      const ox = cw.x / FOG_BANK + (t * FOG_WIND_X) / FOG_BANK - (this.w / 2) / (z * FOG_BANK);
+      const oy = cw.y / FOG_BANK + (t * FOG_WIND_Y) / FOG_BANK - (hh / 2) / (z * FOG_BANK);
+      const kx = FOG_STEP / (z * FOG_BANK), ky = FOG_STEP / (z * FOG_BANK);
+      const inner = radius * 0.3, span = Math.max(1, radius - inner);
+      let i = 0;
+      for (let cy = 0; cy < bh; cy++) {
+        const sy = cy * FOG_STEP, ny = oy + cy * ky, dy = sy - py;
+        for (let cx = 0; cx < bw; cx++, i += 4) {
+          const sx = cx * FOG_STEP, dx = sx - px;
+          // The pool around you, as before: clear at your feet, full beyond it.
+          const r = Math.sqrt(dx * dx + dy * dy);
+          let pool = (r - inner) / span;
+          pool = pool < 0 ? 0 : pool > 1 ? 1 : pool;
+          pool = 0.05 + 0.85 * pool * pool * (3 - 2 * pool);
+          // 0.35 keeps a thin haze even in a gap, so a pocket is somewhere you
+          // can see THROUGH rather than a hole cut in the weather.
+          const bank = 0.35 + 1.15 * fogNoise(ox + cx * kx, ny);
+          let a = fog * pool * bank;
+          if (a > 0.94) a = 0.94;
+          d[i] = 150; d[i + 1] = 158; d[i + 2] = 166;
+          d[i + 3] = (a * 255) | 0;
+        }
+      }
+      this._fogBufCtx.putImageData(img, 0, 0);
+      ctx.save();
+      // The buffer is a cell wider and taller than the viewport so the upscale
+      // has something to interpolate toward at the edges; clip so the overhang
+      // never reaches the dashboard.
+      ctx.beginPath();
+      ctx.rect(0, 0, this.w, hh);
+      ctx.clip();
+      ctx.imageSmoothingEnabled = true;   // the bilinear upscale IS the softness
+      ctx.drawImage(this._fogBuf, 0, 0, bw, bh, 0, 0, bw * FOG_STEP, bh * FOG_STEP);
+      ctx.restore();
     }
 
     // The goggles' own view: a green phosphor wash over the whole scene, laid on
@@ -608,6 +673,13 @@ export class Renderer {
     // bubble around yourself); the periphery greys to "indistinct". Turned OFF
     // for now (SIGHT_CONE) — the effect works but wants careful tuning before
     // it goes live; the drawSightCone method is kept ready to switch back on.
+    // A panel owns the screen while it is up, so nothing floats over it: not the
+    // toasts, not the touch buttons, not the hover tooltip, and not the panel
+    // rail — which is the thing that opened the panel in the first place.
+    // (The lore archive draws in runDrawScreen below, so it counts as a panel.)
+    const modalOpen = !!(hud.showBackpack || hud.showSkills || hud.showWeapons
+      || hud.narrows || hud.pong           // an arcade cabinet owns the screen
+      || (hud.lore && hud.lore.archiveOpen));
     if (SIGHT_CONE && !hud.rest && !hud.deathCert && !hud.paused) {
       const z = camera.zoom || 1;
       const pw = worldToScreen(player.x, player.y);
@@ -633,15 +705,12 @@ export class Renderer {
     }
     if (!hud.driving) {
       this.drawDashboard(player, hud);
-      this.drawHudOverlay(player, hud); // wordmark, message line, daemon voice — both layouts
+      this.drawHudOverlay(player, hud, modalOpen); // wordmark, message line, daemon voice — both layouts
     }
     // A panel is up. The world's own overlays all draw AFTER the panels, so
     // without this the touch buttons, the toasts and the occlusion ghost paint
     // straight over whatever you are trying to read. (The lore archive draws
     // in runDrawScreen just below, so it counts as a panel too.)
-    const modalOpen = !!(hud.showBackpack || hud.showSkills || hud.showWeapons
-      || hud.narrows || hud.pong           // an arcade cabinet owns the screen
-      || (hud.lore && hud.lore.archiveOpen));
     if (hud.showBackpack) this.drawBackpackPanel(player);
     runDrawScreen(ctx, { w: this.w, h: this.h, map, player });
     if (hud.craftPrompt) {
@@ -709,7 +778,7 @@ export class Renderer {
     if (hud.toast && !modalOpen) this.drawToast(hud.toast);
     if (hud.nokiaToast && !modalOpen) this.drawNokiaToast(hud.nokiaToast, hud.nokiaSignal, !!hud.touchControls);
     else if (modalOpen) this._nokiaToastRect = null;   // nor tappable-to-dismiss behind a panel
-    if (hud.detail) this.drawDetail(hud.detail);
+    if (hud.detail && !modalOpen) this.drawDetail(hud.detail);
     if (hud.drag) this.drawDragGhost(hud.drag, player);
     if (player.torpor > 0) this.drawTorporHaze(player.torpor);
     if (hud.rest) this.drawRestOverlay(hud.rest.dim);
@@ -3178,7 +3247,13 @@ export class Renderer {
     // relay the relay's tall hit-rect used to swallow every slightly-off click, so
     // the obelisk terminal was near-impossible to open. The obelisk is tested
     // before the relay (main.js), so a generous column target wins the overlap.
-    this.obeliskHits.push({ obj, x: sx - 7 - SCREEN_PAD, y: sy - 34 - SCREEN_PAD, w: 15 + 2 * SCREEN_PAD, h: 42 + 2 * SCREEN_PAD });
+    // LIFT-ADJUSTED, as drawTor's rect is. A tower standing on a rise is drawn
+    // through a translate the click test knows nothing about, so a rect built
+    // from worldToScreen alone sat at ground level while the tower stood above
+    // it — and a click on the green screen missed, went unconsumed, and reached
+    // the tool in your hand instead. With an electro-gun that shot the tower.
+    const lift = (this.hudMap && this.hudMap.heightAt ? this.hudMap.heightAt(obj.x, obj.y) : 0) * ELEV;
+    this.obeliskHits.push({ obj, x: sx - 7 - SCREEN_PAD, y: sy - 34 - SCREEN_PAD - lift, w: 15 + 2 * SCREEN_PAD, h: 42 + 2 * SCREEN_PAD });
 
     // Damage bar above a scorched obelisk when the player's near — five OB_gun
     // burns (or an insane bomb) to fell one, so it needs the heavy kit.
@@ -3796,11 +3871,19 @@ export class Renderer {
   // inside the rotated transform).
   _ensureFog(map) {
     if (!map.explored) return null;
-    if (!this.fogCanvas || this.fogCanvas.width !== map.w) {
+    // Rebuilt when the MAP changes, not only when its width does. Every island
+    // is 128 wide, so keying on width alone handed Polyphemus the fog mask you
+    // had earned on Ogygia — and `fogDirty` covers the other case, a save
+    // restoring an island's fog onto a map this has already drawn.
+    if (!this.fogCanvas || this.fogCanvas.width !== map.w || this.fogMap !== map || map.fogDirty) {
+      this.fogMap = map;
+      map.fogDirty = false;
       this.fogCanvas = document.createElement('canvas');
       this.fogCanvas.width = map.w;
       this.fogCanvas.height = map.h;
       const f = this.fogCanvas.getContext('2d');
+      f.globalCompositeOperation = 'source-over';
+      f.clearRect(0, 0, map.w, map.h);
       f.fillStyle = 'rgba(128, 128, 128, 0.88)';
       f.fillRect(0, 0, map.w, map.h);
       // Catch up on anything revealed before the first draw.
@@ -3924,6 +4007,42 @@ export class Renderer {
     ctx.save();
     ctx.translate(cx, cy);
     ctx.scale(s, s);
+    // The FSF membership card: a white credit card lying on its side, the gold
+    // USB tab folded out of the top-right corner, and the gnu's dark head over
+    // a red mark on the left. Drawn rather than sprited because everything in
+    // this HUD is, and at 26px the shapes are all that survives anyway.
+    if (key === 'fsf_card') {
+      ctx.fillStyle = '#c8a83c';                       // the connector, folded out
+      ctx.fillRect(4, -10, 7, 5);
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      for (let i = 0; i < 3; i++) ctx.fillRect(5.5, -9 + i * 1.6, 4, 0.9);
+      ctx.fillStyle = '#f4f4ef';                       // the card
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(-10, -6, 20, 13, 2); else ctx.rect(-10, -6, 20, 13);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = '#b02a1e';                       // FSF mark
+      ctx.fillRect(-8, -4, 5, 2);
+      ctx.fillStyle = '#2a2a26';                       // the wordmark, as a rule
+      ctx.fillRect(-2, -4, 9, 1.4);
+      ctx.fillRect(-2, -1.8, 6, 1);
+      ctx.fillStyle = '#3b3b34';                       // the gnu, head and horns
+      ctx.beginPath();
+      ctx.moveTo(-7, 5); ctx.lineTo(-5.5, 0.5); ctx.lineTo(-2.5, 0.5); ctx.lineTo(-1, 5);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = '#3b3b34'; ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(-6.5, 0.8); ctx.quadraticCurveTo(-7.6, -1.4, -6, -1.8);
+      ctx.moveTo(-2, 0.8); ctx.quadraticCurveTo(-0.9, -1.4, -2.5, -1.8);
+      ctx.stroke();
+      ctx.fillStyle = '#2a2a26';                       // the QR square, bottom right
+      ctx.fillRect(4.5, 1.5, 4, 4);
+      ctx.fillStyle = '#f4f4ef';
+      ctx.fillRect(5.5, 2.5, 1.2, 1.2);
+      ctx.fillRect(7, 4, 1.2, 1.2);
+      ctx.restore();
+      return;
+    }
     if (itemDef.kind === 'shield') {
       // A rounded heater-shield outline; a mirror shield gets a bright sheen.
       ctx.fillStyle = itemDef.color;

@@ -1,3 +1,12 @@
+// BML — a 2026 Standard ML. Part of NostOS; synced to the BML repository.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 // THE LEXER. Source text to a flat list of tokens.
 //
 // Part of src/lang/, the language proper: nothing here knows about NostOS, its
@@ -54,6 +63,22 @@ function readEscaped(src, from, n, close) {
       const m = src.slice(j + 1, j + 4);
       if (!/^[0-9]{3}$/.test(m)) throw new RonmlError('a \\ddd escape needs exactly three digits');
       out += String.fromCharCode(Number(m)); j += 4; continue;
+    }
+    // `\^A` is the control character whose code is the letter's minus 64, so
+    // `\^A` is 1 and `\^[` is 27. The Definition's own spelling for the ones
+    // that have no letter of their own.
+    if (e === '^') {
+      const c = src[j + 2];
+      if (!c || c.charCodeAt(0) < 64 || c.charCodeAt(0) > 95) {
+        throw new RonmlError('a \\^ escape takes one character from @ to _');
+      }
+      out += String.fromCharCode(c.charCodeAt(0) - 64); j += 3; continue;
+    }
+    // `\uXXXX`, four hex digits.
+    if (e === 'u') {
+      const h = src.slice(j + 2, j + 6);
+      if (!/^[0-9a-fA-F]{4}$/.test(h)) throw new RonmlError('a \\u escape needs exactly four hex digits');
+      out += String.fromCharCode(parseInt(h, 16)); j += 6; continue;
     }
     throw new RonmlError(`unknown escape \\${e}`);
   }
@@ -224,7 +249,12 @@ export function tokenize(src) {
     if (c === '~') {
       let k = i + 1;
       while (k < n && /\s/.test(src[k])) k++;
-      if (/[0-9(a-zA-Z]/.test(src[k] || '')) { toks.push({ t: 'NEG' }); i = k; continue; }
+      // …and a closing bracket, for `op ~`: naming the operator rather than
+      // applying it. Without it `(op ~)` reached the bottom of the lexer and
+      // was reported as an unexpected character, so IntInf could not declare
+      // its negation — and a structure whose body will not parse is dropped
+      // whole, so the whole of IntInf went with it.
+      if (/[0-9(a-zA-Z)]/.test(src[k] || '')) { toks.push({ t: 'NEG' }); i = k; continue; }
     }
     if (/[A-Za-z_]/.test(c) || (c === "'" && /[A-Za-z]/.test(src[i + 1] || ''))) {
       let j = i + 1;
@@ -232,6 +262,13 @@ export function tokenize(src) {
       // (factory_id.ml, readme.md) — evalNode tags anything ending .ml/.md a file.
       // `-` is NOT: it is the subtraction operator now (codes/filenames underscore).
       while (j < n && /[A-Za-z0-9_.']/.test(src[j])) j++;
+      // A structure's member may be SYMBOLIC: `Word.<<`, `Word8.~>>`. The run
+      // above stops at the `<`, which left `Word.` as one token and `<<` as the
+      // next, so the member could not be reached at all — Word's shift
+      // operators were unbindable and unusable.
+      if (src[j - 1] === '.' && SYMBOLIC.test(src[j] || '')) {
+        while (j < n && SYMBOLIC.test(src[j])) j++;
+      }
       toks.push({ t: 'IDENT', v: src.slice(i, j) });
       i = j;
       continue;

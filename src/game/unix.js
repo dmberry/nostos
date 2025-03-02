@@ -1,3 +1,12 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 // A small UNIX for the laptop — the first computer in the game that is YOURS.
 // Design: docs/laptop-plan.md.
 //
@@ -26,6 +35,12 @@ export class UnixError extends Error {}
 // A directory is {d: {name: node}}, a file is {f: 'text'}. Deliberately tiny:
 // the whole disk is a plain object, so it serialises straight into a save.
 
+// Where the FSF card lands and what df calls it. Defined here rather than
+// imported from fsfcard.js, which imports dir/file from this file: the card is
+// data built out of the filesystem's own primitives, so the dependency only
+// runs one way.
+export const FSF_MOUNT = 'fsf';
+export const FSF_DEV = '/dev/sd0';
 export function dir(children = {}) { return { d: children }; }
 export function file(text = '') { return { f: text }; }
 export function isDir(n) { return !!(n && n.d); }
@@ -160,6 +175,15 @@ const MAN = {
     '  left open.',
   ].join('\n'),
   halt: 'halt\n  Stop the processor. Close the lid and it is off until you open it.',
+  save: [
+    'save',
+    '  Write a checkpoint: where you are standing, what you are carrying, what',
+    '  you have learned. Load it from the title screen.',
+    '',
+    '  One slot per island, overwritten each time you save there. It will not',
+    '  write from a boat, and there is nowhere to fix a position from in the',
+    '  Backspace.',
+  ].join('\n'),
   suspend: [
     'suspend',
     '  Close the lid without stopping. The card goes down and everything else',
@@ -174,6 +198,7 @@ const MAN = {
   who: 'who\n  Who is logged in. On this machine that is a short answer, and the\n  interesting part is the name in /etc/passwd that is not yours.',
   ps: 'ps\n  What is running. Nothing on this machine phones anywhere, and this is\n  where you check that rather than take the readme\'s word for it.',
   df: 'df\n  Free space, by filesystem. The disk is small and the books on it are\n  not, so this is worth knowing before you save much.',
+  mount: 'mount [-u]\n  Mount the card in the slot, or say what is mounted. -u takes it out\n  again.\n\n  The only thing that fits is an FSF membership card: a credit-card USB\n  carrying a live GNU/Linux system and the source for all of it. It comes\n  up read-only on /mnt/fsf and nothing on this machine is touched.',
   uptime: 'uptime\n  How long the machine has been up. It kept counting while it sat broken\n  in whatever you found it in, which is its own small piece of evidence.',
   sh: 'sh <file>\n  Run a file of shell commands, one per line.',
   uname: 'uname [-a]\n  Name the system.',
@@ -906,7 +931,7 @@ export function makeDisk() {
       ttys: file(TTYS),
     }),
     lib: dir({ 'libc.a': file('[ archive ]\nStandard C library. 41 objects.') }),
-    mnt: dir({}),                     // nothing mounted. There is nothing to mount.
+    mnt: dir({}),                     // empty until you `mount` the FSF card
     tmp: dir({
       'core': file(CORE_NOTE),
       'ml.lock': file('held by pid 214\npid 214 is not running'),
@@ -1290,6 +1315,33 @@ const COMMANDS = {
     '   12 con  0:00 -sh',
     '  214 ?    9:41 ml            (defunct)',
   ].join('\n'),
+
+  // mount(1). One thing in the world is mountable: the FSF membership card, a
+  // credit-card USB with a live system and its own source on it. The host puts
+  // the card's tree in env.fsfCard when the player is carrying one, so the
+  // command asks the host rather than reading a table of items.
+  mount: (args, _in, env) => {
+    const at = ['mnt', FSF_MOUNT];
+    const already = lookup(env.root, at);
+    if (!args.length) {
+      return already
+        ? `${FSF_DEV} on /mnt/${FSF_MOUNT} type iso9660 (ro)`
+        : '/dev/hd0 on / type v7fs (rw)';
+    }
+    if (args[0] === '-u' || args[0] === '-r') {
+      if (!already) throw new UnixError(`/mnt/${FSF_MOUNT}: not mounted`);
+      delete lookup(env.root, ['mnt']).d[FSF_MOUNT];
+      return `${FSF_DEV} unmounted. Take the card; it goes back in a wallet.`;
+    }
+    if (!env.fsfCard) throw new UnixError('nothing to mount. There is a slot, and you are not carrying anything that fits it.');
+    if (already) return `${FSF_DEV} is already on /mnt/${FSF_MOUNT}`;
+    lookup(env.root, ['mnt']).d[FSF_MOUNT] = env.fsfCard();
+    return [
+      `${FSF_DEV} on /mnt/${FSF_MOUNT} type iso9660 (ro)`,
+      'Trisquel GNU/Linux, live. Nothing is written to this machine.',
+      `Start with: cat /mnt/${FSF_MOUNT}/README`,
+    ].join('\n');
+  },
 
   df: () => [
     'Filesystem  blocks   used   free  capacity  Mounted on',
@@ -1830,7 +1882,7 @@ const COMMANDS = {
 export const HOOK_COMMANDS = [
   'ml', 'pico', 'ed', 'netscape', 'www', 'pdf-viewer', 'pdf', 'book',
   'transcribe', 'telnet', 'post', 'vi', 'vim', 'emacs', 'nano',
-  'sleep', 'reboot', 'halt', 'suspend', 'wifi', 'sniffer', 'more',
+  'sleep', 'reboot', 'halt', 'suspend', 'save', 'wifi', 'sniffer', 'more',
 ];
 
 // A selector for any command that acts on a numbered list: `3`, `2-5`, `1,3,7`,
@@ -1955,6 +2007,14 @@ export function runUnix(line, env, hooks = {}) {
       if (name === 'sleep' || name === 'reboot' || name === 'halt' || name === 'suspend') {
         if (!hooks[name]) throw new UnixError(`${name}: not permitted`);
         return hooks[name](args, env);
+      }
+      // save(1). Not a V7 command and not a file operation: it writes the
+      // RUN — where you are standing, what you are carrying — to a checkpoint
+      // the title screen can load. The hub owns it because none of that is on
+      // this disk.
+      if (name === 'save') {
+        if (!hooks.save) throw new UnixError('save: nothing to save from here');
+        return hooks.save(args, env);
       }
       // The pager. It holds the screen, so the hub owns it, same as pico.
       if (name === 'more') {

@@ -1,3 +1,12 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 // The departure register: every place this build and Standard ML disagree.
 //
 // One entry per disagreement, each carrying the source, what Standard ML does,
@@ -31,8 +40,11 @@
 // reading what it said, rather than reading the code.
 //
 // Note what an empty register does and does not claim. It only ever tracks
-// departures somebody has written down. Conformance against Harper's corpus is
-// 82%, so there is plenty the language does not do that is not itemised here.
+// departures somebody has written down, so an empty one means nobody has an
+// itemised complaint — not that there is nothing left. Quote the corpus figure
+// from `tools/isml-conformance.mjs` rather than from here: a number written
+// into a comment is a number that goes stale, and this one sat at 82% until
+// v1.323 while the harness said 87%.
 
 export const DEPARTURES = [
   // ---- silent: wrong answers with no error -------------------------------

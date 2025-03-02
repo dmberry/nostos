@@ -1,3 +1,12 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 // Ship parts for the greek-ship craft (Stage 1d). The three parts are FOUND,
 // not crafted (decision with David, 2026-07-12): the SAIL washed up at a beached
 // wreck on the shore, the OAR and ROPE left in fishermen's huts (building

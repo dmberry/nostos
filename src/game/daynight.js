@@ -1,3 +1,12 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 // Day/night clock. Pure logic: tracks elapsed game time, exposes the hour,
 // a 1-based day counter, a HUD label, and an ambient light level with smooth
 // dawn/dusk ramps. Deterministic given the same sequence of dt values.

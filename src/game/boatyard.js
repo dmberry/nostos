@@ -1,3 +1,12 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 // A boat-builder's yard on the shore: a plank jetty running out over the sea and
 // a ruined boat-house beside it, its loot boxes holding the three greek-ship
 // parts (oar, rope, sail) plus salvage. This is where a shipwright's tackle
@@ -142,4 +151,58 @@ export function placeBoatYard(map, seed, spawn = null, count = 1) {
     if (placeOneYard(map, (seed ^ (0x1f7 * (i + 1))) >>> 0, spawn, placed === 0)) placed += 1;
   }
   return placed;
+}
+
+// ---- restocking a part that has gone out of the world ----------------------
+//
+// The three parts are scarce on purpose, and that turns out to be a trap: they
+// do not look like anything, so a player finds a rope and an oar early, decides
+// they are junk, drops them somewhere on a hundred-and-twenty-eight tiles of
+// island, and cannot leave Ogygia. There is no other way off it.
+//
+// So the yard restocks. A part that is nowhere at all — not carried, not in a
+// box, not lying on the ground — is put back in a boatyard box, which is where
+// it came from and where a player who has been to the yard already knows to
+// look. A part lying in a field is NOT lost and is not duplicated: dropping one
+// deliberately, to come back for it, still works.
+export const SHIP_PARTS = ['oar', 'rope', 'sail'];
+
+/** Is this item anywhere in the world or on the player? */
+function partExists(map, player, key) {
+  if (player && player.hasItem(key)) return true;
+  if (map.groundItems && map.groundItems.some((g) => g.item === key)) return true;
+  for (const o of map.objects || []) {
+    if (o.loot && o.loot.some((l) => l.item === key)) return true;
+  }
+  return false;
+}
+
+/** The boxes of the yard that carried the parts, nearest the shore first. */
+function yardBoxes(map) {
+  return (map.objects || []).filter((o) => o.type === 'box' && map.buildingAt
+    && (map.buildingAt(o.x, o.y) || {}).kind === 'boatyard');
+}
+
+/**
+ * Put back any ship part that has left the world entirely. Returns the keys it
+ * restocked, so the caller can say so; silent when there is nothing to do,
+ * which is almost always.
+ */
+export function restockShipParts(map, player) {
+  const missing = SHIP_PARTS.filter((k) => !partExists(map, player, k));
+  if (!missing.length) return [];
+  const boxes = yardBoxes(map);
+  if (!boxes.length) {
+    // No yard on this island (the scatter fallback ran): drop them at the
+    // player's feet rather than leave the run unfinishable.
+    for (const k of missing) map.groundItems.push({ item: k, qty: 1, x: Math.floor(player.x), y: Math.floor(player.y) });
+    return missing;
+  }
+  for (let i = 0; i < missing.length; i++) {
+    const box = boxes[i % boxes.length];
+    box.loot = box.loot || [];
+    box.loot.push({ item: missing[i], qty: 1 });
+    box.opened = false;   // worth opening again
+  }
+  return missing;
 }

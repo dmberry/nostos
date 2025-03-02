@@ -440,6 +440,17 @@ is 35/35, `node bin/bml.js` runs, and the conformance harness reports the same
 created 2026-07-27, empty and waiting for the split. Nothing is pushed to it
 until M6 lands.
 
+> **This shipped.** BML is published, installable, and live at
+> [critical-code-studies.github.io/BML](https://critical-code-studies.github.io/BML/),
+> at **0.36.0** as of nostos v1.331. `src/lang/` here is the source of record
+> and `tools/sync-bml.sh` copies it across, so the two cannot drift.
+>
+> The figures in this document are the ones from when it was written and are
+> left alone as a record: it says 81%, and the corpus is 355/408 (87%) now, with
+> a second instrument beside it at 100/100. The plan is kept for the reasoning
+> and the staging, not as a status page. Current state is in the README and in
+> the BML vs SML modal.
+
 ```
 BML/
   src/            lex, parse, eval, types, basis, diag, interp, index

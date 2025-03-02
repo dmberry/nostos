@@ -1,4 +1,13 @@
-// BML — a little Standard ML. The public surface.
+// BML — a 2026 Standard ML. Part of NostOS; synced to the BML repository.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
+// BML — a 2026 Standard ML. The public surface.
 //
 // This is the file a host imports. Everything reachable from here is the
 // language; nothing here knows about NostOS. When src/lang/ is split out to
@@ -12,11 +21,12 @@
 export { createInterpreter, smlEcho, flattenSession } from './interp.js';
 export { RonmlError, RonmlFuelError, RonmlRaise } from './errors.js';
 export { tokenize } from './lex.js';
-export { parse, parseLine, joinProgram, joinProgramLines, defaultFixity } from './parse.js';
-export { formatValue, showReal, describeValue, CONSOLE_FUEL } from './eval.js';
+export { parse, parseLine, joinProgram, joinProgramLines, needsMoreInput, continuesPrevious, defaultFixity } from './parse.js';
+export { formatValue, showReal, describeValue, setHostValues, CONSOLE_FUEL } from './eval.js';
 export { typeOf, remember } from './types.js';
 export { diagnose, NOT_FITTED_SAMPLES } from './diag.js';
 export { PRELUDE } from './basis.js';
+export { complete, readlineCompleter, commonPrefix, COMPLETION_KEYWORDS } from './complete.js';
 
 export const BML_NAME = 'BML';
 
@@ -27,7 +37,7 @@ export const BML_NAME = 'BML';
 // `value`, then gained `printing`, then `primitives`), so 2.7 would have
 // claimed two major versions of a settled interface that has never existed.
 // The language's own lineage belongs in the history and the README, not here.
-export const BML_VERSION = '0.24.0';
+export const BML_VERSION = '0.40.0';
 
 export const BML_CREDIT = [
   'BML created by David M. Berry, 2026.',

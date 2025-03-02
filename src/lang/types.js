@@ -1,3 +1,12 @@
+// BML — a 2026 Standard ML. Part of NostOS; synced to the BML repository.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 // TYPE INFERENCE FOR AI-ML.
 //
 // Hindley-Milner, over the AST that ai_ml.js already builds: unification with
@@ -32,6 +41,14 @@ export function con(name, args = []) { return { k: 'con', name, args }; }
 export const INT = con('int');
 export const REAL = con('real');
 export const CHAR = con('char');
+// Arbitrary precision. A separate TYPE from int, as it is in the Basis: an
+// `intinf` and an `int` are not the same thing and mixing them is an error the
+// checker should catch rather than a coercion it should perform.
+export const INTINF = con('intinf');
+// The type every exception has. `raise` and `handle` were special-cased and the
+// checker never learnt an exception at all, so `Fail "x"` used as a VALUE — to
+// General.exnMessage, say — was an unbound name.
+export const EXN = con('exn');
 // Kept as a name for the places that only care that it is a number.
 export const NUM = INT;
 // `string`, which is its name in Standard ML. It printed as `str` until v1.290,
@@ -77,10 +94,60 @@ export function unify(a, b) {
     return;
   }
   if (y.k === 'var') return unify(y, x);
+  if (x.name === 'record' && y.name === 'record') return unifyRecords(x, y);
   if (x.name !== y.name || x.args.length !== y.args.length) {
     throw new TypeError_(`${show(x)} and ${show(y)} are not the same type`);
   }
   for (let i = 0; i < x.args.length; i++) unify(x.args[i], y.args[i]);
+}
+
+// Records unify BY LABEL, not by position. Position was all this had, so
+// `{a : int, b : string}` and `{b : string, a : int}` — the same record written
+// in two orders — were refused for disagreeing about field one, and
+// `{a : int, b : int}` and `{c : int, d : int}` were accepted as the same type
+// and failed at run time instead.
+//
+// An OPEN record says "at least these", which is what `#lab` knows about the
+// thing it is given. Meeting a closed one it must be a subset, and then it
+// BECOMES that closed record — a mutation, as `x.ref = y` is for a variable,
+// and safe for the same reason: `instantiate` rebuilds a record per use.
+function unifyRecords(x, y) {
+  const at = (r, l) => r.args[r.labels.indexOf(l)];
+  const has = (r, l) => r.labels.includes(l);
+
+  if (!x.open && !y.open) {
+    if (x.labels.length !== y.labels.length || !x.labels.every((l) => has(y, l))) {
+      throw new TypeError_(`${show(x)} and ${show(y)} are not the same type`);
+    }
+    for (const l of x.labels) unify(at(x, l), at(y, l));
+    return;
+  }
+
+  if (x.open && y.open) {
+    for (const l of x.labels) if (has(y, l)) unify(at(x, l), at(y, l));
+    const labels = [...x.labels, ...y.labels.filter((l) => !has(x, l))];
+    const args = labels.map((l) => (has(x, l) ? at(x, l) : at(y, l)));
+    becomeRecord(x, labels, args, true);
+    becomeRecord(y, labels, args, true);
+    return;
+  }
+
+  const open = x.open ? x : y;
+  const closed = x.open ? y : x;
+  for (const l of open.labels) {
+    if (!has(closed, l)) {
+      throw new TypeError_(`${show(closed)} has no field ${l}`);
+    }
+    unify(at(open, l), at(closed, l));
+  }
+  becomeRecord(open, closed.labels, closed.args, false);
+}
+
+/** Make one record type into another, in place, so every reference sees it. */
+function becomeRecord(r, labels, args, open) {
+  r.labels = labels;
+  r.args = args;
+  r.open = open;
 }
 
 // ---- schemes and environments ----------------------------------------------
@@ -140,6 +207,9 @@ function instantiate(s) {
   const go = (t) => {
     const p = prune(t);
     if (p.k === 'var') return map.get(p.id) || p;
+    // LABELS AND OPENNESS TRAVEL WITH IT. This rebuilt the con and kept neither,
+    // so a generalised record type lost its fields at the first use.
+    if (p.name === 'record') return recordOf(p.labels, p.args.map(go), p.open);
     return con(p.name, p.args.map(go));
   };
   return go(s.type);
@@ -160,7 +230,9 @@ export function show(t, names = new Map()) {
   if (p.name === '*') return p.args.map((a) => showArg(a, names)).join(' * ');
   if (p.name === 'list') return `${showArg(p.args[0], names)} list`;
   if (p.name === 'record') {
-    return `{${p.labels.map((l, i) => `${l} : ${show(p.args[i], names)}`).join(', ')}}`;
+    const fields = p.labels.map((l, i) => `${l} : ${show(p.args[i], names)}`);
+    if (p.open) fields.push('...');
+    return `{${fields.join(', ')}}`;
   }
   if (!p.args.length) return p.name;
   // Standard ML brackets a type constructor's arguments once there is more
@@ -175,9 +247,12 @@ function showArg(t, names) {
   return (p.k === 'con' && (p.name === '->' || p.name === '*')) ? `(${s})` : s;
 }
 
-export function recordOf(labels, types) {
+// A record type. OPEN means "at least these fields", which is what `#lab` and a
+// `{a, ...}` pattern know about their argument; closed means "exactly these".
+export function recordOf(labels, types, open = false) {
   const c = con('record', types);
   c.labels = labels;
+  c.open = open;
   return c;
 }
 
@@ -264,6 +339,24 @@ function baseEnv() {
     // `Vector.length` read `'a array -> int` and refused every vector given to
     // it — under strict, which is the default.
     // The clock. `clocknow` takes unit because a value would be constant.
+    bigfromint: mono(fnOf(INT, INTINF)),
+    bigtoint: mono(fnOf(INTINF, INT)),
+    bigfromstring: mono(fnOf(STR, INTINF)),
+    bigtostring: mono(fnOf(INTINF, STR)),
+    bigadd: mono(fnOf(INTINF, fnOf(INTINF, INTINF))),
+    bigsub: mono(fnOf(INTINF, fnOf(INTINF, INTINF))),
+    bigmul: mono(fnOf(INTINF, fnOf(INTINF, INTINF))),
+    bigdiv: mono(fnOf(INTINF, fnOf(INTINF, INTINF))),
+    bigmod: mono(fnOf(INTINF, fnOf(INTINF, INTINF))),
+    bigpow: mono(fnOf(INTINF, fnOf(INT, INTINF))),
+    bigcmp: mono(fnOf(INTINF, fnOf(INTINF, INT))),
+    wordand: mono(fnOf(INT, fnOf(INT, INT))),
+    wordor: mono(fnOf(INT, fnOf(INT, INT))),
+    wordxor: mono(fnOf(INT, fnOf(INT, INT))),
+    wordnot: mono(fnOf(INT, INT)),
+    wordshl: mono(fnOf(INT, fnOf(INT, INT))),
+    wordshr: mono(fnOf(INT, fnOf(INT, INT))),
+    wordashr: mono(fnOf(INT, fnOf(INT, INT))),
     clocknow: mono(fnOf(UNIT, INT)),
     clockparts: mono(fnOf(INT, tupleOf([INT, INT, INT, INT, INT, INT, INT]))),
     vectorsub: scheme([a.id], fnOf(con('vector', [a]), fnOf(INT, a))),
@@ -323,6 +416,11 @@ let CURRENT_CONARITY = {};
 function inferPattern(pat, binds, cons) {
   switch (pat.p) {
     case 'wild': return fresh();
+    // `fun f () = …`. Without this the parameter took a fresh variable, so the
+    // function reported `'a -> t` and `f 7` was let through the checker to fail
+    // at RUN time with an unmatched pattern. Standard ML refuses it where it is
+    // written.
+    case 'unit': return UNIT;
     case 'num': return pat.real ? REAL : INT;
     case 'char': return CHAR;
     case 'str': return STR;
@@ -338,7 +436,8 @@ function inferPattern(pat, binds, cons) {
     case 'record': {
       const labels = pat.fields.map((f) => f.label);
       const types = pat.fields.map((f) => inferPattern(f.pat, binds, cons));
-      return recordOf(labels, types);
+      // `{a, ...}` says "at least a", which is exactly an open record.
+      return recordOf(labels, types, !!pat.open);
     }
     case 'as': {
       const t = inferPattern(pat.pat, binds, cons);
@@ -479,8 +578,17 @@ export function infer(node, env, cons) {
           const i = parseInt(node.fn.label, 10) - 1;
           if (i >= 0 && i < at.args.length) return at.args[i];
         }
-        // Anything else needs row polymorphism and stays honestly unknown.
-        return fresh();
+        // A TUPLE label on something not yet known stays unknown: `#1` is a
+        // projection out of a tuple of unknown WIDTH, and there is no open
+        // tuple here the way there is an open record.
+        if (/^[0-9]+$/.test(node.fn.label)) return fresh();
+        // Everything else goes through the ordinary application rule now, where
+        // `#a` carries `{a : 'x, ...} -> 'x` and constrains the argument to be a
+        // record that HAS an a. That is the whole of row polymorphism: it used
+        // to stop here and answer a fresh variable.
+        const want = fresh();
+        unify(at, recordOf([node.fn.label], [want], true));
+        return want;
       }
       // A multi-argument constructor may be applied to a TUPLE, `N (a, b, c)`,
       // which is how Standard ML writes it, as well as curried, `N a b c`,
@@ -591,7 +699,13 @@ export function infer(node, env, cons) {
       return recordOf(node.fields.map((f) => f.label),
         node.fields.map((f) => infer(f.value, env, cons)));
 
-    case 'Select': return fresh();     // needs row polymorphism; honestly unknown
+    case 'Select': {
+      // `#a` is `{a : 'x, ...} -> 'x`. It was a bare fresh variable, so every
+      // projection written inside a function — which is every accessor in
+      // `Date` — reported `'a -> 'b` and constrained nothing.
+      const field = fresh();
+      return fnOf(recordOf([node.label], [field], true), field);
+    }
 
     case 'While': {
       // `while c do e` is `bool`, then `unit`, and answers `unit`. There was no
@@ -697,6 +811,10 @@ export function infer(node, env, cons) {
     }
 
     case 'Datatype': return UNIT;
+
+    // The open's own names come from the session, which infer already reads, so
+    // the body is typed as it stands.
+    case 'LetOpen': { infer(node.decl, env, cons); return infer(node.body, env, cons); }
 
     // A STRUCTURE. Until v1.293 this fell through to `fresh()` below, so
     // `structure List = struct … end` was never walked and no member ever got a
@@ -875,7 +993,29 @@ export function infer(node, env, cons) {
       const inner = { ...env };
       const members = {};
       for (const d of node.decls || []) {
-        if (!d || d.type !== 'TopLet') { try { infer(d, inner, cons); } catch { /* a member this module cannot type is not an error in the structure */ } continue; }
+        if (!d || d.type !== 'TopLet') {
+          try { infer(d, inner, cons); } catch { /* a member this module cannot type is not an error in the structure */ }
+          // A DATATYPE DECLARED IN HERE introduces names, and they were going
+          // nowhere: `structure Pal = struct datatype hue = Red end` published
+          // Pal's values and not its constructors, so `Pal.Red` reported `'a`
+          // — and so did every member of the structure that MENTIONED Red,
+          // since the constructor was unknown inside the body too. The `Decls`
+          // branch above has done this since v1.307; a structure is the same
+          // problem and did not.
+          if (d.type === 'Datatype' || d.type === 'TypeAbbrev') {
+            const scratch = {};
+            try { remember(d, scratch, UNIT); } catch { /* not this module's */ }
+            for (const k of Object.keys(scratch.__contypes || {})) {
+              cons[k] = scratch.__contypes[k];
+              inner[k] = scratch.__contypes[k];
+              members[k] = scratch.__contypes[k];
+            }
+            for (const k of Object.keys(scratch.__datacons || {})) CURRENT_DATACONS[k] = scratch.__datacons[k];
+            for (const k of Object.keys(scratch.__conarity || {})) CURRENT_CONARITY[k] = scratch.__conarity[k];
+            for (const k of Object.keys(scratch.__abbrevs || {})) CURRENT_ABBREVS[k] = scratch.__abbrevs[k];
+          }
+          continue;
+        }
         try {
           // BIND THE MEMBER'S OWN NAME FIRST, exactly as 'TopLet' does above.
           // Every function in the Basis is recursive — `fun map f nil = nil |
@@ -1030,7 +1170,7 @@ export function typeOf(ast, session = {}) {
 // Deliberately small: the base types, a list of one of them, and the datatype
 // being declared (so `Node of tree * int * tree` knows what a tree is). Anything
 // else is a fresh variable, which is no worse than before this existed.
-const BASE_TYPES = { int: () => INT, real: () => REAL, string: () => STR, str: () => STR, bool: () => BOOL, char: () => CHAR, unit: () => UNIT };
+const BASE_TYPES = { exn: () => EXN, intinf: () => INTINF, int: () => INT, real: () => REAL, string: () => STR, str: () => STR, bool: () => BOOL, char: () => CHAR, unit: () => UNIT };
 function typeOfWords(ws, selfType, selfName, tyvars) {
   if (!ws || !ws.length) return fresh();
   const last = ws[ws.length - 1];
@@ -1047,6 +1187,14 @@ function typeOfWords(ws, selfType, selfName, tyvars) {
   };
   if (ws.length === 1) return baseOf(head) || fresh();
   if (last === 'list') { const b = baseOf(head); return b ? listOf(b) : fresh(); }
+  // `int option`, `string tree` — ANY type constructor applied to arguments,
+  // not just `list`. Only `list` was named here, so everything else fell to the
+  // line at the bottom, which takes the head and DROPS the constructor:
+  // `GEN of int option` typed as plain `int`, and the option was gone.
+  if (!BASE_TYPES[last] && !(tyvars && Object.prototype.hasOwnProperty.call(tyvars, last))
+      && /^[a-z]/.test(last) && !(selfName && last === selfName)) {
+    return con(last, ws.slice(0, -1).map((w) => baseOf(w) || fresh()));
+  }
   // `'a tree` — a parameterised type applied to an argument, which is how a
   // recursive datatype names itself: `Node of 'a tree * 'a * 'a tree`. The
   // words arrive head-first, so the last is the constructor and the rest are
@@ -1100,6 +1248,15 @@ export function remember(ast, session, t) {
   } else if (ast.type === 'TypeAbbrev' && ast.rhs) {
     if (!session.__abbrevs) session.__abbrevs = {};
     session.__abbrevs[nameKey(ast.name)] = { params: ast.params || [], rhs: ast.rhs };
+  } else if (ast.type === 'ExnDecl') {
+    // An exception is a constructor like any other: `exception E of string`
+    // gives `E : string -> exn`, and a nullary one is an `exn` outright.
+    const payload = ast.arity
+      ? typeOfWords(ast.argWords || [], EXN, null, {})
+      : null;
+    session.__contypes[ast.name] = generalise({}, payload ? fnOf(payload, EXN) : EXN);
+    if (!session.__conarity) session.__conarity = {};
+    session.__conarity[ast.name] = ast.arity || 0;
   } else if (ast.type === 'Datatype') {
     // ONE VARIABLE PER TYPE PARAMETER, made here and shared by every mention of
     // that parameter in every constructor. `datatype 'a box = Box of 'a` is

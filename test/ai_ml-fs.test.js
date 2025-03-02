@@ -1,3 +1,12 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 // Unit tests for the RON-ML terminal filesystem — Stage S1 of the Calypso
 // escape chain (docs/calypso-escape-chain.md, §8). Exercises the LANGUAGE layer
 // in ronml.js: filenames lexing to `file` values, the cd/ls verbs, and the
@@ -177,10 +186,82 @@ test('drives calls ctx.drives (the listing)', () => {
   assert.equal(called, true);
 });
 
-test('retire calls ctx.retire (R3 guard stand-down)', () => {
-  let called = false;
-  const ctx = { station: 'ob', session: {}, retire: () => { called = true; } };
-  const r = runRonml('retire', ctx);
+// ---- THE REFUNCTION IS A PROGRAM ------------------------------------------
+//
+// `retire` was arity 0: the largest turn in the game, typed in six letters, at
+// any obelisk on any island. It takes the open key and a REPLACEMENT for her
+// keeping, and it tries that replacement before accepting it — she keeps you,
+// so the only thing that passes is a keeping that gives you back.
+
+const retireCtx = () => {
+  const st = { called: false };
+  st.ctx = fakeCtx();
+  // fakeCtx's bindSession is a no-op stub, which is fine for the file tests and
+  // no use here: `retire` is reached THROUGH the key, so the binding has to land
+  // somewhere the next line can read it, the way replSession does in the game.
+  st.ctx.bindSession = (name, val) => { st.ctx.session[name] = val; };
+  st.ctx.retire = () => { st.called = true; };
+  return st;
+};
+
+test('retire: the open key and the identity stand the guards down', () => {
+  const st = retireCtx();
+  const r = runRonml('copy aikey; retire (decrypt aikey) (fn x => x)', st.ctx);
   assert.ok(r.ok, r.text);
-  assert.equal(called, true);
+  assert.equal(st.called, true);
+});
+
+test('retire: a program held in let-bindings works, because it is a program', () => {
+  const st = retireCtx();
+  const r = runRonml('copy aikey; let val k = decrypt aikey val keep = fn x => x in retire k keep end', st.ctx);
+  assert.ok(r.ok, r.text);
+  assert.equal(st.called, true);
+});
+
+test('retire: the bare word does nothing at all now', () => {
+  const st = retireCtx();
+  const r = runRonml('retire', st.ctx);
+  assert.equal(st.called, false, 'six letters must not be the whole hack');
+  assert.match(r.text, /decrypt aikey/, 'and it has to say what it wants instead');
+});
+
+test('retire: a sealed key is refused', () => {
+  const st = retireCtx();
+  const r = runRonml('copy aikey; retire aikey (fn x => x)', st.ctx);
+  assert.equal(st.called, false);
+  assert.match(r.text, /sealed/);
+});
+
+test('retire: anything that KEEPS what it is given is refused', () => {
+  // Every wrong answer here is the same wrong answer — a function that gives
+  // back something other than what it was handed is what she already is.
+  for (const keeping of ['fn x => 0', 'fn x => x + 1', 'fn x => ~x']) {
+    const st = retireCtx();
+    const r = runRonml(`copy aikey; retire (decrypt aikey) (${keeping})`, st.ctx);
+    assert.equal(st.called, false, `${keeping} should not have released her`);
+    assert.match(r.text, /keeping, not a release/);
+  }
+});
+
+test('retire: a keeping that throws is still a keeping', () => {
+  const st = retireCtx();
+  const r = runRonml('copy aikey; retire (decrypt aikey) (fn x => hd [])', st.ctx);
+  assert.equal(st.called, false);
+  assert.ok(!r.ok);
+});
+
+test('retire: not a function at all is refused before she runs anything', () => {
+  const st = retireCtx();
+  const r = runRonml('copy aikey; retire (decrypt aikey) 1', st.ctx);
+  assert.equal(st.called, false);
+  assert.match(r.text, /FUNCTION/);
+});
+
+test('retire: where there is no ctx.retire there is no refunction', () => {
+  // The host decides WHERE. main.js supplies retire only on the island she
+  // keeps; on any other the verb parses and then finds nothing to talk to.
+  const ctx = fakeCtx();
+  ctx.bindSession = (name, val) => { ctx.session[name] = val; };
+  const r = runRonml('copy aikey; retire (decrypt aikey) (fn x => x)', ctx);
+  assert.match(r.text, /nothing to retire/);
 });

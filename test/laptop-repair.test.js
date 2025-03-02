@@ -1,9 +1,20 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 // The dead NostBook is the one item whose entire purpose is a recipe you cannot
 // see: you start the game holding it, and nothing in the world tells you that it
-// wants two cells and two chip fragments. Tapping it used to move it silently to
-// your hand. Now it answers, and these tests pin what it says — including the
-// plural, because "2 more batterys" is the kind of small wrongness that makes a
-// game read as unfinished.
+// wants a cell and a chip fragment. Tapping it used to move it silently to your
+// hand. Now it answers, and these tests pin what it says — including the plural
+// rule, because "2 more batterys" is the kind of small wrongness that makes a
+// game read as unfinished. The recipe was halved at v1.336: the NostBook is
+// where you LEARN the language, so a shopping list in front of it keeps players
+// away from the thing the game most wants them to find.
 //
 // Drives the real Player.prototype methods over a stub `this` (as card-swap and
 // boat do), so there is no canvas and no world.
@@ -36,8 +47,8 @@ test('tapping the dead NostBook says exactly what its board still wants', () => 
   const p = stub();
   p.equipSlot({ kind: 'pocket', i: 0 });
   assert.equal(p.said.length, 1);
-  assert.match(p.said[0], /2 more batteries/, 'batteries, not batterys');
-  assert.match(p.said[0], /2 more chip fragments/);
+  assert.match(p.said[0], /1 more battery\b/);
+  assert.match(p.said[0], /1 more chip fragment\b/);
   assert.match(p.said[0], /\bC\b/, 'and which key does the soldering');
   // It must NOT quietly move to the hand instead, which is what it did before.
   assert.equal(p.hands, null);
@@ -45,15 +56,17 @@ test('tapping the dead NostBook says exactly what its board still wants', () => 
 });
 
 test('the count is what is SHORT, not what the recipe costs', () => {
+  // Holding the battery already, so only the fragment is named — and the
+  // pluralisation still has to be right, which is what a count of one tests.
   const p = stub({ pockets: [{ item: 'laptop_broken', qty: 1 }, { item: 'battery', qty: 1 }, null, null] });
   p.equipSlot({ kind: 'pocket', i: 0 });
-  assert.match(p.said[0], /1 more battery\b/, 'singular, and one, not two');
-  assert.doesNotMatch(p.said[0], /batteries/);
+  assert.match(p.said[0], /1 more chip fragment\b/, 'singular, and only what is missing');
+  assert.doesNotMatch(p.said[0], /battery|batteries/, 'the battery is in hand, so it is not asked for');
 });
 
 test('with the parts in the pack it stops listing and names the key', () => {
   const p = stub({
-    pockets: [{ item: 'laptop_broken', qty: 1 }, { item: 'battery', qty: 2 }, { item: 'chip_fragment', qty: 2 }, null],
+    pockets: [{ item: 'laptop_broken', qty: 1 }, { item: 'battery', qty: 1 }, { item: 'chip_fragment', qty: 1 }, null],
   });
   assert.equal(p.canRepairLaptop(), true);
   p.equipSlot({ kind: 'pocket', i: 0 });

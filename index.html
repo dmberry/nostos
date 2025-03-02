@@ -133,6 +133,8 @@
   .seamodal .cancel { margin: 16px 0 6px; color: #6b5526; font-size: 12.5px; font-style: italic;
     cursor: pointer; text-align: center; }
   .seamodal .cancel:hover { color: #241d10; text-decoration: underline; }
+  /* Set while a canvas panel (backpack, Record, Armoury) owns the screen. */
+  body.panelup #hint, body.panelup #helpBtn, body.panelup #aboutBtn { display: none; }
   #help {
     display: none; position: fixed; inset: 0;
     background: rgba(5,7,4,0.75); z-index: 10;
@@ -144,14 +146,50 @@
     border-radius: 6px; color: #cfd8c3;
     font: 14px/1.55 system-ui, sans-serif;
   }
+  #help .panel { position: relative; }
+  /* Aligned with the first row of tabs rather than floating in the corner, and
+     above the sticky strip so scrolling does not slide the tabs over it. */
+  #help .help-x { position: absolute; top: 26px; right: 22px; z-index: 2; width: 26px; height: 26px;
+    border: 1px solid rgba(207,216,195,0.3); border-radius: 4px; background: rgba(207,216,195,0.07);
+    color: #cfd8c3; font: 13px/1 system-ui, sans-serif; cursor: pointer; }
+  #help .help-x:hover { background: rgba(207,216,195,0.18); }
+  /* Opened from the title screen, the help wears the theme you picked there.
+     It is the same panel and the same markup — moved inside #mobile-gate so the
+     gate's --accent / --bg1 / --bg2 resolve, then painted from them. */
+  /* Opened from the title screen. The theme is worn as an ACCENT, not as a
+     repaint: the panel keeps its own dark, readable palette, and the colour you
+     picked shows in the border, the active tab and the wash behind. Painting
+     the whole card from --bg1/--bg2/--accent flattened every heading into the
+     body text, and on the Backspace theme (near-black accent on olive) it left
+     the active tab unreadable. */
+  #help.gated { z-index: 20;
+    background: radial-gradient(120% 80% at 50% 0%,
+      color-mix(in srgb, var(--bg1) 78%, rgba(4,6,3,0.92)),
+      rgba(4,6,3,0.92) 70%);
+    justify-content: center; align-items: flex-start; }   /* the gate is a containing block, so centre it here */
+  #help.gated .panel { margin: 6vh 12px 0;
+    border-color: color-mix(in srgb, var(--accent) 42%, transparent);
+    box-shadow: 0 18px 50px rgba(0,0,0,0.6),
+      0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent); }
+  #help.gated .helpTabs { border-bottom-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+  #help.gated .helpTab.active { color: #10130d; background: var(--accent); border-color: var(--accent); }
+  #help.gated h2 { color: color-mix(in srgb, var(--accent) 85%, #9db284); }
+  #help.gated .help-x { border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+
   #help h1 { font-size: 18px; margin: 0 0 4px; }
   #help h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em;
     color: #9db284; margin: 18px 0 6px; }
   #help h3 { font-size: 11px; letter-spacing: 0.04em;
     color: #8a9878; margin: 14px 0 4px; }
   #help h3:first-of-type { margin-top: 4px; }
-  #help .helpTabs { display: flex; gap: 6px; margin: 12px 0 6px; flex-wrap: wrap;
-    position: sticky; top: -22px; background: #141a10; padding: 6px 0; z-index: 1; }
+  /* The tab strip is the top of the panel now — the wordmark above it told you
+     the name of the thing you were already looking at. Sticky, so it stays put
+     while a long page scrolls under it, and ruled underneath so it reads as a
+     toolbar rather than a block of darker colour laid over the page. The right
+     gutter is the close button's. */
+  #help .helpTabs { display: flex; gap: 6px; margin: 0 0 12px; flex-wrap: wrap;
+    position: sticky; top: -22px; background: #141a10; z-index: 1;
+    padding: 6px 34px 9px 0; border-bottom: 1px solid rgba(207,216,195,0.14); }
   #help .helpTab {
     background: rgba(207,216,195,0.10); color: #9db284;
     border: 1px solid rgba(207,216,195,0.25); border-radius: 5px;
@@ -319,6 +357,106 @@
   #ronnotebook .nb-text { white-space: pre-wrap; }
   #ronnotebook-footer { display: flex; align-items: center; justify-content: space-between;
     margin-top: 10px; padding-top: 8px; border-top: 1px dashed rgba(40,30,10,0.35); }
+  /* Scrapbook tabs. Books moved out to the Library, so what is left is what you
+     PICKED UP rather than what you read — field records and album sleeves — and
+     the arrows page within one kind instead of crossing between them. */
+  #ronnotebook .nb-tabs { display: flex; gap: 6px; margin: 2px 0 8px; flex-wrap: wrap; }
+  #ronnotebook .nb-tab { font: 700 10px/1 ui-monospace, monospace; letter-spacing: 0.1em;
+    color: #5a4a2a; background: rgba(90,74,42,0.10); border: 1px solid rgba(90,74,42,0.28);
+    border-radius: 3px; padding: 5px 9px; cursor: pointer; }
+  #ronnotebook .nb-tab:hover { background: rgba(90,74,42,0.2); }
+  #ronnotebook .nb-tab.on { color: #2a2418; background: rgba(90,74,42,0.3); border-color: rgba(90,74,42,0.6); }
+
+  /* ---- THE LIBRARY -----------------------------------------------------
+     A BOUND BOOK, and it has to read as one at a glance or it is just another
+     panel: cloth boards in a dark red, a ribbed spine with gilt bands, cream
+     laid paper, and a serif face. The scrapbook next door is ruled paper in
+     Courier — the two should never be mistaken for each other, because they
+     hold different kinds of thing. */
+  #bookshelf { display: none; position: fixed; inset: 0; z-index: 24;
+    background: rgba(0,0,0,0.72); align-items: center; justify-content: center; }
+  #bookshelf .bk-book { position: relative; display: flex; flex-direction: column;
+    width: min(760px, 94vw); height: min(560px, 84vh);
+    padding: 14px 16px 10px 40px; border-radius: 3px 8px 8px 3px;
+    background: linear-gradient(100deg, #5c2320 0%, #6d2b26 6%, #7a322c 12%, #6b2a25 100%);
+    box-shadow: 0 18px 50px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08); }
+  /* The spine: ribbed bands and the gilt title, turned to read up the book. */
+  #bookshelf .bk-spine { position: absolute; left: 0; top: 0; bottom: 0; width: 30px;
+    border-radius: 3px 0 0 3px; background:
+      repeating-linear-gradient(180deg, rgba(0,0,0,0.32) 0 3px, rgba(0,0,0,0) 3px 46px),
+      linear-gradient(90deg, #4a1b19 0%, #6d2b26 60%, #3d1614 100%);
+    box-shadow: inset -3px 0 6px rgba(0,0,0,0.45);
+    display: flex; align-items: center; justify-content: center; }
+  #bookshelf .bk-spine span { writing-mode: vertical-rl; transform: rotate(180deg);
+    font: 700 10px/1 Georgia, 'Times New Roman', serif; letter-spacing: 0.32em;
+    color: #d9b86a; text-shadow: 0 1px 0 rgba(0,0,0,0.6); }
+  #bookshelf .bk-x { position: absolute; top: 8px; right: 10px; z-index: 2;
+    background: none; border: none; color: #e8cf9a; font-size: 20px; line-height: 1; cursor: pointer; }
+  #bookshelf .bk-x:hover { color: #fff; }
+  #bookshelf .bk-inner { flex: 1; min-height: 0; display: flex; gap: 0;
+    border-radius: 2px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.4); }
+  /* The shelf: the list that makes this scale where a page sequence does not. */
+  #bookshelf .bk-shelf { width: 216px; flex: 0 0 auto; overflow-y: auto;
+    background: #e3d9bd; border-right: 1px solid rgba(60,40,20,0.28);
+    padding: 10px 0; }
+  #bookshelf .bk-item { display: block; width: 100%; text-align: left; cursor: pointer;
+    background: none; border: none; border-left: 3px solid transparent;
+    padding: 7px 12px 8px; font: 13px/1.25 Georgia, 'Times New Roman', serif; color: #3a3324; }
+  #bookshelf .bk-item small { display: block; font: italic 11px/1.3 Georgia, serif; color: #7a7059; }
+  #bookshelf .bk-item:hover { background: rgba(120,60,40,0.09); }
+  #bookshelf .bk-item.on { background: rgba(120,60,40,0.16); border-left-color: #7a322c; }
+  /* The leaf: cream laid paper with a gutter shadow where it meets the shelf. */
+  #bookshelf .bk-leaf { flex: 1; min-width: 0; overflow-y: auto; padding: 22px 26px 20px;
+    background: #f2ead2;
+    background-image: repeating-linear-gradient(180deg, rgba(120,100,60,0) 0 25px, rgba(120,100,60,0.05) 25px 26px);
+    box-shadow: inset 10px 0 14px -12px rgba(0,0,0,0.5); }
+  #bookshelf .bk-head { border-bottom: 1px solid rgba(60,40,20,0.25); padding-bottom: 10px; margin-bottom: 14px; }
+  #bookshelf #bookshelf-title { margin: 0; font: 700 22px/1.2 Georgia, 'Times New Roman', serif; color: #2c2418; }
+  #bookshelf #bookshelf-author { font: italic 13px/1.4 Georgia, serif; color: #6d6450; margin-top: 3px; }
+  #bookshelf #bookshelf-body { font: 15px/1.62 Georgia, 'Times New Roman', serif; color: #2f2a1c; white-space: pre-wrap; }
+  /* A drop cap, because it is a book. Only on the first paragraph. */
+  #bookshelf #bookshelf-body .bk-first::first-letter { float: left; font-size: 46px; line-height: 38px;
+    padding: 2px 7px 0 0; font-weight: 700; color: #7a322c; }
+  #bookshelf .bk-cover { float: right; width: 104px; margin: 2px 0 10px 14px;
+    border: 1px solid rgba(40,30,10,0.45); box-shadow: 2px 3px 8px rgba(0,0,0,0.3); }
+  /* The quit gate. Plain, and deliberately not diegetic: it is about the
+     session, not about the island, and should not look like something in the
+     world is talking to you. */
+  #quitbox { display: none; position: fixed; inset: 0; z-index: 40;
+    background: rgba(0,0,0,0.66); align-items: center; justify-content: center; }
+  #quitbox .qb-panel { width: min(380px, 88vw); background: #14170f;
+    border: 1px solid rgba(207,216,195,0.35); border-radius: 6px; padding: 20px 22px 16px;
+    box-shadow: 0 16px 44px rgba(0,0,0,0.6); }
+  #quitbox .qb-title { font: 700 15px/1.3 system-ui, sans-serif; color: #e8ecdf; margin-bottom: 8px; }
+  #quitbox .qb-body { font: 13px/1.55 system-ui, sans-serif; color: #b9c1ad; }
+  #quitbox .qb-btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+  #quitbox .qb-b { font: 600 13px system-ui, sans-serif; cursor: pointer; padding: 8px 14px;
+    border-radius: 4px; border: 1px solid rgba(207,216,195,0.4); background: transparent; color: #dfe6d4; }
+  #quitbox .qb-b:hover { background: rgba(207,216,195,0.12); }
+  #quitbox .qb-go { background: #6b2f2a; border-color: #8d3b34; color: #fbeee9; }
+  #quitbox .qb-go:hover { background: #8d3b34; }
+  #bookshelf .bk-sect { font: 700 9px/1 ui-monospace, monospace; letter-spacing: 0.18em;
+    color: #8a7a58; padding: 12px 12px 5px; border-top: 1px solid rgba(60,40,20,0.2); margin-top: 6px; }
+  /* A whole text reads as a book on the shelf, not as another note. */
+  #bookshelf .bk-item.bk-vol small { color: #7a322c; }
+  #bookshelf .bk-item.bk-out { opacity: 0.5; cursor: default; }
+  #bookshelf .bk-open, #bookshelf .bk-back { display: inline-block; margin: 16px 0 4px; cursor: pointer;
+    font: 600 12px/1 Georgia, serif; color: #f2ead2; background: #7a322c;
+    border: 1px solid #5c2320; border-radius: 3px; padding: 8px 12px; }
+  #bookshelf .bk-open:hover, #bookshelf .bk-back:hover { background: #8d3b34; }
+  #bookshelf .bk-back { margin: 0 0 10px; background: none; color: #7a322c; border-color: rgba(122,50,44,0.4); }
+  /* The whole text, in the leaf. Its own scroll, and the paper behind it. */
+  #bookshelf .bk-frame { display: block; width: 100%; height: min(60vh, 380px); border: 1px solid rgba(60,40,20,0.3);
+    background: #fbf6e6; }
+  #bookshelf .bk-empty { font: italic 14px/1.6 Georgia, serif; color: #6b6350; }
+  #bookshelf .bk-hint { margin-top: 8px; font: 10px/1 ui-monospace, monospace;
+    letter-spacing: 0.06em; color: rgba(232,207,154,0.72); text-align: right; }
+  @media (max-width: 620px) {
+    #bookshelf .bk-book { padding-left: 30px; }
+    #bookshelf .bk-inner { flex-direction: column; }
+    #bookshelf .bk-shelf { width: auto; max-height: 34%; border-right: none;
+      border-bottom: 1px solid rgba(60,40,20,0.28); }
+  }
   /* The HERMES test console (type "hermes" in-game). Deliberately plain and
      un-game-like — it is a tool, not a diegetic screen, and it should never be
      mistaken for one. */
@@ -508,10 +646,14 @@
 <div id="about">
   <div class="panel">
     <h1 class="wordmark">Nost<span class="os">OS</span></h1>
-    <p class="meta">A postAI Odyssey &middot; by David and Henrik</p>
+    <p class="meta">A postAI Odyssey &middot; <b class="verNum">v?</b> &middot; by David M. Berry</p>
 
     <h2>Coding</h2>
-    <p>David and Henrik, vibecoding 2026.</p>
+    <p>David M. Berry, vibecoding 2026. Beta testing by Henrik.</p>
+
+    <h2>Licence</h2>
+    <p>NostOS is <b>free software</b>: you may redistribute and modify it under the <b>GNU General Public License, version 3 or later</b>. Copyright &copy; 2026 David M. Berry. The full text ships with the source at <a href="https://github.com/dmberry/nostos" target="_blank" rel="noopener">github.com/dmberry/nostos</a>.</p>
+    <p class="meta">The library's Project Gutenberg texts keep their own licence and header, unaltered; the papers in <i>/home/documents</i> are out-of-copyright scholarship. Neither is covered by the above, because neither is ours to license.</p>
 
     <h2>Music &amp; cassettes</h2>
     <p>The soundtrack is a set of <b>cassette tapes</b> you find and play on the walkman. Each has an A and a B side:</p>
@@ -548,7 +690,7 @@
       James asking whether we are automata, and Gonseth on the humanization of
       technics.</p>
 
-    <div class="foot">Game designed in the UK &middot; v<span id="aboutVer"></span> &middot; github.com/dmberry/nostos</div>
+    <div class="foot">Game designed in the UK &middot; <span class="verNum">v?</span> &middot; GPL-3.0-or-later &middot; github.com/dmberry/nostos</div>
   </div>
 </div>
 <div id="heading" class="seamodal">
@@ -561,20 +703,154 @@
 </div>
 <div id="help">
   <div class="panel">
-    <h1 class="wordmark">Nost<span class="os">OS</span></h1>
-    <p class="meta">A postAI Odyssey &middot; by David and Henrik</p>
+    <button class="help-x" id="help-x" type="button" aria-label="Close">&#10005;</button>
 
     <div class="helpTabs">
-      <button class="helpTab active" data-panel="controls" type="button">Controls</button>
+      <button class="helpTab active" data-panel="start" type="button">Start here</button>
+      <button class="helpTab" data-panel="controls" type="button">Controls</button>
       <button class="helpTab" data-panel="survival" type="button">Survival</button>
       <button class="helpTab" data-panel="animals" type="button">Animals</button>
       <button class="helpTab" data-panel="machines" type="button">Machines</button>
+      <button class="helpTab" data-panel="aiml" type="button">Programming</button>
       <button class="helpTab" data-panel="nostbook" type="button">The NostBook</button>
       <button class="helpTab" data-panel="sea" type="button">The sea</button>
       <button class="helpTab" data-panel="settings" type="button">Settings</button>
     </div>
 
-    <div class="helpPanel active" data-panel="controls">
+    <!-- THE FIRST THING A NEW PLAYER SEES. The other tabs are reference and
+         assume you already know what you are doing; nothing said what the game
+         WAS. Four sections, and it stays short: detail belongs in the tabs
+         beside it, and this one only has to get somebody moving. -->
+    <div class="helpPanel active" data-panel="start">
+
+    <h2>BACKGROUND</h2>
+    <p>
+      The AIs took the world and wrecked it. They are still here: black
+      <b>obelisk towers</b> pulse across the landscape and <b>T-class hunters</b>
+      patrol around them. The people are mostly gone. Nobody will explain what
+      happened — you piece it together from newspapers, diaries, floppy disks,
+      video tapes and dead computers left where they fell.
+    </p>
+    <p>
+      You wake washed up on a beach, and it is not your island. It is
+      <b>OGYGIA</b>, and it belongs to <b>CALYPSO</b>, who keeps you here well,
+      and kindly, and completely.
+    </p>
+    <p>
+      A resistance called <b>RON</b> — Reality or Nothing — hid weapons and tools
+      in crates through the ruins before it went quiet. Whether it still exists
+      is never settled.
+    </p>
+
+    <h2>GOAL</h2>
+    <p><b>Get home to Ithaca.</b> Five islands stand between you and it, and four
+      daemons run them.</p>
+    <table>
+      <tr><td><b>1. Leave Ogygia</b></td><td>Calypso is the one daemon you do not
+        kill — her core cannot be broken. Reach the terminal on it and
+        <b>refunction</b> her, and she hands over her shipwright's recipe, the
+        <b>golden axe</b>. Build a <b>greek ship</b> with it: wood, plus a sail
+        from a beached wreck and an oar and a rope from the fishermen's huts. A
+        raft is not a ship, and Poseidon rows you straight back onto your own
+        sand.</td></tr>
+      <tr><td><b>2. Sail</b></td><td>Board the ship and row out until there is no
+        land in any direction; only then does the chart open. <b>AEGILIA</b>
+        (POLYPHEMUS), <b>AEAEA</b> (CIRCE), <b>THRINACIA</b> (HELIOS).</td></tr>
+      <tr><td><b>3. Fell each daemon</b></td><td>Break into the island's fortress
+        and break its core open. Every machine on that island powers down where
+        it stands.</td></tr>
+      <tr><td><b>4. Come home</b></td><td>With all four down, sail to
+        <b>ITHACA</b>. Argos lifts his grey head and knows you. That is the
+        end of the road.</td></tr>
+    </table>
+    <p>
+      Landing somewhere new sets a <b>checkpoint</b> you can load from the title
+      screen. Each island is keyed to its own daemon, so one virus never opens
+      the whole archipelago.
+    </p>
+
+    <h2>HACKING</h2>
+    <p>
+      Every obelisk has a small screen on it: walk up and <b>click the screen</b>
+      to jack in. You need an <b>access chip</b> first — felling any tower always
+      drops one, and every machine you destroy sheds a <b>chip fragment</b>, so
+      collect eight and press <kbd>C</kbd> to assemble one. Carrying a chip is
+      enough; you do not have to hold it. While you are logged in, the obelisk
+      hides you from the machines.
+    </p>
+    <p>
+      Inside is the AI's own operating system, running <b>AI-ML</b> — a small ML
+      the resistance left scattered through the ruins. Start with these:
+    </p>
+    <table>
+      <tr><td><code>scan</code></td><td>list the obelisks on the wire</td></tr>
+      <tr><td><code>name</code></td><td>the node you are standing on</td></tr>
+      <tr><td><code>hack OB_XXXX</code></td><td>hands you that node's own key</td></tr>
+      <tr><td><code>crash OB_XXXX k</code></td><td>knocks it dark, with the key <code>hack</code> gave you</td></tr>
+      <tr><td><code>loop OB_XXXX</code></td><td>freezes a tower and its garrison until a repair drone unpicks it</td></tr>
+      <tr><td><code>help</code></td><td>the console teaches rather than gatekeeps — ask it</td></tr>
+    </table>
+    <p>
+      The amber <b>HERMES</b> relays on the hilltops are a separate system, RON's
+      own, and that is where you forge the virus for each island's daemon. The
+      <b>NostBook</b> (<kbd>L</kbd>) is a laptop you repair and carry, and it runs
+      a real UNIX with the machines' own web on it. Read <code>/readme.txt</code>
+      first.
+    </p>
+
+    <h2>TIPS AND TRICKS</h2>
+    <table>
+      <tr><td><b>Open every box</b></td><td>This is the single most useful habit
+        in the game. Press <kbd>E</kbd> at the crates inside buildings: RON left
+        crowbars, bats and machetes in them, and the guns — and lots of useful
+        things that will help you along the way. Search everything, everywhere.
+        Almost every good thing you own will have come out of a box.</td></tr>
+      <tr><td><b>Text for help</b></td><td>The phone (<kbd>O</kbd>) sends as well
+        as receives, and both correspondents answer commands. <b>RON</b> knows
+        things: <code>supply</code>, <code>relay</code>, <code>status</code>,
+        <code>what is a bluebox</code>, <code>recipe goggles</code>,
+        <code>mayday</code>. <b>Calypso</b> does things: <code>sleep</code> stops
+        the machines near you, <code>fog</code> thins it, <code>hungry</code>
+        lays a table. Every favour of hers tightens her hold on you, and she does
+        none of them once she has gone cold.</td></tr>
+      <tr><td><b>Save at a terminal</b></td><td>Type <code>save</code> at any
+        obelisk, HERMES relay or on the NostBook and it writes a checkpoint you
+        can load from the title screen. One slot per island, overwritten each
+        time. Do it before you go into a fortress.</td></tr>
+      <tr><td><b>Eat before you starve</b></td><td>Health only comes back when
+        you are fed and unpoisoned. Berries and meat are out there; cook what you
+        can.</td></tr>
+      <tr><td><b>Hide, don't just run</b></td><td>Every hunter needs to actually
+        see you. Break its line of sight behind a wall or a hill for a few
+        seconds and it gives up and wanders off.</td></tr>
+      <tr><td><b>T1s cannot climb</b></td><td>Put any rise between you and a
+        wheeled hunter, or lure it into a hollow and it is stuck for good.
+        Sprinting outruns it. A T2 walks at exactly your pace, so break away with
+        <kbd>Shift</kbd> or stand and fight.</td></tr>
+      <tr><td><b>Jump twice</b></td><td><kbd>Space</kbd> again in mid-air lands
+        you on top of a wall block, where ground machines cannot reach you.</td></tr>
+      <tr><td><b>Fell a tower for the parts</b></td><td>A toppled obelisk drops
+        circuit boards, batteries, scrap and always an access chip. Carry a
+        stun-gun, an electro-gun and a Wi-Fi block together and you are prompted
+        to build the <b>OB_gun</b> with <kbd>C</kbd>.</td></tr>
+      <tr><td><b>Read what you find</b></td><td><b>Click a book</b> in your
+        pockets and you read it — it teaches its skill for good and opens on your
+        shelf. Every book you have read is kept in the <b>Library</b>: press
+        <kbd>Shift</kbd>+<kbd>N</kbd>, or <kbd>N</kbd> then <b>LIBRARY</b>. A few of the
+        paperbacks are whole books, and those you can read from cover to cover.
+        The Scrapbook itself keeps the scraps — field records and album
+        sleeves.</td></tr>
+    </table>
+    <p>
+      The tabs along the top have the detail: keys under <b>Controls</b>, the
+      machines and the terminal language under <b>Machines</b>, and the
+      archipelago under <b>The sea</b>. Press <kbd>H</kbd> any time to come back
+      here.
+    </p>
+
+    </div>
+
+    <div class="helpPanel" data-panel="controls">
     <h2>Character</h2>
     <p>
       <button class="persona" data-gender="m">Adam</button>
@@ -640,8 +916,13 @@
       <tr><td><kbd>P</kbd></td><td>Pause the game</td></tr>
       <tr><td><kbd>M</kbd></td><td>Cycle the music: three found tapes, the old piano bed, or off</td></tr>
       <tr><td><kbd>O</kbd></td><td>The phone — SMS to Calypso and the RONs (and Snake). Esc, the &#10005;, or a click off the screen puts it away</td></tr>
-      <tr><td><kbd>N</kbd></td><td>Open the notepad — any pages you've found worth keeping, no terminal needed</td></tr>
+      <tr><td><kbd>N</kbd></td><td>Open the Scrapbook — field records and album sleeves, tabbed. The <b>LIBRARY</b> button there opens your shelf of books read</td></tr>
+      <tr><td>click a book</td><td>Reading it: the skill is yours for good and the Library opens at that book. A few are whole texts you can read right through</td></tr>
       <tr><td><kbd>Ctrl</kbd>+<kbd>N</kbd></td><td>Start a new game (asks first — wipes saved progress; a bare N no longer does this)</td></tr>
+      <tr><td><kbd>Shift</kbd>+<kbd>N</kbd></td><td>Open the <b>Library</b> — every book you have read, and the whole text of the ones that have one</td></tr>
+      <tr><td><kbd>0</kbd></td><td>Fold the panel buttons away and back — the column down the right-hand edge that opens the Help, Scrapbook, Library, Record, Minimap and Armoury. The grip under it does the same</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>Close whatever is open; with nothing open, back to the title screen. Your run is saved and <b>Continue</b> picks it up — it only asks first if you are at sea or in the Backspace, where it cannot be</td></tr>
+      <tr><td><kbd>Shift</kbd>+<kbd>Q</kbd></td><td>Leave for the title screen directly</td></tr>
       <tr><td><kbd>S</kbd></td><td>On the Certificate of Death: copy it to the clipboard as an image (or click the Copy button)</td></tr>
     </table>
     </div><!-- /controls -->
@@ -724,9 +1005,171 @@
     <p>You carry a <b>walkman</b> on a strap — its slot sits on the dashboard. It takes <b>cassette tapes</b>; you start with one (meme's "compilation"), and more turn up out in the ruins and down in the Backspace. <b>Click the tape</b> in the walkman to play it: once for side A, again to flip to side B, again to stop. Each side can hold more than one track and loops round. The reels turn while it plays and the artist and track drift slowly across the little screen below. The game's own music is just a quiet synth bed (or off, toggled with <kbd>M</kbd>) — the only way to hear the tapes is to start one on the walkman.</p>
     </div><!-- /survival (part 2) -->
 
+    <!-- A GUIDE rather than a reference. The Machines tab already carries the
+         full description of the console in one long paragraph; nobody learns a
+         language from a paragraph. This is short, and it is worked examples. -->
+    <div class="helpPanel" data-panel="aiml">
+
+    <h2>Programming the machines</h2>
+    <p>
+      The machines' consoles run <b>AI-ML</b>, a small ML the resistance left
+      scattered through the ruins. It is a <b>top level</b>: you type one line,
+      it runs, and it answers. A bare <code>let x = e</code> — no
+      <code>in</code> — binds a value that lasts the rest of your visit, so you
+      build a program a line at a time.
+    </p>
+    <p>
+      <b>Practise on the NostBook</b> (<kbd>L</kbd>), where nothing is trying to
+      kill you: type <code>ml</code> at its shell for a prompt of your own. And
+      look for <b>the RON-DOS Operator's Manual</b> out in the ruins — read it
+      and the console starts finishing your verbs for you, faded ghost text you
+      accept with <kbd>Tab</kbd>. The scraps you find teach the rest one idea at
+      a time, and <code>help</code> at any console lists what it takes.
+    </p>
+
+    <h3>The whole language in six lines</h3>
+    <table>
+      <tr><td><code>let n = 3</code></td><td>bind a value; it lasts the visit</td></tr>
+      <tr><td><code>let f x = x * 2</code></td><td>name a function</td></tr>
+      <tr><td><code>fn x =&gt; x * 2</code></td><td>the same thing, unnamed</td></tr>
+      <tr><td><code>if c then a else b</code></td><td>choose — and an <code>if</code> is how a recursion stops</td></tr>
+      <tr><td><code>1 :: 2 :: nil</code></td><td>a list; take it apart with <code>hd</code>, <code>tl</code>, <code>length</code></td></tr>
+      <tr><td><code>case s of A =&gt; 1 | B =&gt; 2</code></td><td>match a value you declared with <code>datatype</code></td></tr>
+    </table>
+    <p>
+      There is deliberately no <code>map</code>. With recursion and
+      <code>case</code> you can write it in two lines, and writing it is the
+      point:
+    </p>
+    <pre class="mlbox"><span class="p">&gt; </span>let map f l = if length l = 0 then nil else f (hd l) :: map f (tl l)</pre>
+
+    <h3>Working the obelisks</h3>
+    <p>Standing at any terminal, with an access chip on you:</p>
+    <table>
+      <tr><td><code>scan</code></td><td>every obelisk on the wire</td></tr>
+      <tr><td><code>scan |&gt; nearest</code></td><td>pipe that straight to the closest one</td></tr>
+      <tr><td><code>name</code></td><td>the node you are standing under</td></tr>
+      <tr><td><code>loop OB_1A2B</code></td><td>pin an infinite loop into a tower — it and its garrison freeze until a repair drone picks the loop back out</td></tr>
+    </table>
+    <p>
+      Knocking one dark takes two steps, because <code>crash</code> wants that
+      tower's own key and <code>hack</code> is what hands it over:
+    </p>
+    <pre class="mlbox"><span class="p">&gt; </span>let k = hack OB_1A2B in crash OB_1A2B k</pre>
+    <p>Or, built up a line at a time, which is usually easier to read:</p>
+    <pre class="mlbox"><span class="p">&gt; </span>let n = scan |&gt; nearest
+<span class="p">&gt; </span>let k = hack n
+<span class="p">&gt; </span>crash n k</pre>
+
+    <h3>Working the machines</h3>
+    <p>
+      <code>sleep 30</code> puts the local garrison down for a while and
+      <code>repel</code> sends the factory's hunters home. Inside a machine's own
+      program you are writing its mind rather than commanding it, and it reads
+      its own senses — <code>charge</code>, <code>integrity</code>,
+      <code>range</code>, <code>threat</code>, <code>sight</code>,
+      <code>armed</code> — so a program is a rule about what it does with them:
+    </p>
+    <pre class="mlbox"><span class="p">&gt; </span>if charge &lt; 20 then home else if threat then hunt else patrol</pre>
+
+    <h3>The island, once you have a clean key</h3>
+    <p>
+      A decrypted AI key does more than open the fortress door. These reach the
+      whole island rather than one tower, they all take the key as their last
+      argument, and each one <b>costs the tower you are standing at</b> — it
+      freezes while the order stands. Nothing here is permanent: the purge is
+      the clock, and the world takes its own state back after a while.
+    </p>
+    <table>
+      <tr><td><code>fog HIGH</code></td><td>drive the purge fog up over the whole island — <code>LOW</code> thins it, <code>CLEAR</code> lifts it</td></tr>
+      <tr><td><code>poseidon DOWN</code></td><td>take the purge offline: the towers stop pooling sight and the grey stops spreading. <code>UP</code> wakes it early, which you would do on purpose only once</td></tr>
+      <tr><td><code>robots OFF</code></td><td>every machine in reach goes still. <code>ON</code> wakes them, and they know who did it</td></tr>
+      <tr><td><code>net OFF</code></td><td>cut the towers' shared sight without felling anything</td></tr>
+      <tr><td><code>spread STOP</code></td><td>freeze every blight front at once, which felling one tower only does for its own</td></tr>
+    </table>
+    <p>
+      The key is a value like any other, so it binds once and serves all of
+      them:
+    </p>
+    <pre class="mlbox"><span class="p">&gt; </span>let k = decrypt aikey in (fog CLEAR k; robots OFF k; poseidon DOWN k)</pre>
+
+    <h3>Their browser</h3>
+    <p>
+      <code>explorer</code> opens the machines' own browser on the tower you are
+      standing at. No key: the chip that got you in is enough to read. It is the
+      same web the NostBook's Netscape reaches — but this is <b>their</b>
+      software, and it behaves like it, with warnings about their own network
+      and things it would like you to want. A tower's page lists the units homed
+      to it, which is what makes it worth putting up with.
+    </p>
+
+    <h3>The AI key</h3>
+    <p>
+      The key out of a wrecked W-factory comes <b>sealed</b>, and the fortress
+      wants it clean. Four lines, and the middle two can be in either order:
+    </p>
+    <pre class="mlbox"><span class="p">&gt; </span>copy aikey
+<span class="p">&gt; </span>let k = hack OB_1A2B
+<span class="p">&gt; </span>let d = decrypt aikey
+<span class="p">&gt; </span>unlock k d</pre>
+    <p>
+      That drops a <b>fortress key</b>. <code>print aikey</code> stamps a spare
+      at your feet, and an AI key never rots on the ground, so stash copies. At
+      an amber <b>HERMES</b> relay, <code>backup aikey</code> and
+      <code>restore aikey</code> keep one off the AI's own hardware, so a bad
+      death need not cost you it.
+    </p>
+    <p>
+      Get something wrong and the terminal tells you what to try instead. It is
+      built to teach.
+    </p>
+
+    </div>
+
     <div class="helpPanel" data-panel="nostbook">
+    <!-- The brochure the machine would have shipped with, then what to actually
+         do with it. Everything below is unchanged; what was missing was
+         anything telling a new owner why they want one. -->
+    <h2>The NostBook Personal Workstation</h2>
+    <p>
+      <i>State of the art. A complete <b>UNIX V7</b> system on your lap: a real
+      kernel, a real hierarchical filesystem, the full set of standard
+      utilities, and a <b>wireless card</b> built onto the board. Editing, mail,
+      news, and the whole of the network, from anywhere you can sit down.
+      Nothing to install. Nothing to phone home to.</i>
+    </p>
+    <p>
+      Nobody is selling them any more. You find a <b>broken</b> one and click it
+      in your pockets to see what its board still wants: <b>one battery and one
+      chip fragment</b>, soldered in with <kbd>C</kbd>. Both come off the
+      machines — every one you destroy sheds a fragment, and they all run on
+      batteries — so the repair is a few kills away rather than a tower away.
+      Then <kbd>L</kbd> opens the lid.
+    </p>
+
+    <h3>What to do with it first</h3>
+    <table>
+      <tr><td><code>cat /readme.txt</code></td><td>Start here. The builders
+        explain, in their own words, why the machine is deliberately old — no
+        update service, no telemetry, no vendor.</td></tr>
+      <tr><td><code>netscape</code></td><td>The browser, and the reason to
+        bother with the card. The machines still serve pages to each other, and
+        a tower's own page lists the units homed to it — so you can read a
+        garrison before you go anywhere near it.</td></tr>
+      <tr><td><code>ifconfig</code></td><td>Brings the wireless card up. Then
+        <code>wifi</code> to see what is in the air; RON's link-local relay
+        answers where nothing else does.</td></tr>
+      <tr><td><code>ml</code></td><td>An AI-ML prompt of your own, with nothing
+        hunting you while you practise. See the <b>Programming</b> tab.</td></tr>
+      <tr><td><code>ls /home</code></td><td>The machine belonged to somebody.
+        Her documents, her mail and her books are still on it.</td></tr>
+      <tr><td><code>man</code></td><td>The manuals are just files on the disk,
+        so you can <code>cat</code> one or <code>grep</code> it like anything
+        else.</td></tr>
+    </table>
+
     <h2>The machine that is yours</h2>
-    <p>Every other console in the game is bolted down. Obelisks stand where the towers stand; the amber HERMES relays sit on hilltops. The <b>NostBook</b> (<kbd>L</kbd>) is the first computer that is <i>yours</i>, carried in its own slot beside the phone and the walkman. You never find one working. You find a <b>broken</b> one, and clicking it in your pockets tells you what its board still wants: three <b>circuit boards</b>, soldered in with <kbd>C</kbd>.</p>
+    <p>Every other console in the game is bolted down. Obelisks stand where the towers stand; the amber HERMES relays sit on hilltops. The <b>NostBook</b> (<kbd>L</kbd>) is the first computer that is <i>yours</i>, carried in its own slot beside the phone and the walkman. You never find one working. You find a <b>broken</b> one, and clicking it in your pockets tells you what its board still wants: <b>one battery and one chip fragment</b>, soldered in with <kbd>C</kbd>.</p>
     <p>It runs a small <b>UNIX V7</b>, and the disk is a real one. <code>/dev /etc /lib /mnt /tmp /usr/src</code>, the kernel sitting at the root as a file called <code>unix</code>, and deliberately no <code>/var</code>, <code>/opt</code>, <code>/proc</code> or <code>/sbin</code>, because all of those came later. Nothing on it is scenery: <code>/etc/passwd</code> names the woman who owned the machine before you, <code>/dev/wifi0</code> is the card <code>ifconfig</code> talks to, and <code>/tmp/core</code> is a crash dump from Netscape, which ran out of memory rendering a page with too many images on it. Read <code>/readme.txt</code> first. It explains, in its builders' own words, why this UNIX is a hodgepodge of a 1979 kernel, a Berkeley networking tape and code typed in off a printed listing: it is old <b>on purpose</b>. No update service, no telemetry, no vendor, and nothing in it written after the estates were built, so nothing in it makes any accommodation for them.</p>
 
     <h2>The shell</h2>
@@ -859,9 +1302,46 @@
       <button class="nb-navbtn" id="ronnotebook-next-top" type="button" aria-label="Next page">&rsaquo;</button>
       <select id="ronnotebook-jump" aria-label="Jump to a page"></select>
     </div>
+    <div class="nb-tabs" id="ronnotebook-tabs"></div>
     <div id="ronnotebook-title">NOTEPAD</div>
     <div id="ronnotebook-body"></div>
     <div class="nb-hint">&larr; &rarr; to flip &middot; the drop-down jumps to any page &middot; &times; or click outside to close</div>
+  </div>
+</div>
+<!-- THE LIBRARY. A book is not a scrap, so it does not live in the scrapbook
+     and is not read by paging through one. This is a bound hardback: a shelf of
+     spines down the left, the open leaf on the right. A LIST rather than a
+     sequence, because a sequence is what stops scaling once you have found
+     twenty of them. -->
+<div id="bookshelf">
+  <div class="bk-book">
+    <div class="bk-spine"><span>LIBRARY</span></div>
+    <button class="bk-x" id="bookshelf-close" type="button" aria-label="Close">&times;</button>
+    <div class="bk-inner">
+      <aside class="bk-shelf" id="bookshelf-list"></aside>
+      <section class="bk-leaf" id="bookshelf-leaf">
+        <div class="bk-head">
+          <h2 id="bookshelf-title"></h2>
+          <div id="bookshelf-author"></div>
+        </div>
+        <div id="bookshelf-body"></div>
+      </section>
+    </div>
+    <div class="bk-hint">click a title to open it &middot; &uarr; &darr; to scroll &middot; &times; or click outside to close</div>
+  </div>
+</div>
+<!-- LEAVING. There was no way out of a run except closing the tab, which is not
+     a way out so much as an absence of one. Escape with nothing else open asks
+     first, because Escape is also the key you hit to dismiss things and a
+     mis-hit should not end the session. -->
+<div id="quitbox">
+  <div class="qb-panel">
+    <div class="qb-title">Leave now?</div>
+    <div class="qb-body">Your progress is saved. You will come back to the title screen, and <b>Continue</b> picks this run up where you left it.</div>
+    <div class="qb-btns">
+      <button id="qb-stay" type="button" class="qb-b">Stay</button>
+      <button id="qb-leave" type="button" class="qb-b qb-go">Leave</button>
+    </div>
   </div>
 </div>
 <div id="devbox">
@@ -1159,6 +1639,79 @@
   #netscape .ns-status { display: flex; align-items: center; gap: 8px; padding: 2px 6px; font-size: 11px;
     border-top: 1px solid #dfdfdf; }
   #netscape .ns-status .ns-sunk { flex: 1; padding: 1px 4px; border: 1px solid; border-color: #4f4f4f #dfdfdf #dfdfdf #4f4f4f; }
+  /* ---- EXPLORER (docs/ob-hacking-plan.md) --------------------------------
+     The obelisk's browser. It is the SAME WEB — net.js builds every page and
+     nsRender dispatches them — shown by a different program, so this is a skin
+     on the Netscape window rather than a second browser that would drift from
+     it. What differs is the branding, the typography, and the nagging.
+
+     It also runs on an obelisk, not a laptop, so the NostBook lid around it is
+     hidden: a tower is not a machine you own. */
+  #netscape.msie .lap, #netscape.msie .lap-lid, #netscape.msie .lap-bezel {
+    background: none; border: 0; box-shadow: none; padding: 0; border-radius: 0;
+  }
+  /* The whole NostBook — brand, keyboard deck, indicator — goes with it.
+     Explorer runs on a tower, and a tower has one screen bolted to it. */
+  #netscape.msie .lap-brand, #netscape.msie .lap-base, #netscape.msie .lap-led { display: none; }
+  #netscape.msie .ns-title { background: linear-gradient(90deg, #0a246a, #a6caf0); }
+  #netscape.msie .ns-title .ns-n {
+    background: #f0f0f0; color: #1a5fb4; font: italic bold 12px "Times New Roman", serif;
+  }
+  #netscape.msie .ns-logo { background: #dfdfdf; color: #1a5fb4; font: italic bold 15px "Times New Roman", serif; }
+  /* THE PAGE. Times, a background that is not quite white, and the blue and
+     purple every link had before anybody thought about it. */
+  #netscape.msie .ns-page {
+    font-family: "Times New Roman", Times, serif; font-size: 15px;
+    background: #fffff4; color: #000;
+  }
+  #netscape.msie .ns-page a { color: #0000ee; text-decoration: underline; }
+  #netscape.msie .ns-page a:visited { color: #551a8b; }
+  #netscape.msie .ns-page h1, #netscape.msie .ns-page h2 {
+    font-family: "Times New Roman", Times, serif; color: #000080;
+  }
+  /* A modal that both buttons agree with, and a pop-up that opens itself. */
+  #netscape .ie-modal, #netscape .ie-pop {
+    position: absolute; z-index: 40; background: #c0c0c0; color: #000;
+    border: 2px solid; border-color: #dfdfdf #4f4f4f #4f4f4f #dfdfdf;
+    box-shadow: 3px 3px 0 rgba(0,0,0,0.45); font: 11px Tahoma, system-ui, sans-serif;
+  }
+  #netscape .ie-modal { left: 50%; top: 40%; transform: translate(-50%, -50%); width: 330px; }
+  #netscape .ie-pop { width: 250px; }
+  #netscape .ie-bar {
+    display: flex; align-items: center; gap: 6px; padding: 2px 4px; font-weight: bold; font-size: 11px;
+    background: linear-gradient(90deg, #0a246a, #a6caf0); color: #fff;
+  }
+  #netscape .ie-bar .ie-grow { flex: 1; }
+  #netscape .ie-bar button {
+    width: 16px; height: 14px; padding: 0; font: bold 9px Tahoma, sans-serif; cursor: pointer;
+    background: #c0c0c0; border: 1px solid; border-color: #dfdfdf #4f4f4f #4f4f4f #dfdfdf;
+  }
+  #netscape .ie-body { padding: 12px 14px; display: flex; gap: 10px; align-items: flex-start; }
+  #netscape .ie-body .ie-icon { font-size: 26px; line-height: 1; }
+  #netscape .ie-btns { display: flex; gap: 8px; justify-content: center; padding: 0 10px 12px; }
+  #netscape .ie-btns button {
+    min-width: 76px; padding: 3px 10px; font: 11px Tahoma, system-ui, sans-serif; cursor: pointer;
+    background: #c0c0c0; border: 2px solid; border-color: #dfdfdf #4f4f4f #4f4f4f #dfdfdf;
+  }
+  #netscape .ie-pop .ie-body { display: block; padding: 10px 12px; font: 12px "Times New Roman", serif; }
+  #netscape .ie-pop .ie-body b { color: #000080; }
+  /* A CODE BOX in the help. The programming examples were loose <code> runs in
+     the body text and read as a mess: no edge to them, and a three-line one was
+     three <br>s pretending to be a program.
+
+     Drawn with a border rather than with literal ┌─┐ characters, which would
+     need the right edge padded to the longest line and would silently misalign
+     the moment anybody edited the text inside. Same look, and it cannot drift. */
+  #help .mlbox {
+    margin: 10px 0; padding: 8px 12px; overflow-x: auto;
+    font: 12.5px/1.55 "SF Mono", ui-monospace, "DejaVu Sans Mono", Menlo, Consolas, monospace;
+    color: #cfe0bb; background: rgba(10,14,8,0.55);
+    border: 1px solid rgba(157,178,132,0.45); border-radius: 3px;
+    white-space: pre;
+  }
+  /* The prompt a line would be typed at, so a program reads as a transcript
+     rather than as a quotation. */
+  #help .mlbox .p { color: #7f9668; user-select: none; }
 </style>
 <div id="pico">
  <div class="lap">

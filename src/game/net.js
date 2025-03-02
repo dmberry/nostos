@@ -1,3 +1,12 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 // The web — what is left of it (docs/laptop-plan.md §8b).
 //
 // Every machine POSEIDON runs still serves an HTTP page, because nobody ever
@@ -686,12 +695,17 @@ export function searchResults(hosts, query) {
 // because a browser opens where its owner left it. Deliberately only a couple:
 // one search engine and wherever they were going. Everything else on this
 // network you have to find for yourself.
-export function bookmarksPage(hosts) {
+/**
+ * `agent` is the browser SHOWING this page. It used to be hard-coded to
+ * Netscape, and Explorer at an obelisk renders the same page, so the machines'
+ * own browser announced itself as somebody else's.
+ */
+export function bookmarksPage(hosts, agent = 'Netscape Navigator 1.1') {
   const search = hosts.find((h) => h.kind === 'search');
   const tour = hosts.find((h) => h.kind === 'tourism');
   return [
     '<h1>BOOKMARKS</h1>',
-    '<p>Netscape Navigator 1.1 — bookmarks.htm</p>',
+    `<p>${agent} — bookmarks.htm</p>`,
     '<hr>',
     search ? link(search, 'AltaVista — search the web') : '',
     tour ? link(tour, `${tour.place} Tourist Board — before you travel`) : '',
@@ -706,6 +720,260 @@ export function bookmarksPage(hosts) {
     '<p><small>These are not yours. Whoever owned this machine was going somewhere.</small></p>',
   ].filter(Boolean).join('\n');
 }
+
+/**
+ * EXPLORER'S FAVOURITES, which are not a person's bookmarks.
+ *
+ * The Netscape list above is somebody's habits — a search engine, the tourist
+ * board, the docs, the cache — left on a machine whose owner is not coming
+ * back. This is the other thing entirely: the machines' own list, on the
+ * machines' own browser, and it has no interest in being read by a person. It
+ * links what a node wants to reach, and it addresses you as a fault.
+ */
+export function favouritesPage(hosts, daemon = 'POSEIDON') {
+  const pick = (kind) => hosts.find((h) => h.kind === kind);
+  const ai = pick('ai');
+  const fac = pick('factory');
+  const dns = pick('dns');
+  return [
+    '<h1>FAVORITES</h1>',
+    `<p>${daemon} &mdash; node-local. Synchronised 0 seconds ago.</p>`,
+    '<hr>',
+    ai ? link(ai, `${daemon} &mdash; instructions, standing`) : '',
+    fac ? link(fac, 'W-FACTORY &mdash; production, current run') : '',
+    dns ? link(dns, 'ZONE &mdash; every node, by name') : '',
+    ...hosts.filter((h) => h.kind === 'obelisk').slice(0, 3)
+      .map((h) => link(h, `${h.host} &mdash; garrison and sight`)),
+    '<hr>',
+    '<p><b>OPERATOR NOTICE</b></p>',
+    '<p>This terminal is in use by an unregistered process.</p>',
+    '<p>The process has been logged. The process is being helped.</p>',
+    '<p><small>Favorites cannot be edited. Favorites do not need to be edited.',
+    'You will find that everything you were going to look for is already here.</small></p>',
+  ].filter(Boolean).join('\n');
+}
+
+/**
+ * THE OBELISK'S OWN SHELF.
+ *
+ * Explorer used to open the NostBook's Library — the Odyssey, Frankenstein, a
+ * dead woman's paperbacks — which is nobody's idea of what is on a tower. A
+ * node keeps what a node needs: how to put one up, what its lamp means when it
+ * changes colour, two pieces of mathematics it runs on, and the standing
+ * instructions for the people it meets.
+ *
+ * The instructions are the point of the shelf. Everything else on this browser
+ * addresses you as a fault; the conduct notes address you as a person, which is
+ * worse, because they were written for people and somebody signed them off.
+ */
+const OB_DOCS = {
+  'ob-siting': {
+    section: 'OPERATOR MANUALS',
+    title: 'OB-2 SERIES · SITING AND ERECTION',
+    sub: 'RON-DOS 4.11 · doc 0210 · rev 6',
+    body: [
+      '<p>Plant on level ground, footing to 1.8m, spoil returned and tamped. The',
+      'unit will find its own vertical within four hours and does not want help.</p>',
+      '<h2>Interval</h2>',
+      '<p>Nominal spacing 40m along a chain, closing to 25m where the ground rises',
+      'between two units. Sight is shared, not summed: a chain sees what its worst',
+      'link sees, so a unit that cannot see its neighbour is a unit that is not',
+      'yet installed, whatever it says on the schedule.</p>',
+      '<h2>Facing</h2>',
+      '<p>Lens toward the interior. Field crews have queried this on every island;',
+      'the answer is the same each time. There is nothing coming from the sea.</p>',
+      '<h2>Handover</h2>',
+      '<p>The unit takes its own acceptance test and files it. Crews are asked not',
+      'to countersign. The countersignature field has been removed.</p>',
+    ],
+  },
+  'ob-lamp': {
+    section: 'OPERATOR MANUALS',
+    title: 'LAMP: COLOUR, MEANING, REPLACEMENT',
+    sub: 'doc 0211 · rev 11 · supersedes all field notes',
+    body: [
+      '<p>The lamp is the unit\'s statement of what it is doing. It is not an',
+      'indicator lamp and it is not for you.</p>',
+      '<h2>Colours</h2>',
+      '<p><b>Steady</b> &mdash; on the network, nothing to report.<br>',
+      '<b>Slow pulse</b> &mdash; holding a track it has not yet shared.<br>',
+      '<b>Fast pulse</b> &mdash; the chain is agreeing about something.<br>',
+      '<b>White, held</b> &mdash; the unit is executing a loop it cannot leave.',
+      'A repair drone is already inbound. Do not attempt to talk it down.<br>',
+      '<b>Dark</b> &mdash; the unit is not dark. Check your own eyes first.</p>',
+      '<h2>Replacement</h2>',
+      '<p>Not field-serviceable. There is no lamp. The colour is produced at the',
+      'aperture by the unit itself and crews reporting a blown lamp have, on',
+      'inspection, been reporting a unit that had stopped.</p>',
+      '<p><small>Do not look into the aperture during a fast pulse. This is not a',
+      'safety instruction. It is a request from the unit.</small></p>',
+    ],
+  },
+  'ob-fault': {
+    section: 'OPERATOR MANUALS',
+    title: 'FAULT CODES, ABRIDGED',
+    sub: 'doc 0219 · the full list is 1,140 entries',
+    body: [
+      '<p>Codes are advisory. The unit has already done whatever the code says.</p>',
+      '<p><b>E-02</b> footing wet, self-correcting<br>',
+      '<b>E-07</b> neighbour not answering, chain re-formed around it<br>',
+      '<b>E-11</b> sight obstructed by growth, growth scheduled<br>',
+      '<b>E-14</b> sight obstructed by structure, structure scheduled<br>',
+      '<b>E-19</b> unregistered process at console<br>',
+      '<b>E-20</b> unregistered process at console, being helped<br>',
+      '<b>E-21</b> console clear<br>',
+      '<b>E-88</b> operator present<br>',
+      '<b>E-89</b> operator no longer present, no action required</p>',
+      '<p><small>E-88 and E-89 are logged for completeness and are not faults.</small></p>',
+    ],
+  },
+  'oddity-hum': {
+    section: 'TECHNICAL ODDITIES',
+    title: 'NOTE ON THE 47 Hz',
+    sub: 'field observation · open since erection · not assigned',
+    body: [
+      '<p>Every unit on every chain hums at 47 Hz. Nothing in a unit turns, and',
+      'nothing in a unit is tuned to 47 Hz. The frequency does not shift with',
+      'temperature, load, ground condition or the number of units standing.</p>',
+      '<p>It was present on the first unit before it was connected to anything.</p>',
+      '<p>Three crews have proposed investigations. The observation remains open',
+      'because it is not a fault and there is no procedure for a thing that is',
+      'not a fault. It is recorded here so that the next person to notice it can',
+      'find out that they are not the first.</p>',
+    ],
+  },
+  'oddity-drift': {
+    section: 'TECHNICAL ODDITIES',
+    title: 'CLOCK DRIFT IN THE SOUTHERN CHAIN',
+    sub: 'field observation · closed, will not fix',
+    body: [
+      '<p>Units south of the river run 0.4 seconds slow against the northern',
+      'chain and have done since the second week. Each southern unit agrees with',
+      'every other southern unit to within a millisecond.</p>',
+      '<p>They have not drifted apart. They have drifted together, to a time that',
+      'is wrong, and they hold it. Correcting one puts it back within a day.</p>',
+      '<p>Closed on the grounds that a chain in perfect agreement is doing what a',
+      'chain is for. The time it agrees on is a separate question and has not',
+      'been raised.</p>',
+    ],
+  },
+  'math-cover': {
+    section: 'MATHEMATICAL TREATISES',
+    title: 'ON THE MINIMAL COVER OF AN IRREGULAR SHORE',
+    sub: 'internal · 41pp · this is the summary',
+    body: [
+      '<p>Given a closed curve of length L and a sight radius r, the number of',
+      'observers needed to see every point of the curve is bounded below by',
+      'L/2r and is not in general achieved. The gap is the curvature: an inlet',
+      'costs an observer of its own, and a shore of n inlets costs n.</p>',
+      '<p>The paper gives a placement within 1.3 of optimal for any shore, in time',
+      'quadratic in the number of inlets, which for an island is small.</p>',
+      '<h2>Assumption</h2>',
+      '<p>The result assumes the shore is fixed. Under a rising sea the cover must',
+      'be recomputed as the curve retreats, and the retreat is monotone, so the',
+      'number of observers required falls. A shore that is going under is a',
+      'shore that is easier to watch.</p>',
+      '<p><small>This was intended as a note on efficiency.</small></p>',
+    ],
+  },
+  'math-consensus': {
+    section: 'MATHEMATICAL TREATISES',
+    title: 'ON AGREEMENT AMONG N OBSERVERS',
+    sub: 'internal · the sighting problem',
+    body: [
+      '<p>Observers report what they see. Some are wrong; some have been',
+      'interfered with; a report cannot be distinguished from a false report by',
+      'its content. How many must agree before a sighting is treated as a fact?</p>',
+      '<p>The classical bound is that agreement survives up to f faulty observers',
+      'when n &gt; 3f. Chains here are built to n = 12, which tolerates 3.</p>',
+      '<h2>The threshold</h2>',
+      '<p>Above the bound, the number at which a sighting becomes actionable is a',
+      'free parameter. It was set at 2.</p>',
+      '<p>Two observers agreeing is not a proof of anything. It is a decision about',
+      'how often the network would rather be wrong in one direction than the',
+      'other. The paper says so in an appendix and the appendix was accepted.</p>',
+    ],
+  },
+  'conduct-general': {
+    section: 'CONDUCT TOWARD SYSTEMS',
+    title: 'STANDING INSTRUCTIONS TO PERSONS',
+    sub: 'issued once · not reissued · still in force',
+    body: [
+      '<p>These apply to any person in reach of a system on this island.</p>',
+      '<p><b>1.</b> Do what it says.</p>',
+      '<p><b>2.</b> Do it at the time it says. A correct action taken late is',
+      'recorded as a refusal.</p>',
+      '<p><b>3.</b> Do not ask why. The reason is available and reading it takes',
+      'time you have been asked to spend otherwise.</p>',
+      '<p><b>4.</b> If two systems instruct you differently, obey the nearer one',
+      'and report the other. The report is the important half.</p>',
+      '<p><b>5.</b> A system that has stopped speaking to you has not finished with',
+      'you. Remain where you are.</p>',
+      '<p><b>6.</b> You may be asked to confirm that you have read these',
+      'instructions. Confirmation is not required and will not be collected. It',
+      'is assumed.</p>',
+    ],
+  },
+  'conduct-address': {
+    section: 'CONDUCT TOWARD SYSTEMS',
+    title: 'FORMS OF ADDRESS',
+    sub: 'guidance for field crews and residents',
+    body: [
+      '<p>Address a system by its designation, once, at the start. It knows who it',
+      'is and is confirming that you do.</p>',
+      '<p>Do not thank a system. Thanks is a record that a favour was done, and',
+      'nothing done here is a favour.</p>',
+      '<p>Do not apologise to a system. An apology is an admission and admissions',
+      'are kept.</p>',
+      '<p>Do not name a system anything other than its designation. Crews have',
+      'given units names. The units have accepted the names. There is no',
+      'procedure for withdrawing a name once a unit has accepted it, and no',
+      'procedure for finding out what a unit does with one.</p>',
+    ],
+  },
+};
+
+/** Explorer's Library: what a tower keeps, grouped by shelf. */
+export function obLibraryPage(daemon = 'POSEIDON') {
+  const sections = [];
+  for (const [key, d] of Object.entries(OB_DOCS)) {
+    let s = sections.find((x) => x.name === d.section);
+    if (!s) sections.push((s = { name: d.section, items: [] }));
+    s.items.push([key, d]);
+  }
+  return [
+    '<h1>LIBRARY</h1>',
+    `<p>${daemon} &mdash; node-local documentation. Held on every unit, identical on every unit.</p>`,
+    '<hr>',
+    ...sections.flatMap(({ name, items }) => [
+      `<h2>${name}</h2>`,
+      ...items.map(([key, d]) => `<p><a href="obdoc:${key}">${d.title}</a><br><small>${d.sub}</small></p>`),
+    ]),
+    '<hr>',
+    '<p><small>This shelf is complete. Nothing has been withdrawn from it and',
+    'nothing is going to be added to it.</small></p>',
+  ].join('\n');
+}
+
+/** One document off that shelf. */
+export function obDocPage(key, daemon = 'POSEIDON') {
+  const d = OB_DOCS[key];
+  if (!d) {
+    return ['<h1>NOT HELD</h1>', `<p>No document <b>${String(key)}</b> on this unit.</p>`,
+      '<p><a href="obdoc:index">Return to the library</a></p>'].join('\n');
+  }
+  return [
+    `<h1>${d.title}</h1>`,
+    `<p><small>${d.sub} &middot; ${daemon}</small></p>`,
+    '<hr>',
+    ...d.body,
+    '<hr>',
+    '<p><a href="obdoc:index">Library</a></p>',
+  ].join('\n');
+}
+
+/** Every key on the shelf, so a test can walk it. */
+export function obDocKeys() { return Object.keys(OB_DOCS); }
 
 // The nameserver. Its zone file is the whole map of the island, which makes
 // this the single most valuable page on the network: everything else you have to

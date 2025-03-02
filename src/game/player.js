@@ -1,9 +1,18 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 import { screenDirToWorld } from '../engine/iso.js';
 import { sfx } from '../engine/sound.js';
 import { ITEMS } from './items.js';
 import { OBJECTS } from './tiles.js';
 import { DAEMON_VOICE, DAEMON_FINAL, daemonTier } from './fortress.js';
-import { fire, SCORE, zombieImmune } from './combat.js';
+import { fire, SCORE, KILL_XP, zombieImmune } from './combat.js';
 
 const WALK_SPEED = 4.2;   // tiles per second
 const SPRINT_SPEED = 7.5;
@@ -25,7 +34,10 @@ const BLUEBOX_CRAFT_CIRCUITS = 2;  // circuit boards soldered into a bluebox
 // hour — because the NostBook is a tool you want in the player's hands early,
 // not a late reward. Circuit boards were wrong for it: those come off felled
 // towers, which is hours away.
-const LAPTOP_REPAIR = [['battery', 2], ['chip_fragment', 2]];
+// One of each. The NostBook is where you LEARN the language, so gating it
+// behind a shopping list keeps a player away from the thing the game most
+// wants them to find. Both drop off any machine you destroy.
+const LAPTOP_REPAIR = [['battery', 1], ['chip_fragment', 1]];
 const SPOOF_RANGE = 6;             // how close you must stand to impersonate a tower
 const BLUEBOX_CONVERT_COST = 1;    // circuit board spent to splice one machine to a gardener
 const WOOD_PER_BOAT = 12;   // wood felled and lashed into a boat (Player.craftBoat)
@@ -242,6 +254,7 @@ export class Player {
     this.name = 'Nobody';   // Odysseus's 'Outis' to the Cyclops — and the 'nobody' the OB terminals accept
     this.gender = 'm';    // 'm' | 'f' | 'u'
     this.skills = new Set(); // knowledge from books; survives death
+    this.booksRead = new Set(); // the Library: which physical books you have read
     this.skillLog = [];   // books read, in order (for the skills screen)
     this.weaponsFound = new Set(['penknife']); // for the weapon chart; survives death
     this.killLog = [];    // obelisks destroyed, by hex code name
@@ -257,6 +270,14 @@ export class Player {
     // reading. Levels rise on a square-root curve (25, 100, 225... xp per
     // level) and, like skills, survive death and reloads.
     this.xp = { melee: 0, guns: 0, knowledge: 0 };
+    // GROUND YOU HAVE SEEN. Knowledge came only from reading, so a player who
+    // walked the whole archipelago and read nothing had learnt nothing. Coarse
+    // 8x8 blocks, keyed per world, so a fresh island is worth exploring and
+    // pacing the same field is not. A 128x128 island is 256 blocks, which is
+    // worth about three levels for walking all of it — a real investment,
+    // and less than a shelf of books.
+    this.seenGround = new Set();
+    this.worldId = '';   // set by main.js on every world switch
   }
 
   xpLevel(kind) {
@@ -271,6 +292,17 @@ export class Player {
       this.say(`Practice pays off: your ${label} sharpens.`);
     }
     if (this.onXpGain) this.onXpGain();
+  }
+
+  // Walking somewhere new teaches you something. Called every frame; the Set
+  // lookup is the whole cost, and only a block you have not stood in before
+  // pays out.
+  noteGround() {
+    const key = `${this.worldId}:${Math.floor(this.x / 8)},${Math.floor(this.y / 8)}`;
+    if (this.seenGround.has(key)) return;
+    this.seenGround.add(key);
+    // The first block on arrival is not exploration, it is where you woke up.
+    if (this.seenGround.size > 1) this.gainXp('knowledge', 1);
   }
 
   setPersona(name, gender) {
@@ -1076,6 +1108,7 @@ export class Player {
   }
 
   update(dt, input, map, animals = [], robots = [], mouseWorld = null) {
+    this.noteGround();
     this.swingTimer = Math.max(0, this.swingTimer - dt);
     this.hurtTimer = Math.max(0, this.hurtTimer - dt);
     if (this.ubikFlickerT > 0) this.ubikFlickerT = Math.max(0, this.ubikFlickerT - dt);
@@ -1341,6 +1374,23 @@ export class Player {
     this._wifiOn = this.ownsWifiBlock() && this.wifiPower > 0;
     this.invisibleToRobots = this._wifiOn || this.terminalSafe || this.isSwine();
 
+    // A JAM IS NOT A SHIELD, AND A TERMINAL IS. The flag above hides you from
+    // every machine's SENSORS, and the swarm classes deliberately look past it
+    // when they strike: a held Wi-Fi block confuses the network, but a W1 that
+    // has already triangulated its way on top of you still connects. That is
+    // the right trade for a jammer you carry around and swing a bat next to.
+    //
+    // It is the wrong trade for a console. Jacked in you cannot move, cannot
+    // dodge and cannot swing, and the obelisk says on its own banner that you
+    // are hidden while you are in there. So the terminal carries a second,
+    // stronger flag and the swarm reads THIS one before it hits.
+    //
+    // Fortress guards (M4/M5/M6) do not read it: an access chip is a credential
+    // on POSEIDON's network, and the daemon's own household troops standing over
+    // its core are not fooled by one. The gate and core terminals are inside
+    // their reach on purpose.
+    this.jackedIn = this.terminalSafe;
+
     // Forcefield: armed by clicking it in whatever slot it's carried in (hand,
     // pocket, or backpack — no need to hold it). While armed and carried it
     // burns its charge; when a cell runs out it pulls a fresh battery from
@@ -1589,11 +1639,24 @@ export class Player {
       this.gainXp('knowledge', def.tip ? 3 : 8);
       this.readManuals ??= new Set();
       if (!this.readManuals.has(itemKey)) { this.addScore(SCORE.book); this.readManuals.add(itemKey); }
+      this._shelve(itemKey, def);
       this._fileBookNote(def);
       this.say(`You read ${def.name}. ${def.text} (Summary filed in your notepad, N.)`);
       return;
     }
+    this._shelve(itemKey, def);
     this._fileBookNote(def);
+    // A PAPERBACK TEACHES NO SKILL, and there are 28 of them. Without this the
+    // branch below added `undefined` to the skills set and pushed {skill:
+    // undefined} into the skill log — both of which are saved and both of which
+    // the Record panel draws. Reading Foucault is worth knowing something; it is
+    // not worth a skill called undefined.
+    if (!def.skill) {
+      this.gainXp('knowledge', this.booksRead && this.booksRead.has(itemKey) ? 2 : 6);
+      this.addScore(SCORE.book);
+      this.say(`You read ${def.name}. It is on your shelf now — press N, then LIBRARY.`);
+      return;
+    }
     if (this.skills.has(def.skill)) {
       this.gainXp('knowledge', 2); // re-reading still teaches a little
       this.say(`You have already read ${def.name}. (It's summarised in your notepad, N.)`);
@@ -1605,6 +1668,16 @@ export class Player {
       this.say(`You read "${def.name}". ${def.skillText} Summary filed in your notepad (N).`);
       if (this.onSkillLearned) this.onSkillLearned(def.skill);
     }
+  }
+
+  // YOUR SHELF. Which physical books you have read, by item key, and nothing
+  // else: the Library is built from this and from ITEMS, so it survives a
+  // reload where the filed pages do not. A book you actually read and carried
+  // is a thing you have; a page of notes about it is a thing this run made.
+  _shelve(itemKey, def) {
+    if (!def || (def.kind !== 'book' && def.kind !== 'paperbook')) return;
+    this.booksRead ??= new Set();
+    this.booksRead.add(itemKey);
   }
 
   // File a one-page summary of a book into the notepad — title, author, and a
@@ -1817,7 +1890,7 @@ export class Player {
       const ky = target.y + ((target.y - this.y) / kd) * KNOCKBACK_DIST;
       if (!map.isSolid(Math.floor(kx), Math.floor(ky))) { target.x = kx; target.y = ky; }
       target.knockT = KNOCKBACK_STUN;
-      this.gainXp('melee', target.hp <= 0 ? 5 : 1);
+      this.gainXp('melee', target.hp <= 0 ? KILL_XP : 1);
       if (isRobot) {
         this.sparkAt(map, target.x, target.y);
         // The robots module marks it dead and drops scrap on its next tick.

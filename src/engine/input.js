@@ -1,3 +1,12 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 // Keyboard state tracker. Reads are by physical key code. Held keys are
 // queried with isDown(); one-shot actions use consumePress() so a single
 // keypress triggers a single action regardless of key-repeat.
@@ -44,7 +53,17 @@ export class Input {
           // N alone opens the notepad; only Ctrl/Cmd+N starts a new game
           // (which wipes the run) — split here so a bare N can never trigger
           // the destructive action by accident.
-          if (e.code === 'KeyN') this._keyNCtrl = e.ctrlKey || e.metaKey;
+          if (e.code === 'KeyN') {
+            this._keyNCtrl = e.ctrlKey || e.metaKey;
+            // Shift+N is the Library — the other book. Recorded at the same
+            // moment as Ctrl for the same reason: the modifier belongs to THIS
+            // press, and reading it later would read whatever is held then.
+            this._keyNShift = e.shiftKey && !(e.ctrlKey || e.metaKey);
+          }
+          // Shift+Q leaves the game. Q on its own is eat, so the modifier is
+          // what makes it deliberate — and it is recorded here, with the press,
+          // for the same reason the N modifiers are.
+          if (e.code === 'KeyQ') this._keyQShift = e.shiftKey && !(e.ctrlKey || e.metaKey);
         }
         this.down.add(e.code);
         e.preventDefault();
@@ -262,7 +281,20 @@ export class Input {
   }
 
   eatPressed() {
+    if (this.pressed.has('KeyQ') && this._keyQShift) return false;   // that one is Leave
     return this.consumePress('KeyQ');
+  }
+
+  // Shift+Q: leave the game. Not Escape — Escape is the key every overlay uses
+  // to dismiss itself, and some of this game's panels are drawn on the canvas
+  // rather than as elements, so "is anything else open?" cannot be answered
+  // reliably enough to hang the end of a session on it.
+  quitPressed() {
+    if (this.pressed.has('KeyQ') && this._keyQShift) {
+      this.pressed.delete('KeyQ');
+      return true;
+    }
+    return false;
   }
 
   readPressed() {
@@ -363,6 +395,12 @@ export class Input {
     return this.consumePress('KeyV');
   }
 
+  // Show/hide the panel rail ( 0 ). The digits 1-4 pick a pocket, so 0 is the
+  // one left, and it sits at the end of that run where a HUD control belongs.
+  panelsTogglePressed() {
+    return this.consumePress('Digit0');
+  }
+
   // Show/hide the corner minimap ( ] ).
   minimapTogglePressed() {
     return this.consumePress('BracketRight');
@@ -378,9 +416,22 @@ export class Input {
     return false;
   }
 
+  // Shift+N opens the Library — your shelf of books read. Every letter of the
+  // alphabet is already bound, so it takes a modifier; N is the right one to
+  // hang it off, since the Scrapbook is its sibling and Ctrl+N is already the
+  // destructive one. `l`, `y`, `r` and `e` are avoided for a further reason:
+  // the LYRE console watches for that word and swallows the keys that spell it.
+  libraryPressed() {
+    if (this.pressed.has('KeyN') && this._keyNShift) {
+      this.pressed.delete('KeyN');
+      return true;
+    }
+    return false;
+  }
+
   // Bare N opens the notepad directly, no terminal needed.
   notesPressed() {
-    if (this.pressed.has('KeyN') && !this._keyNCtrl) {
+    if (this.pressed.has('KeyN') && !this._keyNCtrl && !this._keyNShift) {
       this.pressed.delete('KeyN');
       return true;
     }

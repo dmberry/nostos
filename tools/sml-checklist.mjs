@@ -1,3 +1,12 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 // A checklist of Standard ML, run against this build.
 //
 //   node tools/sml-checklist.mjs
@@ -18,6 +27,12 @@
 //
 // Each case is [area, what, setup lines, the expression, the SML answer], and
 // passes only on an exact match.
+//
+// WHAT IT CANNOT SEE: it compares ANSWERS. A defect that gives the right value
+// under the wrong type is invisible here — `fun f () = 5` reported `'a -> int`
+// for a long time and `f ()` answered 5 throughout. Three cases written for
+// that were removed again on finding they passed against the broken checker
+// too. Those belong in the unit tests, which can ask for a type.
 
 import { createInterpreter } from '../src/lang/interp.js';
 

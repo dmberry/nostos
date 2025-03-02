@@ -1,3 +1,12 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 // The daemon death-aria must speak the core's OWN name. It shipped hardcoded to
 // ZEUS — a god not in this game — so breaking POLYPHEMUS's or CIRCE's core had it
 // introduce itself as Zeus. `{AI}` is now templated with obj.ai at speak time.

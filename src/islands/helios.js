@@ -1,3 +1,12 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 // HELIOS — Thrinacia. The fourth and last fell-able daemon, and the one that does
 // not hunt you at all — until you break its one rule (islands-plan §6). The cattle
 // of the Sun graze on the headland, golden and placid and FORBIDDEN. Fell the core

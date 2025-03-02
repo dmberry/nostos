@@ -1,3 +1,12 @@
+// BML — a 2026 Standard ML. Part of NostOS; synced to the BML repository.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 // THE PRIMITIVES. The parts of the Basis that cannot be written in BML.
 //
 // Part of src/lang/. Written at v1.288 (M4).
@@ -30,12 +39,27 @@ import { RonmlError, RonmlRaise } from './errors.js';
 // nothing to match and the house style was costing the language a feature it
 // claimed to have. It answers both now: `handle Empty` sees an ordinary
 // constructor, and an UNCAUGHT one still prints the sentence.
+// A number as Standard ML writes it: a minus sign is a TILDE. The host spells
+// every one of these with `-`, so nothing it produces can be handed back as it
+// stands. `bigtostring` has done this inline since IntInf landed.
+const smlNum = (s) => String(s).replace(/^-/, '~');
+
 function raiseStd(name, why) {
   throw new RonmlRaise({ tag: 'con', name, args: [], why });
 }
 import { describeValue, formatValue, pushOut } from './eval.js';
 
 const numericTag = (x) => !!x && (x.tag === 'int' || x.tag === 'real');
+/** The BigInt out of an arbitrary-precision value. */
+const bigOf = (x) => {
+  if (!x || x.tag !== 'intinf') throw new RonmlError(`${describeValue(x)} is not an IntInf`);
+  return x.v;
+};
+/** A whole number out of a value, or a refusal naming what arrived instead. */
+const intOf = (x) => {
+  if (!x || x.tag !== 'int') throw new RonmlError(`${describeValue(x)} is not a word`);
+  return x.v;
+};
 
 export const PRIMITIVES = {
   // ANY value as the text it prints as. The prelude used to write `"" ^ n` for
@@ -176,6 +200,100 @@ export const PRIMITIVES = {
   // exist so the CHECKER can tell them apart: `Vector.length` was typed
   // `'a array -> int`, so every use of it on a real vector was refused, and
   // strict is the default. It ran, which is why nothing caught it.
+  // ARBITRARY PRECISION, over JavaScript's BigInt. A separate tag, so an
+  // `intinf` prints, compares and types as itself: the Basis makes IntInf.int a
+  // type of its own and mixing it with `int` is an error, not a coercion.
+  bigfromint: { arity: 1, fn: ([n]) => ({ tag: 'intinf', v: BigInt(intOf(n)) }) },
+  bigtoint: { arity: 1, fn: ([b]) => ({ tag: 'int', v: Number(bigOf(b)) }) },
+  bigfromstring: {
+    arity: 1,
+    fn: ([s]) => {
+      if (!s || s.tag !== 'str') throw new RonmlError(`${describeValue(s)} is not a string`);
+      // Standard ML writes a negative with a tilde, and that is what a reader
+      // will have typed.
+      const t = s.v.trim().replace(/^~/, '-');
+      if (!/^-?[0-9]+$/.test(t)) throw new RonmlError(`${s.v} is not a whole number`);
+      return { tag: 'intinf', v: BigInt(t) };
+    },
+  },
+  bigtostring: { arity: 1, fn: ([b]) => ({ tag: 'str', v: String(bigOf(b)).replace(/^-/, '~') }) },
+  bigadd: { arity: 2, fn: ([a, b]) => ({ tag: 'intinf', v: bigOf(a) + bigOf(b) }) },
+  bigsub: { arity: 2, fn: ([a, b]) => ({ tag: 'intinf', v: bigOf(a) - bigOf(b) }) },
+  bigmul: { arity: 2, fn: ([a, b]) => ({ tag: 'intinf', v: bigOf(a) * bigOf(b) }) },
+  bigdiv: {
+    arity: 2,
+    fn: ([a, b]) => {
+      if (bigOf(b) === 0n) raiseStd('Div', 'a whole number cannot be divided by zero');
+      return { tag: 'intinf', v: bigOf(a) / bigOf(b) };
+    },
+  },
+  bigmod: {
+    arity: 2,
+    fn: ([a, b]) => {
+      if (bigOf(b) === 0n) raiseStd('Div', 'a whole number cannot be divided by zero');
+      return { tag: 'intinf', v: bigOf(a) % bigOf(b) };
+    },
+  },
+  bigpow: { arity: 2, fn: ([a, n]) => ({ tag: 'intinf', v: bigOf(a) ** BigInt(intOf(n)) }) },
+  bigcmp: {
+    arity: 2,
+    fn: ([a, b]) => {
+      const x = bigOf(a), y = bigOf(b);
+      return { tag: 'int', v: x < y ? -1 : x > y ? 1 : 0 };
+    },
+  },
+
+  // BITWISE. Word's operators, and Word8's. JavaScript's own are 32-bit and
+  // signed, so `>>> 0` puts each answer back in the unsigned range a word is:
+  // `notb 0w0` is 4294967295, not ~1.
+  wordand: { arity: 2, fn: ([a, b]) => ({ tag: 'int', v: (intOf(a) & intOf(b)) >>> 0 }) },
+  wordor:  { arity: 2, fn: ([a, b]) => ({ tag: 'int', v: (intOf(a) | intOf(b)) >>> 0 }) },
+  wordxor: { arity: 2, fn: ([a, b]) => ({ tag: 'int', v: (intOf(a) ^ intOf(b)) >>> 0 }) },
+  wordnot: { arity: 1, fn: ([a]) => ({ tag: 'int', v: (~intOf(a)) >>> 0 }) },
+  wordshl: { arity: 2, fn: ([a, b]) => ({ tag: 'int', v: (intOf(a) << intOf(b)) >>> 0 }) },
+  // `>>` on a word is LOGICAL — a word has no sign — and `~>>` is arithmetic,
+  // which is what the tilde in its name says.
+  wordshr: { arity: 2, fn: ([a, b]) => ({ tag: 'int', v: intOf(a) >>> intOf(b) }) },
+  wordashr: { arity: 2, fn: ([a, b]) => ({ tag: 'int', v: (intOf(a) >> intOf(b)) >>> 0 }) },
+
+  // FORMATS. `StringCvt` names them and `fmt` was ignoring the name it was
+  // handed: `Real.fmt (FIX (SOME 2)) 3.14159` answered 3.14159, and every fmt
+  // in the Basis was `fun fmt _ x = toString x`. These do the work the format
+  // asks for; the choosing is in the prelude, where the datatype is.
+  //
+  // Standard ML writes a negative with a TILDE and an exponent with a capital
+  // E, so none of the host's own spellings can be used as they stand.
+  fmtfix: { arity: 2, fn: ([x, n]) => ({ tag: 'str', v: smlNum(x.v.toFixed(intOf(n))) }) },
+  fmtsci: {
+    arity: 2,
+    fn: ([x, n]) => {
+      // toExponential gives `1.23e+4`; Standard ML wants `1.23E4`, and `E~4`
+      // for a negative exponent.
+      const s = x.v.toExponential(intOf(n));
+      return { tag: 'str', v: smlNum(s.replace(/e\+?(-?)(\d+)$/, (_, sign, d) => `E${sign ? '~' : ''}${d}`)) };
+    },
+  },
+  // GEN is the shorter of the two, at n SIGNIFICANT digits rather than n after
+  // the point, which is what `toPrecision` means.
+  fmtgen: {
+    arity: 2,
+    fn: ([x, n]) => {
+      const d = Math.max(1, Math.min(21, intOf(n)));
+      const s = x.v.toPrecision(d).replace(/e\+?(-?)(\d+)$/, (_, sign, dd) => `E${sign ? '~' : ''}${dd}`);
+      // A trailing run of zeros after the point carries no information here.
+      return { tag: 'str', v: smlNum(s.includes('E') ? s : s.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')) };
+    },
+  },
+  // A whole number in another base. Standard ML writes hex in CAPITALS.
+  fmtradix: {
+    arity: 2,
+    fn: ([x, base]) => {
+      const b = intOf(base);
+      const v = intOf(x);
+      return { tag: 'str', v: (v < 0 ? `~${(-v).toString(b)}` : v.toString(b)).toUpperCase() };
+    },
+  },
+
   // THE CLOCK. Milliseconds since 1970, from the host or not at all.
   clocknow: {
     arity: 1,

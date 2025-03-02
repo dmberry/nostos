@@ -22,18 +22,30 @@ Standard ML has and this does not. It is hand-written, and it is the page's
 answer to the one question a visitor actually asks.
 
 **Whenever a gap on that list is closed, take it off the list in the same
-change.** The list, as of BML 0.21.0 (literals and exception replication came off at 0.20.0, Date and Time at 0.21.0):
+change.** The list, as of BML 0.36.0, is down to three rows and two of them are
+deliberate:
 
 | | |
 |---|---|
-| the Basis | eighteen structures; no `StringCvt`, `IntInf`, monomorphic arrays; no `OS`, and there will not be one. `Date` is UTC only |
-| operators | an operator cannot be DEFINED infix, `fun (f ** g) (x, y) = …`; `op` cannot stand in a pattern |
-| blocks | `let … end` works as an operator's left operand, not its right; `open` cannot appear inside a `let` |
-| the stack | non-tail recursion is bounded by the host stack |
+| the stack | non-tail recursion is bounded by the host stack: about **1,200** on a first run, about **4,200** once the browser has compiled the evaluator. Tail calls are not bounded |
+| no `OS` | runs in the browser, so no OS support as such. Not going to change |
+| `Date` is UTC | follows from the row above |
+
+**This table has itself gone stale twice**, which is the joke at its own
+expense: it sat at "eighteen structures; no `StringCvt`, `IntInf`, monomorphic
+arrays" and at BML 0.21.0 long after all of those landed. Nothing checks it but
+whoever is reading. The Basis Library is 29 structures and 430 members, the
+operator and block rows are gone (v1.322 closed all eight language gaps), and
+the corpus is 355/408.
 
 The page also once carried a corpus figure that sat three versions out of date,
 which is why the counts came off it. If a number goes back on, it needs a test
 that reads the page and checks it against what the harnesses report.
+
+**And the same rot reached the BML README**, found at v1.330: `## What it is
+not` claimed identifiers were lower-cased, that the Basis was 16 structures, and
+that `Word` had no unsigned division, all false for some versions. When the
+modal changes, check that file in the same pass.
 
 ---
 

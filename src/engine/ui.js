@@ -1,3 +1,12 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 // Screen-space UI drawing (HUD overlays, modals), split out of renderer.js to
 // keep that file navigable — part of the systems-registry refactor's file-size
 // split; see docs/refactor-registry.md. This is NOT registry work: the HUD is
@@ -267,21 +276,36 @@ export const uiMethods = {
     return null;
   },
 
-  // The weapon chart (V): every weapon in the game, with a power rating.
-  // Found ones show full and named; ones still to find are faded, unnamed,
-  // and marked with a "?".
+  // THE ARMOURY (V): every weapon in the game, what it does, and what it costs
+  // to swing. Found ones are named and rated; ones still to find are faded and
+  // unnamed, and their numbers are withheld too — a blank row that still showed
+  // the rating told you what was coming.
+  //
+  // The rating is DERIVED, not declared. It used to read `def.power`, a field
+  // no weapon in items.js has, so every bar drew at 1/10 and every row said the
+  // same thing. It is damage against machines now, scaled against the best
+  // weapon in the list, which is the comparison the panel is for.
   drawWeaponChart(player) {
     const ctx = this.ctx;
     ctx.fillStyle = 'rgba(6,8,5,0.82)';
     ctx.fillRect(0, 0, this.w, this.h);
-    const pw = Math.min(480, this.w - 50), rowH = 30;
-    const ph = Math.min(this.h - 60, 90 + WEAPON_ORDER.length * rowH);
+    const pw = Math.min(520, this.w - 50);
+    const n = WEAPON_ORDER.length;
+    const ph = Math.min(this.h - 60, 92 + n * 34);
     const px = Math.round((this.w - pw) / 2), py = Math.round((this.h - ph) / 2);
+    // Rows shrink to the room there is rather than running off the bottom.
+    const rowH = Math.max(22, Math.min(34, Math.floor((ph - 92) / n)));
+    const twoLine = rowH >= 28;
     this._weaponsRect = { x: px, y: py, w: pw, h: ph }; // click-away-to-close hit test (main.js)
     ctx.fillStyle = '#12160e';
     ctx.fillRect(px, py, pw, ph);
     ctx.strokeStyle = 'rgba(207,216,195,0.4)';
     ctx.strokeRect(px + 0.5, py + 0.5, pw - 1, ph - 1);
+
+    const padR = 20, lblW = 26, barW = 84;
+    const barX = px + pw - padR - lblW - barW;
+    const rate = (d) => d.robotDamage || d.animalDamage || 1;
+    const best = Math.max(...WEAPON_ORDER.map((k) => (ITEMS[k] ? rate(ITEMS[k]) : 1)));
 
     ctx.fillStyle = '#cfd8c3';
     ctx.font = 'bold 16px system-ui, sans-serif';
@@ -289,35 +313,58 @@ export const uiMethods = {
     ctx.font = '11px system-ui, sans-serif';
     ctx.fillStyle = 'rgba(207,216,195,0.55)';
     const found = WEAPON_ORDER.filter((k) => player.weaponsFound && player.weaponsFound.has(k)).length;
-    ctx.fillText(`${found} of ${WEAPON_ORDER.length} found · V to close`, px + 20, py + 48);
+    ctx.fillText(`${found} of ${n} found \u00b7 V to close`, px + 20, py + 48);
+    // A column head, so the number at the end of each row does not have to
+    // carry its own label eighteen times over.
+    ctx.font = 'bold 9px system-ui, sans-serif';
+    ctx.fillStyle = 'rgba(207,216,195,0.4)';
+    ctx.fillText('VS MACHINES', barX, py + 48);
 
-    let y = py + 74;
+    let y = py + 68;
     for (const key of WEAPON_ORDER) {
       const def = ITEMS[key];
       if (!def) continue;
       const has = player.weaponsFound && player.weaponsFound.has(key);
       ctx.globalAlpha = has ? 1 : 0.32;
-      // icon
-      this.drawItemIcon(def, px + 34, y + 8, 0.7);
-      // name (hidden until found)
+      this.drawItemIcon(def, px + 34, y + (twoLine ? 13 : 9), 0.7);
       ctx.fillStyle = '#e8e0d0';
       ctx.font = '13px system-ui, sans-serif';
-      ctx.fillText(has ? def.name : '??? undiscovered', px + 58, y + 12);
-      // power bar — hidden until found, so an undiscovered weapon does not leak its
-      // rating (an empty track + "pwr ?"). Only a found weapon fills the bar.
-      const barX = px + pw - 130, barW = 100, pwr = def.power || 1;
+      ctx.fillText(has ? def.name : '??? undiscovered', px + 58, y + (twoLine ? 11 : 13));
+      // The small print: reach, what it does to animals, what a swing costs.
+      // Withheld until found, like the name.
+      if (twoLine) {
+        ctx.font = '9.5px system-ui, sans-serif';
+        ctx.fillStyle = 'rgba(207,216,195,0.55)';
+        ctx.fillText(has ? this.weaponStatLine(def) : '', px + 58, y + 23);
+      }
+      const pwr = rate(def);
+      const by = y + (twoLine ? 4 : 5);
       ctx.fillStyle = 'rgba(255,255,255,0.12)';
-      ctx.fillRect(barX, y + 4, barW, 8);
+      ctx.fillRect(barX, by, barW, 8);
       if (has) {
         ctx.fillStyle = '#e8d27a';
-        ctx.fillRect(barX, y + 4, barW * (pwr / 10), 8);
+        ctx.fillRect(barX, by, Math.max(3, barW * (pwr / best)), 8);
       }
       ctx.fillStyle = 'rgba(207,216,195,0.7)';
       ctx.font = '10px system-ui, sans-serif';
-      ctx.fillText(has ? `pwr ${pwr}` : 'pwr ?', barX + barW + 6, y + 12);
+      ctx.textAlign = 'right';
+      ctx.fillText(has ? String(pwr) : '?', px + pw - padR, by + 8);
+      ctx.textAlign = 'left';
       ctx.globalAlpha = 1;
       y += rowH;
     }
+  },
+
+  // One line of small print for a weapon: how far it reaches and on what, what
+  // it does to an animal, and what the swing costs you.
+  weaponStatLine(def) {
+    const bits = [];
+    if (def.range) bits.push(`reach ${def.range}${def.ammoType ? ` \u00b7 ${(ITEMS[def.ammoType] || {}).name || def.ammoType}` : ''}`);
+    else bits.push('in hand');
+    if (def.animalDamage) bits.push(`${def.animalDamage} vs animals`);
+    if (def.treeDamage) bits.push(`fells at ${def.treeDamage}`);
+    if (def.staminaCost) bits.push(`${def.staminaCost} stamina`);
+    return bits.join(' \u00b7 ');
   },
 
   // The skills screen (K): learned book-skills in the order gained, plus the
@@ -614,25 +661,51 @@ export const uiMethods = {
   },
 
   // Right-click inspection tooltip, near the cursor.
+  // A tooltip in two registers. `text` is what the thing is called, set as it
+  // always was. `sub` is what it is FOR (items.js `use`), set smaller, italic
+  // and a shade dimmer, so the name still reads at a glance and the sentence
+  // under it does not shout. The right-click inspector passes no `sub` and is
+  // drawn exactly as before.
   drawDetail(d) {
     const ctx = this.ctx;
-    ctx.font = '12px system-ui, sans-serif';
+    const HEAD = '12px system-ui, sans-serif';
+    const SUB = 'italic 10.5px system-ui, sans-serif';
     const maxW = 260;
-    const lines = this._wrapText(ctx, d.text, maxW);
-    const boxW = Math.min(maxW, Math.max(...lines.map((l) => ctx.measureText(l).width))) + 20;
-    const boxH = 12 + lines.length * 15;
+    // Split on newlines FIRST, then wrap each: _wrapText on its own treats \n
+    // as an ordinary space, and a break that was written is a break that was
+    // meant.
+    const wrap = (s, font) => {
+      ctx.font = font;
+      return String(s).split('\n').flatMap((ln) => (ln ? this._wrapText(ctx, ln, maxW) : ['']));
+    };
+    const lines = wrap(d.text, HEAD);
+    const subs = d.sub ? wrap(d.sub, SUB) : [];
+    // Measure each block in its own font, or the box is cut to the wrong width.
+    ctx.font = HEAD;
+    let widest = Math.max(...lines.map((l) => ctx.measureText(l).width));
+    ctx.font = SUB;
+    for (const l of subs) widest = Math.max(widest, ctx.measureText(l).width);
+
+    const boxW = Math.min(maxW, widest) + 20;
+    const boxH = 12 + lines.length * 15 + (subs.length ? 4 + subs.length * 13 : 0);
     let x = d.x + 14, y = d.y + 14;
     if (x + boxW > this.w) x = d.x - boxW - 14;
     if (y + boxH > this.h) y = d.y - boxH - 14;
-    const a = Math.min(1, d.ttl);
-    ctx.globalAlpha = a;
+    ctx.globalAlpha = Math.min(1, d.ttl);
     ctx.fillStyle = 'rgba(10,14,8,0.92)';
     ctx.fillRect(x, y, boxW, boxH);
     ctx.strokeStyle = 'rgba(207,216,195,0.45)';
     ctx.strokeRect(x + 0.5, y + 0.5, boxW - 1, boxH - 1);
+    ctx.font = HEAD;
     ctx.fillStyle = '#dfe6d4';
     let ly = y + 16;
     for (const l of lines) { ctx.fillText(l, x + 10, ly); ly += 15; }
+    if (subs.length) {
+      ctx.font = SUB;
+      ctx.fillStyle = 'rgba(207,216,195,0.72)';
+      ly += 2;
+      for (const l of subs) { ctx.fillText(l, x + 10, ly); ly += 13; }
+    }
     ctx.globalAlpha = 1;
   },
 
@@ -1748,8 +1821,16 @@ export const uiMethods = {
     const numW = ctx.measureText(txt).width;
     ctx.font = 'bold 7px system-ui, sans-serif';
     ctx.fillStyle = 'rgba(232,210,122,0.55)';
+    const labW = ctx.measureText('SCORE').width;
     ctx.fillText('SCORE', rx - numW - 5, baselineY);
     ctx.textAlign = 'left';
+    // Clickable: the number is what the Record panel is ABOUT, so the obvious
+    // thing to do with it is press it. Recorded here because only the drawing
+    // knows where the pair ended up, and read by main.js on the next frame —
+    // the same contract as the backpack and armoury rects. Padded to a target a
+    // thumb can find.
+    const x0 = rx - numW - 5 - labW - 6;
+    this._scoreRect = { x: x0, y: baselineY - 15, w: (rx - x0) + 6, h: 21 };
   },
 
   // A rounded rectangle path (canvas 2D has roundRect only in newer engines, and
@@ -1889,6 +1970,177 @@ export const uiMethods = {
     }
   },
 
+  // THE PANELS, as buttons, in the gap between the vitals bars and the hands
+  // slot. Each one is stamped with its own keyboard shortcut, so the button
+  // both opens the panel and teaches the key; hovering names it in the detail
+  // box. Two columns of three, sized to the 40px gap that was already there —
+  // no slot moves, and nothing lands under the condition words.
+  // Amber under the cursor, the same for every one: these panels are yours, and
+  // amber is what the human machines print in. Green belongs to the AIs.
+  HUD_BTN_GLOW: '#e8c64f',
+  HUD_BTNS: [
+    { icon: 'help',    action: 'help',    name: 'Help', sub: 'Keys and commands (H)' },
+    { icon: 'notes',   action: 'notes',   name: 'Scrapbook', sub: 'Notes, scraps, maps (N)' },
+    { icon: 'books',   action: 'library', name: 'Library', sub: 'Books you have read (Shift+N)' },
+    { icon: 'star',    action: 'skills',  name: 'Record', sub: 'Skills and knowledge (K)' },
+    { icon: 'map',     action: 'minimap', name: 'Minimap', sub: 'Show or hide the corner map (])' },
+    { icon: 'swords',  action: 'weapons', name: 'Armoury', sub: 'What each weapon is for (V)' },
+  ],
+
+  // THE PANEL RAIL: one placement, every screen. It stands at the right-hand
+  // edge over the world with its foot on the dashboard, and folds down into
+  // that foot when you do not want it. Anchored at the BOTTOM rather than the
+  // top, so folding and unfolding move the buttons and never the handle — the
+  // thing you press stays where you last pressed it.
+  drawHudRail(mouse, open, hud) {
+    const ctx = this.ctx;
+    const mx = mouse ? mouse.x : -1, my = mouse ? mouse.y : -1;
+    // Folded, the handle is all there is, so it grows a little to be findable —
+    // downward only, so its top edge does not move between the two states.
+    const S = 17, gap = 2, HH = open ? 9 : 14;
+    const GLOW = this.HUD_BTN_GLOW;
+    const x = this.w - S - 8;
+    const dashTop = this.hudTop != null ? this.hudTop : this.h;
+    // Centred down the world's height (the dashboard is not the world), with
+    // the handle hung off the bottom of where the column WOULD be — computed
+    // from the open layout whether it is open or not, so folding moves the
+    // buttons and never the handle. The thing you press stays where you last
+    // pressed it.
+    const n = this.HUD_BTNS.length;
+    const colH = n * (S + gap) - gap;
+    const colTop = Math.round(dashTop / 2 - colH / 2);
+    const hy = colTop + colH + 4;
+
+    this.uiButtons = [];
+    const hHot = mx >= x && mx <= x + S && my >= hy && my <= hy + HH;
+    ctx.save();
+    if (hHot) { ctx.globalAlpha = 0.2; ctx.fillStyle = GLOW; } else ctx.fillStyle = 'rgba(12,15,10,0.5)';
+    this.roundRect(x, hy, S, HH, 2); ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = hHot ? GLOW : 'rgba(207,216,195,0.28)';
+    ctx.lineWidth = 1;
+    this.roundRect(x + 0.5, hy + 0.5, S - 1, HH - 1, 2); ctx.stroke();
+    // A chevron pointing the way it will go: up to unfold, down to put away.
+    ctx.fillStyle = hHot ? GLOW : 'rgba(207,216,195,0.6)';
+    ctx.beginPath();
+    const cxm = x + S / 2, cym = hy + HH / 2, d = open ? 1 : -1;
+    ctx.moveTo(cxm - 3.5, cym - 1.6 * d);
+    ctx.lineTo(cxm + 3.5, cym - 1.6 * d);
+    ctx.lineTo(cxm, cym + 2 * d);
+    ctx.closePath(); ctx.fill();
+    this.uiButtons.push({ action: 'menu', x, y: hy, w: S, h: HH,
+      name: open ? 'Put away' : 'Panels',
+      sub: open ? 'Fold the buttons down' : 'Help, Scrapbook, Library, Record, Minimap, Armoury' });
+    if (open) this.drawHudRailButtons(colTop, x, S, gap, mx, my, GLOW);
+  },
+
+  // The column itself, drawn the same whether a handle sits under it or not.
+  drawHudRailButtons(colTop, x, S, gap, mx, my, GLOW) {
+    const ctx = this.ctx;
+    this.HUD_BTNS.forEach((b, i) => {
+      const y = colTop + i * (S + gap);
+      const hot = mx >= x && mx <= x + S && my >= y && my <= y + S;
+      ctx.save();
+      if (hot) { ctx.globalAlpha = 0.2; ctx.fillStyle = GLOW; } else ctx.fillStyle = 'rgba(12,15,10,0.5)';
+      this.roundRect(x, y, S, S, 3); ctx.fill();
+      ctx.restore();
+      ctx.strokeStyle = hot ? GLOW : 'rgba(207,216,195,0.28)';
+      ctx.lineWidth = 1;
+      this.roundRect(x + 0.5, y + 0.5, S - 1, S - 1, 3); ctx.stroke();
+      this.drawPanelIcon(b.icon, x + 3, y + 3, S - 6,
+        hot ? GLOW : 'rgba(223,230,212,0.85)', hot ? GLOW : null);
+      this.uiButtons.push({ ...b, x, y, w: S, h: S });
+    });
+  },
+
+  // The panel icons, drawn rather than set in type: at 11px a letter is just a
+  // letter, and these have to read as the thing they open. Each is built inside
+  // an s x s box at (x, y) so the caller only picks a corner.
+  drawPanelIcon(kind, x, y, s, col, glow) {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.strokeStyle = col; ctx.fillStyle = col;
+    ctx.lineWidth = 1; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    if (glow) { ctx.shadowColor = glow; ctx.shadowBlur = 6; }
+    const u = s / 11;                       // the icons are drawn on an 11-unit grid
+    const P = (a, b) => [x + a * u, y + b * u];
+    if (kind === 'help') {
+      // a question mark, hooked and dotted
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(...P(5.5, 3.6), 2.3 * u, Math.PI * 0.95, Math.PI * 0.35);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(...P(5.5, 5.9)); ctx.lineTo(...P(5.5, 7.3));
+      ctx.stroke();
+      ctx.beginPath(); ctx.arc(...P(5.5, 9.2), 0.85 * u, 0, Math.PI * 2); ctx.fill();
+    } else if (kind === 'notes') {
+      // a page with a folded corner and three ruled lines
+      ctx.beginPath();
+      ctx.moveTo(...P(2, 1)); ctx.lineTo(...P(7, 1)); ctx.lineTo(...P(9, 3));
+      ctx.lineTo(...P(9, 10)); ctx.lineTo(...P(2, 10)); ctx.closePath();
+      ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(...P(7, 1)); ctx.lineTo(...P(7, 3)); ctx.lineTo(...P(9, 3)); ctx.stroke();
+      ctx.beginPath();
+      for (const ly of [5, 6.8, 8.6]) { ctx.moveTo(...P(3.6, ly)); ctx.lineTo(...P(7.4, ly)); }
+      ctx.stroke();
+    } else if (kind === 'books') {
+      // three spines on a shelf, the last one leaning
+      ctx.beginPath();
+      ctx.rect(...P(1.6, 2.4), 2 * u, 6.6 * u);
+      ctx.rect(...P(4.2, 1.6), 2 * u, 7.4 * u);
+      ctx.stroke();
+      ctx.save();
+      ctx.translate(...P(8.4, 9));
+      ctx.rotate(0.28);
+      ctx.beginPath(); ctx.rect(-1.9 * u, -6.4 * u, 1.9 * u, 6.4 * u); ctx.stroke();
+      ctx.restore();
+      ctx.beginPath(); ctx.moveTo(...P(1, 9.8)); ctx.lineTo(...P(10, 9.8)); ctx.stroke();
+    } else if (kind === 'star') {
+      // a five-pointed star: the Record, and what you have earned in it
+      ctx.beginPath();
+      for (let k = 0; k < 10; k++) {
+        const r = (k % 2 ? 2.1 : 4.7) * u;
+        const a = -Math.PI / 2 + k * Math.PI / 5;
+        const px = x + 5.5 * u + Math.cos(a) * r, py = y + 5.6 * u + Math.sin(a) * r;
+        k ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+      }
+      ctx.closePath(); ctx.fill();
+    } else if (kind === 'swords') {
+      // two crossed blades, each with a crossguard and a stub of grip
+      ctx.lineWidth = 1.2;
+      for (const dir of [1, -1]) {
+        const bx = 5.5 - dir * 3.6, tx = 5.5 + dir * 3.6;
+        ctx.beginPath();
+        ctx.moveTo(...P(bx, 9.6)); ctx.lineTo(...P(tx, 1.6));
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(...P(bx - dir * 1.3, 7.4)); ctx.lineTo(...P(bx + dir * 1.5, 8.6));
+        ctx.stroke();
+      }
+    } else if (kind === 'map') {
+      // a map folded in three, creased up and down
+      ctx.beginPath();
+      ctx.moveTo(...P(1.2, 2.6)); ctx.lineTo(...P(4.4, 1.4)); ctx.lineTo(...P(7.6, 2.9));
+      ctx.lineTo(...P(10.4, 1.6)); ctx.lineTo(...P(10.4, 8.4)); ctx.lineTo(...P(7.6, 9.7));
+      ctx.lineTo(...P(4.4, 8.2)); ctx.lineTo(...P(1.2, 9.4)); ctx.closePath();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(...P(4.4, 1.4)); ctx.lineTo(...P(4.4, 8.2));
+      ctx.moveTo(...P(7.6, 2.9)); ctx.lineTo(...P(7.6, 9.7));
+      ctx.stroke();
+    }
+    ctx.restore();
+  },
+
+  /** Which panel button (if any) is under a screen point. */
+  hudButtonAt(mx, my) {
+    for (const b of this.uiButtons || []) {
+      if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h) return b;
+    }
+    return null;
+  },
+
   // Which dashboard/backpack slot (if any) is under a screen point. Later
   // entries (the backpack panel, drawn on top) win over earlier ones.
   slotAt(mx, my) {
@@ -1953,7 +2205,9 @@ export const uiMethods = {
     ctx.fillRect(0, top, W, 1);
 
     // --- Top row: vitals (left), score/countdown (right). ---
-    const bx = 10, bw = Math.min(150, Math.round(W * 0.42));
+    // Shorter than they were (150 / 42%): a bar you read as a fraction does not
+    // need the width, and the space it gives back is where the panel buttons go.
+    const bx = 10, bw = Math.min(112, Math.round(W * 0.32));
     this.drawBar(bx, top + 16, bw, 6, player.health / player.maxHealth, '#b0392f', 'HP', 0.25);
     this.drawBar(bx, top + 34, bw, 6, player.stamina / player.maxStamina, '#5f8f3e', 'STA');
     this.drawBar(bx, top + 52, bw, 6, (player.food ?? 100) / (player.maxFood ?? 100), '#c99a3e', 'FOOD');
@@ -1967,10 +2221,11 @@ export const uiMethods = {
     else if (player.invisibleToRobots) { ctx.fillStyle = '#4fd8c3'; ctx.fillText(`HID ${Math.ceil((player.wifiPower || 0) / 60)}m`, cx, top + 39); }
     if (player.food <= 0) { ctx.fillStyle = '#e05548'; ctx.fillText('STARVING', cx, top + 57); }
     else if (player.food < 25) { ctx.fillStyle = '#d8a04f'; ctx.fillText('HUNGRY', cx, top + 57); }
-  // The status card: where you are, who holds it, and how you are doing —
+    // The status card: where you are, who holds it, and how you are doing —
     // boxed and tight so it reads as one panel rather than three loose lines
     // floating over the terrain.
     this.drawStatusCard(player, hud, W - 10, top + 8);
+
     // Score hard into the bottom-right corner of the dashboard panel.
     this.drawScoreCorner(player, W - 10, top + MDH - 63);   // in the clear band above the slot labels
 
@@ -2283,7 +2538,14 @@ export const uiMethods = {
   // silently vanished — the "wordmark goes missing when small" bug, and with
   // it every say() message and the whole death-aria. Drawn here, after the
   // dashboard has set this.hudTop, they render at any width.
-  drawHudOverlay(player, hud) {
+  drawHudOverlay(player, hud, modalOpen) {
+    // Drawn here, after whichever dashboard has set hudTop, so the rail stands
+    // on the right edge at either width without being written out twice.
+    // Not drawn behind a panel, and not TAPPABLE behind one either — the rects
+    // are rebuilt from the draw, so leaving a stale set would take taps meant
+    // for whatever is on top.
+    if (modalOpen) this.uiButtons = [];
+    else this.drawHudRail(hud.mouse, hud.menuOpen !== false, hud);
     const ctx = this.ctx;
     const top = this.hudTop != null ? this.hudTop : this.h - DASH_H;
 

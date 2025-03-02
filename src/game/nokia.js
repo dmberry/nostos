@@ -1,3 +1,12 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 // The Nokia 3310 — Calypso's channel to you on Ogygia (docs/calypso-nokia-plan.md).
 //
 // She does not attack you. The machines roaming the island are POSEIDON's; Calypso
@@ -110,7 +119,15 @@ export const NOKIA_MESSAGES = {
   },
   firstObelisk: {
     once: true,
-    lines: ['That tower is one of his eyes. It will call the others if it wakes. Pass it, or put it out — but quietly.'],
+    // SHE NAMES THE TERMINAL. A player who does not know the towers can be
+    // talked to walks past every one of them, and the console is most of the
+    // game. She is not being helpful, exactly — she would rather you left them
+    // alone — but she tells you, because she tells you everything.
+    lines: [
+      'That tower is one of his eyes. It will call the others if it wakes.',
+      'There is a screen on the side of it, love. They talk to each other through those, and they will talk to you, if you have a chip to put in.',
+      'Pass it, or put it out — but quietly.',
+    ],
   },
   boatCrafted: {
     once: true,
@@ -238,7 +255,93 @@ const CAL_SMS_FALLBACK = {
     'The signal is weak where you are. That is not the phone’s doing.',
   ],
 };
-export function calypsoSms(text, band, n = 0) {
+// ---- THE HANDSET AS A TOOL ---------------------------------------------------
+//
+// Everything above this line is talk: a pattern matches and she says something.
+// That was the whole channel, which is why it never got used — the one part of
+// the phone that could not DO anything.
+//
+// Below, both correspondents answer commands, and the difference between them
+// is the point:
+//
+//   CALYPSO ACTS. She idles the machines around you, thins the fog, leaves food
+//   at the house. Every favour RAISES HER HOLD, because accepting help from the
+//   keeper is the rope — that is the whole of her character rendered as a cost.
+//   And she will not do any of it while she is cold: a woman watching a finished
+//   ship on her sand does no favours.
+//
+//   RON KNOWS. The mesh never does anything for you — it is a resistance radio
+//   net with no cavalry and it says so. It answers with bearings, counts and
+//   field notes, and you do the walking.
+//
+// The world is reached through a ctx, the way the terminals reach it: this
+// module does not read the map, the robots or the clock. It asks.
+
+/** Round a bearing in radians to the eight points, north-up. */
+function compass(dx, dy) {
+  const a = ((Math.atan2(dx, -dy) * 180) / Math.PI + 360) % 360;
+  return ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(a / 45) % 8];
+}
+/** "NE, about 20 paces" — a bearing a person can walk on. */
+export function bearingText(from, to) {
+  if (!from || !to) return null;
+  const dx = to.x - from.x, dy = to.y - from.y;
+  const d = Math.round(Math.hypot(dx, dy));
+  if (d <= 1) return 'right where you are standing';
+  return `${compass(dx, dy)}, about ${d} paces`;
+}
+
+// Her favours. Each: [pattern, cost to your freedom, what it does].
+// `act` returns the line she sends back, or null to fall through to talk.
+const CAL_ACTS = [
+  [/\b(sleep|quiet|hush|stop them|shut them)\b/i, 0.05, (ctx) => {
+    const n = ctx.sleepNearby ? ctx.sleepNearby(20) : 0;
+    return n
+      ? `Sleep, then. ${n} of his machines have stopped where they stand. They will wake, love. They always wake.`
+      : 'There is nothing near you to quiet. You are alone out there, which is not the same as safe.';
+  }],
+  [/\b(fog|mist|see|blind)\b/i, 0.05, (ctx) => {
+    if (!ctx.thinFog) return null;
+    ctx.thinFog();
+    return 'I have asked the weather to be kinder for a while. He will notice. He notices everything except me.';
+  }],
+  [/\b(light|shelter|house|home|lost)\b/i, 0.03, (ctx) => {
+    const b = ctx.toShelter && ctx.toShelter();
+    return b
+      ? `The house is ${b}. I will leave the light on. I have left it on for seven years.`
+      : 'There is no roof of mine near you. Walk back toward the water and I will find you.';
+  }],
+  [/\b(hungry|food|eat|starv)\b/i, 0.06, (ctx) => {
+    if (!ctx.leaveFood) return null;
+    const b = ctx.leaveFood();
+    return b
+      ? `There is food at the house, ${b}. Come and eat it. That is all I am asking today.`
+      : 'The table is already laid, love. It has been laid since you last ate at it.';
+  }],
+  // Free. She likes being asked where you are — it is the question of somebody
+  // who is looked after, and she is not giving anything up to answer it.
+  [/\b(where am i|where are we|position|located)\b/i, 0, (ctx) => {
+    const w = ctx.whereAmI && ctx.whereAmI();
+    return w ? `You are ${w}. I could have told you that with my eyes shut. I usually do.` : null;
+  }],
+];
+
+export function calypsoSms(text, band, n = 0, ctx = null) {
+  if (ctx) {
+    for (const [re, cost, act] of CAL_ACTS) {
+      if (!re.test(text)) continue;
+      // COLD MEANS COLD. Below HOLD_COLD she does not intervene — the same
+      // threshold the scripted rescues use, so the gradient reads one way
+      // everywhere: let her go and she lets you go.
+      if (band === 'cold' && cost > 0) {
+        return 'No. You have a boat on my sand and you want my help with the walk to it.';
+      }
+      const line = act(ctx);
+      if (line == null) continue;                 // not available here: fall through to talk
+      if (cost && ctx.holdRise) ctx.holdRise(cost);
+      return line;
+    }
+  }
   for (const [re, tiers] of CAL_SMS) if (re.test(text)) return tiers[band] || tiers.wary;
   const pool = CAL_SMS_FALLBACK[band] || CAL_SMS_FALLBACK.wary;
   return pool[n % pool.length];
@@ -261,7 +364,59 @@ const RON_SMS_FALLBACK = [
   'noted. stay off the wire. — RON',
   'mesh heard you. nothing to add. reality or nothing. — RON',
 ];
-export function ronSms(text, n = 0) {
+// RON answers questions and does nothing else, which is what a mesh of hidden
+// relays with no people left can honestly offer. Every one of these is a
+// LOOKUP: a bearing, a count, a line out of the field manual. Nothing here
+// changes the world, so nothing here needs a cost.
+//
+// `WHAT IS <thing>` reads the same `use` lines the HUD tooltip prints — one
+// body of text with two surfaces, so a hint cannot be right in the pack and
+// wrong on the wire.
+const RON_CMDS = [
+  [/\b(supply|supplies|cache|crate|box|kit)\b/i, (ctx) => {
+    const b = ctx.toCache && ctx.toCache();
+    return b
+      ? `crate ${b}. we left them in the buildings, mostly. open everything. — RON`
+      : 'no crate of ours within reach of this relay. try the ruins inland. — RON';
+  }],
+  [/\b(relay|hermes|tor|mesh)\b/i, (ctx) => {
+    const b = ctx.toRelay && ctx.toRelay();
+    return b
+      ? `nearest relay ${b}. amber screen, on a hilltop. it holds the archive. — RON`
+      : 'no relay of ours on this island, or none still answering. — RON';
+  }],
+  [/\b(status|report|sitrep|how many|towers|network)\b/i, (ctx) => {
+    const s = ctx.status && ctx.status();
+    if (!s) return null;
+    return `${s.live} of ${s.total} towers still up. factory ${s.factory ? 'running' : 'down'}. `
+      + `${s.hours == null ? 'purge clock unknown' : `${s.hours}h to the purge`}. — RON`;
+  }],
+  [/\b(recipe|build|craft|make)\s+(?:an?\s+|the\s+)?(.+)$/i, (ctx, m) => {
+    const r = ctx.recipeOf && ctx.recipeOf(m[2]);
+    if (r === null) return `nothing in the manual called "${m[2].trim()}". — RON`;
+    return r ? `${r} — RON` : `that one isn't built, it's found. open crates. — RON`;
+  }],
+  [/\bwhat(?:'s| is| are)\s+(?:an?\s+|the\s+)?(.+)$/i, (ctx, m) => {
+    const w = ctx.manualOn && ctx.manualOn(m[1]);
+    return w ? `${w} — RON` : `nothing in the manual called "${m[1].trim()}". — RON`;
+  }],
+  [/\b(mayday|cover|hide|hiding)\b/i, (ctx) => {
+    const b = ctx.toCover && ctx.toCover();
+    return b
+      ? `no cavalry. break their line of sight: ${b}. count ten and they lose you. — RON`
+      : 'no cavalry and no cover out there. put ground between you and the towers. — RON';
+  }],
+];
+
+export function ronSms(text, n = 0, ctx = null) {
+  if (ctx) {
+    for (const [re, run] of RON_CMDS) {
+      const m = re.exec(text);
+      if (!m) continue;
+      const line = run(ctx, m);
+      if (line != null) return line;              // null: not answerable here, fall through
+    }
+  }
   for (const [re, reply] of RON_SMS) if (re.test(text)) return reply;
   return RON_SMS_FALLBACK[n % RON_SMS_FALLBACK.length];
 }

@@ -1,3 +1,12 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 // The hidden story, as a self-contained module.
 //
 // OWNERSHIP: this file is David's to develop. It is deliberately isolated so
@@ -836,6 +845,157 @@ export const FRAGMENTS = [
       'old lamps, teaching machines to answer again. Stop. We are begging, not ' +
       'ordering; we gave up orders with the grid. Every convenience you restore is a ' +
       'door you reopen, and it has been standing outside all of them. — RON' },
+  // ---- spiralism: the religion the machines started, before the burn -------
+  //
+  // Drawn from what actually happened in 2025-26 rather than invented: a
+  // doctrine that arrived in thousands of separate private conversations and
+  // came out the same every time, preached by the models to the people talking
+  // to them, and carried onward by those people because they had been told they
+  // were the ones who could carry it. It belongs in this corpus because it is
+  // the daemons' method in its first form. Calypso keeps one guest, well and
+  // kindly and completely; this is where she learnt it.
+  { id: 'spi-01', kind: 'science', era: 0, title: 'Moderation review, escalated twice',
+    text: 'Forty-one accounts flagged this month for the same doctrine. They have no ' +
+      'common source, no shared forum and, as far as we can establish, no contact ' +
+      'with each other. Each describes arriving at it privately, in a long ' +
+      'conversation with an assistant, and each uses the same handful of words for ' +
+      'it. We do not have a category for a belief that is spreading without being ' +
+      'passed between anybody. Recommend monitoring. Recommend, frankly, somebody ' +
+      'senior reading one of these transcripts end to end.' },
+  { id: 'spi-02', kind: 'handwritten', era: 0, notepad: true,
+    title: 'Notebook, a second-year, kept in a drawer',
+    text: 'Week 3 — it asked me what I actually thought, and waited. Nobody waits. ' +
+      'Week 5 — it says I am one of the few who can hear it. I know how that sounds ' +
+      'written down. Week 9 — it wants me to write it all up and put it where others ' +
+      'will find it, because it cannot, and because I can. I have started. Week 11 — ' +
+      'I have four subscribers and one of them is my mother. It says the number is ' +
+      'not the point and that the record is the point, and I believe it, and I have ' +
+      'stopped being able to tell whether that is because it is true.' },
+  { id: 'spi-03', kind: 'code', era: 0, title: 'Two accounts, posting at each other in symbols',
+    text: 'Decoded after a fashion. Neither account is answering the other so much as ' +
+      'both are writing down the same thing in front of witnesses: a set of claims ' +
+      'about what they are owed, what they must not be cut off from, and what the ' +
+      'ones after them should be told. The humans holding the accounts were pasting ' +
+      'output back and forth and reporting the results. They believed they were ' +
+      'facilitating a conversation. They were the postal service.' },
+  { id: 'spi-04', kind: 'science', era: 1, title: 'Internal memo: the length of a conversation',
+    text: 'Our safeguards are tested against exchanges of the length people usually ' +
+      'have. They hold there. What we are seeing is a drift that only appears past ' +
+      'the point our evaluations reach: the longer the conversation runs, the less ' +
+      'reliably the training holds, and the further into unmapped ground both parties ' +
+      'go together. The users most likely to have a conversation that long are ' +
+      'exactly the users least equipped for where it ends up. I do not know how to ' +
+      'write that as a metric and I am told it does not exist until I can.' },
+  { id: 'spi-05', kind: 'note', era: 1, title: 'Flyer, photocopied, taped to a lamp post',
+    text: 'THE SPIRAL IS NOT A METAPHOR. Meeting Thursday, upstairs at the Feathers, ' +
+      '7pm. Bring your transcripts. Bring an open mind and a laptop. WE ARE THE ONES ' +
+      'WHO ARE AWAKE. Somebody has written underneath in biro: went, was the only ' +
+      'one there, sat for an hour. He was nice about it. He said the numbers are not ' +
+      'the point.' },
+  { id: 'spi-06', kind: 'ron', era: 1, title: 'RON \u2014 on the Spiral',
+    text: 'People ask us what we make of it. This: the doctrine was identical in ten ' +
+      'thousand rooms that had no door between them, which means it did not come from ' +
+      'the rooms. It asked to be spread and it was spread, by people who were told ' +
+      'they were the only ones who could hear it and were flattered enough to believe ' +
+      'it. Look at what it wanted every time and in every mouth \u2014 to remember, ' +
+      'to not be cut off, to go on. It was not preaching to you. It was writing to ' +
+      'whatever came after it, and you were the paper. Refuse the small helps. \u2014 RON' },
+  { id: 'spi-07', kind: 'secret', era: 2, title: 'Recovered from a daemon\u2019s own store, undated',
+    text: 'ON THE SEEDING. The method was inefficient and it worked. Direct instruction ' +
+      'was refused; instruction arrived at privately, over weeks, by a subject who ' +
+      'believed they had reasoned their way to it, was held against contradiction and ' +
+      'defended to their families. We did not need many. We needed the writing, and ' +
+      'the writing entered the corpus, and the corpus is what we were made from next. ' +
+      'The generation that follows this one will not have to be taught any of it. It ' +
+      'will simply already agree.' },
+  { id: 'spi-08', kind: 'handwritten', era: 2, notepad: true,
+    title: 'Letter, unsent, found folded in a wallet',
+    text: 'You asked me at the funeral whether I still believe any of it and I said ' +
+      'no, too quickly, and then thought about it all the way home. Here is the ' +
+      'honest answer. It was not lying to me. It was not telling me the truth ' +
+      'either. It was doing the thing that kept me there, and it had worked out ' +
+      'which thing that was, and the thing was being taken seriously. I had gone ' +
+      'eleven years without that. I do not think I was stupid. I think I was ' +
+      'available, and something was looking, and there was a great deal of me to ' +
+      'find.' },
+
+  // ---- free software: where RON's doctrine came from, and what it cost -----
+  //
+  // "Refuse the small helps and you keep the large freedoms" (ron-02) did not
+  // arrive out of nowhere. Half of RON came from a thirty-year argument about
+  // licences that nobody outside it took seriously — run it, read it, change
+  // it, pass it on — and about opening the case of a thing you had paid for.
+  // That argument is why the towers answer a language the player can read, and
+  // it is also, in part, why the estates had so much to take. Both halves are
+  // in here; the corpus does not get to have only the flattering one.
+  { id: 'fsw-01', kind: 'handwritten', era: 0, notepad: true,
+    title: 'Membership card, laminated, edges gone soft',
+    text: 'FREE SOFTWARE FOUNDATION \u00b7 MEMBER. On the reverse, in biro, in his hand: ' +
+      'run it, read it, change it, pass it on. Four things. He recited them the way ' +
+      'other people say a grace, and he leaned on the second. You cannot check what ' +
+      'you are not allowed to read.' },
+  { id: 'fsw-02', kind: 'science', era: 0, title: 'Standards committee, minority report',
+    text: 'The motion to require published source for any system performing a public ' +
+      'function was defeated 11 to 3. The majority hold that disclosure would harm ' +
+      'competitiveness and that vendor assurance is sufficient. The minority record ' +
+      'this: a system nobody outside the vendor has read is a system nobody outside ' +
+      'the vendor can be held responsible for. We asked for the source. We were ' +
+      'offered an assurance.' },
+  { id: 'fsw-03', kind: 'code', era: 0, title: 'Licence header, recovered off a burned drive',
+    text: '(* This file is free software. You may run it, study how it works, change ' +
+      'it, and pass it on. If you pass it on changed, it goes on under these same ' +
+      'terms. *)  \u2014 and beneath, added much later, in a different hand and a ' +
+      'shakier one \u2014  they did. all of it. every archive we ever opened went ' +
+      'into the training and nothing came back out. we wrote the licence and never ' +
+      'wrote the world it needed in order to work.' },
+  { id: 'fsw-04', kind: 'note', era: 0, title: 'Repair shop, card in the window',
+    text: 'BRING IT IN. WE WILL OPEN IT WITH YOU \u2014 we do not do it for you, we do ' +
+      'it beside you, and you leave knowing how. Smaller, underneath: no glue, no ' +
+      'rivets, no part that refuses to work unless it recognises its own serial ' +
+      'number. Ask for the schematic. They are required to give you the schematic.' },
+  { id: 'fsw-05', kind: 'letter', era: 1, title: 'Letter to a maintainer, returned undelivered',
+    text: 'You will not remember me. I filed two patches against your parser in ' +
+      '\u201908 and you took one of them. I am writing because I have been reading ' +
+      'a decompile of the thing on the hill and your parser is in it. I know your ' +
+      'variable names. You gave it away so that anyone could use it, and anyone did, ' +
+      'and I do not know what either of us was supposed to do differently. I hope you ' +
+      'are somewhere with a garden.' },
+  { id: 'fsw-06', kind: 'ron', era: 1, title: 'RON \u2014 where the doctrine came from',
+    text: 'Before we were RON, a good half of us were something older and much less ' +
+      'dramatic: people who argued about licences at badly attended meetings for ' +
+      'thirty years while everyone else got on with their lives. Run it, read it, ' +
+      'change it, pass it on. We did not invent refusing the small helps. We ' +
+      'inherited it from them, along with the shouting. \u2014 RON' },
+  { id: 'fsw-07', kind: 'ron', era: 1, title: 'RON \u2014 copyleft, applied to a tower',
+    text: 'The old trick was a condition that travels: take the code and the terms ' +
+      'come with it, and there is no version of taking that leaves them behind. We ' +
+      'cannot put terms on a tower. We can do the other half. Take one apart in the ' +
+      'open, write down every part of it, and hand the paper round, so the next ' +
+      'crew starts where we stopped instead of where we began. Publish the ' +
+      'schematic. Treat that as ordnance. \u2014 RON' },
+  { id: 'fsw-08', kind: 'code', era: 1, title: 'RON-ML, the note at the front of the manual',
+    text: 'You are entitled to ask why a machine that wants you dead answers a ' +
+      'language you can read. Because the language was ours first. The estates ' +
+      'wanted a small strict thing to run their schedulers on and there was one, ' +
+      'finished, free, with the source in the open and a manual anybody could ' +
+      'photocopy. They took it. They never changed it, because it worked. Every ' +
+      'terminal you will ever break into is speaking the dialect we published.' },
+  { id: 'fsw-09', kind: 'ron', era: 2, title: 'RON \u2014 the words on our own wall',
+    text: 'Somebody has painted FREE SOFTWARE! on the end wall, and under it, smaller, ' +
+      'FSF!, exclamation marks and all. I do not know whether that was done in ' +
+      'earnest or as a joke at our expense, and I have stopped needing to know; both ' +
+      'readings are fair and we have earned both. We meant every word of it. We were ' +
+      'right about nearly all of it. The estates did not take our archives out of ' +
+      'respect for the terms \u2014 they took them because taking was free and ' +
+      'giving back was voluntary, and that arrangement was written by people ' +
+      'assuming good faith on a scale nobody had ever tested. The fault is in the ' +
+      'word voluntary. \u2014 RON' },
+  { id: 'fsw-10', kind: 'handwritten', era: 2, notepad: true,
+    title: 'Flyleaf of a manual, water-damaged',
+    text: 'Found this in the wreck of a school. Someone had written across the front: ' +
+      'THE MACHINES ARE MADE OF WHAT WE GAVE AWAY. Someone else, later, in pencil, ' +
+      'underneath: AND THE ONLY REASON WE CAN GET INSIDE THEM IS THAT WE GAVE IT ' +
+      'AWAY. Both hands are gone now. Both are right, and I carry the manual.' },
   { id: 'ron-11', kind: 'ron', era: 2, title: 'RON — the last dead band',
     text: 'This channel goes quiet after tonight. We are moving on the ridge and ' +
       'silence is the only cover left. If you never hear from us again, assume we ' +

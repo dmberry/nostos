@@ -1,3 +1,12 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 // Ruined temples — Odyssey set-dressing. The island was somewhere once; what's
 // left are little sanctuaries half-swallowed by the grass: a scatter of broken
 // marble column stumps and fallen entablature blocks, ringed by trees like an

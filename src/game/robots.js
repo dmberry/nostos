@@ -1,3 +1,12 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 import { makeRng } from './rng.js';
 import { decide, LAMP_COLOURS } from './ai_ml.js';
 import { sfx } from '../engine/sound.js';
@@ -1672,7 +1681,10 @@ function updateW1(r, dt, player, map) {
   if (r.drained) return;
 
   if (!r.aggro) {
-    if (!(r.loseInterestT > 0) && Math.hypot(player.x - r.x, player.y - r.y) < HUNTER_REACQUIRE_RANGE * ease) {
+    // distTo, not a raw hypot: a jammed or jacked-in player is not there to be
+    // re-acquired. This line read the live distance, so a swarm that had lost
+    // you picked you straight back up through a Wi-Fi block or a console.
+    if (!(r.loseInterestT > 0) && distTo(r, player) < HUNTER_REACQUIRE_RANGE * ease) {
       r.aggro = true;
     } else if (r.returning) {
       moveToward(r, r.home.x, r.home.y, W1_CHASE_SPEED * 0.5, dt, map);
@@ -1705,11 +1717,14 @@ function updateW1(r, dt, player, map) {
   else { tx = target.x + Math.cos(r.swarmAngle) * standoff; ty = target.y + Math.sin(r.swarmAngle) * standoff; }
   moveToward(r, tx, ty, W1_CHASE_SPEED, dt, map);
 
-  // Damage always checks the real, live distance (not distTo, which a Wi-Fi
-  // block forces to Infinity) — triangulation gets the squad close, but a hit
-  // still requires the machine to actually be standing next to you.
+  // Damage checks the real, live distance (not distTo, which a Wi-Fi block
+  // forces to Infinity) — triangulation gets the squad close, but a hit still
+  // requires the machine to actually be standing next to you. A jammer you
+  // carry does not stop that; a terminal does. `jackedIn` was the whole of
+  // task #92: the W1 swarm was the ONE class that could hit you at a console,
+  // and it hit through a promise the obelisk prints on its own banner.
   const realD = Math.hypot(player.x - r.x, player.y - r.y);
-  if (r.w1Phase === 'attack' && realD < W1_HIT_RANGE + reachBonus(player, map) && r.attackTimer <= 0) {
+  if (r.w1Phase === 'attack' && !player.jackedIn && realD < W1_HIT_RANGE + reachBonus(player, map) && r.attackTimer <= 0) {
     r.attackTimer = W1_HIT_COOLDOWN;
     player.takeDamage(W1_HIT_DAMAGE * ease, 'machine');
   }
@@ -2157,6 +2172,9 @@ function updateM6Pack(r, dt, player, map, robots, ease) {
   const standoff = r.m6Phase === 'attack' ? M6_ATTACK_STANDOFF : M6_WITHDRAW_RANGE;
   moveToward(r, player.x + Math.cos(r.swarmAngle) * standoff, player.y + Math.sin(r.swarmAngle) * standoff, M6_CHASE_SPEED, dt, map);
 
+  // No `jackedIn` check here, unlike the W1 swarm above, and deliberately: the
+  // daemon's household guard is not fooled by a credential on POSEIDON's
+  // network. The gate and core terminals stand inside their reach.
   const realD = Math.hypot(player.x - r.x, player.y - r.y);
   if (r.m6Phase === 'attack' && realD < M6_HIT_RANGE + reachBonus(player, map) && r.attackTimer <= 0) {
     r.attackTimer = M6_HIT_COOLDOWN;
@@ -2398,7 +2416,10 @@ function drawDesignation(ctx, r, x, y) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = '#b8bcc2'; // light grey, softer than stark white
-  ctx.fillText(r.type.toUpperCase(), x, y);
+  // `designation` overrides the type for a unit that is a variant rather than a
+  // class of its own — the siren tower's own repair unit runs a W3's program
+  // and wears T1a, because that is what it is.
+  ctx.fillText(r.designation || r.type.toUpperCase(), x, y);
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
 }

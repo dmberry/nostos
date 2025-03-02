@@ -1,3 +1,12 @@
+// BML — a 2026 Standard ML. Part of NostOS; synced to the BML repository.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 // THE EVALUATOR. An abstract syntax tree to a value.
 //
 // Part of src/lang/, the language proper. Moved out of src/game/ai_ml.js at
@@ -59,6 +68,15 @@ export function setHostNameHint(fn) { HOST_NAME_HINT = fn; }
 let HOST_UNBOUND = null;
 export function setHostUnbound(fn) { HOST_UNBOUND = fn; }
 
+// VALUES THE LANGUAGE DID NOT MAKE. NostOS passes its own things through this
+// evaluator — a tower, a key, a file on a card — and their tags were cased for
+// by name in here: `case 'key': return v.kind === 'aikey' ? 'the AI key' : …`.
+// The AI key is not a feature of Standard ML. A host that has such values says
+// how they compare, how they read and how they print, the same way it says what
+// an unbound name means; the language handles its own and asks about the rest.
+let HOST_VALUES = null;
+export function setHostValues(v) { HOST_VALUES = v; }
+
 // ---- Evaluator -----------------------------------------------------------
 
 export function applyValue(fnVal, argVal) {
@@ -117,13 +135,11 @@ function valuesEqual(a, b) {
   if (!a || !b || a.tag !== b.tag) return false;
   switch (a.tag) {
     case 'int': case 'real': case 'str': case 'bool': case 'char': return a.v === b.v;
+    case 'intinf': return a.v === b.v;
     case 'tuple': return a.items.length === b.items.length && a.items.every((x, i) => valuesEqual(x, b.items[i]));
     case 'list': return a.items.length === b.items.length && a.items.every((x, i) => valuesEqual(x, b.items[i]));
     case 'con': return a.name === b.name && (a.args || []).length === (b.args || []).length
       && (a.args || []).every((x, i) => valuesEqual(x, b.args[i]));
-    case 'node': return a.id === b.id;
-    case 'key': return a.kind === b.kind && a.id === b.id;
-    case 'file': return a.name === b.name;
     case 'unit': return true;
     // A record is equal when it has the same labels and equal values under
     // each. Field order is not part of a record, so compare by label.
@@ -144,7 +160,8 @@ function valuesEqual(a, b) {
     case 'vector':
       return a.items.length === b.items.length
         && a.items.every((x, i) => valuesEqual(x, b.items[i]));
-    default: return false;
+    // A value the host made: it says whether two of them are the same.
+    default: return HOST_VALUES && HOST_VALUES.equal ? HOST_VALUES.equal(a, b) : false;
   }
 }
 
@@ -198,10 +215,25 @@ function applyBinOp(op, l, r) {
   }
   const tag = isReal(l) ? 'real' : 'int';
 
+  // AN INT THAT LEAVES THE RANGE RAISES, as Standard ML's does. `Int.maxInt`
+  // has answered 9007199254740991 since the Basis was written and the
+  // arithmetic went straight past it, so `fact 500` answered `Infinity` and
+  // every comparison after that was against something no longer whole. Reals
+  // are NOT checked: `1E308 * 10.0` is `inf` in Standard ML too.
+  const ranged = (v) => {
+    if (tag === 'int' && !Number.isSafeInteger(v)) {
+      throw new RonmlRaise({
+        tag: 'con', name: 'Overflow', args: [],
+        why: 'the answer is outside the range of int. Int.maxInt is 9007199254740991; IntInf is unbounded.',
+      });
+    }
+    return { tag, v };
+  };
+
   switch (op) {
-    case 'PLUS': return { tag, v: a + b };
-    case 'MINUS': return { tag, v: a - b };
-    case 'STAR': return { tag, v: a * b };
+    case 'PLUS': return ranged(a + b);
+    case 'MINUS': return ranged(a - b);
+    case 'STAR': return ranged(a * b);
     case 'SLASH':
       if (tag !== 'real') throw new RonmlError('/ divides reals. For whole numbers use div');
       if (b === 0) throw new RonmlError('division by zero');
@@ -222,6 +254,371 @@ function applyBinOp(op, l, r) {
   }
 }
 
+// The declaration and module forms, lifted out of evalNode.
+//
+// V8 sizes a stack frame for every local a function declares, not for the ones
+// the branch actually taken uses. evalNode was one switch holding 92 of them,
+// so a recursive program reserved room for StructApply's twelve and OpenDecl's
+// six on every call, and ran out of host stack at a depth of 686. None of these
+// cases can appear inside a recursion: they are what a program declares, not
+// what it computes. Out here they cost one frame when a structure is declared
+// and nothing at all thereafter.
+//
+// Measured in docs/deep-recursion-plan.md.
+function evalDecl(node, env, ctx, builtins) {
+  switch (node.type) {
+    // An exception is a constructor that can be raised. Declaring one puts it
+    // where names are looked up, exactly like a datatype's constructors.
+    case 'ExnDecl': {
+      const store = (ctx && ctx.session) || {};
+      const reg = (store.__cons = store.__cons || {});
+      // A replication binds the NEW name to the OLD exception's identity, so
+      // the two are one exception under two names, as the Definition says.
+      if (node.alias) {
+        const src = reg[node.alias];
+        if (!src) throw new RonmlError(`${node.alias} is not an exception`);
+        reg[node.name] = src;
+        (store.__exn = store.__exn || {})[node.name] = true;
+        store[nameKey(node.name)] = src.arity === 0
+          ? { tag: 'con', name: src.name, args: [] }
+          : { tag: 'confn', name: src.name, arity: src.arity, args: [] };
+        return { tag: 'exndecl', name: node.name };
+      }
+      reg[node.name] = { name: node.name, arity: node.arity, of: 'exn' };
+      (store.__exn = store.__exn || {})[node.name] = true;
+      store[nameKey(node.name)] = node.arity === 0
+        ? { tag: 'con', name: node.name, args: [] }
+        : { tag: 'confn', name: node.name, arity: node.arity, args: [] };
+      return { tag: 'exndecl', name: node.name };
+    }
+
+    case 'Datatype': {
+      const store = (ctx && ctx.session) || {};
+      const reg = (store.__cons = store.__cons || {});
+      // `datatype t = datatype u` shares u's CONSTRUCTORS. Every one of them is
+      // registered again under this type's name, keeping its own identity, so a
+      // value made with u's constructor matches a pattern written against t —
+      // which is the whole point, and the half that the exception replication
+      // got wrong on the first attempt.
+      if (node.alias) {
+        const src = store.__datacons && store.__datacons[node.alias];
+        const names = src || [];
+        if (!names.length) throw new RonmlError(`${node.alias} is not a datatype`);
+        (store.__datacons = store.__datacons || {})[node.name] = names.slice();
+        return { tag: 'datatype', name: node.name, cons: names.slice() };
+      }
+      (store.__datacons = store.__datacons || {})[node.name] = node.cons.map((c) => c.name);
+      for (const c of node.cons) {
+        reg[c.name] = { name: c.name, arity: c.arity, of: node.name };
+        store[nameKey(c.name)] = c.arity === 0
+          ? { tag: 'con', name: c.name, args: [] }
+          : { tag: 'confn', name: c.name, arity: c.arity, args: [] };
+      }
+      return { tag: 'datatype', name: node.name, cons: node.cons.map((c) => c.name) };
+    }
+
+    case 'Local': {
+      const store = (ctx && ctx.session) || {};
+      const inner = Object.create(env);
+      for (const d of node.hidden) evalNode(d, inner, { ...ctx, session: inner }, builtins);
+      // D-06: `local … in … end` BINDS, so it should report what it bound.
+      // It was implemented as an anonymous structure and echoed as one:
+      // `structure local : 1 name(s)`, which tells you nothing about `vis`.
+      const names = [];
+      const values = [];
+      for (const d of node.shown) {
+        evalNode(d, inner, { ...ctx, session: inner }, builtins);
+        if (d.name) {
+          const v = inner[nameKey(d.name)];
+          store[nameKey(d.name)] = v;
+          names.push(d.name);
+          values.push(v);
+        }
+      }
+      if (names.length === 1) return { tag: 'binding', name: names[0], value: values[0] };
+      if (names.length > 1) return { tag: 'bindings', names, values };
+      return { tag: 'unit' };
+    }
+
+    case 'FunctorDecl': {
+      const store = (ctx && ctx.session) || {};
+      (store.__functors = store.__functors || {})[node.name] = { param: node.param, decls: node.decls };
+      return { tag: 'functor', name: node.name, param: node.param };
+    }
+
+    // `structure Q = Queue` — one structure under another name. Every member
+    // of the old one appears under the new, and an ascription narrows what
+    // shows, exactly as it does on a struct.
+    case 'StructAlias': {
+      const store = (ctx && ctx.session) || {};
+      const prefix = `${nameKey(node.from)}.`;
+      const allowed = node.ascribe ? ((store.__sigs || {})[node.ascribe] || null) : null;
+      const published = [];
+      // `for … in`, not Object.keys: INSIDE A STRUCT the body runs in a scope
+      // that prototype-chains to the enclosing one, so the structure being
+      // named is reachable but not an own property. Own keys alone made
+      // `struct structure Key : ORDERED = IntLT … end` answer *no structure
+      // IntLT to name*, which is the form the corpus uses everywhere.
+      for (const k in store) {
+        if (!k.startsWith(prefix)) continue;
+        const bare = k.slice(prefix.length);
+        if (allowed && !allowed.some((n) => nameKey(n) === bare)) continue;
+        store[`${nameKey(node.name)}.${bare}`] = store[k];
+        published.push(bare);
+      }
+      if (!published.length) throw new RonmlError(`no structure ${node.from} to name`);
+      // The same shape a `struct` declaration returns, so the prompt echoes
+      // `structure Q : 2 name(s)` rather than wrapping it as a string value:
+      // `val it = "structure Q : 2 name(s)" : unit`, which said the declaration
+      // WAS a string.
+      return { tag: 'struct', name: node.name, names: published };
+    }
+
+    case 'StructApply': {
+      const store = (ctx && ctx.session) || {};
+      const f = (store.__functors || {})[node.functor];
+      if (!f) throw new RonmlError(`${node.functor} is not a functor`);
+      const inner = Object.create(env);
+      // The argument's names are visible inside the body both bare and under
+      // the parameter's name, so `X.size` and `size` both find it.
+      //
+      // SEVERAL STRUCTURES, one per parameter:
+      // `F (structure P = A structure Q = B)`. Each is copied in under its own
+      // parameter's name and bare, which is what the single-parameter path does
+      // once, done once per binding.
+      if (node.argBinds) {
+        for (const b of node.argBinds) {
+          // An anonymous structure for this parameter: run its declarations
+          // into a scratch scope and take those, as the single-parameter path
+          // does for `F (struct … end)`.
+          if (b.decls) {
+            const anon = Object.create(env);
+            for (const d of b.decls) evalNode(d, anon, { ...ctx, session: anon }, builtins);
+            for (const k of Object.keys(anon)) {
+              if (k.startsWith('__') || k.includes('.')) continue;
+              inner[`${nameKey(b.param)}.${k}`] = anon[k];
+              if (!(k in inner)) inner[k] = anon[k];
+            }
+            continue;
+          }
+          const pre = `${nameKey(b.from)}.`;
+          let found = 0;
+          for (let e = store; e && e !== Object.prototype; e = Object.getPrototypeOf(e)) {
+            for (const k of Object.keys(e)) {
+              if (!k.startsWith(pre)) continue;
+              const bare = k.slice(pre.length);
+              if (bare.includes('.')) continue;
+              inner[`${nameKey(b.param)}.${bare}`] = e[k];
+              if (!(bare in inner)) inner[bare] = e[k];
+              found++;
+            }
+          }
+          if (!found) throw new RonmlError(`${b.from} is not a structure`);
+        }
+      }
+      else if (node.argDecls) {
+        // `F (struct val z = 5 end)` — an ANONYMOUS structure. Run its
+        // declarations into a scratch scope and hand those over, rather than
+        // reading a named structure out of the session.
+        const anon = Object.create(env);
+        for (const d of node.argDecls) evalNode(d, anon, { ...ctx, session: anon }, builtins);
+        for (const k of Object.keys(anon)) {
+          if (k.startsWith('__') || k.includes('.')) continue;
+          inner[k] = anon[k];
+          inner[`${nameKey(f.param)}.${k}`] = anon[k];
+        }
+      } else {
+        const prefix = `${nameKey(node.arg || '')}.`;
+        for (const k of Object.keys(store)) {
+          if (!k.startsWith(prefix)) continue;
+          const bare = k.slice(prefix.length);
+          inner[bare] = store[k];
+          inner[`${nameKey(f.param)}.${bare}`] = store[k];
+        }
+      }
+      for (const d of f.decls) evalNode(d, inner, { ...ctx, session: inner }, builtins);
+      const allowed = node.ascribe ? ((store.__sigs || {})[node.ascribe] || null) : null;
+      const published = [];
+      for (const k of Object.keys(inner)) {
+        if (k.startsWith('__') || k.includes('.')) continue;
+        if (allowed && !allowed.some((n) => nameKey(n) === k)) continue;
+        store[`${nameKey(node.name)}.${k}`] = inner[k];
+        published.push(k);
+      }
+      return { tag: 'struct', name: node.name, names: published };
+    }
+
+    // A structure runs its declarations in a scope of their own and then
+    // publishes them under a prefix, so `Board.size` finds what `size` became.
+    // `:>` publishes only the names the signature lists, which is the real work
+    // a signature does even without a checker behind it: everything else stays
+    // inside, and a caller reaching for it does not find it.
+    case 'StructDecl': {
+      const store = (ctx && ctx.session) || {};
+      const inner = Object.create(env);
+      // WHICH CONSTRUCTORS THIS STRUCTURE ADDS, taken as a before-and-after.
+      // `inner.__cons` is not a fresh table: reading it walks the prototype
+      // chain to the enclosing one, so a struct body registers straight into
+      // the session's own registry and the two are the same object. Qualifying
+      // everything in it, once per structure, re-qualified names that were
+      // already qualified — `word.stringcvt.col.red` — and the prelude never
+      // finished loading.
+      const before = new Set(Object.keys(store.__cons || {}));
+      for (const d of node.decls) evalNode(d, inner, { ...ctx, session: inner }, builtins);
+      const allowed = node.ascribe ? ((store.__sigs || {})[node.ascribe] || null) : null;
+      const published = [];
+      for (const k of Object.keys(inner)) {
+        if (k.startsWith('__')) continue;
+        const bare = k;
+        if (allowed && !allowed.some((n) => nameKey(n) === bare)) continue;
+        store[`${nameKey(node.name)}.${bare}`] = inner[k];
+        published.push(bare);
+      }
+      // Constructors declared inside are visible through the prefix too.
+      //
+      // UNDER THE QUALIFIED NAME AS WELL, which is the half that was missing.
+      // A pattern name that is not a registered constructor is read as a
+      // VARIABLE, and a variable matches anything — so `case c of
+      // StringCvt.HEX => …` took the first arm whatever it was handed, and
+      // `Real.fmt` answered as though every format were the first one. Silent,
+      // and in the Basis itself. Registering `Col.Red` beside `Red` is enough:
+      // the matcher already compares against the constructor's canonical name,
+      // so the two spellings are one constructor, and `Bogus.Red` still fails
+      // rather than matching anything at all.
+      const icons = inner.__cons || {};
+      const reg = (store.__cons = store.__cons || {});
+      for (const c of Object.keys(icons)) {
+        reg[c] = icons[c];
+        if (!before.has(c) && !c.includes('.')) reg[`${nameKey(node.name)}.${nameKey(c)}`] = icons[c];
+      }
+      return { tag: 'struct', name: node.name, names: published };
+    }
+
+    case 'SigDecl': {
+      const store = (ctx && ctx.session) || {};
+      (store.__sigs = store.__sigs || {})[node.name] = node.names;
+      return { tag: 'sig', name: node.name, names: node.names };
+    }
+
+    // `signature B = A where type … = …`: B inherits A's public names. The
+    // where-type refinement is a no-op here, since signatures track names and
+    // not types.
+    case 'SigAbbrev': {
+      const store = (ctx && ctx.session) || {};
+      const names = (store.__sigs || {})[node.from];
+      if (!names) throw new RonmlError(`no signature ${node.from} to name`);
+      (store.__sigs = store.__sigs || {})[node.name] = names;
+      return { tag: 'sig', name: node.name, names };
+    }
+
+    // `open S` copies a structure's published names into scope without their
+    // prefix. The members are stored flat as `s.member`, so this is a scan for
+    // that prefix and a copy — the same shape the structure case writes.
+    case 'OpenDecl': {
+      const store = (ctx && ctx.session) || {};
+      const opened = [];
+      for (const name of node.names) {
+        const pre = `${nameKey(name)}.`;
+        let found = 0;
+        for (let e = store; e && e !== Object.prototype; e = Object.getPrototypeOf(e)) {
+          for (const k of Object.keys(e)) {
+            if (!k.startsWith(pre)) continue;
+            const bare = k.slice(pre.length);
+            if (bare.includes('.')) continue;      // a nested structure stays qualified
+            if (!(bare in env)) { env[bare] = e[k]; found++; }
+          }
+        }
+        // Constructors too: `open` on a structure holding a datatype brings its
+        // constructors, which is most of why anyone opens anything.
+        const cons = store.__cons || {};
+        for (const k of Object.keys(cons)) {
+          if (nameKey(k).startsWith(pre)) {
+            cons[k.slice(pre.length)] = cons[k];
+            found++;
+          }
+        }
+        if (!found) throw new RonmlError(`no structure ${name} to open`);
+        opened.push(name);
+      }
+      return { tag: 'struct', name: opened.join(' '), names: [] };
+    }
+
+    // Fixity is applied at parse time; this persists it so the NEXT line parsed
+    // in this session sees it too.
+    case 'FixityDecl': {
+      const store = (ctx && ctx.session) || {};
+      const tbl = (store.__fixity = store.__fixity || defaultFixity());
+      for (const n of node.names) {
+        if (node.word === 'nonfix') delete tbl[n];
+        else tbl[n] = [node.prec, node.assoc];
+      }
+      return { tag: 'unit' };
+    }
+
+    // A chain of simultaneous declarations. Evaluated in order into the same
+    // environment, which is what makes `fun ev … and od …` mutually recursive:
+    // both land in the session before either is called.
+    case 'Decls': {
+      // `and` is SIMULTANEOUS. Every right-hand side sees the bindings that
+      // were in scope BEFORE the declaration, which is the whole difference
+      // between `val a = 1 and b = a` and two declarations in a row. v1.278
+      // built the chain by running the parts in sequence, so each right-hand
+      // side saw the ones before it and `val u = 2 and w = u` gave w the new u.
+      //
+      // Every case in the corpus is independent or mutually recursive
+      // definitions, where the two readings agree, which is why the conformance
+      // number never noticed. Shadowing is where they part.
+      //
+      // `fun` chains are the exception and must NOT be held back: mutual
+      // recursion needs each name in scope while the others are defined. They
+      // bind functions, and a function's body is not run at definition, so
+      // letting them see each other is both necessary and harmless.
+      const isFun = node.sequential
+        || node.items.every((d) => d && d.type === 'TopLet' && d.value && d.value.type === 'Lam');
+      if (isFun) {
+        const fnames = [];
+        const fvalues = [];
+        let last = { tag: 'unit' };
+        for (const d of node.items) {
+          last = evalNode(d, env, ctx, builtins);
+          if (last && last.tag === 'binding') { fnames.push(last.name); fvalues.push(last.value); }
+        }
+        if (fnames.length > 1) return { tag: 'bindings', names: fnames, values: fvalues };
+        return last;
+      }
+      // Value bindings: work out every right-hand side first, against the
+      // environment as it stands, and only then put the names in.
+      const staged = node.items.map((d) => {
+        if (d && d.type === 'TopLet') {
+          return { d, v: evalNode(d.value, env, ctx, builtins) };
+        }
+        return { d, v: null };
+      });
+      // D-08: report EVERY binding the chain made, not just the last one. Both
+      // names always bound correctly; only the echo dropped them, so
+      // `val a = 1 and b = 2` answered `val b = 2` and left you wondering about a.
+      const names = [];
+      const values = [];
+      let last = { tag: 'unit' };
+      for (const { d, v } of staged) {
+        if (v !== null && d.type === 'TopLet') {
+          env[nameKey(d.name)] = v;
+          names.push(d.name);
+          values.push(v);
+          last = { tag: 'binding', name: d.name, value: v };
+        } else {
+          last = evalNode(d, env, ctx, builtins);
+        }
+      }
+      if (names.length > 1) return { tag: 'bindings', names, values };
+      return last;
+    }
+    default:
+      throw new RonmlError('malformed command');
+  }
+}
+
+// The evaluator.
 // PROPER TAIL CALLS (docs/tail-calls-plan.md). Standard ML requires them, and
 // this evaluator did not have them: every sub-expression recursed, so how deep a
 // program could go was whatever the host stack had left. `count 5000` faulted at
@@ -322,30 +719,21 @@ export function evalNode(node, env, ctx, builtins) {
     // nothing here to check with.
     case 'TypeAbbrev': return { tag: 'typename', name: node.name };
 
-    // An exception is a constructor that can be raised. Declaring one puts it
-    // where names are looked up, exactly like a datatype's constructors.
-    case 'ExnDecl': {
-      const store = (ctx && ctx.session) || {};
-      const reg = (store.__cons = store.__cons || {});
-      // A replication binds the NEW name to the OLD exception's identity, so
-      // the two are one exception under two names, as the Definition says.
-      if (node.alias) {
-        const src = reg[node.alias];
-        if (!src) throw new RonmlError(`${node.alias} is not an exception`);
-        reg[node.name] = src;
-        (store.__exn = store.__exn || {})[node.name] = true;
-        store[nameKey(node.name)] = src.arity === 0
-          ? { tag: 'con', name: src.name, args: [] }
-          : { tag: 'confn', name: src.name, arity: src.arity, args: [] };
-        return { tag: 'exndecl', name: node.name };
-      }
-      reg[node.name] = { name: node.name, arity: node.arity, of: 'exn' };
-      (store.__exn = store.__exn || {})[node.name] = true;
-      store[nameKey(node.name)] = node.arity === 0
-        ? { tag: 'con', name: node.name, args: [] }
-        : { tag: 'confn', name: node.name, arity: node.arity, args: [] };
-      return { tag: 'exndecl', name: node.name };
-    }
+    // Declarations and module forms. Their bodies live in evalDecl so their
+    // local variables are not part of every recursive call's stack frame.
+    case 'ExnDecl':
+    case 'Datatype':
+    case 'Local':
+    case 'FunctorDecl':
+    case 'StructAlias':
+    case 'StructApply':
+    case 'StructDecl':
+    case 'SigDecl':
+    case 'SigAbbrev':
+    case 'OpenDecl':
+    case 'FixityDecl':
+    case 'Decls':
+      return evalDecl(node, env, ctx, builtins);
 
     case 'Raise': {
       const v = evalNode(node.arg, env, ctx, builtins);
@@ -370,166 +758,7 @@ export function evalNode(node, env, ctx, builtins) {
 
     // A structure's declarations run in a scope of their own and are then
     // published. Pulled out because local, functor and structure all do it.
-    case 'Local': {
-      const store = (ctx && ctx.session) || {};
-      const inner = Object.create(env);
-      for (const d of node.hidden) evalNode(d, inner, { ...ctx, session: inner }, builtins);
-      // D-06: `local … in … end` BINDS, so it should report what it bound.
-      // It was implemented as an anonymous structure and echoed as one:
-      // `structure local : 1 name(s)`, which tells you nothing about `vis`.
-      const names = [];
-      const values = [];
-      for (const d of node.shown) {
-        evalNode(d, inner, { ...ctx, session: inner }, builtins);
-        if (d.name) {
-          const v = inner[nameKey(d.name)];
-          store[nameKey(d.name)] = v;
-          names.push(d.name);
-          values.push(v);
-        }
-      }
-      if (names.length === 1) return { tag: 'binding', name: names[0], value: values[0] };
-      if (names.length > 1) return { tag: 'bindings', names, values };
-      return { tag: 'unit' };
-    }
 
-    case 'FunctorDecl': {
-      const store = (ctx && ctx.session) || {};
-      (store.__functors = store.__functors || {})[node.name] = { param: node.param, decls: node.decls };
-      return { tag: 'functor', name: node.name, param: node.param };
-    }
-
-    // `structure Q = Queue` — one structure under another name. Every member
-    // of the old one appears under the new, and an ascription narrows what
-    // shows, exactly as it does on a struct.
-    case 'StructAlias': {
-      const store = (ctx && ctx.session) || {};
-      const prefix = `${nameKey(node.from)}.`;
-      const allowed = node.ascribe ? ((store.__sigs || {})[node.ascribe] || null) : null;
-      const published = [];
-      // `for … in`, not Object.keys: INSIDE A STRUCT the body runs in a scope
-      // that prototype-chains to the enclosing one, so the structure being
-      // named is reachable but not an own property. Own keys alone made
-      // `struct structure Key : ORDERED = IntLT … end` answer *no structure
-      // IntLT to name*, which is the form the corpus uses everywhere.
-      for (const k in store) {
-        if (!k.startsWith(prefix)) continue;
-        const bare = k.slice(prefix.length);
-        if (allowed && !allowed.some((n) => nameKey(n) === bare)) continue;
-        store[`${nameKey(node.name)}.${bare}`] = store[k];
-        published.push(bare);
-      }
-      if (!published.length) throw new RonmlError(`no structure ${node.from} to name`);
-      // The same shape a `struct` declaration returns, so the prompt echoes
-      // `structure Q : 2 name(s)` rather than wrapping it as a string value:
-      // `val it = "structure Q : 2 name(s)" : unit`, which said the declaration
-      // WAS a string.
-      return { tag: 'struct', name: node.name, names: published };
-    }
-
-    case 'StructApply': {
-      const store = (ctx && ctx.session) || {};
-      const f = (store.__functors || {})[node.functor];
-      if (!f) throw new RonmlError(`${node.functor} is not a functor`);
-      const inner = Object.create(env);
-      // The argument's names are visible inside the body both bare and under
-      // the parameter's name, so `X.size` and `size` both find it.
-      if (node.argDecls) {
-        // `F (struct val z = 5 end)` — an ANONYMOUS structure. Run its
-        // declarations into a scratch scope and hand those over, rather than
-        // reading a named structure out of the session.
-        const anon = Object.create(env);
-        for (const d of node.argDecls) evalNode(d, anon, { ...ctx, session: anon }, builtins);
-        for (const k of Object.keys(anon)) {
-          if (k.startsWith('__') || k.includes('.')) continue;
-          inner[k] = anon[k];
-          inner[`${nameKey(f.param)}.${k}`] = anon[k];
-        }
-      } else {
-        const prefix = `${nameKey(node.arg || '')}.`;
-        for (const k of Object.keys(store)) {
-          if (!k.startsWith(prefix)) continue;
-          const bare = k.slice(prefix.length);
-          inner[bare] = store[k];
-          inner[`${nameKey(f.param)}.${bare}`] = store[k];
-        }
-      }
-      for (const d of f.decls) evalNode(d, inner, { ...ctx, session: inner }, builtins);
-      const allowed = node.ascribe ? ((store.__sigs || {})[node.ascribe] || null) : null;
-      const published = [];
-      for (const k of Object.keys(inner)) {
-        if (k.startsWith('__') || k.includes('.')) continue;
-        if (allowed && !allowed.some((n) => nameKey(n) === k)) continue;
-        store[`${nameKey(node.name)}.${k}`] = inner[k];
-        published.push(k);
-      }
-      return { tag: 'struct', name: node.name, names: published };
-    }
-
-    // Fixity is applied at parse time; this persists it so the NEXT line parsed
-    // in this session sees it too.
-    // A chain of simultaneous declarations. Evaluated in order into the same
-    // environment, which is what makes `fun ev … and od …` mutually recursive:
-    // both land in the session before either is called.
-    case 'Decls': {
-      // `and` is SIMULTANEOUS. Every right-hand side sees the bindings that
-      // were in scope BEFORE the declaration, which is the whole difference
-      // between `val a = 1 and b = a` and two declarations in a row. v1.278
-      // built the chain by running the parts in sequence, so each right-hand
-      // side saw the ones before it and `val u = 2 and w = u` gave w the new u.
-      //
-      // Every case in the corpus is independent or mutually recursive
-      // definitions, where the two readings agree, which is why the conformance
-      // number never noticed. Shadowing is where they part.
-      //
-      // `fun` chains are the exception and must NOT be held back: mutual
-      // recursion needs each name in scope while the others are defined. They
-      // bind functions, and a function's body is not run at definition, so
-      // letting them see each other is both necessary and harmless.
-      const isFun = node.sequential
-        || node.items.every((d) => d && d.type === 'TopLet' && d.value && d.value.type === 'Lam');
-      if (isFun) {
-        const fnames = [];
-        const fvalues = [];
-        let last = { tag: 'unit' };
-        for (const d of node.items) {
-          last = evalNode(d, env, ctx, builtins);
-          if (last && last.tag === 'binding') { fnames.push(last.name); fvalues.push(last.value); }
-        }
-        if (fnames.length > 1) return { tag: 'bindings', names: fnames, values: fvalues };
-        return last;
-      }
-      // Value bindings: work out every right-hand side first, against the
-      // environment as it stands, and only then put the names in.
-      const staged = node.items.map((d) => {
-        if (d && d.type === 'TopLet') {
-          return { d, v: evalNode(d.value, env, ctx, builtins) };
-        }
-        return { d, v: null };
-      });
-      // D-08: report EVERY binding the chain made, not just the last one. Both
-      // names always bound correctly; only the echo dropped them, so
-      // `val a = 1 and b = 2` answered `val b = 2` and left you wondering about a.
-      const names = [];
-      const values = [];
-      let last = { tag: 'unit' };
-      for (const { d, v } of staged) {
-        if (v !== null && d.type === 'TopLet') {
-          env[nameKey(d.name)] = v;
-          names.push(d.name);
-          values.push(v);
-          last = { tag: 'binding', name: d.name, value: v };
-        } else {
-          last = evalNode(d, env, ctx, builtins);
-        }
-      }
-      if (names.length > 1) return { tag: 'bindings', names, values };
-      return last;
-    }
-
-    // `open S` copies a structure's published names into scope without their
-    // prefix. The members are stored flat as `s.member`, so this is a scan for
-    // that prefix and a copy — the same shape the structure case writes.
     // `while c do e` answers unit and is there for its effects: a ref being
     // assigned, something printed. Bounded by the same step budget as anything
     // else, so a loop that never ends faults rather than hanging.
@@ -545,97 +774,12 @@ export function evalNode(node, env, ctx, builtins) {
       }
     }
 
-    case 'OpenDecl': {
-      const store = (ctx && ctx.session) || {};
-      const opened = [];
-      for (const name of node.names) {
-        const pre = `${nameKey(name)}.`;
-        let found = 0;
-        for (let e = store; e && e !== Object.prototype; e = Object.getPrototypeOf(e)) {
-          for (const k of Object.keys(e)) {
-            if (!k.startsWith(pre)) continue;
-            const bare = k.slice(pre.length);
-            if (bare.includes('.')) continue;      // a nested structure stays qualified
-            if (!(bare in env)) { env[bare] = e[k]; found++; }
-          }
-        }
-        // Constructors too: `open` on a structure holding a datatype brings its
-        // constructors, which is most of why anyone opens anything.
-        const cons = store.__cons || {};
-        for (const k of Object.keys(cons)) {
-          if (nameKey(k).startsWith(pre)) {
-            cons[k.slice(pre.length)] = cons[k];
-            found++;
-          }
-        }
-        if (!found) throw new RonmlError(`no structure ${name} to open`);
-        opened.push(name);
-      }
-      return { tag: 'struct', name: opened.join(' '), names: [] };
-    }
-
-    case 'FixityDecl': {
-      const store = (ctx && ctx.session) || {};
-      const tbl = (store.__fixity = store.__fixity || defaultFixity());
-      for (const n of node.names) {
-        if (node.word === 'nonfix') delete tbl[n];
-        else tbl[n] = [node.prec, node.assoc];
-      }
-      return { tag: 'unit' };
-    }
-
-    case 'SigDecl': {
-      const store = (ctx && ctx.session) || {};
-      (store.__sigs = store.__sigs || {})[node.name] = node.names;
-      return { tag: 'sig', name: node.name, names: node.names };
-    }
-
-    // `signature B = A where type … = …`: B inherits A's public names. The
-    // where-type refinement is a no-op here, since signatures track names and
-    // not types.
-    case 'SigAbbrev': {
-      const store = (ctx && ctx.session) || {};
-      const names = (store.__sigs || {})[node.from];
-      if (!names) throw new RonmlError(`no signature ${node.from} to name`);
-      (store.__sigs = store.__sigs || {})[node.name] = names;
-      return { tag: 'sig', name: node.name, names };
-    }
-
-    // A structure runs its declarations in a scope of their own and then
-    // publishes them under a prefix, so `Board.size` finds what `size` became.
-    // `:>` publishes only the names the signature lists, which is the real work
-    // a signature does even without a checker behind it: everything else stays
-    // inside, and a caller reaching for it does not find it.
-    case 'StructDecl': {
-      const store = (ctx && ctx.session) || {};
+    // `let open S in e end`. A child scope, so what the open brings reaches the
+    // body and stops at the `end`, which is what Standard ML says.
+    case 'LetOpen': {
       const inner = Object.create(env);
-      for (const d of node.decls) evalNode(d, inner, { ...ctx, session: inner }, builtins);
-      const allowed = node.ascribe ? ((store.__sigs || {})[node.ascribe] || null) : null;
-      const published = [];
-      for (const k of Object.keys(inner)) {
-        if (k.startsWith('__')) continue;
-        const bare = k;
-        if (allowed && !allowed.some((n) => nameKey(n) === bare)) continue;
-        store[`${nameKey(node.name)}.${bare}`] = inner[k];
-        published.push(bare);
-      }
-      // Constructors declared inside are visible through the prefix too.
-      const icons = inner.__cons || {};
-      const reg = (store.__cons = store.__cons || {});
-      for (const c of Object.keys(icons)) reg[c] = icons[c];
-      return { tag: 'struct', name: node.name, names: published };
-    }
-
-    case 'Datatype': {
-      const store = (ctx && ctx.session) || {};
-      const reg = (store.__cons = store.__cons || {});
-      for (const c of node.cons) {
-        reg[c.name] = { name: c.name, arity: c.arity, of: node.name };
-        store[nameKey(c.name)] = c.arity === 0
-          ? { tag: 'con', name: c.name, args: [] }
-          : { tag: 'confn', name: c.name, arity: c.arity, args: [] };
-      }
-      return { tag: 'datatype', name: node.name, cons: node.cons.map((c) => c.name) };
+      evalNode(node.decl, inner, ctx, builtins);
+      return evalNode(node.body, inner, ctx, builtins);
     }
 
     // The eliminator. Arms are tried in order and the first that matches wins,
@@ -920,9 +1064,6 @@ export function describeValue(v) {
     case 'real': return `the real ${v.v}`;
     case 'char': return `the character ${v.v}`;
     case 'bool': return v.v ? 'true' : 'false';
-    case 'node': return `node ${v.id}`;
-    case 'key': return v.kind === 'aikey' ? 'the AI key' : 'a key';
-    case 'file': return `the file ${v.name}`;
     case 'list': return 'a list';
     case 'array': return `an array of ${v.items.length}`;
     case 'vector': return `a vector of ${v.items.length}`;
@@ -936,7 +1077,7 @@ export function describeValue(v) {
     case 'binding': return `the binding ${v.name}`;
     case 'bindings': return `${v.names.length} bindings`;
     case 'fn': return `${v.name} (needs ${v.builtin.arity - v.args.length} more arg${v.builtin.arity - v.args.length === 1 ? '' : 's'})`;
-    default: return 'that';
+    default: return (HOST_VALUES && HOST_VALUES.describe && HOST_VALUES.describe(v)) || 'that';
   }
 }
 
@@ -1027,13 +1168,11 @@ export function formatValue(v) {
     // Standard ML writes a negative number with a tilde, not a minus: `~3`,
     // `~1.5`. The minus sign is the binary operator and nothing else.
     case 'int': return String(v.v).replace(/^-/, '~');
+    case 'intinf': return String(v.v).replace(/^-/, '~');
     case 'real': return showReal(v.v);
     case 'char': return v.v;
     case 'bool': return v.v ? 'true' : 'false';
     case 'str': return v.v;
-    case 'node': return v.id;
-    case 'key': return v.kind === 'aikey' ? (v.enc === false ? 'AIKEY:open' : 'AIKEY:sealed') : `KEY:${v.id}`;
-    case 'file': return v.name;
     case 'list': return '[' + v.items.map(formatValue).join(', ') + ']';
     case 'tuple': return '(' + v.items.map(formatValue).join(', ') + ')';
     case 'record': return '{' + Object.keys(v.fields).map((k) => `${k} = ${formatValue(v.fields[k])}`).join(', ') + '}';
@@ -1063,7 +1202,7 @@ export function formatValue(v) {
     case 'bindings': return v.names.map((n, i) => `val ${n} = ${formatValue(v.values[i])}`).join('\n');
     case 'closure': return '<fn>';
     case 'fn': return `<${describeValue(v)}>`;
-    default: return String(v);
+    default: return (HOST_VALUES && HOST_VALUES.format && HOST_VALUES.format(v)) || String(v);
   }
 }
 

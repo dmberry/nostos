@@ -1,3 +1,12 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 // Item definitions. Tools live in the hands slot; resources stack in pockets.
 
 export const ITEMS = {
@@ -186,6 +195,7 @@ export const ITEMS = {
   // own; this and the W5 gardener are the only ways back. See player.plantSeed.
   grass_seed: {
     name: 'Grass seed',
+    use: 'Plant it on blighted ground to bring the green back.',
     kind: 'seed',
     stack: 32,
     color: '#8fbf5a',
@@ -261,6 +271,7 @@ export const ITEMS = {
   // top it back up. Held item, so it lives in the hands slot like a weapon.
   wifiblock: {
     name: 'Wi-Fi block',
+    use: 'Carry it charged and hunters cannot acquire you. It jams their sensors; it will not stop one already standing over you.',
     kind: 'gadget',
     tier: 4,
     ammoType: 'battery',
@@ -299,6 +310,7 @@ export const ITEMS = {
   // Point it at a tower and its robots take their orders from you instead.
   ob_spoofer: {
     name: 'OB spoofer',
+    use: 'Stand under a tower and press X. The garrison homed to it hears an obelisk that is not there and takes your orders instead. Spends a battery.',
     kind: 'gadget',
     tier: 5,
     ammoType: 'battery',
@@ -317,12 +329,14 @@ export const ITEMS = {
   // this one grew into a complete computer, and an acquisition arc beats variety.
   laptop: {
     name: 'NostBook', kind: 'laptop', color: '#c9bda1', cpu: 1, ram: 1,
+    built: 'a broken NostBook, a battery and a chip fragment. press C holding all three.',
     blurb: 'Yellowed plastic, a stiff hinge, a keyboard worn shiny. It works.',
   },
   // Found dead. Solder circuit boards into it (C) and it becomes the machine
   // above — which is also why circuits keep mattering after the bluebox.
   laptop_broken: {
     name: 'Broken NostBook', kind: 'laptop', color: '#9d947f', cpu: 1, ram: 1,
+    use: 'A dead NostBook. Click it and it says what its board still wants.',
     broken: true, damage: 'cracked',
     blurb: 'Dead. The board is scorched, but the disk inside it is intact.',
   },
@@ -331,6 +345,7 @@ export const ITEMS = {
   // you're jacked in, the obelisk masks you: the machines lose you entirely.
   chip: {
     name: 'Access chip',
+    use: 'Jacks you into an obelisk. Walk up to a tower and click its screen: the console is behind it.',
     kind: 'chip',
     stack: 1,
     color: '#6ad0a0',
@@ -340,6 +355,7 @@ export const ITEMS = {
   // always a route to a terminal even without felling a tower.
   chip_fragment: {
     name: 'Chip fragment',
+    use: 'Repair stock. A burnt NostBook wants one of these and a battery.',
     kind: 'material',
     stack: 64,
     color: '#8fe0c0',
@@ -349,6 +365,7 @@ export const ITEMS = {
   // to unfold the POSEIDON territory map anywhere, away from a terminal.
   printed_map: {
     name: 'Printed map',
+    use: 'The territory, as the towers see it. Click it to read.',
     kind: 'map',
     stack: 1,
     color: '#d8cfa8',
@@ -368,6 +385,7 @@ export const ITEMS = {
   // survives the crossing off Ogygia.
   greek_ship: {
     name: 'Greek ship',
+    built: 'the golden axe, wood, a sail, an oar and a rope. calypso\'s recipe first.',
     kind: 'vehicle',
     stack: 1,
     color: '#9a7038',
@@ -377,20 +395,21 @@ export const ITEMS = {
   // craft; it is not consumed, so you can build more than one ship.
   golden_axe: {
     name: "Golden axe (Calypso's recipe)",
+    use: 'Calypso\'s recipe, and the only thing that will build a sea-worthy ship. Refunction her at the fortress to get it.',
     kind: 'recipe',
     stack: 1,
     color: '#e8c24a',
   },
   // The three ship parts — found at wrecks and huts along the coast, not crafted.
-  oar: { name: 'Oar', kind: 'part', stack: 4, color: '#8a6437' },
+  oar: { name: 'Oar', kind: 'part', stack: 4, color: '#8a6437', use: 'One of the three parts the boat-house wants before it will build you a ship. Keep it.' },
   // The bronze ram (embolos) off an older warship, rusted into a wreck on Aeaea.
   // Not a ship part: the greek_ship craft does not want it and never asks. Carry
   // it through the narrows and it is fitted to the bow, where it shoulders the
   // first few rocks aside. It is no use at all against Scylla or Charybdis, which
   // is the point of it — see RAM_MAX in game/narrows.js.
   ram: { name: 'Bronze ram', kind: 'part', stack: 1, color: '#b07d3a' },
-  rope: { name: 'Rope', kind: 'part', stack: 4, color: '#b8a066' },
-  sail: { name: 'Sail', kind: 'part', stack: 2, color: '#d8d2c0' },
+  rope: { name: 'Rope', kind: 'part', stack: 4, color: '#b8a066', use: 'One of the three parts the boat-house wants before it will build you a ship. Keep it.' },
+  sail: { name: 'Sail', kind: 'part', stack: 2, color: '#d8d2c0', use: 'One of the three parts the boat-house wants before it will build you a ship. Keep it.' },
   // Electro-compass: click it (in hand, pocket, or pack) to arm it — once
   // armed and carried, your facing chevron becomes a cluster of homing
   // pointers, one per notable thing nearby, colour-coded (see
@@ -398,6 +417,7 @@ export const ITEMS = {
   // not a weapon.
   compass: {
     name: 'Electro-compass',
+    use: 'Click it to arm. Chevrons at the edge of the screen then point at whatever is notable nearby.',
     kind: 'compass',
     tier: 2,
     color: '#8fd0e0',
@@ -409,6 +429,8 @@ export const ITEMS = {
   // the circuits obelisks drop. See main.js's poseidon fog + player.gogglesOn.
   goggles: {
     name: 'Night-vision goggles',
+    built: 'five torches and a circuit board. press C.',
+    use: 'Click to wear. The purge fog goes thin and green and you can see through it.',
     kind: 'wearable',
     tier: 2,
     color: '#4fd06a',
@@ -421,6 +443,8 @@ export const ITEMS = {
   // Carried, never held (key-triggered). See player.bluebox / canCraftBluebox.
   bluebox: {
     name: 'Bluebox',
+    built: 'two circuit boards. press C.',
+    use: 'Splices a downed machine into a green-eyed gardener that heals blight. Stun or drain one first, then press U beside it. Spends a circuit board.',
     kind: 'device',
     tier: 3,
     color: '#3a6ea5',
@@ -431,6 +455,7 @@ export const ITEMS = {
   // means no weapon in hand, so it's a real choice.
   shield: {
     name: 'Riot shield',
+    use: 'Hold it in your hands and it stops a laser bolt.',
     kind: 'shield',
     tier: 3,
     reflect: false,
@@ -438,6 +463,7 @@ export const ITEMS = {
   },
   mirror_shield: {
     name: 'Mirror shield',
+    use: 'Hold it in your hands and a laser goes back the way it came, taking the machine that fired it.',
     kind: 'shield',
     tier: 5,
     reflect: true,
@@ -449,6 +475,7 @@ export const ITEMS = {
   // left the field drops.
   forcefield: {
     name: 'Forcefield',
+    use: 'Click it in any slot to arm. While armed and carried it stops laser bolts, and burns batteries doing it.',
     kind: 'forcefield',
     tier: 6,
     ammoType: 'battery',
@@ -458,6 +485,8 @@ export const ITEMS = {
   // hold all three). Sets an obelisk ablaze; five hits bring one down.
   obgun: {
     name: 'OB_gun',
+    built: 'a stun-gun, an electro-gun and a Wi-Fi block, all three in hand. press C.',
+    use: 'The tower-killer. Built from a stun-gun, an electro-gun and a Wi-Fi block.',
     kind: 'gun',
     tier: 6,
     range: 7,
@@ -475,12 +504,14 @@ export const ITEMS = {
   // sends, and the unit stops to answer it.
   sniffer: {
     name: 'Bot sniffer',
+    built: 'two circuit boards, and the program fetched off the wire.',
     kind: 'tool',
     stack: 1,
     color: '#3a7fa8',
   },
   circuit: {
     name: 'Circuit board',
+    use: 'Repair stock. The goggles, the bluebox and the OB_gun are built out of these, and the bluebox spends one on every machine it turns.',
     kind: 'resource',
     stack: 64,
     color: '#3f8f5f',
@@ -506,6 +537,7 @@ export const ITEMS = {
   // through death would be too strong later, but for now it's a rare trophy.
   ai_key: {
     name: 'AI key',
+    use: 'The master card. Decrypt it at a terminal, then refunction it into a Trojan card.',
     kind: 'key',
     stack: 4,
     color: '#e6d24a',
@@ -519,6 +551,7 @@ export const ITEMS = {
   // one step on. hasAiKeyFamily() keeps it counting as the AI key.
   trojan_key: {
     name: 'Trojan key',
+    use: 'The refunctioned card. The Lion\'s Gate reads it and opens.',
     kind: 'key',
     stack: 1,
     color: '#b5892e',
@@ -529,6 +562,7 @@ export const ITEMS = {
   // final state.
   hermes_card: {
     name: 'Hermes card',
+    use: 'Forged at a HERMES relay. It carries the virus that ends this island’s daemon, and it will stand the fortress guard down.',
     kind: 'key',
     stack: 1,
     color: '#a9e0ff',
@@ -567,12 +601,14 @@ export const ITEMS = {
   // the player, not the stack.)
   ubik: {
     name: 'Ubik',
+    use: 'Spray it at the ground. Keep spraying one patch and the world gives way there.',
     kind: 'spray',
     stack: 1,
     color: '#e6c93a',
   },
   battery: {
     name: 'Battery',
+    use: 'Charge. The Wi-Fi block, the forcefield, the spoofer and the guns all drink these.',
     kind: 'resource',
     stack: 64,
     color: '#d8c94f',
@@ -582,6 +618,7 @@ export const ITEMS = {
   // it on death.
   backpack: {
     name: 'Backpack',
+    use: 'Wear it and you carry far more. Click it to open the pack.',
     kind: 'backpack',
     stack: 1,
     color: '#5a4a32',
@@ -603,6 +640,7 @@ export const ITEMS = {
   // a prize for whoever works out how to want it.
   anvil: {
     name: 'Anvil',
+    use: 'Stand at it to build the things that need more than your hands.',
     kind: 'material',
     stack: 1,
     color: '#4a4e55',
@@ -661,6 +699,7 @@ export const ITEMS = {
   // not eaten and never spends — the herb is a ward, not a cure you swallow.
   moly: {
     name: 'Moly',
+    use: 'Eat it to undo Circe\'s change, or before you take anything she offers you.',
     kind: 'resource',
     stack: 4,
     color: '#eef4e2',  // milk-white flower on a black root
@@ -668,6 +707,7 @@ export const ITEMS = {
   },
   torch: {
     name: 'Torch',
+    use: 'Light. Enough of them, with a circuit board, make night-vision goggles.',
     kind: 'resource',
     stack: 20,   // torches stack freely — you gather a lot, and goggles want five
     color: '#e0a030',
@@ -675,6 +715,13 @@ export const ITEMS = {
   // Books: read (R) to gain a permanent skill. Knowledge survives death.
   book_wood: {
     name: 'Whittling & Woodcraft',
+    notepadText: `Blades, green wood, and the grain.
+
+The first half is edges: how to put one on, how to keep it, and why a dull blade takes more from you than a sharp one takes from the tree. Read the grain before you cut. Wood that has grown leaning will split toward the lean, and a notch on the wrong side sends a trunk down across your legs.
+
+The second half is felling. Cut a wedge on the side you want it to fall, then come in from behind, above the wedge, and stop. Do not cut through. Leave a hinge and let the weight do the rest.
+
+Cheap paper, and somebody has worked through it: the felling chapter is thumbed grey and the margin beside the hinge diagram says GO SLOW in pencil, twice.`,
     kind: 'book',
     stack: 1,
     color: '#7d5a3c',
@@ -685,6 +732,13 @@ export const ITEMS = {
   },
   book_herbs: {
     name: 'Hedgerow Remedies',
+    notepadText: `Field remedies from before the pharmacies.
+
+Which berries draw poison and which close a wound; what to chew, what to bind, what to leave alone whatever anyone tells you. There is a table at the front, hand-drawn, of the ones that look alike, and the whole point of the book is on that page: the difference between the two is a bloom on the underside of the leaf.
+
+Poison first, it says, then pain. A body that is still being poisoned does not heal, and a body that has stopped hurting has not stopped bleeding.
+
+Home-bound, the stitching gone at the spine and the pages held with a rubber band that has perished into the paper. Somebody's own additions in ink at the back, in a hand that got shakier down the page.`,
     kind: 'book',
     stack: 1,
     color: '#5d7a3c',
@@ -695,6 +749,13 @@ export const ITEMS = {
   },
   book_track: {
     name: 'Reading the Wild',
+    notepadText: `Spoor, gait, and the signs a body leaves passing through country.
+
+Print depth tells you weight; the space between tells you speed; the two together tell you whether it was walking or being chased. A running animal lands harder on the toe. Something carrying something else lands harder everywhere.
+
+There is a section on reading ground that has been walked twice, which is the one worth learning: the second set of prints is crisper at the edge, and that is all you get.
+
+A gamekeeper's book, and it reads like one — no illustrations of anything he had not seen himself. His name is inside the cover and the date under it is forty years before the collapse.`,
     kind: 'book',
     stack: 1,
     color: '#8a4a3a',
@@ -705,6 +766,13 @@ export const ITEMS = {
   },
   book_run: {
     name: 'The Long Road',
+    notepadText: `Breath, pace, and the ground under you.
+
+Most of it is breathing: in for three, out for two, and never let the out-breath be the short one. A body that panics breathes shallow and fast and then has nothing left when it needs it, which is exactly when it needs it.
+
+The rest is ground. Uphill, shorten the stride and let the pace fall; downhill, let go, because braking on a slope costs more than the speed is worth. Look where you want your foot, not at your foot.
+
+A club pamphlet, stapled, with race dates on the back for a season that never finished. Somebody has ticked three of them.`,
     kind: 'book',
     stack: 1,
     color: '#4a5a7a',
@@ -716,8 +784,25 @@ export const ITEMS = {
   // The AI-ML manual and its torn pages: readable like a skill book (kind
   // 'book' so R / walk-onto reads them), but flagged `manual` so they teach
   // the console language instead of a survival skill (Player.learnFromBook).
+  // THE FSF MEMBERSHIP CARD. A real object the Foundation really posted to
+  // members: credit-card sized, 16GB, a double-sided USB connector folded into
+  // one corner, carrying a live GNU/Linux system with the source for all of it.
+  // In the world it is the one artefact that answers the RON-ML lore in the
+  // hand rather than in prose — `mount` it at the NostBook and the source of
+  // the language every tower speaks is on /mnt/fsf, where anybody who found a
+  // card could read it. Fits a pocket, which is what it was made for.
+  fsf_card: {
+    name: 'FSF membership card',
+    short: 'FSF card',
+    use: 'A live system on a card. mount it at the NostBook: /mnt/fsf, source and all.',
+    kind: 'tool',
+    stack: 1,
+    color: '#f2f2ee',
+    text: 'Credit-card sized, white, a gnu on the front in a dressing gown. The USB connector folds out of the corner and goes in either way up. 16GB: a whole free system, live, with the source for every part of it. Nothing on it asks who you are.',
+  },
   book_ronml: {
     name: 'the RON-DOS Operator’s Manual',
+    use: 'The AI-ML manual. Read it and the terminals stop being a wall.',
     kind: 'book',
     manual: true,
     author: 'RON',
@@ -884,7 +969,217 @@ export const DELETED_BOOKS = [
   ['book-covers/postdigital.jpg', 'Postdigital', 'David M. Berry', 'Berry on life after the digital’s novelty wears off, when computation stops being new and becomes the ground.'],
   ['book-covers/Cover CriticalTheory_Berry.jpg', 'Critical Theory and the Digital', 'David M. Berry', 'Berry brings the Frankfurt School to bear on software, code, and the computational condition.'],
   ['book-covers/Cover - DH .png', 'Digital Humanities', 'David M. Berry', 'Berry on what becomes of the humanities once they compute — method, knowledge, and the machine.'],
+  // These five exist as WHOLE TEXTS (books.js) and had no physical copy, so the
+  // only way to reach them was the laptop — which is the digital library, not
+  // this one. Find the book and you can read all of it.
+  ['book-covers/Meditations- Marcus Aurelius.jpg', 'Meditations', 'Marcus Aurelius', 'The private notebook of a Roman emperor, written to himself in camp — on duty, death, and not wasting the day.'],
+  ['', 'Frankenstein', 'Mary Wollstonecraft Shelley', 'Shelley on a man who makes a living thing and cannot bear to look at it — the first novel about a maker abandoning what he made.'],
+  ['', 'Moby-Dick', 'Herman Melville', 'Melville on a captain hunting the whale that took his leg, and on everything else there is to know about whaling.'],
+  ['', 'The King James Bible', '', 'The 1611 translation: the one that set the rhythm of the language for four centuries.'],
+  ['', 'The Complete Works', 'William Shakespeare', 'All of it, in one brick — the histories, the comedies, the tragedies, and the sonnets at the back.'],
 ];
+// A REAL PAGE FOR EACH, keyed by title so the tuple table above stays a tuple
+// table. Filed to the Library when you read the book, and it is what the Library
+// shows: what the book argues, one thing it actually says, and a line about THIS
+// copy — the last is what makes it a found object rather than a catalogue entry.
+export const PBOOK_PAGES = {
+  'The Republic': `Plato asks what justice is and cannot get a straight answer, so he builds a city instead — on the argument that justice is easier to read written large in a state than small in a person, and that whatever it turns out to be there it will be here too.
+
+The famous parts are pictures. Prisoners in a cave who have only ever seen shadows on a wall and take them for the world. A line divided between what you can see and what you can only think. A ship whose crew fight over the tiller while nobody studies navigation.
+
+The city he builds is not a nice place to live. Poets are shown the door, and the rulers are bred.
+
+A cheap teaching edition, spine cracked at Book VII, which is the cave.`,
+  'Nicomachean Ethics': `Aristotle on how to live, and his answer is that you cannot be told — you can only be trained.
+
+Virtue is a habit, not a rule and not a feeling. Courage is not the absence of fear but the mean between running and throwing your life away, and where that mean falls depends on who you are and what is in front of you. He is explicit that this is not a science and that anyone who wants one from him has misunderstood.
+
+The last book turns to friendship at length, and to whether a good life needs luck. He decides it does, which is more honest than the argument required.
+
+Somebody has been through it with a ruler and a red pen, underlining every occurrence of the word "mean".`,
+  'The Odyssey': `A man takes ten years to get home and spends most of the poem being kept somewhere.
+
+Calypso holds him seven years on her island and offers him deathlessness to stay. Circe turns his crew to swine. A giant eats them. The sea itself is against him because he blinded that giant and it was somebody's son.
+
+What he wants is not glory. It is an old dog, a scarred garden, a wife, a bed built from a living olive tree that cannot be moved without cutting it — which is how she finally knows him.
+
+This copy has been read to pieces and taped twice. Somebody has written a name inside the cover and then crossed it out.`,
+  'The Prince': `Machiavelli on holding power, written to get a job and read ever since as a confession.
+
+The advice is practical to the point of coldness: it is safer to be feared than loved, because love is given by others and fear you administer yourself; cruelty should be done all at once and kindness slowly; a prince must learn how not to be good, and use it or not according to need.
+
+He is not recommending wickedness so much as reporting that it works, which is the part nobody forgives.
+
+A thin edition with an introduction twice the length of the text, all of it explaining that he did not mean it.`,
+  'Leviathan': `Hobbes on why we put up with being governed.
+
+Without a common power, he says, there is no industry, no navigation, no arts, no letters, no society — and worst of all, continual fear and danger of violent death. The life of man solitary, poor, nasty, brutish, and short. So we hand our violence to a sovereign and agree not to take it back, and what we get for it is the possibility of an evening.
+
+The state is a made thing, an artificial man, and the frontispiece draws it: a giant whose body is a crowd of small people, all facing away.
+
+Water-damaged along the bottom edge. The frontispiece survived.`,
+  'The Wealth of Nations': `Smith on why a pin factory makes more pins than the same men working alone, and on what follows from that all the way up.
+
+The division of labour, the extent of the market, and the invisible hand — which appears once, in passing, and does far less work in the book than in the century after it. He is at least as interested in what specialisation does to the specialist, and says plainly that a man who spends his life on one operation becomes as stupid as it is possible for a human creature to become.
+
+A book-club printing with gilt edges, never opened past the first hundred pages.`,
+  'Critique of Pure Reason': `Kant asking what the mind has to be like for experience to be possible at all.
+
+His answer is that space and time are not out there waiting to be found; they are the form our seeing takes, the shape of the lens rather than of the thing. Cause and effect likewise. So we can know a great deal about the world as it appears and nothing whatever about the world as it is, and the tradition spent the next century arguing about the second half of that sentence.
+
+Dense past the point of readability in places, and he admits it in the preface.
+
+Ex-library, with the date-stamp card still in the pocket. Last borrowed a long time ago.`,
+  'Phenomenology of Spirit': `Hegel on consciousness finding out what it is by being wrong, repeatedly, in a determinate order.
+
+Each shape of knowing sets itself up, discovers a contradiction in its own terms, and collapses into the next — sense-certainty into perception, perception into force, and so on up to spirit. The master and slave passage is the one everybody reads: the master wins recognition from someone whose recognition is now worthless, and the slave, working on the world, becomes the one who makes something of himself.
+
+Nobody has ever agreed on what the last chapter says.
+
+A German-English facing edition, and somebody gave up at page 90 in both languages.`,
+  'Thus Spoke Zarathustra': `Nietzsche in a prophet's voice, which he chose knowing exactly what it would cost him in readers.
+
+Zarathustra comes down from the mountain to tell a market crowd that God is dead and that they should be ashamed of being content. They laugh at him and watch a tightrope walker instead. Then the eternal return, the will to power, the last man who blinks — and the harder idea underneath, that a value can be examined for where it came from and who it served.
+
+A paperback with a lurid cover that has nothing to do with the book. Someone has read the first section forty times and the rest once.`,
+  'Capital': `Marx taking a commodity apart to see what is inside it, and finding hours.
+
+The argument builds slowly: use-value and exchange-value, then the peculiar commodity that is labour-power, then surplus — the part of the working day you are not paid for, which is where profit comes from and why it can look like nothing is being taken. The chapter on the working day is not theory at all; it is factory-inspector reports, quoted at length, about children.
+
+Commodity fetishism is the idea that outlasts everything: a relation between people, appearing as a relation between things.
+
+Volume one only. The other two were never in this house.`,
+  'War and Peace': `Tolstoy on a war, a country, and about six hundred people.
+
+The novel keeps stopping to argue. Napoleon does not cause the campaign, he is carried by it; history is the sum of an enormous number of small wills and no great man steers it. Then it goes back to a name-day party, and the argument is somehow stronger for the interruption.
+
+The best of it is small: a boy at his first action realising nobody is looking at him, an old man's death taking a very long time, a hunt in the snow.
+
+Enormous, in two volumes, and the second has been used to prop something up.`,
+  'Process and Reality': `Whitehead rebuilding the world out of events rather than things.
+
+Nothing is a substance sitting there having properties; everything is a process of becoming, an occasion that takes up what came before it and makes something of it and then perishes into what comes next. Enduring objects are just occasions repeating a pattern faithfully enough that we call them the same rock.
+
+He invents most of his vocabulary because the old one has substance built into it, which makes the book hard in a way that is not showing off.
+
+Corrected edition. Someone has been keeping their own glossary on the endpapers.`,
+  'Understanding Media': `McLuhan on the medium, and the claim that what it carries matters less than what it is.
+
+A technology is an extension of a sense or a limb, and every extension is also an amputation. The electric light is his example of a medium with no content at all, which still reorganises everything around it — a night game, a surgical theatre, a street that is now usable after dark.
+
+Hot and cool, the global village, the rear-view mirror. He is right often enough that being wrong the rest of the time hardly slows him down.
+
+A sixties printing, the cover half typographic joke, and the previous owner has argued with him in biro throughout.`,
+  'The Rule of Metaphor': `Ricoeur on metaphor as something that thinks rather than decorates.
+
+The tradition treats a metaphor as a word out of place, a borrowed name you could swap back for the plain one. He argues it works at the level of the sentence and cannot be swapped back: a live metaphor asserts an impossible identity, holds the contradiction, and makes a description available that had not existed before. Dead metaphors are the ones that got absorbed into the dictionary.
+
+Long, patient, and in eight studies, each arguing with a different discipline.
+
+Ex-university, with three different hands in the margins and a coffee ring on the third study.`,
+  'Discipline and Punish': `Foucault on the day the scaffold was replaced by the timetable.
+
+He opens with a public execution described in full, then a prison timetable from eighty years later, and asks what happened in between. His answer is not that we became kinder. Power stopped working on the body from outside, all at once and in public, and started working through it — arranging bodies in space, dividing time into units, examining, ranking, recording.
+
+The panopticon is the model: a tower you cannot see into, so you behave as though it is occupied, and eventually it does not have to be.
+
+Somebody has drawn the panopticon diagram again, larger, on the flyleaf.`,
+  'Anti-Oedipus': `Deleuze and Guattari against the couch and the family triangle.
+
+Desire is not a lack and not a private drama about your parents; it is productive, it makes connections, and capitalism both unleashes it and keeps re-tying it to the same three people. Psychoanalysis, they say, is the priest with new equipment. Against it they set schizoanalysis, desiring-machines, bodies without organs, and a prose style that refuses to sit still long enough to be summarised.
+
+Infuriating on purpose. It is not trying to be understood so much as used.
+
+A library discard with the stamp crossed through, and the flyleaf reads MADE IT TO PAGE 40 in three different pens.`,
+  'The Road to Serfdom': `Hayek's wartime argument that planning an economy leads by its own logic somewhere nobody planned.
+
+The case is not that planners are wicked. It is that no committee can hold what a price holds — the scattered, local, mostly unspoken knowledge of everyone who is doing anything — and that a plan which cannot get that knowledge must eventually get compliance instead. The chapter titled "Why the Worst Get on Top" is the one that keeps being quoted at people.
+
+He dedicated it to the socialists of all parties, and meant it.
+
+A wartime economy printing, thin paper, small type, and the notice about paper standards still on the back.`,
+  'Capitalism': `A short book about the thing everybody is inside and nobody can stand back from.
+
+Markets, wage labour, the firm, the commodity, credit, crisis — set out in order and without a side, which is rarer than it sounds. The chapter on crisis argues that the crashes are not failures of the system but the way it clears its own accounts, and that the clearing is always paid for by whoever is nearest the bottom when it comes.
+
+The last chapter asks whether it has an outside and does not pretend to know.
+
+A student paperback, cover creased right through, and somebody has written IS THIS TRUE? beside the crisis chapter.`,
+  'Brave New World': `Huxley's dystopia, which is the one that gets less frightening the older you get and then more.
+
+Nobody is oppressed. Everybody is happy — conditioned in the bottle, sorted into castes that are content to be their caste, kept level with soma, and entertained continuously. The one man who was born rather than decanted cannot make the argument he wants to make, because there is nothing being done to anybody that anybody objects to.
+
+He asks for the right to be unhappy and they cannot think why he would want it.
+
+A school edition with the study questions at the back, all of them answered in pencil, badly.`,
+  'Fahrenheit 451': `Bradbury on a fireman whose job is starting them.
+
+The books are burned, but the state did not begin it — people stopped wanting them first, and the burning came afterwards as a tidying-up. His wife has three walls of television family and wants the fourth; she overdoses without noticing and the technicians who pump her out have done nine that night.
+
+At the end there are people out past the city who have each memorised a book, and are the book, and are waiting.
+
+Appropriately, this copy has been scorched along the top edge, and somebody has kept it anyway.`,
+  'Postdigital': `Berry on what follows the digital rather than what comes after it — the condition where computation has stopped being a sector and become the medium everything else happens in.
+
+The argument is that "postdigital" does not mean the digital is over; it means it has been absorbed to the point where it is no longer visible as a choice, and the interesting work is now in what it has made ordinary. Infrastructure, sensing, the way a service that is always on reorganises attention and labour around itself.
+
+A university press hardback, and the dust jacket is missing.`,
+  'Critical Theory and the Digital': `Berry on doing critical theory when the object is code.
+
+The claim is that a computational system is not neutral plumbing under the culture but a place where the culture is made — and that reading it therefore needs the tools of critique rather than only those of engineering. Software studies, the algorithm as a cultural object, the question of what it means to read something that also runs.
+
+The middle chapters are the practical ones: what a close reading of code actually consists of, and what it cannot reach.
+
+Somebody has been through the methods chapter with tabs.`,
+  'Digital Humanities': `Berry on what happens to the humanities when their material becomes data.
+
+Not a manifesto for the field and not an attack on it. The useful part is the account of the trade: what you gain by making a text countable, what you lose in the same move, and why the argument about whether this is really humanities work is less interesting than the question of what kind of knowledge it produces.
+
+There is a chapter on the university itself, and on who is paying for the infrastructure.
+
+An edited collection, and the pages of two chapters are still uncut at the top.`,
+  'Meditations': `A Roman emperor talking to himself, and not meant for us.
+
+There is no argument in it and no system. It is a man on campaign reminding himself every morning that people will be ungrateful today, that he will die, that the work in front of him is the only thing he controls, and that none of this is an excuse. He tells himself off. He repeats himself, because he keeps needing it.
+
+Written in Greek, by a man whose day job was the Roman empire, in a tent.
+
+An army-issue pocket edition, small enough for a jacket, and read to the point where the spine has gone soft.`,
+  'Frankenstein': `A student assembles a man out of parts, brings it to life, sees what he has done, and runs.
+
+The creature is the articulate one. It learns to speak by watching a family through a wall, reads the books it finds, and comes back to ask its maker one question: why did you make me and then leave. The novel gives it the best of the argument and does not resolve it.
+
+Nobody in it is called Frankenstein except the man who ran.
+
+Cheap paper gone brown at the edges. Someone has underlined the creature's speeches and nothing else.`,
+  'Moby-Dick': `A man goes to sea because he is running out of reasons not to, and ends up on a ship captained by someone hunting one particular whale.
+
+Between the chase there is everything else: how a whale is cut up, what the oil is for, the colour white and why it frightens people, a sermon, a chowder. The digressions are the book. The hunt is what it hangs on.
+
+The last thirty pages are as fast as the middle three hundred are slow, and that is deliberate.
+
+A doorstop paperback, cover long gone, held with a rubber band.`,
+  'The King James Bible': `The 1611 translation, made by committee and somehow the best-sounding English ever printed.
+
+Six companies of scholars, working to rules, revising each other — and out of that came the cadences the language has been borrowing ever since. Half the phrases people use without knowing where they got them are in here.
+
+Whatever else it is, it is the book that most shaped how English sentences fall.
+
+A pew Bible, boards warped, with three generations of names on the flyleaf and the last date unfinished.`,
+  'The Complete Works': `All of it in one brick: the histories, the comedies, the tragedies, and the sonnets at the back.
+
+The famous speeches are famous for a reason and the plays around them are stranger than the speeches suggest — the comedies are crueller, the histories more like journalism, and the late plays go somewhere nobody expected. The stage directions are almost nothing, which is the point: it was written to be worked out by people standing up.
+
+India paper, two columns, and a ribbon still marking a place in Lear.`,
+};
+// The paperbacks whose WHOLE TEXT is also on the disk (books.js keys). Find the
+// physical book and you can read all of it in the Library.
+export const PBOOK_FULL = {
+  'The Republic': 'republic', 'The Odyssey': 'odyssey', 'Meditations': 'meditations',
+  'Frankenstein': 'frankenstein', 'Moby-Dick': 'mobydick',
+  'The King James Bible': 'kjv', 'The Complete Works': 'shakespeare',
+};
+
 export const DELETED_RECORDS = [
   ['album-covers/It-Might-Be-Useful-For-Us-To-Know.webp', 'It Might Be Useful For Us To Know', '', 'A salvaged recording — analogue, unnetworked, played on nothing that reports back. The kind of thing they backspaced first.'],
   ['album-covers/Astral Weeks.webp', 'Astral Weeks', 'Van Morrison', 'Van Morrison, 1968 — cut in a couple of nights, more incantation than song. The kind of thing that was never meant to be counted or optimised.'],
@@ -896,6 +1191,7 @@ DELETED_BOOKS.forEach(([cover, title, author, abstract], i) => {
   ITEMS[`pbook_${i + 1}`] = {
     name: author ? `${title} — ${author}` : title, short: title, author, abstract,
     kind: 'paperbook', stack: 1, cover, color: '#6b5a3a', backspace: true,
+    notepadText: PBOOK_PAGES[title] || null, full: PBOOK_FULL[title] || null,
   };
 });
 DELETED_RECORDS.forEach(([cover, title, artist, abstract], i) => {

@@ -1,3 +1,12 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 // createInterpreter: the language's one entry point, tested without the game.
 //
 // Everything here imports src/lang/index.js and nothing else. That is the
@@ -5,6 +14,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { createInterpreter, smlEcho, flattenSession, showReal, BML_NAME, BML_VERSION, BML_CREDIT } from '../src/lang/index.js';
 import { DECL_KEYWORDS, BLOCK_ENDERS, joinProgram } from '../src/lang/parse.js';
 
@@ -206,6 +216,32 @@ test('flattenSession drops what cannot survive a save, and does not throw', () =
   // and not this test's business.
   assert.equal(flat.kept.v, 42, 'ordinary values survive');
   assert.equal('f' in flat, false, 'the closure is left out rather than breaking the save');
+});
+
+test('a saved session does not claim a prelude it just dropped', () => {
+  // The standard library is written in ML, so every one of its functions is a
+  // closure and the loop above drops all of them. `__prelude` is the
+  // once-per-session guard and it was saved WITH them, so a restored NostBook
+  // asserted a library it did not have: loadPrelude returned at the guard and
+  // `map` came back unbound — reported as *no network on this machine*, because
+  // an unbound name at a station is read as a verb belonging elsewhere. The
+  // types survived, being plain data, so a function would typecheck against a
+  // library that was not there and fail on the next line.
+  const bml = createInterpreter({ typecheck: 'off' });
+  bml.loadPrelude();
+  assert.equal(bml.session.__prelude, true, 'the guard is set while it is loaded');
+  assert.equal(bml.run('map (fn n => n * 2) [1, 2, 3]').text, '[2, 4, 6]');
+
+  // Close the lid, exactly as the game does: flatten, then through JSON.
+  const saved = JSON.parse(JSON.stringify(flattenSession(bml.session)));
+  assert.equal('__prelude' in saved, false, 'the guard must not travel with a dropped library');
+
+  // Open it again. The guard is clear, so the library is rebuilt.
+  const back = createInterpreter({ typecheck: 'off', session: saved });
+  back.loadPrelude();
+  assert.equal(back.run('map (fn n => n * 2) [1, 2, 3]').text, '[2, 4, 6]', 'map is back');
+  assert.equal(back.run('foldl (fn (x, a) => x + a) 0 [1, 2, 3, 4]').text, '10');
+  assert.equal(back.run('List.filter (fn n => n mod 2 = 1) [1, 2, 3, 4, 5]').text, '[1, 3, 5]');
 });
 
 // ---- qualified names have types (v1.293) -------------------------------------
@@ -603,13 +639,18 @@ test('the budget still bounds a program that never comes back', () => {
 });
 
 test('non-tail recursion is still bounded, and says so honestly', () => {
-  // `fact` does work AFTER the call returns, so its frames are genuinely
+  // `deep` does work AFTER the call returns, so its frames are genuinely
   // needed. It got deeper (the If frames on the way are gone) but it is not
   // unbounded, and the README says so rather than implying the problem is gone.
+  //
+  // It ADDS rather than multiplies. This was written with `fact`, and once ints
+  // learnt to raise Overflow at 9007199254740991 the probe stopped measuring
+  // depth and started measuring the range of int: `fact 20` is 2.4e18 and
+  // raises before the recursion gets anywhere near the stack.
   const bml = createInterpreter({ typecheck: 'off' });
-  bml.run('fun fact n = if n = 0 then 1 else n * fact (n - 1)');
-  assert.equal(bml.run('fact 20', { fuel: 10000000 }).ok, true);
-  assert.equal(bml.run('fact 2500', { fuel: 100000000 }).ok, true, 'deeper than the old ~2000 ceiling');
+  bml.run('fun deep n = if n = 0 then 0 else 1 + deep (n - 1)');
+  assert.equal(bml.run('deep 20', { fuel: 10000000 }).ok, true);
+  assert.equal(bml.run('deep 2500', { fuel: 100000000 }).ok, true, 'deeper than the old ~2000 ceiling');
 });
 
 test('a closure carries its own ctx and builtins through a tail jump', () => {
@@ -1287,11 +1328,10 @@ test('`let … end` can be the operand of an operator', () => {
   const bml = createInterpreter({ typecheck: 'strict' });
   bml.loadPrelude();
   assert.equal(bml.run('let val m = 3 in m end * 2').text, '6');
-  // The RIGHT operand is a separate gap and this does not close it: the right
-  // side is read by the operator grammar, which has no `let` in it. Both corpus
-  // declarations put the `let` on the left.
-  assert.equal(bml.run('let val m = 3 in m end + let val n = 4 in n end').ok, false,
-    'a `let` on the right is still refused');
+  // The RIGHT operand was a separate gap and was asserted here as refused until
+  // v1.322 closed it. Both sides now.
+  assert.equal(bml.run('let val m = 3 in m end + let val n = 4 in n end').text, '7',
+    'and one on each side');
   bml.run('fun h (x:real):real = let val y = 2.0 in y+y end * x');
   assert.equal(bml.run('h 3.0').text, '12.0', 'and inside a fun body');
 
@@ -1588,4 +1628,809 @@ test('a short name gets no guess, and a member inside a structure gets pointed a
   assert.match(say('tabulate'), /there is List\.tabulate/);
   // And a name that is neither gets nothing rather than a guess.
   assert.equal(say('zqxjw'), 'ERR: unbound variable: zqxjw');
+});
+
+test('a `()` parameter is unit, not a fresh variable', () => {
+  // `fun f () = 5` reported `'a -> int`, because inferPattern had no case for
+  // the unit pattern and fell through to a fresh variable. So `f 7` was let
+  // past the checker to fail at RUN time with an unmatched pattern, where
+  // Standard ML refuses it where it is written.
+  const bml = createInterpreter({ typecheck: 'strict', clock: () => 0 });
+  bml.loadPrelude();
+  bml.run('fun u1 () = 5');
+  assert.equal(bml.typeReport('u1'), 'unit -> int');
+  assert.equal(bml.run('u1 ()').text, '5');
+  const bad = bml.run('u1 7');
+  assert.equal(bad.ok, false);
+  assert.match(bad.text, /unit and int are not the same type/);
+  // Every function in the library that takes unit gains the same.
+  assert.equal(bml.typeReport('Time.now'), 'unit -> int');
+});
+
+test('a datatype declared inside a structure publishes its constructors', () => {
+  // `Date.Wed` reported `'a`. A structure's member walk collected its VALUES
+  // and not the constructors of a datatype declared in it, so they were unknown
+  // both outside the structure and inside its own body.
+  const bml = createInterpreter({ typecheck: 'strict', clock: () => 0 });
+  bml.loadPrelude();
+  bml.run('structure Pal = struct datatype hue = Red | Blue of int val n = 1 end');
+  assert.equal(bml.typeReport('Pal.Red'), 'hue');
+  assert.equal(bml.typeReport('Pal.Blue'), 'int -> hue');
+  assert.equal(bml.typeReport('Pal.n'), 'int', 'and a plain value is unaffected');
+  // The library's own, which is where this was reported.
+  assert.equal(bml.typeReport('Date.Wed'), 'weekday');
+  assert.equal(bml.typeReport('Date.Jan'), 'month');
+  assert.equal(bml.run('Date.Wed').text, 'Wed');
+  // A top-level datatype was always fine; assert it stays so.
+  bml.run('datatype colour = R | G of int');
+  assert.equal(bml.typeReport('R'), 'colour');
+  assert.equal(bml.typeReport('G'), 'int -> colour');
+});
+
+test('a qualified name whose structure is right is judged on its MEMBER', () => {
+  // `Date.January` when the month is `Date.Jan`. suggestName judges a qualified
+  // name on its HEAD, found Date perfectly good, and said nothing — so every
+  // near miss on a member got the bare message and no help at all.
+  const bml = createInterpreter({ typecheck: 'off', clock: () => 0 });
+  bml.loadPrelude();
+  const say = (s) => bml.run(s).text;
+
+  assert.match(say('Date.January'), /did you mean Date\.Jan\?/);
+  assert.match(say('Date.April'), /did you mean Date\.Apr\?/);
+  assert.match(say('Date.Monday'), /did you mean Date\.Mon\?/);
+  assert.match(say('Date.Friday'), /did you mean Date\.Fri\?/);
+  assert.match(say('Date.Friay'), /did you mean Date\.Fri\?/, 'a slip as well as a long form');
+  assert.match(say('List.mapp'), /did you mean List\.map\?/);
+  // Nothing like it in there: say that rather than guess.
+  assert.match(say('Date.zzz'), /Date has no zzz/);
+  // A wrong STRUCTURE is still judged on the structure.
+  assert.match(say('Lst.map'), /did you mean the structure List\?/);
+  // The ones that exist are untouched.
+  assert.equal(say('Date.May'), 'May');
+  assert.equal(say('Date.Wed'), 'Wed');
+});
+
+test('row polymorphism: #lab constrains an argument it has not seen', () => {
+  // `case 'Select': return fresh();  // needs row polymorphism; honestly
+  // unknown` — so every projection written INSIDE a function reported `'a -> 'b`
+  // and constrained nothing. Which is every accessor in Date.
+  const bml = createInterpreter({ typecheck: 'strict', clock: () => 0 });
+  bml.loadPrelude();
+
+  assert.equal(bml.typeReport('#a'), "{a : 'a, ...} -> 'a");
+  assert.equal(bml.typeReport('fn x => #a x'), "{a : 'a, ...} -> 'a");
+  // The field's type is constrained by what is done with it.
+  assert.equal(bml.typeReport('fn r => #a r + 1'), '{a : int, ...} -> int');
+  // `{a, ...}` is an open record, so a pattern says the same thing.
+  assert.equal(bml.typeReport('fn {a, ...} => a'), "{a : 'a, ...} -> 'a");
+  assert.equal(bml.typeReport('fn {a, b} => a'), "{a : 'a, b : 'b} -> 'a", 'and a closed one stays closed');
+
+  // A projection that cannot work is refused where it is written.
+  const bad = bml.run('(fn x => #a x) {b = 1}');
+  assert.equal(bad.ok, false);
+  assert.match(bad.text, /has no field a/);
+  // Date's accessors, which is what started this.
+  assert.match(bml.typeReport('Date.year'), /^\{year : /);
+});
+
+test('records unify BY LABEL, not by position', () => {
+  // Position was all this had. So the same record written in two field orders
+  // was refused for disagreeing about field one, and two records with different
+  // labels but the same width were accepted as the same type and failed at RUN
+  // time instead.
+  const bml = createInterpreter({ typecheck: 'strict', clock: () => 0 });
+  bml.loadPrelude();
+
+  bml.run('fun tk (r : {a : int, b : string}) = #a r');
+  assert.equal(bml.run('tk {b = "x", a = 1}').text, '1', 'the same record, written in the other order');
+  assert.equal(bml.run('tk {a = 1, b = "x"}').text, '1');
+
+  bml.run('fun tk2 (r : {a : int, b : int}) = #a r');
+  const wrong = bml.run('tk2 {c = 1, d = 2}');
+  assert.equal(wrong.ok, false, 'different labels are a different type');
+  assert.match(wrong.text, /not the same type|has no field/);
+
+  // A generalised record type keeps its labels through instantiation — it was
+  // rebuilt without them, so any reuse lost the fields.
+  bml.run('fun pair x = {a = x, b = x}');
+  assert.equal(bml.typeReport('pair 1'), '{a : int, b : int}');
+  assert.equal(bml.typeReport('pair "s"'), '{a : string, b : string}');
+});
+
+// ---- the eight language gaps, one test each (docs/language-gaps-plan.md) ----
+
+test('G1: control and unicode string escapes', () => {
+  // `\^A` is the control character whose code is the letter's minus 64; `\uXXXX`
+  // is four hex digits. Both are in the Definition and neither lexed.
+  const bml = createInterpreter({ typecheck: 'strict' });
+  bml.loadPrelude();
+  assert.equal(bml.run('size "\\^A"').text, '1');
+  assert.equal(bml.run('ord (String.sub ("\\^A", 0))').text, '1');
+  assert.equal(bml.run('ord (String.sub ("\\^[", 0))').text, '27');
+  assert.equal(bml.run('"\\u0041"').text, '"A"');
+  assert.equal(bml.run('"\\u00e9"').text, '"é"');
+  assert.equal(bml.run('"\\^"').ok, false, 'and a malformed one is refused');
+  assert.equal(bml.run('"\\u12"').ok, false);
+  // The escapes that already worked are untouched.
+  assert.equal(bml.run('size "a\\nb"').text, '3');
+  assert.equal(bml.run('"\\065"').text, '"A"');
+});
+
+test('G2: numeric record labels', () => {
+  // In Standard ML a tuple IS a record with numeric labels. The labels were read
+  // as identifiers only, so the numeric spelling was a parse error.
+  const bml = createInterpreter({ typecheck: 'off' });
+  bml.loadPrelude();
+  assert.equal(bml.run('#1 {1 = 9, 2 = 8}').text, '9');
+  assert.equal(bml.run('#2 {1 = 9, 2 = 8}').text, '8');
+  assert.equal(bml.run('case {1 = 4, 2 = 5} of {1 = a, 2 = b} => a + b').text, '9');
+  assert.equal(bml.run('{a = 1}').text, '{a = 1}', 'and a named label still reads');
+  assert.equal(bml.run('#1 (4, 5)').text, '4');
+});
+
+test('G3: datatype replication shares the constructors', () => {
+  // `datatype t = datatype u` is another name for one type, not a copy of it,
+  // so a value made with u's constructor matches a pattern written against t.
+  // That is the half the exception replication got wrong at first.
+  const bml = createInterpreter({ typecheck: 'strict' });
+  bml.loadPrelude();
+  bml.run('datatype hue = Red | Blue of int');
+  assert.equal(bml.run('datatype shade = datatype hue').ok, true);
+  assert.equal(bml.run('case Red of Red => "red" | Blue _ => "blue"').text, '"red"');
+  assert.equal(bml.run('case Blue 2 of Red => 0 | Blue n => n').text, '2');
+  assert.equal(bml.run('datatype nope = datatype zzz').ok, false, 'and only a datatype can be');
+});
+
+test('G4: open inside a let, and it stops at the end', () => {
+  const bml = createInterpreter({ typecheck: 'off' });
+  bml.loadPrelude();
+  assert.equal(bml.run('let open List in null [] end').text, 'true');
+  bml.run('structure Q9 = struct val z9 = 41 end');
+  assert.equal(bml.run('let open Q9 in z9 + 1 end').text, '42');
+  // SCOPED. `open` binds into the environment rather than the session, so a
+  // child scope gives it exactly the reach the Definition says: the body.
+  assert.equal(bml.run('z9').ok, false, 'and no further than the end');
+  // A plain top-level open is unaffected.
+  bml.run('open Q9');
+  assert.equal(bml.run('z9').text, '41');
+});
+
+test('G5: a let, if, case or fn may be an operator’s right operand', () => {
+  const bml = createInterpreter({ typecheck: 'off' });
+  bml.loadPrelude();
+  assert.equal(bml.run('1 + let val m = 2 in m end').text, '3');
+  assert.equal(bml.run('let val a = 1 in a end + let val b = 2 in b end').text, '3');
+  assert.equal(bml.run('1 + if true then 2 else 3').text, '3');
+  assert.equal(bml.run('1 + case 0 of 0 => 5 | _ => 6').text, '6');
+
+  // The `;` work at v1.307 and the left-operand work at v1.312 are what this
+  // could have broken, so each of their shapes is asserted rather than assumed.
+  assert.equal(bml.run('let val x = 1 in x; x + 1 end').text, '2');
+  assert.equal(bml.run('(1; 2; 3)').text, '3');
+  assert.equal(bml.run('(if true then 1 else 2; 7)').text, '7');
+  assert.equal(bml.run('let val a = 2 in let val b = 3 in a * b end end').text, '6');
+  assert.equal(bml.run('let val m = 3 in m end * 2').text, '6');
+  assert.equal(bml.run('2 * 3 + 1').text, '7', 'precedence is unchanged');
+  assert.equal(bml.run('1 :: 2 :: nil').text, '[1, 2]', 'and so is associativity');
+});
+
+test('G6: a functor may take several structures', () => {
+  // `functor F (structure P : S structure Q : S)` is Standard ML's sugar for a
+  // functor over one anonymous structure with P and Q inside it, and the
+  // application supplies one structure per name.
+  const bml = createInterpreter({ typecheck: 'off' });
+  bml.loadPrelude();
+  bml.run('signature Q1 = sig val v : int end');
+  assert.equal(bml.run('functor F2 (structure P : Q1 structure Q : Q1) = struct val w = P.v + Q.v end').ok, true);
+  bml.run('structure A1 = struct val v = 10 end');
+  bml.run('structure B1 = struct val v = 32 end');
+  bml.run('structure R2 = F2 (structure P = A1 structure Q = B1)');
+  assert.equal(bml.run('R2.w').text, '42');
+
+  // An anonymous structure per binding, which is what examples/25-functors.ml
+  // writes and what the first spelling of this refused.
+  bml.run('structure R6 = F2 (structure P = struct val v = 1 end structure Q = struct val v = 2 end)');
+  assert.equal(bml.run('R6.w').text, '3');
+
+  // All three single-parameter forms are untouched.
+  bml.run('functor F1 (X : Q1) = struct val m = X.v end');
+  bml.run('structure R3 = F1 (A1)');
+  assert.equal(bml.run('R3.m').text, '10', 'by name');
+  bml.run('structure R4 = F1 (structure X = A1)');
+  assert.equal(bml.run('R4.m').text, '10', 'by specification');
+  bml.run('structure R5 = F1 (struct val v = 7 end)');
+  assert.equal(bml.run('R5.m').text, '7', 'anonymous');
+});
+
+test('G7/G8: an operator can be named where it will be used', () => {
+  // `fun (f ** g) (x, y) = …` defines `**`, not a function called f, and
+  // `fun (op ++) (a, b) = …` names the operator plainly. Standard ML reads the
+  // left-hand side as a pattern and takes the operator out of it.
+  const bml = createInterpreter({ typecheck: 'off' });
+  bml.loadPrelude();
+
+  bml.run('fun (f ** g) (x, y) = (f x, g y)');
+  bml.run('infix 7 **');
+  assert.equal(bml.run('((fn a => a + 1) ** (fn b => b * 2)) (3, 4)').text, '(4, 8)');
+
+  bml.run('fun (op ++) (a, b) = a + b');
+  bml.run('infix 6 ++');
+  assert.equal(bml.run('3 ++ 4').text, '7');
+
+  // Nothing that was already a binding changes: the shapes below all begin with
+  // a `(` too, and are read as they were.
+  bml.run('fun idp (x) = x');
+  assert.equal(bml.run('idp 9').text, '9');
+  bml.run('fun swp (a, b) = (b, a)');
+  assert.equal(bml.run('swp (1, 2)').text, '(2, 1)');
+  bml.run('val (va, vb) = (1, 2)');
+  assert.equal(bml.run('va').text, '1', 'a val still takes a pattern there');
+});
+
+test('the language holds nothing of the game', () => {
+  // src/lang/ is Standard ML and nothing else. NostOS passes its own values
+  // through the evaluator — a tower, a key, a file on a card — and their tags
+  // were cased for BY NAME in there, so `case 'key': return v.kind === 'aikey'
+  // ? 'the AI key' : …` put the AI key inside an implementation of a 1997
+  // language standard. A parse error suggested `let k = hack OB_XXXX in …` too.
+  //
+  // A host with such values says how they read, the same way it says what an
+  // unbound name means. This walks the source because that is the only thing
+  // that will notice when one creeps back.
+  const dir = new URL('../src/lang/', import.meta.url);
+  const files = fs.readdirSync(dir).filter((f) => f.endsWith('.js'));
+  assert.ok(files.length >= 8, 'found the language');
+  const game = /\b(aikey|OB_XXXX|obelisk|hermes|lyre|W4|calypso|poseidon)\b/i;
+  for (const f of files) {
+    const src = fs.readFileSync(new URL(f, dir), 'utf8');
+    src.split('\n').forEach((line, i) => {
+      // A comment may EXPLAIN why a host policy exists — that is the design and
+      // it is worth writing down. Code may not.
+      const code = line.replace(/\/\/.*$/, '').replace(/^\s*\*.*$/, '');
+      const m = game.exec(code);
+      assert.equal(m, null, `${f}:${i + 1} names ${m && m[0]} in code: ${line.trim()}`);
+    });
+  }
+});
+
+test('a qualified constructor in a PATTERN is a constructor, not a variable', () => {
+  // A pattern name that is not a registered constructor is read as a variable,
+  // and a variable matches anything. Constructors were registered under their
+  // bare name only, so `Col.Red` in a pattern matched whatever it was handed and
+  // took the first arm every time. Silent, and it reached the Basis: every
+  // `fmt` in the library dispatches on a StringCvt constructor, so `Real.fmt`
+  // and `Int.fmt` answered as though every format were the first one.
+  const bml = createInterpreter({ typecheck: 'off' });
+  bml.loadPrelude();
+  bml.run('structure Col = struct datatype t = Red | Green | Blue end');
+
+  assert.equal(bml.run('case Col.Green of Col.Red => 1 | _ => 2').text, '2',
+    'Col.Red must not match a Green');
+  bml.run('fun g Col.Red = 1 | g Col.Green = 2 | g Col.Blue = 3');
+  assert.equal(bml.run('g Col.Red').text, '1');
+  assert.equal(bml.run('g Col.Green').text, '2');
+  assert.equal(bml.run('g Col.Blue').text, '3');
+
+  // The bare name still works, and the two spellings are ONE constructor: the
+  // matcher compares against the canonical name, so a value made one way
+  // matches a pattern written the other.
+  bml.run('open Col');
+  assert.equal(bml.run('case Blue of Col.Blue => 1 | _ => 2').text, '1', 'one constructor, two spellings');
+  assert.equal(bml.run('case Col.Blue of Blue => 1 | _ => 2').text, '1', 'and the other way round');
+
+  // A structure that does not have it is still a plain variable pattern, which
+  // is what Standard ML does with an unknown name.
+  assert.equal(bml.run('case Col.Blue of Bogus.Red => 1 | _ => 2').text, '1',
+    'an unknown qualified name is a variable, so it matches and binds');
+});
+
+test('the Basis: every fmt obeys the format it is handed', () => {
+  // All six were `fun fmt _ x = toString x`. The argument was accepted and
+  // dropped, so the answer was the same whatever was asked for.
+  const bml = createInterpreter({ typecheck: 'strict', clock: () => 0 });
+  bml.loadPrelude();
+  const is = (src, want) => assert.equal(bml.run(src).text, want, src);
+
+  is('Real.fmt (StringCvt.FIX (SOME 2)) 3.14159', '"3.14"');
+  is('Real.fmt (StringCvt.FIX (SOME 0)) 3.7', '"4"');
+  is('Real.fmt (StringCvt.FIX NONE) 1.5', '"1.500000"');       // six is the Basis default
+  is('Real.fmt (StringCvt.SCI (SOME 2)) 1234.5', '"1.23E3"');
+  is('Real.fmt (StringCvt.SCI (SOME 3)) 0.00123', '"1.230E~3"');  // a tilde exponent
+  is('Real.fmt (StringCvt.GEN (SOME 3)) 3.14159', '"3.14"');      // significant digits
+  is('Real.fmt (StringCvt.FIX (SOME 2)) ~3.14159', '"~3.14"');    // and a tilde minus
+
+  is('Int.fmt StringCvt.BIN 5', '"101"');
+  is('Int.fmt StringCvt.OCT 8', '"10"');
+  is('Int.fmt StringCvt.DEC 42', '"42"');
+  is('Int.fmt StringCvt.HEX 255', '"FF"');                        // capitals, as SML writes them
+  is('Int.fmt StringCvt.HEX ~255', '"~FF"');
+
+  is('Word.fmt StringCvt.BIN 0w5', '"101"');
+  is('Word.fmt StringCvt.HEX 0w255', '"FF"');
+  is('Word8.fmt StringCvt.HEX (Word8.fromInt 255)', '"FF"');
+  is('IntInf.fmt StringCvt.HEX (IntInf.fromInt 255)', '"FF"');
+
+  is('Time.fmt 3 (Time.fromSeconds 1)', '"1.000"');
+  is('Time.fmt 0 (Time.fromSeconds 2)', '"2"');
+
+  // toString is untouched: it is GEN NONE and always was.
+  is('Real.toString 3.14159', '"3.14159"');
+  is('Word.toString 0w255', '"FF"');
+});
+
+test('Word.~ wraps round zero', () => {
+  // A word has no sign, so its negation is what wrapping gives. It was unbound
+  // in both structures.
+  const bml = createInterpreter({ typecheck: 'off' });
+  bml.loadPrelude();
+  assert.equal(bml.run('Word.~ 0w1').text, '4294967295');
+  assert.equal(bml.run('Word.toString (Word.~ 0w1)').text, '"FFFFFFFF"');
+  assert.equal(bml.run('Word.~ 0w0').text, '0');
+  assert.equal(bml.run('Word8.~ 0w1').text, '255', 'eight bits, so 255 rather than 4294967295');
+  assert.equal(bml.run('Word8.~ 0w0').text, '0');
+});
+
+test('an int that leaves the range raises Overflow', () => {
+  // `Int.maxInt` has answered 9007199254740991 and `Int.precision` 53 since the
+  // Basis was written, and the arithmetic went straight past both: `fact 500`
+  // answered `Infinity`, which is not an int, and every comparison after that
+  // was against something no longer whole. A silent wrong answer.
+  const bml = createInterpreter({ typecheck: 'strict' });
+  bml.loadPrelude();
+  const raises = (src) => {
+    const r = bml.run(src);
+    assert.equal(r.ok, false, `${src} should raise`);
+    assert.match(r.text, /Overflow/, src);
+  };
+  raises('9007199254740991 + 1');
+  raises('~9007199254740991 - 1');
+  raises('4611686018427387904 * 4');
+  bml.run('fun fact 0 = 1 | fact n = n * fact (n - 1)');
+  raises('fact 500');
+
+  // It is catchable by name, like Div and Empty.
+  assert.equal(bml.run('(9007199254740991 + 1) handle Overflow => ~1').text, '~1');
+
+  // The edge itself is fine, and ordinary arithmetic is untouched.
+  assert.equal(bml.run('9007199254740990 + 1').text, '9007199254740991');
+  assert.equal(bml.run('fact 18').text, '6402373705728000');
+
+  // REALS ARE NOT CHECKED. `1E308 * 10.0` is `inf` in Standard ML too, and an
+  // overflowing real is not an error there.
+  assert.equal(bml.run('1E308 * 10.0').text, 'inf');
+
+  // And IntInf is unbounded, which is the whole reason it exists.
+  assert.equal(bml.run('IntInf.toString (IntInf.pow (IntInf.fromInt 2, 100))').text,
+    '"1267650600228229401496703205376"');
+});
+
+test('evalNode stays slim, so a recursion gets a deep enough stack', () => {
+  // docs/deep-recursion-plan.md. V8's INTERPRETER sizes a frame for every local
+  // a function declares, not for the ones the branch taken uses. evalNode was
+  // one switch holding 92, so every ML call reserved room for StructApply's
+  // twelve, and `List.tabulate (1000, f)` ran out of host stack at 505. Moving
+  // the declaration cases into evalDecl took it to 1191.
+  //
+  // The optimiser does proper register allocation, so once V8 has compiled
+  // evalNode the dead locals cost nothing and the limit is ~4200 either way.
+  // That is why this walks the SOURCE: inside a test run evalNode is warm and a
+  // depth assertion would pass against the defect. Only the local count is
+  // visible to a test.
+  const src = fs.readFileSync(new URL('../src/lang/eval.js', import.meta.url), 'utf8');
+  const lines = src.split('\n');
+  const from = lines.findIndex((l) => l.startsWith('export function evalNode'));
+  assert.ok(from > 0, 'found evalNode');
+  const to = from + 1 + lines.slice(from + 1).findIndex((l) => l === '}');
+  const locals = lines.slice(from, to).filter((l) => /^\s+(const|let) /.test(l)).length;
+  assert.ok(locals <= 45, `evalNode declares ${locals} locals; it was 92 and is meant to stay near 36`);
+});
+
+test('a thousand-element list can be built', () => {
+  // The bound that a person actually meets. 505 before the evalDecl split.
+  const bml = createInterpreter({ typecheck: 'strict' });
+  bml.loadPrelude();
+  assert.equal(bml.run('List.length (List.tabulate (1000, fn i => i))').text, '1000');
+  bml.run('fun sum [] = 0 | sum (x::r) = x + sum r');
+  assert.equal(bml.run('sum (List.tabulate (1000, fn i => 1))').text, '1000',
+    'and walked back down non-tail-recursively');
+});
+
+test('the Basis: the members Phase 1 filled in', () => {
+  // docs/basis-plan.md. Every one called once against its answer — the
+  // checklist compares answers too, but it is a list of FEATURES and this is a
+  // list of members, so it belongs here.
+  const bml = createInterpreter({ typecheck: 'strict', clock: () => 0 });
+  bml.loadPrelude();
+  const is = (src, want) => assert.equal(bml.run(src).text, want, src);
+
+  // List
+  is('List.hd [1,2]', '1');
+  is('List.tl [1,2]', '[2]');
+  is('List.getItem [1,2]', 'SOME (1, [2])');
+  is('List.revAppend ([1,2],[3])', '[2, 1, 3]');
+  is('List.mapPartial (fn x => if x > 1 then SOME x else NONE) [1,2,3]', '[2, 3]');
+  is('List.collate Int.compare ([1,2],[1,3])', 'LESS');
+  // ListPair, which had two of a dozen
+  is('ListPair.zipEq ([1],[2])', '[(1, 2)]');
+  is('ListPair.map (fn (a,b) => a+b) ([1,2],[3,4])', '[4, 6]');
+  is('ListPair.all (fn (a,b) => a < b) ([1],[2])', 'true');
+  is('ListPair.foldl (fn (a,b,c) => a+b+c) 0 ([1],[2])', '3');
+  is('(ListPair.zipEq ([1],[2,3])) handle UnequalLengths => nil', '[]');
+  // Option
+  is('Option.mapPartial (fn x => SOME (x+1)) (SOME 1)', 'SOME 2');
+  is('Option.compose (fn x => x+1, fn y => SOME y) 1', 'SOME 2');
+  // Vector
+  is('Vector.update (#[1,2,3], 1, 9)', '#[1, 9, 3]');
+  is('Vector.mapi (fn (i,x) => i+x) #[10,20]', '#[10, 21]');
+  is('Vector.foldli (fn (i,x,a) => i+x+a) 0 #[1,2]', '4');
+  // Char
+  is('Char.isPunct #","', 'true');
+  is('Char.isHexDigit #"f"', 'true');
+  is('Char.succ #"a"', '#"b"');
+  is('Char.contains "abc" #"b"', 'true');
+  // String
+  is('String.str #"a"', '"a"');
+  is('String.isSuffix "lo" "hello"', 'true');
+  is('String.isSubstring "ell" "hello"', 'true');
+  // Substring, which had ten of thirty
+  is('Substring.getc "ab"', 'SOME (#"a", "b")');
+  is('Substring.splitAt ("abcd", 2)', '("ab", "cd")');
+  is('Substring.dropl (fn c => c = #" ") "  hi"', '"hi"');
+  is('Substring.splitl Char.isAlpha "ab1"', '("ab", "1")');
+  // Int and Real
+  is('Int.quot (~7, 2)', '~3');
+  is('Int.rem (~7, 2)', '~1');
+  is('Real.floor ~2.5', '~3');
+  is('Real.ceil 2.1', '3');
+  is('Real.rem (7.5, 2.0)', '1.5');
+  is('Real.round 3.7', '4', 'and round still reads the primitive, not Real.floor');
+  is('Time.toReal 1500', '1.5');
+});
+
+test('StringCvt, and the constructor payload it exposed', () => {
+  const bml = createInterpreter({ typecheck: 'strict', clock: () => 0 });
+  bml.loadPrelude();
+  assert.equal(bml.run('StringCvt.HEX').text, 'HEX');
+  assert.equal(bml.run('StringCvt.padLeft #"0" 4 "7"').text, '"0007"');
+  assert.equal(bml.run('StringCvt.padRight #"." 4 "ab"').text, '"ab.."');
+  assert.equal(bml.run('StringCvt.skipWS "  hi"').text, '"hi"');
+
+  // `GEN of int option` typed its payload as plain `int`: typeOfWords named
+  // `list` and nothing else, so any other type constructor was DROPPED and the
+  // head taken. Writing StringCvt is what found it.
+  assert.equal(bml.run('StringCvt.GEN NONE').text, 'GEN NONE');
+  assert.equal(bml.run('StringCvt.FIX (SOME 2)').text, 'FIX (SOME 2)');
+  bml.run('datatype box = B of int option');
+  assert.equal(bml.typeReport('B'), 'int option -> box');
+  bml.run('datatype lb = LB of string list');
+  assert.equal(bml.typeReport('LB'), 'string list -> lb', 'and list is unaffected');
+});
+
+test('every member of every structure is actually bound', () => {
+  // A STRUCTURE THAT FAILS TO LOAD IS DROPPED IN SILENCE — one member that will
+  // not type does not stop the rest, which is right for a console but means an
+  // absent structure says nothing at all. The monomorphic arrays were written
+  // before Array and Vector in the prelude, and since `val fromList =
+  // Vector.fromList` is evaluated where it stands, all eight bound NOTHING and
+  // the only sign was a member that could not be found later.
+  const bml = createInterpreter({ typecheck: 'off', clock: () => 0 });
+  bml.loadPrelude();
+  const members = {};
+  for (const k of Object.keys(bml.session)) {
+    const dot = k.indexOf('.');
+    if (dot <= 0 || k.startsWith('__')) continue;
+    const m = k.slice(dot + 1);
+    if (m.includes('.')) continue;
+    (members[k.slice(0, dot)] = members[k.slice(0, dot)] || []).push(m);
+  }
+  const names = Object.keys(members).sort();
+  assert.ok(names.length >= 28, `28 structures or more, found ${names.length}`);
+  // The ones that must be there, by name, so a structure quietly vanishing is
+  // a failure rather than a smaller number nobody reads.
+  for (const s of ['Array', 'Bool', 'Char', 'CharArray', 'CharVector', 'Date', 'General',
+    'Int', 'IntArray', 'IntVector', 'List', 'ListPair', 'Math', 'Option', 'Real',
+    'RealArray', 'RealVector', 'String', 'StringCvt', 'Substring', 'TextIO', 'Time',
+    'Vector', 'Word', 'Word8', 'Word8Array', 'Word8Vector']) {
+    assert.ok(members[s], `${s} is missing from the prelude`);
+  }
+  // Bound is what is asserted, not that it evaluates: naming a primitive-backed
+  // function bare answers "needs more arguments", which is not a fault.
+  let total = 0;
+  for (const s of names) {
+    for (const m of members[s]) {
+      total++;
+      const t = String(bml.run(`${s}.${m}`).text || '');
+      assert.ok(!/unbound variable/.test(t), `${s}.${m} is not bound`);
+    }
+  }
+  assert.ok(total >= 400, `400 members or more, found ${total}`);
+  // And OS stays out for good: nothing behind this has a file system.
+  assert.equal(members.OS, undefined, 'OS is deliberately absent');
+});
+
+test('Word8 and the bitwise operators Word never had', () => {
+  const bml = createInterpreter({ typecheck: 'strict' });
+  bml.loadPrelude();
+  const is = (src, want) => assert.equal(bml.run(src).text, want, src);
+  // A word is unsigned, so each answer goes back into that range: `notb 0w0`
+  // is 4294967295, not ~1.
+  is('Word.andb (0w12, 0w10)', '8');
+  is('Word.orb (0w12, 0w10)', '14');
+  is('Word.xorb (0w12, 0w10)', '6');
+  is('Word.notb 0w0', '4294967295');
+  is('Word.wordSize', '32');
+  // `Word.<<` could not be WRITTEN: the identifier lexer stops at the `<`, so
+  // `Word.` was one token and `<<` the next, and every shift was unreachable.
+  is('Word.<< (0w1, 0w4)', '16');
+  is('Word.>> (0w16, 0w4)', '1');
+  is('Word.~>> (0w16, 0w4)', '1');
+  // Word8 is the same, masked to eight bits.
+  is('Word8.wordSize', '8');
+  is('Word8.notb 0w0', '255');
+  is('Word8.fromInt 300', '44');
+  is('Word8.<< (0w1, 0w9)', '0');
+  is('Word8.toString 0w255', '"FF"');
+});
+
+test('the monomorphic arrays and vectors', () => {
+  const bml = createInterpreter({ typecheck: 'strict' });
+  bml.loadPrelude();
+  const is = (src, want) => assert.equal(bml.run(src).text, want, src);
+  is('CharVector.toString (CharVector.fromString "abc")', '"abc"');
+  is('CharVector.length (CharVector.fromString "abc")', '3');
+  is('let val a = CharArray.fromString "abc" in (CharArray.update (a,0,#"z"); CharArray.toString a) end', '"zbc"');
+  is('Word8Vector.length (Word8Vector.fromList [0w1,0w2])', '2');
+  is('let val a = Word8Array.fromList [0w1] in (Word8Array.update (a,0,0w9); Word8Array.sub (a,0)) end', '9');
+  is('RealVector.sub (RealVector.fromList [1.5,2.5], 1)', '2.5');
+  is('IntArray.length (IntArray.fromList [1,2,3])', '3');
+  is('IntVector.toList (IntVector.map (fn x=>x+1) (IntVector.fromList [1,2]))', '[2, 3]');
+});
+
+test('IntInf: whole numbers of any size, and a type of their own', () => {
+  const bml = createInterpreter({ typecheck: 'strict' });
+  bml.loadPrelude();
+  const is = (src, want) => assert.equal(bml.run(src).text, want, src);
+  is('IntInf.toString (IntInf.fromInt 42)', '"42"');
+  is('IntInf.toString (IntInf.pow (IntInf.fromInt 2, 100))', '"1267650600228229401496703205376"');
+  is('IntInf.toString (IntInf.* (IntInf.fromString "123456789012345678901234567890", IntInf.fromInt 2))',
+    '"246913578024691357802469135780"');
+  is('IntInf.toString (IntInf.+ (IntInf.fromInt 1, IntInf.fromInt 2))', '"3"');
+  is('IntInf.toString (IntInf.~ (IntInf.fromInt 5))', '"~5"', 'and `op ~` can be declared at all');
+  is('IntInf.toString (IntInf.fromString "~7")', '"~7"', 'a tilde is how ML writes a negative');
+  is('IntInf.compare (IntInf.fromInt 1, IntInf.fromInt 2)', 'LESS');
+  is('IntInf.fromInt 5 = IntInf.fromInt 5', 'true');
+  is('IntInf.fromInt 5', '5');
+  is('~3', '~3', 'and a plain negative still lexes');
+
+  // A TYPE OF ITS OWN, as the Basis has it: an intinf and an int are not the
+  // same thing, and mixing them is an error rather than a coercion.
+  assert.equal(bml.typeReport('IntInf.fromInt 1'), 'intinf');
+  const mixed = bml.run('IntInf.fromInt 1 + 1');
+  assert.equal(mixed.ok, false);
+  assert.match(mixed.text, /intinf and int are not the same type/);
+});
+
+
+// ---- the Basis, member by member (task #80) --------------------------------
+//
+// Every expected value here was written from the Basis Library and then run,
+// NOT captured from the run and pasted back: capturing asserts whatever the
+// implementation happens to do, bugs included. Four of the first 125 disagreed
+// and three were the implementation's fault — String.isPrefix took a tuple
+// where the Basis curries, Word.min and Word.max aliased the curried
+// primitives where the Basis takes a pair, and the checker had never learnt
+// what an exception is.
+const BASIS_CASES = [
+  ['List.all', 'List.all (fn x => x > 0) [1,2]', 'true'],
+  ['List.exists', 'List.exists (fn x => x > 1) [1,2]', 'true'],
+  ['List.app', '(List.app (fn _ => ()) [1]; 1)', '1'],
+  ['List.concat', 'List.concat [[1],[2,3]]', '[1, 2, 3]'],
+  ['List.drop', 'List.drop ([1,2,3], 1)', '[2, 3]'],
+  ['List.take', 'List.take ([1,2,3], 2)', '[1, 2]'],
+  ['List.null', 'List.null []', 'true'],
+  ['Bool.not', 'Bool.not true', 'false'],
+  ['Char.compare', 'Char.compare (#"a", #"b")', 'LESS'],
+  ['Char.fromString', 'Char.fromString "a"', 'SOME #"a"'],
+  ['Char.isAlphaNum', 'Char.isAlphaNum #"1"', 'true'],
+  ['Char.isAscii', 'Char.isAscii #"a"', 'true'],
+  ['Char.isCntrl', 'Char.isCntrl #"a"', 'false'],
+  ['Char.isGraph', 'Char.isGraph #"a"', 'true'],
+  ['Char.isLower', 'Char.isLower #"a"', 'true'],
+  ['Char.isPrint', 'Char.isPrint #"a"', 'true'],
+  ['Char.isSpace', 'Char.isSpace #" "', 'true'],
+  ['Char.isUpper', 'Char.isUpper #"A"', 'true'],
+  ['Char.max', 'Char.max (#"a", #"b")', '#"b"'],
+  ['Char.min', 'Char.min (#"a", #"b")', '#"a"'],
+  ['Char.notContains', 'Char.notContains "abc" #"z"', 'true'],
+  ['Char.pred', 'Char.pred #"b"', '#"a"'],
+  ['Char.toLower', 'Char.toLower #"A"', '#"a"'],
+  ['General.before', '(1 before ())', '1'],
+  ['General.ignore', 'General.ignore 5', '()'],
+  ['General.exnMessage', 'General.exnMessage (Fail "x")', '"Fail x"'],
+  ['Int.abs', 'Int.abs ~3', '3'],
+  ['Int.fromInt', 'Int.fromInt 3', '3'],
+  ['Int.min', 'Int.min (1, 2)', '1'],
+  ['Int.sign', 'Int.sign ~3', '~1'],
+  ['Int.sameSign', 'Int.sameSign (1, 2)', 'true'],
+  ['Int.toInt', 'Int.toInt 3', '3'],
+  ['Int.fmt', 'Int.fmt StringCvt.DEC 42', '"42"'],
+  ['Int.precision', 'Int.precision', 'SOME 53'],
+  ['Int.minInt', 'Int.minInt', 'SOME ~9007199254740991'],
+  ['Math.e', 'Real.floor Math.e', '2'],
+  ['Math.pow', 'Math.pow (2.0, 3.0)', '8.0'],
+  ['Math.exp', 'Real.floor (Math.exp 0.0)', '1'],
+  ['Math.ln', 'Math.ln 1.0', '0.0'],
+  ['Math.log10', 'Math.log10 100.0', '2.0'],
+  ['Math.cos', 'Math.cos 0.0', '1.0'],
+  ['Math.sin', 'Math.sin 0.0', '0.0'],
+  ['Math.tan', 'Math.tan 0.0', '0.0'],
+  ['Math.acos', 'Math.acos 1.0', '0.0'],
+  ['Math.asin', 'Math.asin 0.0', '0.0'],
+  ['Math.atan', 'Math.atan 0.0', '0.0'],
+  ['Math.atan2', 'Math.atan2 (0.0, 1.0)', '0.0'],
+  ['Math.cosh', 'Math.cosh 0.0', '1.0'],
+  ['Math.sinh', 'Math.sinh 0.0', '0.0'],
+  ['Math.tanh', 'Math.tanh 0.0', '0.0'],
+  ['Option.app', '(Option.app (fn _ => ()) (SOME 1); 1)', '1'],
+  ['Option.composePartial', 'Option.composePartial (fn x => SOME (x+1), fn y => SOME y) 1', 'SOME 2'],
+  ['Real.compare', 'Real.compare (1.0, 2.0)', 'LESS'],
+  ['Real.isNan', 'Real.isNan 1.0', 'false'],
+  ['Real.isFinite', 'Real.isFinite 1.0', 'true'],
+  ['Real.max', 'Real.max (1.0, 2.0)', '2.0'],
+  ['Real.min', 'Real.min (1.0, 2.0)', '1.0'],
+  ['Real.realCeil', 'Real.realCeil 2.1', '3.0'],
+  ['Real.realRound', 'Real.realRound 2.6', '3.0'],
+  ['Real.sameSign', 'Real.sameSign (1.0, 2.0)', 'true'],
+  ['Real.sign', 'Real.sign ~2.0', '~1'],
+  ['Real.trunc', 'Real.trunc ~2.7', '~2'],
+  ['String.compare', 'String.compare ("a","b")', 'LESS'],
+  ['String.implode', 'String.implode [#"a",#"b"]', '"ab"'],
+  ['String.isPrefix', 'String.isPrefix "he" "hello"', 'true'],
+  ['String.map', 'String.map Char.toUpper "ab"', '"AB"'],
+  ['String.toString', 'String.toString "ab"', '"ab"'],
+  ['StringCvt.BIN', 'StringCvt.BIN', 'BIN'],
+  ['StringCvt.OCT', 'StringCvt.OCT', 'OCT'],
+  ['StringCvt.EXACT', 'StringCvt.EXACT', 'EXACT'],
+  ['StringCvt.SCI', 'StringCvt.SCI NONE', 'SCI NONE'],
+  ['Substring.size', 'Substring.size "abc"', '3'],
+  ['Substring.isEmpty', 'Substring.isEmpty ""', 'true'],
+  ['Substring.concat', 'Substring.concat ["a","b"]', '"ab"'],
+  ['Substring.explode', 'Substring.explode "ab"', '[#"a", #"b"]'],
+  ['Substring.slice', 'Substring.slice ("abcd", 1, SOME 2)', '"bc"'],
+  ['Substring.splitr', 'Substring.splitr Char.isDigit "ab12"', '("ab", "12")'],
+  ['Substring.fields', 'Substring.fields (fn c => c = #",") "a,b"', '["a", "b"]'],
+  ['Time.add', 'Time.add (1000, 500)', '1500'],
+  ['Time.sub', 'Time.sub (1500, 500)', '1000'],
+  ['Time.compare', 'Time.compare (1, 2)', 'LESS'],
+  ['Time.fromMilliseconds', 'Time.fromMilliseconds 5', '5'],
+  ['Time.toMilliseconds', 'Time.toMilliseconds 5', '5'],
+  ['Time.zeroTime', 'Time.zeroTime', '0'],
+  ['Time.fromReal', 'Time.fromReal 1.5', '1500'],
+  ['Word.compare', 'Word.compare (0w1, 0w2)', 'LESS'],
+  ['Word.div', 'Word.div (0w7, 0w2)', '3'],
+  ['Word.mod', 'Word.mod (0w7, 0w2)', '1'],
+  ['Word.max', 'Word.max (0w1, 0w2)', '2'],
+  ['Word.min', 'Word.min (0w1, 0w2)', '1'],
+  ['Word.fromString', 'Word.fromString "12"', 'SOME 12'],
+  ['Word8.andb', 'Word8.andb (0w12, 0w10)', '8'],
+  ['Word8.orb', 'Word8.orb (0w12, 0w10)', '14'],
+  ['Word8.xorb', 'Word8.xorb (0w12, 0w10)', '6'],
+  ['Word8.>>', 'Word8.>> (0w255, 0w4)', '15'],
+  ['Word8.compare', 'Word8.compare (0w1, 0w2)', 'LESS'],
+  ['Word8.toInt', 'Word8.toInt 0w300', '44'],
+  ['Word8.div', 'Word8.div (0w7, 0w2)', '3'],
+  ['IntInf.-', 'IntInf.toString (IntInf.- (IntInf.fromInt 5, IntInf.fromInt 2))', '"3"'],
+  ['IntInf.<', 'IntInf.< (IntInf.fromInt 1, IntInf.fromInt 2)', 'true'],
+  ['IntInf.>=', 'IntInf.>= (IntInf.fromInt 2, IntInf.fromInt 2)', 'true'],
+  ['IntInf.div', 'IntInf.toString (IntInf.div (IntInf.fromInt 7, IntInf.fromInt 2))', '"3"'],
+  ['IntInf.mod', 'IntInf.toString (IntInf.mod (IntInf.fromInt 7, IntInf.fromInt 2))', '"1"'],
+  ['IntInf.abs', 'IntInf.toString (IntInf.abs (IntInf.fromInt ~5))', '"5"'],
+  ['IntInf.sign', 'IntInf.sign (IntInf.fromInt ~5)', '~1'],
+  ['IntInf.max', 'IntInf.toString (IntInf.max (IntInf.fromInt 1, IntInf.fromInt 2))', '"2"'],
+  ['IntInf.toInt', 'IntInf.toInt (IntInf.fromInt 42)', '42'],
+  ['Array.app', 'let val a = Array.fromList [1] in (Array.app (fn _ => ()) a; 1) end', '1'],
+  ['Array.all', 'Array.all (fn x => x > 0) (Array.fromList [1,2])', 'true'],
+  ['Array.exists', 'Array.exists (fn x => x > 1) (Array.fromList [1,2])', 'true'],
+  ['Array.find', 'Array.find (fn x => x > 1) (Array.fromList [1,2])', 'SOME 2'],
+  ['Array.foldl', 'Array.foldl (fn (x,a) => x+a) 0 (Array.fromList [1,2])', '3'],
+  ['Array.copy', 'Array.toList (Array.copy (Array.fromList [1,2]))', '[1, 2]'],
+  ['Array.tabulate', 'Array.toList (Array.tabulate (3, fn i => i))', '[0, 1, 2]'],
+  ['Vector.all', 'Vector.all (fn x => x > 0) #[1,2]', 'true'],
+  ['Vector.exists', 'Vector.exists (fn x => x > 1) #[1,2]', 'true'],
+  ['Vector.find', 'Vector.find (fn x => x > 1) #[1,2]', 'SOME 2'],
+  ['Vector.concat', 'Vector.concat [#[1],#[2]]', '#[1, 2]'],
+  ['Vector.foldr', 'Vector.foldr (fn (x,a) => x+a) 0 #[1,2]', '3'],
+  ['Vector.tabulate', 'Vector.tabulate (3, fn i => i)', '#[0, 1, 2]'],
+  ['ListPair.exists', 'ListPair.exists (fn (a,b) => a < b) ([1],[2])', 'true'],
+  ['ListPair.allEq', 'ListPair.allEq (fn (a,b) => a < b) ([1],[2])', 'true'],
+  ['ListPair.foldr', 'ListPair.foldr (fn (a,b,c) => a+b+c) 0 ([1],[2])', '3'],
+  ['ListPair.unzip', 'ListPair.unzip [(1,2)]', '([1], [2])'],
+  ['ListPair.mapEq', 'ListPair.mapEq (fn (a,b) => a+b) ([1],[2])', '[3]'],
+];
+test('the Basis answers what the Basis says, member by member', () => {
+  const bml = createInterpreter({ typecheck: 'strict', clock: () => 0 });
+  bml.loadPrelude();
+  for (const [name, src, want] of BASIS_CASES) {
+    assert.equal(String(bml.run(src).text ?? '').split('\n').pop().trim(), want, name);
+  }
+});
+
+test('an exception is a value with a type, not only something to raise', () => {
+  // `raise` and `handle` were special-cased and the checker never learnt an
+  // exception at all, so `Fail "x"` handed to General.exnMessage was an unbound
+  // name. An exception is a constructor like any other.
+  const bml = createInterpreter({ typecheck: 'strict' });
+  bml.loadPrelude();
+  assert.equal(bml.typeReport('Fail'), 'string -> exn');
+  assert.equal(bml.typeReport('Empty'), 'exn');
+  assert.equal(bml.run('General.exnMessage (Fail "x")').text, '"Fail x"');
+  bml.run('exception Mine of int');
+  assert.equal(bml.typeReport('Mine'), 'int -> exn');
+  // And raising and handling still work, which is what was special-cased.
+  assert.equal(bml.run('(raise Fail "x") handle Fail s => s').text, '"x"');
+  assert.equal(bml.run('(1 div 0) handle Div => ~1').text, '~1');
+});
+
+test('List, Array and Vector keep their own members', () => {
+  // A Python replace with no count put List's additions into every structure
+  // that had a `tabulate`, so Array and Vector each gained six members that
+  // take a LIST — `Array.hd` was reachable and would fail on an array. The
+  // coverage sweep found it; nothing else would have.
+  const bml = createInterpreter({ typecheck: 'off' });
+  bml.loadPrelude();
+  for (const m of ['hd', 'tl', 'getItem', 'revAppend', 'mapPartial', 'collate']) {
+    assert.equal(bml.run(`List.${m}`).ok, true, `List.${m} belongs to List`);
+    assert.equal(bml.run(`Array.${m}`).ok, false, `Array has no ${m}`);
+    assert.equal(bml.run(`Vector.${m}`).ok, false, `Vector has no ${m}`);
+  }
+  assert.equal(bml.run('Array.sub (Array.fromList [7,8], 1)').text, '8');
+  assert.equal(bml.run('Vector.sub (#[7,8], 1)').text, '8');
+});
+
+
+// WORD ARITHMETIC WRAPS (task #82).
+//
+// `Word.+`, `Word.-` and `Word.*` could not be written before v1.345: their
+// bodies need the operator being defined, which meant either a `local` after
+// another declaration in a struct body (#83, refused, and it killed the whole
+// structure in silence) or `val (op +) = …` (#84, did not parse). Both are
+// fixed, so these three are expressible, and they are written with `val` for
+// the reason that makes `val` the right word — its right-hand side runs in the
+// environment as it stands, so the `+` inside is the ordinary one.
+//
+// This is NOT the word type. `0wxFFFFFFFF + 0w1` bare is still int arithmetic,
+// because a word literal lexes to an int and nothing downstream can tell them
+// apart. See docs/word-type-plan.md for why that is being left alone and said
+// out loud rather than built.
+test('Word.+ - and * wrap at the word size', () => {
+  const bml = createInterpreter({ typecheck: 'off' });
+  bml.loadPrelude();
+  assert.equal(bml.run('Word.+ (0wxFFFFFFFF, 0w1)').text, '0', 'round the top');
+  assert.equal(bml.run('Word.- (0w0, 0w1)').text, '4294967295', 'and round the bottom');
+  assert.equal(bml.run('Word.* (0w65536, 0w65536)').text, '0', '2^32 is zero in 32 bits');
+  assert.equal(bml.run('Word.toString (Word.+ (0wxFFFFFFFF, 0w1))').text, '"0"');
+  // Eight bits for Word8, by the same idiom.
+  assert.equal(bml.run('Word8.+ (0w255, 0w1)').text, '0');
+  assert.equal(bml.run('Word8.- (0w0, 0w1)').text, '255');
+  assert.equal(bml.run('Word8.* (0w16, 0w16)').text, '0');
+});
+
+test('the operator inside Word.+ is the ordinary one, not itself', () => {
+  // The whole reason for `val` over `fun`. Written with `fun` these would
+  // recurse until the step budget stopped them, and the structure would be
+  // useless in a way that only shows up on the first call.
+  const bml = createInterpreter({ typecheck: 'off' });
+  bml.loadPrelude();
+  assert.equal(bml.run('Word.+ (0w1, 0w2)').text, '3');
+  assert.equal(bml.run('Word.* (0w6, 0w7)').text, '42');
+  assert.equal(bml.run('Word8.+ (0w1, 0w2)').text, '3');
+});
+
+test('rebinding + inside a structure leaves + alone outside it', () => {
+  // The Basis defines Word.+ by shadowing. If that reached the top level, every
+  // program after the prelude loaded would be doing 32-bit arithmetic.
+  const bml = createInterpreter({ typecheck: 'off' });
+  bml.loadPrelude();
+  assert.equal(bml.run('1 + 2').text, '3');
+  assert.equal(bml.run('4294967295 + 1').text, '4294967296', 'int does not wrap');
 });

@@ -1,3 +1,12 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 // ITHACA — home (islands-plan §6). The first REAL island that is not CALYPSO: a
 // machine-free wilderness reached by sailing off Ogygia, with Argos the loyal dog
 // waiting on the shore. No obelisks, no W-factory, no fortress, no hunter robots —
@@ -111,6 +120,7 @@ export function createIthaca(seed) {
   map.bombs = [];
   map.explosions = [];
   map.explored = new Uint8Array(map.w * map.h).fill(1);
+  map.exploredAll = true;   // nothing to remember: the save skips a fog that is already whole
   map.newlyRevealed = [];
 
   applyIslandPalette(map, 'ithaca'); // per-island ground + foliage colour (B2)

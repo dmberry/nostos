@@ -1,3 +1,12 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 // AI-ML: the small functional language typed into an obelisk terminal, a
 // HERMES relay, the NostBook, and carried by a machine as its own program.
 // Design: docs/ob-terminal-language.md.
@@ -26,7 +35,7 @@
 import { typeOf, remember, setHostKnowsName } from '../lang/types.js';
 import {
   evalNode, applyValue, formatValue, describeValue, combineOutput,
-  beginRun, setHostNameHint, setHostUnbound, setOut, pushOut,
+  beginRun, setHostNameHint, setHostUnbound, setHostValues, setOut, pushOut,
 } from '../lang/eval.js';
 import { createInterpreter, smlEcho, flattenSession } from '../lang/interp.js';
 import { PRELUDE } from '../lang/basis.js';
@@ -56,9 +65,9 @@ import { RonmlError, RonmlFuelError, RonmlRaise } from '../lang/errors.js';
 // adapter RE-EXPORTS and never copies. Two definitions of the same thing is how
 // the diagnostic list went stale six times.
 import { tokenize } from '../lang/lex.js';
-import { parse, parseLine, joinProgram, joinProgramLines, defaultFixity } from '../lang/parse.js';
+import { parse, parseLine, joinProgram, joinProgramLines, needsMoreInput, continuesPrevious, defaultFixity } from '../lang/parse.js';
 
-export { parseLine, joinProgram, joinProgramLines, defaultFixity };
+export { parseLine, joinProgram, joinProgramLines, needsMoreInput, continuesPrevious, defaultFixity };
 
 // What a unit's lamp can be set to. A machine of this vintage has one LED and
 // a handful of drive levels, not a colour picker, so the set is short and named.
@@ -113,6 +122,34 @@ const COPY_FILE = {
     return { tag: 'file', name: file.name };
   },
 };
+
+// ---- the control verbs (docs/ob-hacking-plan.md) ---------------------------
+//
+// `unlock` was the ONLY thing a decrypted AI key was for, which made the most
+// laborious object in the game a single-use one. These reach the island as a
+// system rather than one node at a time, and they all want the same key, so the
+// check is written once here rather than five times below.
+function requireClean(dec, verb) {
+  if (!dec || dec.tag !== 'key' || dec.kind !== 'aikey') {
+    throw new RonmlError(`${verb} needs the AI key, decrypted. copy aikey  then  let d = decrypt aikey  then  ${verb} … d`);
+  }
+  if (dec.enc !== false) {
+    throw new RonmlError(`that AI key is still sealed. let d = decrypt aikey  first, then  ${verb} … d`);
+  }
+}
+
+// A SETTING WRITTEN AS A BARE WORD, which is how this console already reads
+// `hack OB_1A2B`: an unbound word arrives as a node. A string works too, and
+// both fold case, because NostOS folds case everywhere. An unknown word is
+// named back rather than quietly ignored.
+function settingOf(v, verb, allowed) {
+  const raw = v && (v.tag === 'node' ? v.id : v.tag === 'str' ? v.v : null);
+  const word = raw == null ? null : String(raw).toLowerCase();
+  if (!word || !allowed.includes(word)) {
+    throw new RonmlError(`${verb} takes ${allowed.join(' | ')} — try: ${verb} ${allowed[0].toUpperCase()} d`);
+  }
+  return word;
+}
 
 function makeBuiltins(station) {
   const B = {
@@ -234,6 +271,19 @@ function makeBuiltins(station) {
       fn: (_args, ctx) => {
         if (!ctx.ls) throw new RonmlError('no drives at this terminal.');
         return { tag: 'list', items: (ctx.ls() || []).map((n) => ({ tag: 'file', name: n })) };
+      },
+    },
+    // `save`: write a checkpoint you can load from the title screen. Neutral,
+    // so it works at an obelisk, a HERMES relay and the NostBook alike — a
+    // terminal is a machine you are logged into, and writing your position to
+    // one is a thing terminals are for. The host decides where it can be
+    // written from and says so (task #93); the language only asks.
+    save: {
+      arity: 0,
+      fn: (_args, ctx) => {
+        if (!ctx.saveGame) throw new RonmlError('nothing to save from this terminal.');
+        ctx.saveGame();
+        return { tag: 'unit' };
       },
     },
     // `decrypt aikey`: turn a sealed AI key (from `copy`) into the open token
@@ -375,12 +425,54 @@ function makeBuiltins(station) {
         return { tag: 'file', name: r.out };
       },
     },
-    // `retire` (R3): with the hermes card, stand the fortress guards down — they
-    // become gardeners instead of hunters. The refunction-by-command payoff.
+    // `retire` (R3): the refunction. Stand the fortress guards down — they become
+    // gardeners instead of hunters, and the keeper's hold on the tide breaks.
+    //
+    // IT USED TO BE ONE WORD, arity 0, at any obelisk on any island: the largest
+    // turn in the game typed in six letters, and typed on POLYPHEMUS it retired
+    // HIS guards while setting CALYPSO's flag, because refunctionCalypso reads
+    // the world you are standing in. It is a program now, and the host decides
+    // where a program may run (ctx.retire is only supplied on her island).
+    //
+    // The shape of it is the argument. She is the keeper; her whole operation is
+    // a function that takes a departure and gives back a stay. So she does not
+    // take a command — she takes a REPLACEMENT for that function, and she tries
+    // it before she accepts it: three probes, and it has to give each one back
+    // unchanged. Anything else keeps something, which is what she already does.
+    //
+    //   retire (decrypt aikey) (fn x => x)
+    //
+    // Nothing here is a magic word. The key has to be open (`decrypt`), which
+    // means the card has to be aboard; the function has to be a function, and it
+    // has to behave. `fn x => x` is not the password — it is the only thing that
+    // passes the test, and a player who understands why has understood the game.
     retire: {
-      arity: 0,
-      fn: (_args, ctx) => {
+      arity: 2,
+      fn: ([k, f], ctx) => {
         if (!ctx.retire) throw new RonmlError('nothing to retire from this terminal.');
+        if (!k || k.tag !== 'key' || k.kind !== 'aikey') {
+          throw new RonmlError('retire wants the AI key first:  retire (decrypt aikey) (fn x => x)');
+        }
+        if (k.enc) throw new RonmlError('the key is still sealed. Open it:  retire (decrypt aikey) (fn x => x)');
+        const t = f && f.tag;
+        if (t !== 'closure' && t !== 'builtin' && t !== 'confn' && t !== 'select') {
+          throw new RonmlError('retire wants a FUNCTION to put in place of her keeping — she keeps you, '
+            + 'so give her a keeping that gives you back:  retire (decrypt aikey) (fn x => x)');
+        }
+        // Her test, run on the spot: hand it three departures and see whether
+        // each one comes back as it went out.
+        const probes = [{ tag: 'int', v: 0 }, { tag: 'int', v: 7 }, { tag: 'int', v: -3 }];
+        for (const p of probes) {
+          let out;
+          try { out = applyValue(f, p); } catch (e) {
+            throw new RonmlError(`she runs it once and it fails: ${(e && e.message) || 'error'}. `
+              + 'A keeping that throws is still a keeping.');
+          }
+          if (!out || out.tag !== 'int' || out.v !== p.v) {
+            throw new RonmlError(`she hands it ${p.v} and gets back ${describeValue(out)}. `
+              + 'That is a keeping, not a release — it has to give back exactly what it is given.');
+          }
+        }
         ctx.retire();
         return { tag: 'unit' };
       },
@@ -529,6 +621,79 @@ function makeBuiltins(station) {
     // `unlock k d`: the endgame program. `k` is a key hacked off a live node
     // (`hack`), `d` is the DECRYPTED AI key (`copy aikey` then `decrypt aikey`).
     // Both together drop a fortress key; either alone is refused with a hint.
+    // FOG. The purge's fog is one number the renderer reads; this pins it until
+    // the world takes it back, which it does as the towers fall.
+    fog: {
+      arity: 2,
+      fn: ([level, dec], ctx) => {
+        requireClean(dec, 'fog');
+        const how = settingOf(level, 'fog', ['high', 'low', 'clear']);
+        ctx.setFog(how);
+        return { tag: 'unit' };
+      },
+    },
+    // POSEIDON, up or down, and DOWN is the one anybody wants: it takes the
+    // purge offline, so the towers stop pooling sight and the blight stops
+    // spreading. Temporary — the purge is the clock, and a verb that stopped it
+    // for good would stop the game.
+    poseidon: {
+      arity: 2,
+      fn: ([state, dec], ctx) => {
+        requireClean(dec, 'poseidon');
+        const how = settingOf(state, 'poseidon', ['up', 'down']);
+        ctx.setPurge(how === 'up');
+        return { tag: 'unit' };
+      },
+    },
+    // ROBOTS, in reach, for a while. OFF is `sleep` without the arithmetic; ON
+    // wakes them early, and they are cross about it.
+    robots: {
+      arity: 2,
+      fn: ([state, dec], ctx) => {
+        requireClean(dec, 'robots');
+        const how = settingOf(state, 'robots', ['on', 'off']);
+        ctx.setRobots(how === 'on');
+        return { tag: 'unit' };
+      },
+    },
+    // The shared-sight NET, cut without felling anything. Stepping into one
+    // tower's view turns every hunter that can reach you; this stops that.
+    //
+    // Called `net` and not `sight`: `sight` is one of a machine's own senses
+    // (MACHINE_ONLY below), and a verb of that name shadowed the sensor —
+    // three fire-control tests went red and named it straight away.
+    net: {
+      arity: 2,
+      fn: ([state, dec], ctx) => {
+        requireClean(dec, 'net');
+        const how = settingOf(state, 'net', ['on', 'off']);
+        ctx.setSharedSight(how === 'on');
+        return { tag: 'unit' };
+      },
+    },
+    // Every blight front frozen where it stands. Felling a tower already does
+    // this for its own front; this does it for all of them at once.
+    //
+    // `spread` and not `blight`, for the same reason `net` is not `sight`: a
+    // machine's own senses include `blight`, and a verb of that name shadowed
+    // it. Second time in one change; there is a test below that walks both
+    // lists now so there is not a third.
+    spread: {
+      arity: 2,
+      fn: ([state, dec], ctx) => {
+        requireClean(dec, 'spread');
+        const how = settingOf(state, 'spread', ['stop', 'go']);
+        ctx.setBlight(how === 'go');
+        return { tag: 'unit' };
+      },
+    },
+    // EXPLORER. The machines' own browser, on their own hardware. No key: the
+    // chip that got you in is enough to READ, as it always has been. It takes
+    // an optional address, as `netscape` does on the laptop.
+    explorer: {
+      arity: 0,
+      fn: (_args, ctx) => { ctx.openExplorer(null); return { tag: 'unit' }; },
+    },
     unlock: {
       arity: 2,
       fn: ([key, dec], ctx) => {
@@ -561,6 +726,10 @@ function makeBuiltins(station) {
   // (`not` and `echo` are in ROBOT_VERBS too and stay neutral: they belong to
   // the language, not to any one machine.)
   for (const k of MACHINE_ONLY) if (B[k]) B[k].station = 'robot';
+  // `read` belongs to BOTH consoles: the relay's docs and the tower's
+  // maintenance store. A verb can name more than one station, and the filter
+  // below reads the list — a store you can `ls` and cannot open is not a store.
+  if (B.read) B.read.station = ['ob', 'hermes'];
   if (!station) return B;
   // The laptop is the language WITHOUT the world: hand back only its own short
   // list, so no verb that needs a wire (or a drive, or a card) is even present.
@@ -576,7 +745,8 @@ function makeBuiltins(station) {
   }
   const out = {};
   for (const k of Object.keys(B)) {
-    if (!B[k].station || B[k].station === station) out[k] = B[k];
+    const tag = B[k].station;
+    if (!tag || tag === station || (Array.isArray(tag) && tag.includes(station))) out[k] = B[k];
   }
   // A HERMES relay prints DOCUMENTS, not maps — override `print` here so it
   // takes a topic (`print fortress`). The obelisk keeps its own arity-0 `print`.
@@ -592,10 +762,13 @@ function makeBuiltins(station) {
 // Which verbs belong to which system. Used to filter each terminal's builtins,
 // and to tell "not a command here" (a real verb, wrong system) apart from a
 // plain bad word.
-// `copy`, `cd`, `ls` are deliberately NOT listed here — they are neutral (work at
-// both an obelisk and a HERMES relay), like `notes`. A verb tagged for one station
-// is refused at the other; the file verbs must move files at either terminal.
-const OB_VERBS = ['scan', 'nearest', 'keys', 'name', 'timer', 'echo', 'not', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'sing', 'map', 'print', 'decrypt', 'unlock', 'eliza', 'retire'];
+// `copy`, `cd`, `ls`, `save` are deliberately NOT listed here — they are neutral
+// (work at both an obelisk and a HERMES relay). A verb tagged for one station is
+// refused at the other; the file verbs must move files at either terminal, and
+// `save` must write a checkpoint from whichever one you are logged into.
+const OB_VERBS = ['scan', 'nearest', 'keys', 'name', 'timer', 'echo', 'not', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'sing', 'map', 'print', 'decrypt', 'unlock', 'eliza', 'retire', 'read',
+  // The control verbs, all of which want a decrypted AI key.
+  'fog', 'poseidon', 'robots', 'net', 'spread', 'explorer'];
 // Note: HERMES's `print` is added as an override in makeBuiltins (it takes a
 // topic), not tagged here — tagging it would steal the obelisk's own arity-0
 // `print`. `print` is already in OB_VERBS, so ALL_VERBS still covers it.
@@ -605,8 +778,10 @@ const HERMES_VERBS = ['read', 'archive', 'records', 'drive', 'backup', 'restore'
 // arithmetic / `;` / recursion), which is exactly what makes it a place to LEARN
 // the language rather than perform it under fire. A tower verb typed here is not a
 // typo, it is a machine that isn't listening: evalNode says so and points at a tower.
+// (`save` is the one exception, and it is not a network verb: it writes where
+// you are standing, which this machine can do from anywhere you can open it.)
 const LAPTOP_VERBS = ['echo', 'not', 'hd', 'tl', 'length', 'abs', 'sqrt', 'min', 'max', 'size',
-  'real', 'floor', 'ord', 'chr', 'str', 'explode', 'implode', 'makestring', 'ref', 'units'];
+  'real', 'floor', 'ord', 'chr', 'str', 'explode', 'implode', 'makestring', 'ref', 'units', 'save'];
 // A MACHINE'S OWN STATION. Its program runs here: senses in, an intent out, and
 // nothing else within reach — no network, no files, no console verbs. That is
 // not a restriction bolted on, it is what a unit actually has.
@@ -626,6 +801,7 @@ const RETIRED_VERBS = ['make', 'ping'];
 // ROBOT_VERBS are in here too: a unit's own senses and service verbs are real
 // words, so typing `beep` or `charge` at a console should say it is not a
 // command HERE rather than quietly evaluating to a node id.
+export { OB_VERBS, MACHINE_ONLY };
 const ALL_VERBS = new Set([...OB_VERBS, ...HERMES_VERBS, ...RETIRED_VERBS, ...ROBOT_VERBS]);
 
 // A real verb typed at the wrong machine. On the laptop that is not a mistake so
@@ -649,6 +825,37 @@ function notHereMessage(name, station) {
 // around as values, so `hack OB_1A2B` names a tower and `copy factory_id.ml ob`
 // names a file, and neither was ever declared. The rule lives here now, where
 // it belongs, rather than inside the language where every host inherited it.
+// THE GAME'S OWN VALUES. A tower, a key, a file on a card: none of them is a
+// feature of Standard ML, and the language used to case for their tags by name
+// — `case 'key': return v.kind === 'aikey' ? 'the AI key' : …` — which put the
+// AI key inside an implementation of a 1997 language standard. It asks now.
+setHostValues({
+  equal: (a, b) => {
+    switch (a.tag) {
+      case 'node': return a.id === b.id;
+      case 'key': return a.kind === b.kind && a.id === b.id;
+      case 'file': return a.name === b.name;
+      default: return false;
+    }
+  },
+  describe: (v) => {
+    switch (v.tag) {
+      case 'node': return `node ${v.id}`;
+      case 'key': return v.kind === 'aikey' ? 'the AI key' : 'a key';
+      case 'file': return `the file ${v.name}`;
+      default: return null;
+    }
+  },
+  format: (v) => {
+    switch (v.tag) {
+      case 'node': return v.id;
+      case 'key': return v.kind === 'aikey' ? (v.enc === false ? 'AIKEY:open' : 'AIKEY:sealed') : `KEY:${v.id}`;
+      case 'file': return v.name;
+      default: return null;
+    }
+  },
+});
+
 setHostUnbound((name) => {
   if (/\.(ml|md)$/i.test(name)) return { tag: 'file', name };
   return { tag: 'node', id: name };
@@ -675,6 +882,7 @@ setHostNameHint((name, ctx) => {
 });
 // design doc's "crash OB_BB05 alone -> ERR: crash needs a key..." example.
 const USAGE_HINTS = {
+  retire: 'retire wants an open key and a keeping:  retire (decrypt aikey) (fn x => x)',
   hack: 'hack needs a node. try: hack OB_XXXX',
   crash: "crash needs a node and its key. try: let k = hack OB_XXXX in crash OB_XXXX k",
   loop: 'loop needs a node. try: loop OB_XXXX',
@@ -685,6 +893,13 @@ const USAGE_HINTS = {
   cd: 'cd needs a device. try: cd aikey  ·  cd ob',
   eliza: 'eliza <file> transforms a file (eliza factory_id.ml); bare `eliza` opens the DOCTOR',
   decrypt: 'decrypt needs the AI key. try: copy aikey  then  decrypt aikey',
+  // The control verbs all take a setting AND the decrypted key, so a bare
+  // `fog` answered "needs more arguments" and left you guessing which two.
+  fog: 'fog takes a level and the decrypted AI key. try: let d = decrypt aikey in fog HIGH d  ·  HIGH | LOW | CLEAR',
+  poseidon: 'poseidon takes UP or DOWN and the decrypted AI key. try: let d = decrypt aikey in poseidon DOWN d',
+  robots: 'robots takes ON or OFF and the decrypted AI key. try: let d = decrypt aikey in robots OFF d',
+  net: 'net takes ON or OFF and the decrypted AI key — the towers\u2019 shared sight. try: let d = decrypt aikey in net OFF d',
+  spread: 'spread takes STOP or GO and the decrypted AI key — the blight. try: let d = decrypt aikey in spread STOP d',
   unlock: 'unlock needs a hacked node key and the decrypted AI key. try: copy aikey / let k = hack OB_XXXX / let d = decrypt aikey / unlock k d',
   print: 'print needs a topic — at an obelisk: print map  or  print aikey; at a relay: print <document>',
   backup: 'backup needs a key — try: backup aikey',
@@ -699,37 +914,44 @@ const USAGE_HINTS = {
 // terminal — 'ob' (AI obelisk / TIRESIAS), 'hermes' (RON relay), or '' for the
 // verbs that work anywhere. `help` filters to the terminal you're at.
 const HELP_VERBS = [
-  ['scan', 'unit -> list', 'obelisks/machines in range of this terminal', '', 'ob'],
-  ['nearest', 'list -> node', 'the closest element of a list', '', 'ob'],
-  ['keys', 'unit -> list', 'the access keys you currently hold', '', 'ob'],
-  ['name', 'unit -> node', 'the code of the obelisk you are jacked into', '', 'ob'],
-  ['timer', 'unit -> node', 'time left until POSEIDON comes online', '', 'ob'],
+  ['scan', 'unit -> list', 'obelisks on the wire', '', 'ob'],
+  ['nearest', 'list -> node', 'the closest of a list', '', 'ob'],
+  ['keys', 'unit -> list', 'the keys you hold', '', 'ob'],
+  ['name', 'unit -> node', 'the node you are on', '', 'ob'],
+  ['timer', 'unit -> node', 'time left before POSEIDON', '', 'ob'],
   ['hack n', 'node -> key', "take node n's access key", 'no key needed', 'ob'],
-  ['crash n k', 'node key -> unit', 'knock node n dark until a drone mends it', 'needs k from hack', 'ob'],
-  ['loop n', 'node -> unit', 'pin an infinite loop into node n — freezes it and its garrison until a drone resets it', 'no key needed', 'ob'],
-  ['sleep t', 'num -> unit', 'idle local machines for t game-minutes', 'no key needed', 'ob'],
-  ['rewind t', 'num -> unit', 'claw t hours back off the POSEIDON deadline', 'before the purge only', 'ob'],
-  ['repel', 'unit -> unit', 'nearby machines turn tail and flee you', 'no key needed', 'ob'],
-  ['map', 'unit -> unit', 'show the territory map (obelisks, machines, mainframe)', '', 'ob'],
-  ['print t', 'atom -> unit', 'print map (a carryable map) or print aikey (a spare AI key)', '', 'ob'],
-  ['copy k', 'key -> key', 'copy the AI key you hold into the session as `aikey`', 'hold an AI key', ''],
-  ['copy f d', 'file device -> file', 'copy a file onto a device — copy factory_id.ml ob', '', ''],
-  ['cd d', 'device -> node', 'change drive — the console echoes which drive, and the card state (run `drives` to see what is attached here)', '', ''],
-  ['drives', 'unit -> unit', "list the drives attached here and the card's current name", '', ''],
-  ['ls', 'unit -> list', 'list the files on the current drive', '', ''],
-  ['decrypt k', 'key -> key', 'open the sealed AI key so unlock can use it', 'hold an AI key', 'ob'],
-  ['unlock k d', 'key key -> unit', 'legacy — the fortress gate opens to a Trojan card now (refunction your AI key)', 'superseded', 'ob'],
-  ['eliza', 'file -> file', 'eliza <file> runs the DOCTOR transform on a file; bare `eliza` (or run eliza) opens the DOCTOR to talk to — quit to leave', '', 'ob'],
-  ['retire', 'unit -> unit', "stand the fortress guards down — they become gardeners (needs the hermes card)", 'hermes card', 'ob'],
-  ['read t', 'atom -> unit', 'read a document — read ronml / fortress / obelisks / robots / history / destroy', 'HERMES relay only', 'hermes'],
-  ['print t', 'atom -> unit', 'print a copy of a document into your notepad (N)', 'HERMES relay only', 'hermes'],
-  ['archive', 'unit -> unit', 'list the documents this relay holds', 'HERMES relay only', 'hermes'],
-  ['records', 'unit -> unit', "pull the next of RON's own field records into your Scrapbook (J); repeat until dry", 'HERMES relay only', 'hermes'],
-  ['drive', 'unit -> unit', 'override a nearby machine and see through its eyes — drive it till it leaves range', 'HERMES relay only', 'hermes'],
-  ['backup aikey', 'key -> unit', "copy your AI key to RON's relay mesh — survives death", 'HERMES relay only', 'hermes'],
-  ['restore aikey', 'key -> unit', 'mint a backed-up AI key back into your pack', 'HERMES relay only', 'hermes'],
-  ['forge f', 'file -> file', 'forge zeus_virus.ml into zeus_lightning.ml from your Trojan card', 'HERMES relay, Trojan card', 'hermes'],
-  ['help', 'unit -> unit', 'this reference, or `help <verb>` for one verb', '', ''],
+  ['crash n k', 'node key -> unit', 'knock n dark for a while', 'needs k from hack', 'ob'],
+  ['loop n', 'node -> unit', 'freeze n and its garrison', 'no key needed', 'ob'],
+  ['sleep t', 'num -> unit', 'idle local machines t minutes', 'no key needed', 'ob'],
+  ['rewind t', 'num -> unit', 'claw t hours off the deadline', 'before the purge only', 'ob'],
+  ['repel', 'unit -> unit', 'nearby machines turn and run', 'no key needed', 'ob'],
+  ['map', 'unit -> unit', 'the territory map', '', 'ob'],
+  ['explorer', 'unit -> unit', "the machines' own browser", 'no key needed', 'ob'],
+  ['fog s d', 'node key -> unit', 'HIGH | LOW | CLEAR, island-wide', 'needs a decrypted AI key', 'ob'],
+  ['poseidon s d', 'node key -> unit', 'UP | DOWN, the purge itself', 'needs a decrypted AI key', 'ob'],
+  ['robots s d', 'node key -> unit', 'ON | OFF, everything in reach', 'needs a decrypted AI key', 'ob'],
+  ['net s d', 'node key -> unit', "ON | OFF, the towers' shared sight", 'needs a decrypted AI key', 'ob'],
+  ['spread s d', 'node key -> unit', 'STOP | GO, the blight', 'needs a decrypted AI key', 'ob'],
+  ['print t', 'atom -> unit', 'print map, or print aikey', '', 'ob'],
+  ['copy k', 'key -> key', 'bring the AI key into the session', 'hold an AI key', ''],
+  ['copy f d', 'file device -> file', 'copy a file onto a drive', '', ''],
+  ['cd d', 'device -> node', 'change drive', '', ''],
+  ['drives', 'unit -> unit', 'what is attached here', '', ''],
+  ['ls', 'unit -> list', 'files on this drive', '', ''],
+  ['decrypt k', 'key -> key', 'open the sealed AI key', 'hold an AI key', 'ob'],
+  ['unlock k d', 'key key -> unit', 'legacy — use a Trojan card now', 'superseded', 'ob'],
+  ['eliza', 'file -> file', 'the DOCTOR, on a file or bare', '', 'ob'],
+  ['retire', "key -> ('a -> 'a) -> unit", 'refunction the keeper, at her own island', 'hermes card', 'ob'],
+  ['read t', 'atom -> unit', 'read a page', 'HERMES relay only', 'hermes'],
+  ['print t', 'atom -> unit', 'print map, or print aikey', 'HERMES relay only', 'hermes'],
+  ['archive', 'unit -> unit', 'the RON archive', 'HERMES relay only', 'hermes'],
+  ['records', 'unit -> unit', 'the next RON field record', 'HERMES relay only', 'hermes'],
+  ['drive', 'unit -> unit', 'a drive', 'HERMES relay only', 'hermes'],
+  ['backup aikey', 'key -> unit', 'keep your key off their hardware', 'HERMES relay only', 'hermes'],
+  ['restore aikey', 'key -> unit', 'take your key back', 'HERMES relay only', 'hermes'],
+  ['forge f', 'file -> file', 'forge a virus for this island', 'HERMES relay, Trojan card', 'hermes'],
+  ['save', 'unit -> unit', 'write a checkpoint you can load', 'one slot per island', ''],
+  ['help', 'unit -> unit', 'this list, or help <verb>', '', ''],
 ];
 // `help ml` — a one-screen tour of the language itself (as opposed to `help`,
 // which lists the verbs). Overview + worked examples, hello-world first.
@@ -770,6 +992,8 @@ const LAPTOP_HELP = [
   '  if c then a else b',
   '  + - * /  math     ^  join text    == != < > <= >=  compare',
   '',
+  '  save              write a checkpoint (also `save` in the shell)',
+  '',
   '  the tower verbs (scan, hack, crash, …) need a wire. Practise here.',
   '  type `help ml` for the full tour with worked examples.',
   '  type `quit` to leave ML and go back to the shell.',
@@ -795,26 +1019,65 @@ function helpText(topic, station, hasManual) {
   // split by how the reference presents them.
   const IMPERATIVE = new Set([
     'scan', 'keys', 'name', 'timer', 'map', 'print', 'sleep', 'rewind', 'repel', 'sing', 'loop', 'retire',
-    'read', 'make', 'archive', 'records', 'drive', 'backup', 'restore', 'forge',
+    'read', 'make', 'archive', 'records', 'drive', 'backup', 'restore',
+    // Arity-0 and nothing comes back: `explorer` opens a window, `save` writes a
+    // checkpoint, `drives` prints what is attached. They belong with `map` and
+    // `print` rather than with the verbs you nest in a `let`.
+    'explorer', 'save', 'drives',
   ]);
-  const lines = here.map(([sig, , desc, gate]) => {
-    const shown = IMPERATIVE.has(sig.split(' ')[0]) ? '*' + sig : sig;
-    return `  ${pad(shown, 12)} ${desc}${gate ? `  [${gate}]` : ''}`;
-  });
+  // NOT here, and each for a reason worth keeping straight:
+  //   crash · unlock · fog · poseidon · robots · net · spread · nearest
+  //     take a value you bound earlier. A `*` command's arguments are LITERALS,
+  //     so `*crash OB_1A2B k` cannot work and marking it would teach a lie.
+  //   hack · decrypt · copy · cd · ls · eliza · forge
+  //     hand something back, and that answer is what you came for. `forge` sat
+  //     in the list above until v1.345 with the same `file -> file` signature as
+  //     `eliza` beside it, marked the other way.
+  // GROUPED, because twenty verbs in one column is a wall and a new player
+  // reads none of it. The groups answer the question somebody actually has:
+  // what can I look at, what can I do to one tower, what can I do to the whole
+  // island, and what does the key buy. Anything not named falls into the last
+  // group, so adding a verb can never make it vanish from the list.
+  const GROUPS = [
+    ['LOOK', ['scan', 'nearest', 'name', 'keys', 'timer', 'map', 'explorer']],
+    ['ONE NODE', ['hack', 'crash', 'loop']],
+    ['THE ISLAND — needs a decrypted AI key', ['fog', 'poseidon', 'robots', 'net', 'spread']],
+    ['THE KEY', ['copy', 'decrypt', 'unlock', 'print']],
+  ];
+  const nameOf = (sig) => sig.split(' ')[0];
+  // NO GATE TAG HERE. `[needs a decrypted AI key]` on the end of every line was
+  // most of why this wrapped: the console is about 66 characters wide, and a
+  // wrapped line restarts at column 0, so the whole list came apart. The gate is
+  // printed by `help <verb>`, which has a screen to itself.
+  const row = ([sig, , desc]) => {
+    const shown = IMPERATIVE.has(nameOf(sig)) ? '*' + sig : sig;
+    return `  ${pad(shown, 13)} ${desc}`;
+  };
+  const claimed = new Set(GROUPS.flatMap(([, names]) => names));
+  const lines = [];
+  for (const [label, names] of GROUPS) {
+    const rows = here.filter((v) => names.includes(nameOf(v[0])));
+    if (!rows.length) continue;
+    lines.push('', `  ${label}`, ...rows.map(row));
+  }
+  const rest = here.filter((v) => !claimed.has(nameOf(v[0])));
+  if (rest.length) lines.push('', '  EVERYTHING ELSE', ...rest.map(row));
   const title = station === 'hermes' ? 'HERMES reference (RON relay)' : 'AI-ML reference';
   const example = station === 'hermes'
     ? '  e.g.  read moly      make berries      archive'
-    : '  e.g.  scan |> nearest      let k = hack OB_1A2B in crash OB_1A2B k';
+    : '  e.g.  scan |> nearest\n        let k = hack OB_1A2B in crash OB_1A2B k';
   const out = [
     title,
     ...lines,
     '',
-    '  let x = e in body   bind a value      |>   pipe left into right',
-    '  fn x => e  a function    let f x = e  names one    "text"  a string',
-    '  + - * /  math    ^  join text    == != < >  compare    if c then a else b',
-    '  echo x  print a line    a ; b  do a then b    *cmd arg  plain command (BBC style)',
+    '  THE LANGUAGE',
+    '  let x = e        bind a value, for this visit',
+    '  let f x = e      name a function',
+    '  fn x => e        a function, unnamed',
+    '  if c then a else b     a ; b   do a then b',
+    '  |>  pipe    ^  join text    + - * /  math    == != < >  compare',
     example,
-    '  type `help ml` for a tour of the language + examples.',
+    '  help ml  for a tour of the language, with examples.',
   ];
   // If the player hasn't read the full manual yet, say so — this reference is
   // the short form, and the bound RON-DOS Operator's Manual is a real find

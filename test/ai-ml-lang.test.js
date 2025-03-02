@@ -1,10 +1,19 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 // AI-ML language additions (v1.187): string literals + `echo`, the BBC-Micro
 // `*command` form (literal args), and "no such command" for a bare typo. Drives
 // runRonml against a tiny self-contained ctx — no world, no DOM.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { runRonml, decide, smlEcho, AIML_CREDIT, joinProgramLines, diagnose, joinProgram, typeReport, aimlVersion, aimlFull, NOT_FITTED_SAMPLES, loadPrelude, defaultFixity, PRELUDE } from '../src/game/ai_ml.js';
+import { runRonml, decide, smlEcho, AIML_CREDIT, joinProgramLines, needsMoreInput, continuesPrevious, diagnose, joinProgram, typeReport, aimlVersion, aimlFull, NOT_FITTED_SAMPLES, loadPrelude, defaultFixity, PRELUDE, OB_VERBS, MACHINE_ONLY } from '../src/game/ai_ml.js';
 import { docsPage } from '../src/game/ml-docs.js';
 import { newShell, runUnix } from '../src/game/unix.js';
 import { RELAY_FILES } from '../src/game/net.js';
@@ -773,6 +782,65 @@ test('a program file may be laid out the way ML is written', () => {
   let last = '';
   for (const l of joined) last = String(runRonml(l, ctx).text);
   assert.equal(last, '3');
+});
+
+test('a declaration may run over at a PROMPT, in either direction', () => {
+  // A file is joined all at once; a prompt has one line and no way to look
+  // ahead. Until v1.332 it ran each physical line alone, so pasting any of the
+  // examples into the NostBook failed on the second line of every clausal
+  // function and on every comment written across two lines. These are the
+  // shapes from the report.
+
+  // FORWARDS: the text cannot have ended, so the prompt holds it open.
+  assert.equal(needsMoreInput('fun times n ='), true, 'a trailing = is waiting');
+  assert.equal(needsMoreInput('datatype t ='), true);
+  assert.equal(needsMoreInput('val x = 1'), false, 'a finished binding is finished');
+
+  // An unclosed comment, which is what a two-line (* … *) leaves behind.
+  assert.equal(needsMoreInput('(* map, filter and fold. Three ways of walking a list,'), true);
+  assert.equal(needsMoreInput('(* map, filter and fold. *)'), false);
+  assert.equal(needsMoreInput('(* one *) val x = 1 (* two'), true, 'the second one is still open');
+  assert.equal(needsMoreInput('val s = "a (* b"'), false, 'not a comment: it is inside a string');
+  // An escaped quote does not end the string, so the (* stays inside it.
+  assert.equal(needsMoreInput('val s = "a \\" b (* still text"'), false);
+  assert.equal(needsMoreInput('val s = "a \\" b" (* and now a real one'), true);
+
+  // BACKWARDS: the line cannot have STARTED anything, so it belongs above.
+  assert.equal(continuesPrevious('  | insert (Node (l, v, r), x) ='), true);
+  assert.equal(continuesPrevious('| toList (Node (l, v, r)) = toList l'), true);
+  assert.equal(continuesPrevious('else Node (l, v, insert (r, x))'), true);
+  assert.equal(continuesPrevious('and odd n = ...'), true);
+  assert.equal(continuesPrevious('val doubled = map f xs'), false, 'a fresh declaration is not a continuation');
+  assert.equal(continuesPrevious('  val indented = 1'), false, 'indentation alone does not, at a prompt');
+
+  // And the whole of it, run the way the prompt runs it: hold, join, re-run.
+  const ctx = sess();
+  loadPrelude(ctx);
+  let pending = '';
+  let last = '';
+  let answer = '';
+  for (const typed of [
+    '(* A binary tree, and a sort that falls out of walking it. *)',
+    "datatype 'a tree = Leaf | Node of 'a tree * 'a * 'a tree",
+    'fun insert (Leaf, x) = Node (Leaf, x, Leaf)',
+    '  | insert (Node (l, v, r), x) =',
+    '      if x < v then Node (insert (l, x), v, r)',
+    '      else Node (l, v, insert (r, x))',
+    'fun toList Leaf = nil',
+    '  | toList (Node (l, v, r)) = toList l @ [v] @ toList r',
+    'fun sort xs = toList (List.foldl (fn (x, t) => insert (t, x)) Leaf xs)',
+    'sort [5, 3, 8, 1, 9, 2, 7]',
+  ]) {
+    let source = typed.trim();
+    if (pending) source = `${pending} ${source}`;
+    else if (continuesPrevious(typed) && last) source = `${last} ${source}`;
+    if (needsMoreInput(source)) { pending = source; continue; }
+    pending = '';
+    answer = String(runRonml(source, ctx).text);
+    assert.ok(!answer.startsWith('ERR'), `${source.slice(0, 50)} -> ${answer}`);
+    last = source;
+  }
+  assert.equal(answer, '[1, 2, 3, 5, 7, 8, 9]', 'the tree sort answers, pasted line by line');
 });
 
 test('every demo on the laptop disk runs to the end', () => {
@@ -1927,4 +1995,97 @@ test('strict and advisory agree on everything except whether the line runs', () 
   const s = mk('strict');
   assert.ok(runRonml('datatype c = R | G | B', s).ok);
   assert.ok(runRonml('case R of R => 1 | G => 2', s).ok, 'exhaustiveness warns, never refuses');
+});
+
+test('no obelisk verb shadows a machine sensor', () => {
+  // A machine's own program reads its senses by name — `charge`, `threat`,
+  // `sight`, `blight`. Those names are bound when a robot's program runs, so a
+  // CONSOLE verb of the same name shadows the sensor and the machine's program
+  // silently stops seeing the world.
+  //
+  // This happened twice in one change (v1.336): `sight` and then `blight` were
+  // added as control verbs at the obelisk, and both shadowed sensors. The
+  // fire-control tests caught them, but only because those sensors happen to be
+  // covered; a sensor without a test would have gone through. So: the two lists
+  // are compared directly.
+  const clash = OB_VERBS.filter((v) => MACHINE_ONLY.includes(v));
+  assert.deepEqual(clash, [],
+    `these obelisk verbs shadow a machine's own senses: ${clash.join(', ')}. `
+    + 'Rename the verb — the sensor name is the one a player writes into a robot.');
+});
+
+
+// ---- `local` after another declaration (task #83) --------------------------
+//
+// `local` alone in a struct body worked; `local` after anything else did not,
+// and the failure was silent in the worst way — a struct whose body will not
+// parse is dropped WHOLE, so the symptom was `Word.toString` simply being
+// unbound with no error anywhere.
+//
+// The cause was a hand-written list in `atomStarts` of the keywords that cannot
+// begin an atom. `local` was missing from it, so juxtaposition ate it as an
+// argument to whatever came before. It is built from DECL_KEYWORDS now, so it
+// cannot go stale again — `abstype`, `functor`, `withtype`, `infix`, `infixr`,
+// `nonfix` and `with` were missing with it.
+test('local follows another declaration inside a struct', () => {
+  const run = (src) => runRonml(src, { session: {} });
+  assert.equal(run('structure A = struct local val x = 1 in val y = x end end').ok, true);
+  const b = run('structure B = struct val hi = 1 local val x = 2 in val y = x end end');
+  assert.equal(b.ok, true, `local after a val: ${b.text}`);
+  const c = run('structure C = struct fun f a = a local val x = 2 in val y = x end end');
+  assert.equal(c.ok, true, `local after a fun: ${c.text}`);
+});
+
+test('a struct that uses local still binds what it shows', () => {
+  // The point of the form: `x` is hidden, `y` is not.
+  const s = {};
+  assert.equal(runRonml('structure L = struct local val x = 41 in val y = x + 1 end end', { session: s }).ok, true);
+  assert.equal(runRonml('L.y', { session: s }).text, '42');
+});
+
+test('every declaration keyword ends an argument list', () => {
+  // The general form of the bug. A declaration keyword can never be an
+  // argument, so `1 <kw>` must not read as an application — it must report the
+  // keyword, not complain about something the line does not contain.
+  for (const kw of ['local', 'abstype', 'functor', 'withtype', 'infix', 'infixr', 'nonfix',
+    'val', 'fun', 'type', 'datatype', 'exception', 'structure', 'signature', 'open']) {
+    const r = runRonml(`val hi = 1 ${kw}`, { session: {} });
+    assert.equal(r.ok, false, `'${kw}' after a binding should not parse as one line`);
+    assert.match(r.text, new RegExp(`got '${kw}'|expected`),
+      `'${kw}' was swallowed as an argument instead of ending the line: ${r.text}`);
+  }
+});
+
+
+// ---- `val op +` (task #84) -------------------------------------------------
+//
+// `op` in a left-hand side was taught to `fun` at v1.322 and not to `val`. The
+// `val` form is the one that matters for shadowing: its right-hand side runs in
+// the environment as it stands, so the OLD operator is still there to build the
+// new one out of, where `fun` would see itself and recurse.
+test('val binds an operator, parenthesised or not', () => {
+  for (const src of ['val (op +) = fn (a, b) => a', 'val op + = fn (a, b) => a',
+    'val (op ~) = fn a => 0 - a', 'val (op * ) = fn (a, b) => a']) {
+    assert.equal(runRonml(src, { session: {} }).ok, true, src);
+  }
+});
+
+test('and val still takes a pattern there', () => {
+  // What the exclusion was protecting. `(a, b)` after `val` is a tuple pattern
+  // and must not be read as an operator left-hand side.
+  const s = {};
+  assert.equal(runRonml('val (a, b) = (1, 2)', { session: s }).ok, true);
+  assert.equal(runRonml('a + b', { session: s }).text, '3');
+  const t = {};
+  assert.equal(runRonml('val [x, y] = [3, 4]', { session: t }).ok, true);
+  assert.equal(runRonml('x + y', { session: t }).text, '7');
+});
+
+test('a structure can rebind an operator and build it from the old one', () => {
+  // The shape Word needs: the inner `+` is the ordinary one, and the rebinding
+  // is reachable qualified without disturbing the operator outside.
+  const s = {};
+  assert.equal(runRonml('structure W = struct val (op +) = fn (a, b) => a + b + 1000 end', { session: s }).ok, true);
+  assert.equal(runRonml('W.+ (1, 2)', { session: s }).text, '1003', 'the inner + must be the old one');
+  assert.equal(runRonml('1 + 2', { session: s }).text, '3', 'and the outer + is untouched');
 });

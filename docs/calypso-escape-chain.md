@@ -140,8 +140,45 @@ payoff reads the same wherever it fires.
 **R3 `winMode:'depart'` now BUILT (v1.123):** Calypso's core is `indestructible` — no
 core-kill win; the departure (refunction → ship-launch) is the only way out, and
 `refunctionCalypso` records her fall in the daemons-down tally. Her fortress guards detain
-(warn-then-lethal) via `player.detainHit`. Still deferred (minor): gating `retire` to her
-terminal only, and per-island voice/colour (R5).
+(warn-then-lethal) via `player.detainHit`. Still deferred: per-island voice/colour (R5).
+
+**`retire` is a program, and it only runs on her island (v1.365).** It was arity 0 at any
+obelisk on any island — the largest turn in the game typed in six letters, and typed on
+POLYPHEMUS it stood *his* muster down while setting Calypso's flag, because
+`refunctionCalypso` reads the world you are standing in. Two things changed:
+
+- **Where.** `ctx.retire` is supplied only where `currentWorld.winMode === 'depart'`, so the
+  language has no `retire` to call anywhere else. The host decides where a program may run;
+  the language never reads a host table (the standing rule).
+- **What.** `retire : key -> ('a -> 'a) -> unit`. She is the keeper — her whole operation is a
+  function from a departure to a stay — so she does not take a command, she takes a
+  *replacement* for that function, and she tries it before she accepts it: three probes, each
+  of which must come back unchanged.
+
+      retire (decrypt aikey) (fn x => x)
+
+  The key has to be open, which means the card has to be aboard. `fn x => x` is not a password:
+  it is the only thing that passes the test, and a keeping that returns anything else is what
+  she already does. Refusals name what went wrong without naming the answer.
+
+**And it is learnt in the world, not in the help (v1.366).** A turn this large cannot live
+only in a help panel a player may never open. `keeper` is a read-only drive at every tower — they
+are one network, so a shift note written at OGYGIA is readable from any node — with the
+program one folder down:
+
+    drives            keeper  node maintenance store (read-only)
+    cd keeper         readme.md  handover/
+    cd handover       shift.md  keeping.ml
+    read keeping.ml
+
+`keeping.ml` is her operation — `fun keep _ = STAY` — with the maintenance override under it
+and a note on how the core tests a replacement. `shift.md` is the keeper process's handover:
+nothing to report, again, and *I have read it many times*. `read` is now an obelisk verb as
+well as a relay one; it was tagged for the relay alone, so a store you could `ls` was a store
+you could not open. You can learn the refunction on an island she does not keep: it simply has
+nothing to act on until you are back where she is, and knowing is not the same as being in a
+position to use it. A test extracts the let-program straight out of the file and runs it, so
+the lesson cannot go stale while still reading perfectly well.
 
 
 **Exists:** `copy`(key) / `decrypt` / `unlock` / `backup` / `restore` / `eliza`(DOCTOR) /

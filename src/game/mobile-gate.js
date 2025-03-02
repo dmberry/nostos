@@ -1,3 +1,12 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 // Mobile fallback. NostOS is a keyboard/mouse game and isn't playable on a
 // phone, so on a touch device we skip loading the game (main.js never runs)
 // and show this gate: a friendly note plus a working Walkman for the
@@ -8,6 +17,8 @@
 
 import { TAPES } from './items.js';
 import { VERSION } from '../version.js';
+import { wireHelpTabs } from './help-tabs.js';
+import { fillMachineGallery } from './machine-icons.js';
 import { Renderer } from '../engine/renderer.js';
 import { drawRobot } from './robots.js';
 import { worldToScreen } from '../engine/iso.js';
@@ -61,7 +72,11 @@ export function initMobileGate(mode = 'gate') {
   let stageEntries = [];
   try {
     const stages = JSON.parse(localStorage.getItem('postai-stages') || '{}');
-    stageEntries = Object.values(stages).sort((a, b) => (b.order || 0) - (a.order || 0));
+    // Highest rung first; ties broken by when it was written, so the
+    // hand-written checkpoints (all one order, above every rung) come newest
+    // first rather than in whatever order the store happens to hold them.
+    stageEntries = Object.values(stages)
+      .sort((a, b) => ((b.order || 0) - (a.order || 0)) || ((b.ts || 0) - (a.ts || 0)));
   } catch (e) { /* storage blocked */ }
   let running = true;   // frame loop / clock keep going until we boot the game
   let skyTimer = null;
@@ -73,7 +88,12 @@ export function initMobileGate(mode = 'gate') {
   // title lays the same pieces out as two columns (hero text | Walkman) with
   // the dancing machines as a full-width band along the bottom, so it fits a
   // landscape laptop instead of a tall phone strip.
-  const brandHtml = `<div class="mg-brand"><span class="mg-brand-mark" aria-hidden="true"></span><h1>Nost<span class="mg-ai">OS</span><span class="mg-caret">_</span></h1></div>`;
+  // The build is part of the identity, not small print. It used to sit in the
+  // footer at 9px in 30% grey with the T2s and W4s walking over it, which meant
+  // a screenshot of the title did not say which build it was and a player
+  // reporting a bug had to hunt for it. Set beside the wordmark, from VERSION,
+  // which stays the single source of truth.
+  const brandHtml = `<div class="mg-brand"><span class="mg-brand-mark" aria-hidden="true"></span><h1>Nost<span class="mg-ai">OS</span><span class="mg-caret">_</span></h1><span class="mg-brandver">v${VERSION}</span></div>`;
   const stageHtml = `<div class="mg-stage" id="mg-stage"></div>`;
   const deckHtml = `<div class="mg-deck">
       <canvas class="mg-deck-cass" id="mg-deck-cass" width="264" height="168"></canvas>
@@ -97,6 +117,7 @@ export function initMobileGate(mode = 'gate') {
       <button class="mg-menu-btn" id="mg-menu-btn" aria-label="Menu" aria-expanded="false">☰</button>
       <div class="mg-menu-pop" id="mg-menu-pop" hidden>
         <div class="mg-menu-label">Theme</div>${themesHtml}
+        <button class="mg-menu-about" id="mg-menu-help">Help</button>
         <button class="mg-menu-about" id="mg-menu-about">About</button>
       </div>
     </div>`;
@@ -119,7 +140,9 @@ export function initMobileGate(mode = 'gate') {
         <p class="mg-about-tiny">Game designed in the UK · github.com/dmberry/nostos</p>
       </div>
     </div>`;
-  const footerHtml = `<div class="mg-madein">beta · Game designed in the UK · <button class="mg-about-open" id="mg-about-open">About</button> <span class="mg-ver">v${VERSION}</span></div>`;
+  // No version here any more — it is up beside the wordmark, where it can be
+  // read. Printing it twice on one screen only teaches a player to distrust one.
+  const footerHtml = `<div class="mg-madein">beta · Game designed in the UK · ${isTitle ? '' : '<button class="mg-about-open" id="mg-help-foot">Help</button> · '}<button class="mg-about-open" id="mg-about-open">About</button></div>`;
   // A looping game-world clip drifting slowly behind everything, low opacity.
   // It plays at half speed (set in JS) and pans gently left→right (CSS).
   // H.264 MP4 — plays in every modern browser (transcoded from the source .mov).
@@ -131,13 +154,14 @@ export function initMobileGate(mode = 'gate') {
        <div class="mg-actions">
          ${hasSave ? '<button id="mg-continue" class="mg-btn primary">Continue</button>' : ''}
          <button id="mg-start" class="mg-btn ${hasSave ? '' : 'primary'}">${hasSave ? 'New game' : 'Start'}</button>
+         <button id="mg-help-open" class="mg-btn quiet">Help</button>
        </div>`
     : `<p class="mg-sub">It's the end of the world.<span class="mg-sub2">This is a beta — playable end to end, and still growing. You can play it right here with touch controls (hold to move, tap to act), or grab a laptop for the full keyboard-and-mouse game. Either way, here's the soundtrack.</span></p>
        <div class="mg-actions"><button id="mg-tryanyway" class="mg-btn primary">▶ Play (beta)</button></div>`;
   const checkpointHtml = (isTitle && stageEntries.length)
     ? `<div class="mg-stages">
          <div class="mg-stages-h">Load a checkpoint</div>
-         <div class="mg-stages-row">${stageEntries.map((s) => `<button class="mg-stage-btn" data-id="${s.id}">${s.label}<span class="mg-stage-score">${s.score || 0}</span></button>`).join('')}</div>
+         <div class="mg-stage-list">${stageEntries.map((s) => `<button class="mg-stage-btn" data-id="${s.id}"><span class="mg-stage-name">${s.label}</span><span class="mg-stage-score">${s.score || 0}</span></button>`).join('')}</div>
        </div>`
     : '';
   const bodyHtml = isTitle
@@ -154,8 +178,14 @@ export function initMobileGate(mode = 'gate') {
         background: radial-gradient(120% 90% at 50% 0%, var(--bg1) 0%, var(--bg2) 72%);
         color: #cfd8c3; font-family: system-ui, -apple-system, sans-serif;
         display: flex; flex-direction: column; align-items: center;
-        padding: max(16px, env(safe-area-inset-top)) 16px max(14px, env(safe-area-inset-bottom));
+        padding: max(16px, env(safe-area-inset-top)) 16px calc(max(14px, env(safe-area-inset-bottom)) + 22px);
         -webkit-user-select: none; user-select: none; touch-action: manipulation; }
+      /* On a phone the column is taller than the screen — brand, copy, Play,
+         machines, deck, rack. It was clipped, not scrolled, so the tape titles at
+         the bottom were cut in half and the footer, which is fixed, printed
+         straight over what was left. It scrolls now. The desktop title is a
+         grid built to fit and keeps the clip. */
+      #mobile-gate:not([data-mode="title"]) { overflow-y: auto; -webkit-overflow-scrolling: touch; }
       /* moving game-world backdrop: low opacity, gently panning left↔right
          (negative z-index so it sits behind all the in-flow content). */
       .mg-bgvideo { position: absolute; top: 0; left: 0; height: 100%; width: auto; min-width: 100%;
@@ -178,6 +208,11 @@ export function initMobileGate(mode = 'gate') {
       .mg-brand-mark::before, .mg-brand-mark::after { content: ''; position: absolute; top: 9px;
         width: 8px; height: 8px; border-radius: 50%; background: #e8e2d0; box-shadow: inset 0 0 0 2px #26282d; }
       .mg-brand-mark::before { left: 6px; } .mg-brand-mark::after { right: 6px; }
+      /* The build, set as a tag on the wordmark: monospace like the mark, in the
+         theme accent, sitting on the baseline of the type rather than under it. */
+      .mg-brandver { font: 600 9px ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: 0.06em;
+        color: var(--accent); opacity: 0.75; align-self: flex-end; padding-bottom: 6px; margin-left: -6px;
+        text-shadow: 0 0 8px color-mix(in srgb, var(--accent) 35%, transparent); }
       #mobile-gate .mg-sub { font-size: 15px; line-height: 1.4; color: #f0ead8; font-weight: 700; text-align: center; max-width: 30em; margin: 0 0 2px; }
       #mobile-gate .mg-sub2 { display: block; font-size: 12px; font-weight: 400; color: var(--accent); margin-top: 6px; }
       .mg-tryanyway { font-size: 12px; color: var(--accent); opacity: 0.8; text-decoration: underline;
@@ -189,19 +224,34 @@ export function initMobileGate(mode = 'gate') {
         color: var(--accent); background: rgba(255,255,255,0.07); border: 1.5px solid var(--accent);
         border-radius: 8px; padding: 10px 24px; transition: transform 0.1s; }
       .mg-btn.primary { color: #10130d; background: var(--accent); border-color: var(--accent); }
+      /* Help sits with the buttons you came here to press, but does not compete
+         with them: same size to hit, lighter to look at. */
+      .mg-btn.quiet { font-weight: 500; opacity: 0.75;
+        border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+      .mg-btn.quiet:hover { opacity: 1; }
       .mg-btn:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); }
       .mg-btn.primary:hover { background: color-mix(in srgb, var(--accent) 88%, white); }
       .mg-btn:active { transform: scale(0.96); }
       /* stage checkpoints (Load list) */
       .mg-stages { margin: 10px 0 2px; text-align: center; flex: 0 0 auto; }
       .mg-stages-h { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); opacity: 0.7; margin-bottom: 6px; }
-      .mg-stages-row { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
-      .mg-stage-btn { font: 600 12px system-ui, sans-serif; cursor: pointer; font-family: inherit;
-        color: var(--accent); background: rgba(255,255,255,0.05); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
-        border-radius: 6px; padding: 6px 12px; display: inline-flex; align-items: center; gap: 8px; transition: transform 0.1s; }
+      /* A list, not a row of chips: a run that has been going a while has more
+         checkpoints than fit across the hero column, and they wrapped into a
+         block that pushed everything below it off the screen. Three rows are
+         shown; the rest are one scroll away, newest at the top. */
+      .mg-stage-list { display: flex; flex-direction: column; gap: 4px; width: min(260px, 84vw);
+        margin: 0 auto; max-height: 104px; overflow-y: auto; padding-right: 2px;
+        scrollbar-width: thin; -webkit-overflow-scrolling: touch; }
+      .mg-stage-list::-webkit-scrollbar { width: 5px; }
+      .mg-stage-list::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--accent) 30%, transparent); border-radius: 3px; }
+      .mg-stage-name { text-align: left; }
+      .mg-stage-score { font-size: 10px; opacity: 0.6; }
+      .mg-stage-btn { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+        width: 100%; flex: 0 0 auto; font: 600 12px system-ui, sans-serif; cursor: pointer; font-family: inherit;
+        padding: 7px 10px; border-radius: 6px; color: var(--accent);
+        background: rgba(255,255,255,0.06); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); }
       .mg-stage-btn:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
       .mg-stage-btn:active { transform: scale(0.95); }
-      .mg-stage-score { font-size: 10px; opacity: 0.6; }
       /* theme switch (under the tape rack) */
       .mg-themes { display: flex; gap: 6px; margin-top: 18px; justify-content: center; flex: 0 0 auto; }
       .mg-themes button { font: 600 11px system-ui, sans-serif; letter-spacing: 0.06em; text-transform: uppercase;
@@ -225,7 +275,11 @@ export function initMobileGate(mode = 'gate') {
         letter-spacing: 0.04em; color: var(--accent); background: rgba(255,255,255,0.06);
         border: 1px solid rgba(255,255,255,0.18); border-radius: 6px; }
       /* "designed in the UK" footer + About link (both modes) */
-      .mg-madein { position: fixed; left: 0; right: 0; bottom: max(5px, env(safe-area-inset-bottom));
+      /* A band, not a floating line: anything scrolling under it has to be
+         covered or the two sets of type read as one mangled one. */
+      .mg-madein { position: fixed; left: 0; right: 0; bottom: 0;
+        padding: 10px 0 max(5px, env(safe-area-inset-bottom));
+        background: linear-gradient(to top, var(--bg2) 62%, transparent);
         text-align: center; font-size: 10px; letter-spacing: 0.03em; color: rgba(207,216,195,0.42); z-index: 6; pointer-events: none; }
       .mg-about-open { font: inherit; color: rgba(207,216,195,0.7); background: none; border: none; padding: 0;
         text-decoration: underline; text-underline-offset: 2px; cursor: pointer; pointer-events: auto; }
@@ -255,9 +309,15 @@ export function initMobileGate(mode = 'gate') {
       .mg-skylink.imminent { animation: mg-alarm 0.8s steps(1) infinite; }
       @keyframes mg-alarm { 0%,50% { opacity: 1; } 51%,100% { opacity: 0.35; } }
       /* dancing machines (canvas, drawn by drawRobot) */
-      .mg-stage { flex: 1 1 auto; display: flex; align-items: flex-end; justify-content: center; gap: 8px; width: 100%; min-height: 128px; max-height: 190px;
+      /* The machines stand on the floor of whatever room there is. A fixed
+         min-height pushed them off the bottom of a short window and straight
+         through the footer, which is position:fixed and does not move for
+         them — so the band is capped against the viewport and the canvases
+         scale to it (width:auto keeps each robot's proportions). */
+      .mg-stage { flex: 1 1 auto; display: flex; align-items: flex-end; justify-content: center; gap: 8px; width: 100%;
+        min-height: 0; max-height: min(190px, 24vh); overflow: hidden;
         background: radial-gradient(70% 120% at 50% 100%, rgba(255,255,255,0.14), transparent 72%); }
-      .mg-bot { width: 98px; height: 122px; }
+      .mg-bot { width: auto; height: 122px; max-height: 100%; }
       /* walkman deck — the yellow, double-outlined box from the HUD */
       .mg-deck { width: min(320px, 88vw); background: var(--deck); border-radius: 14px;
         border: 3px solid var(--edge); box-shadow: 0 8px 22px rgba(0,0,0,0.5), inset 0 0 0 2px var(--bezel);
@@ -291,6 +351,7 @@ export function initMobileGate(mode = 'gate') {
       #mobile-gate[data-mode="title"] { padding: 3vh 6vw; gap: 2px; justify-content: center; }
       #mobile-gate[data-mode="title"] h1 { font-size: 46px; }
       #mobile-gate[data-mode="title"] .mg-brand { margin: 6px 0; gap: 16px; }
+      #mobile-gate[data-mode="title"] .mg-brandver { font-size: 11px; padding-bottom: 10px; margin-left: -10px; }
       #mobile-gate[data-mode="title"] .mg-brand-mark { width: 48px; height: 31px; border-radius: 5px; }
       #mobile-gate[data-mode="title"] .mg-brand-mark::before, #mobile-gate[data-mode="title"] .mg-brand-mark::after { top: 13px; width: 11px; height: 11px; }
       #mobile-gate[data-mode="title"] .mg-brand-mark::before { left: 9px; } #mobile-gate[data-mode="title"] .mg-brand-mark::after { right: 9px; }
@@ -309,7 +370,7 @@ export function initMobileGate(mode = 'gate') {
           display: grid; align-content: center; justify-content: center;
           grid-template-columns: minmax(300px, 460px) minmax(340px, 480px);
           grid-template-rows: 1fr auto; grid-template-areas: "hero player" "stage stage";
-          column-gap: 5vw; row-gap: 1vh; padding: 2vh 5vw; }
+          column-gap: 5vw; row-gap: 1vh; padding: 2vh 5vw calc(2vh + 24px); }
         #mobile-gate[data-mode="title"] .mg-hero { grid-area: hero; align-items: flex-start; align-self: center; }
         #mobile-gate[data-mode="title"] .mg-hero .mg-sub, #mobile-gate[data-mode="title"] .mg-hero .mg-sub2 { text-align: left; }
         #mobile-gate[data-mode="title"] .mg-hero .mg-actions { justify-content: flex-start; }
@@ -320,8 +381,8 @@ export function initMobileGate(mode = 'gate') {
         #mobile-gate[data-mode="title"] .mg-rack { justify-content: center; overflow: visible; max-width: none; gap: 9px; }
         #mobile-gate[data-mode="title"] .mg-tape { width: 84px; }
         #mobile-gate[data-mode="title"] .mg-tape canvas { width: 84px; height: 55px; }
-        #mobile-gate[data-mode="title"] .mg-stage { grid-area: stage; width: 100%; max-height: 260px; align-self: end; }
-        #mobile-gate[data-mode="title"] .mg-bot { width: 122px; height: 152px; }
+        #mobile-gate[data-mode="title"] .mg-stage { grid-area: stage; width: 100%; max-height: min(260px, 30vh); align-self: end; }
+        #mobile-gate[data-mode="title"] .mg-bot { width: auto; height: 152px; max-height: 100%; }
       }
     </style>
     ${bodyHtml}
@@ -364,6 +425,41 @@ export function initMobileGate(mode = 'gate') {
   }
   el.querySelectorAll('#mg-themes button').forEach((b) => b.addEventListener('click', () => { applyTheme(b.dataset.theme); closeMenu(); }));
 
+  // ---- Help ----
+  // The help panel is the game's, written once in index.html. Rather than set
+  // the keys and commands out a second time here — a copy that would drift the
+  // first time a key changed — the one panel is moved inside this element,
+  // where the theme variables set above resolve, and `.gated` repaints it from
+  // them. main.js is not loaded yet at the title, so the gate does the move
+  // itself and puts the panel back before it tears itself down.
+  const helpPanel = document.getElementById('help');
+  const helpHome = () => {
+    if (!helpPanel || !helpPanel.classList.contains('gated')) return;
+    helpPanel.classList.remove('gated');
+    helpPanel.style.display = 'none';
+    document.body.appendChild(helpPanel);
+  };
+  const askHelp = (e) => {
+    e.stopPropagation();
+    closeMenu();
+    if (!helpPanel) return;
+    el.appendChild(helpPanel);
+    helpPanel.classList.add('gated');
+    wireHelpTabs(helpPanel);   // main.js is not loaded yet, so the tabs are ours to bind
+    fillMachineGallery(helpPanel);   // ...and so are the eleven machine pictures
+    helpPanel.style.display = 'flex';
+    const panel = helpPanel.querySelector('.panel');
+    if (panel) panel.scrollTop = 0;
+  };
+  for (const b of el.querySelectorAll('#mg-help-open, #mg-help-foot, #mg-menu-help')) {
+    b.addEventListener('click', askHelp);
+  }
+  // Backdrop, the ✕, and Escape all close it. These listeners outlive the gate
+  // (the panel does), so each one no-ops unless the panel is actually gated.
+  helpPanel?.addEventListener('click', (e) => { if (e.target === helpPanel) helpHome(); });
+  helpPanel?.querySelector('#help-x')?.addEventListener('click', helpHome);
+  window.addEventListener('keydown', (e) => { if (e.key === 'Escape') helpHome(); });
+
   // ---- About overlay ----
   const about = el.querySelector('#mg-about');
   const openAbout = () => { about.hidden = false; closeMenu(); };
@@ -388,6 +484,7 @@ export function initMobileGate(mode = 'gate') {
         localStorage.removeItem('postai-seed');
       } catch (e) { /* storage blocked */ }
     }
+    helpHome();      // or the shared help panel is removed along with the gate
     el.remove();
 
     // The boot loader takes the screen the instant the title goes, so there is
@@ -424,19 +521,23 @@ export function initMobileGate(mode = 'gate') {
     if (cont) cont.addEventListener('click', () => boot(false));
     // Load a checkpoint: restore its seed + save into the run keys, then boot the
     // resume path (main.js's restore reads them, exactly like Continue).
+    // One loader, whichever row in the list you press.
+    const loadStage = (id) => {
+      if (!id) return;
+      try {
+        const stages = JSON.parse(localStorage.getItem('postai-stages') || '{}');
+        const st = stages[id];
+        if (st) {
+          if (st.seed != null) localStorage.setItem('postai-seed', st.seed);
+          localStorage.setItem('postai-character', JSON.stringify(st.save));
+        }
+      } catch (e) { /* storage blocked */ }
+      boot(false);
+    };
     el.querySelectorAll('.mg-stage-btn').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        try {
-          const stages = JSON.parse(localStorage.getItem('postai-stages') || '{}');
-          const st = stages[btn.dataset.id];
-          if (st) {
-            if (st.seed != null) localStorage.setItem('postai-seed', st.seed);
-            localStorage.setItem('postai-character', JSON.stringify(st.save));
-          }
-        } catch (e) { /* storage blocked */ }
-        boot(false);
-      });
+      btn.addEventListener('click', () => loadStage(btn.dataset.id));
     });
+
   } else {
     // Escape hatch: if the gate fired by mistake (a touch laptop, say), let them
     // dismiss it and boot the real game anyway (resuming any save).

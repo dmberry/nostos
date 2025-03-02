@@ -1,8 +1,18 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createNokia, sendNokia, holdRise, holdFall, holdBand,
   HOLD_INIT, HOLD_WARM, HOLD_COLD,
+  calypsoSms, ronSms, bearingText,
 } from '../src/game/nokia.js';
 
 const mkPlayer = (hold = HOLD_INIT) => ({ calypsoHold: hold, nokiaSent: new Set(), _nokiaIvIdx: 0 });
@@ -65,4 +75,127 @@ test('queue: texts show one at a time, beep on appearance, expire, then the next
   n.tick(0.016);                        // now the second appears
   assert.equal(n.current.lines[0], 'two');
   assert.equal(n.pending, 0);
+});
+
+
+// ---- THE HANDSET AS A TOOL -------------------------------------------------
+//
+// The SMS channel was flavour: a regex matched and somebody said something. It
+// is the one part of the phone that could not DO anything, which is why nobody
+// used it. Both correspondents take commands now, and the difference between
+// them is the design:
+//
+//   CALYPSO ACTS, and every favour raises her hold — accepting help from the
+//   keeper is the rope. She refuses outright when she is cold.
+//   RON KNOWS, and never does anything. Bearings, counts, field notes.
+//
+// nokia.js reaches the world through a ctx, the way the terminals do, so all of
+// this drives against a stub with no map and no canvas.
+
+function smsStub(over = {}) {
+  const calls = [];
+  return {
+    calls,
+    holdRise: (a) => calls.push(['hold', a]),
+    sleepNearby: (m) => { calls.push(['sleep', m]); return 3; },
+    thinFog: () => calls.push(['fog']),
+    toShelter: () => 'NE, about 12 paces',
+    leaveFood: () => 'NE, about 12 paces',
+    whereAmI: () => 'out in the open on OGYGIA',
+    toCache: () => 'S, about 30 paces',
+    toRelay: () => 'W, about 44 paces',
+    toCover: () => 'E, about 6 paces',
+    status: () => ({ live: 9, total: 12, factory: true, hours: 7 }),
+    manualOn: (q) => (/bluebox/i.test(q) ? 'Bluebox: splices a downed machine.' : null),
+    recipeOf: (q) => (/bluebox/i.test(q) ? 'two circuit boards. press C.' : /rope/i.test(q) ? '' : null),
+    ...over,
+  };
+}
+
+test('Calypso acts on a command, and it costs you', () => {
+  const s = smsStub();
+  const r = calypsoSms('sleep', 'warm', 0, s);
+  assert.match(r, /stopped where they stand/);
+  assert.deepEqual(s.calls, [['sleep', 20], ['hold', 0.05]], 'the favour ran and the hold rose');
+});
+
+test('every favour of hers raises the hold', () => {
+  for (const word of ['sleep', 'fog', 'light', 'hungry']) {
+    const s = smsStub();
+    calypsoSms(word, 'warm', 0, s);
+    assert.ok(s.calls.some(([k]) => k === 'hold'), `"${word}" was free, and none of hers should be`);
+  }
+});
+
+test('asking where you are is free — she likes being asked', () => {
+  const s = smsStub();
+  const r = calypsoSms('where am i', 'warm', 0, s);
+  assert.match(r, /out in the open on OGYGIA/);
+  assert.deepEqual(s.calls, [], 'no cost for a question she enjoys');
+});
+
+test('cold, she does no favours at all', () => {
+  const s = smsStub();
+  const r = calypsoSms('sleep', 'cold', 0, s);
+  assert.match(r, /boat on my sand/);
+  assert.deepEqual(s.calls, [], 'nothing ran, and nothing was charged');
+  // ...but a free question still answers, because it costs her nothing to look.
+  const s2 = smsStub();
+  assert.match(calypsoSms('where am i', 'cold', 0, s2), /OGYGIA/);
+});
+
+test('with no ctx she is exactly as talkative as before', () => {
+  // The flavour tables are untouched, and a host that passes nothing gets the
+  // old behaviour — which is what the game did before this and what the tests
+  // above this line still assert.
+  const r = calypsoSms('sleep', 'warm', 0);
+  assert.ok(typeof r === 'string' && r.length > 0);
+  assert.doesNotMatch(r, /stopped where they stand/);
+});
+
+test('RON answers with bearings and counts, and touches nothing', () => {
+  const s = smsStub();
+  assert.match(ronSms('supply', 0, s), /S, about 30 paces/);
+  assert.match(ronSms('where is the nearest relay', 0, s), /W, about 44 paces/);
+  assert.match(ronSms('mayday', 0, s), /E, about 6 paces/);
+  assert.deepEqual(s.calls, [], 'the mesh does nothing for you, ever');
+});
+
+test('RON status reports the network', () => {
+  const s = smsStub();
+  const r = ronSms('status', 0, s);
+  assert.match(r, /9 of 12 towers/);
+  assert.match(r, /factory running/);
+  assert.match(r, /7h to the purge/);
+});
+
+test('WHAT IS reads the same field note the tooltip prints', () => {
+  const s = smsStub();
+  assert.match(ronSms('what is a bluebox', 0, s), /splices a downed machine/);
+  assert.match(ronSms('what is the bluebox?', 0, s), /splices a downed machine/);
+  assert.match(ronSms('what is a flibbertigibbet', 0, s), /nothing in the manual/);
+});
+
+test('RECIPE says how a thing is built, or that it is not built at all', () => {
+  const s = smsStub();
+  assert.match(ronSms('recipe bluebox', 0, s), /two circuit boards/);
+  assert.match(ronSms('how do i build a bluebox', 0, s), /two circuit boards/);
+  assert.match(ronSms('recipe rope', 0, s), /isn't built, it's found/);
+  assert.match(ronSms('recipe unicorn', 0, s), /nothing in the manual/);
+});
+
+test('a command RON cannot answer falls through to the old advice', () => {
+  // `status` with no world behind it must not answer half a sentence.
+  const s = smsStub({ status: () => null });
+  const r = ronSms('status of the towers', 0, s);
+  assert.doesNotMatch(r, /undefined|null/);
+  assert.match(r, /RON/);
+});
+
+test('bearingText names a direction and a distance you can walk', () => {
+  const at = { x: 10, y: 10 };
+  assert.match(bearingText(at, { x: 10, y: 0 }), /^N, about 10 paces$/);
+  assert.match(bearingText(at, { x: 20, y: 10 }), /^E, about 10 paces$/);
+  assert.equal(bearingText(at, { x: 10.2, y: 10 }), 'right where you are standing');
+  assert.equal(bearingText(null, at), null);
 });

@@ -1,9 +1,18 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 // The web (docs/laptop-plan.md §8b): addresses, the host table, the org-chart of
 // links the machines serve, and the text render Netscape draws. Pure module.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { hostTable, findHost, pageFor, renderPage, searchResults, bookmarksPage, whatsNewPage, docsPage, programPage, DOC_TOPICS, ipFor, aiIp, domainFor, spoofedAddr, IFACE, httpdBinary, httpdToken, HTTPD_PATH } from '../src/game/net.js';
+import { hostTable, findHost, pageFor, renderPage, searchResults, bookmarksPage, whatsNewPage, docsPage, programPage, DOC_TOPICS, ipFor, aiIp, domainFor, spoofedAddr, IFACE, httpdBinary, httpdToken, HTTPD_PATH, obLibraryPage, obDocPage, obDocKeys } from '../src/game/net.js';
 
 const world = () => ({
   islandId: 'ogygia',
@@ -454,4 +463,43 @@ test('a flat unit offers its reserve, once', () => {
   assert.doesNotMatch(page({ limping: true }), /FORCE HOME/, 'no second push while it walks');
   assert.match(page({ reserveSpent: true }), /SPENT/);
   assert.doesNotMatch(page({ reserveSpent: true }), /FORCE HOME/, 'and none after it is gone');
+});
+
+
+// ---- Explorer's Library: what a tower keeps -------------------------------
+//
+// The Library button opened the NostBook's books in Explorer — a dead woman's
+// Odyssey and Frankenstein, on a machine bolted to a hillside. A node keeps its
+// own documentation: how to put one up, what its lamp means, the mathematics it
+// runs on, and the standing instructions for the people it meets.
+
+test('the tower library holds no human books', () => {
+  const lib = obLibraryPage('CALYPSO');
+  assert.doesNotMatch(lib, /Odyssey|Frankenstein|Homer|Shelley/,
+    "Explorer is showing the NostBook's shelf again");
+  assert.match(lib, /CALYPSO/, 'the page is signed by the island that holds it');
+  // The four shelves David asked for, by section heading.
+  for (const s of ['OPERATOR MANUALS', 'TECHNICAL ODDITIES', 'MATHEMATICAL TREATISES', 'CONDUCT TOWARD SYSTEMS']) {
+    assert.match(lib, new RegExp(s), `no ${s} shelf`);
+  }
+});
+
+test('every document on the shelf is reachable, and every one comes back', () => {
+  // A list that links a document the shelf does not hold is a dead end with no
+  // Back — obdoc:index IS the way back, so it has to be on every page.
+  const lib = obLibraryPage();
+  const linked = [...lib.matchAll(/obdoc:([\w-]+)/g)].map((m) => m[1]);
+  assert.deepEqual([...linked].sort(), obDocKeys().sort(), 'the list and the shelf disagree');
+  for (const key of obDocKeys()) {
+    const page = obDocPage(key, 'CALYPSO');
+    assert.ok(page.length > 200, `${key} is a stub`);
+    assert.match(page, /obdoc:index/, `${key} has no way back to the library`);
+    assert.doesNotMatch(page, /NOT HELD/, `${key} is linked but not held`);
+  }
+});
+
+test('a document that is not held says so rather than rendering blank', () => {
+  const page = obDocPage('no-such-thing');
+  assert.match(page, /NOT HELD/);
+  assert.match(page, /obdoc:index/, 'and still offers the way back');
 });

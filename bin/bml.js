@@ -1,6 +1,15 @@
 #!/usr/bin/env node
+// BML — a 2026 Standard ML. Part of NostOS; synced to the BML repository.
+// Copyright (C) 2026 David M. Berry
 //
-// BML — a little Standard ML. The read-eval-print loop.
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
+//
+// BML — a 2026 Standard ML. The read-eval-print loop.
 //
 //   node bin/bml.js              strict: a line that does not typecheck is refused
 //   node bin/bml.js --sloppy     advisory: a clash is named and the line still runs
@@ -22,8 +31,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import {
-  createInterpreter, smlEcho, joinProgram,
-  BML_NAME, BML_VERSION, BML_CREDIT,
+  createInterpreter, smlEcho, joinProgram, needsMoreInput, continuesPrevious,
+  readlineCompleter, BML_NAME, BML_VERSION, BML_CREDIT,
 } from '../src/lang/index.js';
 
 // A closed pipe is not an error. `bml | head -1` shuts stdout while readline is
@@ -161,7 +170,7 @@ if (argv.includes('--version') || argv.includes('-v')) {
 
 if (argv.includes('--help') || argv.includes('-h')) {
   console.log([
-    `${BML_NAME} ${BML_VERSION}, a little Standard ML`,
+    `${BML_NAME} ${BML_VERSION}, a 2026 Standard ML`,
     'Created by David M. Berry, University of Sussex, 2026.',
     '',
     '  bml                 strict repl (ill-typed lines are refused)',
@@ -200,13 +209,17 @@ function banner() {
   return [
     '',
     '------------------------------------------------------------',
-    `${BML_NAME} ${BML_VERSION}, a little Standard ML${sloppy ? '  (advisory)' : ''}`,
+    `${BML_NAME} ${BML_VERSION}, a 2026 Standard ML${sloppy ? '  (advisory)' : ''}`,
     'Created by David M. Berry, University of Sussex, 2026.',
     'Based on Standard ML developed by Robin Milner, Mads Tofte and Robert Harper.',
     '',
+    // BOTH LINES DESCRIBE THE MODE. This one read `strict: use typecheck`,
+    // which looks like an instruction to type `typecheck` — and that is not a
+    // command, so it answered `unbound variable: typecheck`. The advisory line
+    // beside it was already a description; they match now.
     sloppy
       ? 'advisory: a clash is named and the line runs anyway.'
-      : 'strict: use typecheck',
+      : 'strict: a line that does not typecheck is refused. --sloppy runs it anyway.',
     'Type help for more info, :quit to leave.',
     '------------------------------------------------------------',
     '',
@@ -217,7 +230,7 @@ function banner() {
 // game the console intercepts it before evaluation, and that interception lives
 // in the game's adapter, so out here `help` was an unbound variable. A REPL that
 // cannot tell you what it takes is not much of a teaching interpreter.
-const HELP = `${BML_NAME} ${BML_VERSION}, a little Standard ML
+const HELP = `${BML_NAME} ${BML_VERSION}, a 2026 Standard ML
 Created by David M. Berry, University of Sussex, 2026.
 
 DECLARATIONS
@@ -314,10 +327,63 @@ if (newer) {
   console.log('');
 }
 
-const rl = readline.createInterface({ input: process.stdin, output: process.stdout, prompt: '- ' });
+// TAB COMPLETES. The rule is in the language (src/lang/complete.js) so that the
+// page's prompt and this one cannot drift apart, and so it can be tested
+// without a terminal.
+//
+// Against the CURRENT PHYSICAL LINE, not the held continuation text: mid
+// declaration the buffer holds `fun fact 0 = 1` from the line before, and
+// completing against that would offer names for a word the reader is not
+// typing and replace the wrong span. readline hands us the line it is editing,
+// which is the right one.
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout,
+  prompt: '- ',
+  completer: (line) => readlineCompleter(line, bml),
+});
 rl.prompt();
+
+// A DECLARATION MAY RUN OVER TWO LINES, and until 0.38.0 this loop took one
+// physical line and no more, so `fun fact 0 = 1` followed by `| fact n = …`
+// answered *unexpected 'BAR'* — while the README printed a transcript showing
+// the `=` continuation prompt, which had never existed.
+//
+// Forwards: text that cannot have ended is held. Backwards: a line that cannot
+// have STARTED anything belongs to the declaration above, which has already
+// run, so it runs again with the clause attached. Rebinding is what a top level
+// does anyway.
+let pending = '';
+let last = '';
 rl.on('line', (line) => {
-  if (step(line) === null) { rl.close(); return; }
+  const typed = String(line);
+  // LEAVING ALWAYS WORKS, held line or not. Buffering it would trap anyone who
+  // opened a bracket and then thought better of the whole thing, and a prompt
+  // you cannot leave is not a prompt.
+  if (/^\s*:(quit|q)\s*$/.test(typed)) { rl.close(); return; }
+  // A BLANK LINE ABANDONS what is held. This is the way out of a stray `(`,
+  // which is unfinished by every test there is and would otherwise take the
+  // rest of the session with it.
+  if (pending && !typed.trim()) {
+    console.log('(abandoned)');
+    pending = '';
+    rl.setPrompt('- ');
+    rl.prompt();
+    return;
+  }
+  let source = typed.trim();
+  if (pending) source = `${pending} ${source}`;
+  else if (continuesPrevious(typed) && last) source = `${last} ${source}`;
+  if (source && needsMoreInput(source)) {
+    pending = source;
+    rl.setPrompt('=   ');
+    rl.prompt();
+    return;
+  }
+  pending = '';
+  rl.setPrompt('- ');
+  if (step(source) === null) { rl.close(); return; }
+  last = source;
   rl.prompt();
 });
 rl.on('close', () => { console.log(''); process.exit(0); });

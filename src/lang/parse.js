@@ -1,3 +1,12 @@
+// BML — a 2026 Standard ML. Part of NostOS; synced to the BML repository.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 // THE PARSER. Tokens to an abstract syntax tree.
 //
 // Part of src/lang/, the language proper: nothing here knows about NostOS, its
@@ -45,6 +54,27 @@ export const BLOCK_ENDERS = ['with', 'end', 'in', 'and'];
 const STOPS = [...DECL_KEYWORDS, ...BLOCK_ENDERS];
 const isStop = (t) => t && t.t === 'IDENT' && STOPS.includes(nameKey(t.v));
 
+// WHAT CANNOT BEGIN AN ATOM, and therefore ends an argument list. Juxtaposition
+// binds tighter than anything, so a word here that is not listed gets eaten as
+// an argument to whatever came before it.
+//
+// Built from STOPS rather than typed out again. It WAS typed out again, and it
+// went stale exactly where you would expect: `local` was missing, so
+// `val hi = 1 local val x = 2 in val y = x end` read `local` as an argument
+// applied to 1 and died complaining about a `let` nobody wrote. `abstype`,
+// `functor`, `withtype`, `infix`, `infixr`, `nonfix` and `with` were missing
+// with it. A declaration keyword can never start an atom, so the one list that
+// already knows them all is the one to ask.
+//
+// The rest are the expression keywords, which are not declarations and so are
+// not in STOPS. `mod` and `div` are also caught by the fixity check in
+// parseApp; they are named here too because that check is about operators and
+// this one is about words.
+const NOT_AN_ATOM = new Set([...STOPS,
+  'let', 'if', 'then', 'else', 'fn', 'or', 'andalso', 'orelse', 'mod', 'div',
+  'case', 'of', 'as', 'do', 'while', 'sig', 'struct', 'raise', 'handle',
+]);
+
 function isKeyword(tok, word) {
   // `val` is Standard ML's word for a value binding. Accepted as a synonym for
   // `let` so that a line copied out of a manual binds rather than complains.
@@ -79,7 +109,7 @@ export function defaultFixity() {
 const OP_SYM = {
   PLUS: '+', MINUS: '-', STAR: '*', SLASH: '/', CARET: '^',
   LT: '<', GT: '>', LE: '<=', GE: '>=', EQEQ: '=', NE: '<>', EQ: '=',
-  CONS: '::', AT: '@',
+  CONS: '::', AT: '@', NEG: '~',
 };
 // …and back to the node this parser already builds for it.
 const SYM_BIN = {
@@ -90,6 +120,7 @@ const SYM_BIN = {
 
 export function parse(toks, fixityIn) {
   let p = 0;
+  try {
   // The parser's own copy: `infix` inside a block must not leak out to the
   // caller's session until the declaration is actually evaluated.
   const fixity = { ...(fixityIn || defaultFixity()) };
@@ -297,6 +328,63 @@ export function parse(toks, fixityIn) {
     return !!toks[q] && toks[q].t === 'EQ';
   }
 
+  // A binding whose name is written in the position it will be USED in:
+  //
+  //   fun (f ** g) (x, y) = (f x, g y)     defines **, taking the pair (f, g)
+  //   fun (op +) (a, b) = a                defines +, `op` naming it plainly
+  //
+  // Standard ML reads the left-hand side as a pattern and takes the operator
+  // out of it. Returns the name and the parameters that were around it, or null
+  // if this is not one of those shapes — in which case nothing is consumed.
+  // `opOnly` restricts it to the `(op +)` shape. `val` wants that one and must
+  // not have the other: `(f ** g)` is a function being DEFINED with an infix
+  // name, which `val` does not do, and `val (a, b) = e` is a tuple pattern that
+  // must keep working.
+  function infixLhs(opOnly = false) {
+    // `val op + = e`, without the parentheses. Standard ML's ordinary way to
+    // rebind an operator, and the reason `val` needs this at all: `val`
+    // evaluates its right-hand side BEFORE the binding takes effect, so the old
+    // operator is still there to build the new one out of, where `fun` would
+    // see itself and recurse.
+    if (opOnly && peek().t === 'IDENT' && nameKey(peek().v) === 'op') {
+      const save0 = p;
+      p++;
+      const t0 = toks[p++];
+      const sym0 = OP_SYM[t0.t] || (t0.t === 'STAR' ? '*' : null) || (t0.t === 'IDENT' ? t0.v : null);
+      if (sym0 && peek().t === 'EQ') return { name: sym0, params: [] };
+      p = save0;
+      return null;
+    }
+    if (peek().t !== 'LP') return null;
+    const save = p;
+    p++;
+    // `(op +)`, and `op` on any operator this lexer gives a token of its own.
+    if (peek().t === 'IDENT' && nameKey(peek().v) === 'op') {
+      p++;
+      const t = toks[p++];
+      const sym = OP_SYM[t.t] || (t.t === 'STAR' ? '*' : null) || (t.t === 'IDENT' ? t.v : null);
+      if (sym && peek().t === 'RP') { p++; return { name: sym, params: [] }; }
+      p = save; return null;
+    }
+    // `(f ** g)` — a name either side of an operator.
+    if (peek().t === 'IDENT') {
+      const left = toks[p++].v;
+      const t = toks[p++];
+      const sym = OP_SYM[t.t] || (t.t === 'STAR' ? '*' : null)
+        || (t.t === 'IDENT' && !/^[A-Za-z_]/.test(t.v) ? t.v : null);
+      if (sym && peek().t === 'IDENT') {
+        const right = toks[p++].v;
+        if (peek().t === 'RP') {
+          p++;
+          return { name: sym, params: [{ pat: { p: 'tuple', items: [
+            { p: 'name', name: left, args: [] }, { p: 'name', name: right, args: [] },
+          ] } }] };
+        }
+      }
+    }
+    p = save; return null;
+  }
+
   function letParams() {
     const params = [];
     for (;;) {
@@ -384,6 +472,19 @@ export function parse(toks, fixityIn) {
     if (isKeyword(peek(), 'if')) return parseIf();
     if (isKeyword(peek(), 'while')) return parseWhile();
     if (isKeyword(peek(), 'let')) {
+      // `let open List in null [] end`. A `let` may hold a DECLARATION, not only
+      // a binding, and `open` is the one anybody writes there. It binds into the
+      // ENVIRONMENT rather than the session, so a child scope gives it exactly
+      // the reach Standard ML says it has: the body, and no further.
+      if (toks[p + 1] && isKeyword(toks[p + 1], 'open')) {
+        p++;
+        const decl = parseTopOne();
+        if (!isKeyword(peek(), 'in')) throw new RonmlError("expected 'in' after the open");
+        p++;
+        const body = inSeq(parseExpr);
+        if (isKeyword(peek(), 'end')) p++;
+        return asOperand({ type: 'LetOpen', decl, body });
+      }
       // WHICH WORD it was matters and this used to throw it away. In Standard
       // ML `val` takes a PATTERN and `fun` takes a name and its parameters;
       // `val f x = e` is not a thing. Losing the distinction meant
@@ -418,7 +519,20 @@ export function parse(toks, fixityIn) {
         const nxt = toks[p + 1];
         return !!nxt && nxt.t !== 'EQ' && nxt.t !== 'COLON';
       };
-      if (peek().t === 'LP' || peek().t === 'LB' || peek().t === 'LC' || valTakesPattern()) {
+      // `fun (f ** g) (x, y) = …` and `fun (op +) (a, b) = …`. Tried before the
+      // pattern branch below, which sees the `(` and reads the whole left-hand
+      // side as something to bind.
+      //
+      // `val` gets the `op` shapes ONLY — `val op + = e` and `val (op +) = e` —
+      // never `(f ** g)`, which is a function being defined, and never anything
+      // that would eat `val (a, b) = e`, which is a tuple pattern. It needs them
+      // because `val` is how Standard ML SHADOWS an operator: the right-hand
+      // side runs in the environment as it stands, so the old `+` is still
+      // there to build the new one out of, where `fun` would see itself and
+      // recurse. BOTH call sites, because there are two paths through a binding
+      // here and fixing one has left the other broken twice before.
+      const infLhs = infixLhs(saidVal);
+      if (!infLhs && (peek().t === 'LP' || peek().t === 'LB' || peek().t === 'LC' || valTakesPattern())) {
         const pat = valTakesPattern() ? parsePattern() : parsePatternAtom();
         eat('EQ');
         const value = parseExpr();
@@ -437,8 +551,10 @@ export function parse(toks, fixityIn) {
         }
         return { type: 'TopLetPat', pat, value };
       }
-      const nameTok = eat('IDENT');
-      const params = letParams();
+      // `fun (f ** g) (x, y) = …` and `fun (op +) (a, b) = …` name the function
+      // where it will be used. Nothing is consumed when it is neither.
+      const nameTok = infLhs ? { t: 'IDENT', v: infLhs.name } : eat('IDENT');
+      const params = infLhs ? [...infLhs.params, ...letParams()] : letParams();
       let ann0 = null;
       if (peek().t === 'COLON') { p++; ann0 = parseTypeExpr(); }
       eat('EQ');
@@ -479,7 +595,7 @@ export function parse(toks, fixityIn) {
         // others once they are all there.
         return asOperand({ type: 'LetRec', binds: [{ name: nameTok.v, value }, ...extra], body });
       }
-      if (!isKeyword(peek(), 'in')) throw new RonmlError("expected 'in' after let — try: let k = hack OB_XXXX in crash OB_XXXX k");
+      if (!isKeyword(peek(), 'in')) throw new RonmlError("expected 'in' after let — try: let val x = 1 in x + 1 end");
       p++;
       const body = inSeq(parseExpr);   // a let body sequences with `;`, as parens do
       if (isKeyword(peek(), 'end')) p++;      // SML closes a local block with `end`
@@ -579,7 +695,7 @@ export function parse(toks, fixityIn) {
       if (peek().t !== 'RC') {
         for (;;) {
           if (peek().t === 'ELLIPSIS') { p++; open = true; break; }
-          const label = eat('IDENT').v;
+          const label = peek().t === 'NUM' ? String(eat('NUM').v) : eat('IDENT').v;
           // `{x = x : real}`. A field takes a pattern WITH its annotation, the
           // same as any other pattern position; `parsePattern` alone stops at
           // the colon and the caller then wants the `}`.
@@ -766,10 +882,24 @@ export function parse(toks, fixityIn) {
       // Left-associative operators demand a tighter right operand; right-
       // associative ones accept their own level, which is what makes
       // `1 :: 2 :: nil` group to the right.
-      const right = parseInfix(f[1] === 'l' ? f[0] + 1 : f[0]);
+      // A `let`, `if`, `case` or `fn` on the RIGHT of an operator is read by
+      // parseExpr1, above this level, so `1 + let val m = 2 in m end` stopped
+      // at the `let`. The left operand has worked since v1.312; this is the
+      // other half. Standard ML reads such an operand as far as it goes, which
+      // is what parseExpr1 does, so there is nothing to bound it with here.
+      const right = startsBigExpr(peek())
+        ? parseExpr1()
+        : parseInfix(f[1] === 'l' ? f[0] + 1 : f[0]);
       left = mkInfix(sym, left, right);
     }
     return left;
+  }
+
+  // The forms parseExpr1 reads whole, which the operator grammar has no room
+  // for. As an operand they are read by that parser and run to their own end.
+  function startsBigExpr(tok) {
+    return isKeyword(tok, 'let') || isKeyword(tok, 'if')
+      || isKeyword(tok, 'case') || isKeyword(tok, 'fn') || isKeyword(tok, 'raise');
   }
 
   function parseCompare() { return parseInfix(0); }
@@ -778,8 +908,7 @@ export function parse(toks, fixityIn) {
     // Keywords delimit rather than begin an atom, so a bare `if`/`then`/`else`/`fn`
     // in application position ends the current argument list instead of being eaten
     // as a variable named "then".
-    if (tok.t === 'IDENT' && ['in', 'let', 'if', 'then', 'else', 'fn', 'and', 'or', 'andalso', 'orelse', 'mod', 'div', 'case', 'of', 'datatype', 'val', 'fun', 'as', 'end', 'do', 'while', 'open',
-      'structure', 'signature', 'sig', 'struct', 'exception', 'raise', 'handle', 'type'].includes(nameKey(tok.v))) return false;
+    if (tok.t === 'IDENT' && NOT_AN_ATOM.has(nameKey(tok.v))) return false;
     return ['NUM', 'STR', 'CHAR', 'NEG', 'IDENT', 'LP', 'LB', 'LC', 'HASH'].includes(tok.t);
   }
 
@@ -855,7 +984,7 @@ export function parse(toks, fixityIn) {
       const fields = [];
       if (peek().t !== 'RC') {
         for (;;) {
-          const label = eat('IDENT').v;
+          const label = peek().t === 'NUM' ? String(eat('NUM').v) : eat('IDENT').v;
           if (peek().t === 'EQ') { p++; fields.push({ label, value: parseExpr() }); }
           else fields.push({ label, value: { type: 'Var', name: label } });
           if (peek().t !== 'COMMA') break;
@@ -1099,7 +1228,7 @@ export function parse(toks, fixityIn) {
       let arity = 0;
       const shape = {};
       if (isKeyword(peek(), 'of')) { p++; arity = skipTypeExpr(shape); }
-      return { type: 'ExnDecl', name: nameTok.v, arity };
+      return { type: 'ExnDecl', name: nameTok.v, arity, argWords: shape.words || [] };
     }
     // `infix [n] id …`, `infixr [n] id …`, `nonfix id …`. These are parse-time:
     // the table is updated here so that the very next line in the same unit
@@ -1197,8 +1326,14 @@ export function parse(toks, fixityIn) {
       // body. That is already how a functor is applied here — the argument's
       // names are bound both bare and under the parameter's name — so the
       // sugar only has to reach the same place: take K as the parameter.
+      // SEVERAL structure parameters: `functor F (structure P : S structure Q : S)`.
+      // Standard ML's sugar for a functor over one anonymous structure with P
+      // and Q inside it, so each name is a parameter and the application
+      // supplies one structure per name.
+      const params = [];
       if (isKeyword(peek(), 'structure')) p++;
       const param = eat('IDENT').v;
+      params.push(param);
       // D-16: the parameter's signature may be written OUT rather than named:
       // `functor G (X : sig val n : int end)`. A named one already worked, so
       // this only had to accept the other spelling and skip to the matching
@@ -1219,6 +1354,12 @@ export function parse(toks, fixityIn) {
           eat('IDENT');
         }
       }
+      // …and any more of them, each with its own optional signature.
+      while (isKeyword(peek(), 'structure')) {
+        p++;
+        params.push(eat('IDENT').v);
+        if (peek().t === 'COLON' || peek().t === 'ASCRIBE') { p++; eat('IDENT'); skipWhereClauses(); }
+      }
       eat('RP');
       if (peek().t === 'COLON' || peek().t === 'ASCRIBE') { p++; eat('IDENT'); skipWhereClauses(); }
       eat('EQ');
@@ -1229,7 +1370,7 @@ export function parse(toks, fixityIn) {
       while (eatDeclSemis(), !isKeyword(peek(), 'end') && peek().t !== 'EOF') { decls.push(parseTop()); }
       inBlock--;
       if (isKeyword(peek(), 'end')) p++;
-      return { type: 'FunctorDecl', name: nameTok.v, param, decls };
+      return { type: 'FunctorDecl', name: nameTok.v, param, params, decls };
     }
     // `open S` brings a structure's names into scope unqualified. It takes
     // several at once and later ones win, which is what SML says.
@@ -1294,8 +1435,41 @@ export function parse(toks, fixityIn) {
           p++;
           // …and the matching sugar at the application: `F (structure K = X)`
           // names the argument by declaration rather than passing a structure.
-          // The name on the right is the structure being handed over.
-          if (isKeyword(peek(), 'structure')) { p++; eat('IDENT'); eat('EQ'); }
+          // The name on the right is the structure being handed over. SEVERAL of
+          // them is the matching half of a multi-parameter functor:
+          // `F (structure P = A structure Q = B)`, one structure per name.
+          if (isKeyword(peek(), 'structure')) {
+            const binds = [];
+            while (isKeyword(peek(), 'structure')) {
+              p++;
+              const pname = eat('IDENT').v;
+              eat('EQ');
+              // The right-hand side is a NAME or an anonymous `struct … end`.
+              // The example in examples/25-functors.ml writes the second, which
+              // the first spelling of this refused.
+              if (isKeyword(peek(), 'struct')) {
+                p++;
+                const ds = [];
+                inBlock++;
+                while (eatDeclSemis(), !isKeyword(peek(), 'end') && peek().t !== 'EOF') { ds.push(parseTop()); }
+                inBlock--;
+                if (isKeyword(peek(), 'end')) p++;
+                binds.push({ param: pname, decls: ds });
+              } else {
+                binds.push({ param: pname, from: eat('IDENT').v });
+              }
+            }
+            eat('RP');
+            // ONE of them, given by name, is the form that already worked: hand
+            // the structure over and let the single-parameter path take it.
+            if (binds.length === 1 && binds[0].from) {
+              return { type: 'StructApply', name: nameTok.v, functor: fn, arg: binds[0].from, ascribe };
+            }
+            if (binds.length === 1 && binds[0].decls) {
+              return { type: 'StructApply', name: nameTok.v, functor: fn, arg: null, argDecls: binds[0].decls, ascribe };
+            }
+            return { type: 'StructApply', name: nameTok.v, functor: fn, arg: null, argBinds: binds, ascribe };
+          }
           // `F (struct val z = 5 end)` — an ANONYMOUS structure as the
           // argument, which Standard ML allows and which was a parse error
           // here: the argument had to be a name declared on an earlier line.
@@ -1347,6 +1521,13 @@ export function parse(toks, fixityIn) {
       }
       const nameTok = eat('IDENT');
       eat('EQ');
+      // `datatype t = datatype u` — a REPLICATION. Not a new type but another
+      // name for one, sharing its constructors, so `t` and `u` are one type
+      // under two names. The same shape as `exception E = Fail`.
+      if (isKeyword(peek(), 'datatype')) {
+        p++;
+        return { type: 'Datatype', name: nameTok.v, params: [], cons: [], alias: eat('IDENT').v };
+      }
       const cons = [];
       for (;;) {
         const c = eat('IDENT');
@@ -1377,6 +1558,19 @@ export function parse(toks, fixityIn) {
       return { type: 'Datatype', name: nameTok.v, params, cons };
     }
     if (isKeyword(peek(), 'let')) {
+      // `let open List in null [] end`. A `let` may hold a DECLARATION, not only
+      // a binding, and `open` is the one anybody writes there. It binds into the
+      // ENVIRONMENT rather than the session, so a child scope gives it exactly
+      // the reach Standard ML says it has: the body, and no further.
+      if (toks[p + 1] && isKeyword(toks[p + 1], 'open')) {
+        p++;
+        const decl = parseTopOne();
+        if (!isKeyword(peek(), 'in')) throw new RonmlError("expected 'in' after the open");
+        p++;
+        const body = inSeq(parseExpr);
+        if (isKeyword(peek(), 'end')) p++;
+        return asOperand({ type: 'LetOpen', decl, body });
+      }
       // WHICH WORD it was matters and this used to throw it away. In Standard
       // ML `val` takes a PATTERN and `fun` takes a name and its parameters;
       // `val f x = e` is not a thing. Losing the distinction meant
@@ -1408,7 +1602,20 @@ export function parse(toks, fixityIn) {
         const nxt = toks[p + 1];
         return !!nxt && nxt.t !== 'EQ' && nxt.t !== 'COLON';
       };
-      if (peek().t === 'LP' || peek().t === 'LB' || peek().t === 'LC' || valTakesPattern()) {
+      // `fun (f ** g) (x, y) = …` and `fun (op +) (a, b) = …`. Tried before the
+      // pattern branch below, which sees the `(` and reads the whole left-hand
+      // side as something to bind.
+      //
+      // `val` gets the `op` shapes ONLY — `val op + = e` and `val (op +) = e` —
+      // never `(f ** g)`, which is a function being defined, and never anything
+      // that would eat `val (a, b) = e`, which is a tuple pattern. It needs them
+      // because `val` is how Standard ML SHADOWS an operator: the right-hand
+      // side runs in the environment as it stands, so the old `+` is still
+      // there to build the new one out of, where `fun` would see itself and
+      // recurse. BOTH call sites, because there are two paths through a binding
+      // here and fixing one has left the other broken twice before.
+      const infLhs = infixLhs(saidVal);
+      if (!infLhs && (peek().t === 'LP' || peek().t === 'LB' || peek().t === 'LC' || valTakesPattern())) {
         const pat = valTakesPattern() ? parsePattern() : parsePatternAtom();
         eat('EQ');
         const value = parseExpr();
@@ -1427,8 +1634,10 @@ export function parse(toks, fixityIn) {
         }
         return { type: 'TopLetPat', pat, value };
       }
-      const nameTok = eat('IDENT');
-      const params = letParams();
+      // `fun (f ** g) (x, y) = …` and `fun (op +) (a, b) = …` name the function
+      // where it will be used. Nothing is consumed when it is neither.
+      const nameTok = infLhs ? { t: 'IDENT', v: infLhs.name } : eat('IDENT');
+      const params = infLhs ? [...infLhs.params, ...letParams()] : letParams();
       let ann = null;
       if (peek().t === 'COLON') { p++; ann = parseTypeExpr(); }
       eat('EQ');
@@ -1511,6 +1720,17 @@ export function parse(toks, fixityIn) {
   }
   eat('EOF');
   return expr;
+  } catch (e) {
+    // HOW FAR IT GOT, on the way out. At a prompt the question is not what the
+    // error says but whether more input could fix it, and the answer is
+    // whether the parser had run out when it gave up: `if x then y` with the
+    // `else` on the next line fails at EOF, `if x then y else` with a stray
+    // `)` does not. Only `parse` can see this, `p` being its own.
+    if (e && typeof e === 'object' && !('atEnd' in e)) {
+      try { e.atEnd = p >= toks.length - 1 || toks[p].t === 'EOF'; } catch { /* frozen */ }
+    }
+    throw e;
+  }
 }
 
 // Parse one line to an AST without evaluating it. Exists so the type checker
@@ -1561,4 +1781,52 @@ export function joinProgram(text) {
 // Harper's corpus failed on its second line.
 export function joinProgramLines(text) {
   return joinProgram(text).map((l) => l.text);
+}
+
+// ---- the same rules, at a PROMPT ------------------------------------------
+//
+// A file is joined all at once, above, because every line is already there. A
+// prompt has one line and no way to look ahead, and until v1.332 it simply ran
+// each physical line on its own: pasting any of the examples into the NostBook
+// failed on the second line of every clausal function and on every comment
+// written across two lines. `fun insert (Leaf, x) = …` ran, and the `| insert
+// (Node …)` under it answered *unexpected 'BAR'*.
+//
+// Two questions do it, and between them they cover both directions a
+// declaration can run over.
+
+// Is this text unfinished — does something later have to close it? An open
+// comment, or a last token that cannot end a declaration.
+export function needsMoreInput(text) {
+  const s = String(text);
+  // Comment depth, skipping what is inside a string so that "(*" is not one.
+  let depth = 0;
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === '"') { i++; while (i < s.length && s[i] !== '"') i += s[i] === '\\' ? 2 : 1; continue; }
+    if (s[i] === '(' && s[i + 1] === '*') { depth++; i++; continue; }
+    if (s[i] === '*' && s[i + 1] === ')' && depth) { depth--; i++; }
+  }
+  if (depth > 0) return true;
+  const code = s.replace(/\(\*[\s\S]*?\*\)/g, '').trim();
+  // A line that is only a comment is FINISHED — it does nothing, and there is
+  // nothing to wait for. Without this the parse below sees an empty token
+  // stream, fails at the end of it, and holds the prompt open forever on
+  // `(* a note *)`.
+  if (!code) return false;
+  // The same test joinProgram applies to the line ABOVE a continuation.
+  if (/(=|\||=>|->|:|,|\bof)$/.test(code)) return true;
+  // And then ASK THE PARSER, because a trailing token cannot see everything:
+  // `if x < v then Node (…)` ends on a `)` and is still waiting for its `else`,
+  // and `let val x = 1` for its `in`. Both fail at the end of the input, which
+  // is the difference between a line that is unfinished and a line that is
+  // wrong. A list of shapes here would go stale; the parser already knows.
+  try { parse(tokenize(s)); return false; }
+  catch (e) { return !!(e && e.atEnd); }
+}
+
+// Does this line continue the one before rather than start something? The
+// openers are joinProgram's, minus the leading-whitespace rule: indentation at
+// a prompt is how anyone lays out a fresh expression.
+export function continuesPrevious(line) {
+  return /^\s*(\||=>|::|@|\)|and\b|in\b|end\b|else\b|then\b)/.test(String(line));
 }

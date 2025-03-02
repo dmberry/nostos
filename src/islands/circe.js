@@ -1,3 +1,12 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 // CIRCE — Aeaea. The third daemon island and the one that does not attack your
 // body but your CATEGORY: her swine-magic rewrites what you ARE (islands-plan §6 /
 // islands-odyssey-revision §1.3). Venom-green towers, a CIRCE fortress, and a slow

@@ -1,3 +1,12 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 // The World contract: a World owns everything that lives on one island — its map,
 // arrival point, and entity collections. main.js holds one `currentWorld` and reads
 // `currentWorld.robots` (etc.) at runtime instead of bare module-level arrays. See

@@ -133,6 +133,17 @@ most because a list construction goes through more of them. Non-tail recursion
 is still bounded by the host stack, just further away, and still probe-sensitive
 in the way described above — treat these as an order of magnitude, not a figure.
 
+**Why it is probe-sensitive was worked out later** (v1.330,
+docs/deep-recursion-plan.md), and it is not what this section guessed. It has
+nothing to do with what the stack has been through. V8 runs a function in its
+interpreter until it has been called enough times to be worth compiling, and the
+interpreter reserves a frame slot for every local the function declares while
+the compiler allocates registers only for the ones live. `evalNode` declared 92
+locals, so its frame was several times larger before V8 compiled it than after,
+and any probe that tried a few sizes in one process was measuring its own
+warm-up. The numbers in the table above are warm ones. Measure with a fresh
+process per probe.
+
 ## How it was verified
 
 1. The depth probe, before and after, for all three shapes. ✓

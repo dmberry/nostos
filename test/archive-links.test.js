@@ -1,3 +1,12 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 // Every link on a cached page goes somewhere, and every page offered is a page
 // that exists.
 //
@@ -131,5 +140,29 @@ test('every page has a title and a non-empty body', () => {
   for (const [name, page] of allPages()) {
     assert.ok(page.title, `${name} has no title`);
     assert.ok(Array.isArray(page.body) && page.body.length, `${name} has no body`);
+  }
+});
+
+// ---- THE CORPUS ITSELF ----------------------------------------------------
+
+test('no two fragments share an id', () => {
+  // Placement, the Scrapbook list and the found-set are all keyed by id, so a
+  // duplicate does not error — it quietly makes one of the two unreachable,
+  // and the corpus still reads fine, which is why nothing would report it.
+  const seen = new Map();
+  for (const f of FRAGMENTS) {
+    assert.ok(!seen.has(f.id), `two fragments share the id ${f.id}: "${seen.get(f.id)}" and "${f.title}"`);
+    seen.set(f.id, f.title);
+  }
+});
+
+test('every fragment has a kind the Scrapbook can draw', () => {
+  // `kind` picks the object it reads as. An unknown one falls through to
+  // nothing in particular and the entry looks broken rather than missing.
+  const KINDS = new Set(['science', 'code', 'ron', 'letter', 'handwritten', 'note', 'secret', 'liminal', 'crafting']);
+  for (const f of FRAGMENTS) {
+    assert.ok(KINDS.has(f.kind), `${f.id} has kind "${f.kind}", which nothing draws`);
+    assert.ok([0, 1, 2].includes(f.era), `${f.id} has era ${f.era}, outside 0..2`);
+    assert.ok(f.title && f.text, `${f.id} is missing a title or a body`);
   }
 });

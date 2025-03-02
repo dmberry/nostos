@@ -1,3 +1,12 @@
+// BML — a 2026 Standard ML. Part of NostOS; synced to the BML repository.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
 // THE INTERPRETER. The one entry point, and the thing a host holds.
 //
 // Part of src/lang/. Written at v1.288 (M3) out of what was `runRonml` in
@@ -140,12 +149,24 @@ function patternNames(pat, out = []) {
 // The test is empirical rather than a list of tags: anything that survives a
 // round trip is kept, anything that does not is dropped. A list would go stale
 // the first time a value type gained a function field.
+// AND `__prelude` MUST NOT TRAVEL. It is the once-per-session guard, and it
+// asserts the very thing the loop above has just undone: the standard library is
+// written in ML, so `map`, `foldl`, `List.filter` and the rest are closures and
+// every one of them is dropped here. Saving the flag with them left a restored
+// session claiming a library it did not have, `loadPrelude` returned at the
+// guard, and the NostBook came back with no `map` — reported as *no network on
+// this machine*, because an unbound name at a station is read as a verb from
+// elsewhere. Types survived, being plain data, so a function would typecheck
+// against a library that was not there and then fail on the next line.
+//
+// Left out, the guard is clear on restore and `loadPrelude` rebuilds the whole
+// library from source, which costs a few milliseconds once.
 export function flattenSession(session) {
   const out = {};
   if (!session) return out;
   const tip = session.__env || session;
   for (const k in tip) {
-    if (k === '__env') continue;
+    if (k === '__env' || k === '__prelude') continue;
     try {
       JSON.stringify(tip[k]);
       out[k] = tip[k];
@@ -262,7 +283,7 @@ export function createInterpreter(opts = {}) {
   }
 
   /** The members of a structure, if that is what this name is. */
-  function membersOf(name) {
+  function membersOf(name, limit = 3) {
     const pre = `${name}.`;
     // FUNCTIONS first. Ordering by key put `Date.Jan, Date.Feb, Date.Mar` in
     // front — the month constructors, which are the least useful thing in
@@ -274,7 +295,7 @@ export function createInterpreter(opts = {}) {
       return t === 'closure' || t === 'builtin' || t === 'confn';
     };
     return [...all.filter(isFn), ...all.filter((k) => !isFn(k))]
-      .slice(0, 3)
+      .slice(0, limit)
       .map((k) => k.slice(pre.length));
   }
 
@@ -287,6 +308,25 @@ export function createInterpreter(opts = {}) {
     const own = membersOf(name);
     if (own.length) {
       return `ERR: ${name} is a structure, not a value — try ${own.map((k) => `${name}.${k}`).join(', ')}`;
+    }
+    // A QUALIFIED name whose STRUCTURE is right and member is not: `Date.January`
+    // when the month is `Date.Jan`. suggestName judges a qualified name on its
+    // head, finds Date perfectly good, and says nothing — so every near miss on
+    // a member got the bare message. The structure's own members are exactly the
+    // list to search.
+    const dot = String(name).indexOf('.');
+    if (dot > 0) {
+      const head = String(name).slice(0, dot);
+      const want = String(name).slice(dot + 1);
+      const all = membersOf(head, Infinity);
+      if (all.length && want.length >= 2) {
+        const low = want.toLowerCase();
+        const near = all.find((k) => k.toLowerCase() === low)
+          || all.find((k) => k.length >= 3
+            && (low.startsWith(k.toLowerCase()) || k.toLowerCase().startsWith(low)));
+        if (near) return `ERR: unbound variable: ${name} — did you mean ${head}.${near}?`;
+        return `ERR: unbound variable: ${name} — ${head} has no ${want}`;
+      }
     }
     const hint = suggestName(name, knownNames());
     // A name that is nowhere at the top level may still be INSIDE a structure.
@@ -448,5 +488,9 @@ export function createInterpreter(opts = {}) {
     }
   }
 
-  return { run, typeReport, loadPrelude, smlEcho, session, typecheck, env: envTip };
+  // `knownNames` and `membersOf` are handed out because Tab completion needs
+  // exactly what the "did you mean `Date`?" diagnostics needed, and there is no
+  // reason for a host to rebuild it. `membersOf` keeps its default limit of 3
+  // for the diagnostics; completion asks for Infinity.
+  return { run, typeReport, loadPrelude, smlEcho, session, typecheck, env: envTip, knownNames, membersOf };
 }
