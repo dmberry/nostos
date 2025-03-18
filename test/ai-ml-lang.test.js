@@ -4,7 +4,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { runRonml, decide, AIML_CREDIT, joinProgramLines, diagnose, joinProgram, typeReport, aimlVersion, aimlFull, NOT_FITTED_SAMPLES, loadPrelude } from '../src/game/ai_ml.js';
+import { runRonml, decide, smlEcho, AIML_CREDIT, joinProgramLines, diagnose, joinProgram, typeReport, aimlVersion, aimlFull, NOT_FITTED_SAMPLES, loadPrelude, defaultFixity, PRELUDE } from '../src/game/ai_ml.js';
 import { docsPage } from '../src/game/ml-docs.js';
 import { newShell, runUnix } from '../src/game/unix.js';
 import { RELAY_FILES } from '../src/game/net.js';
@@ -150,15 +150,15 @@ test('arithmetic: precedence and grouping', () => {
 });
 
 test('unary minus and subtraction share the freed `-`', () => {
-  assert.equal(runRonml('5 - 8', ctx()).text, '-3');
-  assert.equal(runRonml('-3', ctx()).text, '-3');
+  assert.equal(runRonml('5 - 8', ctx()).text, '~3', 'SML writes a negative with a tilde');
+  assert.equal(runRonml('-3', ctx()).text, '~3');
 });
 
 test('division by zero is a teaching error, not Infinity', () => {
   const r = runRonml('1.0 / 0.0', ctx());
   assert.equal(r.ok, false);
   assert.match(r.text, /division by zero/);
-  assert.match(runRonml('1 div 0', ctx()).text, /div by zero/);
+  assert.match(runRonml('1 div 0', ctx()).text, /Div — division by zero/);
 });
 
 test('^ joins values as text', () => {
@@ -229,10 +229,34 @@ test('a recursive echo ; recurse prints every step (the live countdown)', () => 
   assert.equal(r.text, '3\n2\n1\nliftoff');
 });
 
-test('the countdown works without the optional parens too', () => {
+test('the parens round a sequence in an else are NOT optional', () => {
+  // They were, and that was a departure from Standard ML nobody had noticed.
+  // `if a then b else c ; d` reads as `(if a then b else c) ; d` in SML — `;`
+  // binds looser than `if` — and it read as `if a then b else (c ; d)` here,
+  // which is why the countdown terminated without them.
+  //
+  // Every place the game teaches this program parenthesises it (ml_ai.js:752,
+  // ml-docs.js, the relay disk), so nothing documented changes. This test named
+  // the parens "optional" and was the only thing relying on it.
   const c = ctx();
-  runRonml('let go n = if n == 0 then echo "done" else echo n ; go (n - 1)', c);
-  assert.equal(runRonml('go 2', c).text, '2\n1\ndone');
+  const bare = runRonml('let go n = if n == 0 then echo "done" else echo n ; go (n - 1)', c);
+  // v1.307: `;` at the top level separates DECLARATIONS, so this is two of
+  // them — `go`, and then `go (n - 1)` with no `n` in scope, which is refused.
+  // Standard ML reads it exactly this way. `go` is bound all the same.
+  assert.equal(bare.ok, false, 'the second declaration has no n');
+  assert.equal(runRonml('go', c).ok, true, 'and the first one bound go');
+
+  const c2 = ctx();
+  runRonml('let go2 n = if n == 0 then echo "done" else (echo n ; go2 (n - 1))', c2);
+  assert.equal(runRonml('go2 2', c2).text, '2\n1\ndone', 'parenthesised, it counts down');
+});
+
+test('a sequence inside parentheses answers its LAST expression', () => {
+  // `(if true then 1 else 2; 7)` answered 1, because the else branch read the
+  // `;` as part of itself. Standard ML answers 7.
+  const c = ctx();
+  assert.equal(runRonml('(if true then 1 else 2; 7)', c).text, '7');
+  assert.equal(runRonml('(1; 2; 3)', c).text, '3');
 });
 
 test('*echo still prints through the shared buffer (not "()")', () => {
@@ -443,7 +467,7 @@ test('a constructor with arguments collects them and then stops being a function
   const run = (src) => runRonml(src, ctx).text;
   run('datatype shape = Circle of num | Rect of num * num');
   assert.equal(run('Circle 3'), 'Circle 3');
-  assert.equal(run('Rect 2 4'), 'Rect 2 4', 'arity comes from the * in the type');
+  assert.equal(run('Rect (2, 4)'), 'Rect (2, 4)', 'arity comes from the * in the type');
   assert.match(run('Rect 2'), /Rect/, 'given too few it is still a function');
 });
 
@@ -549,7 +573,7 @@ test('the regexp matcher on the docs page parses and matches', () => {
   assert.equal(val('tokenize ["(", "a", "+", "b", ")", "*"]'),
     '[LParen, Lit a, PlusSign, Lit b, RParen, Asterisk]');
   assert.equal(val('parse ["(", "a", "+", "b", ")", "*", ".", "c"]'),
-    'Times (Star (Plus (Chr a) (Chr b))) (Chr c)',
+    'Times (Star (Plus (Chr a, Chr b)), Chr c)',
     'nested constructors print with the parentheses that show their shape');
   assert.equal(val('matches (parse ["a", ".", "b"]) ["a", "b"]'), 'true');
   assert.equal(val('matches (parse ["a", ".", "b"]) ["a", "c"]'), 'false');
@@ -610,7 +634,7 @@ test('div is whole division and / is not', () => {
   assert.equal(run('7.0 / 2.0'), '3.5');
   assert.match(run('7 / 2'), /divides reals/, '/ is real division, as in ML');
   assert.equal(run('1 + 7 div 2'), '4', 'binds like times and divide');
-  assert.match(runRonml('1 div 0', ctx).text, /div by zero/);
+  assert.match(runRonml('1 div 0', ctx).text, /Div — division by zero/);
 });
 
 // ---- clausal definitions, @ and type variables (v1.245) --------------------
@@ -669,7 +693,7 @@ test('a datatype may carry type variables, which are read and discarded', () => 
   assert.equal(run('get (SOME 7)'), '7');
   assert.equal(run('get NONE'), '0');
   run("datatype 'a tree = Empty | Node of 'a tree * 'a * 'a tree");
-  assert.equal(run('Node Empty 5 Empty'), 'Node Empty 5 Empty', 'three-part constructors too');
+  assert.equal(run('Node (Empty, 5, Empty)'), 'Node (Empty, 5, Empty)', 'three-part constructors too');
 });
 
 // ---- records, blocks, fn-matches, as-patterns, library (v1.246) ------------
@@ -718,7 +742,7 @@ test('fn takes several alternatives, and as- names the whole', () => {
   assert.equal(run('f [9]'), '1');
   run('datatype t = Leaf | Node of t * t');
   run('fun norm (whole as Node a b) = whole | norm x = x');
-  assert.equal(run('norm (Node Leaf Leaf)'), 'Node Leaf Leaf');
+  assert.equal(run('norm (Node Leaf Leaf)'), 'Node (Leaf, Leaf)');
 });
 
 test('the little library: abs, sqrt, min, max, size', () => {
@@ -830,14 +854,30 @@ test('a construct this build does not have is named, not lexed at', () => {
   // Only two things are still refused outright. The rest of this list has been
   // pruned as the features landed; see NOT_FITTED_SAMPLES and the test below,
   // which is what stops it drifting again.
-  assert.match(String(diagnose('infix 8 OR')), /infix/);
-  assert.match(String(diagnose('String.explode s')), /not on this machine/);
-  // And everything that used to be here is simply supported now.
+  // v1.316: OS is the only structure still absent, and the only one this rule
+  // may name. It said Word, Array, Vector, IO, TextIO, Math, Substring and
+  // General too, long after all eight landed, so a bad MEMBER of a present
+  // structure was reported as a missing library. The walking test below never
+  // caught it because its sample, `Array.sub (a, 0)`, went on failing on the
+  // unbound `a`. So the check now runs BOTH ways.
+  assert.match(String(diagnose('OS.getEnv "HOME"')), /not on this machine/);
+  for (const present of ['Array.sub (v, 0)', 'Vector.length v', 'Math.pi', 'Word.toString w',
+    'IO.Io', 'TextIO.print s', 'Substring.full s', 'General.o']) {
+    assert.equal(diagnose(present), null, `${present} is here, so nothing may say it is not`);
+  }
+  // And everything that used to be here is simply supported now. `infix` and
+  // the List/String/Int/Option structures joined this list at v1.277 and v1.257.
   for (const src of ['signature S = sig val go : int end', 'exception Fail', 'type t = int',
     '#"a"', '~3', 'val x : int = 5', 'let r = ref 0',
-    'local fun h n = n in fun t n = h n end']) {
+    'local fun h n = n in fun t n = h n end',
+    'infix 8 OR', 'infixr 5 ++', 'nonfix OR']) {
     assert.equal(diagnose(src), null, `${src} is supported now`);
     assert.ok(!String(runRonml(src, sess()).text).startsWith('ERR'), `${src} runs`);
+  }
+  // These parse and are no longer diagnosed as absent, but need the prelude
+  // loaded to actually evaluate, so only the diagnosis is asserted here.
+  for (const src of ['String.explode s', 'List.map f l', 'Int.toString n']) {
+    assert.equal(diagnose(src), null, `${src} is no longer refused outright`);
   }
 });
 
@@ -909,9 +949,11 @@ test('inference works out the type, and Harper prints the same one', () => {
   assert.equal(t('1'), 'int');
   assert.equal(t('1.5'), 'real', 'two number types, kept apart');
   assert.equal(t('#"a"'), 'char');
-  assert.equal(t('"hi"'), 'str');
+  // v1.290: `string`, which is what Standard ML calls it. It read `str` until
+  // then, so `explode` reported `str -> char list` where SML says `string -> …`.
+  assert.equal(t('"hi"'), 'string');
   assert.equal(t('[1, 2, 3]'), 'int list');
-  assert.equal(t('(1, "a")'), 'int * str');
+  assert.equal(t('(1, "a")'), 'int * string');
   assert.equal(t('fn x => x'), "'a -> 'a");
   t('let map f l = case l of nil => nil | x :: r => f x :: map f r');
   assert.equal(t('map'), "('a -> 'b) -> 'a list -> 'b list",
@@ -992,6 +1034,12 @@ test("Harper's N-queens runs: all four solutions, same answer", () => {
       const r = runRonml(l, ctx);
       assert.ok(!String(r.text).startsWith('ERR'), `${name}: ${l}\n  ${r.text}`);
     }
+    // Back to n = 6, where it was before it became a barometer. The
+    // CONTINUATIONS variant unwound a chain of `fn () => …` thunks on the
+    // JavaScript stack and sat exactly on the cliff at 6, passing or failing
+    // depending on how much stack the rest of the suite had used. Both `fc ()`
+    // and `addqueen (…, fn () => …)` are tail calls, so v1.303 took the stack
+    // out of it.
     const got = String(runRonml('queens 6', ctx).text);
     assert.match(got, /^SOME/, `${name} finds a placement`);
     answers.push(got);
@@ -1024,7 +1072,11 @@ test('the language reports its own version and surface', () => {
   }
   // It must say what is absent as plainly as what is present, or it is a sales
   // pitch rather than a survey.
-  assert.match(full, /no infix, no op/, 'the one real gap left is still named');
+  // v1.285: this used to pin `no infix, no op`, which -full had gone on saying
+  // since v1.277, when both landed. The survey now names the library that is
+  // genuinely absent instead.
+  assert.match(full, /no Array, Vector, IO/, 'what is absent is still named plainly');
+  assert.doesNotMatch(full, /no infix, no op/, 'infix and op have worked since v1.277');
   assert.match(full, /#"a"/, 'char is present now, so it is listed as a value');
   assert.match(full, /int/);
   assert.match(full, /real/);
@@ -1050,8 +1102,8 @@ test('int and real are separate, and do not mix', () => {
 
 test('~ is unary minus, which was simply never lexed', () => {
   const ctx = sess();
-  assert.equal(String(runRonml('~3', ctx).text), '-3');
-  assert.equal(String(runRonml('~3.5', ctx).text), '-3.5');
+  assert.equal(String(runRonml('~3', ctx).text), '~3');
+  assert.equal(String(runRonml('~3.5', ctx).text), '~3.5');
   assert.equal(String(runRonml('~3 + 5', ctx).text), '2');
 });
 
@@ -1157,7 +1209,14 @@ test('the library is written in the language it is for', () => {
   assert.equal(run('List.map (fn n => n * 2) [1, 2, 3]'), '[2, 4, 6]');
   assert.equal(run('List.filter (fn n => n > 1) [1, 2, 3]'), '[2, 3]');
   assert.equal(run('List.rev [1, 2, 3]'), '[3, 2, 1]');
-  assert.equal(run('List.foldl (fn h => fn a => h + a) 0 [1, 2, 3]'), '6');
+  // v1.306: foldl takes a TUPLE, as the Basis does. It was curried, so the
+  // spelling in every textbook was refused and the one that worked was one no
+  // Standard ML program is written in. Changed here deliberately.
+  assert.equal(run('List.foldl (fn (h, a) => h + a) 0 [1, 2, 3]'), '6');
+  // The direction, which the addition above cannot tell you: SML's foldl gives
+  // 2 for this and foldr gives 2 as well, by different routes.
+  assert.equal(run('List.foldl (fn (h, a) => h - a) 0 [1, 2, 3]'), '2');
+  assert.equal(run('List.foldr (fn (h, a) => h - a) 0 [1, 2, 3]'), '2');
   assert.equal(run('List.tabulate (4, fn n => n * n)'), '[0, 1, 4, 9]');
   assert.equal(run('String.rev "hello"'), 'olleh');
   assert.equal(run('String.size "abc"'), '3');
@@ -1338,7 +1397,7 @@ test('the value restriction holds, and let-polymorphism survives it', async () =
   // A lambda is a syntactic value and generalises: one definition, two types.
   assert.equal(ty('fun id x = x'), "'a -> 'a");
   assert.equal(ty('id 3'), 'int');
-  assert.equal(ty('id "a"'), 'str', 'still polymorphic after use at int');
+  assert.equal(ty('id "a"'), 'string', 'still polymorphic after use at int');
   // An application is not a value, so the cell does not generalise.
   assert.equal(ty('val q = ref nil'), "'a list ref");
   ty('q := [1]');
@@ -1375,4 +1434,497 @@ test('every program the game ships is free of holes', async () => {
       }
     }
   }
+});
+
+// ---- L-B: string escapes (v1.275) ------------------------------------------
+// The tokenizer used to copy the character after a backslash verbatim, so
+// `"a\nb"` was the three letters a, n, b — silently wrong data. This is
+// Harper §2.2.4: \n \t \\ \" \ddd and the \…\ line-continuation.
+test('string escapes are real characters, not their letters', async () => {
+  const ctx = { station: 'laptop', session: {} };
+  await loadPrelude(ctx);
+  const run = (s) => { const r = runRonml(s, ctx); assert.ok(r.ok, `${s}: ${r.text}`); return r.text; };
+  // The canonical round-trip: a\nb is THREE characters with a real newline at 1.
+  assert.equal(run('size "a\\nb"'), '3');
+  const echoed = run('echo "a\\nb"');
+  assert.equal(echoed.length, 3);
+  assert.equal(echoed.charCodeAt(1), 10, 'position 1 is a newline, not the letter n');
+  assert.equal(run('size "x\\ty"'), '3', '\\t is one character');
+  assert.equal(run('size "q\\"q"'), '3', '\\" is one character and does not end the string');
+  assert.equal(run('size "a\\\\b"'), '3', '\\\\ is one backslash');
+  assert.equal(run('ord (hd (explode "\\065"))'), '65', '\\ddd is a code point');
+  assert.equal(run('size "ab\\   \\cd"'), '4', 'the \\…\\ gap elides whitespace across the break');
+  assert.equal(run('size "hello"'), '5', 'an ordinary string is unaffected');
+});
+
+test('a bad string escape is reported, not swallowed', async () => {
+  const ctx = { station: 'laptop', session: {} };
+  await loadPrelude(ctx);
+  assert.equal(runRonml('"a\\qb"', ctx).ok, false, '\\q is not an escape');
+  assert.equal(runRonml('"a\\05b"', ctx).ok, false, '\\ddd needs three digits');
+});
+
+// ---- L-D: signature abbreviation and named ascription (v1.276) --------------
+// `signature INT_DICT = DICT where type key = int` — the body is another
+// signature's name, not a literal sig...end. views.sml is built entirely this
+// way. Signatures track names, not types, so `where type` is a no-op.
+test('a signature can be named from another, with where-type ignored', () => {
+  const ctx = { station: 'laptop', session: {} };
+  const run = (s) => { const r = runRonml(s, ctx); assert.ok(r.ok, `${s}: ${r.text}`); return r.text; };
+  run('signature DICT = sig type key val empty : key val lt : key end');
+  run('signature INT_DICT = DICT where type key = int');
+  run('structure D :> INT_DICT = struct val empty = 0 val lt = 1 val secret = 2 end');
+  assert.equal(run('D.empty'), '0', 'a name the signature lists is visible');
+  // A name the signature omits is hidden — the qualified reference resolves to
+  // nothing and (as a bare atom) prints itself.
+  assert.equal(run('D.secret'), 'D.secret', 'a name the signature omits is hidden');
+});
+
+test('naming from an undeclared signature is reported', () => {
+  const ctx = { station: 'laptop', session: {} };
+  assert.equal(runRonml('signature Q = NOPE where type t = int', ctx).ok, false);
+});
+
+// ---- L-E: fixity declarations and op (v1.277) -------------------------------
+// In Standard ML fixity is a PARSE-TIME fact: `infix 8 OR` changes how the next
+// line reads. Harper's regexp.sml declares OR and THEN inside a structure and
+// uses them three lines later.
+test('infix declares an operator, with precedence and associativity', () => {
+  const ctx = { station: 'laptop', session: {} };
+  const run = (s) => { const r = runRonml(s, ctx); assert.ok(r.ok, `${s}: ${r.text}`); return r.text; };
+  run('fun PLUS3 (a, b) = a + b + 3');
+  run('fun TIMES (a, b) = a * b');
+  run('infixr 2 PLUS3');
+  run('infix 9 TIMES');
+  assert.equal(run('1 PLUS3 2'), '6', 'a declared operator is applied to the pair');
+  assert.equal(run('1 PLUS3 2 PLUS3 3'), '12', 'infixr groups to the right');
+  assert.equal(run('1 PLUS3 2 TIMES 3'), '10', 'the higher precedence binds tighter');
+  run('nonfix PLUS3');
+  assert.equal(run('PLUS3 (1, 2)'), '6', 'nonfix puts it back to an ordinary function');
+});
+
+test('the type checker reads a line with the same fixity the evaluator does', () => {
+  // Found by the REPL, which typechecks before it evaluates. `typeReport` used
+  // to parse with the DEFAULT table while the evaluator parsed with the
+  // session's, so after `infix 6 plus` the checker read `2 plus 3` as applying
+  // 2 to two arguments and called it ill-typed. Advisory mode printed a warning
+  // for a perfectly good line; strict mode refused it outright.
+  const ctx = { station: 'laptop', session: {}, types: true };
+  // Drive it the way every real caller does: check the line, then run it. The
+  // checker only learns a binding from its own pass, so a test that skips it
+  // is testing an empty environment.
+  const run = (s) => {
+    typeReport(s, ctx);
+    const r = runRonml(s, ctx); assert.ok(r.ok, `${s}: ${r.text}`); return r.text;
+  };
+  run('fun plus (a, b) = a + b');
+  run('infix 6 plus');
+  assert.equal(typeReport('2 plus 3', ctx), 'int', 'the checker sees the operator, not an application');
+  assert.equal(run('2 plus 3'), '5');
+});
+
+test('a strict session accepts a line that its own infix declaration enables', () => {
+  const ctx = { station: 'laptop', session: {}, types: true, typecheck: 'strict' };
+  const run = (s) => { const r = runRonml(s, ctx); assert.ok(r.ok, `${s}: ${r.text}`); return r.text; };
+  run('fun plus (a, b) = a + b');
+  run('infix 6 plus');
+  assert.equal(run('1 plus 2 plus 3'), '6');
+});
+
+test('op passes an operator as a value', () => {
+  const ctx = { station: 'laptop', session: {} };
+  const run = (s) => { const r = runRonml(s, ctx); assert.ok(r.ok, `${s}: ${r.text}`); return r.text; };
+  assert.equal(run('op + (1, 2)'), '3');
+  assert.equal(run('op * (3, 4)'), '12');
+  assert.equal(run('op :: (1, nil)'), '[1]');
+  // The point of op: handing an operator to something else, as Harper's
+  // fcnls.sml does with `reduce (0, op +, l)`.
+  run('fun apply2 (f, a, b) = f (a, b)');
+  assert.equal(run('apply2 (op +, 4, 5)'), '9');
+});
+
+test('the built-in fixities are Standard ML\'s own', () => {
+  const ctx = { station: 'laptop', session: {} };
+  const run = (s) => { const r = runRonml(s, ctx); assert.ok(r.ok, `${s}: ${r.text}`); return r.text; };
+  assert.equal(run('2 + 3 * 4'), '14', '* (7) binds tighter than + (6)');
+  assert.equal(run('10 - 3 - 2'), '5', '- is left-associative');
+  assert.equal(run('1 :: 2 :: nil'), '[1, 2]', ':: is right-associative');
+  assert.equal(run('"a" ^ "b" ^ "c"'), 'abc');
+});
+
+// v1.285 revises this. The old version asserted `o` and `before` are NOT infix,
+// on the grounds that seeding them into defaultFixity() broke a program using
+// `o` as a parameter name. Two things were wrong with that. The parameter-name
+// case is not valid Standard ML either — `o` is infix in the top-level
+// environment there, so `fun f o = …` is a syntax error in SML too — and every
+// use of `o` in Harper's corpus is composition, none is a variable. What stays
+// true is the mechanism: the fixity comes from an `infix` declaration in the
+// PRELUDE, where a program can see it and turn it off, and not from the parser.
+test('o and before are infix, and come by declaration rather than by seeding', () => {
+  assert.ok(!Object.prototype.hasOwnProperty.call(defaultFixity(), 'o'),
+    'the parser itself must not know about o; the prelude declares it');
+  assert.ok(!Object.prototype.hasOwnProperty.call(defaultFixity(), 'before'),
+    'the parser itself must not know about before; the prelude declares it');
+
+  const ctx = { station: 'laptop', session: {} };
+  const run = (s) => { const r = runRonml(s, ctx); assert.ok(r.ok, `${s}: ${r.text}`); return r.text; };
+  loadPrelude(ctx);
+  run('fun inc x = x + 1');
+  run('fun dbl x = x * 2');
+  assert.equal(run('(inc o dbl) 5'), '11', 'o composes right to left');
+  assert.equal(run('(dbl o inc) 5'), '12');
+  assert.equal(run('1 before 2'), '1', 'before evaluates both and keeps the first');
+  assert.equal(run('ignore (3 + 4)'), '()');
+});
+
+test('nonfix o gives the name back to a program that wants it', () => {
+  // The escape hatch, and the reason fixity belongs in the prelude rather than
+  // the parser: a program can say it wants the name for something else.
+  const ctx = { station: 'laptop', session: {} };
+  const run = (s) => { const r = runRonml(s, ctx); assert.ok(r.ok, `${s}: ${r.text}`); return r.text; };
+  loadPrelude(ctx);
+  run('nonfix o');
+  run('fun f o = o + 1');
+  assert.equal(run('f 2'), '3');
+});
+
+// ---- L-F: simultaneous declarations (v1.278) --------------------------------
+// `and` joins declarations of the same kind, and the keyword is not repeated
+// after it. It was the largest remaining bucket in the conformance histogram:
+// mutually recursive datatypes, simultaneous type abbreviations, and mutually
+// recursive functions.
+test('and joins declarations of the same kind', () => {
+  const ctx = { station: 'laptop', session: {} };
+  const run = (s) => { const r = runRonml(s, ctx); assert.ok(r.ok, `${s}: ${r.text}`); return r.text; };
+  run('type count = int and average = real');
+  run('datatype t = A | B and u = C | D');
+  assert.equal(run('C'), 'C', 'the second datatype\'s constructors are registered');
+  assert.equal(run('B'), 'B');
+  run('val a = 1 and b = 2');
+  assert.equal(run('a + b'), '3');
+});
+
+test('mutually recursive functions defined with and', () => {
+  const ctx = { station: 'laptop', session: {} };
+  const run = (s) => { const r = runRonml(s, ctx); assert.ok(r.ok, `${s}: ${r.text}`); return r.text; };
+  run('fun ev 0 = true | ev n = od (n-1) and od 0 = false | od n = ev (n-1)');
+  assert.equal(run('ev 10'), 'true');
+  assert.equal(run('ev 7'), 'false');
+  assert.equal(run('od 7'), 'true', 'od is callable, and calls back into ev');
+});
+
+test('and is still boolean conjunction where that is what it is', () => {
+  // This build accepts `and` for both, so the two readings have to be told
+  // apart. A declaration chain has a name and its patterns and then `=`;
+  // anything else is the conjunction.
+  const ctx = { station: 'laptop', session: {} };
+  const run = (s) => { const r = runRonml(s, ctx); assert.ok(r.ok, `${s}: ${r.text}`); return r.text; };
+  assert.equal(run('true and false'), 'false');
+  assert.equal(run('true and true'), 'true');
+  assert.equal(run('let val x = true and y = false in x and y end'), 'false',
+    'a let-chain and a conjunction in the same line');
+});
+
+// ---- L-F: annotated fn parameters (v1.279) ----------------------------------
+test('a fn parameter may carry its type without brackets', async () => {
+  const ctx = { station: 'laptop', session: {}, types: true };
+  await loadPrelude(ctx);
+  const run = (s) => { const r = runRonml(s, ctx); assert.ok(r.ok, `${s}: ${r.text}`); return r.text; };
+  assert.equal(run('(fn x : real => x + 1.0) 2.0'), '3.0');
+  assert.equal(run('(fn (x : real) => x + 1.0) 2.0'), '3.0', 'the bracketed form still works');
+  // The annotation is KEPT, not skipped: the checker still sees the claim.
+  assert.equal(typeReport('fn x : real => x', ctx), 'real -> real');
+});
+
+test('a type annotation containing -> does not eat the fn arrow', () => {
+  // `->` is ARROWT and belongs to the type; `=>` is ARROW and ends it. The type
+  // skipper consumed ARROW, so it swallowed the arrow of every annotated fn and
+  // the error blamed the missing `=>`.
+  const ctx = { station: 'laptop', session: {} };
+  const run = (s) => { const r = runRonml(s, ctx); assert.ok(r.ok, `${s}: ${r.text}`); return r.text; };
+  assert.equal(run('(fn f : int -> int => f 3) (fn y => y * 2)'), '6');
+});
+
+test('each arm of a multi-clause fn may be annotated too', () => {
+  const ctx = { station: 'laptop', session: {} };
+  const run = (s) => { const r = runRonml(s, ctx); assert.ok(r.ok, `${s}: ${r.text}`); return r.text; };
+  assert.equal(run('(fn nil => 0 | x :: r => 1) [1]'), '1');
+  assert.equal(run('(fn 0 : int => "zero" | _ => "some") 0'), 'zero');
+});
+
+// ---- L-F: two parse bugs found inside structures (v1.280) -------------------
+test('a let binding a pattern consumes its end', () => {
+  // `let val (d, a, b) = … in … end` parsed the body and then reported `end` as
+  // unexpected, because only the name-binding path ate it. Destructuring a
+  // tuple out of a function's result is ordinary ML and the corpus is full of it.
+  const ctx = { station: 'laptop', session: {} };
+  const run = (s) => { const r = runRonml(s, ctx); assert.ok(r.ok, `${s}: ${r.text}`); return r.text; };
+  assert.equal(run('let val (x, y) = (3, 4) in x * y end'), '12');
+  assert.equal(run('let (x, y) = (3, 4) in x * y end'), '12', 'and without the val');
+  assert.equal(run('let val (d, a, b) = (1, 2, 3) in d + a + b end'), '6');
+  assert.equal(run('let val [p, q] = [5, 6] in p * q end'), '30');
+  assert.equal(run('let (x, y) = (3, 4) in x * y'), '12', 'the end is optional, as before');
+});
+
+test('a datatype constructor argument stops at the next declaration', () => {
+  // The `of` type was read by a hand-rolled loop that ate any run of
+  // identifiers, so `datatype t = N of int val z = 1` swallowed `val z` and
+  // then blamed the `=`. It only showed inside a structure, where a datatype
+  // is followed by more declarations.
+  const ctx = { station: 'laptop', session: {} };
+  const run = (s) => { const r = runRonml(s, ctx); assert.ok(r.ok, `${s}: ${r.text}`); return r.text; };
+  run('structure A = struct datatype t = E | N of int val z = 1 end');
+  assert.equal(run('A.z'), '1', 'the declaration after the datatype survived');
+  run("structure B = struct datatype 'a t = E | N of 'a t * int val z = 2 end");
+  assert.equal(run('B.z'), '2');
+  // …and the arity it counts is still right, which is what the loop was for.
+  run('datatype pair = P of int * int');
+  run('datatype one = Q of int');
+  assert.equal(run('Q 5'), 'Q 5', 'a one-argument constructor still takes one');
+});
+
+// ---- L-F: functor sugar and character escapes (v1.281) ----------------------
+test('a functor parameter and argument may be written as declarations', () => {
+  // Standard ML's sugar: `functor F (structure K : S)` means the parameter is
+  // an anonymous structure with K visible directly in the body, and
+  // `F (structure K = X)` supplies it the same way. Applying a functor here
+  // already bound the argument's names both bare and under the parameter name,
+  // so the sugar only had to reach that.
+  const ctx = { station: 'laptop', session: {} };
+  const run = (s) => { const r = runRonml(s, ctx); assert.ok(r.ok, `${s}: ${r.text}`); return r.text; };
+  run('signature ORDERED = sig val lt : int end');
+  run('structure LessInt = struct fun lt (a, b) = a < b end');
+  run('functor DictFun (structure K : ORDERED) = struct fun cmp (a, b) = K.lt (a, b) end');
+  run('structure D = DictFun (structure K = LessInt)');
+  assert.equal(run('D.cmp (1, 2)'), 'true', 'the body reached K through the sugar');
+  // The plain form still works.
+  run('structure A = struct val v = 7 end');
+  run('functor G (X) = struct val w = X.v end');
+  run('structure B = G (A)');
+  assert.equal(run('B.w'), '7');
+});
+
+test('where type is skipped after every ascription, not only a signature', () => {
+  const ctx = { station: 'laptop', session: {} };
+  const run = (s) => { const r = runRonml(s, ctx); assert.ok(r.ok, `${s}: ${r.text}`); return r.text; };
+  run('signature DICT = sig val v : int end');
+  run('signature IDICT = DICT where type key = int');
+  run('functor F (structure K : DICT) :> DICT where type Key.t = K.t = struct val v = 1 end');
+});
+
+test('a character literal takes the same escapes a string does', () => {
+  // The char lexer decoded none of them, so `#"\\"` could not be lexed at all
+  // and Harper's regexp tokenizer — which matches it to spot an escaped
+  // character in a pattern — was unreadable. One decoder now serves both.
+  const ctx = { station: 'laptop', session: {} };
+  const run = (s) => { const r = runRonml(s, ctx); assert.ok(r.ok, `${s}: ${r.text}`); return r.text; };
+  assert.equal(run('ord #"\\\\"'), '92', 'a backslash character');
+  assert.equal(run('ord #"\\n"'), '10', 'a newline character');
+  assert.equal(run('ord #"a"'), '97');
+  assert.equal(run('size "a\\nb"'), '3', 'strings are unchanged');
+});
+
+// ---- L-C: SML's top-level answer (v1.282) -----------------------------------
+// `val it = 7 : int` is what Standard ML replies to a bare expression. This was
+// assembled inline in the terminal, where no test could reach it; it is a pure
+// function now, so the shape is checked here rather than by typing at a CRT.
+test('a bare expression is echoed as val it = … : ty', () => {
+  assert.deepEqual(smlEcho('7', 'int'), ['val it = 7 : int']);
+  assert.deepEqual(smlEcho('[1, 2]', 'int list'), ['val it = [1, 2] : int list']);
+});
+
+test('a declaration names itself and does not become it', () => {
+  assert.deepEqual(smlEcho('val f = <fn>', 'int -> int'), ['val f = <fn> : int -> int']);
+  assert.deepEqual(smlEcho('datatype t = A | B', 'unit'), ['datatype t = A | B']);
+  assert.deepEqual(smlEcho('exception Fail', 'unit'), ['exception Fail']);
+});
+
+test('with no type to show, the value is printed as it was', () => {
+  assert.deepEqual(smlEcho('7', null), ['7'], 'the checker is off');
+  assert.deepEqual(smlEcho('7', 'TYPE: int and str are not the same type'), ['7'],
+    'a clash is printed on its own line before this, not folded in here');
+  assert.deepEqual(smlEcho('', 'int'), [], 'nothing to say, nothing said');
+});
+
+test('an exhaustiveness warning rides after the type, on its own line', () => {
+  assert.deepEqual(
+    smlEcho('val n = <fn>', "colour -> int    WARNING: this case does not cover Blue"),
+    ['val n = <fn> : colour -> int', '  WARNING: this case does not cover Blue'],
+  );
+});
+
+// ---- L-H: strict mode (v1.283) ----------------------------------------------
+// In Standard ML a program that does not typecheck does not run. Until this
+// existed the accurate claim was that AI-ML *infers* types, not that it *is*
+// typed, and Harper's unityped critique applied in full.
+const strict = () => ({ station: 'laptop', session: {}, types: true, typecheck: 'strict' });
+const advisory = () => ({ station: 'laptop', session: {}, types: true, typecheck: 'report' });
+
+test('strict mode refuses a line the checker rejects', async () => {
+  const ctx = strict();
+  await loadPrelude(ctx);
+  const r = runRonml('val x : int = "hello"', ctx);
+  assert.equal(r.ok, false, 'an annotation that is a lie is refused, not honoured');
+  assert.match(r.text, /int and string|string and int/);
+  // …and the binding did not happen.
+  assert.match(String(runRonml('x', ctx).text), /x/, 'x is unbound, so it is just a word');
+});
+
+test('the same line is advisory in the game, which is deliberate', async () => {
+  const ctx = advisory();
+  await loadPrelude(ctx);
+  const r = runRonml('val x : int = "hello"', ctx);
+  assert.equal(r.ok, true, 'a machine in a ruin reports and lets the operator decide');
+  assert.equal(r.text, 'val x = hello');
+});
+
+test('strict mode still runs what typechecks', async () => {
+  const ctx = strict();
+  await loadPrelude(ctx);
+  assert.equal(runRonml('3 + 4', ctx).text, '7');
+  assert.equal(runRonml('fun sq n = n * n', ctx).text, 'val sq = <fn>');
+  assert.equal(runRonml('sq 5', ctx).text, '25');
+  assert.equal(runRonml('List.map (fn x => x + 1) [1, 2]', ctx).text, '[2, 3]',
+    'the prelude is reachable under strict (bare  is the obelisk verb)');
+});
+
+test('a warning is a warning under strict too, not a refusal', async () => {
+  // Exhaustiveness is a warning in Standard ML as well: a non-exhaustive match
+  // is legal and may simply raise at run time.
+  const ctx = strict();
+  await loadPrelude(ctx);
+  runRonml('datatype colour = Red | Green | Blue', ctx);
+  const r = runRonml('fun name c = case c of Red => 1 | Green => 2', ctx);
+  assert.equal(r.ok, true, 'the hole is reported, and the definition stands');
+  assert.equal(runRonml('name Red', ctx).text, '1');
+});
+
+test('the occurs check refuses under strict', async () => {
+  const ctx = strict();
+  await loadPrelude(ctx);
+  const r = runRonml('fn x => x x', ctx);
+  assert.equal(r.ok, false);
+  assert.match(r.text, /infinite type/);
+});
+
+// ---- L-G: a Basis slice (v1.285) --------------------------------------------
+// The yardstick is what Harper's files call, not the Basis document's 47
+// structures. Everything here is written in AI-ML in PRELUDE and loaded as
+// source, so a player can read the same map they would have written.
+const basis = () => {
+  const ctx = { station: 'laptop', session: {} };
+  loadPrelude(ctx);
+  return (s) => { const r = runRonml(s, ctx); assert.ok(r.ok, `${s}: ${r.text}`); return r.text; };
+};
+
+test('List gains find, partition, zip, unzip, app and last', () => {
+  const run = basis();
+  assert.equal(run('List.find (fn x => x > 2) [1,2,3,4]'), 'SOME 3');
+  assert.equal(run('List.find (fn x => x > 9) [1,2]'), 'NONE');
+  assert.equal(run('List.partition (fn x => x > 2) [1,2,3,4]'), '([3, 4], [1, 2])');
+  assert.equal(run('List.last [1,2,3]'), '3');
+  // zip stops at the shorter list rather than raising, as ListPair.zip does.
+  assert.equal(run('List.zip ([1,2,3], [4,5])'), '[(1, 4), (2, 5)]');
+  assert.equal(run('List.unzip [(1,2),(3,4)]'), '([1, 3], [2, 4])');
+  assert.equal(run('ListPair.zip ([1,2], [3,4])'), '[(1, 3), (2, 4)]');
+});
+
+test('String gains substring, translate, tokens and fields', () => {
+  const run = basis();
+  assert.equal(run('String.substring ("hello", 1, 3)'), 'ell');
+  assert.equal(run('String.translate (fn c => Char.toString c ^ "-") "abc"'), 'a-b-c-');
+  // tokens drops empty fields, fields keeps them: the only difference.
+  assert.equal(run('String.tokens (fn c => c = #",") "a,,b"'), '[a, b]');
+  assert.equal(run('String.fields (fn c => c = #",") "a,,b"'), '[a, , b]');
+  assert.equal(run('String.concatWith "-" ["a","b","c"]'), 'a-b-c');
+  assert.equal(run('String.extract ("hello", 2, NONE)'), 'llo');
+});
+
+test('the toString family, and Int.fromString answering an option', () => {
+  const run = basis();
+  assert.equal(run('Int.toString 42'), '42');
+  assert.equal(run('Bool.toString true'), 'true');
+  assert.equal(run('Real.toString 1.5'), '1.5');
+  assert.equal(run('Char.toString #"a"'), 'a');
+  assert.equal(run('Int.fromString "42"'), 'SOME 42');
+  assert.equal(run('Int.fromString "~7"'), 'SOME ~7', 'the tilde is SML\'s minus');
+  // Not a numeral is NONE rather than an error: the caller decides.
+  assert.equal(run('Int.fromString "no"'), 'NONE');
+  assert.equal(run('Int.fromString ""'), 'NONE');
+  assert.equal(run('Int.fromString "1x"'), 'NONE');
+  assert.equal(run('Bool.fromString "true"'), 'SOME true');
+  assert.equal(run('Bool.fromString "yes"'), 'NONE');
+});
+
+test('Option gains join and filter, Real gains round and fromInt', () => {
+  const run = basis();
+  assert.equal(run('Option.join (SOME (SOME 3))'), 'SOME 3');
+  assert.equal(run('Option.join NONE'), 'NONE');
+  assert.equal(run('Option.filter (fn x => x > 2) 5'), 'SOME 5');
+  assert.equal(run('Option.filter (fn x => x > 2) 1'), 'NONE');
+  assert.equal(run('Real.round 3.7'), '4');
+  assert.equal(run('Real.fromInt 3'), '3.0');
+  assert.equal(run('Real.abs ~2.5'), '2.5');
+});
+
+test('a line holding only a comment is empty input, not an error', () => {
+  // Pasting a commented program produced one error per comment line before
+  // v1.285. In Standard ML a comment is whitespace.
+  const ctx = { station: 'laptop', session: {} };
+  for (const s of ['(* just a comment *)', '   ', '(* one *) (* two *)']) {
+    const r = runRonml(s, ctx);
+    assert.ok(r.ok, `${JSON.stringify(s)} should be accepted: ${r.text}`);
+    assert.equal(r.text, '');
+  }
+});
+
+test('the prelude is written in AI-ML and every line of it loads', () => {
+  // loadPrelude swallows a failing line so a broken library cannot brick the
+  // terminal, which also means a broken line is INVISIBLE. This walks it.
+  const ctx = { station: 'laptop', session: {} };
+  const bad = [];
+  for (const l of joinProgram(PRELUDE)) {
+    const text = String(l && l.text !== undefined ? l.text : l);
+    if (!text.trim()) continue;
+    let r;
+    try { r = runRonml(text, ctx); } catch (e) { r = { ok: false, text: String(e.message) }; }
+    if (!r.ok) bad.push(`${text.split('\n')[0].slice(0, 50)} -> ${r.text}`);
+  }
+  assert.deepEqual(bad, [], 'every prelude declaration must load');
+});
+
+// ---- ml -strict at the NostBook (v1.288) ------------------------------------
+// The game is advisory everywhere by design: a machine in a ruin should say what
+// it worked out and let the operator decide. The laptop is the exception a
+// player can ask for, because it is the machine you own and the one you learn
+// on, and Standard ML refuses a program that does not typecheck.
+test('a laptop session can be put into strict mode, and the machines cannot', () => {
+  const advisory = { station: 'laptop', session: {}, types: true, typecheck: 'off' };
+  const r1 = runRonml('val x : int = "hello"', advisory);
+  assert.ok(r1.ok, 'advisory honours the line');
+
+  const strict = { station: 'laptop', session: {}, types: true, typecheck: 'strict' };
+  const r2 = runRonml('val x : int = "hello"', strict);
+  assert.equal(r2.ok, false, 'strict refuses it');
+  assert.match(r2.text, /not the same type/);
+  // Refused means nothing was bound.
+  assert.match(runRonml('x', strict).text, /no such command/);
+
+  // A machine carrying its own program has no checker and nobody to read one,
+  // so a robot context stays advisory whatever it is handed.
+  const robot = { station: 'robot', session: {} };
+  assert.ok(runRonml('val x : int = "hello"', robot).ok, 'a machine never refuses');
+});
+
+test('strict and advisory agree on everything except whether the line runs', () => {
+  const mk = (mode) => ({ station: 'laptop', session: {}, types: true, typecheck: mode });
+  for (const good of ['3 + 4', 'fun f x = x + 1', 'val xs = [1,2,3]']) {
+    const a = runRonml(good, mk('off'));
+    const b = runRonml(good, mk('strict'));
+    assert.equal(a.text, b.text, `${good} reads the same in both modes`);
+  }
+  // A warning stays a warning under both: a non-exhaustive match is legal ML.
+  const s = mk('strict');
+  assert.ok(runRonml('datatype c = R | G | B', s).ok);
+  assert.ok(runRonml('case R of R => 1 | G => 2', s).ok, 'exhaustiveness warns, never refuses');
 });

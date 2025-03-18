@@ -1,0 +1,38 @@
+# CI for NostOS. No build step, no dependencies, no package.json: the whole
+# thing is ES modules under plain node, so this is `node --test` and nothing
+# else.
+#
+# The conformance run is deliberately NOT here. It fetches Robert Harper's
+# teaching corpus from cs.cmu.edu, which is his material and is not vendored;
+# a CI job that hammers a university web server on every push would be rude,
+# and a red build caused by their downtime would say nothing about this code.
+# Run it locally: node tools/isml-conformance.mjs
+
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: game and language suites
+        run: node --test test/*.test.js
+
+      - name: conformance suite
+        run: node --test ML_tests/**/*.test.js
+        continue-on-error: true   # a second suite, still being written
+
+      - name: every module parses
+        run: |
+          for f in $(find src bin tools -name '*.js' -o -name '*.mjs'); do
+            node --check "$f" || exit 1
+          done

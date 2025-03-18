@@ -21,6 +21,9 @@
 //
 // Pure data and string building, like net.js: no world, no DOM.
 
+// One cached document long enough to want its own file. See poplog.js.
+import { POPLOG_TITLE, POPLOG_BODY } from './poplog.js';
+
 export const CACHE_SUB = 'cache';
 
 // The sites written out properly. Each one gets the page it deserves: not a
@@ -234,6 +237,53 @@ export const ARCHIVED_SITES = [
       '<p>Torch (2 pack) &middot; Tinned food, case of 12 &middot; Circuit boards, assorted</p>',
     ],
   },
+  {
+    // The one site in the cache that came back nearly whole, and the reason is
+    // the reason it is here: everything it made was published under a licence
+    // that let the crawler keep it. The platforms it spent twenty years
+    // criticising are the damaged records either side of it in this list.
+    domain: 'networkcultures.org',
+    name: 'NETWORKCULTURES',
+    title: 'Institute of Network Cultures',
+    body: [
+      '<h1>Institute of Network Cultures</h1>',
+      '<p><small>Amsterdam University of Applied Sciences &middot; Amsterdam</small></p>',
+      '<hr>',
+      '<p>The INC analyses and shapes the terrain of network cultures, through',
+      'events, publications and online dialogue. Founded in 2004 by Geert Lovink,',
+      'media theorist, on his appointment at the Amsterdam University of Applied',
+      'Sciences. A small core team works with international researchers.</p>',
+      '<h2>Research networks</h2>',
+      '<p class="kv">Video Vortex ......... 2007 &middot; online video</p>',
+      '<p class="kv">Society of the Query . 2009 &middot; the culture of search</p>',
+      '<p class="kv">Critical Point of View  &middot; Wikipedia</p>',
+      '<p class="kv">Unlike Us ............ 2011 &middot; social media and its alternatives</p>',
+      '<p class="kv">MoneyLab ............. 2014 &middot; revenue models, crowdfunding, crypto</p>',
+      '<p>Each runs as conferences and workshops first and becomes a reader',
+      'afterwards, so the argument and the room that had it are published',
+      'together.</p>',
+      '<h2>Publications</h2>',
+      '<p>Two series, <i>Theory on Demand</i> and the <i>INC Readers</i>, all of',
+      'them free to download and licensed CC BY-NC-SA. Includes the Video Vortex',
+      'Reader (2008) and Reader II (2011), Unlike Us Reader (2013), Society of the',
+      'Query Reader (2014) and MoneyLab Reader (2015).</p>',
+      '<h2>Organised networks</h2>',
+      '<p>The institute&rsquo;s longest-running proposal, put by Lovink and Ned',
+      'Rossiter in <i>Dawn of the Organised Networks</i> (Fibreculture Journal 5,',
+      '2005) and worked out at book length in <i>Organization After Social Media</i>',
+      '(Autonomedia, 2018). An organised network is an alternative to the social',
+      'media logic of weak links: a network that lasts, decides, and owns the',
+      'infrastructure it runs on.</p>',
+      '<p><a href="wiki:orgnets">Organised network</a> &mdash; encyclopedia entry.</p>',
+      '<h2>Also by Lovink</h2>',
+      '<p><i>Extinction Internet</i> (2022) &middot; <i>Platform Brutality: From',
+      'Radical Critique to Social Media Exodus</i> (2025).</p>',
+      '<hr>',
+      '<p><small>Object 96% complete, the highest figure in this cache. Nothing',
+      'here was behind a login and nothing here forbade copying, so the crawler',
+      'took all of it on the first pass and never had to come back.</small></p>',
+    ],
+  },
 ];
 
 // The long tail. A player will type these, and a named damaged record reads far
@@ -245,6 +295,7 @@ export const KNOWN_DOMAINS = [
   'angelfire.com', 'tripod.com', 'livejournal.com', 'friendster.com', 'bebo.com',
   'flickr.com', 'last.fm', 'digg.com', 'slashdot.org', 'netscape.com',
   'microsoft.com', 'apple.com', 'nokia.com', 'reddit.com', 'instagram.com',
+  'bit.ly', 'tinyurl.com', 'cs.bham.ac.uk',
 ];
 
 
@@ -261,6 +312,7 @@ export const KNOWN_DOMAINS = [
 // which is all the crawler ever kept.
 export const UNIVERSITIES = [
   { domain: 'sussex.ac.uk', name: 'University of Sussex', place: 'Brighton' },
+  { domain: 'bham.ac.uk', name: 'University of Birmingham', place: 'Birmingham' },
   { domain: 'ox.ac.uk', name: 'University of Oxford', place: 'Oxford' },
   { domain: 'cam.ac.uk', name: 'University of Cambridge', place: 'Cambridge' },
   { domain: 'gla.ac.uk', name: 'University of Glasgow', place: 'Glasgow' },
@@ -298,8 +350,12 @@ const DEPTS = [
 // Departments that survived as their own page rather than as a line in a list.
 // Keyed by domain: a university may have more than one.
 const DEPT_PAGES = {
-  'sussex.ac.uk': [{ key: 'media', name: 'Media and Film' }],
+  'sussex.ac.uk': [
+    { key: 'media', name: 'Media and Film' },
+    { key: 'cogs', name: 'Cognitive and Computing Sciences' },
+  ],
   'hu-berlin.de': [{ key: 'media', name: 'Institut f\u00fcr Medienwissenschaft' }],
+  'usc.edu': [{ key: 'retroai', name: 'Retro AI: Archaeologies of A.I.' }],
 };
 export const deptPagesFor = (domain) => DEPT_PAGES[domain] || [];
 
@@ -364,6 +420,113 @@ DEPARTMENTS['hu-berlin.de/media'] = {
     '<p><a href="wiki:ernst">Wolfgang Ernst</a> &middot; <a href="wiki:kittler">Friedrich Kittler</a></p>',
     '<hr>',
     '<p><small>Object 64% complete.</small></p>',
+  ],
+};
+
+// The school the Poplog paper was written from, and the paper itself. The paper
+// is not listed on the university index: it is reached from here, or from the
+// search, the way a document on a departmental site actually was.
+DEPARTMENTS['sussex.ac.uk/cogs'] = {
+  title: 'Cognitive and Computing Sciences — University of Sussex',
+  body: [
+    '<!--bg:grey-->',
+    '<h1>School of Cognitive and Computing Sciences</h1>',
+    '<p><small>University of Sussex &middot; Brighton BN1 9QN</small></p>',
+    '<hr>',
+    '<p>Teaching and research across Artificial Intelligence, Computer Science,',
+    'Linguistics, Philosophy and Psychology. The school began as the Cognitive',
+    'Studies Programme in the School of Social Sciences.</p>',
+    '<h2>Subjects</h2>',
+    '<p class="kv">&middot; Artificial Intelligence</p>',
+    '<p class="kv">&middot; Computer Science</p>',
+    '<p class="kv">&middot; Linguistics</p>',
+    '<p class="kv">&middot; Philosophy</p>',
+    '<p class="kv">&middot; Psychology</p>',
+    '<h2>Languages taught here</h2>',
+    '<p>Pop-11 for the first year, then Prolog, Lisp and ML, all of them in one',
+    'system. The argument for teaching in the language the staff do their own',
+    'research in is set out in the paper below.</p>',
+    '<h2>Documents</h2>',
+    `<p><a href="dept:sussex.ac.uk/cogs/poplog">${POPLOG_TITLE}</a><br>`,
+    '<small>Aaron Sloman. An account of how the language and its development',
+    'environment were built here, and why the alternatives were turned down.</small></p>',
+    '<h2>Elsewhere</h2>',
+    '<p><a href="bham.ac.uk">University of Birmingham</a> &middot;',
+    '<a href="wiki:transformer">Transformer (machine learning)</a></p>',
+    '<hr>',
+    '<p><small>Object 91% complete. The teaching timetable and the staff',
+    'photographs were generated per visitor and are not in store.</small></p>',
+  ],
+};
+
+DEPARTMENTS['sussex.ac.uk/cogs/poplog'] = { title: POPLOG_TITLE, body: POPLOG_BODY };
+
+// A two-day symposium on the histories of AI, cached with its schedule intact
+// and its registration link pointing at a shortener that is no longer anything.
+// The programme is the joke and the archive does not have to make it: a meeting
+// about the archaeology of artificial intelligence, dug up.
+DEPARTMENTS['usc.edu/retroai'] = {
+  title: 'Retro AI: Archaeologies of A.I. — University of Southern California',
+  body: [
+    '<!--bg:grey-->',
+    '<h1>Retro AI: Archaeologies of A.I.</h1>',
+    '<p><small>Mudd Hall (MHP) 102 &middot; University of Southern California</small></p>',
+    '<p><a href="bit.ly">Register Here</a></p>',
+    '<hr>',
+    '<p>The field of artificial intelligence has long been obsessively focussed',
+    'on the next big breakthrough which would solve its defining problems. While',
+    'interventions like critical AI studies are at least starting to ask the right',
+    'questions of this field, their fixation on the latest innovation often misses',
+    'the critical histories and genealogies of AI&rsquo;s past. You are invited to a',
+    'two-day symposium on Retro AI at the University of Southern California to',
+    'critically consider these questions and their implications for today.</p>',
+    '<p>Sponsored by the Institute on Ethics &amp; Trust in Computing, The',
+    'Humanities and Critical Code Studies Lab, and the Electronic Literature',
+    'Organization.</p>',
+    '<p><small>Note to presenters: each presentation gets 25 minutes, which can be',
+    'used all for talking or part talk, part QA. The last 10 minutes of each hour',
+    'is for a break.</small></p>',
+    '<p><small>Play breaks: Tom and Braxton are bringing an Intellivision for',
+    'playbreaks.</small></p>',
+    '<h2>Friday, July 31</h2>',
+    '<p class="kv">          Pre-symposium: coffee, tea, bagels</p>',
+    '<p class="kv">9am       AI &amp; the University</p>',
+    '<p class="kv">          A regularly meeting group of faculty, staff and</p>',
+    '<p class="kv">          graduate students discussing responses to AI,</p>',
+    '<p class="kv">          particularly in teaching. All are welcome.</p>',
+    '<p class="kv">11am      Symposium begins: welcome and introductions</p>',
+    '<p class="kv">12pm      Lunch (provided)</p>',
+    '<p class="kv">12:30     Online gallery opening (during lunch)</p>',
+    '<p class="kv">1:30pm    Retro-duction AI: (re)reading, (re)constructing</p>',
+    '<p class="kv">          and (re)running AI &mdash; David Berry, workshop</p>',
+    '<p class="kv">2:30pm    QA</p>',
+    '<p class="kv">2:45pm    Coffee break</p>',
+    '<p class="kv">3pm       Reanimation(s) of The World&rsquo;s First True AI(s):</p>',
+    '<p class="kv">          Newell, Simon, and Shaw&rsquo;s Logic Theorist</p>',
+    '<p class="kv">          &mdash; Jeff Shrager</p>',
+    '<p class="kv">3:30pm    QA</p>',
+    '<p class="kv">4pm       Looking Back on MrMind &mdash; Peggy Weil</p>',
+    '<p class="kv">4:30pm    QA</p>',
+    '<h2>Saturday, August 1</h2>',
+    '<p class="kv">9am       Welcome, day 2: gathering, coffee, tea, bagels</p>',
+    '<p class="kv">10am      TEAM ELIZA</p>',
+    '<p class="kv">11am      Giant Electric Mouths: Alternative Archaeologies</p>',
+    '<p class="kv">          of AI &mdash; Rebecca Roach (virtual)</p>',
+    '<p class="kv">          Artificial Intellivision: Gaming Histories of AI</p>',
+    '<p class="kv">          &mdash; Tom Boellstorff &amp; Braxton Soderman</p>',
+    '<p class="kv">12pm      Lunch (provided)</p>',
+    '<p class="kv">1:15pm    Daniel Pillis &amp; playbreak</p>',
+    '<p class="kv">2:15pm    Yitong Wang (virtual) &amp; launch of virtual gallery</p>',
+    '<p class="kv">3pm       Chelly Jin &amp; playbreak</p>',
+    '<p class="kv">4pm       Halim Madi, wrap-up</p>',
+    '<h2>Related</h2>',
+    '<p><a href="wiki:transformer">Transformer (machine learning)</a> &middot;',
+    '<a href="dept:sussex.ac.uk/cogs">Cognitive and Computing Sciences, Sussex</a></p>',
+    '<hr>',
+    '<p><small>Object 88% complete. The online gallery and the virtual gallery',
+    'were both hosted elsewhere and neither host is in store. The registration',
+    'link is a shortener: the record for it exists and no longer says what it',
+    'stood for.</small></p>',
   ],
 };
 
@@ -482,6 +645,60 @@ export const categoryOf = (domain) => (
 // The edit histories are the tell. They are dense, then argumentative, then they
 // stop.
 export const WIKI_ARTICLES = {
+  orgnets: {
+    title: 'Organised network',
+    body: [
+      '<h1>Organised network</h1>',
+      '<p><small>From Wikipedia, the free encyclopedia</small></p>',
+      '<hr>',
+      '<p>An <b>organised network</b>, or <b>orgnet</b>, is a proposed form of',
+      'social organisation that is native to digital media rather than adapted to',
+      'them: durable enough to make decisions and hold resources, but without the',
+      'representative machinery of a party, a union or an NGO. The term was put',
+      'forward in 2005 by the media theorists Geert Lovink and Ned Rossiter, who',
+      'described the concept at the outset as a proposal rather than a description',
+      'of anything that existed.</p>',
+      '<h2>The two things it is between</h2>',
+      '<p>A network is easy to start and hard to sustain; an institution is durable',
+      'and slow. The organised network is described by its authors as',
+      '"part tactical media, part institutional formation", with the crucial',
+      'condition that its institutional logic is internal to the media it runs on',
+      'rather than imported from outside them. It is not a network that later',
+      'acquires an office.</p>',
+      '<h2>Weak links, and notworking</h2>',
+      '<p>The proposal declines to romanticise participation. Most members of any',
+      'network are inactive most of the time, and the authors treat this as the',
+      'normal condition rather than a failure, describing long stretches of',
+      '<i>interpassivity</i> broken by short bursts of interactivity. Nor is',
+      'agreement the goal: the claim is that "networks thrive on diversity and',
+      'conflict", which the authors call the <i>notworking</i>, and not on unity.</p>',
+      '<h2>The problems it does not solve</h2>',
+      '<p class="kv">scale ..... a network breaks into micro-conversations past a</p>',
+      '<p class="kv">            few hundred participants, and the authors record no</p>',
+      '<p class="kv">            solution</p>',
+      '<p class="kv">money ..... domains, servers and paid labour are costs, and</p>',
+      '<p class="kv">            the belief that information wants to be free does not</p>',
+      '<p class="kv">            meet them</p>',
+      '<h2>Against tactical media</h2>',
+      '<p>The same argument turns on the tradition the authors came from. Tactical',
+      'media, the short intervention that appears, disrupts and withdraws, is said',
+      'to share its rhythm with the economy it opposes: novelty from the',
+      'periphery, at short notice, with nothing kept. The remedy proposed is',
+      'duration, which is the whole of what "organised" is doing in the name.</p>',
+      '<h2>Later development</h2>',
+      '<p>Lovink and Rossiter returned to the concept in <i>Organization After',
+      'Social Media</i> (Autonomedia, 2018), written against platforms whose',
+      'business is the weak link and whose politics ends at the button: "the world',
+      'cries for action, not likes".</p>',
+      '<h2>References</h2>',
+      '<p>Lovink, G. and Rossiter, N. (2005) &lsquo;Dawn of the Organised',
+      'Networks&rsquo;, <i>Fibreculture Journal</i> 5.</p>',
+      '<p>Lovink, G. and Rossiter, N. (2018) <i>Organization After Social Media</i>.',
+      'Autonomedia.</p>',
+      '<h2>See also</h2>',
+      '<p><a href="networkcultures.org">Institute of Network Cultures</a></p>',
+    ],
+  },
   transformer: {
     title: 'Transformer (machine learning)',
     body: [

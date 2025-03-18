@@ -7,10 +7,33 @@ version table and `VERSION-PLAN.md`; this file is only what's *ahead*.
 Order within a phase is rough priority. Nothing here is committed to — it's a
 map, not a schedule.
 
-*Last full reconciliation against the code: **v1.167**. Every item below was
-checked against `src/` rather than assumed — nothing on this list had quietly
-shipped, but two entries were wrong about the state of the code and are corrected
-in place, and the pass turned up one live defect (the daemon aria, Phase 1).*
+*Last full reconciliation against the code: **v1.167**. Targeted pass at
+**v1.273** (2026-07-27): the v1.168–v1.273 arc moved to "recently cleared",
+two stale entries corrected (the dead-internet browser and the Calypso
+cabinet, both of which had shipped), and the POSEIDON item updated to what
+actually got built. Items not named in that pass were NOT re-verified.*
+
+---
+
+## Standing: the BML vs SML modal is a claim, keep it true
+
+`index.html` in the BML repository has a **BML vs SML** modal listing what
+Standard ML has and this does not. It is hand-written, and it is the page's
+answer to the one question a visitor actually asks.
+
+**Whenever a gap on that list is closed, take it off the list in the same
+change.** The list, as of BML 0.21.0 (literals and exception replication came off at 0.20.0, Date and Time at 0.21.0):
+
+| | |
+|---|---|
+| the Basis | eighteen structures; no `StringCvt`, `IntInf`, monomorphic arrays; no `OS`, and there will not be one. `Date` is UTC only |
+| operators | an operator cannot be DEFINED infix, `fun (f ** g) (x, y) = …`; `op` cannot stand in a pattern |
+| blocks | `let … end` works as an operator's left operand, not its right; `open` cannot appear inside a `let` |
+| the stack | non-tail recursion is bounded by the host stack |
+
+The page also once carried a corpus figure that sat three versions out of date,
+which is why the counts came off it. If a number goes back on, it needs a test
+that reads the page and checks it against what the harnesses report.
 
 ---
 
@@ -22,7 +45,8 @@ long time and are now in the game:
 - **The phone / comms** — built as the **Nokia 3310** (v1.112–v1.122). Calypso's
   channel on Ogygia, per-island daemon threads elsewhere, roaming welcomes,
   Snake, and an SMS log that survives reload. The "dead-internet browser of
-  cached pages" idea was *not* built and is parked below.
+  cached pages" was later built on the *laptop* instead (Netscape + the caching
+  proxy, v1.208+), not on the phone.
 - **The other three AIs as islands** — built as the archipelago (v1.95–v1.131):
   OGYGIA, AEGILIA (Polyphemus), AEAEA (Circe), THRINACIA (Helios), ITHACA. Note
   the roster changed: the old APOLLO / ATHENA / HADES names in earlier drafts of
@@ -40,6 +64,19 @@ long time and are now in the game:
   the channel as a widening whirlpool, walking rock chicanes in the back half, and
   a bronze ram found on Aeaea that shoulders three rocks aside. Rules in
   `src/game/narrows.js`, unit-tested without a canvas.
+- **The NostBook and its language** (v1.180–v1.273) — the whole laptop arc: a
+  carried UNIX V7 (60+ commands, pipes, `>` redirect, `more`, man pages under
+  test), Netscape over the machines' surviving web and a cached pre-collapse
+  internet, the wifi picker and RON's link-local relay, and **AI-ML**, a small
+  Standard ML with Hindley-Milner inference, modules, exceptions and
+  exhaustiveness warnings. The machines run it: a T-1 carries a `program.ml` you
+  can read, edit and post. Its own future is a separate document,
+  [aiml-standalone-plan.md](aiml-standalone-plan.md) — turning it into a real
+  Standard ML and shipping it as **BML** at
+  [critical-code-studies/BML](https://github.com/critical-code-studies/BML).
+- **Telling one machine from another** (v1.262–v1.265) — stable per-unit names,
+  the obelisk's printed map labelled, `arp`, a REPORT link, a craftable Bot
+  sniffer and RON's downloadable `sniffer` scope, all reading one identity.
 - **Per-island save fidelity** (v1.147) — the run snapshot now stores each
   island's own world state instead of reading Calypso's arrays whatever island
   you were on. Found while preparing the v1.147 release.
@@ -82,13 +119,10 @@ long time and are now in the game:
   Polyphemus's Breakout played blind inside his gaze, Circe's memory game against
   an opponent editing your memory, Helios's cattle. Sketches, the test each one
   has to pass, the shared chassis and the open questions are in
-  [ai-cabinets-plan.md](ai-cabinets-plan.md). *Calypso's built v1.171 — the
-  un-winnable pong, playable via the lyre `▶ CALYPSO` chip; NOT yet wired into
-  her sanctum / the escape chain, which is the next step. Refactor the cabinet
-  shell out of `narrows.js`+`calypso-pong.js` before the third.*
-- **The dead-internet browser**: cached pages from before the collapse, as a
-  reading surface alongside the notepad and Scrapbook. The phone shipped without
-  it.
+  [ai-cabinets-plan.md](ai-cabinets-plan.md). *Calypso's pong built v1.171 and
+  wired into her sanctum since. The other three (Polyphemus, Circe, Helios) are
+  the open work; refactor a shared cabinet shell out of
+  `narrows.js`+`calypso-pong.js` before the second.*
 - **Deeper underworld**: the Backspace is one generated level. Add stacked
   levels — a tear/door within it dropping to a deeper, stranger floor (different
   palette, worse lurkers), Backrooms "levels" style. The separate-map plumbing
@@ -109,8 +143,11 @@ long time and are now in the game:
   sight, and it converts the island to "standing reserve" tile by tile), and a
   **jammer built from circuit boards** cuts a tower from the net without felling
   it. Full design, slices (J1–J4) and open questions in
-  [poseidon-consequences-plan.md](poseidon-consequences-plan.md). Build J1
-  (jammer + planting) and J2 (shared sight) first.
+  [poseidon-consequences-plan.md](poseidon-consequences-plan.md). *J1 shipped
+  as the bluebox robot-hack (fell/convert a hunter to a gardener that reseeds
+  blight) and J2 as shared sight (jam or fell a tower to cut it from the net).
+  Still open: POSEIDON activation with a real consequence, and the everyday use
+  for circuit boards.*
 
 - **The portal gun** (a separate item from the Ubik tear): the clean sci-fi
   paired-portal teleporter, a deliberate homage. *Corrected at v1.167: paired

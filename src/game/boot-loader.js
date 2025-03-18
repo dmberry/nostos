@@ -38,7 +38,8 @@ const SPIN = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '�
 const PHASES = [
   { key: 'modules', head: 'Mounting core modules', verb: 'fetch',
     parts: ['engine/renderer.js', 'engine/input.js', 'engine/sound.js', 'game/worldgen.js',
-            'game/robots.js', 'game/player.js', 'game/ai_ml.js', 'game/fortress.js'] },
+            'game/robots.js', 'game/player.js', 'lang/parse.js', 'game/ai_ml.js',
+            'game/fortress.js'] },
   { key: 'engine', head: 'Starting engine', verb: 'init',
     parts: ['canvas 2d context', 'input: keyboard + touch', 'audio graph', 'systems registry'] },
   { key: 'world', head: 'Building island: OGYGIA', verb: 'gen',

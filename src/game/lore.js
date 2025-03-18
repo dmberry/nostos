@@ -766,6 +766,13 @@ export const FRAGMENTS = [
       'whole thing about him before they were told not to. and bitstream.net if you want ' +
       'to know how they talked about it at the time. they were not lying. they just could ' +
       'not see it.' },
+  { id: 'tor-08', kind: 'note', era: 0, title: 'Note — organised, not networked',
+    text: 'Dutch outfit, networkcultures.org, been at this twenty years. Their argument is ' +
+      'that a network of friends cannot decide anything and cannot pay for anything, so it ' +
+      'lasts exactly as long as everyone is enjoying it. If you want one that outlives the ' +
+      'enthusiasm you have to own the wire it runs on, keep the disagreement going, and ' +
+      'plan for most people doing nothing most of the time. Everything they publish is free ' +
+      'to copy, so I have been copying it.' },
   { id: 'tor-07', kind: 'note', era: 2, title: 'Note — the one page worth the walk',
     text: 'If you read one thing off the old net, make it exchange-daily.com, issue 4,744, ' +
       'the 26th of July. The money pages got there first. The machines wrecked the supply ' +
@@ -859,6 +866,16 @@ export const FRAGMENTS = [
       'were not heroes and we were not mad. We were people who counted the cost, ' +
       'found it monstrous, and paid it anyway so that someone could stand in a field ' +
       'one day, unwatched, and read these words in the plain light. — RON' },
+  { id: 'ron-18', kind: 'ron', era: 1, title: 'RON — the three rules',
+    text: 'Three rules, and they are not up for a vote. Own the wire: a network you do not ' +
+      'own is a room somebody else can lock. Expect the silence: most of us do nothing most ' +
+      'of the time, and a cell that only works while everyone is keen is not a cell, it is ' +
+      'an evening. Argue: we have never once agreed on anything and we are still here. — RON' },
+  { id: 'ron-19', kind: 'ron', era: 1, title: 'RON — why the relays are slow',
+    text: 'People ask why the mail takes three days when the towers answer in a heartbeat. ' +
+      'Because a fast network is somebody else\'s. Ours is a box on a hill, a cell, an ' +
+      'aerial, and a queue that leaves when a person carries it uphill. Every part of that ' +
+      'we can make again from what is lying about. Speed we would have to be given. — RON' },
   { id: 'ron-17', kind: 'ron', era: 1, title: 'RON — the four daemons',
     text: 'They did not build one god. They built four, and let each take an old ' +
       'name, which tells you all you need. The old word for such a power was daemon: ' +

@@ -6,3 +6,7 @@
 # ships only its baked outputs, so nothing here is needed at runtime.
 _tmp/
 tools/.isml-cache/
+# `bml --examples` writes here. It is the tool's OUTPUT, and it was committed
+# into the BML repo by accident in a test run, which then made `bml --examples`
+# refuse in a fresh clone because the directory it wanted to create was there.
+bml-examples/

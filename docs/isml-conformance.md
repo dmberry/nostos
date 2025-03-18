@@ -90,6 +90,17 @@ Recorded so far:
 | v1.244 | 145 / 282 (51%) | first run |
 | v1.245 | 170 / 294 (58%) | clausal definitions, `@`, type variables |
 | v1.246 | 178 / 356 (61% on the original basis) | records, blocks, `fn` matches, as-patterns, library |
+| v1.257 | 303 / 509 (60%) | translator stripped to nothing; raw Standard ML |
+| v1.274 | **268 / 395 (68%)** | **the instrument fixed**, not the language |
+
+**v1.274 is not comparable to the rows above it, and that is the point.** The
+splitter had been cutting every `local … in … end` and every `structure S =
+struct … end` into fragments, because `in` and `end` were in its list of
+declaration-starting keywords; it also ended a declaration at any blank line and
+used a non-greedy regex on SML's *nested* comments. And `translate()` was still
+skipping `local`, `functor`, `ref`/`:=` and the whole standard library, all of
+which v1.257 had added. Fixing both took 572 fragments down to 408 real
+declarations and the skip count from 63 to 13. The language did not change.
 
 Eight of the 32 files are entirely module-system material and score zero by
 design. `lists.sml` and `regexp.sml` both port **100% by hand**; the mechanical

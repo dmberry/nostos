@@ -21,7 +21,7 @@ import { Lore, FRAGMENTS } from './game/lore.js';
 import { ITEMS, TAPES } from './game/items.js';
 import { sfx } from './engine/sound.js';
 import { worldToScreen } from './engine/iso.js';
-import { runRonml, decide, joinProgramLines, diagnose, joinProgram, typeReport, aimlVersion, aimlFull, AIML_VERSION, loadPrelude } from './game/ai_ml.js';
+import { runRonml, decide, smlEcho, joinProgramLines, diagnose, joinProgram, typeReport, aimlVersion, aimlFull, AIML_VERSION, loadPrelude, flattenSession } from './game/ai_ml.js';
 import { createEliza } from './game/eliza.js';
 import { placeTors, HERMES_DOCS, hermesTopics, virusFor, virusFilesFor, virusDocsFor } from './game/hermes.js';
 import { VERSION } from './version.js';
@@ -4067,6 +4067,14 @@ function laptopCtx() {
     // where you are learning the language, which is where a type is worth
     // seeing.
     types: true,
+    // ADVISORY OR STRICT, on this machine only. The game is advisory
+    // everywhere by design: a machine in a ruin should say what it worked out
+    // and let the operator decide, and a T-1 has neither a checker nor anyone
+    // to read one. The NostBook is the exception you can ask for, because it is
+    // the machine you own and the one you practise on, and Standard ML refuses
+    // a program that does not typecheck. `ml -strict` turns it on and it sticks
+    // to the session, so it survives closing the lid.
+    typecheck: laptopSession.__strict ? 'strict' : 'off',
   };
 }
 
@@ -4076,6 +4084,18 @@ function laptopMlHook(args, env) {
   const flag = String((args[0] && (args[0].name || args[0].v || args[0])) || '').toLowerCase();
   if (flag === '-ver' || flag === '--version' || flag === '-v') return { ok: true, text: aimlVersion() };
   if (flag === '-full' || flag === '--full') return { ok: true, text: aimlFull() };
+  // Standard ML does not run a program that does not typecheck. This machine
+  // will, unless you ask it not to.
+  if (flag === '-strict') {
+    laptopSession.__strict = true;
+    return { ok: true, text: ['strict: a line that does not typecheck will not run.',
+      'This is what Standard ML does. ml -advisory to go back.'].join('\n') };
+  }
+  if (flag === '-advisory') {
+    laptopSession.__strict = false;
+    return { ok: true, text: ['advisory: a clash is named and the line runs anyway.',
+      'This is how the machines out there work, and the default here.'].join('\n') };
+  }
   if (args.length) {
     let text;
     try { text = runUnixRead(env, args[0]); }
@@ -4104,7 +4124,7 @@ function laptopMlHook(args, env) {
   laptopMl = true;
   return {
     ok: true, mode: 'ml',
-    text: ['', `AI-ML ${AIML_VERSION}`, 'Type help for the forms, quit to go back to the shell.', ''].join('\n'),
+    text: ['', `AI-ML ${AIML_VERSION}${laptopSession.__strict ? '  (strict)' : ''}`, 'Type help for more info, quit to go back to the shell.', ''].join('\n'),
   };
 }
 
@@ -5708,7 +5728,11 @@ function laptopRun(line) {
     const r = runRonml(t, ctx);
     sfx.play(r.ok ? 'keyclick' : 'keyclick_soft');
     if (ty && ty.startsWith('TYPE:')) replPrint(ty);
-    if (r.text) replPrint(ty && !ty.startsWith('TYPE:') ? `${r.text} : ${ty}` : r.text);
+    // Standard ML's top level answers `val it = 7 : int` — the name it bound,
+    // the value, and the type. A declaration names itself and already reads
+    // that way (`val f = <fn>`), so only a bare expression needs `it` put in
+    // front of it. A WARNING rides after the type, as it does at the prompt.
+    for (const line of smlEcho(r.text, ty)) replPrint(line);
     return;
   }
   if (/^(exit|logout|halt)$/i.test(t)) { closeObTerminal(); return; }
@@ -5805,7 +5829,11 @@ function saveLaptopState() {
     history: replHistory.slice(),
     typed: obTermInput.value || '',
     ml: laptopMl,
-    session: laptopSession,
+    // FLATTENED. A top-level rebinding pushes a new frame on a prototype
+    // chain (see interp.js), and JSON keeps own properties only, so saving the
+    // raw object would silently drop every binding made after a name was
+    // reused. Closures do not survive the save either way.
+    session: flattenSession(laptopSession),
     ed: edState,
     web: web ? { view: web.view, history: web.history.slice(), fwd: web.fwd.slice() } : null,
     // An open editor is part of where you were, and losing an unsaved buffer
