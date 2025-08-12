@@ -95,7 +95,7 @@ ML, and two are on purpose: non-tail recursion is bounded by the host stack
 
 **Still queued (large systems):** the rest of the sea's own monsters (Laestrygonians, Aeolus, the Cicones), a dead-internet browser of cached pages, and stacked Backspace levels. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
-Created by David M. Berry. Beta testing by Henrik.
+Created by David M. Berry, 2026. Beta testing by Henrik.
 
 ## Version history
 

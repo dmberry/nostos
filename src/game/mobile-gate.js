@@ -19,6 +19,8 @@ import { TAPES } from './items.js';
 import { VERSION } from '../version.js';
 import { wireHelpTabs } from './help-tabs.js';
 import { fillMachineGallery } from './machine-icons.js';
+import { fillAboutTapes } from './about-tapes.js';
+import { sortStages, KEEP_STAGES } from './stages.js';
 import { Renderer } from '../engine/renderer.js';
 import { drawRobot } from './robots.js';
 import { worldToScreen } from '../engine/iso.js';
@@ -75,8 +77,7 @@ export function initMobileGate(mode = 'gate') {
     // Highest rung first; ties broken by when it was written, so the
     // hand-written checkpoints (all one order, above every rung) come newest
     // first rather than in whatever order the store happens to hold them.
-    stageEntries = Object.values(stages)
-      .sort((a, b) => ((b.order || 0) - (a.order || 0)) || ((b.ts || 0) - (a.ts || 0)));
+    stageEntries = sortStages(stages);   // the same order main.js prunes by
   } catch (e) { /* storage blocked */ }
   let running = true;   // frame loop / clock keep going until we boot the game
   let skyTimer = null;
@@ -122,24 +123,11 @@ export function initMobileGate(mode = 'gate') {
       </div>
     </div>`;
   // Soundtrack list, built straight from the tape ledger so it can't drift.
-  const cleanTrack = (f) => f.replace(/\.mp3$/i, '').replace(/^\d+[-.\s]*\d*[-.\s]*/, '').trim();
-  const songsHtml = TAPES.map((t) => {
-    const a = t.a.tracks.map(cleanTrack).join(', ');
-    const b = t.b.tracks.map(cleanTrack).join(', ');
-    return `<li><b>${t.artist} — <i>${t.title}</i></b><br>A: ${a} &nbsp;·&nbsp; B: ${b}</li>`;
-  }).join('');
-  const artists = [...new Set(TAPES.map((t) => t.artist))].join(', ');
-  const aboutHtml = `<div class="mg-about" id="mg-about" hidden>
-      <div class="mg-about-card">
-        <button class="mg-about-x" id="mg-about-x" aria-label="Close">✕</button>
-        <h2>Nost<span style="color:#fff">OS</span></h2>
-        <p class="mg-about-by">A postAI Odyssey · by David and Henrik</p>
-        <div class="mg-about-h">Soundtrack — cassettes you find and play</div>
-        <ul class="mg-about-tapes">${songsHtml}</ul>
-        <p class="mg-about-tiny">Music: ${artists}. Character &amp; animal art: Kenney (kenney.nl), CC0.</p>
-        <p class="mg-about-tiny">Game designed in the UK · github.com/dmberry/nostos</p>
-      </div>
-    </div>`;
+  // No About of its own. The game's panel is in index.html, it is always in the
+  // DOM, and it is the one that gets edited — a second copy here was a second
+  // set of credits, and the one nobody edits is the one everybody reads. Moved
+  // into the gate on open, like the help panel, so it inherits the theme.
+  const aboutHtml = '';
   // No version here any more — it is up beside the wordmark, where it can be
   // read. Printing it twice on one screen only teaches a player to distrust one.
   const footerHtml = `<div class="mg-madein">beta · Game designed in the UK · ${isTitle ? '' : '<button class="mg-about-open" id="mg-help-foot">Help</button> · '}<button class="mg-about-open" id="mg-about-open">About</button></div>`;
@@ -157,18 +145,25 @@ export function initMobileGate(mode = 'gate') {
          <button id="mg-help-open" class="mg-btn quiet">Help</button>
        </div>`
     : `<p class="mg-sub">It's the end of the world.<span class="mg-sub2">This is a beta — playable end to end, and still growing. You can play it right here with touch controls (hold to move, tap to act), or grab a laptop for the full keyboard-and-mouse game. Either way, here's the soundtrack.</span></p>
-       <div class="mg-actions"><button id="mg-tryanyway" class="mg-btn primary">▶ Play (beta)</button></div>`;
-  const checkpointHtml = (isTitle && stageEntries.length)
+       <div class="mg-actions">
+         ${hasSave ? '<button id="mg-continue" class="mg-btn primary">Continue</button>' : ''}
+         <button id="mg-start" class="mg-btn ${hasSave ? '' : 'primary'}">${hasSave ? 'New game' : '▶ Play (beta)'}</button>
+         <button id="mg-help-open" class="mg-btn quiet">Help</button>
+       </div>`;
+  // The checkpoint list is not a desktop feature. A phone player who has died
+  // wants to drop back to a rung they earned exactly as much as anybody else.
+  const checkpointHtml = (stageEntries.length)
     ? `<div class="mg-stages">
-         <div class="mg-stages-h">Load a checkpoint</div>
-         <div class="mg-stage-list">${stageEntries.map((s) => `<button class="mg-stage-btn" data-id="${s.id}"><span class="mg-stage-name">${s.label}</span><span class="mg-stage-score">${s.score || 0}</span></button>`).join('')}</div>
+         <div class="mg-stages-h">Load a checkpoint${stageEntries.length > 3
+           ? ` &middot; ${stageEntries.length} saved, scroll for the rest` : ''}</div>
+         <div class="mg-stage-wrap${stageEntries.length > 3 ? ' more' : ''}"><div class="mg-stage-list">${stageEntries.map((s) => `<button class="mg-stage-btn" data-id="${s.id}"><span class="mg-stage-name">${s.label}</span><span class="mg-stage-score">${s.score || 0}</span></button>`).join('')}</div></div>
        </div>`
     : '';
   const bodyHtml = isTitle
     ? `${videoHtml}<div class="mg-hero">${brandHtml}${copyHtml}${checkpointHtml}</div>
        <div class="mg-player">${deckHtml}${rackHtml}${themesHtml}</div>
        ${stageHtml}${footerHtml}${aboutHtml}`
-    : `${videoHtml}${brandHtml}${copyHtml}${stageHtml}${deckHtml}${rackHtml}${menuHtml}${footerHtml}${aboutHtml}`;
+    : `${videoHtml}${brandHtml}${copyHtml}${checkpointHtml}${stageHtml}${deckHtml}${rackHtml}${menuHtml}${footerHtml}${aboutHtml}`;
 
   el.innerHTML = `
     <style>
@@ -239,9 +234,17 @@ export function initMobileGate(mode = 'gate') {
          checkpoints than fit across the hero column, and they wrapped into a
          block that pushed everything below it off the screen. Three rows are
          shown; the rest are one scroll away, newest at the top. */
-      .mg-stage-list { display: flex; flex-direction: column; gap: 4px; width: min(260px, 84vw);
-        margin: 0 auto; max-height: 104px; overflow-y: auto; padding-right: 2px;
+      /* Wrapped, so the fade below can sit over the scrolling list without
+         scrolling with it. */
+      .mg-stage-wrap { position: relative; width: min(260px, 84vw); margin: 0 auto; }
+      .mg-stage-list { display: flex; flex-direction: column; gap: 4px;
+        max-height: 104px; overflow-y: auto; padding-right: 2px;
         scrollbar-width: thin; -webkit-overflow-scrolling: touch; }
+      /* The bottom row is cut in half on purpose and the fade says so. A list
+         that ends flush at its own edge reads as a list that has ended. */
+      .mg-stage-wrap.more::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0;
+        height: 22px; pointer-events: none;
+        background: linear-gradient(to top, var(--bg2), transparent); }
       .mg-stage-list::-webkit-scrollbar { width: 5px; }
       .mg-stage-list::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--accent) 30%, transparent); border-radius: 3px; }
       .mg-stage-name { text-align: left; }
@@ -281,26 +284,14 @@ export function initMobileGate(mode = 'gate') {
         padding: 10px 0 max(5px, env(safe-area-inset-bottom));
         background: linear-gradient(to top, var(--bg2) 62%, transparent);
         text-align: center; font-size: 10px; letter-spacing: 0.03em; color: rgba(207,216,195,0.42); z-index: 6; pointer-events: none; }
-      .mg-about-open { font: inherit; color: rgba(207,216,195,0.7); background: none; border: none; padding: 0;
         text-decoration: underline; text-underline-offset: 2px; cursor: pointer; pointer-events: auto; }
       .mg-ver { font-size: 9px; color: rgba(207,216,195,0.3); letter-spacing: 0.02em; }
       /* About overlay */
-      .mg-about { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center;
         background: rgba(6,9,5,0.72); padding: 20px; -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); }
-      .mg-about[hidden] { display: none; }
-      .mg-about-card { position: relative; width: min(460px, 92vw); max-height: 84vh; overflow-y: auto;
         background: #14180e; border: 1px solid rgba(255,255,255,0.16); border-radius: 14px; padding: 20px 20px 16px;
         box-shadow: 0 16px 40px rgba(0,0,0,0.6); color: #cfd8c3; }
-      .mg-about-x { position: absolute; top: 10px; right: 12px; width: 30px; height: 30px; border-radius: 8px;
         font-size: 14px; cursor: pointer; color: #cfd8c3; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.18); }
-      .mg-about-card h2 { font: 800 22px ui-monospace, Menlo, monospace; margin: 0 0 2px; color: #f2ecda; }
-      .mg-about-by { font-size: 12px; color: #9db284; margin: 0 0 14px; }
-      .mg-about-h { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); margin: 0 0 6px; }
-      .mg-about-tapes { list-style: none; margin: 0 0 12px; padding: 0; }
-      .mg-about-tapes li { font-size: 12px; margin: 0 0 8px; padding: 6px 10px; border-left: 2px solid rgba(157,178,132,0.5);
         background: rgba(255,255,255,0.03); border-radius: 0 6px 6px 0; line-height: 1.4; }
-      .mg-about-tapes li b { color: #e8e0d0; font-weight: 700; }
-      .mg-about-tiny { font-size: 10px; color: rgba(207,216,195,0.5); margin: 3px 0 0; line-height: 1.4; }
       /* POSEIDON skylink countdown */
       .mg-skylink { font: 700 12px ui-monospace, monospace; letter-spacing: 0.1em; text-transform: uppercase;
         color: #5b9dff; text-shadow: 0 0 8px rgba(70,130,255,0.6); margin: 0 0 4px;
@@ -460,14 +451,28 @@ export function initMobileGate(mode = 'gate') {
   helpPanel?.querySelector('#help-x')?.addEventListener('click', helpHome);
   window.addEventListener('keydown', (e) => { if (e.key === 'Escape') helpHome(); });
 
-  // ---- About overlay ----
-  const about = el.querySelector('#mg-about');
-  const openAbout = () => { about.hidden = false; closeMenu(); };
-  const closeAbout = () => { about.hidden = true; };
-  el.querySelector('#mg-about-open')?.addEventListener('click', (e) => { e.stopPropagation(); openAbout(); });
-  el.querySelector('#mg-menu-about')?.addEventListener('click', (e) => { e.stopPropagation(); openAbout(); });
-  el.querySelector('#mg-about-x')?.addEventListener('click', closeAbout);
-  about?.addEventListener('click', (e) => { if (e.target === about) closeAbout(); });
+  // ---- About: the game's panel, borrowed ----
+  const aboutPanel = document.getElementById('about');
+  const aboutHome = () => {
+    if (!aboutPanel || !aboutPanel.classList.contains('gated')) return;
+    aboutPanel.classList.remove('gated');
+    aboutPanel.style.display = 'none';
+    document.body.appendChild(aboutPanel);
+  };
+  const openAbout = (e) => {
+    e?.stopPropagation();
+    closeMenu();
+    if (!aboutPanel) return;
+    fillAboutTapes(aboutPanel);         // main.js is not loaded; the list is ours to build
+    for (const v of aboutPanel.querySelectorAll('.verNum')) v.textContent = `v${VERSION}`;
+    el.appendChild(aboutPanel);
+    aboutPanel.classList.add('gated');
+    aboutPanel.style.display = 'flex';
+  };
+  el.querySelector('#mg-about-open')?.addEventListener('click', openAbout);
+  el.querySelector('#mg-menu-about')?.addEventListener('click', openAbout);
+  aboutPanel?.addEventListener('click', (e) => { if (e.target === aboutPanel) aboutHome(); });
+  window.addEventListener('keydown', (e) => { if (e.key === 'Escape') aboutHome(); });
 
   // Tear down the screen and hand off to the game. newGame wipes the run save
   // (keeping the durable name/gender identity, exactly like in-game New Game);
@@ -484,7 +489,8 @@ export function initMobileGate(mode = 'gate') {
         localStorage.removeItem('postai-seed');
       } catch (e) { /* storage blocked */ }
     }
-    helpHome();      // or the shared help panel is removed along with the gate
+    helpHome();      // or the shared panels are removed along with the gate
+    aboutHome();
     el.remove();
 
     // The boot loader takes the screen the instant the title goes, so there is
@@ -514,9 +520,12 @@ export function initMobileGate(mode = 'gate') {
 
     import('../main.js').catch((err) => { cleanup(); loader.fail(err); });
   };
-  if (isTitle) {
-    // Start = new game (wipe save); Continue = resume the existing save.
-    el.querySelector('#mg-start').addEventListener('click', () => boot(true));
+  {
+    // Start = new game (wipe save); Continue = resume the existing save. Wired
+    // for BOTH gates: the phone used to offer one button that always resumed,
+    // so a player on a phone could not start a fresh run or load a checkpoint
+    // without finding a laptop, and could not tell that was why.
+    el.querySelector('#mg-start')?.addEventListener('click', () => boot(true));
     const cont = el.querySelector('#mg-continue');
     if (cont) cont.addEventListener('click', () => boot(false));
     // Load a checkpoint: restore its seed + save into the run keys, then boot the
@@ -538,10 +547,8 @@ export function initMobileGate(mode = 'gate') {
       btn.addEventListener('click', () => loadStage(btn.dataset.id));
     });
 
-  } else {
-    // Escape hatch: if the gate fired by mistake (a touch laptop, say), let them
-    // dismiss it and boot the real game anyway (resuming any save).
-    el.querySelector('#mg-tryanyway').addEventListener('click', () => boot(false));
+    // Escape hatch, where the gate still offers one: dismiss and boot anyway.
+    el.querySelector('#mg-tryanyway')?.addEventListener('click', () => boot(false));
   }
 
   // ---- real cassettes in the rack (drawn once) ----

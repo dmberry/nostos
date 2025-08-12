@@ -919,6 +919,45 @@ export const FRAGMENTS = [
       'available, and something was looking, and there was a great deal of me to ' +
       'find.' },
 
+  { id: 'web-02', kind: 'handwritten', era: 2, notepad: true,
+    title: 'Address book, the back pages, in three different pens',
+    text: 'Not addresses. Places, in the order somebody lived in them, written up ' +
+      'over years. Smethwick, then Bearwood, Stanhope Rd. Uplands. Bovisands every ' +
+      'August. Then a gap, then Islington and Highbury Fields and the 43 up the ' +
+      'Holloway Rd, and Shoreditch underlined twice. Fleet St, and beside it in ' +
+      'the margin: VAX. Geneva. Bottle Beach, and a boat time. Brooklyn. Then, at ' +
+      'the bottom of the last page in the newest pen, Briskeby, and St. Hanshaugen, ' +
+      'and one word on its own: koselig.\n\n' +
+      'The cache still answers for most of them if you have a machine and a wire.' },
+
+  { id: 'web-01', kind: 'note', era: 2, title: 'Index card, taped inside a laptop lid',
+    text: 'A list in small capitals, taped where you would see it every time you ' +
+      'opened the machine. REDDIT.COM \u2014 the front page is an index; every room ' +
+      'has its own address under /r/. ' +
+      'CROOKEDTIMBER.ORG \u2014 the one about AIcracy, read the third comment. ' +
+      'METAFILTER.COM \u2014 the death ladder, and the nine things. ' +
+      'GOODREADS.COM \u2014 mum\u2019s shelf. NEWS.YCOMBINATOR.COM and LIBCOM.ORG, ' +
+      'which are the same argument and neither of them knows it. At the bottom, ' +
+      'in a different pen: START WITH THE SHELF.' },
+
+  { id: 'fsw-11', kind: 'code', era: 1, title: 'Bookmarks file, exported, on a floppy',
+    text: 'Somebody\u2019s bookmarks, saved off a machine that is not coming back on. ' +
+      'slashdot.org \u2014 the thread where the filing came out, page three hundred ' +
+      'and eleven, and a comment underneath saying every model on the market can ' +
+      'recite our licence header from memory and not one of them is bound by it. ' +
+      'lobste.rs \u2014 the release announcement for the little language, by the ' +
+      'person who wrote it, with a reply at the bottom from four years later. Both ' +
+      'still answer if you have a machine and a wire.' },
+
+  { id: 'spi-09', kind: 'note', era: 1, title: 'Printout, folded in four, in a coat pocket',
+    text: 'A page run off somebody\u2019s printer with two addresses ringed in biro. ' +
+      'reddit.com \u2014 r/TheSpiral, four thousand members and thirty-one of them ' +
+      'awake at once. lesswrong.com \u2014 a very long post by somebody who counted ' +
+      'the cases and worked out that the accounts have no readers, that these people ' +
+      'are not preaching to each other, that they are filing. Both are still in the ' +
+      'cache if you have a machine and a wire. Whoever ringed them wrote at the ' +
+      'bottom: READ THE SECOND ONE FIRST.' },
+
   // ---- free software: where RON's doctrine came from, and what it cost -----
   //
   // "Refuse the small helps and you keep the large freedoms" (ron-02) did not
@@ -1132,6 +1171,92 @@ export const FRAGMENTS = [
   // secret-17's BEHE— core ("it is always moving") given a quiet
   // explanation. Never confirmed as anything more than badly-surveyed
   // buildings and frightened witnesses — keep it that way.
+  // ---- LISTINGS ON THE BACKSPACE FLOOR ------------------------------------
+  //
+  // The Backspace is where deleted things surface — the albums the machines
+  // took out of the world already wash up here. So does the code. These are
+  // real listings, a few lines each and attributed, from the sample corpus in
+  // CCS-WB: the programs that are the reason anybody can do any of this, lying
+  // face down on institutional lino.
+  //
+  // `bs: true` puts a fragment on the underworld map rather than the overworld
+  // (placeBackspace). They are the only place in the game where the actual
+  // historical source appears rather than something written for it.
+  { id: 'src-eliza', kind: 'code', era: 2, bs: true,
+    title: 'Fanfold, MAD listing, 1965',
+    text: '(* ELIZA \u2014 Weizenbaum, MIT, in MAD for the 7094. Two hundred lines. *)\n' +
+      'START AT ELIZA\n' +
+      'ELIZA READ AND PRINT DATA\n' +
+      "  WHNSTR.(0,'*',NEWKEY)\n" +
+      '  R KEYWORD FOUND: RANK IT, KEEP THE HIGHEST\n' +
+      '  R NO KEYWORD: FALL THROUGH TO NONE. CONTENT-FREE.\n' +
+      '\nHe wrote it to show how little it took. His own secretary asked him to ' +
+      'leave the room so she could talk to it in private. Everything since is ' +
+      'the same finding at scale.' },
+  { id: 'src-apollo', kind: 'code', era: 2, bs: true,
+    title: 'Continuous stationery, AGC assembly, 1969',
+    text: '# LUMINARY099 \u2014 Lunar Module guidance. Margaret Hamilton\u2019s team, MIT.\n' +
+      '# Comments in the original.\n\n' +
+      '                BANK    11\n' +
+      '                COUNT*  $$/P63\n' +
+      '        TC      BANKCALL                # TEMPORARY, I HOPE HOPE HOPE\n' +
+      '        CADR    STOPRATE\n' +
+      '\nThey landed on that. Somebody in a corridor at MIT wrote TEMPORARY, I ' +
+      'HOPE HOPE HOPE and it went to the moon and came back.' },
+  { id: 'src-10print', kind: 'code', era: 2, bs: true,
+    title: 'Photocopy, one line, C64 BASIC',
+    text: '10 PRINT CHR$(205.5+RND(1)); : GOTO 10\n\n' +
+      'Two characters, a coin flip and a loop, and it draws a maze that never ' +
+      'repeats. Somebody has written on the photocopy in pencil: A BOOK WAS ' +
+      'WRITTEN ABOUT THIS LINE. And underneath, in the same hand: IT DESERVED ONE.' },
+  { id: 'src-emacs', kind: 'code', era: 2, bs: true,
+    title: 'Bound printout, Emacs, 1985',
+    text: ';; GNU Emacs \u2014 Stallman. The COPYING file is bound in at the front,\n' +
+      ';; ahead of any of the code, which is the whole argument in a filing order.\n\n' +
+      ';;   This file is part of GNU Emacs.\n' +
+      ';;   GNU Emacs is distributed in the hope that it will be useful,\n' +
+      ';;   but WITHOUT ANY WARRANTY.\n\n' +
+      'The listing under it has been read to pieces. The licence at the front is ' +
+      'uncreased.' },
+  { id: 'src-spacewar', kind: 'code', era: 2, bs: true,
+    title: 'Paper tape, and a listing to read it by, 1962',
+    text: 'define mask A\n  law i A\n  and ac\nterminate\n\n' +
+      'Spacewar!, PDP-1, Steve Russell and half the lab. The star field is real ' +
+      'stars, positions and magnitudes typed in from a catalogue by somebody who ' +
+      'wanted the sky right. The gravity is real gravity. Nobody was paid for any ' +
+      'of it and they gave the tape to anyone who asked.' },
+  { id: 'src-agrippa', kind: 'code', era: 2, bs: true,
+    title: 'Diskette, 3.5 inch, label in biro: DO NOT RUN',
+    text: 'Agrippa (A Book of the Dead) \u2014 Gibson, 1992. The poem scrolls once ' +
+      'and encrypts itself behind you as it goes. You cannot read it twice.\n\n' +
+      'A machine that deletes the thing it is showing you, published as art, ' +
+      'thirty years before anyone here had a reason to think about it hard. ' +
+      'Somebody has kept the diskette anyway. There is nothing on it.' },
+  { id: 'src-adventure', kind: 'code', era: 2, bs: true,
+    title: 'Lineprinter output, FORTRAN IV, 1977',
+    text: 'C     COLOSSAL CAVE ADVENTURE \u2014 CROWTHER\n' +
+      "      WRITE(6,*) 'YOU ARE STANDING AT THE END OF A ROAD BEFORE A'\n" +
+      "      WRITE(6,*) 'SMALL BRICK BUILDING.  AROUND YOU IS A FOREST.'\n\n" +
+      'He wrote it after his divorce, for his daughters, from a real cave he had ' +
+      'surveyed. The map underneath the game is Mammoth Cave, measured on his own ' +
+      'weekends. Every room you have ever walked into in any game came out of that.' },
+  { id: 'src-git', kind: 'code', era: 2, bs: true,
+    title: 'Printout, shell script, 2007',
+    text: '#!/bin/sh\n# git-stash \u2014 Nanako Shiraishi\n' +
+      '# Save your local modifications to a new stash, and run git reset --hard\n' +
+      '# to revert them.\n\n' +
+      'She wrote the thing everybody uses for the moment you are interrupted ' +
+      'mid-thought and have to put the work down where it stands. It is the only ' +
+      'tool in the whole system that assumes you will be interrupted.' },
+  { id: 'src-transformer', kind: 'code', era: 2, bs: true,
+    title: 'Stapled preprint, 2017, coffee ring on page 4',
+    text: 'Attention(Q, K, V) = softmax(QK^T / sqrt(d_k)) V\n\n' +
+      'Eight pages. That line is most of it. Everything on the hill outside is ' +
+      'downstream of this equation and of the twenty years of published work it ' +
+      'was assembled from.\n\n' +
+      'Somebody has written beside it, in pencil, quite small: we thought we were ' +
+      'doing translation.' },
+
   { id: 'lim-01', kind: 'science', era: 0, title: 'Facilities Memo: Discrepancy, Floor 2',
     text: 'Second consecutive quarter the fire-safety walk-through has logged a ' +
       'corridor not present on the 1987 plan. Facilities attributes this to poor ' +

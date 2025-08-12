@@ -17,6 +17,13 @@ const TRACKED = new Set([
   'ShiftLeft', 'ShiftRight',
   'KeyE', 'Slash', 'Space', 'KeyQ', 'KeyH', 'KeyR', 'KeyG', 'KeyF', 'KeyI', 'KeyP', 'KeyZ', 'KeyJ',
   'KeyK', 'KeyC', 'KeyM', 'KeyO', 'KeyV', 'KeyN', 'KeyB', 'KeyX', 'KeyT', 'KeyU', 'KeyL', 'BracketRight', 'Escape',
+  // DROP moved here off F. F sits under the index finger beside WASD, so it was
+  // being hit mid-melee and the thing in your hands went on the ground in the
+  // middle of a fight. Backspace is nowhere near the movement hand, it means
+  // get rid of this everywhere else, and Delete does the same for a keyboard
+  // that puts it somewhere better. Tracked, so preventDefault stops Backspace
+  // navigating the page back.
+  'Backspace', 'Delete',
   // ENTER was being asked for by the narrows (the coin slot, and the GAME OVER
   // card) but was never tracked, so consumePress('Enter') could not fire. Typing
   // into an HTML control is already guarded above, so this cannot eat a form.
@@ -330,8 +337,10 @@ export class Input {
     return this.consumePress('KeyY');
   }
 
+  // Backspace or Delete. NOT F, which is one key from D and was being pressed
+  // by accident in melee — the worst possible moment to put your weapon down.
   dropPressed() {
-    return this.consumePress('KeyF');
+    return this.consumePress('Backspace') || this.consumePress('Delete');
   }
 
   backpackWeaponSelectPressed() {

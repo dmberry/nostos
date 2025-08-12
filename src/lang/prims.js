@@ -47,7 +47,7 @@ const smlNum = (s) => String(s).replace(/^-/, '~');
 function raiseStd(name, why) {
   throw new RonmlRaise({ tag: 'con', name, args: [], why });
 }
-import { describeValue, formatValue, pushOut } from './eval.js';
+import { describeValue, formatValue, pushOut, takeIn } from './eval.js';
 
 const numericTag = (x) => !!x && (x.tag === 'int' || x.tag === 'real');
 /** The BigInt out of an arbitrary-precision value. */
@@ -87,6 +87,20 @@ export const PRIMITIVES = {
       pushOut(formatValue(x));
       return { tag: 'unit' };
     },
+  },
+  // The other half of echo. `readLine ()` takes the next line the host has
+  // queued; if there is none, the run suspends (RonmlNeedInput) rather than
+  // returning an empty string, so a console can go and ask for one.
+  //
+  // The trailing newline is NOT included, unlike TextIO.inputLine in Standard
+  // ML. A host here hands over lines, not a byte stream, and a program that had
+  // to strip \n from every read would be paying for a file abstraction that
+  // has nothing behind it. TextIO.inputLine in the Basis puts the newline back
+  // and wraps the result in an option, which is what a Standard ML program
+  // expects to see.
+  readLine: {
+    arity: 1,
+    fn: () => ({ tag: 'str', v: takeIn() }),
   },
   hd: {
     arity: 1,

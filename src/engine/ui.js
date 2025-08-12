@@ -23,6 +23,7 @@
 // imports nothing from renderer.js, so there is no import cycle.
 
 import { ITEMS, WEAPON_ORDER } from '../game/items.js'; // weapon-chart data
+import { ARMOUR_SLOTS, armourPoints, armourReduction, durFraction } from '../game/armour.js';
 import { PAPER_TEXTURE, NOKIA_SPRITE } from './textures.js'; // death-cert paper; the 3310 in the PHONE box
 import {
   NARROWS_W, VIEW_ROWS, MONSTERS, HULL_MAX, RAM_MAX, CHARYBDIS_ROWS,
@@ -30,6 +31,8 @@ import {
 } from '../game/narrows.js'; // the Scylla/Charybdis arcade run
 import { PADDLE_H, calypsoVoice } from '../game/calypso-pong.js'; // Calypso's un-winnable pong
 
+// What an empty armour slot says it is for, so the column teaches itself.
+const ARMOUR_SLOT_LABEL = { head: 'HEAD', chest: 'BODY', legs: 'LEGS', feet: 'FEET' };
 export const DASH_H = 78; // dashboard panel height
 
 // The rank for the certificate, banded purely by score.
@@ -1909,8 +1912,17 @@ export const uiMethods = {
     const ctx = this.ctx;
     const cols = 4, size = 42, gap = 14;
     const gridW = cols * size + (cols - 1) * gap;
-    const panelW = gridW + 40;
-    const panelH = 420;
+    // A column down the left for what you are WEARING, the way every game with
+    // armour has done it since Minecraft, because that is where a player looks.
+    // Wide enough for the heading line, not just for the slot. It was sized to
+    // the slot and the total ran into the rule beside it.
+    const armW = size + 56;
+    const panelW = Math.min(this.w - 24, gridW + 44 + armW);
+    // Tall enough for whichever column is longer and no taller. It was a flat
+    // 430 and left a dead band under the grid that read as something missing.
+    const wornH = 60 + 4 * (size + 22);
+    const gridH = 58 + size + 34 + 4 * (size + 14);
+    const panelH = Math.min(this.h - 24, Math.max(wornH, gridH) + 30);
     const px = Math.round((this.w - panelW) / 2);
     const py = Math.round((this.h - panelH) / 2);
     this._backpackRect = { x: px, y: py, w: panelW, h: panelH }; // click-away-to-close hit test (main.js)
@@ -1930,29 +1942,52 @@ export const uiMethods = {
     ctx.fillText('I to close', px + panelW - 20, py + 26);
     ctx.textAlign = 'left';
 
+    // WORN, drawn first and drawn whether or not you have a bag: armour is on
+    // you, not in it, and the panel that shows it must not be gated behind
+    // finding a backpack.
+    // Centred down the panel's body rather than hung from the top: four slots
+    // against a four-row grid of a different pitch, so aligning their tops left
+    // one column short and the other long.
+    const bodyTop = py + 44, bodyBot = py + panelH - 14;
+    const colH = ARMOUR_SLOTS.length * (size + 22) - 22;
+    const colY = Math.max(bodyTop, Math.round((bodyTop + bodyBot) / 2 - colH / 2));
+    this.drawArmourColumn(player, px + 20, colY, size);
+    const gx0 = px + 20 + armW;
+    // A rule between what you are wearing and what you are carrying. They are
+    // two different things and the panel should say so without a heading.
+    // Spanning the CONTENT, not the panel. Run to the frame it reads as part of
+    // the border and stops separating anything.
+    const ruleTop = py + 52, ruleBot = py + panelH - 34;
+    ctx.strokeStyle = 'rgba(207,216,195,0.3)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(Math.round(gx0 - 14) + 0.5, ruleTop);
+    ctx.lineTo(Math.round(gx0 - 14) + 0.5, ruleBot);
+    ctx.stroke();
+
     if (!player.backpack) {
       ctx.font = '12px system-ui, sans-serif';
       ctx.fillStyle = 'rgba(207,216,195,0.7)';
-      ctx.fillText("You aren't carrying one yet.", px + 20, py + 60);
+      ctx.fillText("No bag yet — what you are wearing is on the left.", gx0, py + 60);
       return;
     }
 
     // Spare weapon slot: select with 5, swap with G, same as a pocket.
     const weaponY = py + 42;
-    this.drawLabel('SPARE WEAPON — click or 5+G', px + 20, weaponY + 10);
-    this.drawSlot(px + 20, weaponY + 16, size,
+    this.drawLabel('SPARE WEAPON \u00b7 5 then G', gx0, weaponY + 10);
+    this.drawSlot(gx0, weaponY + 16, size,
       player.backpack.weapon ? ITEMS[player.backpack.weapon] : null, 0, player.selectedPocket === 'bw');
-    this.uiSlots.push({ x: px + 20, y: weaponY + 16, w: size, h: size, kind: 'bw' });
+    this.uiSlots.push({ x: gx0, y: weaponY + 16, w: size, h: size, kind: 'bw' });
     if (player.backpack.weapon) {
       ctx.font = '9px system-ui, sans-serif';
       ctx.fillStyle = 'rgba(207,216,195,0.7)';
-      ctx.fillText(ITEMS[player.backpack.weapon].name, px + 20 + size + 10, weaponY + 16 + size / 2 + 3);
+      ctx.fillText(ITEMS[player.backpack.weapon].name, gx0 + size + 10, weaponY + 16 + size / 2 + 3);
     }
 
     // 16-slot storage grid: fills automatically; food and ammo are drawn
     // from here on their own once the pockets run out.
-    const gridX = px + 20, gridY = weaponY + 16 + size + 34;
-    this.drawLabel('STORAGE — auto-fills; food & ammo used automatically', gridX, gridY - 8);
+    const gridX = gx0, gridY = weaponY + 16 + size + 34;
+    this.drawLabel('STORAGE \u00b7 food & ammo used from here', gridX, gridY - 8);
     for (let i = 0; i < 16; i++) {
       const col = i % cols, row = Math.floor(i / cols);
       const sx = gridX + col * (size + gap);
@@ -1964,10 +1999,58 @@ export const uiMethods = {
         ctx.font = '7px system-ui, sans-serif';
         ctx.fillStyle = 'rgba(207,216,195,0.6)';
         ctx.textAlign = 'center';
-        ctx.fillText(ITEMS[slot.item].name, sx + size / 2, sy + size + 9, size + 10);
+        ctx.fillText(ITEMS[slot.item].name, sx + size / 2, sy + size + 9, size + 4);
         ctx.textAlign = 'left';
       }
     }
+  },
+
+  // WHAT YOU ARE WEARING. Four slots down the left of the backpack panel, each
+  // with a wear bar under it, because armour here is a consumable and a player
+  // has to be able to see how much of it is left before the fight rather than
+  // during it.
+  drawArmourColumn(player, x, y, size) {
+    const ctx = this.ctx;
+    const worn = player.armourWorn ? player.armourWorn() : {};
+    const pts = armourPoints(worn, (k) => ITEMS[k]);
+    // The total belongs in the heading. At the foot of the column it sat level
+    // with the third row of the storage grid and ran into its labels.
+    this.drawLabel('WORN', x, y - 26);
+    ctx.font = 'bold 9px system-ui, sans-serif';
+    ctx.fillStyle = pts ? '#c9d3bd' : 'rgba(207,216,195,0.35)';
+    // maxWidth as well as room: a number can always surprise you, and a heading
+    // that squeezes is a heading that never crosses the rule.
+    ctx.fillText(pts ? `${pts} pts \u00b7 ${Math.round(armourReduction(worn, (k) => ITEMS[k]) * 100)}%`
+      : 'nothing worn', x, y - 12, size + 40);
+    ARMOUR_SLOTS.forEach((slot, i) => {
+      const sy = y + i * (size + 22);
+      const w = worn[slot];
+      const def = w ? ITEMS[w.item] : null;
+      this.drawSlot(x, sy, size, def, 0);
+      this.uiSlots.push({ x, y: sy, w: size, h: size, kind: 'armour', i: slot });
+      // An empty slot says what goes in it, so the column teaches itself.
+      if (!def) {
+        ctx.font = '8px system-ui, sans-serif';
+        ctx.fillStyle = 'rgba(207,216,195,0.3)';
+        ctx.textAlign = 'center';
+        ctx.fillText(ARMOUR_SLOT_LABEL[slot], x + size / 2, sy + size / 2 + 3);
+        ctx.textAlign = 'left';
+        return;
+      }
+      // The wear bar: green while there is plenty, amber past halfway, red at
+      // the end, so the colour is the warning and you do not have to read it.
+      const f = durFraction(w, (k) => ITEMS[k]);
+      const bw = size, bh = 4, by = sy + size + 3;
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(x, by, bw, bh);
+      ctx.fillStyle = f > 0.5 ? '#5f8f3e' : f > 0.2 ? '#c99a3e' : '#b0392f';
+      ctx.fillRect(x, by, Math.max(1, bw * f), bh);
+      ctx.font = '7px system-ui, sans-serif';
+      ctx.fillStyle = 'rgba(207,216,195,0.65)';
+      ctx.textAlign = 'center';
+      ctx.fillText(def.short || def.name, x + size / 2, by + bh + 8, size + 12);
+      ctx.textAlign = 'left';
+    });
   },
 
   // THE PANELS, as buttons, in the gap between the vitals bars and the hands

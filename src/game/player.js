@@ -10,6 +10,7 @@
 import { screenDirToWorld } from '../engine/iso.js';
 import { sfx } from '../engine/sound.js';
 import { ITEMS } from './items.js';
+import { ARMOUR_SLOTS, armourKey, takeHit, slotOf, shouldWear, freshPiece } from './armour.js';
 import { OBJECTS } from './tiles.js';
 import { DAEMON_VOICE, DAEMON_FINAL, daemonTier } from './fortress.js';
 import { fire, SCORE, KILL_XP, zombieImmune } from './combat.js';
@@ -932,6 +933,21 @@ export class Player {
     if (slot.kind === 'pocket') return this.pockets[slot.i] || null;
     if (slot.kind === 'bpstore') return this.backpack ? (this.backpack.slots[slot.i] || null) : null;
     if (slot.kind === 'walkman') return this.walkman || null;
+    // Worn armour. A piece carries its own wear, so the slot value keeps `dur`
+    // and it travels with the piece — drag a half-spent helm into the pack and
+    // it is still half spent when you take it out.
+    if (slot.kind === 'armour') {
+      const w = this.armour && this.armour[slot.i];
+      return w ? { item: w.item, qty: 1, dur: w.dur } : null;
+    }
+    // THE LAPTOP SLOT. It was display-and-click only, so a NostBook picked up
+    // off the ground went into a pocket and answered "can't hold nostbook in
+    // hand" — the one machine in the game with a slot of its own, and no way
+    // to put it there. The whole machine rides in the slot value, because the
+    // disk is on it and a drag that dropped the filesystem would be a theft.
+    if (slot.kind === 'laptop') {
+      return this.laptop ? { item: this.laptop.model || 'laptop', qty: 1, machine: this.laptop } : null;
+    }
     // 'packbadge' is a drop-onto-the-backpack target only, never a source: you
     // don't drag the bag itself, so it reads as empty.
     return null;
@@ -942,6 +958,30 @@ export class Player {
     if (slot.kind === 'bw') { if (!this.backpack) return false; this.backpack.weapon = val ? val.item : null; return true; }
     if (slot.kind === 'pocket') { this.pockets[slot.i] = val; return true; }
     if (slot.kind === 'bpstore') { if (!this.backpack) return false; this.backpack.slots[slot.i] = val; return true; }
+    if (slot.kind === 'laptop') {
+      if (!val) { this.laptop = null; return true; }
+      const def = ITEMS[val.item];
+      // Only a WORKING machine sits in the cradle. A burnt board is cargo until
+      // it is repaired (repairLaptop), and refusing here is what tells moveItem
+      // to leave it where it was rather than swallowing it.
+      if (!def || def.kind !== 'laptop' || val.item !== 'laptop') return false;
+      // No `fs` here: player.js does not import unix.js (repairLaptop takes
+      // makeDisk as an argument for exactly that reason), and openLaptop
+      // already grafts a disk onto a machine that arrives without one.
+      this.laptop = val.machine
+        || { model: val.item, os: 'unix', heat: 0, damage: null, netUp: true };
+      return true;
+    }
+    if (slot.kind === 'armour') {
+      // A slot takes only the piece made for it: a cuirass will not go on your
+      // head, and refusing is how moveItem knows to leave the source alone.
+      if (!this.armour) this.armour = { head: null, chest: null, legs: null, feet: null };
+      if (!val) { this.armour[slot.i] = null; return true; }
+      const def = ITEMS[val.item];
+      if (slotOf(def) !== slot.i) return false;
+      this.armour[slot.i] = { item: val.item, dur: val.dur != null ? val.dur : (def.maxDur || 1) };
+      return true;
+    }
     // Dropping onto the backpack badge (the bag icon on the dashboard) stows the
     // item into the first free storage slot — the natural "put it in the bag"
     // gesture, and how you get a pocket item into the pack without opening it.
@@ -1641,7 +1681,7 @@ export class Player {
       if (!this.readManuals.has(itemKey)) { this.addScore(SCORE.book); this.readManuals.add(itemKey); }
       this._shelve(itemKey, def);
       this._fileBookNote(def);
-      this.say(`You read ${def.name}. ${def.text} (Summary filed in your notepad, N.)`);
+      this.say(`You read ${def.name}. ${def.text} (On your shelf now \u2014 Shift+N for the Library.)`);
       return;
     }
     this._shelve(itemKey, def);
@@ -1654,18 +1694,18 @@ export class Player {
     if (!def.skill) {
       this.gainXp('knowledge', this.booksRead && this.booksRead.has(itemKey) ? 2 : 6);
       this.addScore(SCORE.book);
-      this.say(`You read ${def.name}. It is on your shelf now — press N, then LIBRARY.`);
+      this.say(`You read ${def.name}. It is on your shelf now \u2014 Shift+N for the Library.`);
       return;
     }
     if (this.skills.has(def.skill)) {
       this.gainXp('knowledge', 2); // re-reading still teaches a little
-      this.say(`You have already read ${def.name}. (It's summarised in your notepad, N.)`);
+      this.say(`You have already read ${def.name}. (It is on your shelf \u2014 Shift+N.)`);
     } else {
       this.skills.add(def.skill);
       this.skillLog.push({ skill: def.skill });
       this.gainXp('knowledge', 10);
       this.addScore(SCORE.book);
-      this.say(`You read "${def.name}". ${def.skillText} Summary filed in your notepad (N).`);
+      this.say(`You read "${def.name}". ${def.skillText} On your shelf now \u2014 Shift+N for the Library.`);
       if (this.onSkillLearned) this.onSkillLearned(def.skill);
     }
   }
@@ -2268,6 +2308,18 @@ export class Player {
     map.groundItems.push({ item: 'ai_key', qty: 1, x: cx, y: cy });
     map.groundItems.push({ item: 'scrap', qty: 6, x: cx + 0.6, y: cy });
     map.groundItems.push({ item: 'battery', qty: 4, x: cx - 0.6, y: cy });
+    // BLACK PLATE, the whole set, off the floor of the thing that made all the
+    // others. It is the only place it comes from and there is one factory an
+    // island, so a full black set is a record of four factories rather than a
+    // grind. Laid out in a small arc so the pieces do not stack into one pile.
+    ARMOUR_SLOTS.forEach((slot, i) => {
+      const a = (i / ARMOUR_SLOTS.length) * Math.PI * 2;
+      map.groundItems.push({
+        item: armourKey('x', slot), qty: 1,
+        x: cx + Math.cos(a) * 1.1, y: cy + Math.sin(a) * 0.8,
+        keep: true,   // it does not rot: this is the prize for taking a factory
+      });
+    });
     this.addScore(40);
     sfx.play('treefall');
     this.say('The W-factory buckles and collapses in a roar. An AI key glints in the wreckage.');
@@ -2581,6 +2633,34 @@ export class Player {
         this.say(`You take the ${def.name.toLowerCase()} in hand.`);
         continue;
       }
+      // A WORKING NOSTBOOK GOES STRAIGHT INTO ITS CRADLE. It has a slot of its
+      // own on the dashboard and there is nothing else it can do in a pocket.
+      if (gi.item === 'laptop' && !this.laptop) {
+        this.laptop = gi.machine
+          || { model: 'laptop', os: 'unix', heat: 0, damage: null, netUp: true };
+        gi.qty -= 1;
+        sfx.play('pickup');
+        this.say('A NostBook, and it lights. It goes in the cradle — press L.');
+        continue;
+      }
+      // PLATE GOES ON WHERE YOU STAND. Walking over a better helm and then
+      // having to open a panel to use it is the friction that makes a player
+      // ignore a whole system, so it is worn on pickup when it is an
+      // improvement and what came off goes into the bag rather than vanishing.
+      if (def.kind === 'armour') {
+        const { worn, displaced } = this.wearArmour(gi.item);
+        if (worn) {
+          gi.qty -= 1;
+          if (displaced && this.stow(displaced.item, 1) === 0) {
+            map.groundItems.push({ item: displaced.item, qty: 1, x: this.x, y: this.y });
+          }
+          sfx.play('pickup');
+          this.say(`${def.name} \u2014 on. ${displaced ? 'The old piece goes in the bag.' : ''}`.trim());
+          continue;
+        }
+        // Not an improvement: it goes in the bag like anything else, and the
+        // panel is there for a player who wants it on anyway.
+      }
       const stored = this.stow(gi.item, gi.qty);
       if (stored <= 0) {
         // Nothing fit: with no backpack to overflow into, the pockets are full.
@@ -2821,6 +2901,20 @@ export class Player {
     // lasers all fall short. (A bomb blast still catches you; flying machines,
     // to come, will too.) So they keep trying in vain while you're safe up high.
     if (source !== 'the blast' && this.onBlockTop()) return;
+    // THE PLATE TAKES ITS SHARE FIRST, and is worn by taking it. Every piece
+    // you have on loses a point per blow, so a set is something you are
+    // standing inside for as long as it lasts rather than a permanent upgrade.
+    // Combat only: armour does not help with hunger, venom or cold water.
+    if (source !== 'starvation' && source !== 'the venom'
+      && source !== 'the cold sea' && source !== 'the cold river') {
+      const { reduction, broke } = takeHit(this.armour, (k) => ITEMS[k]);
+      if (reduction > 0) amount *= (1 - reduction);
+      for (const key of broke) {
+        const d = ITEMS[key] || {};
+        this.say(`Your ${d.short || d.name || 'plate'} comes apart and falls away.`);
+        sfx.play('hurt');
+      }
+    }
     // Reverse-log depletion in the low zone: once the bar is flashing, soften
     // incoming combat damage toward a floor, so it drains slower and slower the
     // closer you are to death — a beat to notice and run instead of dropping dead
@@ -2886,6 +2980,29 @@ export class Player {
 
   // Add qty of an item to pockets, stacking first, then overflow into the
   // backpack (if carried). Returns how many fitted.
+  // Armour goes ON when you pick it up, and only into the pack when it is not
+  // an improvement — walking over a better helm and then having to open a panel
+  // to use it is the friction that makes a player ignore a whole system.
+  // Returns the piece that came off, so the caller can stow it rather than
+  // having it vanish. null means nothing was worn.
+  wearArmour(itemKey) {
+    const def = ITEMS[itemKey];
+    const slot = slotOf(def);
+    if (!slot) return { worn: false, displaced: null };
+    if (!this.armour) this.armour = { head: null, chest: null, legs: null, feet: null };
+    if (!shouldWear(this.armour, def, (k) => ITEMS[k])) return { worn: false, displaced: null };
+    const off = this.armour[slot];
+    this.armour[slot] = freshPiece(itemKey, (k) => ITEMS[k]);
+    return { worn: true, displaced: off };
+  }
+
+  /** Every worn piece, for the save and for the panel. */
+  armourWorn() {
+    const out = {};
+    for (const s of ARMOUR_SLOTS) out[s] = (this.armour && this.armour[s]) || null;
+    return out;
+  }
+
   stow(itemKey, qty) {
     if (!itemKey || !ITEMS[itemKey]) return 0; // never stow a null/unknown item
     let left = this._fillSlots(this.pockets, itemKey, qty);

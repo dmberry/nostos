@@ -297,6 +297,9 @@ function baseEnv() {
     implode: mono(fnOf(listOf(CHAR), STR)),
     size: scheme([b.id], fnOf(b, NUM)),
     echo: scheme([b.id], fnOf(b, UNIT)),
+    // readLine : unit -> string. Monomorphic on the way in, unlike echo:
+    // there is exactly one thing you can pass it and no reason to be generous.
+    readLine: mono(fnOf(UNIT, STR)),
     // A cell. `ref` makes one, `!` reads it, `:=` writes it — the three of them
     // are the only way anything in this language changes, so they are worth
     // typing properly rather than leaving as "anything".

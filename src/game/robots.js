@@ -8,6 +8,7 @@
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
 import { makeRng } from './rng.js';
+import { armourKey } from './armour.js';
 import { decide, LAMP_COLOURS } from './ai_ml.js';
 import { sfx } from '../engine/sound.js';
 import { OBJECTS } from './tiles.js';
@@ -84,6 +85,12 @@ const ML_TICK = 0.25;
 // the language; the capability belongs to the machine — a T1 asked to `tend`
 // has no toolhead to tend with, and faults saying so rather than standing there.
 const T1_CAN = ['patrol', 'hunt', 'home', 'flee', 'wait'];
+// A T2 has the same repertoire as a T1 and none of the gear a shooter has: it
+// is legs and a ram, so it can go somewhere, come back, or stand still. There
+// is deliberately no `tend` here — that belongs to the gardeners — and no fire
+// control, so a program that answers [hunt, fire] faults on the second word.
+const T2_CAN = ['patrol', 'hunt', 'home', 'flee', 'wait'];
+const T2_HURT_AT = 0.35;
 const T1_HURT_AT = 0.35;        // `hurt` reads true at or below this fraction of hull
 const T1_BLIND_RANGE = 999;     // what `range` reads when the sensor has nothing (jammed)
 
@@ -153,6 +160,19 @@ const T3_LASER_DAMAGE = 18;       // roughly double a W4 bolt (9) for the pair l
 const T3_HIT_RANGE = 0.75;        // point-blank fallback: claws, not lasers
 const T3_HIT_DAMAGE = 10;
 const T3_HIT_COOLDOWN = 0.9;
+// WHICH PLATE A CLASS SHEDS. The T-classes are the light hunters, the W-classes
+// the heavy ones, the M-classes the fortress guard. Anything not named here is
+// a T, which is the safe default: an unlisted machine drops the weakest plate
+// rather than the strongest. (The factory itself drops black plate — see
+// factory.js; it is not a robot and does not come through here.)
+const ARMOUR_TIER_OF = {
+  t1: 't', t2: 't', t3: 't',
+  w1: 'w', w2: 'w', w3: 'w', w4: 'w', w5: 'w',
+  m4: 'm', m5: 'm', m6: 'm',
+};
+// Weighted toward the pieces you want and away from the boots, a little.
+const ARMOUR_DROP_SLOTS = ['chest', 'legs', 'head', 'legs'];
+
 const T3_BODY = '#123d8a';        // deep, darker blue — still reads at a glance, less garish
 const T3_HEAD = '#081c47';
 const T3_LIMB = '#050f28';
@@ -1107,6 +1127,27 @@ export function updateRobots(dt, robots, player, map) {
       // can craft a whole access chip. Offset a touch so it doesn't stack
       // exactly on the scrap heap.
       map.groundItems.push({ item: 'chip_fragment', qty: 1, x: r.x + 0.25, y: r.y - 0.2 });
+      // PLATE, cut from what it was wearing. Roughly one machine in seven sheds
+      // a piece, and which piece is decided by the wreck's position rather than
+      // by a roll — same rule as the OB_gun below, so a player cannot reload
+      // until a cuirass falls out. The heavier classes carry the heavier plate,
+      // which is the only place the type matters.
+      // The tier is the class that was wearing it: a T sheds T-plate, an M sheds
+      // fortress plate, and the piece is coloured like the machine it came off
+      // so it reads on the ground before you are close enough for the name.
+      // Which piece is decided by the wreck's position rather than by a roll,
+      // the same rule as the OB_gun below, so a player cannot reload until a
+      // cuirass falls out.
+      {
+        const tier = ARMOUR_TIER_OF[r.type] || 't';
+        // About one machine in three. It was one in seven, which is right for a
+        // prize and wrong for a consumable: plate wears out under fire, so the
+        // rate has to keep a player in it rather than reward a long hunt.
+        if ((Math.floor(r.x * 13 + r.y * 29) % 3) === 0) {
+          const slot = ARMOUR_DROP_SLOTS[scrapQty(r.x * 5.1 + 11, r.y * 3.7 + 7) & 3];
+          map.groundItems.push({ item: armourKey(tier, slot), qty: 1, x: r.x - 0.3, y: r.y + 0.2 });
+        }
+      }
       // A T1 very rarely carries an OB_gun — a prize find (deterministic from
       // its wreck position so it isn't reload-farmable).
       if (r.type === 't1' && (scrapQty(r.x * 1.7 + 3, r.y * 2.3 + 1) & 7) === 0
@@ -1458,25 +1499,65 @@ function t1Sense(r, d, map) {
   };
 }
 
+// What a T2's sensor pack can tell it. A T2 is a bigger, slower T1 with the
+// same instruments and a longer nose: it notices you further off and follows
+// you further before it gives up, and those two numbers are the only reason a
+// program written for one does not read identically on the other.
+function t2Sense(r, d, map) {
+  if (r._homeOb === undefined) {
+    let best = null, bd = Infinity;
+    for (const o of (map.objects || [])) {
+      if (o.type !== 'obelisk') continue;
+      const dd = (o.x - r.home.x) ** 2 + (o.y - r.home.y) ** 2;
+      if (dd < bd) { bd = dd; best = o; }
+    }
+    r._homeOb = best || null;
+  }
+  const ob = r._homeOb;
+  return {
+    charge: r.battery,
+    integrity: r.maxHp ? (r.hp / r.maxHp) * 100 : 0,
+    range: Number.isFinite(d) ? d : T1_BLIND_RANGE,
+    home_range: Math.hypot(r.home.x - r.x, r.home.y - r.y),
+    threat: Number.isFinite(d) && d < T2_DETECT_RANGE,
+    hurt: r.maxHp ? r.hp <= r.maxHp * T2_HURT_AT : false,
+    linked: ob ? !(ob.destroyed || ob.jammed || ob.needsRebuild) : false,
+  };
+}
+
+// One entry per chassis: how it reads the world, and what it can be told to do.
+// A table rather than a `t2Think` beside the `t1Think`, because the thinking is
+// identical for every machine on the island and only the instruments and the
+// gear differ. Adding a unit type is adding a row.
+const CHASSIS = {
+  t1: { sense: t1Sense, can: T1_CAN },
+  t2: { sense: t2Sense, can: T2_CAN },
+};
+
 // Re-read the unit's program and store what it chose. Faults are facts about
 // the machine, not error messages: it keeps the fault, drops back to its
 // built-in reflexes, and its own web page reports the reason.
-function t1Think(r, d, dt, map) {
+function botThink(r, d, dt, map) {
   if (!r.program) return;
+  const chassis = CHASSIS[String(r.type || '').toLowerCase()];
+  // No row in the table means this build does not let you program that unit.
+  // Silently ignoring the program would leave a machine serving one on its own
+  // page and never running it, so say so where the page will show it.
+  if (!chassis) return botFault(r, `${r.type}: this unit takes no stored program`);
   r.beepT = Math.max(0, (r.beepT || 0) - dt);
   r.mlT -= dt;
   if (r.mlT > 0) return;
   r.mlT = ML_TICK;
-  const res = decide(r.program, t1Sense(r, d, map));
+  const res = decide(r.program, chassis.sense(r, d, map));
   // Coming out of a fault clears the fault lamp before the program gets to set
   // its own; a program's colours must not be mistaken for a broken machine.
   if (res.ok && r.lampFault) { r.lamp = null; r.lampFlash = 0; r.lampFault = false; }
   // Effects happen even when the program goes on to fault: a beep before a bad
   // branch is a beep the unit really made, and hearing it is the clue.
   applyEffects(r, res.effects, Number.isFinite(d) ? d : Infinity);
-  if (!res.ok) return t1Fault(r, res.fault);
-  if (!T1_CAN.includes(res.intent)) {
-    return t1Fault(r, `${res.intent}: this chassis has no gear for that`);
+  if (!res.ok) return botFault(r, res.fault);
+  if (!chassis.can.includes(res.intent)) {
+    return botFault(r, `${res.intent}: this chassis has no gear for that`);
   }
   r.intent = res.intent;
   r.fault = null;
@@ -1487,7 +1568,7 @@ function t1Think(r, d, dt, map) {
 // that means a unit is running on its reflexes rather than its orders. Its own
 // page carries the reason in words. The tell overrides anything the program set,
 // because the program is exactly what is not working.
-function t1Fault(r, why) {
+function botFault(r, why) {
   r.intent = null;
   r.fault = why;
   r.lamp = 'amber';
@@ -1504,7 +1585,7 @@ function updateT1(r, dt, player, map) {
   // The program decides; this function acts. With no program, or with a
   // faulted one, the machine falls back to the reflexes below — which is what
   // a T1 did before it had a program at all.
-  t1Think(r, d, dt, map);
+  botThink(r, d, dt, map);
   const intent = (r.program && !r.fault) ? r.intent : null;
 
   if (intent) {
@@ -1638,13 +1719,27 @@ function updateT2(r, dt, player, map) {
 
   const d = distTo(r, player);
   const ease = player.threatEase ? player.threatEase() : 1;
-  if (!r.aggro && d < T2_DETECT_RANGE * ease && !(r.loseInterestT > 0)) {
-    r.aggro = true;
+
+  // The program decides; this function acts. With no program, or with a
+  // faulted one, it falls back to the reflexes below — which is what a T2 did
+  // before it could be programmed at all.
+  botThink(r, d, dt, map);
+  const intent = (r.program && !r.fault) ? r.intent : null;
+
+  if (intent) {
+    r.aggro = intent === 'hunt';
+    // `returning` is the reflex's own state and a program does not use it. Left
+    // set, it would take the machine home the moment the program said patrol.
     r.returning = false;
-  }
-  if (r.aggro && d > T2_LOSE_RANGE) {
-    r.aggro = false;
-    r.returning = true; // trail gone cold: back to the tower
+  } else {
+    if (!r.aggro && d < T2_DETECT_RANGE * ease && !(r.loseInterestT > 0)) {
+      r.aggro = true;
+      r.returning = false;
+    }
+    if (r.aggro && d > T2_LOSE_RANGE) {
+      r.aggro = false;
+      r.returning = true; // trail gone cold: back to the tower
+    }
   }
 
   drainBattery(r, r.aggro ? DRAIN_CHASE : DRAIN_PATROL, dt);
@@ -1657,6 +1752,17 @@ function updateT2(r, dt, player, map) {
       r.attackTimer = T2_HIT_COOLDOWN;
       player.takeDamage(T2_HIT_DAMAGE * ease, 'machine');
     }
+  } else if (intent === 'home') {
+    // Told to go home: it trudges back at the speed it trudges back at, and
+    // stands there. Whether the tower charges it is the tower's business.
+    if (Math.hypot(r.home.x - r.x, r.home.y - r.y) > 0.8) {
+      moveToward(r, r.home.x, r.home.y, T2_RETURN_SPEED, dt, map);
+    }
+  } else if (intent === 'flee') {
+    const dx = r.x - player.x, dy = r.y - player.y, m = Math.hypot(dx, dy) || 1;
+    moveToward(r, r.x + (dx / m) * 3, r.y + (dy / m) * 3, T2_STALK_SPEED, dt, map);
+  } else if (intent === 'wait') {
+    r.wanderTarget = null;   // stands where it is, sensor still turning
   } else if (r.returning) {
     moveToward(r, r.home.x, r.home.y, T2_RETURN_SPEED, dt, map);
     if (Math.hypot(r.home.x - r.x, r.home.y - r.y) < 1) r.returning = false;

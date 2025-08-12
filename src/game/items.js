@@ -9,6 +9,8 @@
 
 // Item definitions. Tools live in the hands slot; resources stack in pockets.
 
+import { makeArmourItems } from './armour.js';
+
 export const ITEMS = {
   penknife: {
     name: 'Penknife',
@@ -876,6 +878,14 @@ A club pamphlet, stapled, with race dates on the back for a season that never fi
   // (Cassette tapes are generated from the TAPES manifest below, so a new one
   // is a single numbered entry — see docs/tapes.md.)
 };
+
+// ---- armour (data-driven) --------------------------------------------------
+//
+// Sixteen near-identical defs written by hand is sixteen chances to leave a
+// field off one of them, and the field you leave off is maxDur, and the piece
+// breaks on the first hit and nothing errors. The tiers are declared once in
+// armour.js and the defs are built from them, so a fifth class is four lines.
+Object.assign(ITEMS, makeArmourItems());
 
 // ---- cassette tapes (data-driven) -----------------------------------------
 // Adding a tape is one entry here: drop its folder under

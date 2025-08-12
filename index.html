@@ -63,20 +63,35 @@
     margin: 8vh auto 0; padding: 22px 28px;
     background: #141a10; border: 1px solid rgba(207,216,195,0.35);
     border-radius: 6px; color: #cfd8c3;
-    font: 14px/1.55 system-ui, sans-serif;
+    /* The body is 12px, not 14. This panel is credits and licences — things you
+       read once and scan afterwards — and the headings carry the structure, so
+       the prose under them does not need to be the same size as prose you are
+       meant to sit down with. */
+    font: 12px/1.5 system-ui, sans-serif;
   }
   #about h1 { font-size: 18px; margin: 0 0 4px; }
   .wordmark .os { color: #fff; }
-  #about .meta { color: #9db284; font-size: 12px; margin: 0 0 16px; }
+  /* The small print: attribution, third-party terms, the notes under a list.
+     11px and dimmer than the body, so a licence footnote reads as a footnote
+     rather than competing with the sentence that says what the licence IS. */
+  #about .meta { color: #8a9878; font-size: 11px; line-height: 1.45; margin: 0 0 14px; }
+  #about .meta a { color: #9db284; }
   #about h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;
     color: #9db284; margin: 16px 0 6px; }
-  #about p { margin: 4px 0; }
+  #about p { margin: 3px 0; }
+  #about li, #about kbd { font-size: 12px; }
   #about a { color: #9db284; text-decoration: underline; text-underline-offset: 2px; }
   #about a:hover { color: #cfe0b0; }
-  #about ul.tapes { list-style: none; margin: 6px 0; padding: 0; }
-  #about ul.tapes li { margin: 0 0 8px; padding: 6px 10px; border-left: 2px solid rgba(157,178,132,0.5);
-    background: rgba(207,216,195,0.05); font-size: 13px; line-height: 1.4; }
-  #about ul.tapes li b { color: #e8e0d0; }
+  /* The soundtrack list: a row per tape, its own cassette beside it. Tight and
+     small — it is a track listing, which is a thing you scan rather than read,
+     and eight of them at 13px with 8px between was most of the panel. */
+  #about ul.tapes { list-style: none; margin: 4px 0 2px; padding: 0; }
+  #about ul.tapes li { display: flex; align-items: center; gap: 9px;
+    margin: 0 0 3px; padding: 3px 8px; border-left: 2px solid rgba(157,178,132,0.5);
+    background: rgba(207,216,195,0.05); font-size: 11px; line-height: 1.35; }
+  #about ul.tapes .tape-pic { width: 46px; height: 29px; flex: 0 0 auto; border-radius: 2px; }
+  #about ul.tapes .tape-txt { min-width: 0; }
+  #about ul.tapes li b { color: #e8e0d0; font-size: 11.5px; }
   #about ul.tapes li i { color: #b7c2a8; font-style: italic; }
   #about .foot { margin-top: 18px; padding-top: 12px; border-top: 1px solid rgba(207,216,195,0.2);
     color: #6b7a5e; font-size: 11px; }
@@ -175,6 +190,15 @@
   #help.gated .helpTab.active { color: #10130d; background: var(--accent); border-color: var(--accent); }
   #help.gated h2 { color: color-mix(in srgb, var(--accent) 85%, #9db284); }
   #help.gated .help-x { border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+  /* The About panel is borrowed by the title screen too (mobile-gate.js moves
+     it in), so it wears the theme the same way the help does. */
+  #about.gated { z-index: 20; display: flex; justify-content: center; align-items: flex-start;
+    background: radial-gradient(120% 80% at 50% 0%,
+      color-mix(in srgb, var(--bg1) 78%, rgba(4,6,3,0.92)), rgba(4,6,3,0.92) 70%); }
+  #about.gated .panel { margin: 6vh 12px 0;
+    border-color: color-mix(in srgb, var(--accent) 42%, transparent);
+    box-shadow: 0 18px 50px rgba(0,0,0,0.6); }
+  #about.gated h2 { color: color-mix(in srgb, var(--accent) 85%, #9db284); }
 
   #help h1 { font-size: 18px; margin: 0 0 4px; }
   #help h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em;
@@ -649,11 +673,11 @@
     <p class="meta">A postAI Odyssey &middot; <b class="verNum">v?</b> &middot; by David M. Berry</p>
 
     <h2>Coding</h2>
-    <p>David M. Berry, vibecoding 2026. Beta testing by Henrik.</p>
+    <p>David M. Berry, 2026.</p>
 
     <h2>Licence</h2>
     <p>NostOS is <b>free software</b>: you may redistribute and modify it under the <b>GNU General Public License, version 3 or later</b>. Copyright &copy; 2026 David M. Berry. The full text ships with the source at <a href="https://github.com/dmberry/nostos" target="_blank" rel="noopener">github.com/dmberry/nostos</a>.</p>
-    <p class="meta">The library's Project Gutenberg texts keep their own licence and header, unaltered; the papers in <i>/home/documents</i> are out-of-copyright scholarship. Neither is covered by the above, because neither is ours to license.</p>
+    <p class="meta">The GPL is published by the <b>Free Software Foundation</b> &mdash; <a href="https://www.fsf.org/" target="_blank" rel="noopener">fsf.org</a>, licence text at <a href="https://www.gnu.org/licenses/gpl-3.0.html" target="_blank" rel="noopener">gnu.org/licenses</a>. Run it, read it, change it, pass it on.</p>
 
     <h2>Music &amp; cassettes</h2>
     <p>The soundtrack is a set of <b>cassette tapes</b> you find and play on the walkman. Each has an A and a B side:</p>
@@ -680,15 +704,7 @@
       <b>Frankenstein</b>, Melville's <b>Moby-Dick</b>, the <b>King James Bible</b>
       and the <b>Complete Works of Shakespeare</b>.</p>
     <p class="meta">All seven come from <b>Project Gutenberg</b> (gutenberg.org),
-      which has been putting public-domain books where anyone can have them since
-      1971, and each carries its own Project Gutenberg licence and header inside
-      the file, unaltered. A machine that holds the whole of Shakespeare and needs
-      nothing from anybody to show it to you is the argument this game keeps
-      making, so it seemed right that the books be real ones, freely given.</p>
-    <p class="meta">The papers in <i>/home/documents</i> are out-of-copyright
-      scholarship for the same reason: Asimov on the cult of ignorance, William
-      James asking whether we are automata, and Gonseth on the humanization of
-      technics.</p>
+      which are public-domain books.</p>
 
     <div class="foot">Game designed in the UK &middot; <span class="verNum">v?</span> &middot; GPL-3.0-or-later &middot; github.com/dmberry/nostos</div>
   </div>
@@ -880,7 +896,7 @@
       <tr><td><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd></td><td>Select a pocket slot</td></tr>
       <tr><td><kbd>5</kbd></td><td>Select the backpack's spare-weapon slot (if you have one)</td></tr>
       <tr><td><kbd>G</kbd></td><td>Swap the held weapon with the selected pocket</td></tr>
-      <tr><td><kbd>F</kbd></td><td>Drop the selected pocket's contents (or the held tool)</td></tr>
+      <tr><td><kbd>Backspace</kbd></td><td>Drop the selected pocket's contents (or the held tool)</td></tr>
       <tr><td>Click a slot</td><td>Equip it straight away (click the hands slot to stow whatever's held)</td></tr>
       <tr><td>Drag a slot</td><td>Move or swap items between pockets, hands, and backpack storage; with the pack open (<kbd>I</kbd>), drag an item off onto empty space to drop it on the ground</td></tr>
       <tr><td>Click the forcefield</td><td>Arm or disarm it in place, wherever it's carried — no need to hold it</td></tr>
@@ -1260,7 +1276,11 @@
     </div>
     <div id="obterminal-body">
       <pre id="obterminal-screen"></pre>
-      <div id="obterminal-inputrow"><span id="obterminal-prompt">&gt;</span><input id="obterminal-input" type="text" autocomplete="off" spellcheck="false"><span id="obterminal-ghost"></span></div>
+      <!-- autocapitalize/autocorrect off on every command field below: iOS
+     capitalises the first letter of a text input and rewrites words as you
+     type, and a capitalised or corrected verb is one the parser has never
+     heard of. The pico editor already had these; the terminals did not. -->
+<div id="obterminal-inputrow"><span id="obterminal-prompt">&gt;</span><input id="obterminal-input" type="text" autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off"><span id="obterminal-ghost"></span></div>
     </div>
     <div class="crt-hint">click outside to disconnect</div>
   </div>
@@ -1351,7 +1371,7 @@
     <div class="dev-row" id="dev-kit"></div>
     <div class="dev-row" id="dev-scene"></div>
     <div id="dev-out"></div>
-    <div class="dev-inputrow"><span>&gt;</span><input id="dev-input" type="text" autocomplete="off" spellcheck="false" placeholder="help"></div>
+    <div class="dev-inputrow"><span>&gt;</span><input id="dev-input" type="text" autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off" placeholder="help"></div>
   </div>
 </div>
 <div id="nokiaphone">
@@ -1366,7 +1386,7 @@
       </div>
       <div id="ph-thread"></div>
       <canvas id="ph-snake" width="84" height="48"></canvas>
-      <div class="ph-inputrow"><span class="ph-prompt">&gt;</span><input id="ph-input" type="text" autocomplete="off" spellcheck="false" maxlength="120"><button id="ph-send" type="button">send</button></div>
+      <div class="ph-inputrow"><span class="ph-prompt">&gt;</span><input id="ph-input" type="text" autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off" maxlength="120"><button id="ph-send" type="button">send</button></div>
     </div>
     <div class="ph-hint">Enter to send &middot; Esc, &#10005;, or a click off the screen to close</div>
   </div>
@@ -1535,6 +1555,24 @@
   #netscape .ns-page p { margin: 3px 0; max-width: 62em; line-height: 1.45; }
   #netscape .ns-page small { font-size: 12px; color: #444; }
   #netscape .ns-page hr { border: none; border-top: 1px solid #999; margin: 10px 0; }
+  /* Photographs on a cached page. A camera of the period gave you 320 across
+     and the page was built around that, so these keep their own size and the
+     text wraps past them. Border, grey backing while it loads, caption under
+     it in the small face. */
+  #netscape .ns-page figure { float: left; clear: both; width: 200px; margin: 6px 14px 8px 0; }
+  #netscape .ns-page figure.r { float: right; margin: 6px 0 8px 14px; }
+  #netscape .ns-page figure img { display: block; width: 100%; height: auto;
+    border: 1px solid #666; background: #cfcfcf; }
+  #netscape .ns-page figure figcaption { font: 11px Tahoma, Verdana, sans-serif;
+    color: #444; line-height: 1.3; padding: 3px 1px 0; }
+  /* A heading or a rule starts a clean line, or the next section rides up
+     alongside the picture belonging to the last one. */
+  #netscape .ns-page h2, #netscape .ns-page hr { clear: both; }
+  /* On a phone a 200px float leaves a two-word column beside it. Stack. */
+  @media (max-width: 560px) {
+    #netscape .ns-page figure, #netscape .ns-page figure.r {
+      float: none; width: 100%; max-width: 260px; margin: 8px auto; }
+  }
   /* Dotted-leader data rows only align in a fixed pitch. */
   #netscape .ns-page .kv { font: 13px 'Courier New', Courier, monospace; white-space: pre; margin: 1px 0; }
   /* Every link on these pages stands alone, so give each one its own bulleted
@@ -1630,6 +1668,16 @@
   #netscape .ns-page.bg-navy { background: #000080; color: #ffffcc; }
   #netscape .ns-page.bg-navy a { color: #66ccff; }
   #netscape .ns-page.bg-navy h1, #netscape .ns-page.bg-navy h2 { color: #ffff00; }
+  /* Oxford blue, which is a specific colour and not navy: #002147. White text,
+     and the section rules have to come up out of the dark or they vanish. */
+  #netscape .ns-page.bg-oxford { background: #002147; color: #fff; }
+  #netscape .ns-page.bg-oxford a { color: #9fc4ff; }
+  #netscape .ns-page.bg-oxford a:visited { color: #c9a8ff; }
+  #netscape .ns-page.bg-oxford h1, #netscape .ns-page.bg-oxford h2 { color: #fff; }
+  #netscape .ns-page.bg-oxford h2 { border-bottom-color: #24476f; }
+  #netscape .ns-page.bg-oxford hr { border-top-color: #24476f; }
+  #netscape .ns-page.bg-oxford small { color: #b9cbe4; }
+  #netscape .ns-page.bg-oxford figure figcaption { color: #b9cbe4; }
   /* A book is framed rather than injected: seven megabytes of Shakespeare
      through innerHTML would stall the browser, and a frame also keeps the
      book's own stylesheet, cover and chapter links working, since they resolve
@@ -1805,7 +1853,7 @@
       <button id="ns-stop" type="button"><span class="ns-ico">✖</span>Stop</button>
       <div class="ns-logo">N</div>
     </div>
-    <div class="ns-loc"><span class="ns-tag">📑 Bookmarks</span><span class="ns-tag">📍 Location:</span><input id="ns-url" type="text" spellcheck="false" autocomplete="off"></div>
+    <div class="ns-loc"><span class="ns-tag">📑 Bookmarks</span><span class="ns-tag">📍 Location:</span><input id="ns-url" type="text" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off"></div>
     <div class="ns-personal"><span id="ns-pb-home">📁 Bookmarks</span><span id="ns-pb-search">📁 Net Search</span><span id="ns-pb-dir">📁 Directory</span><span id="ns-pb-new">📁 New&amp;Cool</span><span id="ns-pb-lib">📁 Library</span></div>
     <div class="ns-page" id="ns-page"></div>
     <div class="ns-status"><span>🔓</span><span class="ns-sunk" id="ns-msg">Document: Done</span></div>

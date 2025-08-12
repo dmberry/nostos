@@ -80,3 +80,45 @@ test('a spare dead machine, once you already have a working one, is spares', () 
   assert.match(p.said[0], /already carry a working NostBook/);
   assert.equal(p.canRepairLaptop(), false, 'and it cannot be built twice');
 });
+
+// ---- THE CRADLE -----------------------------------------------------------
+//
+// The laptop slot was display-and-click only. A NostBook picked up off the
+// ground went into a pocket, where the only thing you can do with an item is
+// hold it, and a laptop cannot be held — so it answered "can't hold nostbook in
+// hand" and there was no way to get it into the one slot made for it.
+
+test('a working NostBook goes into the cradle, by drag and by pickup', () => {
+  const p = stub();
+  p.laptop = null;
+  assert.equal(p.getSlot({ kind: 'laptop' }), null, 'empty to start');
+  assert.equal(p.setSlot({ kind: 'laptop' }, { item: 'laptop', qty: 1 }), true);
+  assert.ok(p.laptop, 'the machine is in the cradle');
+  const held = p.getSlot({ kind: 'laptop' });
+  assert.equal(held.item, 'laptop');
+  assert.ok(held.machine, 'the slot carries the machine, not just its name');
+});
+
+test('the disk rides with the machine, out of the cradle and back', () => {
+  // A drag that dropped the filesystem would be a theft: everything the player
+  // has written is on it.
+  const p = stub();
+  p.setSlot({ kind: 'laptop' }, { item: 'laptop', qty: 1 });
+  p.laptop.fs = { d: { home: { d: { 'notes.txt': { f: 'mine' } } } } };
+  const out = p.getSlot({ kind: 'laptop' });
+  p.setSlot({ kind: 'laptop' }, null);
+  assert.equal(p.laptop, null);
+  p.setSlot({ kind: 'laptop' }, out);
+  assert.equal(p.laptop.fs.d.home.d['notes.txt'].f, 'mine', 'the disk came back');
+});
+
+test('a burnt board is not a machine and the cradle refuses it', () => {
+  // Refusing is what tells moveItem to leave it where it was. Accepting it
+  // would put an unusable object in the one slot that opens the shell.
+  const p = stub();
+  p.laptop = null;
+  assert.equal(p.setSlot({ kind: 'laptop' }, { item: 'laptop_broken', qty: 1 }), false);
+  assert.equal(p.setSlot({ kind: 'laptop' }, { item: 'dead_laptop', qty: 1 }), false);
+  assert.equal(p.setSlot({ kind: 'laptop' }, { item: 'tin', qty: 1 }), false);
+  assert.equal(p.laptop, null, 'nothing got in');
+});

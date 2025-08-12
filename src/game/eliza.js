@@ -17,7 +17,7 @@
 // terminal, a machine reading a human the way the machines read everything.
 
 // Words the doctor flips when it echoes your sentence back at you.
-const REFLECTIONS = {
+export const REFLECTIONS = {
   am: 'are', are: 'am', was: 'were', were: 'was',
   i: 'you', you: 'I', me: 'you',
   my: 'your', your: 'my', mine: 'yours', yours: 'mine',
@@ -27,7 +27,7 @@ const REFLECTIONS = {
 };
 
 // Contraction / spelling tidy-ups run before anything else, as in the script.
-const PRE = [
+export const PRE = [
   [/\bdont\b/g, "don't"], [/\bcant\b/g, "can't"], [/\bwont\b/g, "won't"],
   [/\brecollect\b/g, 'remember'], [/\bdreamt\b/g, 'dreamed'],
   [/\bdreams\b/g, 'dream'], [/\bmaybe\b/g, 'perhaps'],
@@ -53,7 +53,7 @@ function reflect(fragment) {
 // keywords appear), and a list of decomposition rules. A decomposition is a
 // pattern where `*` matches any run of words; the matched runs fill (1), (2)…
 // in the reassembly templates, which are cycled through on repeat matches.
-const SCRIPT = [
+export const SCRIPT = [
   { key: 'sorry', rank: 0, rules: [
     { decomp: '*', reasmb: [
       "Please don't apologise.",

@@ -25,6 +25,7 @@
 // it is testable on its own and the hub does the world-side wiring.
 
 import { PDFS, pdfStub } from './pdfs.js';
+import { ELIZA_README, DOCTOR_SCRIPT, DOCTOR_TABLES, ELIZA_PROGRAM } from './eliza-src.js';
 import { BOOKS, bookFileName, bookStub } from './books.js';
 import { SPOOL, MAILBOX, NODENAME, KNOWN_NODES, OWNER_MAIL, jobText, parseJob,
   routeOf, statusReport, deliver, formatMailbox, formatMessage } from './uucp.js';
@@ -176,13 +177,21 @@ const MAN = {
   ].join('\n'),
   halt: 'halt\n  Stop the processor. Close the lid and it is off until you open it.',
   save: [
-    'save',
+    'save [name]',
     '  Write a checkpoint: where you are standing, what you are carrying, what',
     '  you have learned. Load it from the title screen.',
     '',
-    '  One slot per island, overwritten each time you save there. It will not',
-    '  write from a boat, and there is nowhere to fix a position from in the',
-    '  Backspace.',
+    '  With a name, the checkpoint is listed under it, so you can tell one from',
+    '  another a week later:',
+    '',
+    '    save before the fortress',
+    '    save got the key',
+    '',
+    '  A named checkpoint gets its own slot. Without a name there is one slot',
+    '  per island, overwritten each time you save there.',
+    '',
+    '  It will not write from a boat, and there is nowhere to fix a position',
+    '  from in the Backspace.',
   ].join('\n'),
   suspend: [
     'suspend',
@@ -975,6 +984,16 @@ export function makeDisk() {
         'sentry.ml': file(SENTRY_ML),
         'survivor.ml': file(SURVIVOR_ML),
       }),
+      // ELIZA, as source. The machine in the ruins talks to you the way this
+      // does, and this is short enough to read to the end in a sitting. The
+      // script listing is generated from the table the in-game bot dispatches
+      // on, so it cannot drift from what RON-DOS actually runs.
+      eliza: dir({
+        'readme': file(ELIZA_README),
+        'doctor.script': file(DOCTOR_SCRIPT),
+        'doctor.tables': file(DOCTOR_TABLES),
+        'eliza.ml': file(ELIZA_PROGRAM),
+      }),
       demos: dir({
         'life.ml': file(LIFE_ML),
         'count.ml': file(COUNT_ML),
@@ -999,6 +1018,17 @@ export function makeDisk() {
   });
 }
 
+// Files this build used to ship under /home and does not any more, usually
+// because they were renamed. A graft deletes these if it finds them, which is
+// the only way a rename ever reaches a disk that is already in somebody's save.
+//
+// doctor.ml became eliza.ml when it stopped being a canned session and started
+// reading its input. A save written before that carried the old file, and
+// because the graft below only ever looked at the TOP level of /home it never
+// opened the folder it was in: the directory existed, so it was skipped whole,
+// and the machine went on serving a program that no longer exists in the build.
+const RETIRED = [['eliza', 'doctor.ml']];
+
 // A disk from an older save has none of the system tree, because it was made
 // before there was one. Add anything missing rather than replacing the disk:
 // the player's own files in /home are theirs and must survive untouched.
@@ -1012,7 +1042,22 @@ export function graftSystemDirs(root) {
   const home = root.d.home;
   if (home && home.d) {
     for (const [name, node] of Object.entries(fresh.d.home.d)) {
-      if (!home.d[name]) { home.d[name] = node; added.push(`home/${name}`); }
+      if (!home.d[name]) { home.d[name] = node; added.push(`home/${name}`); continue; }
+      // The folder is already there, which used to end it. Go in: a directory
+      // this build ships gets any file it is missing, so new work reaches an
+      // old save instead of being invisible to everybody who has played before.
+      // Only ADD — a file the player has edited keeps their version.
+      const mine = home.d[name], theirs = fresh.d.home.d[name];
+      if (!mine.d || !theirs.d) continue;
+      for (const [f, node2] of Object.entries(theirs.d)) {
+        if (!mine.d[f]) { mine.d[f] = node2; added.push(`home/${name}/${f}`); }
+      }
+    }
+    for (const [dir, f] of RETIRED) {
+      if (home.d[dir] && home.d[dir].d && home.d[dir].d[f]) {
+        delete home.d[dir].d[f];
+        added.push(`-home/${dir}/${f}`);
+      }
     }
   }
   return added;
@@ -1868,7 +1913,7 @@ const COMMANDS = {
     ...(env && env.net && env.net.card
       ? ['',
         env.net.up
-          ? '  netscape      the card is UP'
+          ? '  netscape      browse what is left of the internet'
           : '  ifconfig wifi0 up   bring the card up, then: netscape']
       : []),
   ].join('\n'),

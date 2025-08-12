@@ -306,7 +306,10 @@ test('netscape is handed to the hub as a MODE once the card is up', () => {
 test('help mentions the card only when one is fitted, and adapts to its state', () => {
   assert.doesNotMatch(run('help', sh()).text, /ifconfig wifi0 up/);
   assert.match(run('help', withCard(false)).text, /ifconfig wifi0 up/);
-  assert.match(run('help', withCard(true)).text, /card is UP/);
+  // The line names the VERB and what it is for, not the interface state — a
+  // player reading help wants to know that netscape is the way out onto the
+  // web, and the ifconfig line below already says the card is what gates it.
+  assert.match(run('help', withCard(true)).text, /netscape\s+browse what is left/);
 });
 
 test('uname names the system', () => {

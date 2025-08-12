@@ -14,6 +14,7 @@ import { uiMethods, DASH_H } from './ui.js';
 import { FLOORS } from '../game/tiles.js';
 import { buildingPalette } from '../game/buildings.js';
 import { ITEMS, WEAPON_ORDER } from '../game/items.js';
+import { armourTint } from '../game/armour.js';
 import { drawAnimal } from '../game/animals.js';
 import { drawBird } from '../game/birds.js';
 import { drawRobot, beginUnitTags } from '../game/robots.js';
@@ -76,6 +77,15 @@ function facingToCompassDir(facing) {
 
 // One reusable offscreen canvas for compositing a hurt/sprint tint onto a
 // sprite before it's drawn to the main canvas — see drawPlayerSprite.
+// A hex colour at an alpha, for the sprite tints. The item colours are hex
+// because that is what a def is written with; a tint needs the alpha.
+function hexTint(hex, a) {
+  const h = String(hex || '').replace('#', '');
+  if (h.length !== 6) return `rgba(140,140,140,${a})`;
+  const n = parseInt(h, 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
+
 let _tintCanvas = null;
 function tintScratch(w, h) {
   if (!_tintCanvas) _tintCanvas = document.createElement('canvas');
@@ -2561,16 +2571,42 @@ export class Renderer {
     // it's static text, no need to re-rasterize it every frame.
     if (!obj._graffitiCanvas) {
       const c = document.createElement('canvas');
-      c.width = 200; c.height = 48;
+      c.width = 200; c.height = 60;
       const octx = c.getContext('2d');
-      octx.font = 'italic bold 26px monospace';
       octx.textAlign = 'center';
       octx.textBaseline = 'middle';
+      const txt = String(obj.graffiti || '');
+      // IT HAS TO FIT ON THE WALL. At a fixed 26px a long tag ran off the end
+      // of the canvas and the canvas is the face, so PROMISED MAGNIFICA came
+      // out as PROMISED MAGN with the rest painted on nothing. The size comes
+      // down until the words are inside, and maxWidth on the draw condenses
+      // whatever is still over — a hand with a can does the same thing.
+      const PAD = 14;
+      let size = 26;
+      octx.font = `italic bold ${size}px monospace`;
+      while (size > 12 && octx.measureText(txt).width > c.width - PAD) {
+        size -= 1;
+        octx.font = `italic bold ${size}px monospace`;
+      }
+      // AND SOMETIMES IT IS ON THE SKEW. Nobody writing on a wall in a hurry
+      // keeps a level. Deterministic from the tile, so a given wall always
+      // carries the same tag at the same angle: about one in three tilts, and
+      // the tilt is small enough to read.
+      const h = Math.floor(Math.abs(obj.x) * 31 + Math.abs(obj.y) * 17);
+      const tilt = (h % 3 === 0) ? ((h % 2 ? -1 : 1) * (0.07 + (h % 5) * 0.018)) : 0;
       // Doubting tags (RON is dead, no one is coming, ...) are painted
       // fainter and greyer, as if older or written by a less certain hand —
       // the game never settles whether the resistance is still out there.
       octx.fillStyle = obj.graffitiFaded ? 'rgba(180,178,170,0.8)' : 'rgba(190,40,36,0.88)';
-      octx.fillText(obj.graffiti, 100, 24);
+      octx.translate(c.width / 2, c.height / 2);
+      if (tilt) {
+        octx.rotate(tilt);
+        // A tilted line needs its corners inside the canvas, so it gives back
+        // the width the rotation costs it.
+        octx.fillText(txt, 0, 0, (c.width - PAD) * Math.cos(tilt) - Math.abs(Math.sin(tilt)) * size);
+      } else {
+        octx.fillText(txt, 0, 0, c.width - PAD);
+      }
       obj._graffitiCanvas = c;
     }
     const jitter = (tileHash(obj.x, obj.y) - 0.5) * 0.12;
@@ -2586,7 +2622,10 @@ export class Renderer {
     // its +y screen-downward, which means passing BOTH bounds high-then-low:
     // u 0.94 -> 0.06 (un-mirror) and v 0.62 -> 0.28 (right way up). Verified
     // in-game against "THE WIRES LIE".
-    const quad = this.subQuad(face[0], face[1], face[3], uLo, uHi, 0.62 + jitter, 0.28 + jitter);
+    // The band grew with the canvas (48 -> 60): the quad is the canvas's frame,
+    // so leaving it at the old height would have squashed every tag vertically
+    // to pay for the room the tilt needs.
+    const quad = this.subQuad(face[0], face[1], face[3], uLo, uHi, 0.66 + jitter, 0.24 + jitter);
     this.drawTexturedQuad(quad, obj._graffitiCanvas, null, null, null, 1);
   }
 
@@ -4043,6 +4082,66 @@ export class Renderer {
       ctx.restore();
       return;
     }
+    // ARMOUR. Four silhouettes, each read from the front, each with a highlight
+    // down one side so a flat grey plate does not look like a flat grey box.
+    // The colour comes off the def, so a second tier only needs a new colour.
+    if (itemDef.kind === 'armour') {
+      const c = itemDef.color || '#8f979b';
+      ctx.fillStyle = c;
+      ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+      ctx.lineWidth = 1;
+      if (itemDef.slot === 'head') {
+        // an open-faced helm: dome, cheek pieces, a gap for the face
+        ctx.beginPath();
+        ctx.moveTo(-7, 4);
+        ctx.quadraticCurveTo(-8, -8, 0, -8);
+        ctx.quadraticCurveTo(8, -8, 7, 4);
+        ctx.lineTo(4, 4); ctx.lineTo(4, -1);
+        ctx.quadraticCurveTo(0, -3, -4, -1);
+        ctx.lineTo(-4, 4);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = 'rgba(255,255,255,0.22)';
+        ctx.fillRect(-6, -6, 2, 8);
+      } else if (itemDef.slot === 'chest') {
+        // a cuirass: shoulders wider than the waist, a seam down the middle
+        ctx.beginPath();
+        ctx.moveTo(-8, -7); ctx.lineTo(8, -7);
+        ctx.lineTo(6, 8); ctx.lineTo(-6, 8);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+        ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(0, 7); ctx.stroke();
+        ctx.fillStyle = 'rgba(255,255,255,0.2)';
+        ctx.fillRect(-7, -6, 2, 12);
+        // the neck, cut out
+        ctx.fillStyle = 'rgba(0,0,0,0.45)';
+        ctx.beginPath(); ctx.arc(0, -7, 3, 0, Math.PI); ctx.fill();
+      } else if (itemDef.slot === 'legs') {
+        // greaves: two tapering shells with a gap between them
+        for (const dx of [-4, 4]) {
+          ctx.beginPath();
+          ctx.moveTo(dx - 3, -7); ctx.lineTo(dx + 3, -7);
+          ctx.lineTo(dx + 2, 8); ctx.lineTo(dx - 2, 8);
+          ctx.closePath(); ctx.fill(); ctx.stroke();
+        }
+        ctx.fillStyle = 'rgba(255,255,255,0.2)';
+        ctx.fillRect(-6, -6, 1.5, 12);
+        ctx.fillRect(2, -6, 1.5, 12);
+      } else {
+        // boots: a pair, seen from the side, toes to the right
+        for (const dy of [-4, 4]) {
+          ctx.beginPath();
+          ctx.moveTo(-6, dy - 3); ctx.lineTo(-1, dy - 3);
+          ctx.lineTo(-1, dy + 1); ctx.lineTo(7, dy + 1);
+          ctx.lineTo(7, dy + 3); ctx.lineTo(-6, dy + 3);
+          ctx.closePath(); ctx.fill(); ctx.stroke();
+        }
+        ctx.fillStyle = 'rgba(255,255,255,0.18)';
+        ctx.fillRect(-5, -6, 3, 1.5);
+        ctx.fillRect(-5, 2, 3, 1.5);
+      }
+      ctx.restore();
+      return;
+    }
     if (itemDef.kind === 'shield') {
       // A rounded heater-shield outline; a mirror shield gets a bright sheen.
       ctx.fillStyle = itemDef.color;
@@ -5225,8 +5324,46 @@ export class Renderer {
       ctx.translate(-fx, -fy);
       swayed = true;
     }
-    const tint = player.hurtTimer > 0 ? 'rgba(220,60,50,0.55)'
+    // WHAT YOU ARE WEARING, drawn AROUND the sprite rather than over it.
+    //
+    // A colour wash over the whole character was the obvious thing and it looked
+    // wrong: it dulled the face and the hands, which are not armoured, and on
+    // the dark tiers it turned a person into a smudge. This is a silhouette of
+    // the sprite in the plate's colour, drawn behind it at a small offset in
+    // every direction — a hard rim, the way a suit reads at this size. The
+    // character keeps its own colours and gains an edge that says clad.
+    //
+    // Thickness and opacity climb with the set, so a scavenged helm is a hairline
+    // and a full black set is a heavy outline you can pick out across a field.
+    const worn = player.armourWorn ? player.armourWorn() : null;
+    const plate = worn ? armourTint(worn, (k) => ITEMS[k]) : null;
+    if (plate) {
+      const sil = tintScratch(sprite.naturalWidth, sprite.naturalHeight);
+      sil.ctx.globalCompositeOperation = 'source-over';
+      sil.ctx.clearRect(0, 0, sil.canvas.width, sil.canvas.height);
+      sil.ctx.drawImage(sprite, 0, 0);
+      // `source-in` keeps only where the sprite already is, which turns the
+      // frame into a flat silhouette of itself.
+      sil.ctx.globalCompositeOperation = 'source-in';
+      sil.ctx.fillStyle = hexTint(plate.colour, 1);
+      sil.ctx.fillRect(0, 0, sil.canvas.width, sil.canvas.height);
+      sil.ctx.globalCompositeOperation = 'source-over';
+      // ONE soft pass, not eight hard ones. Eight offset copies at nearly full
+      // alpha is a cutout — on the black tier it drew a hard mask around the
+      // character and read as a sticker. A single blurred silhouette, scaled a
+      // little past the sprite, shows only where it extends beyond it: a haze
+      // the colour of the plate, which is what a suit looks like at 40px.
+      ctx.save();
+      ctx.globalAlpha = 0.18 + plate.strength * 0.34;      // 0.23 heavy at most
+      if ('filter' in ctx) ctx.filter = `blur(${plate.strength > 0.42 ? 2.4 : 1.6}px)`;
+      const g = 1.07;                                      // just proud of the sprite
+      ctx.drawImage(sil.canvas, c.x - dw * g / 2, cy - dh * g / 2 + 1, dw * g, dh * g);
+      ctx.restore();
+    }
+    const state = player.hurtTimer > 0 ? 'rgba(220,60,50,0.55)'
       : player.sprinting ? 'rgba(255,190,110,0.18)' : null;
+    const tints = state ? [state] : null;
+    const tint = tints;
     if (tint) {
       // Composited off-canvas first: 'source-atop' respects only the alpha
       // already on the SAME canvas, so applying it straight to the main
@@ -5236,8 +5373,7 @@ export class Renderer {
       off.ctx.clearRect(0, 0, off.canvas.width, off.canvas.height);
       off.ctx.drawImage(sprite, 0, 0);
       off.ctx.globalCompositeOperation = 'source-atop';
-      off.ctx.fillStyle = tint;
-      off.ctx.fillRect(0, 0, off.canvas.width, off.canvas.height);
+      for (const t of tints) { off.ctx.fillStyle = t; off.ctx.fillRect(0, 0, off.canvas.width, off.canvas.height); }
       off.ctx.globalCompositeOperation = 'source-over';
       ctx.drawImage(off.canvas, c.x - dw / 2, cy - dh / 2, dw, dh);
     } else {

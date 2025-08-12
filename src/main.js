@@ -56,6 +56,8 @@ import { BOOKS, bookByKey, bookKeys, bookPath, libraryPage } from './game/books.
 import { isMobile } from './game/mobile-gate.js';
 import { wireHelpTabs } from './game/help-tabs.js';
 import { fillMachineGallery } from './game/machine-icons.js';
+import { fillAboutTapes } from './game/about-tapes.js';
+import { pruneStages, checkpointName, saveStageId } from './game/stages.js';
 import { packFog, unpackFogInto } from './game/fog.js';
 import { keeperLs, keeperRead, keeperIsDir } from './game/keeper.js';
 import { buildingName, buildingLook } from './game/buildings.js';
@@ -276,6 +278,17 @@ try {
       // older save naming one still resolves rather than drawing nothing.
       if (player.laptop && !ITEMS[player.laptop.model]) player.laptop.model = 'laptop';
       if (st.calypsoLeave) player.calypsoLeave = true; // sticky: refunctioning Calypso persists across reload
+      // What you were wearing, with its wear. Only pieces that are still armour
+      // and still have life in them: a save written before a piece existed, or
+      // one hand-edited, must not put a null in a slot the panel then draws.
+      if (st.armour) {
+        player.armour = { head: null, chest: null, legs: null, feet: null };
+        for (const [slot, w] of Object.entries(st.armour)) {
+          if (!w || !ITEMS[w.item] || ITEMS[w.item].kind !== 'armour') continue;
+          if (ITEMS[w.item].slot !== slot || !(w.dur > 0)) continue;
+          player.armour[slot] = { item: w.item, dur: Math.min(w.dur, ITEMS[w.item].maxDur || w.dur) };
+        }
+      }
       if (typeof st.swine === 'number') player.swine = st.swine; // CIRCE's change follows you across a reload
       if (typeof st.calypsoHold === 'number') player.calypsoHold = st.calypsoHold; // Nokia gradient survives reload
       if (Array.isArray(st.nokiaSent)) player.nokiaSent = new Set(st.nokiaSent);   // don't re-tutorial on reload
@@ -367,6 +380,10 @@ function buildSaveBlob() {
     // deliberately — a book you have actually read should not be taken back.
     booksRead: [...(player.booksRead || [])],
     state: {
+      // What you are wearing, wear and all — armour is a consumable you are
+      // standing inside, so a reload that handed it back whole would be a
+      // repair, and a reload that dropped it would be a theft.
+      armour: player.armourWorn ? player.armourWorn() : null,
       health: player.health, stamina: player.stamina, food: player.food, venom: player.venom,
       wifiPower: player.wifiPower, x: player.x, y: player.y, hands: player.hands,
       pockets: player.pockets, backpack: player.backpack, walkman: player.walkman,
@@ -546,7 +563,12 @@ function saveStage(id, label, order) {
       score: player.score || 0, ts: Date.now(),
       seed: String(WORLD_SEED), save: buildSaveBlob(), // in-memory seed = always the live world's
     };
-    localStorage.setItem(STAGES_KEY, JSON.stringify(stages));
+    // Pruned on the way out, by the same order the gate offers them in: what
+    // falls off the bottom of the list falls out of the store, so a player is
+    // never shown a row that is about to vanish. Seventeen rungs each carrying
+    // a whole save blob is a quarter of a megabyte to keep a beach nobody will
+    // go back to.
+    localStorage.setItem(STAGES_KEY, JSON.stringify(pruneStages(stages)));
   } catch { /* storage unavailable */ }
 }
 // Hand-written checkpoints sit above every ladder rung in the Load list.
@@ -563,7 +585,7 @@ const MANUAL_STAGE_ORDER = 100;
 // make you think about it before every fight.
 //
 // Returns { ok, text } — the ML consoles print it, the laptop shell returns it.
-function terminalSave() {
+function terminalSave(rawName) {
   // The same two refusals `persist` makes, said out loud rather than silently.
   // A save taken out on the water resumes you marooned at sea; a save taken in
   // the Backspace resumes you at a pocket's coordinates on CALYPSO.
@@ -574,11 +596,18 @@ function terminalSave() {
     return { ok: false, text: 'save: no position to fix here. This place is not on any chart.' };
   }
   const place = hudPlace();
-  const id = `save-${currentWorld.id}`;
-  saveStage(id, `Checkpoint: ${place}`, MANUAL_STAGE_ORDER);
+  const name = checkpointName(rawName);
+  // A named save gets its own slot. Without a name there is one per island, so
+  // writing again where you already wrote replaces it, which is what you want
+  // from a checkpoint. With a name you have said these are different moments,
+  // so `save before the fortress` and `save after` are two rows and not one.
+  const id = saveStageId(currentWorld.id, name);
+  // The name leads, because it is the thing you will recognise; the place
+  // follows it, because in a month you will not remember where you were.
+  saveStage(id, name ? `${name} \u00b7 ${place}` : `Checkpoint: ${place}`, MANUAL_STAGE_ORDER);
   _savedStages.add(id);
   persist(); // keep Continue in step with the checkpoint you just wrote
-  return { ok: true, text: `OK: checkpoint written — ${place}, score ${player.score || 0}.\nLoad it from the title screen.` };
+  return { ok: true, text: `OK: checkpoint written \u2014 ${name ? `"${name}", ` : ''}${place}, score ${player.score || 0}.\nLoad it from the title screen.` };
 }
 // Polled once per frame — the reached() checks are cheap and a stage is written
 // only the first time (per store), so it never thrashes. Saved once ever, so a
@@ -2470,14 +2499,10 @@ const populateAboutTapes = () => {
   // header, the help header, and the foot. A player reporting a bug should find
   // it in whichever panel they happen to have open.
   for (const el of document.querySelectorAll('.verNum')) el.textContent = `v${VERSION}`;
-  const ul = document.getElementById('aboutTapes');
-  if (!ul || ul.childElementCount) return;
-  const cleanTrack = (f) => f.replace(/\.mp3$/i, '').replace(/^\d+[-.\s]*\d*[-.\s]*/, '').trim();
-  ul.innerHTML = TAPES.map((t) => {
-    const a = t.a.tracks.map(cleanTrack).join(', ');
-    const b = t.b.tracks.map(cleanTrack).join(', ');
-    return `<li><b>${t.artist} &mdash; <i>${t.title}</i></b><br>A: ${a} &nbsp;&middot;&nbsp; B: ${b}</li>`;
-  }).join('');
+  // The tape list is built in about-tapes.js, which the title screen calls too:
+  // it opens this same panel before main.js exists (mobile-gate.js moves it in),
+  // and two copies of a credits list is two credits lists.
+  fillAboutTapes();
 };
 const toggleAbout = (force) => {
   const show = force != null ? force : aboutEl.style.display !== 'block';
@@ -2879,7 +2904,7 @@ function ronmlCtx() {
     session: replSession, // persistent top-level bindings for this terminal visit
     bindSession: (name, val) => { replSession[name] = val; },
     cd: fsCd, ls: fsLs, copyFile: fsCopyFile, drives: fsDrives, // RON-DOS drives (cd/ls/copy files)
-    saveGame: () => { replPrint(terminalSave().text); },
+    saveGame: (name) => { replPrint(terminalSave(name).text); },
     hasAiKey: () => player.hasAiKeyFamily(), // ai_key / trojan_key / hermes_card all count
     currentNode: () => (terminalOb ? terminalOb.code : null),
     printKey: () => {
@@ -3108,7 +3133,7 @@ function hermesCtx() {
     hasManual: !!(player.readManuals && player.readManuals.has('book_ronml')),
     session: replSession, // persistent bindings work at relays too (copy/let)
     cd: fsCd, ls: fsLs, copyFile: fsCopyFile, drives: fsDrives, // RON-DOS drives also work at a relay
-    saveGame: () => { replPrint(terminalSave().text); },
+    saveGame: (name) => { replPrint(terminalSave(name).text); },
     showNotepad: () => { openNotebook(); },
     read: (topic) => hermesRead(topic),
     print: () => {}, // never reached — HERMES print takes a topic (see printDoc)
@@ -3193,18 +3218,27 @@ const FSF_TOPICS = ['fsf', 'card', 'fsfcard', 'membership'];
 function fsfSendCode() {
   const code = String(1000 + Math.floor(Math.random() * 9000));
   player._fsfCode = code;
-  nokia.enqueue('RON', [
-    'RON MEMBERSHIP',
-    `Code: ${code}`,
-    'Do not share it.',
-  ]);
+  // BOTH: the toast AND the thread. enqueue only puts a text on screen for a
+  // few seconds, so a player who was looking at the terminal lost the code with
+  // no way to get it back — and the code is the whole of the gate. logSms files
+  // it under RON, where the phone's own tab can find it for as long as it takes.
+  const sms = ['RON MEMBERSHIP', `Code: ${code}`, 'Do not share it.'];
+  nokia.enqueue('RON', sms);
+  for (const l of sms) logSms(player, 'RON', 'them', l);
+  // The instruction has to say STEP OUT first. It read "Open it (O)" and a
+  // player standing at the prompt typed O at the prompt, which is not a command
+  // and should not be — the handset is a thing in your pocket, not a verb on
+  // this machine.
   replPrint(
     'MEMBERSHIP CHECK. The relay does not know your face and will not guess.',
-    'A code has gone to your handset. Open it (O), read the code, then:',
-    '  print <code>',
+    'A code has gone to your handset.',
+    '  1. Esc to step away from this terminal',
+    '  2. O for the handset, RON thread — four digits',
+    '  3. come back and print the DIGITS ALONE:   print 1234',
+    '     (not print fsf 1234 — print takes one argument)',
     'The card carries your name, so it has to be your card.',
   );
-  player.say('A text from RON: a membership code. Open the phone (O).');
+  player.say('A text from RON: a membership code. Esc, then O for the handset.');
 }
 function hermesPrintCard() {
   if (player.hasItem('fsf_card')) {
@@ -3212,11 +3246,14 @@ function hermesPrintCard() {
     return;
   }
   if (!player._fsfCode) { fsfSendCode(); return; }
-  replPrint(`A code is already on your handset (O). Then: print <code>`);
+  replPrint('A code is already on your handset. Esc, then O, then the RON thread;',
+    'come back and print the digits alone:   print 1234');
 }
 function hermesPrintCardWithCode(code) {
   if (code !== player._fsfCode) {
-    replPrint('That is not the code on your handset. Open it (O) and read it again.');
+    replPrint('That is not the code on your handset.',
+      'Esc to step away, O for the handset, the RON thread. Then come back and',
+      'print the digits alone:   print 1234');
     return true;
   }
   if (player.hasItem('fsf_card')) { replPrint('You have one already.'); return true; }
@@ -4468,6 +4505,11 @@ function openHermesTerminal(tor) {
 // open is its own risk.
 let laptopShell = null;     // {root, cwd} over player.laptop.fs
 let laptopMl = false;       // true while the ML sandbox has the prompt
+// A running program that stopped to read a line. Holds the file, its text, the
+// answers given so far, and how many lines of output the player has already
+// been shown — the run is replayed from the top on every answer, so without
+// that count the program's whole conversation reprints itself each time.
+let mlInput = null;
 let laptopSession = {};     // AI-ML bindings, alive while the machine is on
 // A declaration held open across lines, and the last one that ran. See the ml
 // prompt: a `fun` clause may arrive after its own declaration has been run.
@@ -4690,7 +4732,7 @@ function laptopCtx() {
     // The one verb that reaches the world from this machine, and it reaches
     // nothing on the network: it writes where you are standing. The shell has
     // `save` too (laptopSaveHook) — this is the same call from ML.
-    saveGame: () => { replPrint(terminalSave().text); },
+    saveGame: (name) => { replPrint(terminalSave(name).text); },
     // The type checker runs HERE and nowhere else. A machine carrying its own
     // program has a quarter of a second and nobody to read a report; the OB and
     // HERMES consoles reach into a world this build cannot type. The laptop is
@@ -4730,26 +4772,12 @@ function laptopMlHook(args, env) {
     let text;
     try { text = runUnixRead(env, args[0]); }
     catch { return { ok: false, text: `${args[0]}: no such file` }; }
-    const out = [];
-    const ctx = laptopCtx();
-    loadPrelude(ctx);
-    // One session for the whole file, and physical lines joined into logical
-    // ones first, so a program may be laid out the way ML is actually written.
-    for (const { text: l, line } of joinProgram(text)) {
-      if (!l || l.startsWith('(*')) continue;
-      const r = runRonml(l, ctx);
-      if (!String(r.text).startsWith('ERR')) { if (r.text) out.push(r.text); continue; }
-      // Stop at the first error, like a compiler — but say WHERE, show the
-      // line, and if it is a piece of Standard ML this build does not have,
-      // say which piece rather than leaving the lexer to complain about a
-      // colon. A machine that answers "unexpected character" to a signature
-      // block is not teaching anybody anything.
-      const why = diagnose(l);
-      out.push(`${args[0]}:${line}: ${l.length > 64 ? `${l.slice(0, 61)}...` : l}`);
-      out.push(why ? `ERR: ${why}` : String(r.text));
-      break;
+    const r = runMlFile(text, args[0], []);
+    if (r.needInput) {
+      mlInput = { name: args[0], text, lines: [], shown: r.lines.length };
+      return { ok: true, text: r.lines.join('\n') };
     }
-    return { ok: true, text: out.join('\n') };
+    return r;
   }
   laptopMl = true;
   return {
@@ -4758,6 +4786,64 @@ function laptopMlHook(args, env) {
            'Based on Standard ML developed by Robin Milner, Mads Tofte and Robert Harper.',
            'Type help for more info, quit to go back to the shell.', ''].join('\n'),
   };
+}
+
+// A program that reads. The language suspends a run that calls `readLine` with
+// nothing queued, and the only way to resume a synchronous evaluator is to run
+// the program AGAIN with the answer appended — so that is what this does. The
+// file is re-run from the top on every line the player types, against a fresh
+// session, with the queue one longer each time.
+//
+// Replay is honest here because these programs are small, deterministic and
+// fuel-capped. What it costs is that every echo happens again, so the driver
+// tracks how many lines of output the player has already seen and prints only
+// what is past that. Get that wrong and the conversation repeats itself from
+// the beginning after every answer, which is exactly what the first draft did.
+// Append output as individual lines, whatever shape it arrived in.
+function pushLines(out, chunk) {
+  if (chunk == null) return;
+  for (const part of (Array.isArray(chunk) ? chunk : [chunk])) {
+    if (part === '') { out.push(''); continue; }
+    for (const l of String(part).split('\n')) out.push(l);
+  }
+}
+
+function runMlFile(text, name, stdinLines) {
+  const out = [];
+  const ctx = laptopCtx();
+  loadPrelude(ctx);
+  ctx.stdin = stdinLines;
+  ctx.stdinPos = 0;
+  // One session for the whole file, and physical lines joined into logical
+  // ones first, so a program may be laid out the way ML is actually written.
+  for (const { text: l, line } of joinProgram(text)) {
+    if (!l || l.startsWith('(*')) continue;
+    const r = runRonml(l, ctx);
+    // Suspended, not broken: the program wants a line. Everything it printed
+    // on the way to asking comes back on `out`, and the caller collects an
+    // answer and calls this again with a longer queue.
+    if (r.needInput) {
+      pushLines(out, r.out);
+      return { ok: true, needInput: true, lines: out };
+    }
+    // Everything goes in as LINES, both here and on the suspended path above.
+    // On success the language hands back one string with the run's echoes
+    // joined into it; on suspension it hands back the echoes as an array. Push
+    // the two shapes as they arrive and the counts stop matching, which is how
+    // the goodbye at the end of a conversation went missing: the driver had
+    // already counted that whole block as a single line it had shown.
+    if (!String(r.text).startsWith('ERR')) { pushLines(out, r.text); continue; }
+    // Stop at the first error, like a compiler — but say WHERE, show the
+    // line, and if it is a piece of Standard ML this build does not have,
+    // say which piece rather than leaving the lexer to complain about a
+    // colon. A machine that answers "unexpected character" to a signature
+    // block is not teaching anybody anything.
+    const why = diagnose(l);
+    out.push(`${name}:${line}: ${l.length > 64 ? `${l.slice(0, 61)}...` : l}`);
+    out.push(why ? `ERR: ${why}` : String(r.text));
+    break;
+  }
+  return { ok: true, lines: out, text: out.join('\n') };
 }
 
 // Read a file out of the shell's disk without importing the whole fs surface.
@@ -6113,8 +6199,11 @@ function laptopSleepHook(args) {
 // save(1). The NostBook is a terminal like the others, so it writes a
 // checkpoint like the others (task #93). It is a hook rather than a COMMAND in
 // unix.js because it acts on the world and the run, not on the disk.
-function laptopSaveHook() {
-  return terminalSave();
+function laptopSaveHook(args) {
+  // Everything after the verb is the name, spaces and all: `save before the
+  // fortress` is one label, not three arguments.
+  const words = (args || []).map((a) => String((a && (a.name || a.v)) ?? a)).filter((w) => w && w !== 'undefined');
+  return terminalSave(words.join(' '));
 }
 
 function laptopSuspendHook() {
@@ -6345,6 +6434,10 @@ nsUrlEl.addEventListener('keydown', (e) => {
 document.getElementById('ns-pb-new').onclick = () => { if (web) nsSetView({ kind: 'whatsnew' }); };
 document.getElementById('ns-pb-lib').onclick = () => { if (web) nsSetView({ kind: 'library' }); };
 nsEl.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeNetscape(); });
+// Clicking off the machine puts it down, the way every other overlay here
+// works — the backdrop is #netscape itself and the laptop is a child of it, so
+// a click whose target IS the backdrop landed outside the lid.
+nsEl.addEventListener('click', (e) => { if (e.target === nsEl) closeNetscape(); });
 
 // ---- The menu bar --------------------------------------------------------
 // Real drop-downs. Everything this machine can actually do is enabled; the rest
@@ -6571,8 +6664,36 @@ function laptopPrompt() {
   if (edState) return edState.ins != null ? '.' : 'ed>';
   // `=` while a declaration is held open, which is what an ML top level shows
   // and the only sign that the machine is waiting rather than ignoring you.
+  // A program is reading you, not the shell. Say so, or the next line looks
+  // like a command that silently did nothing.
+  if (mlInput) return '?';
   if (laptopMl) return mlPending ? '  =' : 'ml>';
   return `${pathString(laptopShell.cwd)} $`;
+}
+
+// Hand one typed line to the program that is waiting for it, by running the
+// whole file again with that line on the end of the queue. Only the output past
+// what has already been shown gets printed, so the conversation reads forwards.
+function mlFeed(line) {
+  mlInput.lines.push(line);
+  const r = runMlFile(mlInput.text, mlInput.name, mlInput.lines);
+  const fresh = r.lines.slice(mlInput.shown);
+  if (fresh.length) replPrint(...fresh);
+  sfx.play('keyclick');
+  if (r.needInput) { mlInput.shown = r.lines.length; return; }
+  // It ran to the end. Say so, because a program that simply stops printing
+  // looks the same as one that is still thinking.
+  mlInput = null;
+  replPrint('', `[${'ml'} done]`, '');
+}
+
+// Give up on it. The program is not suspended anywhere a signal could reach —
+// there is no process — so this just forgets the queue and the file.
+function mlStop(why) {
+  if (!mlInput) return;
+  const name = mlInput.name;
+  mlInput = null;
+  replPrint('', why || `^C  —  ${name} stopped.`, '');
 }
 
 function laptopRun(line) {
@@ -6599,6 +6720,10 @@ function laptopRun(line) {
     if (r.quit) { edState = null; replPrint('', 'back at the shell.'); }
     return;
   }
+  // A program that stopped to read owns the line before the shell does. What
+  // you type is its input, not a command — the same way ed's input mode works,
+  // and the same way it would on a real terminal.
+  if (mlInput) { mlFeed(line); return; }
   const t = line.trim();
   // Still coming up: the keystroke skips the rest of the boot rather than being
   // swallowed or run against a machine that isn't ready.
@@ -6878,7 +7003,7 @@ function runLaptopBoot(def) {
   step();
 }
 
-function closeObTerminal() { saveLaptopState(); telnetTo = null; if (nsEl) nsEl.style.display = 'none'; if (picoEl) { picoEl.style.display = 'none'; pico = null; } if (pdfEl && pdfEl.style.display === 'flex') closePdf(); elizaBot = null; web = null; edState = null; laptopMl = false; laptopShell = null; laptopBooting = false; _laptopBootRest = null; if (_laptopBootTimer) { clearTimeout(_laptopBootTimer); _laptopBootTimer = null; } terminalKind = 'ob'; terminalOb = null; replSession = {}; setTerminalTheme(null); obTermEl.classList.remove('hermes'); obTermEl.classList.remove('nostbook'); obTermEl.style.display = 'none'; obTermGhost.textContent = ''; obTermPrompt.textContent = '>'; obTermInput.blur(); player.terminalSafe = false; }
+function closeObTerminal() { saveLaptopState(); telnetTo = null; if (nsEl) nsEl.style.display = 'none'; if (picoEl) { picoEl.style.display = 'none'; pico = null; } if (pdfEl && pdfEl.style.display === 'flex') closePdf(); elizaBot = null; web = null; edState = null; laptopMl = false; mlInput = null; laptopShell = null; laptopBooting = false; _laptopBootRest = null; if (_laptopBootTimer) { clearTimeout(_laptopBootTimer); _laptopBootTimer = null; } terminalKind = 'ob'; terminalOb = null; replSession = {}; setTerminalTheme(null); obTermEl.classList.remove('hermes'); obTermEl.classList.remove('nostbook'); obTermEl.style.display = 'none'; obTermGhost.textContent = ''; obTermPrompt.textContent = '>'; obTermInput.blur(); player.terminalSafe = false; }
 // Click-away closes it. With the NostBook chassis in the way, "outside" now
 // includes the beige furniture itself — the lid, the deck, the badge — because
 // those are the machine's body, not its screen, and a click on them plainly
@@ -6968,6 +7093,16 @@ obTermInput.addEventListener('keydown', (e) => {
       && (e.key.length === 1 || e.key === 'Backspace')) {
     sfx.play('keytype');
   }
+  // Escape gets you out of a program that is reading, for anybody who does not
+  // reach for ^C. Only when one is actually waiting: Escape at an ordinary
+  // prompt should stay free for whatever else wants it.
+  if (e.key === 'Escape' && mlInput) {
+    e.preventDefault();
+    obTermInput.value = ''; obTermGhost.textContent = '';
+    mlStop(`[esc]  —  ${'stopped'}.`);
+    obTermPrompt.textContent = laptopPrompt();
+    return;
+  }
   // Ctrl+C breaks out of an ELIZA session, as on a real terminal — back to the
   // RON-DOS prompt without closing the whole console. But if text is selected
   // anywhere, Ctrl+C means COPY — let the browser have it (matters on
@@ -6976,7 +7111,13 @@ obTermInput.addEventListener('keydown', (e) => {
     const screenSel = String(window.getSelection() || '');
     const inputSel = obTermInput.selectionStart !== obTermInput.selectionEnd;
     if (screenSel || inputSel) return; // native copy
-    if (elizaBot) { obTermInput.value = ''; obTermGhost.textContent = ''; stopEliza('^C  —  ELIZA interrupted. Back at the RON-DOS prompt.'); }
+    // A program waiting on readLine goes first: it has the line, so it has to
+    // be the thing ^C takes away.
+    if (mlInput) {
+      obTermInput.value = ''; obTermGhost.textContent = '';
+      mlStop(); obTermPrompt.textContent = laptopPrompt();
+    }
+    else if (elizaBot) { obTermInput.value = ''; obTermGhost.textContent = ''; stopEliza('^C  —  ELIZA interrupted. Back at the RON-DOS prompt.'); }
     // ^C in ed: out of input mode, or out of ed altogether. Real ed ignores it;
     // real ed also has a real terminal behind it and a way to kill the process.
     // Here it is the only interrupt there is, so it has to work.

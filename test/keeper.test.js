@@ -80,3 +80,14 @@ test('a machine still has no `read`', () => {
   const r = runRonml('read keeping.ml', { station: 'robot', session: {}, read: () => {} });
   assert.ok(!r.ok, 'a unit answering `read` means the station list stopped filtering');
 });
+
+test('a HERMES `print` takes a number as well as a topic', () => {
+  // The membership check texts four digits and asks for them back. 3689 lexes
+  // as an int, not an atom, so a print that read only `.id` handed the relay an
+  // empty string and it answered "No document" about a code it had just sent.
+  const got = [];
+  const ctx = { station: 'hermes', session: {}, printDoc: (t) => got.push(t) };
+  assert.ok(runRonml('print 3689', ctx).ok);
+  assert.ok(runRonml('print history', ctx).ok);
+  assert.deepEqual(got, ['3689', 'history']);
+});

@@ -24,6 +24,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import {
   ARCHIVED_SITES, DEPARTMENTS, WIKI_ARTICLES, KNOWN_DOMAINS, UNIVERSITIES,
   deptPagesFor, departmentPage, wikiArticle, archivedSite, universityAt,
@@ -165,4 +166,44 @@ test('every fragment has a kind the Scrapbook can draw', () => {
     assert.ok([0, 1, 2].includes(f.era), `${f.id} has era ${f.era}, outside 0..2`);
     assert.ok(f.title && f.text, `${f.id} is missing a title or a body`);
   }
+});
+
+test('no two written sites claim the same address', () => {
+  // archivedSite() is a .find, so a second entry for a domain is unreachable —
+  // the page is in the file, reads perfectly, and nothing will ever serve it.
+  // This happened the first time somebody added a personal GeoCities page
+  // without noticing the neighbourhoods index was already there.
+  const seen = new Map();
+  for (const s of ARCHIVED_SITES) {
+    assert.ok(!seen.has(s.domain),
+      `two sites claim ${s.domain}: "${seen.get(s.domain)}" and "${s.title}" — the second is unreachable`);
+    seen.set(s.domain, s.title);
+  }
+});
+
+test('a written site is not also listed as a bare stub', () => {
+  // KNOWN_DOMAINS is the "it was there and it is damaged" list. A domain in
+  // both gets a real page and a stub entry, and which one answers is an
+  // accident of lookup order.
+  for (const s of ARCHIVED_SITES) {
+    assert.ok(!KNOWN_DOMAINS.includes(s.domain),
+      `${s.domain} has a written page AND sits in KNOWN_DOMAINS`);
+  }
+});
+
+// Same drift, one layer down: a page names a picture file and the file is not
+// there. Nothing throws. The page renders with a broken-image box in the
+// corner and the caption underneath it, and only a player who opens that exact
+// host ever sees it. So walk every src= on every cached page and stat it.
+test('every picture a cached page names is a file that exists', () => {
+  const root = new URL('../', import.meta.url);
+  const missing = [];
+  for (const site of ARCHIVED_SITES) {
+    for (const m of site.body.join('\n').matchAll(/src="([^"]+)"/g)) {
+      const src = m[1];
+      if (!src.startsWith('assets/')) continue;
+      if (!existsSync(new URL(src, root))) missing.push(`${site.domain} -> ${src}`);
+    }
+  }
+  assert.deepEqual(missing, []);
 });

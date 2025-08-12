@@ -286,6 +286,18 @@ function makeBuiltins(station) {
         return { tag: 'unit' };
       },
     },
+    // `saveas "name"`: the same write with a label on it. Separate from `save`
+    // rather than an optional argument because this language has no optional
+    // arguments — a verb has one arity — and `save` on its own has to keep
+    // working, since it is in the manual and in three help pages.
+    saveas: {
+      arity: 1,
+      fn: ([what], ctx) => {
+        if (!ctx.saveGame) throw new RonmlError('nothing to save from this terminal.');
+        ctx.saveGame(what && what.v !== undefined ? what.v : what && what.name);
+        return { tag: 'unit' };
+      },
+    },
     // `decrypt aikey`: turn a sealed AI key (from `copy`) into the open token
     // `unlock` needs. The AI encrypts its own masters out of habit; this undoes it.
     decrypt: {
@@ -753,7 +765,18 @@ function makeBuiltins(station) {
   if (station === 'hermes') {
     out.print = {
       arity: 1, station: 'hermes',
-      fn: ([topic], ctx) => { ctx.printDoc(String((topic && topic.id) || '').toLowerCase()); return { tag: 'unit' }; },
+      // A topic is normally an atom (`print history`), but the membership check
+      // wants four digits, and 3689 lexes as an INT and not an atom. Reading
+      // only `.id` turned the code into the empty string and the relay answered
+      // `No document "?"` — a true statement about a document and no use at all
+      // to somebody typing a code it had just texted them.
+      fn: ([topic], ctx) => {
+        const t = topic && (topic.id != null ? topic.id
+          : topic.v != null ? topic.v
+          : topic.name != null ? topic.name : '');
+        ctx.printDoc(String(t || '').toLowerCase());
+        return { tag: 'unit' };
+      },
     };
   }
   return out;
@@ -781,7 +804,13 @@ const HERMES_VERBS = ['read', 'archive', 'records', 'drive', 'backup', 'restore'
 // (`save` is the one exception, and it is not a network verb: it writes where
 // you are standing, which this machine can do from anywhere you can open it.)
 const LAPTOP_VERBS = ['echo', 'not', 'hd', 'tl', 'length', 'abs', 'sqrt', 'min', 'max', 'size',
-  'real', 'floor', 'ord', 'chr', 'str', 'explode', 'implode', 'makestring', 'ref', 'units', 'save'];
+  'real', 'floor', 'ord', 'chr', 'str', 'explode', 'implode', 'makestring', 'ref', 'units', 'save', 'saveas',
+  // `readLine` is the laptop's and nowhere else's. It is the one machine on the
+  // island with a person sitting at it, and a program that stops to ask for a
+  // line needs somebody there to answer. A unit carrying a program that called
+  // it would suspend in a field with nobody to type, which is why it is not in
+  // ROBOT_VERBS and must not be added there.
+  'readLine'];
 // A MACHINE'S OWN STATION. Its program runs here: senses in, an intent out, and
 // nothing else within reach — no network, no files, no console verbs. That is
 // not a restriction bolted on, it is what a unit actually has.
@@ -943,7 +972,8 @@ const HELP_VERBS = [
   ['eliza', 'file -> file', 'the DOCTOR, on a file or bare', '', 'ob'],
   ['retire', "key -> ('a -> 'a) -> unit", 'refunction the keeper, at her own island', 'hermes card', 'ob'],
   ['read t', 'atom -> unit', 'read a page', 'HERMES relay only', 'hermes'],
-  ['print t', 'atom -> unit', 'print map, or print aikey', 'HERMES relay only', 'hermes'],
+  ['print t', 'atom -> unit', 'a copy of a document — archive lists them', 'HERMES relay only', 'hermes'],
+  ['print fsf', 'atom -> unit', 'an FSF card, in your name (it texts you a code)', 'HERMES relay only', 'hermes'],
   ['archive', 'unit -> unit', 'the RON archive', 'HERMES relay only', 'hermes'],
   ['records', 'unit -> unit', 'the next RON field record', 'HERMES relay only', 'hermes'],
   ['drive', 'unit -> unit', 'a drive', 'HERMES relay only', 'hermes'],
@@ -951,6 +981,7 @@ const HELP_VERBS = [
   ['restore aikey', 'key -> unit', 'take your key back', 'HERMES relay only', 'hermes'],
   ['forge f', 'file -> file', 'forge a virus for this island', 'HERMES relay, Trojan card', 'hermes'],
   ['save', 'unit -> unit', 'write a checkpoint you can load', 'one slot per island', ''],
+  ['saveas', 'string -> unit', 'write a checkpoint under a name you choose', 'its own slot per name', ''],
   ['help', 'unit -> unit', 'this list, or help <verb>', '', ''],
 ];
 // `help ml` — a one-screen tour of the language itself (as opposed to `help`,
@@ -1023,7 +1054,7 @@ function helpText(topic, station, hasManual) {
     // Arity-0 and nothing comes back: `explorer` opens a window, `save` writes a
     // checkpoint, `drives` prints what is attached. They belong with `map` and
     // `print` rather than with the verbs you nest in a `let`.
-    'explorer', 'save', 'drives',
+    'explorer', 'save', 'saveas', 'drives',
   ]);
   // NOT here, and each for a reason worth keeping straight:
   //   crash · unlock · fog · poseidon · robots · net · spread · nearest

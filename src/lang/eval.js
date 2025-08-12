@@ -21,7 +21,7 @@
 // parameters would mean touching every one of evalNode's recursive calls, which
 // is a larger change than this stage is allowed to make.
 
-import { RonmlError, RonmlFuelError, RonmlRaise } from './errors.js';
+import { RonmlError, RonmlFuelError, RonmlRaise, RonmlNeedInput } from './errors.js';
 import { nameKey } from './names.js';
 import { parse } from './parse.js';
 import { defaultFixity } from './parse.js';
@@ -53,6 +53,29 @@ export function beginRun(fuel) {
 let OUT = null;
 export function setOut(buf) { OUT = buf; }
 export function pushOut(text) { if (OUT) OUT.push(text); }
+
+// The current run's input queue, and how far through it we have read. The
+// mirror image of OUT: the host installs the lines it has before the run, and
+// `readLine` takes them in order. Module-level for the same reason OUT is —
+// a closure defined on one line and called on another must read from the same
+// queue, not from the ctx it happened to be born in.
+//
+// Running off the end throws RonmlNeedInput rather than returning "". A program
+// that reads a line it has not been given has not finished; saying so lets a
+// console suspend it and ask, and lets a headless run report end of input.
+let IN = null;
+let IN_POS = 0;
+export function setIn(lines, pos) {
+  IN = Array.isArray(lines) ? lines : null;
+  IN_POS = Number.isInteger(pos) ? pos : 0;
+}
+export function takeIn() {
+  if (!IN || IN_POS >= IN.length) throw new RonmlNeedInput();
+  return IN[IN_POS++];
+}
+/** How many lines this run has consumed. A host replaying a program uses this
+ *  to know the queue was actually read rather than ignored. */
+export function inRead() { return IN_POS; }
 
 // What the HOST wants said about a name the language does not know. The
 // language has no verbs; NostOS does, and wants "that is a HERMES command, not

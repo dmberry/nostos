@@ -266,7 +266,8 @@ test('search finds a host by its CONTENT, and keeps dark hosts in the index', ()
 test('bookmarks are the landing page, and deliberately short', () => {
   const hosts = hostsOf();
   const { text, links } = renderPage(bookmarksPage(hosts));
-  assert.ok(links.length <= 4, 'a browser someone actually used, not a directory');
+  // Five: the four this machine's owner used, plus reddit, which everybody had.
+  assert.ok(links.length <= 5, 'a browser someone actually used, not a directory');
   const labels = links.map((l) => l.label).join(' | ');
   assert.match(labels, /AltaVista/);
   assert.match(labels, /Tourist Board/);
@@ -502,4 +503,15 @@ test('a document that is not held says so rather than rendering blank', () => {
   const page = obDocPage('no-such-thing');
   assert.match(page, /NOT HELD/);
   assert.match(page, /obdoc:index/, 'and still offers the way back');
+});
+
+test('the bookmarks carry reddit, and carry it by the field that exists', () => {
+  // The first version matched on `h.domain`, which no host record has — the
+  // cache keys the address under `host`. Every comparison was against
+  // undefined, the find returned nothing, and the bookmark was simply absent.
+  // Nothing errored and the page rendered perfectly well without it.
+  const hosts = hostTable({ id: 'calypso', daemonName: 'CALYPSO' });
+  const reddit = hosts.find((h) => h.host === 'reddit.com');
+  assert.ok(reddit, 'reddit is not in the host table at all');
+  assert.match(bookmarksPage(hosts), /reddit/);
 });

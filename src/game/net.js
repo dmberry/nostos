@@ -715,6 +715,14 @@ export function bookmarksPage(hosts, agent = 'Netscape Navigator 1.1') {
     // it is the one address that leads to all the rest.
     (hosts.find((h) => h.kind === 'archive' && !h.cached))
       ? link(hosts.find((h) => h.kind === 'archive' && !h.cached), 'cache — the old Net, as stored') : '',
+    // Somebody's habits, and this is the one everybody had. The front page is a
+    // list of rooms; whoever owned this machine had been going into one of them
+    // most nights.
+    // `host`, not `domain` — the cache's entries key the address under `host`
+    // and a `.domain` that is never set is undefined for every one of them, so
+    // the find failed silently and the bookmark simply was not there.
+    (hosts.find((h) => h.host === 'reddit.com'))
+      ? link(hosts.find((h) => h.host === 'reddit.com'), 'reddit — the front page') : '',
     '<hr>',
     '<p>Type an address to go there, or a link number to follow it.</p>',
     '<p><small>These are not yours. Whoever owned this machine was going somewhere.</small></p>',
