@@ -199,6 +199,16 @@ test('a weapon word the chassis does not have is a fault, not a silent hold', ()
   assert.match(decide('[dance, fire]', {}).fault, /is not something this unit can do/);
 });
 
+test('a branch that ends on an effect (no intent) faults as MISSING INTENT', () => {
+  // `eye "white"` lights the lamp and evaluates to () — the commonest mistake.
+  // It must name the real problem, not report () as an unknown verb.
+  const r = decide('if threat then (eye "white") else patrol', { threat: true });
+  assert.equal(r.ok, false);
+  assert.match(r.fault, /MISSING INTENT/);
+  // adding the intent after the effect fixes it
+  assert.equal(decide('if threat then (eye "white" ; hunt) else patrol', { threat: true }).intent, 'hunt');
+});
+
 test('engage.ml on the disk answers correctly in every situation', () => {
   const disk = newShell();
   const src = runUnix('cat demos/engage.ml', disk, {}).text;

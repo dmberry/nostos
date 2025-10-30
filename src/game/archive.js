@@ -1765,7 +1765,7 @@ export const ARCHIVED_SITES = [
       pic('swansea-streetview', 'Street view of the road. The car went past at about eleven in the morning.', 'r'),
       pic('severn-crossing', 'The second crossing, westbound, in about the weather you would expect.', 'r'),
       pic('swansea-1145', '11:45 to Reading, and Swansea above it on the same board.', 'r'),
-      pic('two-on-the-sand', 'Two of them, a mile of wet sand, and Worms Head at the end of it.', 'r'),
+      pic('two-on-the-sand', 'Philosopher and designer on the Gower.', 'r'),
       '<p>Up the hill west of the middle of town, past the university, and if you ' +
         'keep going you are on <b>Gower</b> within twenty minutes, which is the ' +
         'thing about Swansea nobody outside Wales has taken in: a city with a ' +

@@ -134,9 +134,12 @@ export function initMobileGate(mode = 'gate') {
   // A looping game-world clip drifting slowly behind everything, low opacity.
   // It plays at half speed (set in JS) and pans gently left→right (CSS).
   // H.264 MP4 — plays in every modern browser (transcoded from the source .mov).
-  const videoHtml = `<video class="mg-bgvideo" autoplay muted loop playsinline preload="auto" aria-hidden="true">
-      <source src="assets/media/videos/postAI-background.mp4" type="video/mp4">
-    </video>`;
+  // The backdrop is a looping GIF (was a 7.5 MB MP4; the GIF is ~1.9 MB and
+  // reads the same at 0.18 opacity behind everything). Its `src` is NOT in the
+  // markup: it is attached in JS only if the connection can spare it, so a
+  // data-saver or slow-network visitor issues ZERO requests for it and sees the
+  // themed backdrop alone. A GIF loops on its own — nothing to autoplay.
+  const videoHtml = `<img class="mg-bgvideo" alt="" aria-hidden="true">`;
   const copyHtml = isTitle
     ? `<p class="mg-sub">The machines made the world standing reserve. Only a God can save you.<span class="mg-sub2">A keyboard-and-mouse survival game.<br>Here's the soundtrack while you decide.</span></p>
        <div class="mg-actions">
@@ -160,8 +163,8 @@ export function initMobileGate(mode = 'gate') {
        </div>`
     : '';
   const bodyHtml = isTitle
-    ? `${videoHtml}<div class="mg-hero">${brandHtml}${copyHtml}${checkpointHtml}</div>
-       <div class="mg-player">${deckHtml}${rackHtml}${themesHtml}</div>
+    ? `${videoHtml}<div class="mg-hero">${brandHtml}${copyHtml}${checkpointHtml}${themesHtml}</div>
+       <div class="mg-player">${deckHtml}${rackHtml}</div>
        ${stageHtml}${footerHtml}${aboutHtml}`
     : `${videoHtml}${brandHtml}${copyHtml}${checkpointHtml}${stageHtml}${deckHtml}${rackHtml}${menuHtml}${footerHtml}${aboutHtml}`;
 
@@ -185,8 +188,13 @@ export function initMobileGate(mode = 'gate') {
          (negative z-index so it sits behind all the in-flow content). */
       .mg-bgvideo { position: absolute; top: 0; left: 0; height: 100%; width: auto; min-width: 100%;
         z-index: -1; opacity: 0.18; object-fit: cover; pointer-events: none;
+        /* Anchored at the top and zoomed 1.35x, so the bottom of the frame —
+           where a parked car sits — pushes below the fold and is clipped by
+           the gate's overflow. The zoom rides in the pan keyframes (transform
+           is one property); origin top keeps the crop on the bottom edge. */
+        transform-origin: center top;
         animation: mg-pan 90s ease-in-out infinite alternate; will-change: transform; }
-      @keyframes mg-pan { from { transform: translateX(0); } to { transform: translateX(-14%); } }
+      @keyframes mg-pan { from { transform: translateX(0) scale(1.35); } to { transform: translateX(-14%) scale(1.35); } }
       @media (prefers-reduced-motion: reduce) { .mg-bgvideo { animation: none; } }
       /* branding wordmark: mono terminal type, glowing AI, blinking caret,
          and a little cassette mark — themes with --accent. */
@@ -229,7 +237,8 @@ export function initMobileGate(mode = 'gate') {
       .mg-btn:active { transform: scale(0.96); }
       /* stage checkpoints (Load list) */
       .mg-stages { margin: 10px 0 2px; text-align: center; flex: 0 0 auto; }
-      .mg-stages-h { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); opacity: 0.7; margin-bottom: 6px; }
+      .mg-stages-h { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); opacity: 0.7;
+        max-width: min(260px, 84vw); margin: 0 auto 6px; }
       /* A list, not a row of chips: a run that has been going a while has more
          checkpoints than fit across the hero column, and they wrapped into a
          block that pushed everything below it off the screen. Three rows are
@@ -284,14 +293,10 @@ export function initMobileGate(mode = 'gate') {
         padding: 10px 0 max(5px, env(safe-area-inset-bottom));
         background: linear-gradient(to top, var(--bg2) 62%, transparent);
         text-align: center; font-size: 10px; letter-spacing: 0.03em; color: rgba(207,216,195,0.42); z-index: 6; pointer-events: none; }
+      .mg-about-open { font: inherit; color: rgba(207,216,195,0.7); background: none; border: none; padding: 0;
         text-decoration: underline; text-underline-offset: 2px; cursor: pointer; pointer-events: auto; }
       .mg-ver { font-size: 9px; color: rgba(207,216,195,0.3); letter-spacing: 0.02em; }
-      /* About overlay */
-        background: rgba(6,9,5,0.72); padding: 20px; -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); }
-        background: #14180e; border: 1px solid rgba(255,255,255,0.16); border-radius: 14px; padding: 20px 20px 16px;
-        box-shadow: 0 16px 40px rgba(0,0,0,0.6); color: #cfd8c3; }
-        font-size: 14px; cursor: pointer; color: #cfd8c3; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.18); }
-        background: rgba(255,255,255,0.03); border-radius: 0 6px 6px 0; line-height: 1.4; }
+      /* The About box lives in index.html as #about; mobile-gate borrows it (see openAbout). */
       /* POSEIDON skylink countdown */
       .mg-skylink { font: 700 12px ui-monospace, monospace; letter-spacing: 0.1em; text-transform: uppercase;
         color: #5b9dff; text-shadow: 0 0 8px rgba(70,130,255,0.6); margin: 0 0 4px;
@@ -310,7 +315,7 @@ export function initMobileGate(mode = 'gate') {
         background: radial-gradient(70% 120% at 50% 100%, rgba(255,255,255,0.14), transparent 72%); }
       .mg-bot { width: auto; height: 122px; max-height: 100%; }
       /* walkman deck — the yellow, double-outlined box from the HUD */
-      .mg-deck { width: min(320px, 88vw); background: var(--deck); border-radius: 14px;
+      .mg-deck { width: min(250px, 82vw); background: var(--deck); border-radius: 14px;
         border: 3px solid var(--edge); box-shadow: 0 8px 22px rgba(0,0,0,0.5), inset 0 0 0 2px var(--bezel);
         padding: 9px; margin-bottom: 8px; flex: 0 0 auto; }
       .mg-deck-cass { display: block; width: 100%; height: auto; }
@@ -337,6 +342,12 @@ export function initMobileGate(mode = 'gate') {
       .mg-tape.sel canvas { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent); }
       .mg-tape .mg-artist { font-size: 11.5px; font-weight: 700; color: #e8e2d0; margin-top: 5px; }
       .mg-tape .mg-title { font-size: 10.5px; color: #9aa0aa; font-style: italic; }
+      /* Drag a tape onto the deck to load it (an extra to clicking). The card
+         lifts and dims while dragged; the deck lights up as a drop target. */
+      .mg-tape[draggable="true"] { cursor: grab; }
+      .mg-tape.dragging { opacity: 0.4; cursor: grabbing; }
+      .mg-deck.drop-target { outline: 2px dashed var(--accent); outline-offset: 3px;
+        box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 28%, transparent); }
       /* title mode has a full desktop window to breathe into — bigger logo,
          more air between the header, buttons, clock and stage. */
       #mobile-gate[data-mode="title"] { padding: 3vh 6vw; gap: 2px; justify-content: center; }
@@ -367,11 +378,35 @@ export function initMobileGate(mode = 'gate') {
         #mobile-gate[data-mode="title"] .mg-hero .mg-actions { justify-content: flex-start; }
         #mobile-gate[data-mode="title"] h1 { font-size: 52px; }
         #mobile-gate[data-mode="title"] .mg-player { grid-area: player; align-self: center; justify-self: center; max-width: 480px; }
-        /* Desktop title has room to show ALL the tapes at once — no scroll:
-           centre them and shrink each a touch so the whole rack fits. */
-        #mobile-gate[data-mode="title"] .mg-rack { justify-content: center; overflow: visible; max-width: none; gap: 9px; }
-        #mobile-gate[data-mode="title"] .mg-tape { width: 84px; }
-        #mobile-gate[data-mode="title"] .mg-tape canvas { width: 84px; height: 55px; }
+        /* The Walkman was loud enough to be the whole title screen. Bring it
+           down so it reads as one element among several, not the headline. */
+        #mobile-gate[data-mode="title"] .mg-deck { width: 230px; }
+        #mobile-gate[data-mode="title"] .mg-transport button { width: 36px; height: 29px; }
+        #mobile-gate[data-mode="title"] .mg-transport #mg-play { width: 46px; }
+        /* Desktop title presents the tapes as a compact shelf of horizontal
+           cards: a small cassette thumbnail beside the FULL artist and title,
+           two cards to a row. The card is wide enough for the whole name on one
+           line, so nothing is clipped and the rows sit tight and even. Four rows
+           show at once; add more tapes and the shelf scrolls inside its own box
+           rather than pushing the layout taller — it scales to any number. */
+        #mobile-gate[data-mode="title"] .mg-rack {
+          display: grid; grid-template-columns: repeat(2, 1fr);
+          justify-content: center; align-content: start; gap: 8px 10px;
+          width: 100%; max-width: 428px; max-height: 208px;
+          overflow-x: hidden; overflow-y: auto; padding: 2px 4px; scrollbar-width: thin;
+          scrollbar-color: color-mix(in srgb, var(--accent) 55%, transparent) transparent; }
+        #mobile-gate[data-mode="title"] .mg-rack::-webkit-scrollbar { width: 7px; }
+        #mobile-gate[data-mode="title"] .mg-rack::-webkit-scrollbar-thumb {
+          background: color-mix(in srgb, var(--accent) 55%, transparent); border-radius: 4px; }
+        #mobile-gate[data-mode="title"] .mg-tape {
+          width: auto; display: flex; flex-direction: row; align-items: center; gap: 8px;
+          text-align: left; padding: 5px 7px; border-radius: 8px;
+          background: color-mix(in srgb, #000 20%, transparent); }
+        #mobile-gate[data-mode="title"] .mg-tape.sel { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+        #mobile-gate[data-mode="title"] .mg-tape canvas { width: 46px; height: 30px; flex: 0 0 auto; border-width: 1.5px; }
+        #mobile-gate[data-mode="title"] .mg-tape-meta { min-width: 0; flex: 1 1 auto; }
+        #mobile-gate[data-mode="title"] .mg-tape .mg-artist { margin-top: 0; font-size: 11.5px; line-height: 1.2; }
+        #mobile-gate[data-mode="title"] .mg-tape .mg-title { font-size: 10.5px; line-height: 1.2; }
         #mobile-gate[data-mode="title"] .mg-stage { grid-area: stage; width: 100%; max-height: min(260px, 30vh); align-self: end; }
         #mobile-gate[data-mode="title"] .mg-bot { width: auto; height: 152px; max-height: 100%; }
       }
@@ -380,14 +415,19 @@ export function initMobileGate(mode = 'gate') {
   `;
   document.body.appendChild(el);
 
-  // Backdrop clip at half speed (and nudge it to autoplay where the browser
-  // needs a poke). Harmless if the .mov codec isn't supported — the themed
-  // gradient shows through underneath.
+  // Load the backdrop GIF only if the connection can spare ~1.9 MB. Withhold it
+  // on an explicit data-saver, a 2G-class link, or when the visitor asks for
+  // reduced motion (a looping animation is exactly what that setting means to
+  // avoid, and it saves the bytes too). In those cases the `src` is never set,
+  // so nothing is requested and the low-opacity themed backdrop stands alone.
+  // Where we cannot tell — Safari and Firefox have no Network Information API —
+  // we load it, so no browser is quietly denied the look it had before.
   const bgv = el.querySelector('.mg-bgvideo');
   if (bgv) {
-    bgv.playbackRate = 0.5;
-    bgv.addEventListener('loadedmetadata', () => { bgv.playbackRate = 0.5; });
-    bgv.play?.().catch(() => {});
+    const conn = navigator.connection || {};
+    const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const slow = conn.saveData === true || /^(slow-2g|2g)$/.test(conn.effectiveType || '');
+    if (!reduced && !slow) bgv.src = 'assets/media/videos/postAI-background.gif';
   }
 
   // ---- theme switch ----
@@ -563,9 +603,14 @@ export function initMobileGate(mode = 'gate') {
     r.drawCassette({ color: t.color || '#c9a44a', label: `${t.artist} — ${t.title}` }, 0);
     ctx.restore();
     card.appendChild(cv);
+    // Artist + title wrapped together so the desktop shelf can set the thumbnail
+    // beside them (flex row); on the phone the wrapper is a plain block and the
+    // labels stack under the cassette exactly as before.
+    const meta = document.createElement('div'); meta.className = 'mg-tape-meta';
     const a = document.createElement('div'); a.className = 'mg-artist'; a.textContent = t.artist;
     const ti = document.createElement('div'); ti.className = 'mg-title'; ti.textContent = t.title;
-    card.appendChild(a); card.appendChild(ti);
+    meta.appendChild(a); meta.appendChild(ti);
+    card.appendChild(meta);
     rack.appendChild(card);
   });
 
@@ -629,8 +674,36 @@ export function initMobileGate(mode = 'gate') {
   audio.addEventListener('play', syncTransport);
   audio.addEventListener('pause', syncTransport);
 
+  // The mechanical clunk of a cassette seating in the deck. Synthesised (a short
+  // low body + a plastic tick) so it needs no asset and works on the pre-boot
+  // gate, before the game's sfx exist. The AudioContext is made lazily on the
+  // first load — a click or a drop is the user gesture that unlocks it.
+  let sfxCtx = null;
+  const deckClunk = () => {
+    try {
+      sfxCtx = sfxCtx || new (window.AudioContext || window.webkitAudioContext)();
+      if (sfxCtx.state === 'suspended') sfxCtx.resume();
+      const t0 = sfxCtx.currentTime;
+      const o = sfxCtx.createOscillator(), g = sfxCtx.createGain();
+      o.type = 'square';
+      o.frequency.setValueAtTime(150, t0); o.frequency.exponentialRampToValueAtTime(64, t0 + 0.06);
+      g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.16, t0 + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.1);
+      o.connect(g); g.connect(sfxCtx.destination); o.start(t0); o.stop(t0 + 0.11);
+      const nb = sfxCtx.createBuffer(1, Math.floor(0.03 * sfxCtx.sampleRate), sfxCtx.sampleRate);
+      const ch = nb.getChannelData(0);
+      for (let k = 0; k < ch.length; k++) ch[k] = (Math.random() * 2 - 1) * (1 - k / ch.length);
+      const ns = sfxCtx.createBufferSource(); ns.buffer = nb;
+      const nf = sfxCtx.createBiquadFilter(); nf.type = 'highpass'; nf.frequency.value = 1700;
+      const ng = sfxCtx.createGain();
+      ng.gain.setValueAtTime(0.11, t0); ng.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.03);
+      ns.connect(nf); nf.connect(ng); ng.connect(sfxCtx.destination); ns.start(t0); ns.stop(t0 + 0.04);
+    } catch (_) { /* no audio: the tape still loads silently */ }
+  };
+
   const loadTape = (i) => {
     const t = TAPES[i];
+    deckClunk();   // it clicks into the deck, however it got there (tap or drag)
     playlist = [
       ...t.a.tracks.map((f) => `assets/audio/${t.dir}/A/${f}`),
       ...t.b.tracks.map((f) => `assets/audio/${t.dir}/B/${f}`),
@@ -674,9 +747,43 @@ export function initMobileGate(mode = 'gate') {
   });
   nextBtn.addEventListener('click', (e) => { e.stopPropagation(); nextTrack(); });
   // The big cassette itself still toggles play/pause.
-  el.querySelector('.mg-deck').addEventListener('click', () => {
+  const deckEl = el.querySelector('.mg-deck');
+  deckEl.addEventListener('click', () => {
     if (current < 0) return;
     if (audio.paused) audio.play().catch(() => {}); else audio.pause();
+  });
+  // Drag a tape onto the deck to load it — an extra way in alongside clicking.
+  // HTML5 drag is a mouse affordance (touch keeps the tap handler above), so
+  // this is a desktop delight and never blocks the phone. The dragged index
+  // travels on the transfer, with a module var as the same-page fast path.
+  let dragTape = -1;
+  el.querySelectorAll('.mg-tape').forEach((card) => {
+    card.setAttribute('draggable', 'true');
+    card.addEventListener('dragstart', (e) => {
+      dragTape = Number(card.dataset.i);
+      card.classList.add('dragging');
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'copy';
+        try { e.dataTransfer.setData('text/plain', String(dragTape)); } catch (_) {}
+        // Lift only the cassette itself, not the whole card with its label —
+        // it reads as picking the little tape up out of the shelf.
+        const thumb = card.querySelector('canvas');
+        if (thumb && e.dataTransfer.setDragImage) {
+          const r = thumb.getBoundingClientRect();
+          e.dataTransfer.setDragImage(thumb, r.width / 2, r.height / 2);
+        }
+      }
+    });
+    card.addEventListener('dragend', () => { card.classList.remove('dragging'); dragTape = -1; deckEl.classList.remove('drop-target'); });
+  });
+  deckEl.addEventListener('dragover', (e) => { e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'; deckEl.classList.add('drop-target'); });
+  deckEl.addEventListener('dragleave', (e) => { if (!deckEl.contains(e.relatedTarget)) deckEl.classList.remove('drop-target'); });
+  deckEl.addEventListener('drop', (e) => {
+    e.preventDefault();
+    deckEl.classList.remove('drop-target');
+    let i = dragTape;
+    if (i < 0 && e.dataTransfer) { const d = e.dataTransfer.getData('text/plain'); if (d !== '') i = Number(d); }
+    if (Number.isInteger(i) && i >= 0 && i < TAPES.length) loadTape(i);
   });
   syncTransport();   // initial: play shows ▶, stop/next disabled
 

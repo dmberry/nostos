@@ -19,6 +19,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { makeDisk, graftSystemDirs } from '../src/game/unix.js';
+import { ELIZA_PROGRAM, ELIZA_LOOP_LEGACY } from '../src/game/eliza-src.js';
 
 /** A save-shaped disk: this build's, with the eliza folder wound back. */
 function oldSave() {
@@ -76,4 +77,25 @@ test('every folder this build ships under /home reaches an empty home', () => {
   bare.d.home.d = {};
   graftSystemDirs(bare);
   assert.deepEqual(Object.keys(bare.d.home.d).sort(), shipped.sort());
+});
+
+// eliza.ml changed shape (readLine loop -> fun reply) rather than name, and
+// the add-only graft cannot reach a file that is already there. SUPERSEDED
+// closes that: an on-disk copy byte-identical to the old shipped text is the
+// system's and gets replaced in the SAME graft; anything else is the player's.
+test('an unmodified superseded file is replaced in one graft', () => {
+  const disk = makeDisk();
+  disk.d.home.d.eliza.d['eliza.ml'] = { f: ELIZA_LOOP_LEGACY };
+  const added = graftSystemDirs(disk);
+  assert.equal(disk.d.home.d.eliza.d['eliza.ml'].f, ELIZA_PROGRAM,
+    'one boot must land the new version, not two');
+  assert.ok(added.includes('-home/eliza/eliza.ml (superseded)'), 'the removal is reported');
+  assert.ok(added.includes('home/eliza/eliza.ml'), 'and the replacement');
+});
+
+test('an edited eliza.ml is the player\'s and stays theirs', () => {
+  const disk = makeDisk();
+  disk.d.home.d.eliza.d['eliza.ml'] = { f: '(* my own version *)' };
+  graftSystemDirs(disk);
+  assert.equal(disk.d.home.d.eliza.d['eliza.ml'].f, '(* my own version *)');
 });

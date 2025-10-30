@@ -196,6 +196,43 @@ const withAir = (nets, essid) => {
 const AIR = [{ essid: 'calypso.com', kind: 'daemon', signal: 78, note: 'CALYPSO estate network' },
   { essid: 'ron-relay', kind: 'relay', signal: 96, note: 'unlisted' }];
 
+test('arp renders a sweep and never crashes on an entry with no position', () => {
+  const env = withCard(true);
+  // A well-formed unit line, plus a host with no bearing/range — the shape the
+  // positionless W-factory host took, which used to crash the formatter on
+  // `undefined.padEnd`. The sweep itself now skips such an entry; the formatter
+  // must also degrade rather than throw if one ever reaches it.
+  env.net.local = () => [
+    { host: 't1_03', ip: '10.1.1.9', mac: '8:0:2b:1:2:3', range: 4, bearing: 'NE', down: false, tag: 'guard' },
+    { host: 'w-factory', ip: '10.1.1.1', mac: '8:0:2b:4:5:6', range: NaN, bearing: undefined, down: false, tag: null },
+  ];
+  let out;
+  assert.doesNotThrow(() => { out = run('arp', env).text; });
+  assert.match(out, /t1_03.*NE.*«guard»/, 'the good line renders with its bearing and tag');
+  assert.match(out, /w-factory.*\?/, 'a positionless line degrades to ? rather than crashing');
+});
+
+test('scan lists the obelisks on the associated network, tagged and marked down', () => {
+  const env = withCard(true);
+  env.net.essid = 'calypso.com';
+  env.net.obs = () => [
+    { code: 'OB_5D33', host: 'ob_5d33.calypso.com', ip: '10.1.1.1', tag: 'gate', down: false },
+    { code: 'OB_3C4D', host: 'ob_3c4d.calypso.com', ip: '10.1.1.2', tag: null, down: true },
+  ];
+  const out = run('scan', env).text;
+  assert.match(out, /obelisks on calypso\.com/);
+  assert.match(out, /OB_5D33\s+10\.1\.1\.1.*«gate»/, 'a live tower with its tag');
+  assert.match(out, /OB_3C4D\s+10\.1\.1\.2.*\[down\]/, 'a felled tower flagged down');
+});
+
+test('scan needs a card, and needs it up', () => {
+  assert.match(run('scan', withCard(false)).text, /wifi0 is down/);
+  const noCard = sh(); noCard.net = null;
+  assert.match(run('scan', noCard).text, /no network card/);
+  const upNoObs = withCard(true); upNoObs.net.obs = () => [];
+  assert.match(run('scan', upNoObs).text, /no obelisks/);
+});
+
 test('iwlist scan reports a Cell per network in range', () => {
   const out = run('iwlist wifi0 scan', withAir(AIR)).text;
   assert.match(out, /Scan completed/);
@@ -817,4 +854,52 @@ test('hasFile looks where a person would actually put a program', () => {
   home.d.tool = { f: 'x' };
   assert.equal(hasFile(env, 'tool'), true, '/home counts');
   assert.equal(hasFile(env, 'nothing_here'), false);
+});
+
+// #126 — the watermark. Everything the estate pressed is signed and nothing the
+// player writes is, so run here the detector finds HUMANS. These tests pin that
+// inversion: shipped file valid, edited file not, invented file not.
+test('watermark: a shipped file is machine-generated, byte for byte', () => {
+  const sh = newShell();
+  const out = runUnix('watermark ' + firstShippedFile(sh), sh, {}).text;
+  assert.match(out, /VALID — machine-generated/);
+  assert.match(out, /RON content credentials/);
+});
+
+function firstShippedFile(sh) {
+  // any regular file that exists on a fresh disk
+  const walk = (n, path) => {
+    if (isFile(n)) return path.join('/');
+    for (const k of Object.keys(n.d || {})) {
+      const r = walk(n.d[k], path.concat(k));
+      if (r) return r;
+    }
+    return null;
+  };
+  return '/' + walk(makeDisk(), []);
+}
+
+test('watermark: an edited file loses the mark', () => {
+  const sh = newShell();
+  const p = firstShippedFile(sh).slice(1).split('/');
+  lookup(sh.root, p).f += '\nthe player was here';
+  const out = runUnix('watermark /' + p.join('/'), sh, {}).text;
+  assert.match(out, /NONE — human-made, or scrubbed/);
+  assert.match(out, /does not match/);
+});
+
+test('watermark: a file the player invented was never pressed at all', () => {
+  const sh = newShell();
+  lookup(sh.root, ['home']).d['mine.ml'] = file('fun reply s = s');
+  const out = runUnix('watermark /home/mine.ml', sh, {}).text;
+  assert.match(out, /NONE — human-made/);
+  assert.match(out, /nothing in the estate ever wrote this file/);
+});
+
+test('watermark reports to KLEOS so the explainability track can count it', () => {
+  const sh = newShell();
+  const seen = [];
+  sh.onAchieve = (n) => seen.push(n);
+  runUnix('watermark ' + firstShippedFile(sh), sh, {});
+  assert.deepEqual(seen, ['watermarkRead']);
 });

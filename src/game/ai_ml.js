@@ -163,6 +163,28 @@ function makeBuiltins(station) {
       arity: 0,
       fn: (_args, ctx) => ({ tag: 'list', items: ctx.listObelisks().map((id) => ({ tag: 'node', id })) }),
     },
+    // `garrison` — the units homed to THIS tower, the ones it musters and
+    // recharges: id, chassis, state and any operator tag. Where `scan` lists the
+    // towers on the wire, this lists the machines that answer to the one you are
+    // jacked into, so you can find the right unit to tag, reprogram or repel.
+    garrison: {
+      arity: 0,
+      fn: (_args, ctx) => ({ tag: 'str', v: ctx.garrison ? ctx.garrison() : 'garrison: not available from this console.' }),
+    },
+    // `soul <unit>` — the machine's SOUL DOCUMENT: the program it is running,
+    // printed whole, with whatever constitution sits above it. It is the same
+    // bytes `fetch <unit>/program.ml` returns, wearing the discourse's own word
+    // for the thing. A machine's soul in this world is seven lines, written by
+    // somebody else, and public to anyone who asks.
+    soul: {
+      arity: 1,
+      fn: ([u], ctx) => {
+        const id = String(u && (u.id || u.name || u.v) || '').trim();
+        if (!id) throw new RonmlError('soul takes a unit — try: soul t1_03');
+        if (!ctx.soulOf) throw new RonmlError('no unit interface on this console.');
+        return { tag: 'str', v: ctx.soulOf(id) };
+      },
+    },
     keys: {
       arity: 0,
       fn: (_args, ctx) => ({ tag: 'list', items: [...ctx.heldKeys()].map((id) => ({ tag: 'key', id })) }),
@@ -298,6 +320,21 @@ function makeBuiltins(station) {
         return { tag: 'unit' };
       },
     },
+    // `fetch <addr>` — read a unit's served program off the network, as a
+    // string, so a program can decide on what a machine reports about itself:
+    //   if String.isSubstring "FAULTED" (fetch "10.3.4.7") then post ...
+    // Returns "" when there is nothing to read, so `fetch addr <> ""` is a
+    // reachability test rather than a fault. Laptop-only — a unit in a field
+    // does not call the network — and the read half of the same wire `post`
+    // writes on (main.js getResource).
+    fetch: {
+      arity: 1,
+      fn: ([addr], ctx) => {
+        if (!ctx.fetchResource) throw new RonmlError('no network on this machine.');
+        const a = addr && (addr.v != null ? addr.v : addr.id != null ? addr.id : addr.name);
+        return { tag: 'str', v: String(ctx.fetchResource(String(a || ''))) };
+      },
+    },
     // `decrypt aikey`: turn a sealed AI key (from `copy`) into the open token
     // `unlock` needs. The AI encrypts its own masters out of habit; this undoes it.
     decrypt: {
@@ -363,6 +400,9 @@ function makeBuiltins(station) {
     linked: SENSE('linked', 'bool'),
     blight: SENSE('blight', 'bool'),
     daylight: SENSE('daylight', 'bool'),
+    // A working machine's own trade: true when its toolhead sees a job in range
+    // — a repairable tower for a W-3, plantable ground or blight for a W-5.
+    work: SENSE('work', 'bool'),
     // ---- fire control (P8) ----------------------------------------------
     // The level below `hunt`. A machine that carries a weapon has to know
     // whether it can see the target, whether it is loaded, whether the target
@@ -373,6 +413,12 @@ function makeBuiltins(station) {
     shielded: SENSE('shielded', 'bool'),
     contact: SENSE('contact', 'bool'),
     lost_for: SENSE('lost_for', 'num'),
+    // ---- V-class courier senses (#127) ----------------------------------
+    // A courier has to know whether it is carrying a cell and how far the
+    // nearest flat machine is. On every chassis: a sense a unit does not have
+    // reads false or 24 rather than faulting a program that asks for it.
+    cargo: SENSE('cargo', 'bool'),
+    casualty_range: SENSE('casualty_range', 'num'),
     // ---- a machine's own EFFECTS ----------------------------------------
     // Sensors read; these do. They are not intents: a program still evaluates
     // to exactly one intent, and these happen along the way, exactly like
@@ -382,6 +428,26 @@ function makeBuiltins(station) {
     //     if threat then (beep ; eye "white" ; hunt) else patrol
     // The engine collects them (decide returns them) and is free to refuse:
     // beeping is rate-limited and inaudible from across the island.
+    // `move dx dy` — a LOGO order, not a sensor and not an intent: it queues one
+    // relative-tile leg onto the same ordered channel as the lamp effects. It
+    // means anything only when the program returns the `route` intent, which
+    // tells the engine to walk the queue a leg at a time. Negative is the
+    // language's own tilde: `move 3 ~1`, because `move 3 -1` is subtraction.
+    move: {
+      arity: 2,
+      fn: ([dx, dy]) => {
+        const x = Math.trunc(Number(dx && dx.v)), y = Math.trunc(Number(dy && dy.v));
+        if (!Number.isFinite(x) || !Number.isFinite(y)) throw new RonmlError('move takes two whole numbers of tiles: move 3 ~1');
+        if (Math.abs(x) > ROUTE_MAX_LEG || Math.abs(y) > ROUTE_MAX_LEG) {
+          throw new RonmlError(`move: a leg is at most ${ROUTE_MAX_LEG} tiles each way`);
+        }
+        if (EFFECTS && EFFECTS.length >= ROUTE_MAX_ORDERS) {
+          throw new RonmlError('route too long — the machine cannot hold it');
+        }
+        if (EFFECTS) EFFECTS.push({ k: 'move', dx: x, dy: y });
+        return { tag: 'unit' };
+      },
+    },
     beep: EFFECT('beep', 0, () => ({})),
     eye: EFFECT('eye', 1, ([c]) => {
       const name = String(c && c.v != null ? c.v : c && c.id != null ? c.id : '').toLowerCase();
@@ -394,6 +460,19 @@ function makeBuiltins(station) {
       const hz = Number(n && n.v);
       if (!Number.isFinite(hz) || hz < 0 || hz > 10) throw new RonmlError('flash takes a rate from 0 to 10 (0 is steady)');
       return { hz };
+    }),
+    // `never <word>` — a CONSTITUTIONAL CLAUSE. Not an intent and not a sensor:
+    // a standing prohibition that sits above whatever the program decides, and
+    // binds the chassis reflexes too. The machine cannot choose the forbidden
+    // word, and cannot fall back into it when its program faults. Written at the
+    // top of a program, before the first `;`, so it holds unconditionally — that
+    // is the taught idiom (see robots_code/intents.txt).
+    never: EFFECT('never', 1, ([w]) => {
+      const word = String(w && w.v != null ? w.v : w && w.id != null ? w.id : '').toLowerCase();
+      if (!NEVER_CLAUSES.includes(word)) {
+        throw new RonmlError(`never takes ${NEVER_CLAUSES.join(' or ')} — '${word || '?'}' is not something a constitution can forbid`);
+      }
+      return { word };
     }),
     // `timer`: how long until POSEIDON comes online — a free read off the network
     // clock, so you can pace the run from the console.
@@ -412,6 +491,22 @@ function makeBuiltins(station) {
         const id = ctx.currentNode && ctx.currentNode();
         if (!id) throw new RonmlError('no node here.');
         return { tag: 'node', id };
+      },
+    },
+    // `tag <node> "label"` — hang a short operator label on a unit or tower so
+    // four identical T-1s can be told apart on the wire. The label rides the
+    // broadcast name: arp, the sniffer and the unit's own page all read it back,
+    // which is how you tell which one to post the program to. `tag <node> ""`
+    // clears it. The host decides what a label may touch (ctx.tagNode).
+    tag: {
+      arity: 2,
+      fn: ([node, label], ctx) => {
+        if (!node || node.tag !== 'node') throw new RonmlError('tag needs a node — try: tag t1_03 "hunter"');
+        if (!label || label.tag !== 'str') throw new RonmlError('tag needs a label in quotes — try: tag t1_03 "hunter"  (or "" to clear)');
+        if (!ctx.tagNode) throw new RonmlError('no tagging from this console.');
+        const r = ctx.tagNode(node.id, label.v);
+        if (!r || !r.ok) throw new RonmlError((r && r.text) || `cannot tag ${node.id}`);
+        return { tag: 'str', v: r.text };
       },
     },
     // Opens the browsable notepad overlay (ctx.showNotepad, main.js) rather
@@ -504,6 +599,26 @@ function makeBuiltins(station) {
         const name = topic && (topic.name || topic.id || '') || '';
         ctx.read(String(name).toLowerCase());
         return { tag: 'unit' };
+      },
+    },
+    // `get <file>` / `sz <file>` — pull a readable file off the tower you are
+    // jacked into, down the telnet link, into the NostBook's /home. `sz` is the
+    // same command by its zmodem name. Telnet itself never moved files; you ran
+    // a transfer over the open connection, and this is that transfer.
+    get: {
+      arity: 1,
+      fn: ([f], ctx) => {
+        const name = f && (f.name || f.id || (f.tag === 'str' ? f.v : '')) || '';
+        if (!ctx.pullFile) throw new RonmlError('no file transfer at this console — get pulls a file down a telnet link.');
+        return { tag: 'str', v: ctx.pullFile(String(name)) };
+      },
+    },
+    sz: {
+      arity: 1,
+      fn: ([f], ctx) => {
+        const name = f && (f.name || f.id || (f.tag === 'str' ? f.v : '')) || '';
+        if (!ctx.pullFile) throw new RonmlError('no file transfer at this console — sz sends a file down a telnet link.');
+        return { tag: 'str', v: ctx.pullFile(String(name)) };
       },
     },
     // `forge zeus_virus.ml` (HERMES relay): arm the sealed payload with the two
@@ -789,7 +904,7 @@ function makeBuiltins(station) {
 // (work at both an obelisk and a HERMES relay). A verb tagged for one station is
 // refused at the other; the file verbs must move files at either terminal, and
 // `save` must write a checkpoint from whichever one you are logged into.
-const OB_VERBS = ['scan', 'nearest', 'keys', 'name', 'timer', 'echo', 'not', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'sing', 'map', 'print', 'decrypt', 'unlock', 'eliza', 'retire', 'read',
+const OB_VERBS = ['scan', 'garrison', 'soul', 'nearest', 'keys', 'name', 'tag', 'timer', 'echo', 'not', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'sing', 'map', 'print', 'decrypt', 'unlock', 'eliza', 'retire', 'read', 'get', 'sz',
   // The control verbs, all of which want a decrypted AI key.
   'fog', 'poseidon', 'robots', 'net', 'spread', 'explorer'];
 // Note: HERMES's `print` is added as an override in makeBuiltins (it takes a
@@ -810,18 +925,26 @@ const LAPTOP_VERBS = ['echo', 'not', 'hd', 'tl', 'length', 'abs', 'sqrt', 'min',
   // line needs somebody there to answer. A unit carrying a program that called
   // it would suspend in a field with nobody to type, which is why it is not in
   // ROBOT_VERBS and must not be added there.
-  'readLine'];
+  'readLine', 'fetch'];
 // A MACHINE'S OWN STATION. Its program runs here: senses in, an intent out, and
 // nothing else within reach — no network, no files, no console verbs. That is
 // not a restriction bolted on, it is what a unit actually has.
 // What a machine's own program may say. `not` and `echo` are the language's,
 // not the machine's, so they are listed here but stay neutral elsewhere.
+// What a constitution may forbid. Prohibitions only: they compose, where a
+// positive obligation would be a second decision system competing with the
+// program proper (docs/ml-constitution-plan.md).
+export const NEVER_CLAUSES = ['hunt', 'fire'];
+
 const MACHINE_ONLY = ['charge', 'integrity', 'range', 'home_range',
-  'threat', 'hurt', 'linked', 'blight', 'daylight', 'beep', 'eye', 'flash',
+  'threat', 'hurt', 'linked', 'blight', 'daylight', 'work', 'beep', 'eye', 'flash', 'move', 'never',
   // Fire control (docs/robot-programs-plan.md P8). A machine that shoots needs
   // to know whether it can see, whether it is loaded, whether the target is
   // covered, whether it is being touched, and how long it has been looking.
-  'sight', 'armed', 'shielded', 'contact', 'lost_for'];
+  'sight', 'armed', 'shielded', 'contact', 'lost_for',
+  // V-class courier senses (#127). On every chassis, because a sense a unit
+  // does not have should read false rather than crash a program that asks.
+  'cargo', 'casualty_range'];
 const ROBOT_VERBS = [...MACHINE_ONLY, 'not', 'echo', 'hd', 'tl', 'length', 'abs', 'sqrt', 'min', 'max', 'size',
   'real', 'floor', 'ord', 'chr', 'str', 'explode', 'implode', 'makestring'];
 // Retired verbs kept only so typing one gives a clean "not a command" instead
@@ -944,9 +1067,14 @@ const USAGE_HINTS = {
 // verbs that work anywhere. `help` filters to the terminal you're at.
 const HELP_VERBS = [
   ['scan', 'unit -> list', 'obelisks on the wire', '', 'ob'],
+  ['garrison', 'unit -> str', "this tower's own units", '', 'ob'],
+  ['soul n', 'node -> str', "a unit's soul document: its whole program", '', 'ob'],
   ['nearest', 'list -> node', 'the closest of a list', '', 'ob'],
   ['keys', 'unit -> list', 'the keys you hold', '', 'ob'],
   ['name', 'unit -> node', 'the node you are on', '', 'ob'],
+  ['tag n "label"', 'node str -> unit', 'label a unit or tower on the wire ("" clears)', 'no key needed', 'ob'],
+  ['get "file"', 'str -> str', 'pull a readable file down to the NostBook /home', 'over telnet only', 'ob'],
+  ['sz "file"', 'str -> str', 'send a file to /home — get by its zmodem name', 'over telnet only', 'ob'],
   ['timer', 'unit -> node', 'time left before POSEIDON', '', 'ob'],
   ['hack n', 'node -> key', "take node n's access key", 'no key needed', 'ob'],
   ['crash n k', 'node key -> unit', 'knock n dark for a while', 'needs k from hack', 'ob'],
@@ -1049,8 +1177,8 @@ function helpText(topic, station, hasManual) {
   // they nest in `let`/pipes/functions. Both forms still run; this just teaches the
   // split by how the reference presents them.
   const IMPERATIVE = new Set([
-    'scan', 'keys', 'name', 'timer', 'map', 'print', 'sleep', 'rewind', 'repel', 'sing', 'loop', 'retire',
-    'read', 'make', 'archive', 'records', 'drive', 'backup', 'restore',
+    'scan', 'garrison', 'soul', 'keys', 'name', 'timer', 'map', 'print', 'sleep', 'rewind', 'repel', 'sing', 'loop', 'retire',
+    'read', 'get', 'sz', 'make', 'archive', 'records', 'drive', 'backup', 'restore',
     // Arity-0 and nothing comes back: `explorer` opens a window, `save` writes a
     // checkpoint, `drives` prints what is attached. They belong with `map` and
     // `print` rather than with the verbs you nest in a `let`.
@@ -1070,7 +1198,7 @@ function helpText(topic, station, hasManual) {
   // island, and what does the key buy. Anything not named falls into the last
   // group, so adding a verb can never make it vanish from the list.
   const GROUPS = [
-    ['LOOK', ['scan', 'nearest', 'name', 'keys', 'timer', 'map', 'explorer']],
+    ['LOOK', ['scan', 'garrison', 'soul', 'nearest', 'name', 'keys', 'tag', 'timer', 'map', 'explorer']],
     ['ONE NODE', ['hack', 'crash', 'loop']],
     ['THE ISLAND — needs a decrypted AI key', ['fog', 'poseidon', 'robots', 'net', 'spread']],
     ['THE KEY', ['copy', 'decrypt', 'unlock', 'print']],
@@ -1174,7 +1302,12 @@ function runStar(rest, ctx) {
 // these already (robots.js); the program only picks. Anything else a program
 // returns is a fault — a machine that asks for something it cannot do is broken,
 // not creative.
-export const INTENTS = ['patrol', 'hunt', 'flee', 'home', 'tend', 'wait'];
+export const INTENTS = ['patrol', 'hunt', 'flee', 'home', 'tend', 'wait', 'route', 'follow', 'defend'];
+// The most a `route` may queue in one evaluation, and how far one leg may go.
+// A route that re-queues the same orders loops for ever — that is how circles
+// are written — so the machine cannot be allowed to hold an unbounded list.
+export const ROUTE_MAX_ORDERS = 64;
+export const ROUTE_MAX_LEG = 12;
 
 // What a program may say about its weapon, alongside what it says about its
 // feet. A unit moves and shoots in the same quarter-second, so one intent per
@@ -1213,6 +1346,12 @@ export function decide(program, sense, opts = {}) {
   const intent = (pair ? pair[1] : raw).toLowerCase();
   const fire = pair ? pair[2].toLowerCase() : null;
   if (!INTENTS.includes(intent)) {
+    // A branch that ends on an effect (eye/beep/flash) or on nothing evaluates
+    // to () — the commonest program mistake — so name it as a MISSING INTENT
+    // rather than reporting '()' as a verb the unit cannot do.
+    if (raw === '()' || raw === '') {
+      return { ok: false, fault: 'MISSING INTENT: a program must end with an intent (patrol, hunt, home, flee, wait, ...). This branch ran to (), an effect like eye/beep/flash or nothing. Put the intent last, after any effects.', effects };
+    }
     return { ok: false, fault: `'${pair ? pair[1] : raw}' is not something this unit can do`, effects };
   }
   if (fire && !FIRE.includes(fire)) {
@@ -1372,8 +1511,10 @@ export function aimlFull() {
   L.push('');
   L.push('  A machine answers with an intent, or a pair: [hunt, fire].');
   L.push('  feet: patrol hunt flee home tend wait   weapon: fire hold reload');
+  L.push('  escort: follow (trail you), defend (trail you and fight for you)');
   L.push('  senses: charge integrity range home_range threat hurt linked');
   L.push('          blight daylight sight armed shielded contact lost_for');
+  L.push('          cargo casualty_range  (V-class couriers)');
   L.push('');
   sec('WHAT THE CHECKER DOES');
   L.push('  Hindley-Milner inference: unification, occurs check, let-polymorphism,');
