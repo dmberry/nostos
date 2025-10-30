@@ -16,7 +16,7 @@ const TRACKED = new Set([
   'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
   'ShiftLeft', 'ShiftRight',
   'KeyE', 'Slash', 'Space', 'KeyQ', 'KeyH', 'KeyR', 'KeyG', 'KeyF', 'KeyI', 'KeyP', 'KeyZ', 'KeyJ',
-  'KeyK', 'KeyC', 'KeyM', 'KeyO', 'KeyV', 'KeyN', 'KeyB', 'KeyX', 'KeyT', 'KeyU', 'KeyL', 'BracketRight', 'Escape',
+  'KeyK', 'KeyC', 'KeyM', 'KeyO', 'KeyV', 'KeyN', 'KeyB', 'KeyX', 'KeyT', 'KeyU', 'KeyL', 'BracketRight', 'Digit9', 'Escape',
   // DROP moved here off F. F sits under the index finger beside WASD, so it was
   // being hit mid-melee and the thing in your hands went on the ground in the
   // middle of a fight. Backspace is nowhere near the movement hand, it means
@@ -55,22 +55,20 @@ export class Input {
       const tag = e.target && e.target.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       if (TRACKED.has(e.code)) {
+        // A key held with Ctrl, Cmd or Alt is a BROWSER chord — copy, paste,
+        // cut, select-all — not a game action, and it must reach the browser.
+        // C, V, X and A are all tracked (craft, chart, spoofer, move-left), so
+        // swallowing a chord here was cancelling Cmd/Ctrl+C: you could select
+        // the terminal screen and then fail to copy it. Let every chord through
+        // untouched. Shift is not a browser chord and stays ours (sprint, and
+        // Shift+N for the Library).
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
         if (!e.repeat && !this.down.has(e.code)) {
           this.pressed.add(e.code);
-          // N alone opens the notepad; only Ctrl/Cmd+N starts a new game
-          // (which wipes the run) — split here so a bare N can never trigger
-          // the destructive action by accident.
-          if (e.code === 'KeyN') {
-            this._keyNCtrl = e.ctrlKey || e.metaKey;
-            // Shift+N is the Library — the other book. Recorded at the same
-            // moment as Ctrl for the same reason: the modifier belongs to THIS
-            // press, and reading it later would read whatever is held then.
-            this._keyNShift = e.shiftKey && !(e.ctrlKey || e.metaKey);
-          }
-          // Shift+Q leaves the game. Q on its own is eat, so the modifier is
-          // what makes it deliberate — and it is recorded here, with the press,
-          // for the same reason the N modifiers are.
-          if (e.code === 'KeyQ') this._keyQShift = e.shiftKey && !(e.ctrlKey || e.metaKey);
+          // Shift+N is the Library; a bare N opens the notepad. The modifier
+          // belongs to THIS press, so it is read now — reading it when the
+          // press is later consumed would read whatever is held by then.
+          if (e.code === 'KeyN') this._keyNShift = e.shiftKey;
         }
         this.down.add(e.code);
         e.preventDefault();
@@ -288,20 +286,7 @@ export class Input {
   }
 
   eatPressed() {
-    if (this.pressed.has('KeyQ') && this._keyQShift) return false;   // that one is Leave
     return this.consumePress('KeyQ');
-  }
-
-  // Shift+Q: leave the game. Not Escape — Escape is the key every overlay uses
-  // to dismiss itself, and some of this game's panels are drawn on the canvas
-  // rather than as elements, so "is anything else open?" cannot be answered
-  // reliably enough to hang the end of a session on it.
-  quitPressed() {
-    if (this.pressed.has('KeyQ') && this._keyQShift) {
-      this.pressed.delete('KeyQ');
-      return true;
-    }
-    return false;
   }
 
   readPressed() {
@@ -390,6 +375,14 @@ export class Input {
     return this.consumePress('KeyK');
   }
 
+  // 9: KLEOS, the achievements panel (docs/achievements-plan.md). On the number
+  // row where a panel key belongs, but NOT 1-4 — those are the pocket slots,
+  // and taking one would have cost the inventory a binding it already uses.
+  // Also on the HUD rail, which is where a player actually finds a panel.
+  kleosPressed() {
+    return this.consumePress('Digit9');
+  }
+
   craftPressed() {
     return this.consumePress('KeyC');
   }
@@ -415,21 +408,11 @@ export class Input {
     return this.consumePress('BracketRight');
   }
 
-  // Ctrl/Cmd+N only — a bare N is notesPressed() below, so a stray tap can
-  // never wipe the run.
-  newGamePressed() {
-    if (this.pressed.has('KeyN') && this._keyNCtrl) {
-      this.pressed.delete('KeyN');
-      return true;
-    }
-    return false;
-  }
-
   // Shift+N opens the Library — your shelf of books read. Every letter of the
   // alphabet is already bound, so it takes a modifier; N is the right one to
-  // hang it off, since the Scrapbook is its sibling and Ctrl+N is already the
-  // destructive one. `l`, `y`, `r` and `e` are avoided for a further reason:
-  // the LYRE console watches for that word and swallows the keys that spell it.
+  // hang it off, since the Scrapbook is its sibling. `l`, `y`, `r` and `e` are
+  // avoided for a further reason: the LYRE console watches for that word and
+  // swallows the keys that spell it.
   libraryPressed() {
     if (this.pressed.has('KeyN') && this._keyNShift) {
       this.pressed.delete('KeyN');
@@ -440,7 +423,7 @@ export class Input {
 
   // Bare N opens the notepad directly, no terminal needed.
   notesPressed() {
-    if (this.pressed.has('KeyN') && !this._keyNCtrl && !this._keyNShift) {
+    if (this.pressed.has('KeyN') && !this._keyNShift) {
       this.pressed.delete('KeyN');
       return true;
     }

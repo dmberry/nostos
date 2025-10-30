@@ -14,6 +14,12 @@ import { ARMOUR_SLOTS, armourKey, takeHit, slotOf, shouldWear, freshPiece } from
 import { OBJECTS } from './tiles.js';
 import { DAEMON_VOICE, DAEMON_FINAL, daemonTier } from './fortress.js';
 import { fire, SCORE, KILL_XP, zombieImmune } from './combat.js';
+import { W5_PROGRAM } from './robots.js';
+import { achieveEvent } from './achieve.js';
+
+// The five credentials of the escape chain. Picking any of them up is a beat
+// worth marking (docs/achievements-plan.md, the cards).
+const CARD_ITEMS = new Set(['chip', 'ai_key', 'trojan_key', 'hermes_card', 'fsf_card']);
 
 const WALK_SPEED = 4.2;   // tiles per second
 const SPRINT_SPEED = 7.5;
@@ -174,7 +180,7 @@ export class Player {
     this.ronmlKeys = new Set(); // node ids AI-ML's `hack` has cracked open this session
     this.ammoFrac = {};        // accumulated fractional ammo per gun
     this.electroCharge = (ITEMS.electrogun && ITEMS.electrogun.internalMax) || 4; // electro-gun's self-charging internal cell
-    this.terminalSafe = false;  // true while jacked into an obelisk terminal (invisible to machines)
+    this.terminalSafe = false;  // true while jacked into a console — an obelisk, or the NostBook (invisible to machines)
     this.ubikSprays = UBIK_SPRAYS; // charges left in the Ubik can (set on pickup below too)
     this.ubikFlickerT = 0; // seconds left of the "old world showing through" flicker on spray
     this.ubikFlickerX = 0; this.ubikFlickerY = 0; // world pos the flicker is centred on
@@ -542,6 +548,7 @@ export class Player {
     this.removeItem('laptop_broken');
     this.laptop = { model: 'laptop', os: 'unix', fs: makeDisk(), heat: 0, damage: null, netUp: true };
     sfx.play('zap');
+    achieveEvent('laptopFixed', {});
     this.say('You strip the cells and the chip fragments into the burnt board, and the screen catches. The disk was never the problem. Press L.');
     return true;
   }
@@ -638,6 +645,8 @@ export class Player {
     for (let n = 0; n < BLUEBOX_CONVERT_COST; n++) this.removeItem('circuit');
     bot.gardener = true;
     bot.friendly = true;      // reads friendly: green eye, nothing targets it, it targets nothing
+    bot.program = W5_PROGRAM;  // its page reads as the gardener it now is
+    bot.fault = null; bot.intent = null;
     bot.aggro = false;
     bot.hurt = false;
     bot.drained = false;
@@ -646,6 +655,12 @@ export class Player {
     bot.battery = 100;
     sfx.play('zap');
     if (map) this.sparkAt(map, bot.x, bot.y);
+    // Three things at once, and each is a different achievement's business: a
+    // gardener made, a machine pacified rather than killed, and a machine that
+    // can no longer hurt anyone by any route at all.
+    achieveEvent('gardenerMade', { type: bot.type });
+    achieveEvent('unitPacified', { how: 'convert' });
+    achieveEvent('madeSafe', { how: 'convert' });
     this.say(`You splice the bluebox into the ${bot.type.toUpperCase()}. Its eye flushes green and it turns to the dead ground — a gardener now.`);
   }
 
@@ -1718,6 +1733,7 @@ export class Player {
     if (!def || (def.kind !== 'book' && def.kind !== 'paperbook')) return;
     this.booksRead ??= new Set();
     this.booksRead.add(itemKey);
+    achieveEvent('bookRead', { id: itemKey });
   }
 
   // File a one-page summary of a book into the notepad — title, author, and a
@@ -1921,6 +1937,9 @@ export class Player {
       const bonus = this.xpLevel('melee');
       target.hp -= (isRobot ? (tool.robotDamage ?? 1) : (tool.animalDamage ?? 3)) + bonus;
       target.hurt = true; // modules read this (pack flee, boar enrage, robot aggro)
+      // The blow is yours, and the song counts it as such: the kill will be
+      // attributed to your hand, and a hacker who swings has stopped hacking.
+      if (isRobot) { target._lastHitBy = 'melee'; achieveEvent('handDamage', {}); }
       // A solid blow shoves it back and rattles it for a beat (frozen, no
       // attack) — otherwise it just stands there trading hits nose-to-nose,
       // landing its own attack the instant yours lands and out-damaging you
@@ -1940,6 +1959,7 @@ export class Player {
           : `The ${tool.name.toLowerCase()} clangs off the machine.`);
       } else if (target.hp <= 0) {
         target.dead = true;
+        achieveEvent('animalKilled', { type: target.type });
         map.groundItems.push({ item: 'meat', qty: 1, x: target.x, y: target.y });
         this.addScore(SCORE.animal);
         this.say(`The ${target.type} goes down.`);
@@ -2544,8 +2564,10 @@ export class Player {
         if (robot && e.zombie) continue; // bombs can't touch a zombified machine either
         if (Math.hypot(e.x - b.x, e.y - b.y) > b.radius) continue;
         e.hp -= b.damage; e.hurt = true; e.justHurt = true;
+        // You set the fuse, so whatever it kills is yours (achievements-plan §4).
+        if (robot) { e._lastHitBy = 'weapon'; achieveEvent('handDamage', {}); }
         if (robot) { e.scrapPenalty = true; this.sparkAt(map, e.x, e.y); }
-        if (e.hp <= 0 && !robot) { e.dead = true; map.groundItems.push({ item: 'meat', qty: 1, x: e.x, y: e.y }); this.addScore(SCORE.animal); }
+        if (e.hp <= 0 && !robot) { e.dead = true; achieveEvent('animalKilled', { type: e.type }); map.groundItems.push({ item: 'meat', qty: 1, x: e.x, y: e.y }); this.addScore(SCORE.animal); }
         else if (e.hp <= 0 && robot) this.addScore(SCORE.robot);
       }
     };
@@ -3007,7 +3029,11 @@ export class Player {
     if (!itemKey || !ITEMS[itemKey]) return 0; // never stow a null/unknown item
     let left = this._fillSlots(this.pockets, itemKey, qty);
     if (left > 0 && this.backpack) left = this._fillSlots(this.backpack.slots, itemKey, left);
-    return qty - left;
+    const took = qty - left;
+    // Every card in the escape chain is a rung of the story, so picking one up
+    // is worth noticing. One event, keyed by which card it was.
+    if (took > 0 && CARD_ITEMS.has(itemKey)) achieveEvent('cardTaken', { card: itemKey });
+    return took;
   }
 
   // Stack into existing matching slots first, then fill empty ones.

@@ -18,7 +18,7 @@
 
 import { buildWorld } from '../game/worldgen.js';
 import { spawnAnimals } from '../game/animals.js';
-import { spawnRobots, spawnW5, spawnM4 } from '../game/robots.js';
+import { spawnRobots, spawnW5, spawnGardeners, spawnCouriers, spawnM4 } from '../game/robots.js';
 import { spawnWaterDroids } from '../game/waterdroids.js';
 import { spawnBirds } from '../game/birds.js';
 import { placeTors } from '../game/hermes.js';
@@ -357,12 +357,12 @@ export function createIsland(seed) {
   // random spots away from the remote factory, so you actually come across one
   // early instead of it only ever spawning at the (distant) factory. The factory
   // clock below keeps roughly this many topped up over time.
-  for (let placed = 0, tries = 0; placed < 2 && tries < 120; tries++) {
-    const gx = 6 + Math.floor(Math.random() * (map.w - 12));
-    const gy = 6 + Math.floor(Math.random() * (map.h - 12));
-    const g = spawnW5(map, (seed ^ (0x5ad + placed * 131)) >>> 0, gx, gy);
-    if (g) { robots.push(g); placed++; }
-  }
+  // Two tending drones, each garrisoned to a tower — deterministic, so they come
+  // back the same on reload and carry a tag/program across a save like the roster.
+  robots.push(...spawnGardeners(map, seed, obelisks, 2));
+  // One V-class courier per island (#127): the network's answer to its own
+  // flat machines. Cut it and the fallen stay down.
+  robots.push(...spawnCouriers(map, seed, obelisks, 1));
   const waterdroids = spawnWaterDroids(map, seed);
   // The tower objects themselves (for alert/blink state): {x,y} plus the
   // alert level cannot live on the plain {x,y} obelisks list, since that's

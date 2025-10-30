@@ -263,16 +263,18 @@ test('search finds a host by its CONTENT, and keeps dark hosts in the index', ()
   assert.match(renderPage(searchResults(hosts, 'zzzz')).text, /No documents match/);
 });
 
-test('bookmarks are the landing page, and deliberately short', () => {
+test('bookmarks are the landing page: a personal start page with real links', () => {
   const hosts = hostsOf();
-  const { text, links } = renderPage(bookmarksPage(hosts));
-  // Five: the four this machine's owner used, plus reddit, which everybody had.
-  assert.ok(links.length <= 5, 'a browser someone actually used, not a directory');
-  const labels = links.map((l) => l.label).join(' | ');
-  assert.match(labels, /AltaVista/);
-  assert.match(labels, /Tourist Board/);
-  assert.match(labels, /engineering documentation/, 'the manual is reachable from the off');
-  assert.match(text, /bookmarks\.htm/);
+  const html = bookmarksPage(hosts);
+  // The owner's habits, grouped and iconed — a start page they lived on rather
+  // than a bare four-line list. Links sit inside .bm-row wrappers now, so read
+  // them off the hrefs rather than the plain-text renderer.
+  assert.match(html, /AltaVista/);
+  assert.match(html, /Tourist Board/);
+  assert.match(html, /engineering documentation/, 'the manual is reachable from the off');
+  assert.match(html, /bookmarks\.htm/);
+  const hrefs = [...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(hrefs.length >= 8, 'richer than the old bare list');
 });
 
 test('every page names the device, its status and its address', () => {
@@ -381,13 +383,11 @@ test('a shared address is linked by name, and a unique one still by number', () 
 // be findable by someone who does not know it exists.
 test('the browser opens on pages that lead to the whole store', () => {
   const hosts = hostsOf();
-  const bm = renderPage(bookmarksPage(hosts));
-  const reachable = bm.links.map((l) => l.addr);
-  // Deliberately ONE route in, not three: the list stays a person's habits.
-  // The cache is the address that leads to all the rest.
-  assert.ok(reachable.some((a) => /cache\./.test(a)), 'the cache is bookmarked');
-  // Every bookmark must actually open something.
-  for (const l of bm.links) assert.ok(findHost(hosts, l.addr), `${l.addr} resolves`);
+  const hrefs = [...bookmarksPage(hosts).matchAll(/href="([^"]+)"/g)].map((m) => m[1]);
+  // The cache is the address that leads to all the rest, and it stays bookmarked.
+  assert.ok(hrefs.some((a) => /cache\./.test(a)), 'the cache is bookmarked');
+  // Every bookmark must actually open something — no dead links on the page.
+  for (const a of hrefs) assert.ok(findHost(hosts, a), `${a} resolves`);
 });
 
 test("New&Cool carries the papers, so the collapse is findable by browsing", () => {

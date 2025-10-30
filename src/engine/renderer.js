@@ -687,7 +687,7 @@ export class Renderer {
     // toasts, not the touch buttons, not the hover tooltip, and not the panel
     // rail — which is the thing that opened the panel in the first place.
     // (The lore archive draws in runDrawScreen below, so it counts as a panel.)
-    const modalOpen = !!(hud.showBackpack || hud.showSkills || hud.showWeapons
+    const modalOpen = !!(hud.showBackpack || hud.showSkills || hud.showWeapons || hud.showKleos
       || hud.narrows || hud.pong           // an arcade cabinet owns the screen
       || (hud.lore && hud.lore.archiveOpen));
     if (SIGHT_CONE && !hud.rest && !hud.deathCert && !hud.paused) {
@@ -749,6 +749,10 @@ export class Renderer {
     }
     if (hud.showSkills) this.drawSkillModal(player, hud);
     if (hud.showWeapons) this.drawWeaponChart(player);
+    if (hud.showKleos && hud.kleos) {
+      this.drawKleosModal(hud.kleos);
+      if (hud.mouse) this.drawKleosTip(hud.mouse.x, hud.mouse.y);
+    }
     // GHOST PASS: a wall, column, tower, or the factory standing just
     // south/east of the player paints clean over the sprite — the character
     // simply vanished behind any building. If something tall is in that

@@ -287,7 +287,7 @@ function applyBinOp(op, l, r) {
 // what it computes. Out here they cost one frame when a structure is declared
 // and nothing at all thereafter.
 //
-// Measured in docs/deep-recursion-plan.md.
+// Measured in docs/archive/deep-recursion-plan.md.
 function evalDecl(node, env, ctx, builtins) {
   switch (node.type) {
     // An exception is a constructor that can be raised. Declaring one puts it
@@ -642,7 +642,7 @@ function evalDecl(node, env, ctx, builtins) {
 }
 
 // The evaluator.
-// PROPER TAIL CALLS (docs/tail-calls-plan.md). Standard ML requires them, and
+// PROPER TAIL CALLS (docs/archive/tail-calls-plan.md). Standard ML requires them, and
 // this evaluator did not have them: every sub-expression recursed, so how deep a
 // program could go was whatever the host stack had left. `count 5000` faulted at
 // about 1950, and the same program passed alone and failed inside a full test

@@ -848,9 +848,10 @@ test('every demo on the laptop disk runs to the end', () => {
   const listed = runUnix('ls demos', disk, {}).text.split(/\s+/).filter(Boolean);
   assert.ok(listed.length >= 6, 'there are demos to run');
   for (const name of listed) {
-    // engage.ml is a MACHINE program: it reads sensors a laptop does not have,
-    // and running it here should fail. It has its own tests, against decide().
-    if (name === 'engage.ml') continue;
+    // engage.ml and dance.ml are MACHINE programs: they read sensors and drive
+    // legs a laptop does not have, and running them here should fail. Each has
+    // its own tests, against decide(). (engage: fire control; dance: move/route.)
+    if (name === 'engage.ml' || name === 'dance.ml') continue;
     const src = runUnix(`cat demos/${name}`, disk, {}).text;
     const ctx = { station: 'laptop', session: {} };
     for (const line of joinProgramLines(src)) {

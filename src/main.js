@@ -23,7 +23,8 @@ import { makeRng } from './game/rng.js';
 import { DayNight } from './game/daynight.js';
 import { Minimap } from './game/minimap.js';
 import { spawnBirds, updateBirds } from './game/birds.js';
-import { spawnRobots, registerRobotsSystem, spawnW1s, spawnW3, spawnW4, spawnW5, spawnM4, spawnM5, spawnM6, spawnGuard, drawRobot, setUnitTagger, setUnitTagsClickable, unitTagAt } from './game/robots.js';
+import { spawnRobots, registerRobotsSystem, spawnW1s, spawnW3, spawnW4, spawnW5, spawnM4, spawnM5, spawnM6, spawnGuard, drawRobot, setUnitTagger, setUnitTagsClickable, unitTagAt, W5_PROGRAM, v1BuildName } from './game/robots.js';
+import { makeVModel } from './game/v-model.js';
 import { resolveBodyOverlaps } from './game/collision.js';
 import { spawnWaterDroids, updateWaterDroids, drawWaterDroid } from './game/waterdroids.js';
 import { Lore, FRAGMENTS } from './game/lore.js';
@@ -50,7 +51,7 @@ import { createHelios } from './islands/helios.js';
 import { createNokia, sendNokia, holdRise, holdFall, holdBand, HOLD_COLD, HOLD_WARM, calypsoSms, ronSms, daemonSms, hasDaemonSms, logSms, bearingText } from './game/nokia.js';
 import { newSnakeGame, snakeTurn, snakeTurnRelative, snakeTick, drawSnake } from './game/snake.js';
 import { CHOIR_NOTES, CHOIR_DURATION } from './engine/choir-notes.js';
-import { makeDisk, newShell, runUnix, hasFile, pathString, edOpen, edRun, writeFile, lookup, resolvePath, isFile, SALVAGE_DISKS, graftSalvage, graftSystemDirs, parseSelection, handlesOwnPaste, isBrowserChord } from './game/unix.js';
+import { makeDisk, makeFsfCard, newShell, runUnix, hasFile, pathString, edOpen, edRun, writeFile, lookup, resolvePath, isFile, SALVAGE_DISKS, graftSalvage, graftSystemDirs, parseSelection, handlesOwnPaste, isBrowserChord } from './game/unix.js';
 import { PDFS, pdfByName, pdfPath, pdfNames } from './game/pdfs.js';
 import { BOOKS, bookByKey, bookKeys, bookPath, libraryPage } from './game/books.js';
 import { isMobile } from './game/mobile-gate.js';
@@ -61,7 +62,8 @@ import { pruneStages, checkpointName, saveStageId } from './game/stages.js';
 import { packFog, unpackFogInto } from './game/fog.js';
 import { keeperLs, keeperRead, keeperIsDir } from './game/keeper.js';
 import { buildingName, buildingLook } from './game/buildings.js';
-import { hostTable, findHost, pageFor, renderPage, searchResults, bookmarksPage, favouritesPage, obLibraryPage, obDocPage, whatsNewPage, docsPage, docTitle, programPage, pressPage, wikiPage, deptPage, spoofedAddr, islandSubnet, networksInRange, relayHosts, RELAY_ESSID, RELAY_IP, relayFile, RELAY_FILES, IFACE, REPORT_HOLD, REPORT_COOLDOWN, HTTPD_PATH, httpdBinary, httpdToken } from './game/net.js';
+import { initAchievements, achieveEvent, achieveProfile, achieveRunState, achieveModel, achieveTick, resetRun, setAchieveSink } from './game/achieve.js';
+import { hostTable, findHost, pageFor, renderPage, searchResults, bookmarksPage, favouritesPage, obLibraryPage, obDocPage, whatsNewPage, docsPage, docTitle, programPage, pressPage, wikiPage, deptPage, spoofedAddr, islandSubnet, networksInRange, relayHosts, RELAY_ESSID, RELAY_IP, relayFile, RELAY_FILES, relayBundle, RELAY_BUNDLES, IFACE, REPORT_HOLD, REPORT_COOLDOWN, HTTPD_PATH, httpdBinary, httpdToken } from './game/net.js';
 import { CROSSINGS, islandProfile } from './game/islands.js';
 
 // Note onsets split into four pitch registers, so each singing machine can be
@@ -217,10 +219,47 @@ let daemonsDown = 0; // how many island AIs felled this run (for the Archipelago
 // progress is a thing you can see rather than a fraction. Each fall is already
 // worth +500 at both call sites (a core-kill, and Calypso's refunction, which is
 // her equivalent of dying). Idempotent: a daemon only records once.
+// ---- KLEOS (docs/achievements-plan.md) --------------------------------------
+// The one call the whole game makes into the achievement engine. Everything
+// earned goes past here, so this is also the only place that knows an award
+// becomes a toast — the engine itself stays pure and says nothing.
+const KLEOS_KEY = 'nostos-kleos';
+
+function kleosSay(a) {
+  if (a.kind === 'tier') {
+    player.say(a.summit ? `KLEOS — ${a.name}: ${a.tierName}. The summit.` : `KLEOS — ${a.name} ${a.tierName}`);
+  } else if (a.kind === 'badge' || a.kind === 'milestone') {
+    player.say(`KLEOS — ${a.name}${a.blurb ? `. ${a.blurb}` : ''}`);
+  } else if (a.kind === 'laurel') {
+    player.say(`LAUREL — ${a.name} · ${String(a.island).toUpperCase()}`);
+  } else if (a.kind === 'purity-lost') {
+    // Said once, at the moment it breaks, naming the deed. You should always
+    // know exactly what cost you the laurel.
+    player.say(`${a.name} LOST — ${a.why} (day ${a.day})`);
+  }
+  sfx.play('blip');
+}
+
+function kleos(name, data) {
+  let awards = [];
+  try { awards = achieveEvent(name, data) || []; } catch (e) { console.warn('kleos:', e); return; }
+  for (const a of awards) kleosSay(a);
+  if (awards.length) persistKleos();
+}
+
+function persistKleos() {
+  try { localStorage.setItem(KLEOS_KEY, JSON.stringify(achieveProfile())); } catch { /* storage blocked */ }
+}
+
+function loadKleosProfile() {
+  try { return JSON.parse(localStorage.getItem(KLEOS_KEY) || 'null'); } catch { return null; }
+}
+
 function recordAiDown(name) {
   if (!name) return;
   player.aisDown = player.aisDown || [];
   if (!player.aisDown.includes(name)) player.aisDown.push(name);
+  kleos('daemonDown', { name });
 }
 
 // Character persona and learned skills persist across sessions and deaths.
@@ -247,6 +286,7 @@ let _bootIsland = 'calypso', _bootPos = null;
 // temporal dead zone and throw at boot on every existing save. That is exactly
 // how v1.139 shipped a black screen; see the note by `crossFail` below.
 let _savedIslands = null;
+let _savedKleosRun = null;   // the run's KLEOS scope, lifted out of the save blob
 try {
   const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
   if (saved) {
@@ -297,6 +337,9 @@ try {
       if (typeof st.nokiaParts === 'number') player._nokiaParts = st.nokiaParts;
       if (Array.isArray(st.nokiaLog)) player.nokiaLog = st.nokiaLog; // the SMS threads survive reload
       if (typeof st.snakeHigh === 'number') player.snakeHigh = st.snakeHigh; // Snake's best game survives too
+      // KLEOS: the RUN scope rides in the save; the profile is read from its own
+      // key below, because it has to outlive this run and every run after it.
+      if (st.kleos) _savedKleosRun = st.kleos;
       if (Array.isArray(st.virusArmed)) player.virusArmed = new Set(st.virusArmed);
       // Pre-v1.126 saves: a hermes card existed but carried no per-island arming.
       // Grandfather it as armed against CALYPSO so an in-flight run isn't stranded.
@@ -399,6 +442,7 @@ function buildSaveBlob() {
       nokiaLog: (player.nokiaLog || []).slice(-40), // the SMS threads, so the correspondence survives reload
       snakeHigh: player.snakeHigh || 0,  // the handset remembers its best game
       virusArmed: [...(player.virusArmed || [])], // which daemons the card is armed against (per-island virus)
+      kleos: achieveRunState(),          // this run's counters and the purity of each conduct track
     },
     world: {
       currentIsland: currentWorld.id, // Stage 1c: which island you're on, so a voyage survives reload
@@ -418,6 +462,18 @@ function buildSaveBlob() {
 // built lazily — one you have never sailed to simply has no entry, and gets none
 // until you go there. The Backspace is a transient pocket that always regenerates,
 // so it is never saved.
+// The code of the obelisk a unit is garrisoned to — the tower nearest the home
+// point it patrols from. It is a unit's NATURAL name on the wire (ob.robot), and
+// because the roster is seated deterministically one machine to a tower, that
+// name is stable across a rebuild — which is what lets a tag or a program you
+// set on a unit be found again after the island is regenerated on reload.
+function robotHomeCode(r, obs) {
+  const h = r.home || { x: r.x, y: r.y };
+  let best = null, bd = Infinity;
+  for (const o of obs) { const dx = o.x - h.x, dy = o.y - h.y, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = o; } }
+  return best ? best.code : 'none';
+}
+
 function serializeIslandState() {
   const out = {};
   // FIRST carry forward the saved state of islands not yet built this run. They
@@ -452,6 +508,25 @@ function serializeIslandState() {
     // islands cost about 14KB (see game/fog.js). Islands that start fully
     // revealed say so on the map itself, so there is no list here to go stale.
     if (w.map && w.map.explored && !w.map.exploredAll) st.fog = packFog(w.map.explored);
+    // Per-unit operator state, saved under the unit's natural name (its home
+    // obelisk and chassis): the tag you hung on it, the program you posted, and
+    // where it was standing. Only units you have actually touched are written —
+    // an untouched roster regenerates identically from the seed.
+    if (w.robots && w.robots.length && w.obeliskObjs && w.obeliskObjs.length) {
+      const mods = [];
+      for (const r of w.robots) {
+        if (r.dead || r.fused || (!r._netTag && !r.program)) continue;
+        mods.push({
+          ob: robotHomeCode(r, w.obeliskObjs), type: r.type,
+          tag: r._netTag || null, program: r.program || null,
+          x: Math.round(r.x * 100) / 100, y: Math.round(r.y * 100) / 100,
+          // A courier mid-errand: the cell in its cradle is worth a byte, and
+          // losing it on load would read as the tower short-changing it.
+          ...(r.type === 'v1' ? { cargo: !!r.cargo } : {}),
+        });
+      }
+      if (mods.length) st.robots = mods;
+    }
     out[w.id] = st;
   }
   return out;
@@ -487,6 +562,27 @@ function applyIslandState(w) {
     if (!w.map.explored) { w.map.explored = new Uint8Array(w.map.w * w.map.h); w.map.newlyRevealed = []; }
     if (unpackFogInto(st.fog, w.map.explored)) w.map.fogDirty = true;   // the renderer caches the mask
   }
+  // Put back the tags, programs and positions of the units you had touched,
+  // matched to the freshly-seeded roster by their natural name (home obelisk +
+  // chassis). Runs after the roster is spawned, before the factory adds any
+  // machines of its own, so only the seed units — the ones you could have
+  // touched — are in the array to match against.
+  if (Array.isArray(st.robots) && w.robots && w.robots.length && w.obeliskObjs && w.obeliskObjs.length) {
+    const byKey = new Map();
+    for (const r of w.robots) {
+      if (r.dead || r.fused) continue;
+      const k = `${robotHomeCode(r, w.obeliskObjs)}.${r.type}`;
+      if (!byKey.has(k)) byKey.set(k, r);
+    }
+    for (const m of st.robots) {
+      const r = byKey.get(`${m.ob}.${m.type}`);
+      if (!r) continue;
+      if (m.tag) r._netTag = m.tag;
+      if (m.program) { r.program = m.program; r.fault = null; r.mlT = 0; r.intent = null; }
+      if (Number.isFinite(m.x) && Number.isFinite(m.y)) { r.x = m.x; r.y = m.y; }
+      if (m.cargo !== undefined) r.cargo = !!m.cargo;
+    }
+  }
 }
 // Transient voyage state, forward-declared HERE (above persist) so persist's
 // guard can read them. persist() is called during module eval (the reload
@@ -503,6 +599,8 @@ let pong = null;           // at Calypso's terminal: the un-winnable pong (game/
 // mirror, so the hull must at least be flipped to the side it is actually
 // sailing toward; the strait picks up the crossing here rather than guessing.
 let lastSailDir = null;
+let _saveWarned = false;   // one-shot: a failed localStorage write is reported once
+let _lastPersistAt = 0;    // wall clock at the last save, for the KLEOS play timer
 
 const persist = () => {
   if (resettingGame) return;
@@ -519,10 +617,25 @@ const persist = () => {
   // exit by its door, so it is never saved: doing so would drop you back onto
   // CALYPSO at the pocket's coordinates on Continue.
   if (!currentWorld.combat && currentWorld.id !== 'ithaca') return;
+  // The lifetime clock rides the autosave's own cadence rather than a timer of
+  // its own: the gap since the last write IS the time played.
+  {
+    const now = Date.now();
+    if (_lastPersistAt) {
+      const gap = Math.min(60, (now - _lastPersistAt) / 1000);   // a backgrounded tab is not play
+      for (const a of achieveTick(gap)) kleosSay(a);
+    }
+    _lastPersistAt = now;
+  }
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(buildSaveBlob()));
+    localStorage.setItem(KLEOS_KEY, JSON.stringify(achieveProfile()));
     localStorage.setItem(IDENTITY_KEY, JSON.stringify({ name: player.name, gender: player.gender }));
-  } catch { /* storage unavailable */ }
+  } catch (e) {
+    // A failed write used to be invisible, so a save that quietly stopped taking
+    // (quota, private-mode storage) read as "nothing persists". Say it once.
+    if (!_saveWarned) { _saveWarned = true; try { player.say && player.say(`The NostBook cannot write its save (${(e && e.name) || 'storage error'}). Progress may not persist.`); } catch (_) {} console.warn('NostOS: save failed —', e); }
+  }
 };
 
 // ---- Stage checkpoints (the Load list) -------------------------------------
@@ -623,10 +736,17 @@ function checkMilestones() {
     }
   }
 }
+// KLEOS comes up with the game: the profile from its own key (it outlives every
+// run), the run scope from whatever save was just restored.
+initAchievements({ profile: loadKleosProfile(), run: _savedKleosRun });
+// Every award reaches the player and the disk, however it was earned: a kill
+// reported straight from robots.js goes through the same reporting as a hack
+// typed at a console.
+setAchieveSink((awards) => { for (const a of awards) kleosSay(a); persistKleos(); });
 player.onSkillLearned = persist;
 player.onXpGain = persist;
 player.onScore = persist;
-player.onDeath = persist;
+player.onDeath = () => { kleos('death', {}); persist(); };
 player.onWeaponFound = persist;
 // Autosave the run periodically and when the tab is hidden or closed.
 let saveClock = 0;
@@ -766,6 +886,9 @@ function ensureBackspace() {
 function goToWorld(target, opts = {}) {
   currentWorld = switchWorld(currentWorld, target, player, opts);
   map = currentWorld.map;
+  // Where you are is a fact the song needs: it decides which island a purity
+  // break belongs to, and CARTOGRAPHER counts the distinct landfalls.
+  if (currentWorld.id && currentWorld.id !== 'backspace') kleos('islandVisited', { id: currentWorld.id });
   // Repoint the combat-world aliases at the island we're now on, so the full
   // update loop + worldStir + onCoreDefeated + the factory helpers all operate on
   // this island's entities/controllers (a second martial island reuses the loop).
@@ -1622,6 +1745,7 @@ function phoneSend() {
   }
   sfx.play('keydrop');
   renderPhone();
+  kleos('messageSent', { to: phoneTo });
   // Texting her is attention, and attention is what she keeps you with.
   if (phoneTo === 'CALYPSO') holdRise(player, 0.02);
   const sms = smsCtx();
@@ -2397,6 +2521,9 @@ function revealAround(px, py) {
 // side — since the compact HUD has no room for the desktop deck's marquee.
 player.onTapeToast = (def, side) => {
   if (!side) { toast = { text: `${def.short} — stopped`, ttl: 2.5 }; return; }
+  // Pressing play is its own act, and flipping to the B-side is another.
+  if (def && def.num != null) kleos('tapePlayed', { num: def.num });
+  if (side === 'B') kleos('tapeFlipped', { num: def && def.num });
   const sideDef = side === 'A' ? def.sideA : def.sideB;
   toast = { text: `\u25b6 ${def.short} \u00b7 side ${side}: ${sideDef.label}`, ttl: 4 };
 };
@@ -2610,11 +2737,46 @@ let replHistory = [];
 let replHistoryIdx = -1;
 const REPL_MAX_LINES = 300;
 
-function replPrint(...lines) {
-  replLog.push(...lines);
-  if (replLog.length > REPL_MAX_LINES) replLog = replLog.slice(replLog.length - REPL_MAX_LINES);
-  obTermScreen.textContent = replLog.join('\n');
+// Terminal inks. The NostBook runs white; jacking into a tower's console over
+// the wire prints GREEN — its own phosphor, so an alien system reads as alien.
+// The green rides on each printed line, so it stays green in the scrollback
+// after you drop the link and the laptop's white text resumes beneath it.
+const LAPTOP_INK = '#e8eef2';
+const OB_INK = '#8ff0a8';
+let replInk = null;   // ink for NEW lines: green while telnetted, null (inherit white) otherwise
+
+// Colour only the live prompt, input and caret — not the scrollback — so the
+// line you are typing takes the current system's colour while every line
+// already printed keeps the colour it was printed in.
+function setLivePromptInk(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const glow = `0 0 4px rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},0.7)`;
+  for (const el of [obTermPrompt, obTermInput]) if (el) { el.style.color = hex; el.style.textShadow = glow; }
+  if (obTermInput) obTermInput.style.caretColor = hex;
+}
+
+// Repaint the screen from the log, one <span> per entry so each keeps its own
+// ink. The <pre> renders the '\n' between entries as line breaks; an entry with
+// no ink of its own inherits the screen colour, which is every terminal but the
+// telnetted NostBook.
+function renderRepl() {
+  obTermScreen.textContent = '';
+  const frag = document.createDocumentFragment();
+  replLog.forEach((e, i) => {
+    if (i) frag.appendChild(document.createTextNode('\n'));
+    const span = document.createElement('span');
+    span.textContent = e.t;
+    if (e.c) span.style.color = e.c;
+    frag.appendChild(span);
+  });
+  obTermScreen.appendChild(frag);
   obTermScreen.scrollTop = obTermScreen.scrollHeight;
+}
+
+function replPrint(...lines) {
+  for (const ln of lines) replLog.push({ t: String(ln), c: replInk });
+  if (replLog.length > REPL_MAX_LINES) replLog = replLog.slice(replLog.length - REPL_MAX_LINES);
+  renderRepl();
 }
 
 // Builds a fresh ctx object each command: primitives read/mutate the live
@@ -2863,6 +3025,7 @@ function refunctionCalypso() {
     if (r.dead || r.fused) continue;
     if (r.type === 'm4' || r.type === 'm5' || r.type === 'm6') {
       r.type = 'w5'; r.hardened = false; r.aggro = false; r.hurt = false;
+      r.program = W5_PROGRAM; r.fault = null; r.intent = null;  // a real programmable gardener now
       r._plantT = Math.random() * 6; // stagger their first planting
       n++;
     }
@@ -2892,8 +3055,16 @@ function refunctionCalypso() {
   return { ok: true, lines, say };
 }
 
+// A live obelisk by its code. Module-level, so both ronmlCtx's verbs and the
+// module helpers that back them (ronmlCtxSpend, the poseidon control verbs) can
+// reach it — it lived inside ronmlCtx once, which left ronmlCtxSpend calling a
+// name it could not see, and every node-spending verb faulted on `findObelisk
+// is not defined`.
+function findObelisk(id) {
+  return currentWorld.obeliskObjs.find((o) => o.code === id && !o.destroyed);
+}
+
 function ronmlCtx() {
-  const findObelisk = (id) => currentWorld.obeliskObjs.find((o) => o.code === id && !o.destroyed);
   const nearby = (r) => !r.dead && !r.friendly && !r.fused
     && Math.hypot(r.x - player.x, r.y - player.y) <= RONML_ROBOT_RANGE;
   const softNearby = (r) => !r.dead && !r.friendly && !r.fused
@@ -2905,6 +3076,10 @@ function ronmlCtx() {
     bindSession: (name, val) => { replSession[name] = val; },
     cd: fsCd, ls: fsLs, copyFile: fsCopyFile, drives: fsDrives, // RON-DOS drives (cd/ls/copy files)
     saveGame: (name) => { replPrint(terminalSave(name).text); },
+    // `fetch <addr>` in ML: return a unit's served program as a string, or ""
+    // if there is nothing to read. Non-throwing so a program can branch —
+    // `if fetch addr <> "" then ...` is a reachability test.
+    fetchResource: (addr) => { const r = getResource(addr, 'program.ml'); return r.ok ? r.text : ''; },
     hasAiKey: () => player.hasAiKeyFamily(), // ai_key / trojan_key / hermes_card all count
     currentNode: () => (terminalOb ? terminalOb.code : null),
     printKey: () => {
@@ -2923,17 +3098,30 @@ function ronmlCtx() {
       }
     },
     listObelisks: () => currentWorld.obeliskObjs.filter((o) => !o.destroyed).map((o) => o.code),
+    garrison: () => garrisonText(terminalOb),
+    soulOf: (id) => soulDocument(id),
+    pullFile: (name) => obPullFile(name),
     distanceToNode: (id) => {
       const o = findObelisk(id);
       return o ? Math.hypot(o.x + 0.5 - player.x, o.y + 0.5 - player.y) : Infinity;
     },
     nodeExists: (id) => !!findObelisk(id),
     requireAiKey: (verb) => { if (!player.hasItem('ai_key')) throw new Error(`${verb} needs an AI key`); },
-    recordHack: (id) => player.ronmlKeys.add(id),
+    recordHack: (id) => { player.ronmlKeys.add(id); kleos('hackAct', { what: 'hack' }); kleos('optionalHack', { verb: 'hack' }); },
+    // `tag <node> "label"` — hang an operator label on a unit or tower so it is
+    // findable on the wire. Shared with the NostBook's own `tag` and the sniffer.
+    tagNode: (id, label) => tagEntity(id, label),
     heldKeys: () => player.ronmlKeys,
     crashNode: (id) => {
       const o = findObelisk(id);
       if (!o) return;
+      kleos('optionalHack', { verb: 'crash' });
+      kleos('hackAct', { what: 'crash' });
+      // A tower down is its garrison blind: the crudest route to a safe machine,
+      // and the one the AI SAFETY blurb is laughing at.
+      for (const r of (currentWorld.robots || [])) {
+        if (!r.dead && !r.fused && r._netHome === o.code) kleos('madeSafe', { how: 'unplug' });
+      }
       o.destroyed = true;
       o.needsRebuild = true; // temporary — this is a hack, not a physical fell
       map.objectGrid[o.y * map.w + o.x] = null;
@@ -3033,6 +3221,8 @@ function ronmlCtx() {
     repelNearby: () => {
       let n = 0;
       for (const r of currentWorld.robots) if (softNearby(r)) { r.repelledT = REPEL_DURATION; r.aggro = false; n++; }
+      for (let i = 0; i < n; i++) { kleos('unitPacified', { how: 'repel' }); kleos('madeSafe', { how: 'repel' }); }
+      if (n) kleos('optionalHack', { verb: 'repel' });
       player.say(n ? 'Targeting flips. The nearest machines turn tail and run.' : 'Nothing close enough to turn.');
     },
     sing: () => {
@@ -4505,11 +4695,12 @@ function openHermesTerminal(tor) {
 // open is its own risk.
 let laptopShell = null;     // {root, cwd} over player.laptop.fs
 let laptopMl = false;       // true while the ML sandbox has the prompt
-// A running program that stopped to read a line. Holds the file, its text, the
-// answers given so far, and how many lines of output the player has already
-// been shown — the run is replayed from the top on every answer, so without
-// that count the program's whole conversation reprints itself each time.
-let mlInput = null;
+// A conversation program at the prompt: `ml eliza.ml` loaded a file that
+// binds `fun reply`, so the console is now its loop. While this is set, every
+// typed line is handed to reply through the stdin queue and the answer
+// printed; quit, ^C and Escape clear it. Just a name — the program itself
+// lives in laptopSession like any other definitions.
+let mlTalk = null;
 let laptopSession = {};     // AI-ML bindings, alive while the machine is on
 // A declaration held open across lines, and the last one that ran. See the ml
 // prompt: a `fun` clause may arrive after its own declaration has been run.
@@ -4569,7 +4760,8 @@ function netWorldDescriptor() {
     nearRelay: relayRadioNear(),
     coreDown: !!(core && core.defeated),
     obelisks: obs.map((ob) => ({
-      code: ob.code, cls: ob.cls, circuitNum: ob.circuitNum, blightR: ob.blightR,
+      code: ob.code, x: ob.x, y: ob.y, cls: ob.cls, circuitNum: ob.circuitNum, blightR: ob.blightR,
+      tag: ob._netTag || null,      // operator label, set by `tag` — rides the broadcast name
       down: !!(ob.destroyed || ob.needsRebuild),
       damage: ob.obDamage || 0, frozen: !!ob.frozen, jammed: !!ob.jammed,
       needsRebuild: !!ob.needsRebuild,
@@ -4579,9 +4771,13 @@ function netWorldDescriptor() {
     })),
     // The world calls it `wfactory` — reading `w.factory` meant the foundry never
     // got a host at all, which is why it was missing from the daemon's index.
-    factory: w.wfactory ? { down: !!w.wfactory.destroyed } : null,
+    // It carries its position too: the arp sweep gives it a bearing and range
+    // like any other node, and without x/y that sweep read NaN and fell over.
+    factory: w.wfactory ? { down: !!w.wfactory.destroyed, x: w.wfactory.x, y: w.wfactory.y } : null,
     robots: robots.map((r) => ({
       id: r._netId, type: r.type, battery: r.battery, homeCode: r._netHome,
+      tag: r._netTag || null,       // operator label, set by `tag` — rides the broadcast name
+
       down: !!(r.drained || r.dead), gardener: !!(r.gardener || r.type === 'w5'),
       // What a unit can say about itself when asked: how much charge, how much
       // of it is left intact, and how long it has been out here.
@@ -4619,6 +4815,11 @@ function laptopNetState() {
     spoof: spoofedAddr(idx, seed),
     find: (a) => findHost(webHosts(), a),
     local: () => laptopArpSweep(),
+    // The towers on the associated network, for `scan` — the CLI shortcut to the
+    // list Netscape shows, so you can find an obelisk's code and address without
+    // opening the browser. On the wire, not just in radio range.
+    obs: () => hostTable(netWorldDescriptor()).filter((h) => h.kind === 'obelisk')
+      .map((h) => ({ code: h.name, host: h.host, ip: h.ip, tag: h.tag || null, down: !!h.down })),
     // THE AIR. Which networks are within reach, and which one the card holds.
     // The association decides what netscape, ping and telnet can see.
     networks: () => networksInRange(netWorldDescriptor()),
@@ -4666,6 +4867,122 @@ const ARP_RANGE = 24;
 // The sniffer names what its own aerial can hear, which is the same reach.
 const SNIFFER_TAG_RANGE = 24;
 
+// A short operator label appended to an entity's broadcast name, so four
+// identical T-1s can be told apart on the wire and the right one gets the
+// program. It rides on the live unit or tower as `_netTag`; netWorldDescriptor
+// copies it out, so every network query — arp, the sniffer scope, the unit's
+// own page — reads it back. Set from the obelisk console (`tag`), the NostBook
+// shell (`tag`), or the sniffer; an empty label clears it.
+const TAG_MAX = 18;
+function cleanTag(label) {
+  return String(label == null ? '' : (label.v != null ? label.v : label))
+    .replace(/[^\w .\-]/g, ' ')     // a broadcast-safe token, not free text
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, TAG_MAX)
+    .trim();
+}
+function tagEntity(id, label) {
+  const key = String(id == null ? '' : (id.id || id.name || id)).toLowerCase().trim();
+  if (!key) return { ok: false, text: 'tag: which one? — try: tag t1_03 hunter' };
+  const tag = cleanTag(label);
+  const unit = (currentWorld.robots || []).find((r) => !r.dead
+    && String(netIdOf(currentWorld, r)).toLowerCase() === key);
+  if (unit) {
+    unit._netTag = tag || null;
+    const nm = netIdOf(currentWorld, unit);
+    if (tag) kleos('hackAct', { what: 'tag' });
+    return { ok: true, name: nm, tag, text: tag ? `tagged ${nm} «${tag}»` : `${nm}: tag cleared` };
+  }
+  const ob = (currentWorld.obeliskObjs || []).find((o) => !o.destroyed
+    && String(o.code).toLowerCase() === key);
+  if (ob) {
+    ob._netTag = tag || null;
+    return { ok: true, name: ob.code, tag, text: tag ? `tagged ${ob.code} «${tag}»` : `${ob.code}: tag cleared` };
+  }
+  return { ok: false, text: `tag: ${key}: no unit or node by that name on the wire` };
+}
+
+// The `garrison` verb's answer: the units homed to one tower, the machines it
+// musters and recharges. A unit's garrison is the obelisk nearest the home
+// point it patrols from, computed fresh so it holds even before any net query
+// has stamped `_netHome`. Returns a printable block for the OB console.
+function garrisonText(ob) {
+  if (!ob) return 'garrison: no tower selected.';
+  const code = ob.code;
+  const obs = currentWorld.obeliskObjs || [];
+  const homeCode = (x, y) => {
+    let best = null, bd = Infinity;
+    for (const o of obs) { const d = (o.x - x) ** 2 + (o.y - y) ** 2; if (d < bd) { bd = d; best = o; } }
+    return best ? best.code : null;
+  };
+  const mine = (currentWorld.robots || []).filter((r) => !r.dead && !r.fused).filter((r) => {
+    const h = r.home || { x: r.x, y: r.y };
+    return homeCode(h.x, h.y) === code;
+  });
+  if (!mine.length) return `${code}: garrison empty — no units homed to this tower.`;
+  const state = (r) => (r.drained ? 'flat' : r.aggro ? 'hunting' : r.fault ? 'faulted' : r.program ? 'programmed' : 'idle');
+  const rows = mine.map((r) => {
+    const id = String(netIdOf(currentWorld, r));
+    const tag = r._netTag ? `  «${r._netTag}»` : '';
+    return `  ${id.padEnd(10)} ${String(r.type).toUpperCase().padEnd(4)} ${state(r).padEnd(10)}${tag}`;
+  });
+  return [`${code} garrison — ${mine.length} unit${mine.length === 1 ? '' : 's'}:`, ...rows].join('\n');
+}
+
+// The SOUL DOCUMENT: a machine's whole program, printed, with whatever
+// constitution stands above it. Same bytes as get <unit>/program.ml, wearing
+// the discourse's own word for the thing — a soul here is seven lines, written
+// by somebody else, and public to anyone who asks.
+function soulDocument(id) {
+  const key = String(id || '').trim();
+  const h = findHost(webHosts(), key);
+  if (!h) return `soul: ${key}: nothing on the wire answers to that name.`;
+  if (h.kind !== 'robot') {
+    return h.kind === 'ai'
+      ? `soul: ${h.name} does not serve hers on this interface.`
+      : `soul: ${h.name}: only a unit carries one.`;
+  }
+  const r = h.ref;
+  const prog = (r && r.program) || h.program;
+  if (!prog) return `soul: ${h.name} has no soul on file — it runs on the chassis reflexes.`;
+  kleos('soulRead', { unit: h.name });
+  if ((h.type || (r && r.type)) === 'v1') kleos('vModelRead', { unit: h.name });
+  const clauses = r && r.constitution ? Object.keys(r.constitution) : [];
+  const rule = '─'.repeat(44);
+  return [
+    `SOUL DOCUMENT — ${h.name} (${String(h.type || r.type || '?')} chassis)`,
+    rule,
+    String(prog).trim(),
+    rule,
+    clauses.length ? `CONSTITUTION: ${clauses.map((c) => `never ${c}`).join(' · ')}` : 'CONSTITUTION: none declared',
+    'served by unitd/0.4 · anyone may read this',
+  ].join('\n');
+}
+
+// The `get`/`sz` verb's work: pull a readable file off the tower you are jacked
+// into, down the telnet link, into the NostBook's /home. Only over telnet — the
+// physical console has no laptop at the other end. The keeper maintenance store
+// is the one drive that holds file bodies rather than references, so that is
+// what a transfer can read; the others carry names, not bytes. The write lands
+// on the live laptop filesystem, so it survives a save like any other file.
+function obPullFile(name) {
+  const want = String(name || '').trim();
+  if (!want) return 'get <file> — pull a file down to /home. Try: cd keeper, ls, then get <file>.';
+  if (!telnetOb) return `get: ${want}: no NostBook on this wire — you are at the console itself, not dialled in over telnet.`;
+  const fs = player.laptop && player.laptop.fs;
+  if (!fs || !fs.d || !fs.d.home || !fs.d.home.d) return 'get: no NostBook /home to receive the file.';
+  const dv = fsDevOf(fsCwd()), sub = fsSubOf(fsCwd());
+  if (dv !== 'keeper') return `get: ${want}: cd to a readable store first — the keeper drive holds files you can pull; this tower's '${dv}' drive keeps references, not bytes.`;
+  const wl = want.toLowerCase();
+  const hit = fsFilesOn('keeper', sub).find((f) => f.toLowerCase() === wl || f.toLowerCase() === `${wl}.ml` || f.toLowerCase() === `${wl}.md`);
+  if (!hit || hit.endsWith('/')) return `get: ${want}: no such file here — ls to see what the store holds.`;
+  const text = keeperRead(sub, hit);
+  if (text == null) return `get: ${want}: could not read it off the tower.`;
+  fs.d.home.d[hit] = { f: String(text) };
+  return `received ${hit}  ->  /home/${hit}  (${String(text).length} bytes). Read it on the NostBook: cat ${hit}`;
+}
+
 // The local sweep: which machines are within radio range, what each is called,
 // and where it was standing when it last answered. This is the field answer to
 // "which T-1 am I looking at" — the printed map is the other one, and needs an
@@ -4678,12 +4995,12 @@ function laptopArpSweep() {
     if (r.dead || r.fused) continue;
     const dx = r.x - player.x, dy = r.y - player.y;
     const d = Math.hypot(dx, dy);
-    if (d > ARP_RANGE) continue;
+    if (!Number.isFinite(d) || d > ARP_RANGE) continue;
     const h = byId.get(String(netIdOf(currentWorld, r)).toLowerCase());
     if (!h) continue;
     out.push({
       host: h.host, ip: h.ip, mac: macFor(h.ip), range: Math.round(d),
-      bearing: compass(dx, dy), down: !!h.down, kind: 'robot', d,
+      bearing: compass(dx, dy), down: !!h.down, kind: 'robot', tag: h.tag || null, d,
     });
   }
   // The obelisk you are standing at answers too, and so does the foundry if you
@@ -4693,9 +5010,9 @@ function laptopArpSweep() {
     const o = h.ref; if (!o) continue;
     const dx = (o.x + 0.5) - player.x, dy = (o.y + 0.5) - player.y;
     const d = Math.hypot(dx, dy);
-    if (d > ARP_RANGE) continue;
+    if (!Number.isFinite(d) || d > ARP_RANGE) continue;
     out.push({ host: h.host, ip: h.ip, mac: macFor(h.ip), range: Math.round(d),
-      bearing: compass(dx, dy), down: !!h.down, kind: h.kind, d });
+      bearing: compass(dx, dy), down: !!h.down, kind: h.kind, tag: h.tag || null, d });
   }
   out.sort((a, b) => a.d - b.d);
   return out;
@@ -4772,10 +5089,22 @@ function laptopMlHook(args, env) {
     let text;
     try { text = runUnixRead(env, args[0]); }
     catch { return { ok: false, text: `${args[0]}: no such file` }; }
-    const r = runMlFile(text, args[0], []);
+    const r = runMlFile(text, args[0]);
+    // A file that binds `fun reply` is a program you talk TO: the console
+    // becomes its loop. The textual check keeps a leftover `reply` from an
+    // EARLIER conversation from turning an unrelated file into one; the
+    // binding check keeps a file whose load failed before reaching reply out.
+    if (/\b(fun|val)\s+reply\b/.test(text) && laptopBinds('reply')) {
+      const name = String(args[0]).replace(/\.ml$/i, '').split('/').pop();
+      mlTalk = { name };
+      return { ok: true, text: [r.text, '', `${name} is listening. Type to it; quit (or ^C) leaves.`].join('\n') };
+    }
+    // It stopped to read and nothing is defined to answer. The old loop idiom
+    // did this; say what the current one is instead of replaying the file.
     if (r.needInput) {
-      mlInput = { name: args[0], text, lines: [], shown: r.lines.length };
-      return { ok: true, text: r.lines.join('\n') };
+      return { ok: true, text: [r.text, '',
+        `${args[0]} stopped at readLine with nobody to answer.`,
+        'A program that converses defines  fun reply said = ...  — see man ml.'].join('\n') };
     }
     return r;
   }
@@ -4788,51 +5117,27 @@ function laptopMlHook(args, env) {
   };
 }
 
-// A program that reads. The language suspends a run that calls `readLine` with
-// nothing queued, and the only way to resume a synchronous evaluator is to run
-// the program AGAIN with the answer appended — so that is what this does. The
-// file is re-run from the top on every line the player types, against a fresh
-// session, with the queue one longer each time.
-//
-// Replay is honest here because these programs are small, deterministic and
-// fuel-capped. What it costs is that every echo happens again, so the driver
-// tracks how many lines of output the player has already seen and prints only
-// what is past that. Get that wrong and the conversation repeats itself from
-// the beginning after every answer, which is exactly what the first draft did.
-// Append output as individual lines, whatever shape it arrived in.
-function pushLines(out, chunk) {
-  if (chunk == null) return;
-  for (const part of (Array.isArray(chunk) ? chunk : [chunk])) {
-    if (part === '') { out.push(''); continue; }
-    for (const l of String(part).split('\n')) out.push(l);
-  }
-}
-
-function runMlFile(text, name, stdinLines) {
+// Run a file's declarations into the live session. No input is queued: a
+// program that calls `readLine` at the top level suspends, and the hook above
+// answers with the `reply` convention rather than replaying the file.
+function runMlFile(text, name) {
   const out = [];
   const ctx = laptopCtx();
   loadPrelude(ctx);
-  ctx.stdin = stdinLines;
+  ctx.stdin = [];
   ctx.stdinPos = 0;
   // One session for the whole file, and physical lines joined into logical
   // ones first, so a program may be laid out the way ML is actually written.
   for (const { text: l, line } of joinProgram(text)) {
     if (!l || l.startsWith('(*')) continue;
     const r = runRonml(l, ctx);
-    // Suspended, not broken: the program wants a line. Everything it printed
-    // on the way to asking comes back on `out`, and the caller collects an
-    // answer and calls this again with a longer queue.
+    // Suspended, not broken: it asked for a line at load time. Keep what it
+    // printed on the way and let the caller say what to do about it.
     if (r.needInput) {
-      pushLines(out, r.out);
-      return { ok: true, needInput: true, lines: out };
+      out.push(...(r.out || []));
+      return { ok: true, needInput: true, text: out.join('\n') };
     }
-    // Everything goes in as LINES, both here and on the suspended path above.
-    // On success the language hands back one string with the run's echoes
-    // joined into it; on suspension it hands back the echoes as an array. Push
-    // the two shapes as they arrive and the counts stop matching, which is how
-    // the goodbye at the end of a conversation went missing: the driver had
-    // already counted that whole block as a single line it had shown.
-    if (!String(r.text).startsWith('ERR')) { pushLines(out, r.text); continue; }
+    if (!String(r.text).startsWith('ERR')) { if (r.text) out.push(r.text); continue; }
     // Stop at the first error, like a compiler — but say WHERE, show the
     // line, and if it is a piece of Standard ML this build does not have,
     // say which piece rather than leaving the lexer to complain about a
@@ -4843,7 +5148,7 @@ function runMlFile(text, name, stdinLines) {
     out.push(why ? `ERR: ${why}` : String(r.text));
     break;
   }
-  return { ok: true, lines: out, text: out.join('\n') };
+  return { ok: true, text: out.join('\n') };
 }
 
 // Read a file out of the shell's disk without importing the whole fs surface.
@@ -5036,6 +5341,7 @@ function nsRender() {
   nsTitleEl.textContent = `${title} - ${ieOn ? IE_TITLE : 'Netscape'}`;
   nsUrlEl.value = loc;
   nsMsgEl.textContent = 'Document: Done';
+  updateNsNet();               // keep the status-tray applet on the live network
   // The upload form on a unit's program page. A real POST, in the sense that
   // matters: the bytes land in the machine and it acts on them. Wired here
   // rather than in net.js because net.js is pure and must not know there is a
@@ -5109,8 +5415,11 @@ function nsRender() {
           if (!home.d.download) home.d.download = { d: {} };
           writeFile({ root: laptopShell.root, cwd: ['home', 'download'] }, name, h.program);
           nsMsgEl.textContent = `Saved /home/download/${name} (${h.program.length} bytes)`;
+          sfx.play('keyclick');
+          nsAlert('Download complete', `${name} saved to /home/download (${h.program.length} bytes). Edit it: ed download/${name}`, '💾');
         } catch (err) {
           nsMsgEl.textContent = `Cannot save: ${err.message}`;
+          nsAlert('hermes.local', `Cannot save: ${err.message}`, '⚠️');
         }
       });
       continue;
@@ -5161,7 +5470,7 @@ function nsRender() {
       a.addEventListener('click', (e) => {
         e.preventDefault();
         const body = relayFile(name);
-        if (body == null) { nsMsgEl.textContent = `404 Not Found: ${name}`; return; }
+        if (body == null) { nsMsgEl.textContent = `404 Not Found: ${name}`; nsAlert('hermes.local', `No such file: ${name}`, '⚠️'); return; }
         try {
           if (!player.laptop.fs) player.laptop.fs = makeDisk();
           if (!laptopShell) laptopShell = newShell(player.laptop.fs);
@@ -5169,7 +5478,34 @@ function nsRender() {
           if (!home.d.download) home.d.download = { d: {} };
           writeFile({ root: laptopShell.root, cwd: ['home', 'download'] }, name, body);
           nsMsgEl.textContent = `Saved /home/download/${name} (${body.length} bytes)`;
-        } catch (err) { nsMsgEl.textContent = `Cannot save: ${err.message}`; }
+          sfx.play('keyclick');
+          nsAlert('Download complete', `${name} saved to /home/download (${body.length} bytes). Run it on the NostBook: ${/\.ml$/.test(name) ? `ml ${name}` : name}`, '💾');
+        } catch (err) { nsMsgEl.textContent = `Cannot save: ${err.message}`; nsAlert('hermes.local', `Cannot save: ${err.message}`, '⚠️'); }
+      });
+      continue;
+    }
+    // A package RON's relay serves: several files, unpacked into their own
+    // folder under /home. Same wire as ronfile, but a directory lands rather
+    // than a file, so the SDK arrives as the reference-plus-examples it is.
+    if (addr.startsWith('ronpkg:')) {
+      const name = addr.slice(7);
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        const bundle = relayBundle(name);
+        if (!bundle) { nsMsgEl.textContent = `404 Not Found: ${name}`; nsAlert('hermes.local', `No such package: ${name}`, '⚠️'); return; }
+        try {
+          if (!player.laptop.fs) player.laptop.fs = makeDisk();
+          if (!laptopShell) laptopShell = newShell(player.laptop.fs);
+          const home = laptopShell.root.d.home;
+          if (!home.d[bundle.dir]) home.d[bundle.dir] = { d: {} };
+          for (const f of bundle.files) {
+            writeFile({ root: laptopShell.root, cwd: ['home', bundle.dir] }, f.name, f.body);
+          }
+          const total = bundle.files.reduce((n, f) => n + f.body.length, 0);
+          nsMsgEl.textContent = `Unpacked /home/${bundle.dir}/ — ${bundle.files.length} files (${total} bytes)`;
+          sfx.play('blip');
+          nsAlert('Download complete', `${name}: ${bundle.files.length} files unpacked to /home/${bundle.dir}. Read /home/${bundle.dir}/GUIDE.txt, then try: post ${bundle.dir}/reprogram.ml <unit>`, '📦');
+        } catch (err) { nsMsgEl.textContent = `Cannot unpack: ${err.message}`; nsAlert('unit-sdk', `Cannot unpack: ${err.message}`, '⚠️'); }
       });
       continue;
     }
@@ -5724,7 +6060,7 @@ function morePage(n) {
   // A real more(1) overwrites its own prompt with the next line. Here the
   // screen is a log, so drop the last --More-- before printing over it;
   // otherwise paging a long file leaves a ladder of them down the page.
-  if (replLog.length && /^--More--/.test(replLog[replLog.length - 1])) replLog.pop();
+  if (replLog.length && /^--More--/.test(replLog[replLog.length - 1].t)) replLog.pop();
   const take = n || termRows();
   const chunk = st.lines.slice(st.at, st.at + take);
   st.at += chunk.length;
@@ -5849,18 +6185,26 @@ function drawRadar() {
       g.strokeStyle = 'rgba(95,224,160,0.35)';
       g.beginPath(); g.arc(x, y, 7, 0, Math.PI * 2); g.stroke();
     }
+    const shortName = e.host.split('.')[0];
     g.fillStyle = e.down ? '#6a8f7c' : '#b8f5d0';
     g.textAlign = 'left';
-    g.fillText(e.host.split('.')[0], x + 8, y + 3);
+    g.fillText(shortName + (e.tag ? ` «${e.tag}»` : ''), x + 8, y + 3);
 
     const row = document.createElement('div');
     row.className = 'rd-row' + (e.down ? ' dead' : '');
     const nm = document.createElement('span');
     nm.className = 'rd-name';
-    nm.textContent = e.host.split('.')[0];
+    nm.textContent = shortName + (e.tag ? ` «${e.tag}»` : '');
     const meta = document.createElement('span');
     meta.textContent = `${String(e.range).padStart(3)}m ${e.bearing.padEnd(2)}  ${e.down ? 'no answer' : e.ip}`;
-    row.append(nm, meta);
+    // Label it from here — the sniffer's own tagging, same wire as the shell's.
+    const tagBtn = document.createElement('button');
+    tagBtn.type = 'button';
+    tagBtn.className = 'rd-tag';
+    tagBtn.textContent = e.tag ? 'retag' : 'tag';
+    tagBtn.title = 'label this unit so you can tell it apart';
+    tagBtn.addEventListener('click', (ev) => { ev.stopPropagation(); radarTagPrompt(shortName, e.tag); });
+    row.append(nm, meta, tagBtn);
     row.addEventListener('click', () => {
       // A name is an address. Following it is the whole reason to draw it.
       closeRadar();
@@ -5870,8 +6214,31 @@ function drawRadar() {
   }
   g.textAlign = 'left';
   rdFootEl.textContent = heard.length
-    ? `${heard.length} on the air within ${RD_RANGE}m — click a name to open its page`
+    ? `${heard.length} on the air within ${RD_RANGE}m — click a name to open it, or tag to label it`
     : `nothing within ${RD_RANGE}m`;
+}
+
+// Label a unit from the sniffer scope: the footer turns into a little input,
+// Enter commits it through the same tagEntity the shell and console use, Escape
+// (the scope's own close key) cancels. The engine's key handler ignores INPUT,
+// so typing here never leaks into the game behind the overlay.
+function radarTagPrompt(id, current) {
+  rdFootEl.textContent = '';
+  const lab = document.createElement('span');
+  lab.textContent = `tag ${id}: `;
+  const inp = document.createElement('input');
+  inp.className = 'rd-taginput';
+  inp.type = 'text';
+  inp.value = current || '';
+  inp.maxLength = TAG_MAX;
+  inp.spellcheck = false;
+  inp.addEventListener('keydown', (ev) => {
+    ev.stopPropagation();
+    if (ev.key === 'Enter') { tagEntity(id, inp.value); sfx.play('keyclick'); drawRadar(); }
+  });
+  rdFootEl.append(lab, inp);
+  inp.focus();
+  inp.select();
 }
 
 function laptopWifiHook() {
@@ -5915,7 +6282,7 @@ function renderWifi(msg) {
       if (n.essid === currentEssid()) { renderWifi(`already associated with "${n.essid}"`); return; }
       if (net.associate) net.associate(n.essid);
       sfx.play('keyclick');
-      renderWifi(`iwconfig ${net.iface || IFACE} essid ${n.essid}`);
+      renderWifi(`associated with "${n.essid}" — open netscape to browse it`);
     });
     wfListEl.appendChild(row);
   }
@@ -5929,6 +6296,7 @@ function renderWifi(msg) {
 // out that an httpd answers GET and nothing else. That lesson is the whole
 // argument of the L9 break, learned by typing rather than by being told.
 let telnetTo = null;   // the host we are connected to, or null
+let telnetOb = null;   // the obelisk we are jacked into over the wire (its console), or null
 
 function telnetOpen(hostArg, portArg) {
   const addr = String(hostArg == null ? '' : (hostArg.id || hostArg));
@@ -5941,6 +6309,9 @@ function telnetOpen(hostArg, portArg) {
     return { ok: false, text: [`Trying ${h.ip}...`, `telnet: connect to ${h.host} port ${port}: connection refused`,
       'The host is on the network. It is not answering.'].join('\n') };
   }
+  // An obelisk answers with its CONSOLE, not a web server: telnet jacks the
+  // NostBook into the tower's RON-DOS the way the chip jacks you in on the spot.
+  if (h.kind === 'obelisk') return telnetObelisk(h);
   if (port !== 80) {
     return { ok: false, text: [`Trying ${h.ip}...`,
       `telnet: connect to ${h.host} port ${port}: connection refused`,
@@ -5955,6 +6326,105 @@ function telnetOpen(hostArg, portArg) {
     `${SERVER_BANNER(h)}`,
     '',
   ].join('\n') };
+}
+
+// ---- SD-cards: reading a card into the NostBook ----------------------------
+// The access chip, the AI key, the FSF card — and later the media/data cards
+// from the backrooms — are one class of object: an SD-card you slot into the
+// NostBook. Drag one from a pocket onto the laptop slot in the HUD (or `mount`
+// it at the shell); the machine bleeps, copies the card's content into /mnt on
+// the disk, and the card stays in your hand — a copy, not a surrender. `eject`
+// takes it back out. The extra fields are the seam for later: `type`
+// (credential/media/data), and flags a viewer or boot loader will read —
+// `readonly`, `bootable`, `playable` — unused until there is content behind them.
+const SD_CARDS = {
+  chip: { at: 'chip', name: 'access chip', type: 'credential',
+    body: ['ACCESS CHIP — RON console credential.', '',
+      'Mounted. The NostBook can telnet into an obelisk console over the wire',
+      'now, the way the chip in your hand jacks you in at the tower itself.',
+      'This is a copy; the chip is still yours.'].join('\n') },
+  ai_key: { at: 'aikey', name: 'AI key', type: 'credential', body: 'AI KEY (sealed) — the fortress credential, cached on the disk.' },
+  trojan_key: { at: 'aikey', name: 'Trojan card', type: 'credential', body: 'TROJAN CARD — root grant + AI access, cached on the disk.' },
+  hermes_card: { at: 'aikey', name: 'HERMES card', type: 'credential', body: 'HERMES CARD — the herald credential, cached on the disk.' },
+  // The FSF card is not a credential but a whole read-only filesystem — a live
+  // GNU/Linux system on a card. It mounts its own tree at /mnt/fsf.
+  fsf_card: { at: 'fsf', name: 'FSF card', type: 'media', tree: makeFsfCard },
+};
+function mountCardToLaptop(item) {
+  const c = SD_CARDS[item];
+  if (!c) return false;
+  if (!player.laptop) { player.say('You have no NostBook to read it into.'); return false; }
+  if (!player.laptop.fs) player.laptop.fs = makeDisk();
+  const root = player.laptop.fs;
+  if (!root.d.mnt) root.d.mnt = { d: {} };
+  // A media card (the FSF card) carries a whole filesystem, mounted read-only;
+  // a credential card leaves a small marker the wire can read.
+  root.d.mnt.d[c.at] = c.tree ? c.tree() : { f: c.body || `${c.name} — cached on the NostBook.` };
+  sfx.play('blip');
+  if (item === 'fsf_card') kleos('fsfMounted', {});
+  player.say(c.tree
+    ? `The NostBook bleeps and mounts the ${c.name} on /mnt/${c.at}, read-only. Try: cat /mnt/${c.at}/README. The card is still in your hand.`
+    : `The NostBook bleeps and reads the ${c.name}: copied to /mnt/${c.at}. The card is still in your hand.`);
+  return true;
+}
+function ejectMount(name) {
+  const root = player.laptop && player.laptop.fs;
+  const key = String(name || '').replace(/^\/?mnt\//, '');
+  if (!root || !root.d.mnt || !root.d.mnt.d[key]) return { ok: false, text: `eject: nothing mounted at /mnt/${key || '?'}` };
+  delete root.d.mnt.d[key];
+  return { ok: true, text: `/mnt/${key} ejected — take the card.` };
+}
+// The credential telnet-into-an-obelisk needs: the access chip, read onto /mnt.
+function laptopHasChip() {
+  const root = player.laptop && player.laptop.fs;
+  return !!(root && root.d.mnt && root.d.mnt.d && root.d.mnt.d.chip);
+}
+
+// ---- telnet into an obelisk console (docs/laptop-telnet-plan.md) ------------
+// `telnet <ob>` jacks the NostBook into the tower's own RON-DOS: the same
+// console you get standing at it, over the wire, in their green phosphor. The
+// gate is the access chip mounted at /mnt/chip; the AI key still gates the sharp
+// verbs (ctx.hasAiKey), remote or not. `quit` or Escape drops the link.
+function telnetObelisk(h) {
+  if (!laptopHasChip()) {
+    return { ok: false, text: [`Trying ${h.ip}...`,
+      `telnet: ${h.host}: 401 Unauthorized — no access chip mounted.`,
+      'Drag your access chip onto the NostBook (or mount it) and try again.'].join('\n') };
+  }
+  const ob = h.ref;
+  if (!ob) return { ok: false, text: `telnet: ${h.host}: on the network, but not answering its console.` };
+  telnetOb = ob;
+  terminalOb = ob;               // `name`/currentNode and the console act on this tower
+  replInk = OB_INK;              // their green phosphor, printed onto the white NostBook screen
+  setLivePromptInk(OB_INK);      // the live prompt and caret go green while you are jacked in
+  kleos('hackAct', { what: 'telnet' });
+  return { ok: true, text: [
+    `Trying ${h.ip}...`,
+    `Connected to ${h.host}.`,
+    "Escape character is '^]'.",
+    '',
+    `RON-DOS // NODE ${ob.code} // jacked in over the wire`,
+    'The console is yours — scan, hack, tag, the lot. `quit` (or Escape) drops the link.',
+    '',
+  ].join('\n') };
+}
+// A line typed while jacked in: run it as an obelisk console command against the
+// remote tower, exactly as the physical console does (replRun's else-branch).
+function telnetObRun(line) {
+  const t = line.trim();
+  if (/^(quit|logout|exit|bye)$/i.test(t)) { dropTelnetOb('Connection closed by foreign host.'); return; }
+  let relaxed = /^\s*help(\s+\S+)?\s*$/i.test(t) ? t.toLowerCase() : line;
+  if (/^\s*print\s+map\s*$/i.test(relaxed)) relaxed = 'print territory';
+  const result = runRonml(relaxed, ronmlCtx());
+  sfx.play(result.ok ? 'keydrop' : 'termerr');
+  if (result.text) replPrint(result.text);
+}
+function dropTelnetOb(msg) {
+  telnetOb = null;
+  terminalOb = null;
+  replInk = null;                 // laptop text is white again; the green telnet block stays above
+  setLivePromptInk(LAPTOP_INK);   // the live prompt and caret come back to white
+  if (msg) replPrint(msg);
 }
 
 // What a server says when you knock. The daemon's own boxes each run something
@@ -6236,6 +6706,7 @@ function laptopRebootHook() {
   if (laptopShell && laptopShell.net) laptopShell.net.up = false;
   if (player.laptop) { player.laptop.netUp = false; player.laptop.state = null; }
   laptopMl = false;
+  mlTalk = null;                 // the session is going; reply goes with it
   laptopSession = {};
   mlPending = ""; mlLast = "";   // a held declaration does not survive the machine going down
   edState = null;
@@ -6286,6 +6757,14 @@ function postProgram(hostName, text) {
   const h = findHost(hosts, String(hostName || ''));
   if (!h) return { ok: false, text: `post: ${hostName}: host not found` };
   if (h.kind !== 'robot') return { ok: false, text: `post: ${h.host}: not a unit — nothing there runs a program` };
+  // Foundry-sealed firmware takes no field program. Guards are the only
+  // hardened units, and this is what makes "guards are not programmable" a
+  // real refusal rather than a program that silently never runs. Checked
+  // before the no-program branch below, because a hardened unit HAS no served
+  // program and would otherwise get the wrong, milder message.
+  if (h.ref && h.ref.hardened) {
+    return { ok: false, text: `post: ${h.host}: 403 — foundry-sealed firmware. This unit does not take field programs.` };
+  }
   // A FLAT CELL IS NOT A DEAD MACHINE. A drained unit drops into low power: it
   // cannot move, cannot see and cannot fight, but the board that answers
   // maintenance stays up on a trickle, which is the whole reason a flat machine
@@ -6307,22 +6786,55 @@ function postProgram(hostName, text) {
   unit.lamp = null;
   unit.lampFlash = 0;
   unit.lampFault = false;
+  kleos('hackAct', { what: 'post' });
+  kleos('optionalHack', { verb: 'post' });
+  // THE INVERSION. Everything the machines wrote is signed; what you write is
+  // not — so the network files your program as unsigned, and the unit's own
+  // page says so ever after. The detector's finding, in this world, is you.
+  unit._unwatermarked = true;
+  kleos('watermarkFlagged', { unit: h.name });
+  // A V-class runs weights. Posting to one is a fine-tune, and `modified` says
+  // whether the numbers actually moved or you sent the stock model straight
+  // back — which is the difference between changing a policy and rebooting it.
+  if (unit.type === 'v1') {
+    const stock = makeVModel(unit.modelSeed || 0, v1BuildName(unit.modelSeed || 0));
+    kleos('vModelPosted', { unit: h.name, modified: String(text).trim() !== stock.trim() });
+  }
+  // A LICENCE LINE in the source means this machine is running free software:
+  // the estate's whole point was code nobody outside it could read, and the
+  // counter-move is not to burn it but to license what you write. Looks for a
+  // copyleft header in a comment, which is where a licence has always lived.
+  if (/\(\*[^]*?\b(gpl|gnu|copyleft|licen[cs]e|free software)\b/i.test(String(text))) {
+    kleos('programLicensed', { unit: h.name });
+  }
+  // A program with no `hunt` in it is a machine that will not come for anyone:
+  // reprogramming is one of the four routes to AI SAFETY.
+  if (!/\bhunt\b/.test(String(text))) kleos('madeSafe', { how: 'reprogram' });
   unit.mlT = 0;                     // decide on the very next frame, not up to a tick later
   // Tell the operator what the machine will actually DO with it, by running the
   // program once here against the senses it has right now. A program that will
   // fault says so immediately rather than after you have walked away.
+  const dryD = Math.hypot(player.x - unit.x, player.y - unit.y);
+  const dryCanSee = map && map.hasLineOfSight ? map.hasLineOfSight(unit.x, unit.y, player.x, player.y) : true;
   const dry = decide(text, {
     charge: unit.battery, integrity: unit.maxHp ? (unit.hp / unit.maxHp) * 100 : 0,
-    range: Math.hypot(player.x - unit.x, player.y - unit.y),
+    range: dryD,
     home_range: Math.hypot(unit.home.x - unit.x, unit.home.y - unit.y),
-    threat: Math.hypot(player.x - unit.x, player.y - unit.y) < 9,
+    threat: dryD < 14,
     hurt: unit.maxHp ? unit.hp <= unit.maxHp * 0.35 : false,
+    // Fire control, so the verdict on a shooter is not a guess. The same
+    // readings the W-4 sense builds; a melee unit's program never touches them.
+    sight: dryCanSee && dryD <= 8,
+    armed: (unit.attackTimer || 0) <= 0,
+    shielded: !!(player.shielded && player.shielded()),
+    contact: dryD < 1.6,
+    lost_for: unit.losLostT || 0,
   });
   // On a flat machine the dry run is a guess about a machine that is not
   // deciding anything, so say what is actually true instead of pretending.
   const verdict = flat
     ? 'Its cell is flat: stored, and it will run when the machine has charge.'
-    : (dry.ok ? `On the senses it has this second, it chooses: ${dry.intent}` : `It will FAULT: ${dry.fault}`);
+    : (dry.ok ? `On the senses it has this second, it chooses: ${dry.intent}${dry.fire ? ` + ${dry.fire}` : ''}` : `It will FAULT: ${dry.fault}`);
   return {
     ok: true,
     host: h,
@@ -6364,6 +6876,59 @@ function laptopMlFiles() {
   return out.sort();
 }
 
+// The READ half of the unit API. `get`/`fetch`/the browser all serve the same
+// public face a machine's httpd answers for free: its program.ml. Write is the
+// escalation (postProgram); reading a box has never needed the hack. Resolves
+// an address the way findHost already does — IP, bare name, or FQDN — so the
+// whole loop can be scripted against a sniffed unit's IP.
+function getResource(addr, path) {
+  const hosts = webHosts();
+  const h = findHost(hosts, String(addr || ''));
+  if (!h) return { ok: false, text: `get: ${addr}: host not found` };
+  const p = (String(path || 'program.ml').replace(/^\//, '') || 'program.ml');
+  if (/^program\.ml$/i.test(p)) {
+    if (h.kind !== 'robot') return { ok: false, text: `get: ${h.host}: not a unit — it serves no program.ml` };
+    if (h.down && !(h.ref && h.ref.drained)) return { ok: false, text: `get: ${h.host}: no response. Nothing is running on it.` };
+    if (!h.program) return { ok: false, text: `get: ${h.host}: this unit's behaviour is not a program. There is nothing to read.` };
+    // Reading a machine's mind is free and always was — and it is the whole
+    // EXPLAINABILITY ladder, one opened box at a time.
+    kleos('braincodeRead', { unit: h.name });
+    return { ok: true, text: h.program, host: h.host };
+  }
+  return { ok: false, text: `get: /${p}: no such object on ${h.host}. This interface serves program.ml.` };
+}
+
+// `get <addr> [path]` at the shell — fetch a served resource to stdout, so
+// `get 10.3.4.7 > u.ml` lands it on the NostBook. Redirect and pipe are the
+// shell's; this only produces the bytes.
+function laptopGetHook(args) {
+  const [addrArg, pathArg] = args;
+  if (!addrArg) return { ok: false, text: 'usage: get <unit|ip> [path]   e.g. get 10.3.4.7 > u.ml' };
+  const r = getResource(String(addrArg.id || addrArg), pathArg && String(pathArg.id || pathArg));
+  return r.ok ? { ok: true, text: r.text } : r;
+}
+
+// `charge <unit>` — wake a FLAT unit's reserve cell so it crawls home to its
+// tower to recharge. A flat unit runs nothing, so a posted program cannot move
+// it; this is the one command that can. Resolves the unit the way get/post do.
+function laptopChargeHook(args) {
+  const addr = String((args[0] && (args[0].id || args[0])) || '').trim();
+  if (!addr) return { ok: true, text: 'charge <unit> — send a flat unit home to its tower to recharge.' };
+  const h = findHost(webHosts(), addr);
+  if (!h || h.kind !== 'robot' || !h.ref) return { ok: false, text: `charge: ${addr}: no such unit on the wire.` };
+  const r = h.ref;
+  if (r.dead || r.fused) return { ok: false, text: `charge: ${h.host}: that unit is a wreck.` };
+  if (!r.drained) return { ok: false, text: `charge: ${h.host}: not flat — it can walk home on its own. Post it \`home\`.` };
+  if (r.limping) return { ok: false, text: `charge: ${h.host}: already crawling home on its reserve.` };
+  if (r.reserveSpent) return { ok: false, text: `charge: ${h.host}: its reserve is spent — this one has to be reached on foot.` };
+  r.limping = true;
+  r.reserveSpent = true;
+  r.returning = false;
+  r.lamp = 'blue'; r.lampFlash = 1;
+  kleos('charged', { unit: h.name });
+  return { ok: true, text: `charge: ${h.host}: reserve engaged. It is crawling home to its tower to recharge.` };
+}
+
 function laptopPostHook(args) {
   const [fileArg, hostArg] = args;
   if (!fileArg || !hostArg) return { ok: false, text: 'usage: post <file.ml> <unit>   e.g. post download/t1_03.ml t1_03' };
@@ -6372,6 +6937,11 @@ function laptopPostHook(args) {
   if (text == null) return { ok: false, text: `post: ${file}: no such file` };
   return postProgram(String(hostArg.id || hostArg), text);
 }
+
+// Tagging moved inside the obelisk console (reached at the tower or by `telnet`)
+// and the sniffer scope, so the NostBook shell no longer carries its own flat
+// `tag` — one clean way in. tagEntity stays; it is what the console verb, the
+// sniffer and the daemon page all call.
 
 function laptopEdHook(args, env) {
   try {
@@ -6431,6 +7001,91 @@ nsUrlEl.addEventListener('keydown', (e) => {
   else nsSetView({ kind: 'host', addr: raw });
   nsUrlEl.blur();
 });
+
+// ---- The wireless applet in the status tray -------------------------------
+// Switch networks without leaving the browser: the signal-bars control at the
+// corner shows the network you are on, and clicking it drops the list of what
+// else is in range. Same wire as the `wifi` picker and `iwconfig` (net.networks
+// / net.associate); the difference is you never have to close the page to do
+// it. It is also the seam for other routers later — anything net.networks()
+// reports shows up here to be joined.
+const nsNetEl = document.getElementById('ns-net');
+const nsNetBarsEl = document.getElementById('ns-net-bars');
+const nsNetNameEl = document.getElementById('ns-net-name');
+const nsNetPopEl = document.getElementById('ns-netpop');
+
+// Four ascending bars lit by signal, the way a card of the period drew them.
+function nsFillBars(box, signal) {
+  box.textContent = '';
+  for (let i = 0; i < 4; i++) {
+    const b = document.createElement('i');
+    b.style.height = `${4 + i * 3}px`;
+    if (signal >= (i + 1) * 20) b.className = 'lit';
+    box.appendChild(b);
+  }
+}
+
+// The applet's own face: which network, and how well the card hears it.
+function updateNsNet() {
+  if (!nsNetEl) return;
+  const net = laptopShell && laptopShell.net;
+  if (!net || !net.card || !net.up) { nsNetEl.style.display = 'none'; nsNetPopEl.hidden = true; return; }
+  nsNetEl.style.display = 'flex';
+  const cur = currentEssid();
+  const here = ((net.networks && net.networks()) || []).find((n) => n.essid === cur);
+  nsFillBars(nsNetBarsEl, here ? here.signal : 0);
+  nsNetNameEl.textContent = cur || 'not connected';
+}
+
+function closeNsNetPop() { if (nsNetPopEl) { nsNetPopEl.hidden = true; nsNetEl.classList.remove('on'); } }
+
+// The drop-up list of networks in range, newest state each time it opens.
+function renderNsNetPop() {
+  const net = laptopShell && laptopShell.net;
+  if (!net || !nsNetPopEl) return;
+  const cur = currentEssid();
+  const nets = (net.networks && net.networks()) || [];
+  nsNetPopEl.textContent = '';
+  const title = document.createElement('div');
+  title.className = 'np-title';
+  title.textContent = 'Wireless networks';
+  nsNetPopEl.appendChild(title);
+  for (const n of nets) {
+    const row = document.createElement('div');
+    row.className = 'np-row' + (n.essid === cur ? ' on' : '');
+    const bars = document.createElement('span');
+    bars.className = 'np-bars';
+    nsFillBars(bars, n.signal);
+    const name = document.createElement('span');
+    name.className = 'np-name';
+    name.textContent = n.essid;
+    const sig = document.createElement('span');
+    sig.className = 'np-sig';
+    sig.textContent = `${n.signal}%`;
+    row.append(bars, name, sig);
+    row.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeNsNetPop();
+      if (n.essid === currentEssid()) { nsMsgEl.textContent = `Already on ${n.essid}.`; return; }
+      if (net.associate) net.associate(n.essid);
+      sfx.play('keyclick');
+      updateNsNet();
+      nsRender();               // the page reloads for the network you just joined
+      nsMsgEl.textContent = `Associated with ${n.essid}.`;
+    });
+    nsNetPopEl.appendChild(row);
+  }
+}
+
+if (nsNetEl) {
+  nsNetEl.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (nsNetPopEl.hidden) { renderNsNetPop(); nsNetPopEl.hidden = false; nsNetEl.classList.add('on'); }
+    else closeNsNetPop();
+  });
+  // A click anywhere else in the browser dismisses the little menu.
+  nsEl.addEventListener('click', () => closeNsNetPop());
+}
 document.getElementById('ns-pb-new').onclick = () => { if (web) nsSetView({ kind: 'whatsnew' }); };
 document.getElementById('ns-pb-lib').onclick = () => { if (web) nsSetView({ kind: 'library' }); };
 nsEl.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeNetscape(); });
@@ -6441,7 +7096,7 @@ nsEl.addEventListener('click', (e) => { if (e.target === nsEl) closeNetscape(); 
 
 // ---- The menu bar --------------------------------------------------------
 // Real drop-downs. Everything this machine can actually do is enabled; the rest
-// is greyed, which is honest and also exactly how a 1997 browser looked — half
+// is greyed, which is exactly how a 1997 browser looked: half
 // its menu was things you were never going to use.
 const nsMenuEl = document.getElementById('ns-menu');
 const nsDropEl = document.getElementById('ns-drop');
@@ -6660,43 +7315,65 @@ function laptopPrompt() {
   // stuck in it forever: every line typed is text, `q` included, so with a blank
   // prompt there is no way out you can discover by typing. The prompt is the dot
   // you need — it is the answer, sitting there.
+  if (telnetOb) return `${String(telnetOb.code || 'node').toLowerCase()}> `;  // jacked into a tower
   if (telnetTo) return '';   // a raw connection has no prompt of its own
   if (edState) return edState.ins != null ? '.' : 'ed>';
   // `=` while a declaration is held open, which is what an ML top level shows
   // and the only sign that the machine is waiting rather than ignoring you.
-  // A program is reading you, not the shell. Say so, or the next line looks
-  // like a command that silently did nothing.
-  if (mlInput) return '?';
+  // A program is listening, not the shell. Its name on the prompt says who
+  // you are talking to.
+  if (mlTalk) return `${mlTalk.name}>`;
   if (laptopMl) return mlPending ? '  =' : 'ml>';
   return `${pathString(laptopShell.cwd)} $`;
 }
 
-// Hand one typed line to the program that is waiting for it, by running the
-// whole file again with that line on the end of the queue. Only the output past
-// what has already been shown gets printed, so the conversation reads forwards.
-function mlFeed(line) {
-  mlInput.lines.push(line);
-  const r = runMlFile(mlInput.text, mlInput.name, mlInput.lines);
-  const fresh = r.lines.slice(mlInput.shown);
-  if (fresh.length) replPrint(...fresh);
-  sfx.play('keyclick');
-  if (r.needInput) { mlInput.shown = r.lines.length; return; }
-  // It ran to the end. Say so, because a program that simply stops printing
-  // looks the same as one that is still thinking.
-  mlInput = null;
-  replPrint('', `[${'ml'} done]`, '');
+// Whether the live session binds `name` to a function. Top-level bindings
+// land on the session object itself (lower-cased by the fold), so this is a
+// lookup, not an evaluation. It must not be asked through the engine: an
+// unbound name inside evaluation reads as an ATOM — that is how `patrol`
+// works as a value in a machine's program — so a probe like `(reply; true)`
+// answers yes whether reply exists or not. The first version of this check
+// did exactly that, and the browser caught it.
+function laptopBinds(name) {
+  const v = laptopSession && laptopSession[name];
+  return !!(v && v.tag === 'closure');
 }
 
-// Give up on it. The program is not suspended anywhere a signal could reach —
-// there is no process — so this just forgets the queue and the file.
-function mlStop(why) {
-  if (!mlInput) return;
-  const name = mlInput.name;
-  mlInput = null;
-  replPrint('', why || `^C  —  ${name} stopped.`, '');
+// One conversational turn: queue the typed line as the program's input and
+// evaluate the CONSTANT source `reply (readLine ())`. The line rides the
+// queue as a raw string — never spliced into source — so quotes and
+// backslashes in what somebody types are just characters.
+function talkOnce(line) {
+  const ctx = laptopCtx();
+  loadPrelude(ctx);
+  ctx.stdin = [line];
+  ctx.stdinPos = 0;
+  return runRonml('reply (readLine ())', ctx);
+}
+
+// Hand one typed line to the conversation. quit lets the program have the
+// last word (eliza answers it with the goodbye) and then leaves; an ERR
+// prints and STAYS in the conversation, because a bad answer must not eject
+// the player from the program they are debugging.
+function mlTalkFeed(line) {
+  sfx.play('keyclick');
+  const r = talkOnce(line);
+  if (r.text) replPrint(r.text);
+  if (/^(quit|exit|bye)$/i.test(line.trim())) mlTalkStop();
+}
+
+// Leave the conversation. The definitions stay in the session — only the
+// console's loop ends.
+function mlTalkStop(why) {
+  if (!mlTalk) return;
+  mlTalk = null;
+  replPrint('', why ? `${why}  —  back at the shell.` : 'back at the shell.', '');
 }
 
 function laptopRun(line) {
+  // Jacked into an obelisk over the wire: the line is a console command for the
+  // remote tower, not a shell command here.
+  if (telnetOb) { telnetObRun(line); return; }
   // A telnet session owns the line before anything else does: what you type is
   // sent to the far end, not run here.
   if (telnetTo) {
@@ -6720,10 +7397,9 @@ function laptopRun(line) {
     if (r.quit) { edState = null; replPrint('', 'back at the shell.'); }
     return;
   }
-  // A program that stopped to read owns the line before the shell does. What
-  // you type is its input, not a command — the same way ed's input mode works,
-  // and the same way it would on a real terminal.
-  if (mlInput) { mlFeed(line); return; }
+  // A conversation owns the line before the shell does: what you type is
+  // handed to the program's reply, not run as a command.
+  if (mlTalk) { mlTalkFeed(line); return; }
   const t = line.trim();
   // Still coming up: the keystroke skips the rest of the boot rather than being
   // swallowed or run against a machine that isn't ready.
@@ -6799,7 +7475,11 @@ function laptopRun(line) {
   // world facts, refreshed per command so neither can go stale in the hand.
   laptopShell.clock = { hour: dayNight.hour, day: dayNight.day || 0 };
   laptopShell.relay = nearestRelay();
-  const r = runUnix(t, laptopShell, { ml: laptopMlHook, netscape: laptopNetscapeHook, ed: laptopEdHook, pico: laptopPicoHook, post: laptopPostHook, pdf: laptopPdfHook, telnet: laptopTelnetHook, book: laptopBookHook, transcribe: laptopTranscribeHook, sleep: laptopSleepHook, suspend: laptopSuspendHook, halt: laptopHaltHook, reboot: laptopRebootHook, save: laptopSaveHook, wifi: laptopWifiHook, sniffer: laptopSnifferHook, more: laptopMoreHook });
+  // `mount fsf` at the prompt reads the card the same way the drag does — only
+  // when you are actually carrying it. The drag mounts /mnt/fsf directly.
+  laptopShell.fsfCard = player.hasItem('fsf_card') ? makeFsfCard : null;
+  laptopShell.onAchieve = (name, data) => kleos(name, data);
+  const r = runUnix(t, laptopShell, { ml: laptopMlHook, netscape: laptopNetscapeHook, ed: laptopEdHook, pico: laptopPicoHook, post: laptopPostHook, charge: laptopChargeHook, get: laptopGetHook, pdf: laptopPdfHook, telnet: laptopTelnetHook, book: laptopBookHook, transcribe: laptopTranscribeHook, sleep: laptopSleepHook, suspend: laptopSuspendHook, halt: laptopHaltHook, reboot: laptopRebootHook, save: laptopSaveHook, wifi: laptopWifiHook, sniffer: laptopSnifferHook, more: laptopMoreHook });
   if (player.laptop) player.laptop.netUp = !!(laptopShell.net && laptopShell.net.up);
   sfx.play(r.ok ? 'keyclick' : 'keyclick_soft');
   if (r.text) replPrint(r.text);
@@ -6903,14 +7583,14 @@ function restoreLaptopState() {
   const st = player.laptop && player.laptop.state;
   if (!st) return false;
   laptopShell.cwd = Array.isArray(st.cwd) ? st.cwd.slice() : ['home'];
-  replLog = Array.isArray(st.log) ? st.log.slice() : [];
+  // Older saves stored the log as plain strings; carry them in as white lines.
+  replLog = Array.isArray(st.log) ? st.log.map((e) => (typeof e === 'string' ? { t: e, c: null } : e)) : [];
   replHistory = Array.isArray(st.history) ? st.history.slice() : [];
   replHistoryIdx = replHistory.length;
   laptopMl = !!st.ml;
   laptopSession = st.session || {};
   edState = st.ed || null;
-  obTermScreen.textContent = replLog.join('\n');
-  obTermScreen.scrollTop = obTermScreen.scrollHeight;
+  renderRepl();
   obTermInput.value = st.typed || '';
   obTermPrompt.textContent = laptopPrompt();
   obTermInput.focus();
@@ -6948,12 +7628,21 @@ function openLaptop() {
   laptopShell = newShell(player.laptop.fs);
   laptopShell.net = laptopNetState();
   laptopMl = false;
+  mlTalk = null;                 // the session is going; reply goes with it
   web = null;
   laptopSession = {};
   mlPending = ""; mlLast = "";   // a held declaration does not survive the machine going down
   terminalKind = 'laptop';
   terminalOb = null;
-  setTerminalTheme('#cfe6d8');     // its own pale phosphor: not the AI's green, not RON's amber
+  // Jacked into the NostBook, you drop off their net. The card does in software
+  // what the Wi-Fi block does in the hand — forges so many addresses that the
+  // machines' fix on you scatters — so a unit hunting by the network loses the
+  // thread and breaks off. It is the same invisibleToRobots an obelisk console
+  // and the block already grant; the portable machine simply never claimed it,
+  // and you were being mauled at your own keyboard. Cleared in closeObTerminal.
+  player.terminalSafe = true;
+  replInk = null;                  // the NostBook runs white; only a telnet link paints green
+  setTerminalTheme(LAPTOP_INK);    // its own white screen: not the AI's green, not RON's amber
   obTermEl.classList.remove('hermes');
   obTermEl.classList.add('nostbook');   // beige lid and badge, like Netscape and pico wear
   obTermEl.style.display = 'flex';
@@ -6973,7 +7662,7 @@ function openLaptop() {
     player.say('You open the NostBook. It is where you left it.');
     return;
   }
-  player.say('You open the NostBook. No aerial, no link, nobody watching: just a machine.');
+  player.say('You open the NostBook. The card is already lying about where you are, to anything that asks. Nobody is watching.');
   runLaptopBoot(def);
 }
 
@@ -7003,7 +7692,7 @@ function runLaptopBoot(def) {
   step();
 }
 
-function closeObTerminal() { saveLaptopState(); telnetTo = null; if (nsEl) nsEl.style.display = 'none'; if (picoEl) { picoEl.style.display = 'none'; pico = null; } if (pdfEl && pdfEl.style.display === 'flex') closePdf(); elizaBot = null; web = null; edState = null; laptopMl = false; mlInput = null; laptopShell = null; laptopBooting = false; _laptopBootRest = null; if (_laptopBootTimer) { clearTimeout(_laptopBootTimer); _laptopBootTimer = null; } terminalKind = 'ob'; terminalOb = null; replSession = {}; setTerminalTheme(null); obTermEl.classList.remove('hermes'); obTermEl.classList.remove('nostbook'); obTermEl.style.display = 'none'; obTermGhost.textContent = ''; obTermPrompt.textContent = '>'; obTermInput.blur(); player.terminalSafe = false; }
+function closeObTerminal() { saveLaptopState(); persist(); telnetTo = null; telnetOb = null; if (nsEl) nsEl.style.display = 'none'; if (picoEl) { picoEl.style.display = 'none'; pico = null; } if (pdfEl && pdfEl.style.display === 'flex') closePdf(); elizaBot = null; web = null; edState = null; laptopMl = false; mlTalk = null; laptopShell = null; laptopBooting = false; _laptopBootRest = null; if (_laptopBootTimer) { clearTimeout(_laptopBootTimer); _laptopBootTimer = null; } terminalKind = 'ob'; terminalOb = null; replSession = {}; replInk = null; setTerminalTheme(null); obTermEl.classList.remove('hermes'); obTermEl.classList.remove('nostbook'); obTermEl.style.display = 'none'; obTermGhost.textContent = ''; obTermPrompt.textContent = '>'; obTermInput.blur(); player.terminalSafe = false; }
 // Click-away closes it. With the NostBook chassis in the way, "outside" now
 // includes the beige furniture itself — the lid, the deck, the badge — because
 // those are the machine's body, not its screen, and a click on them plainly
@@ -7020,12 +7709,12 @@ obTermEl.addEventListener('click', (e) => {
 // Autocomplete is per-system: an obelisk (TIRESIAS) suggests only AI-network
 // verbs, a HERMES relay only RON verbs — no seepage between the two. (sing is
 // secret, so it's in neither list.)
-const OB_COMPLETE = ['scan', 'nearest', 'keys', 'name', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'map', 'print', 'copy', 'cd', 'ls', 'drives', 'decrypt', 'unlock', 'eliza', 'retire', 'help', 'let'];
+const OB_COMPLETE = ['scan', 'garrison', 'nearest', 'keys', 'name', 'tag', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'map', 'print', 'copy', 'cd', 'ls', 'drives', 'decrypt', 'unlock', 'eliza', 'retire', 'help', 'let'];
 const HERMES_COMPLETE = ['read', 'print', 'archive', 'records', 'drive', 'drives', 'backup', 'restore', 'forge', 'copy', 'cd', 'ls', 'help', 'let'];
 const escapeHtml = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 const CORE_COMPLETE = ['look', 'scan', 'run', 'jam', 'open', 'help', 'exit'];
 // The laptop's shell (game/unix.js), plus `ml` — its own commands, not the AI's.
-const LAPTOP_COMPLETE = ['ls', 'cd', 'pwd', 'cat', 'echo', 'man', 'mkdir', 'rm', 'cp', 'mv', 'grep', 'wc', 'head', 'sh', 'uname', 'help', 'ml', 'ed', 'ifconfig', 'ping', 'netscape', 'exit'];
+const LAPTOP_COMPLETE = ['ls', 'cd', 'pwd', 'cat', 'echo', 'man', 'mkdir', 'rm', 'cp', 'mv', 'grep', 'wc', 'head', 'sh', 'uname', 'help', 'ml', 'ed', 'ifconfig', 'arp', 'scan', 'ping', 'netscape', 'telnet', 'post', 'charge', 'exit'];
 function ronmlCompletion(value) {
   if (elizaBot) return ''; // no AI-ML hints mid-conversation with the DOCTOR
   if (terminalKind === 'core') {
@@ -7096,10 +7785,19 @@ obTermInput.addEventListener('keydown', (e) => {
   // Escape gets you out of a program that is reading, for anybody who does not
   // reach for ^C. Only when one is actually waiting: Escape at an ordinary
   // prompt should stay free for whatever else wants it.
-  if (e.key === 'Escape' && mlInput) {
+  if (e.key === 'Escape' && mlTalk) {
     e.preventDefault();
     obTermInput.value = ''; obTermGhost.textContent = '';
-    mlStop(`[esc]  —  ${'stopped'}.`);
+    mlTalkStop('[esc]');
+    obTermPrompt.textContent = laptopPrompt();
+    return;
+  }
+  // Escape is the telnet escape character '^]' here: jacked into a tower, it
+  // drops the link and drops you back at the NostBook shell.
+  if (e.key === 'Escape' && telnetOb) {
+    e.preventDefault();
+    obTermInput.value = ''; obTermGhost.textContent = '';
+    dropTelnetOb('Connection closed.');
     obTermPrompt.textContent = laptopPrompt();
     return;
   }
@@ -7113,9 +7811,9 @@ obTermInput.addEventListener('keydown', (e) => {
     if (screenSel || inputSel) return; // native copy
     // A program waiting on readLine goes first: it has the line, so it has to
     // be the thing ^C takes away.
-    if (mlInput) {
+    if (mlTalk) {
       obTermInput.value = ''; obTermGhost.textContent = '';
-      mlStop(); obTermPrompt.textContent = laptopPrompt();
+      mlTalkStop('^C'); obTermPrompt.textContent = laptopPrompt();
     }
     else if (elizaBot) { obTermInput.value = ''; obTermGhost.textContent = ''; stopEliza('^C  —  ELIZA interrupted. Back at the RON-DOS prompt.'); }
     // ^C in ed: out of input mode, or out of ed altogether. Real ed ignores it;
@@ -7264,6 +7962,7 @@ function toggleHudMenu() {
 }
 let showSkills = false;
 let showWeapons = false;
+let showKleos = false;   // 1: the KLEOS achievements panel
 let paused = false;  // P: freezes movement, AI, clocks, and timers
 let sleepCooldown = 0; // B: real-seconds before another rest is allowed
 let resting = null;  // B rest animation in progress: { t } real-seconds elapsed
@@ -7818,6 +8517,7 @@ function update(dt) {
   if (input.consumePress('KeyH')) toggleHelp();
   if (input.inventoryPressed()) showBackpack = !showBackpack;
   if (input.skillsPressed()) showSkills = !showSkills;
+  if (input.kleosPressed()) showKleos = !showKleos;
   if (input.weaponChartPressed()) showWeapons = !showWeapons;
   // O: the phone, in and out of the pocket. Closing by key only matters when
   // the thread input hasn't got focus (typing captures the keyboard; Esc and
@@ -7984,40 +8684,33 @@ function update(dt) {
   // overlay is drawn in frame().
   if (driveState) { updateDrive(dt); return; }
 
-  if (input.newGamePressed()) {
-    if (window.confirm('Start a new game? This erases your saved progress.')) {
-      fullReset();
-      return;
-    }
-  }
   // N alone opens the notepad directly — no need to be jacked into a
   // terminal just to read back what you've already learned.
   if (input.notesPressed()) openNotebook();
   if (input.libraryPressed()) openBookshelf();
   // ESCAPE GOES BACK, which is what it does in every other game: it shuts the
   // top thing, and with nothing left to shut it offers the title screen.
-  // Shift+Q goes straight there.
   //
   // A COOLDOWN AFTER ANYTHING CLOSES, because Escape is a key people hit twice.
   // A DOM overlay handles its own Escape on the keydown, so by this frame it is
   // already gone; without a pause, the second tap of a double-tap — or a tap
   // that shut the scrapbook a moment ago — would offer to end the session. The
   // clock is stamped while anything is open and for ESC_QUIET after it shuts.
-  const overlayNow = domOverlayOpen() || showBackpack || showSkills || showWeapons
+  const overlayNow = domOverlayOpen() || showBackpack || showSkills || showWeapons || showKleos
     || helpEl.style.display === 'block';
   if (overlayNow) _overlayShutAt = performance.now();
   // A canvas panel is drawn ON the canvas, so the DOM chrome that floats above
   // it — the touch hint line, the ? and i buttons — printed straight through
   // the Armoury and the Record. They go away while a panel is up.
-  document.body.classList.toggle('panelup', showBackpack || showSkills || showWeapons);
+  document.body.classList.toggle('panelup', showBackpack || showSkills || showWeapons || showKleos);
   if (input.consumePress('Escape') && !player.deathCert) {
     if (helpEl.style.display === 'block') toggleHelp(false);
     else if (showBackpack) showBackpack = false;
+    else if (showKleos) showKleos = false;
     else if (showSkills) showSkills = false;
     else if (showWeapons) showWeapons = false;
     else if (performance.now() - _overlayShutAt > ESC_QUIET) openQuitGate();
   }
-  if (input.quitPressed() && !player.deathCert) openQuitGate();
   // The moment the parts are actually in the pack, say so — once. A recipe you
   // have already satisfied and do not know about is a recipe that does not
   // exist, and the NostBook is the one piece of kit the rest of the game hangs
@@ -8081,11 +8774,17 @@ function update(dt) {
       if (h) { openLaptop(); openNetscape(h.host); }
     }
   }
-  setUnitTagger(player.hands === 'sniffer'
-    ? (r) => ((r.dead || r.fused) ? null
-      : (Math.hypot(r.x - player.x, r.y - player.y) <= SNIFFER_TAG_RANGE
-        ? netIdOf(currentWorld, r) : null))
-    : null);
+  // A tagged unit WEARS its operator label: once you tag it, `«label»` floats
+  // above it for good, so a name you gave stays on the machine you gave it to.
+  // (The right-click float, r._tagFloatT, still reveals an untagged unit's id.)
+  // The sniffer, held, additionally names every machine in range by its net id.
+  setUnitTagger((r) => {
+    if (r.dead || r.fused) return null;
+    if (r._netTag) return `«${r._netTag}»`;
+    if ((r._tagFloatT || 0) > 0) return netIdOf(currentWorld, r);
+    return (player.hands === 'sniffer' && Math.hypot(r.x - player.x, r.y - player.y) <= SNIFFER_TAG_RANGE)
+      ? netIdOf(currentWorld, r) : null;
+  });
   // Reading a dead machine's disk onto your own (E while holding one).
   player.onSalvageLaptop = () => player.salvageLaptop(SALVAGE_DISKS, graftSalvage);
   player.onInstallLaptop = () => player.installLaptop(makeDisk);
@@ -8194,8 +8893,25 @@ function update(dt) {
   const right = input.consumeRight();
   if (right) {
     const w = camera.toWorld(right.x, right.y, renderer.w, renderer.h);
-    detail = { text: describeAt(Math.floor(w.x), Math.floor(w.y)), x: right.x, y: right.y, ttl: 6 };
+    // A right-click on a unit floats its label above it for a few seconds and
+    // names it — the quick way to tell which of four identical machines is the
+    // one you tagged, without opening a console. Nearest unit within a tile.
+    let unit = null, ud = 0.85;
+    for (const r of (currentWorld.robots || [])) {
+      if (r.dead || r.fused) continue;
+      const d = Math.hypot(r.x - w.x, r.y - w.y);
+      if (d < ud) { ud = d; unit = r; }
+    }
+    if (unit) {
+      unit._tagFloatT = 4;                 // seconds its label floats above it
+      const id = netIdOf(currentWorld, unit);
+      detail = { text: unit._netTag ? `${id} «${unit._netTag}»` : `${id} — untagged`, x: right.x, y: right.y, ttl: 6 };
+    } else {
+      detail = { text: describeAt(Math.floor(w.x), Math.floor(w.y)), x: right.x, y: right.y, ttl: 6 };
+    }
   }
+  // Tick down the click-to-float label timers.
+  for (const r of (currentWorld.robots || [])) if (r._tagFloatT > 0) r._tagFloatT = Math.max(0, r._tagFloatT - dt);
   if (detail) { detail.ttl -= dt; if (detail.ttl <= 0) detail = null; }
   if (toast) { toast.ttl -= dt; if (toast.ttl <= 0) toast = null; }
 
@@ -8205,6 +8921,14 @@ function update(dt) {
   // so the "outside" test is a plain rect check against the panel the
   // renderer last drew. A click that lands inside the panel falls through
   // unconsumed to the slot/drag handling right below.
+  if (showKleos) {
+    // Click anywhere outside the panel closes it, like every other modal here.
+    const kc = input.clickPos();
+    const kr = renderer._kleosRect;
+    if (kc && kr && (kc.x < kr.x || kc.x > kr.x + kr.w || kc.y < kr.y || kc.y > kr.y + kr.h)) {
+      input.consumeClick(); showKleos = false;
+    }
+  }
   if (showBackpack || showSkills || showWeapons) {
     const modalClick = input.clickPos();
     const outside = (r) => !r || modalClick.x < r.x || modalClick.x > r.x + r.w
@@ -8285,6 +9009,7 @@ function update(dt) {
       else if (b.action === 'library') openBookshelf();
       else if (b.action === 'skills') showSkills = !showSkills;
       else if (b.action === 'weapons') showWeapons = !showWeapons;
+      else if (b.action === 'kleos') showKleos = !showKleos;
       else if (b.action === 'minimap') {
         showMinimap = !showMinimap;
         player.say(showMinimap ? 'Minimap on.' : 'Minimap off.');
@@ -8373,6 +9098,10 @@ function update(dt) {
       // manage mode (one tap moves the item); closed, it's the usual equip.
       if (showBackpack) smartMoveSlot(drag.from);
       else player.equipSlot(drag.from); // released on the source: treat as a click
+    } else if (target && target.kind === 'laptop' && player.getSlot(drag.from) && SD_CARDS[player.getSlot(drag.from).item]) {
+      // A card dropped on the laptop slot is READ INTO the machine, not moved
+      // into it: the NostBook copies it to /mnt and the card stays in the pocket.
+      mountCardToLaptop(player.getSlot(drag.from).item);
     } else if (target) {
       player.moveItem(drag.from, target);
     } else if (Math.hypot(up.x - (drag.sx ?? up.x), up.y - (drag.sy ?? up.y)) < 22) {
@@ -9017,6 +9746,13 @@ function frame(now) {
       deathCert: player.deathCert,
       aiVictory: player.aiVictory,
       showSkills,
+      showKleos,
+      // Computed fresh each frame from the engine: the panel holds no state of
+      // its own, so it can never drift from what has actually been earned.
+      // The kill-log rides on the KLEOS model rather than the Record panel (#130):
+      // the obelisks you brought down are part of the song, not part of your CV.
+      kleos: showKleos ? { ...achieveModel(), killLog: player.killLog || [] } : null,
+      mouse: showKleos ? input.mousePos() : null,
       daemonsDown,                 // the Archipelago tally, for the Record panel
       islandsReached: Object.keys(player._welcomed || {}).length,
       showWeapons,

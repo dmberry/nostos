@@ -20,7 +20,7 @@
 
 import { buildWorld } from '../game/worldgen.js';
 import { spawnAnimals } from '../game/animals.js';
-import { spawnRobots, spawnW5, spawnM4, spawnM5, spawnM6 } from '../game/robots.js';
+import { spawnRobots, spawnW5, spawnGardeners, spawnCouriers, spawnM4, spawnM5, spawnM6 } from '../game/robots.js';
 import { spawnWaterDroids } from '../game/waterdroids.js';
 import { spawnBirds } from '../game/birds.js';
 import { placeTors } from '../game/hermes.js';
@@ -153,12 +153,12 @@ export function createCirce(seed) {
   }
 
   const robots = spawnRobots(map, IS, obelisks, { x: spawn.x, y: spawn.y, r: 14 });
-  for (let placed = 0, tries = 0; placed < 2 && tries < 120; tries++) {
-    const gx = 6 + Math.floor(Math.random() * (map.w - 12));
-    const gy = 6 + Math.floor(Math.random() * (map.h - 12));
-    const g = spawnW5(map, (IS ^ (0x5ad + placed * 131)) >>> 0, gx, gy);
-    if (g) { robots.push(g); placed++; }
-  }
+  // Two tending drones, each garrisoned to a tower — deterministic, so they come
+  // back the same on reload and carry a tag/program across a save like the roster.
+  robots.push(...spawnGardeners(map, IS, obelisks, 2));
+  // One V-class courier per island (#127): the network's answer to its own
+  // flat machines. Cut it and the fallen stay down.
+  robots.push(...spawnCouriers(map, IS, obelisks, 1));
   const waterdroids = spawnWaterDroids(map, IS);
 
   const obeliskObjs = obelisks.map((o) => map.objectAt(o.x, o.y)).filter(Boolean);

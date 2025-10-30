@@ -10,6 +10,8 @@
 import { makeRng } from './rng.js';
 import { armourKey } from './armour.js';
 import { decide, LAMP_COLOURS } from './ai_ml.js';
+import { makeVModel } from './v-model.js';
+import { achieveEvent } from './achieve.js';
 import { sfx } from '../engine/sound.js';
 import { OBJECTS } from './tiles.js';
 import { register } from '../engine/systems.js';
@@ -78,19 +80,137 @@ export const T1_PROGRAM = [
   'else patrol',
 ].join('\n');
 
+// The stock T-2 program, in the same idiom as the T-1's but written the way a
+// stalker is set up: it presses on while it is whole and goes home to its
+// tower when it is not, which is the piece of doctrine the T-1 does not carry
+// (a T-1 that runs is a T-1 that has to be recovered; a T-2 is worth more
+// than its pride). `hurt` is the instrument that difference reads from.
+export const T2_PROGRAM = [
+  '(* T-2 stalker. TIRESIAS-pursuit 2.1, heavy chassis.      *)',
+  '(* Doctrine: press while whole, break off when opened.    *)',
+  '(* The hull is the asset; the chase is not.               *)',
+  '',
+  'if hurt then home',
+  'else if charge < 15 then home',
+  'else if threat then hunt',
+  'else patrol',
+].join('\n');
+
+// The stock W-4 program. The hunter-killer the fire-control senses were built
+// for: it flees when whole-but-outmatched (hurt in a fight), holds and shoots
+// when it has the shot, and closes when it does not. `[hunt, fire]` is the one
+// line a melee chassis cannot write — feet and weapon in the same tick.
+// The stock T-3 program. An emplacement: it does not chase, it holds its nest
+// and takes the shot when it has one. `[wait, fire]` — feet still, weapon
+// firing — is the pair a T-3 lives on, and the reason feet and weapon are
+// separate words rather than one intent.
+// The stock W-1 program. A response swarm: it is already hunting when it
+// spawns, so the program is short. The waves, the triangulated fix and the
+// rule that it cannot strike a jacked-in operator are all the chassis under
+// `hunt`; this only chooses to keep at you, or break off home.
+// The stock W-3 program. A fitter: go home on a flat cell, else mend anything
+// in reach (`tend` runs the repair trade — finding the tower is the chassis's
+// job), else wander looking. Park it on `wait` and the towers stop being
+// repaired, which is the sabotage this class exists to allow.
+// The stock W-5 program: the same works build as the W-3, g-fit. Plant where
+// there is work, wander otherwise, home on a flat cell. A converted guard and
+// a blueboxed hunter both carry this, so their pages read as the gardeners they
+// have become.
+export const W5_PROGRAM = [
+  '(* W-5 gardener. TIRESIAS-works 1.7g.               *)',
+  '(* The same works build as the W-3, g-fit.          *)',
+  'if charge < 15 then home',
+  'else if work then tend',
+  'else patrol',
+].join('\n');
+
+export const W3_PROGRAM = [
+  '(* W-3 fitter. TIRESIAS-works 1.7.                  *)',
+  'if charge < 15 then home',
+  'else if work then tend',
+  'else patrol',
+].join('\n');
+
+export const W1_PROGRAM = [
+  '(* W-1 response. TIRESIAS-vengeance 3.0.            *)',
+  '(* The waves are the chassis. This only chooses.    *)',
+  'if charge < 12 then home',
+  'else if threat then hunt',
+  'else patrol',
+].join('\n');
+
+export const T3_PROGRAM = [
+  '(* T-3 ambusher. TIRESIAS-emplacement 1.2.          *)',
+  '(* It does not chase. The nest is the post.         *)',
+  'if charge < 10 then home',
+  'else if sight and armed then [wait, fire]',
+  'else wait',
+].join('\n');
+
+export const W4_PROGRAM = [
+  '(* W-4 hunter-killer. TIRESIAS-tactical 2.11.       *)',
+  '(* Do not edit. Faults are reported to the foundry. *)',
+  'if charge < 20 then home',
+  'else if threat and hurt then flee',
+  'else if threat and sight and armed then [hunt, fire]',
+  'else if threat then hunt',
+  'else patrol',
+].join('\n');
+
 // Four decisions a second, not sixty: the program is a policy, not a body.
 // Staggered per unit at spawn so a garrison never thinks on the same frame.
 const ML_TICK = 0.25;
 // The intents a T1's chassis can actually carry out. The vocabulary belongs to
 // the language; the capability belongs to the machine — a T1 asked to `tend`
 // has no toolhead to tend with, and faults saying so rather than standing there.
-const T1_CAN = ['patrol', 'hunt', 'home', 'flee', 'wait'];
+const T1_CAN = ['patrol', 'hunt', 'home', 'flee', 'wait', 'route', 'follow', 'defend'];
 // A T2 has the same repertoire as a T1 and none of the gear a shooter has: it
 // is legs and a ram, so it can go somewhere, come back, or stand still. There
 // is deliberately no `tend` here — that belongs to the gardeners — and no fire
 // control, so a program that answers [hunt, fire] faults on the second word.
-const T2_CAN = ['patrol', 'hunt', 'home', 'flee', 'wait'];
+const T2_CAN = ['patrol', 'hunt', 'home', 'flee', 'wait', 'route', 'follow', 'defend'];
 const T2_HURT_AT = 0.35;
+// A W-4 has legs and a laser. Same five leg-intents as the melee chassis, and
+// because it can shoot, a `[feet, weapon]` pair is allowed — the fire word
+// rides alongside the movement (fire/hold/reload), not as a sixth intent.
+const W4_CAN = ['patrol', 'hunt', 'home', 'flee', 'wait', 'route', 'follow', 'defend'];
+// A T-3 is an emplacement, not a chaser: same repertoire, but `wait` is its
+// natural state (hold the nest and watch) and `hunt` means its own short
+// engage, not a sprint. It shoots, so a pair is allowed.
+const T3_CAN = ['patrol', 'hunt', 'home', 'flee', 'wait', 'route', 'follow', 'defend'];
+const T3_HURT_AT = 0.35;
+// A W-1 is legs and a fist, spawned already hunting. Its wave rhythm and the
+// triangulated fix are the chassis; the program only chooses between hunting,
+// falling back, and going home. No fire control.
+const W1_CAN = ['patrol', 'hunt', 'home', 'flee', 'wait', 'route', 'follow', 'defend'];
+const W1_HURT_AT = 0.35;
+// A W-3 fitter neither hunts nor shoots. It can go to work (`tend` — its repair
+// trade), stand off, hold, or run. `flee` is a self-preservation branch the
+// reflex never had, which is the point of letting you rewrite it.
+const W3_CAN = ['patrol', 'home', 'wait', 'flee', 'tend', 'route'];
+const W3_SCAN_RANGE = 30;   // how far its `work` sensor reaches for a job
+// A W-5 gardener: the same works repertoire as the fitter. `tend` is its
+// planting trade; `home` holds its current anchor; `flee` lets an uploaded
+// program keep it away from you. It never fights.
+const W5_CAN = ['patrol', 'home', 'wait', 'flee', 'tend', 'route'];
+const W5_SCAN_RANGE = 8;    // how far it looks for blight or open ground to plant
+
+// A V-1 courier (#127, docs/v-class-plan.md). The gardener's repertoire: it
+// carries no weapon and `tend` IS its trade — a gardener tends blight, a
+// V-class tends the fallen. No INTENTS change; the job lives in updateV1.
+const V1_CAN = ['patrol', 'home', 'wait', 'flee', 'tend', 'route'];
+const V1_HP = 46;                  // lighter than a T-2: it is a porter
+const V1_SPEED = 1.6;              // brisker than a gardener, slower than a hunter
+const V1_HURT_AT = 0.4;
+const V1_DETECT_RANGE = 7;         // what counts as something warm nearby
+const V1_SCAN_RANGE = 22;          // how far it looks for a flat machine
+const V1_NO_CASUALTY = 24;         // what casualty_range reads with nobody down
+const V1_WANDER_RANGE = 9;
+const V1_DELIVER_TO = 40;          // D1: enough to limp home, not to rejoin the fight
+const V1_REACH = 1.3;              // close enough to hand a cell over
+const V1_PICKUP_T = 2.2;           // seconds docked at a tower drawing a cell
+const V1_COOLDOWN = 14;            // seconds between deliveries, so one V-1 is not the whole economy
+const V1_FUEL = 6000;              // a forward pass costs ~2400 steps; see v-model.js
 const T1_HURT_AT = 0.35;        // `hurt` reads true at or below this fraction of hull
 const T1_BLIND_RANGE = 999;     // what `range` reads when the sensor has nothing (jammed)
 
@@ -218,6 +338,7 @@ const W4_RANGE = 8;             // preferred firing distance
 const W4_MIN_RANGE = 4.5;       // backs away if the player gets this close
 const W4_FIRE_COOLDOWN = 1.6;
 const W4_DAMAGE = 9;
+const W4_HURT_AT = 0.35;
 const W4_BODY = '#4a1408';      // dull furnace red-black
 const W4_HEAD = '#2c0c05';
 
@@ -452,6 +573,13 @@ const W5_PLANT_INTERVAL = 18;    // seconds between planting attempts
 const W5_PLANT_JITTER = 14;
 const W5_PLANT_RANGE = 1;        // plants right beside itself — you see the gardener garden
 const W5_BODY = '#243a1c';       // mossy green, reads as gardener not hunter
+// Works amber. Every fighting chassis in the roster is a blue, a grey or a
+// red-black, so a utility unit gets the one hue nothing else uses: you should
+// know a courier from across a field before you can read its badge. The green
+// cell in its cradle sits against it rather than in it.
+const V1_BODY = '#7d5511';
+const V1_HEAD = '#96681a';
+const V1_CELL = '#7fe0b0';       // the charged cell it carries, lit
 const W5_HEAD = '#16240f';
 
 // Line-of-sight give-up: any hunting machine that can't see the player for
@@ -567,10 +695,10 @@ function baseRobot(type, x, y, hp, rng) {
     chopPulseT: 0,
     following: false,     // friendly follow hysteresis between FOLLOW_MIN/MAX
     bumpCooldown: 0,      // seconds before another machine colliding with this one can hurt it again
-    // A T1 runs on a program it carries (see T1_PROGRAM). Every other class
+    // A T1 or T2 runs on a program it carries. Every other class
     // still has its policy compiled into this file; they get no program, and
     // `program: null` is what their page reports.
-    program: type === 't1' ? T1_PROGRAM : null,
+    program: type === 't1' ? T1_PROGRAM : type === 't2' ? T2_PROGRAM : type === 't3' ? T3_PROGRAM : type === 'w4' ? W4_PROGRAM : type === 'w1' ? W1_PROGRAM : type === 'w3' ? W3_PROGRAM : type === 'w5' ? W5_PROGRAM : null,
     mlT: rng() * ML_TICK, // stagger the decision tick across a garrison
     intent: null,         // what the program last chose
     fault: null,          // why it last refused to choose; null while healthy
@@ -739,6 +867,67 @@ export function spawnW5(map, seed, fx, fy) {
   const r = baseRobot('w5', spot[0], spot[1], W5_HP, rng);
   r.spawnT = FACTORY_SPAWN_T;
   return r;
+}
+
+// A V-1 courier, seated at a tower like the fighters so it has a home obelisk
+// and therefore a natural name (OB_XXXX.v1) that survives a save.
+export function spawnV1(map, seed, fx, fy) {
+  const rng = makeRng(seed >>> 0);
+  const spot = seatNear(map, fx, fy, { x: fx, y: fy, r: 0 }, new Set(), rng, SPAWN_MAX_R_FALLBACK);
+  if (!spot) return null;
+  const r = baseRobot('v1', spot[0], spot[1], V1_HP, rng);
+  r.spawnT = FACTORY_SPAWN_T;
+  r.cargo = false;
+  // Its weights are its own. The seed is the tower it belongs to, so the same
+  // unit reads the same on every load — a checkpoint you can diff against.
+  r.modelSeed = ((seed >>> 0) % 100000) + 1;
+  r.program = makeVModel(r.modelSeed, v1BuildName(r.modelSeed));
+  return r;
+}
+
+// V1_04, V1_37 — the foundry's build stamp, from the unit's own seed.
+export function v1BuildName(seed) {
+  return `V1_${String((seed | 0) % 100).padStart(2, '0')}`;
+}
+
+// The island's tending drones, each GARRISONED to a tower — seated a little off
+// it, the way the fighters are, so a gardener has a home obelisk (and therefore
+// a stable natural name, OB_XXXX.w5) and can be found, tagged and saved like the
+// rest of the roster. Deterministic from the seed: which towers get one is a
+// seeded shuffle, not Math.random, so the same island brings the same gardeners
+// back on reload — which is what the tag/program persistence keys off.
+export function spawnGardeners(map, seed, obelisks, count = 2) {
+  const out = [];
+  if (!obelisks || !obelisks.length) return out;
+  const rng = makeRng((seed ^ 0x9a4d) >>> 0);
+  const order = obelisks.map((_, i) => i);
+  for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+  for (const idx of order) {
+    if (out.length >= count) break;
+    const ob = obelisks[idx];
+    const g = spawnW5(map, (seed ^ (0x5ad + out.length * 131)) >>> 0, ob.x, ob.y);
+    if (g) out.push(g);
+  }
+  return out;
+}
+
+// The island's couriers, one per island by default, garrisoned to a tower the
+// same way the gardeners are so each has a home obelisk and therefore a natural
+// name (OB_XXXX.v1) that survives a save. Deterministic from the seed: which
+// tower gets the courier is a property of the island, not of the session.
+export function spawnCouriers(map, seed, obelisks, count = 1) {
+  const out = [];
+  if (!obelisks || !obelisks.length) return out;
+  const rng = makeRng((seed ^ 0x7c1a) >>> 0);
+  const order = obelisks.map((_, i) => i);
+  for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+  for (const idx of order) {
+    if (out.length >= count) break;
+    const ob = obelisks[idx];
+    const v = spawnV1(map, (seed ^ (0xc0de + out.length * 149)) >>> 0, ob.x, ob.y);
+    if (v) out.push(v);
+  }
+  return out;
 }
 
 // Seat a fortress guard of `type` near (mx, my). `fromFactory` adds the
@@ -1094,7 +1283,12 @@ function updateRecharge(r, dt, map) {
 
 // ---- Update ---------------------------------------------------------------
 
-export function updateRobots(dt, robots, player, map) {
+export function updateRobots(dt, robots, player, map, dayNight) {
+  // Stamp the daylight state where a gardener's sense can read it. dayNight
+  // lives in main.js and the sense functions are pure of it; one boolean on the
+  // map bridges the two without a wider dependency. Defaults to day if unknown.
+  map._isDay = dayNight ? !dayNight.isNight() : true;
+  _liveRobots = robots;     // this tick's roster, for an escort's `defend` to scan (see updateEscort)
   formM4Squads(robots, dt); // scouts that have lost you form up into search teams
   // The W-factory's location, for repelled W-units to retreat home to (below).
   let facX = null, facY = null;
@@ -1121,6 +1315,10 @@ export function updateRobots(dt, robots, player, map) {
     if (r.hp <= 0) {
       r.dead = true;
       r.stuck = false;
+      // Every machine in the game dies here, so this is the one place the song
+      // needs to hear about it. WHO killed it decides which track it feeds:
+      // the stamps are set at each damage site (see _lastHitBy).
+      achieveEvent('unitDestroyed', { type: r.type, cause: r._lastHitBy || 'unknown' });
       const qty = r.scrapPenalty ? 1 : scrapQty(r.x, r.y);
       (map.groundItems ??= []).push({ item: 'scrap', qty, x: r.x, y: r.y });
       // Every destroyed machine sheds a chip fragment — collect eight and you
@@ -1292,7 +1490,7 @@ export function updateRobots(dt, robots, player, map) {
     // W5 wander-and-reseed AI whatever its original class was, and reads as friendly
     // (green eyes) so nothing targets it and it never targets you. Intercept here,
     // before the flat-battery/friendly-follower paths.
-    if (r.gardener) { updateW5(r, dt, map); r.animT += dt; continue; }
+    if (r.gardener) { updateW5(r, dt, map, player); r.animT += dt; continue; }
 
     // Flat battery: fully inert until the player re-batteries it. (The reserve
     // walk is handled above the distance cull — a machine sent home keeps going
@@ -1305,7 +1503,7 @@ export function updateRobots(dt, robots, player, map) {
     // serving the player or has already broken off to recharge.
     if (r.hurt) {
       r.hurt = false;
-      if (!r.friendly && !r.recharging) r.aggro = true;
+      if (!r.friendly && !r.recharging && constitutionAllows(r, 'hunt')) r.aggro = true;
     }
 
     if (r.friendly) {
@@ -1357,9 +1555,10 @@ export function updateRobots(dt, robots, player, map) {
     if (r.type === 't1') updateT1(r, dt, player, map);
     else if (r.type === 't3') updateT3(r, dt, player, map);
     else if (r.type === 'w1') updateW1(r, dt, player, map);
-    else if (r.type === 'w3') updateW3(r, dt, map, robots);
+    else if (r.type === 'w3') updateW3(r, dt, map, robots, player);
     else if (r.type === 'w4') updateW4(r, dt, player, map);
-    else if (r.type === 'w5') updateW5(r, dt, map);
+    else if (r.type === 'w5') updateW5(r, dt, map, player);
+    else if (r.type === 'v1') updateV1(r, dt, map, player);
     else if (r.type === 'm6' || r.type === 'm5' || r.type === 'm4') updateGuard(r, dt, player, map, robots);
     else updateT2(r, dt, player, map);
   }
@@ -1379,7 +1578,7 @@ export function registerRobotsSystem() {
   register({
     name: 'robots',
     order: 30,
-    update: (w) => updateRobots(w.dt, w.robots, w.player, w.map),
+    update: (w) => updateRobots(w.dt, w.robots, w.player, w.map, w.dayNight),
   });
 }
 
@@ -1420,8 +1619,8 @@ function separateRobots(robots, map, dt, player) {
         // instantly. Only checked on the first pass — later passes this same
         // frame are just finishing the push-apart, not a fresh collision.
         if (pass === 0 && a.bumpCooldown <= 0 && b.bumpCooldown <= 0) {
-          a.hp -= BUMP_DAMAGE; a.hurt = true;
-          b.hp -= BUMP_DAMAGE; b.hurt = true;
+          a.hp -= BUMP_DAMAGE; a.hurt = true; a._lastHitBy = 'machine';
+          b.hp -= BUMP_DAMAGE; b.hurt = true; b._lastHitBy = 'machine';
           a.bumpCooldown = BUMP_COOLDOWN;
           b.bumpCooldown = BUMP_COOLDOWN;
           (map.sparks ??= []).push({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, ttl: 0.3, max: 0.3 });
@@ -1461,6 +1660,7 @@ function updateUbikConfused(r, dt, robots, map) {
       if (Math.hypot(other.x - r.x, other.y - r.y) > UBIK_CONFUSE_ATTACK_RANGE) continue;
       other.hp -= UBIK_CONFUSE_ATTACK_DAMAGE;
       other.hurt = true;
+      other._lastHitBy = 'ubik';   // a confused machine, swinging at its own side
       other.knockT = Math.max(other.knockT || 0, 0.3);
       (map.sparks ??= []).push({ x: other.x, y: other.y, ttl: 0.35, max: 0.35 });
       r._confuseAttackTimer = UBIK_CONFUSE_ATTACK_COOLDOWN;
@@ -1469,12 +1669,10 @@ function updateUbikConfused(r, dt, robots, map) {
   }
 }
 
-// What a T1's sensor pack can tell it, as a snapshot for its program. Only
-// the readings a T1 actually has are in here: ask it for `daylight` or
-// `blight` and you get false, because a T1 carries no light meter and no soil
-// probe. A program written against a sensor the chassis lacks is not an error,
-// it is a program that will never fire that branch.
-function t1Sense(r, d, map) {
+// The tower a unit is homed to, found once and cached. A jammed or felled
+// home reads as `linked: false`, which is how a program tells its network is
+// down without a sensor for it.
+function homeObelisk(r, map) {
   if (r._homeOb === undefined) {
     let best = null, bd = Infinity;
     for (const o of (map.objects || [])) {
@@ -1484,7 +1682,23 @@ function t1Sense(r, d, map) {
     }
     r._homeOb = best || null;
   }
-  const ob = r._homeOb;
+  return r._homeOb;
+}
+
+// A snapshot of what a unit's sensors can tell its program. This is the COMMON
+// pack — the instruments every chassis with a program carries. A chassis row's
+// `sense` builds on it and adds the readings peculiar to that machine (a
+// shooter's fire control, a fitter's `work`), and supplies ONLY those: ask a
+// T-1 for `daylight` or `blight` and the language default answers (false/0),
+// because a T-1 has no light meter and no soil probe. A program written
+// against a sensor the chassis lacks is not an error — it is a branch that
+// never fires, which is the honesty the design turns on.
+//
+// `caps.detect` is the range at which `threat` holds; `caps.hurtAt` the hull
+// fraction at which `hurt` does. Those two numbers are the whole difference
+// between a T-1's senses and a T-2's, which is why one function serves both.
+function baseSense(r, d, map, caps) {
+  const ob = homeObelisk(r, map);
   return {
     charge: r.battery,
     integrity: r.maxHp ? (r.hp / r.maxHp) * 100 : 0,
@@ -1493,35 +1707,134 @@ function t1Sense(r, d, map) {
     // sensor, and its own `threat` branch quietly stops holding.
     range: Number.isFinite(d) ? d : T1_BLIND_RANGE,
     home_range: Math.hypot(r.home.x - r.x, r.home.y - r.y),
-    threat: Number.isFinite(d) && d < T1_DETECT_RANGE,
-    hurt: r.maxHp ? r.hp <= r.maxHp * T1_HURT_AT : false,
+    threat: Number.isFinite(d) && d < caps.detect,
+    hurt: r.maxHp ? r.hp <= r.maxHp * caps.hurtAt : false,
     linked: ob ? !(ob.destroyed || ob.jammed || ob.needsRebuild) : false,
   };
 }
 
-// What a T2's sensor pack can tell it. A T2 is a bigger, slower T1 with the
-// same instruments and a longer nose: it notices you further off and follows
-// you further before it gives up, and those two numbers are the only reason a
-// program written for one does not read identically on the other.
-function t2Sense(r, d, map) {
-  if (r._homeOb === undefined) {
-    let best = null, bd = Infinity;
-    for (const o of (map.objects || [])) {
-      if (o.type !== 'obelisk') continue;
-      const dd = (o.x - r.home.x) ** 2 + (o.y - r.home.y) ** 2;
-      if (dd < bd) { bd = dd; best = o; }
+// The T-1 and T-2 sense packs: the common pack, with each chassis's own
+// detection range and hurt threshold. Nothing else differs, which is the
+// point — a program reads the same on both, and behaves differently only
+// because the machine notices you at a different distance.
+const t1Sense = (r, d, map) => baseSense(r, d, map, { detect: T1_DETECT_RANGE, hurtAt: T1_HURT_AT });
+const t2Sense = (r, d, map) => baseSense(r, d, map, { detect: T2_DETECT_RANGE, hurtAt: T2_HURT_AT });
+
+// A W-4's senses: the common pack, plus the fire control a shooter needs to
+// decide whether it can take the shot. These readings need the player (line of
+// sight, shield state), so the sense function takes it — the melee chassis
+// ignore the extra argument.
+//   sight    the target is in line of sight AND inside firing range
+//   armed    the weapon has cooled down and can fire this tick
+//   shielded the target's shield or forcefield is up (plinking is wasted)
+//   contact  the target is right on top of it
+//   lost_for seconds it has held with no line of sight (the give-up clock)
+// A T-3's senses: the common pack plus fire control at emplacement ranges —
+// it sees and shoots to T3_AMBUSH_RANGE, and `contact` is the point-blank claw
+// distance, not a W-4's standoff.
+// A W-1's senses. Just the common pack, and not even all of it: a W-1 homes to
+// the crater it was deployed from, not a tower, so it has no link sensor —
+// `linked` is dropped, and a program that reads it gets the honest false.
+// A W-3's senses: the common pack, plus `work` — true when a repairable tower
+// is within scan. `range`/`hurt` come free from the pack; a fitter has no fire
+// control and no `threat` branch it acts on, but the pack carries them and a
+// program is free to ignore them.
+// A W-5's senses. The common pack minus `linked` (a gardener homes to nowhere,
+// re-anchoring as it drifts), plus the three a gardener actually uses: `blight`
+// (dead ground within scan), `work` (blight OR open grass to plant on), and
+// `daylight` (the map's day flag). `threat` holds close (d < 6) so a program
+// can be told to keep away from you.
+function w5Sense(r, d, map) {
+  const b = baseSense(r, d, map, { detect: 6, hurtAt: 0.35 });
+  delete b.linked;
+  b.home_range = 0;   // its home is wherever it is
+  let blight = false, plantable = false;
+  const R = W5_SCAN_RANGE;
+  for (let dy = -R; dy <= R && !(blight && plantable); dy++) {
+    for (let dx = -R; dx <= R; dx++) {
+      const tx = Math.floor(r.x) + dx, ty = Math.floor(r.y) + dy;
+      const f = map.floorAt ? map.floorAt(tx, ty) : null;
+      if (f === 'blight' || f === 'blight_sick') { blight = true; }
+      else if (f === 'grass' && !(map.objectAt && map.objectAt(tx, ty)) && (!map.heightAt || map.heightAt(tx, ty) === 0)) { plantable = true; }
+      if (blight && plantable) break;
     }
-    r._homeOb = best || null;
   }
-  const ob = r._homeOb;
+  return { ...b, blight, work: blight || plantable, daylight: map._isDay !== false };
+}
+
+// A V-1's senses: the common pack plus the two a courier needs. The order of
+// the pack IS the documented input vector of the model (v-model.js V_INPUTS),
+// so changing it here without changing the weights makes the unit read its own
+// world through the wrong columns.
+function v1Sense(r, d, map) {
+  const b = baseSense(r, d, map, { detect: V1_DETECT_RANGE, hurtAt: V1_HURT_AT });
+  const c = nearestCasualty(r);
   return {
-    charge: r.battery,
-    integrity: r.maxHp ? (r.hp / r.maxHp) * 100 : 0,
-    range: Number.isFinite(d) ? d : T1_BLIND_RANGE,
-    home_range: Math.hypot(r.home.x - r.x, r.home.y - r.y),
-    threat: Number.isFinite(d) && d < T2_DETECT_RANGE,
-    hurt: r.maxHp ? r.hp <= r.maxHp * T2_HURT_AT : false,
-    linked: ob ? !(ob.destroyed || ob.jammed || ob.needsRebuild) : false,
+    ...b,
+    cargo: !!r.cargo,
+    casualty_range: c ? Math.hypot(c.x - r.x, c.y - r.y) : V1_NO_CASUALTY,
+  };
+}
+
+// The nearest machine lying flat, from this tick's roster. D2: it checks
+// `drained`, not allegiance — a cell is a cell, which is what makes a stolen
+// courier worth having.
+function nearestCasualty(r) {
+  if (!_liveRobots) return null;
+  let best = null, bestD = V1_SCAN_RANGE;
+  for (const o of _liveRobots) {
+    if (o === r || !o.drained || o.dead || o.fused || o.zombie) continue;
+    const d = Math.hypot(o.x - r.x, o.y - r.y);
+    if (d < bestD) { bestD = d; best = o; }
+  }
+  return best;
+}
+
+function w3Sense(r, d, map) {
+  const b = baseSense(r, d, map, { detect: HUNTER_REACQUIRE_RANGE, hurtAt: 0.35 });
+  let work = false;
+  for (const o of (map.objects || [])) {
+    if (!w3Repairable(o)) continue;
+    if (Math.hypot(o.x + 0.5 - r.x, o.y + 0.5 - r.y) <= W3_SCAN_RANGE) { work = true; break; }
+  }
+  return { ...b, work };
+}
+
+function w1Sense(r, d, map) {
+  const b = baseSense(r, d, map, { detect: HUNTER_REACQUIRE_RANGE, hurtAt: W1_HURT_AT });
+  delete b.linked;
+  return b;
+}
+
+function t3Sense(r, d, map, player) {
+  const base = baseSense(r, d, map, { detect: T3_AMBUSH_RANGE, hurtAt: T3_HURT_AT });
+  const canSee = player && map.hasLineOfSight
+    ? map.hasLineOfSight(r.x, r.y, player.x, player.y) : false;
+  const shielded = !!(player && !player.invisibleToRobots && player.shielded && player.shielded());
+  return {
+    ...base,
+    sight: canSee && Number.isFinite(d) && d <= T3_AMBUSH_RANGE,
+    armed: (r.attackTimer || 0) <= 0,
+    shielded,
+    contact: Number.isFinite(d) && d < T3_HIT_RANGE + 1,
+    lost_for: r.losLostT || 0,
+  };
+}
+
+function w4Sense(r, d, map, player) {
+  // A W-4's `threat` holds as far as it re-acquires. Read here, not as a
+  // load-time const: HUNTER_REACQUIRE_RANGE is defined lower in the file.
+  const base = baseSense(r, d, map, { detect: HUNTER_REACQUIRE_RANGE, hurtAt: W4_HURT_AT });
+  const canSee = player && map.hasLineOfSight
+    ? map.hasLineOfSight(r.x, r.y, player.x, player.y) : false;
+  const shielded = !!(player && !player.invisibleToRobots && player.shielded && player.shielded());
+  return {
+    ...base,
+    sight: canSee && Number.isFinite(d) && d <= W4_RANGE,
+    armed: (r.attackTimer || 0) <= 0,
+    shielded,
+    contact: Number.isFinite(d) && d < 1.6,
+    lost_for: r.losLostT || 0,
   };
 }
 
@@ -1529,16 +1842,80 @@ function t2Sense(r, d, map) {
 // A table rather than a `t2Think` beside the `t1Think`, because the thinking is
 // identical for every machine on the island and only the instruments and the
 // gear differ. Adding a unit type is adding a row.
+// One entry per programmable chassis: how it reads the world (`sense`), what
+// intents it can carry out (`can`), and whether it has a weapon a `[feet,
+// weapon]` pair can drive (`fire`). A row is the whole of making a class
+// programmable; the shooters (W-4, T-3) that set `fire: true` land in later
+// stages. T-1 and T-2 are legs and a ram — no fire control — so a pair
+// returned on one faults rather than being silently half-obeyed.
 const CHASSIS = {
-  t1: { sense: t1Sense, can: T1_CAN },
-  t2: { sense: t2Sense, can: T2_CAN },
+  t1: { sense: t1Sense, can: T1_CAN, fire: false },
+  t2: { sense: t2Sense, can: T2_CAN, fire: false },
+  w4: { sense: w4Sense, can: W4_CAN, fire: true },
+  t3: { sense: t3Sense, can: T3_CAN, fire: true },
+  w1: { sense: w1Sense, can: W1_CAN, fire: false },
+  w3: { sense: w3Sense, can: W3_CAN, fire: false },
+  w5: { sense: w5Sense, can: W5_CAN, fire: false },
+  // The V-1 carries a fuel budget of its own: its program is a forward pass,
+  // which costs a thousand times what a hand-written rule costs.
+  v1: { sense: v1Sense, can: V1_CAN, fire: false, fuel: V1_FUEL },
 };
+
+// The network is speaking over this unit's program: a tower's recall (repel),
+// or a spoofer answering with its tower's voice (the unit reads friendly).
+// A bluebox conversion is NOT here — that rewrites the unit into a gardener
+// for real, program and all, rather than talking over it for a spell.
+export function unitOverridden(r) {
+  return !!(r && (r.repelledT > 0 || r.singing || r.friendly));
+}
+
+// Walk a queued route one order at a time. A `move` order is a leg: the unit
+// heads for a tile relative to where it stood when the leg came up, and the leg
+// is done on arrival or abandoned after a couple of seconds pinned (blocked is
+// not a fault — the next leg simply starts from where the machine actually is).
+// A lamp or beep order applies at once and pops, so a colour change lands
+// between the legs it sits between. When the queue empties the route is
+// cleared and the program is re-run next tick.
+const ROUTE_LEG_SPEED = 2.4;   // an unhurried LOGO walk
+function runRoute(r, dt, map, player) {
+  r.beepT = Math.max(0, (r.beepT || 0) - dt);
+  if (!r.route || !r.route.length) { r.route = null; r.mlT = 0; return; }
+  const order = r.route[0];
+  if (order.k === 'move') {
+    if (!r.routeTarget) { r.routeTarget = { x: r.x + order.dx + 0.001, y: r.y + order.dy + 0.001 }; r._routeStuckT = 0; }
+    const before = Math.hypot(r.routeTarget.x - r.x, r.routeTarget.y - r.y);
+    moveToward(r, r.routeTarget.x, r.routeTarget.y, ROUTE_LEG_SPEED, dt, map);
+    const after = Math.hypot(r.routeTarget.x - r.x, r.routeTarget.y - r.y);
+    if (before - after < ROUTE_LEG_SPEED * dt * 0.35) r._routeStuckT = (r._routeStuckT || 0) + dt;
+    else r._routeStuckT = 0;
+    if (after < 0.3 || r._routeStuckT > 2) { r.route.shift(); r.routeTarget = null; r._routeStuckT = 0; }
+  } else {
+    // lamp / flash / beep — apply the one order now and drop it.
+    applyEffects(r, [order], player ? distTo(r, player) : Infinity);
+    r.route.shift();
+  }
+  r.animT += dt;
+}
 
 // Re-read the unit's program and store what it chose. Faults are facts about
 // the machine, not error messages: it keeps the fault, drops back to its
 // built-in reflexes, and its own web page reports the reason.
-function botThink(r, d, dt, map) {
+export function botThink(r, d, dt, map, player) {
   if (!r.program) return;
+  // AUTHORITY BEATS PROGRAM. While the network is recalling this unit — a
+  // tower's `repel`, or a spoofer wearing its tower's voice — its own program
+  // does not get a vote. It is not FAULTED (nothing is broken, so no amber
+  // lamp); it is OVERRIDDEN, and its page says so. Derived from the live
+  // authority state rather than a stored flag, so it cannot fall out of step
+  // with it. (repel and sing already `continue` before this runs; the check
+  // stands so any future authority path that keeps a unit updating normally
+  // still silences its program.)
+  if (unitOverridden(r)) { r.intent = null; r.fireWish = null; r.route = null; return; }
+  // A route in flight owns the machine: keep walking it, do not re-decide and
+  // clobber the queue. When runRoute empties it (r.route = null), the next tick
+  // re-runs the program — which, if it returns route again, refills the queue,
+  // and that is how a circle or a back-and-forth loops with no loop construct.
+  if (r.route && r.route.length) { r.intent = 'route'; return; }
   const chassis = CHASSIS[String(r.type || '').toLowerCase()];
   // No row in the table means this build does not let you program that unit.
   // Silently ignoring the program would leave a machine serving one on its own
@@ -1548,19 +1925,81 @@ function botThink(r, d, dt, map) {
   r.mlT -= dt;
   if (r.mlT > 0) return;
   r.mlT = ML_TICK;
-  const res = decide(r.program, chassis.sense(r, d, map));
+  // Per-chassis fuel (docs/v-class-plan.md §1). Every hand-written program
+  // costs single-digit steps, so the default budget is what makes a runaway
+  // recursion read as a fault in that machine. A V-class runs a forward pass
+  // instead, which is thousands of reductions of honest arithmetic, so its
+  // chassis carries a budget sized to the net with room for a wrapper.
+  const res = decide(r.program, chassis.sense(r, d, map, player),
+    chassis.fuel ? { fuel: chassis.fuel } : undefined);
   // Coming out of a fault clears the fault lamp before the program gets to set
   // its own; a program's colours must not be mistaken for a broken machine.
   if (res.ok && r.lampFault) { r.lamp = null; r.lampFlash = 0; r.lampFault = false; }
-  // Effects happen even when the program goes on to fault: a beep before a bad
-  // branch is a beep the unit really made, and hearing it is the clue.
+  // A `route`: the ordered list of moves and lamp changes IS the effects, and
+  // it must NOT be applied now — the orders play one at a time as the machine
+  // walks, so a colour lands where the machine is when the order comes up, not
+  // all at once at decision time. Checked BEFORE applyEffects for exactly that
+  // reason. Stash the queue; runRoute plays it.
+  if (res.ok && res.intent === 'route') {
+    if (!chassis.can.includes('route')) return botFault(r, 'route: this chassis has no gear for that');
+    r.route = res.effects.slice();
+    r.routeTarget = null;
+    r.intent = 'route';
+    r.fault = null;
+    return;
+  }
+  // Every other outcome applies its effects now: a beep before a bad branch is
+  // a beep the unit really made, and a policy program's colours are meant to
+  // land the instant it decides.
   applyEffects(r, res.effects, Number.isFinite(d) ? d : Infinity);
+  // THE CONSTITUTION. Rebuilt from THIS decision's clauses, so it is exactly
+  // what the current program declares — replace the program and the old
+  // prohibitions go with it. It is not a fault and not an intent: it sits above
+  // both, and the clamps below (plus constitutionAllows at the reflex sites)
+  // are what make it bind even when the reasoning fails.
+  r.constitution = null;
+  for (const e of (res.effects || [])) {
+    if (e.k === 'never') (r.constitution ||= {})[e.word] = true;
+  }
+  if (r.constitution && !r._constitutionSaid) {
+    r._constitutionSaid = true;
+    achieveEvent('constitutionInstalled', { unit: r._netId || r.type });
+  }
   if (!res.ok) return botFault(r, res.fault);
   if (!chassis.can.includes(res.intent)) {
     return botFault(r, `${res.intent}: this chassis has no gear for that`);
   }
+  // A `[feet, weapon]` pair on a chassis with no weapon is a program written
+  // for the wrong machine. Faulting says so, rather than moving the feet and
+  // quietly dropping the trigger — which would look like the program working.
+  if (res.fire && !chassis.fire) {
+    return botFault(r, `${res.fire}: this chassis has no fire control`);
+  }
+  // A forbidden intent is VETOED, not faulted: the machine is not broken, it is
+  // constrained. It falls to patrol and blips white so the veto is visible.
+  if (r.constitution && r.constitution[res.intent]) {
+    r.intent = 'patrol';
+    r.fireWish = null;
+    r.lamp = 'white'; r.lampFlash = 1;
+    r.fault = null;
+    return;
+  }
   r.intent = res.intent;
+  // What the weapon should do this tick, for the update function to read: null
+  // means "no opinion, use the reflex". Only a fire-capable chassis ever sees
+  // a non-null value here, because the branch above faulted otherwise.
+  // `never fire` keeps the trigger up whatever the program asked for. The
+  // machine still tracks and still aims; it does not pull.
+  r.fireWish = (r.constitution && r.constitution.fire) ? 'hold' : (res.fire || null);
   r.fault = null;
+}
+
+// May this machine do the thing its chassis is about to do? A constitution
+// outranks the reflexes as well as the program — that is the whole point of
+// the mechanic, and the reason a faulted unit is still bound by it. A unit with
+// no program has no constitution and is allowed everything.
+export function constitutionAllows(r, word) {
+  return !(r && r.constitution && r.constitution[word]);
 }
 
 // A broken program is a broken machine, and it should be visible from across a
@@ -1576,6 +2015,121 @@ function botFault(r, why) {
   r.lampFault = true;
 }
 
+// ---- FOLLOW / DEFEND: a reprogrammed unit as an escort or a protector ------
+// A program that returns `follow` makes its unit trail the player at a standoff
+// and fight nothing. `defend` does the same until an enemy comes near the
+// player, then peels the unit off to intercept it — a melee chassis (T-1/T-2/
+// W-1) rams, a shooter (W-4/T-3) fires on it. The escort's intent is never
+// `hunt`, so it never treats the player as a target: it is a bodyguard, not a
+// threat, and other escorts running the same code are not targets to each other
+// (they carry no aggro, and only aggroed enemies are engaged).
+const ESCORT_SPEED = 3.0;          // brisk: keeps pace with the player and closes on threats
+const ESCORT_STANDOFF = 2.0;       // trails at arm's length rather than shoving the player
+const ESCORT_THREAT_RANGE = 9;     // peels off for an enemy this near the player
+const ESCORT_MELEE_RANGE = 1.0;    // ram contact
+const ESCORT_MELEE_DAMAGE = 16;
+const ESCORT_MELEE_COOLDOWN = 0.7;
+const ESCORT_SHOOT_RANGE = 7.5;    // a shooter opens fire within this
+const ESCORT_SHOOT_COOLDOWN = 1.0;
+const ESCORT_BOLT_DAMAGE = 18;
+
+// This tick's live roster, stashed by updateRobots so `defend` can scan it. Read
+// only from inside that same pass, so it is never stale where it is used.
+let _liveRobots = null;
+
+// The enemy nearest the player worth intercepting: a machine actively hunting
+// the player (aggro), not dead/fused/friendly/converted/relay-driven, and
+// within ESCORT_THREAT_RANGE of the player. Escorts carry no aggro, so this
+// never returns one — protectors do not fight each other.
+function nearestPlayerThreat(player) {
+  if (!_liveRobots) return null;
+  let best = null, bestD = ESCORT_THREAT_RANGE;
+  for (const o of _liveRobots) {
+    if (o.dead || o.fused || o.friendly || o.driven || o.singing || unitOverridden(o)) continue;
+    if (!o.aggro) continue;
+    const d = Math.hypot(o.x - player.x, o.y - player.y);
+    if (d < bestD) { bestD = d; best = o; }
+  }
+  return best;
+}
+
+// Robot-on-robot damage, the same shape as the Ubik-confused swing: a hit, a
+// hurt flash, a short knock, a spark. Death is resolved by updateRobots at the
+// top of the next tick (hp <= 0 → dead + scrap), so nothing else is needed here.
+function damageRobot(o, dmg, map) {
+  o.hp -= dmg;
+  o.hurt = true;
+  o._lastHitBy = 'escort';   // a unit you programmed did this, so the kill is yours
+
+  o.knockT = Math.max(o.knockT || 0, 0.3);
+  (map.sparks ??= []).push({ x: o.x, y: o.y, ttl: 0.35, max: 0.35 });
+}
+
+// A shooter escort's bolt at an enemy machine — the chassis's own projectile
+// (T-3 throws its heavier twin-beam colour), minus the shield/mirror handling,
+// which is the player's alone.
+function escortFire(r, target, map) {
+  (map.projectiles ??= []).push({
+    x0: r.x, y0: r.y, x1: target.x, y1: target.y, prog: 0,
+    kind: r.type === 't3' ? 'laser_t3' : 'laser',
+  });
+  sfx.play('laser');
+  damageRobot(target, ESCORT_BOLT_DAMAGE, map);
+}
+
+// The escort tick, shared by every mobile fighter chassis. `mode` is 'follow'
+// or 'defend'. It sets aggro=false first, so whatever the chassis did with the
+// player as prey is off the table for as long as the escort program runs.
+function updateEscort(r, dt, map, player, mode) {
+  r.attackTimer = Math.max(0, r.attackTimer - dt);
+  r.aggro = false;        // an escort hunts nothing; keep it off the attack-the-player path
+  r.returning = false;
+  r.stuck = false; r.noProgressT = 0;
+
+  const shooter = !!(CHASSIS[r.type] && CHASSIS[r.type].fire);
+  const enemy = mode === 'defend' ? nearestPlayerThreat(player) : null;
+  // A bodyguard runs on the SERVICE rate while it just trails you, not the
+  // hunter's chase rate — only closing on a real threat costs the fast drain.
+  // (Trailing at DRAIN_CHASE was flattening the cell far too quickly.)
+  drainBattery(r, enemy ? DRAIN_CHASE : DRAIN_FRIENDLY, dt);
+  if (r.drained) return;
+
+  if (enemy) {
+    const ex = enemy.x - r.x, ey = enemy.y - r.y, de = Math.hypot(ex, ey) || 1;
+    r.facing = { x: ex / de, y: ey / de };
+    if (shooter) {
+      const canSee = map.hasLineOfSight(r.x, r.y, enemy.x, enemy.y);
+      if (de > ESCORT_SHOOT_RANGE || !canSee) {
+        const tgt = chaseTarget(r, enemy.x, enemy.y, map);
+        moveToward(r, tgt.x, tgt.y, ESCORT_SPEED, dt, map);
+      }
+      if (de <= ESCORT_SHOOT_RANGE && canSee && r.attackTimer <= 0) {
+        r.attackTimer = ESCORT_SHOOT_COOLDOWN;
+        escortFire(r, enemy, map);
+      }
+    } else {
+      const tgt = chaseTarget(r, enemy.x, enemy.y, map);
+      moveToward(r, tgt.x, tgt.y, ESCORT_SPEED, dt, map);
+      if (de < ESCORT_MELEE_RANGE && r.attackTimer <= 0) {
+        r.attackTimer = ESCORT_MELEE_COOLDOWN;
+        damageRobot(enemy, ESCORT_MELEE_DAMAGE, map);
+      }
+    }
+    return;
+  }
+
+  // No enemy to see to (or plain `follow`): trail the player at a standoff. Raw
+  // distance, NOT distTo — a held Wi-Fi block makes distTo read Infinity to jam
+  // hunters, and an escort has to keep following through exactly that.
+  const dp = Math.hypot(player.x - r.x, player.y - r.y);
+  if (dp > ESCORT_STANDOFF) {
+    const tgt = chaseTarget(r, player.x, player.y, map);
+    moveToward(r, tgt.x, tgt.y, ESCORT_SPEED, dt, map);
+  } else if (dp > 1e-4) {
+    r.facing = { x: (player.x - r.x) / dp, y: (player.y - r.y) / dp };
+  }
+}
+
 function updateT1(r, dt, player, map) {
   r.attackTimer = Math.max(0, r.attackTimer - dt);
 
@@ -1585,14 +2139,16 @@ function updateT1(r, dt, player, map) {
   // The program decides; this function acts. With no program, or with a
   // faulted one, the machine falls back to the reflexes below — which is what
   // a T1 did before it had a program at all.
-  botThink(r, d, dt, map);
+  botThink(r, d, dt, map, player);
   const intent = (r.program && !r.fault) ? r.intent : null;
+  if (intent === 'route') { runRoute(r, dt, map, player); return; }
+  if (intent === 'follow' || intent === 'defend') { updateEscort(r, dt, map, player, intent); return; }
 
   if (intent) {
     r.aggro = intent === 'hunt';
     if (!r.aggro) { r.noProgressT = 0; r.stuck = false; }
   } else {
-    if (!r.aggro && d < T1_DETECT_RANGE * ease && !(r.loseInterestT > 0)) r.aggro = true; // no line of sight needed to notice
+    if (!r.aggro && d < T1_DETECT_RANGE * ease && !(r.loseInterestT > 0) && constitutionAllows(r, 'hunt')) r.aggro = true; // no line of sight needed to notice
     if (r.aggro && d > T1_DEAGGRO_RANGE) r.aggro = false;
   }
 
@@ -1653,7 +2209,7 @@ function fireT3Lasers(r, player, map, ease) {
   sfx.play('laser'); // one pew per salvo (play() debounces regardless)
   const block = player.blockRangedShot ? player.blockRangedShot(r.x, r.y) : null;
   if (block === 'reflect') {
-    r.hp -= 999; r.hurt = true;
+    r.hp -= 999; r.hurt = true; r._lastHitBy = 'reflect';
     for (let s = 0; s < 5; s++) (map.sparks ??= []).push({ x: r.x + (s - 2) * 0.15, y: r.y + (s % 2) * 0.2, ttl: 0.35, max: 0.35 });
     map.projectiles.push({ x0: player.x, y0: player.y, x1: r.x, y1: r.y, prog: 0, kind: 'laser_t3' });
   } else if (!block) {
@@ -1672,7 +2228,19 @@ function updateT3(r, dt, player, map) {
   r.attackTimer = Math.max(0, r.attackTimer - dt);
   const ease = player.threatEase ? player.threatEase() : 1;
 
-  if (r.returning) {
+  // The program decides feet and weapon; this function acts. `wait` is the
+  // camped nest state, `hunt` its short engage — a T-3 never sprints. With no
+  // program, a fault, or a recall, the reflex detection below runs instead.
+  const dThink = distTo(r, player);
+  botThink(r, dThink, dt, map, player);
+  const intent = (r.program && !r.fault && !unitOverridden(r)) ? r.intent : null;
+  if (intent === 'route') { runRoute(r, dt, map, player); return; }
+  if (intent === 'follow' || intent === 'defend') { updateEscort(r, dt, map, player, intent); return; }
+  // A constitution outranks the trigger: `never fire` holds even on a faulted
+  // program, when fireWish is null and the reflex would otherwise shoot.
+  const mayFire = r.fireWish !== 'hold' && r.fireWish !== 'reload' && constitutionAllows(r, 'fire');
+
+  if (r.returning && !intent) {
     moveToward(r, r.home.x, r.home.y, T3_RETURN_SPEED, dt, map);
     if (Math.hypot(r.home.x - r.x, r.home.y - r.y) < 1) r.returning = false;
     return;
@@ -1684,31 +2252,44 @@ function updateT3(r, dt, player, map) {
   const d = distTo(r, player);
   const canSee = map.hasLineOfSight(r.x, r.y, player.x, player.y);
 
-  if (!r.aggro) {
-    if (d < T3_AMBUSH_RANGE * ease && canSee) {
-      r.aggro = true;
-    } else {
-      patrol(r, T3_PATROL_SPEED, T3_PATROL_RANGE, dt, map); // barely stirs from its nest
-      return;
+  // ---- feet -----------------------------------------------------------------
+  if (intent === 'home') {
+    if (Math.hypot(r.home.x - r.x, r.home.y - r.y) > 0.8) moveToward(r, r.home.x, r.home.y, T3_RETURN_SPEED, dt, map);
+  } else if (intent === 'flee') {
+    const fx = r.x - player.x, fy = r.y - player.y, fm = Math.hypot(fx, fy) || 1;
+    moveToward(r, r.x + (fx / fm) * 3, r.y + (fy / fm) * 3, T3_RETREAT_SPEED, dt, map);
+  } else if (intent === 'patrol') {
+    patrol(r, T3_PATROL_SPEED, T3_PATROL_RANGE, dt, map);
+  } else if (intent === 'wait' || intent === 'hunt') {
+    // Both hold the nest and watch. `hunt` differs only in that it nudges back
+    // if you crowd it — the camped engage, never a chase. It always faces you.
+    if (d > 1e-4) r.facing = { x: (player.x - r.x) / d, y: (player.y - r.y) / d };
+    if (intent === 'hunt' && d < T3_MIN_RANGE && d > T3_HIT_RANGE) {
+      const dx = r.x - player.x, dy = r.y - player.y;
+      moveToward(r, r.x + (dx / d) * 2, r.y + (dy / d) * 2, T3_RETREAT_SPEED, dt, map);
+    }
+  } else {
+    // Reflex (no program): dormant until it sees you, then camped and firing.
+    if (!r.aggro) {
+      if (d < T3_AMBUSH_RANGE * ease && canSee && constitutionAllows(r, 'hunt')) r.aggro = true;
+      else { patrol(r, T3_PATROL_SPEED, T3_PATROL_RANGE, dt, map); return; }
+    }
+    if (d > 1e-4) r.facing = { x: (player.x - r.x) / d, y: (player.y - r.y) / d };
+    if (d < T3_MIN_RANGE && d > T3_HIT_RANGE) {
+      const dx = r.x - player.x, dy = r.y - player.y;
+      moveToward(r, r.x + (dx / d) * 2, r.y + (dy / d) * 2, T3_RETREAT_SPEED, dt, map);
     }
   }
 
-  if (d > 1e-4) r.facing = { x: (player.x - r.x) / d, y: (player.y - r.y) / d };
-
-  // Camped: unlike a W4 it never chases to open a shot, only nudges back if
-  // you crowd it — and even then it'll claw rather than retreat forever.
-  if (d < T3_MIN_RANGE && d > T3_HIT_RANGE) {
-    const dx = r.x - player.x, dy = r.y - player.y;
-    moveToward(r, r.x + (dx / d) * 2, r.y + (dy / d) * 2, T3_RETREAT_SPEED, dt, map);
-  }
-
-  if (d < T3_HIT_RANGE + reachBonus(player, map) && r.attackTimer <= 0) {
+  // ---- claw (point-blank fallback) and the volley ---------------------------
+  if (d < T3_HIT_RANGE + reachBonus(player, map) && r.attackTimer <= 0 && mayFire) {
     r.attackTimer = T3_HIT_COOLDOWN;
     player.takeDamage(T3_HIT_DAMAGE * ease, 'machine');
     return;
   }
-
-  if (d <= T3_AMBUSH_RANGE * ease && canSee && r.attackTimer <= 0) {
+  // The volley: geometry AND the program's leave to fire. A held weapon still
+  // tracks (the facing above), it just does not pull.
+  if (d <= T3_AMBUSH_RANGE * ease && canSee && r.attackTimer <= 0 && mayFire) {
     r.attackTimer = T3_FIRE_COOLDOWN;
     fireT3Lasers(r, player, map, ease);
   }
@@ -1723,8 +2304,10 @@ function updateT2(r, dt, player, map) {
   // The program decides; this function acts. With no program, or with a
   // faulted one, it falls back to the reflexes below — which is what a T2 did
   // before it could be programmed at all.
-  botThink(r, d, dt, map);
+  botThink(r, d, dt, map, player);
   const intent = (r.program && !r.fault) ? r.intent : null;
+  if (intent === 'route') { runRoute(r, dt, map, player); return; }
+  if (intent === 'follow' || intent === 'defend') { updateEscort(r, dt, map, player, intent); return; }
 
   if (intent) {
     r.aggro = intent === 'hunt';
@@ -1732,7 +2315,7 @@ function updateT2(r, dt, player, map) {
     // set, it would take the machine home the moment the program said patrol.
     r.returning = false;
   } else {
-    if (!r.aggro && d < T2_DETECT_RANGE * ease && !(r.loseInterestT > 0)) {
+    if (!r.aggro && d < T2_DETECT_RANGE * ease && !(r.loseInterestT > 0) && constitutionAllows(r, 'hunt')) {
       r.aggro = true;
       r.returning = false;
     }
@@ -1783,14 +2366,35 @@ function updateT2(r, dt, player, map) {
 function updateW1(r, dt, player, map) {
   r.attackTimer = Math.max(0, r.attackTimer - dt);
   const ease = player.threatEase ? player.threatEase() : 1;
+
+  // The program chooses; the waves are the chassis. botThink sets the intent,
+  // and `hunt` runs the whole wave-and-triangulation block below. No program,
+  // fault, or recall falls through to the reflex acquire.
+  const dThink = distTo(r, player);
+  botThink(r, dThink, dt, map, player);
+  const intent = (r.program && !r.fault && !unitOverridden(r)) ? r.intent : null;
+  if (intent === 'route') { runRoute(r, dt, map, player); return; }
+  if (intent === 'follow' || intent === 'defend') { updateEscort(r, dt, map, player, intent); return; }
+  if (intent) { r.aggro = intent === 'hunt'; r.returning = false; }
+
   drainBattery(r, r.aggro ? DRAIN_CHASE : DRAIN_PATROL, dt);
   if (r.drained) return;
 
   if (!r.aggro) {
+    if (intent === 'home') {
+      if (Math.hypot(r.home.x - r.x, r.home.y - r.y) > 0.8) moveToward(r, r.home.x, r.home.y, W1_CHASE_SPEED * 0.5, dt, map);
+      return;
+    }
+    if (intent === 'flee') {
+      const fx = r.x - player.x, fy = r.y - player.y, fm = Math.hypot(fx, fy) || 1;
+      moveToward(r, r.x + (fx / fm) * 3, r.y + (fy / fm) * 3, W1_CHASE_SPEED, dt, map);
+      return;
+    }
+    if (intent === 'wait') { r.wanderTarget = null; return; }
+    // Reflex (no program): re-acquire by live distance, else return, else wander.
     // distTo, not a raw hypot: a jammed or jacked-in player is not there to be
-    // re-acquired. This line read the live distance, so a swarm that had lost
-    // you picked you straight back up through a Wi-Fi block or a console.
-    if (!(r.loseInterestT > 0) && distTo(r, player) < HUNTER_REACQUIRE_RANGE * ease) {
+    // re-acquired.
+    if (!intent && !(r.loseInterestT > 0) && constitutionAllows(r, 'hunt') && distTo(r, player) < HUNTER_REACQUIRE_RANGE * ease) {
       r.aggro = true;
     } else if (r.returning) {
       moveToward(r, r.home.x, r.home.y, W1_CHASE_SPEED * 0.5, dt, map);
@@ -1861,8 +2465,31 @@ function w3Wander(r, dt, map) {
   r._recenterT = (r._recenterT || 0) - dt;
   if (r._recenterT <= 0) { r._recenterT = 3.5; r.home = { x: r.x, y: r.y }; }
 }
-function updateW3(r, dt, map, robots) {
+function updateW3(r, dt, map, robots, player) {
   r.aggro = false;
+  // The program chooses the job; the chassis finds the tower. `tend` (or no
+  // program at all) runs the repair trade below. Anything else — home, flee,
+  // wait, patrol — is honoured here and the fitter does not mend.
+  if (player) {
+    const dThink = distTo(r, player);
+    botThink(r, dThink, dt, map, player);
+    const intent = (r.program && !r.fault && !unitOverridden(r)) ? r.intent : null;
+    if (intent === 'route') { runRoute(r, dt, map, player); return; }
+    if (intent && intent !== 'tend') {
+      drainBattery(r, DRAIN_PATROL, dt);
+      if (r.drained) return;
+      if (intent === 'home') {
+        if (Math.hypot(r.home.x - r.x, r.home.y - r.y) > 0.8) moveToward(r, r.home.x, r.home.y, W3_SPEED, dt, map);
+      } else if (intent === 'flee' && Number.isFinite(dThink)) {
+        const fx = r.x - player.x, fy = r.y - player.y, fm = Math.hypot(fx, fy) || 1;
+        moveToward(r, r.x + (fx / fm) * 3, r.y + (fy / fm) * 3, W3_SPEED, dt, map);
+      } else if (intent === 'patrol') {
+        w3Wander(r, dt, map);
+      } // wait: stand
+      r.repairTarget = null;   // dropped the job; re-find when it next tends
+      return;
+    }
+  }
   if (!r.repairTarget || !w3Repairable(r.repairTarget)) {
     let best = null, bestD = Infinity;
     for (const o of map.objects) {
@@ -1920,10 +2547,41 @@ function updateW3(r, dt, map, robots) {
 // the same `grow` field the ambient forest-regrowth timer in main.js uses,
 // so a planted sapling thickens up over the same ~minute. Never aggros,
 // never fights back.
-function updateW5(r, dt, map) {
+function updateW5(r, dt, map, player) {
   r.aggro = false;
+  // A blueboxed gardener reads friendly and is overridden, so botThink returns
+  // null and the reflex plant-and-wander below runs — which is what a converted
+  // hunter should do. A factory or stood-down W-5 with a live program gets its
+  // intent instead.
+  let intent = null;
+  if (player) {
+    botThink(r, distTo(r, player), dt, map, player);
+    intent = (r.program && !r.fault && !unitOverridden(r)) ? r.intent : null;
+    if (intent === 'route') { runRoute(r, dt, map, player); return; }
+  }
   drainBattery(r, DRAIN_PATROL, dt);
   if (r.drained) return;
+
+  if (intent === 'home') {
+    // Stop wandering: hold the current anchor. A gardener told home stays put
+    // rather than drifting, because its home IS wherever it stopped.
+    if (Math.hypot(r.home.x - r.x, r.home.y - r.y) > 0.8) moveToward(r, r.home.x, r.home.y, W5_SPEED, dt, map);
+    return;
+  }
+  if (intent === 'flee' && player) {
+    const fx = r.x - player.x, fy = r.y - player.y, fm = Math.hypot(fx, fy) || 1;
+    moveToward(r, r.x + (fx / fm) * 3, r.y + (fy / fm) * 3, W5_SPEED, dt, map);
+    return;
+  }
+  if (intent === 'wait') { r.wanderTarget = null; return; }
+  // patrol (told to, or reflex with no plant): wander only, do not plant.
+  if (intent === 'patrol') {
+    patrol(r, W5_SPEED, W5_WANDER_RANGE, dt, map);
+    r._recenterT = (r._recenterT || 0) - dt;
+    if (r._recenterT <= 0) { r._recenterT = W5_RECENTER_INTERVAL; r.home = { x: r.x, y: r.y }; }
+    return;
+  }
+  // tend (told to), or the reflex gardener with no program: wander AND plant.
   patrol(r, W5_SPEED, W5_WANDER_RANGE, dt, map);
   r._recenterT = (r._recenterT || 0) - dt;
   if (r._recenterT <= 0) {
@@ -1944,6 +2602,95 @@ function updateW5(r, dt, map) {
   }
 }
 
+// A V-1 neural courier (#127). Its program is a net, and the net answers with
+// an intent like any other program; this function is what an intent MEANS for a
+// porter. `tend` is the job: fetch a cell from a live tower, walk it to the
+// nearest machine lying flat, and stand it back up.
+//
+// The state machine is plain code on purpose. A player who perturbs a weight
+// changes WHICH intent comes back, and the consequence has to be something they
+// can watch happen: a courier that dithers between two casualties, walks to a
+// unit that is not down, or forgets to go home for the next cell. Nothing in
+// the numbers says "casualty". You find out by watching it work.
+function updateV1(r, dt, map, player) {
+  r.aggro = false;
+  r._cargoCool = Math.max(0, (r._cargoCool || 0) - dt);
+
+  botThink(r, distTo(r, player), dt, map, player);
+  const intent = (r.program && !r.fault && !unitOverridden(r)) ? r.intent : null;
+  if (intent === 'route') { runRoute(r, dt, map, player); return; }
+
+  drainBattery(r, DRAIN_PATROL, dt);
+  if (r.drained) { r.cargo = false; r._docking = 0; return; }
+
+  if (intent === 'flee' && player) {
+    const fx = r.x - player.x, fy = r.y - player.y, fm = Math.hypot(fx, fy) || 1;
+    moveToward(r, r.x + (fx / fm) * 3, r.y + (fy / fm) * 3, V1_SPEED, dt, map);
+    return;
+  }
+  if (intent === 'wait') { r.wanderTarget = null; r._docking = 0; return; }
+  if (intent === 'home') { v1GoHome(r, dt, map); return; }
+  if (intent === 'patrol') { patrol(r, V1_SPEED, V1_WANDER_RANGE, dt, map); return; }
+
+  // `tend`, told or reflex: the courier job.
+  const casualty = nearestCasualty(r);
+  if (!r.cargo) {
+    // Empty-handed: go and draw a cell. A tower that is down, jammed or waiting
+    // to be rebuilt has nothing to give.
+    if (r._cargoCool > 0) { patrol(r, V1_SPEED, V1_WANDER_RANGE, dt, map); return; }
+    const ob = homeObelisk(r, map);
+    if (!ob || ob.destroyed || ob.jammed || ob.needsRebuild) {
+      patrol(r, V1_SPEED, V1_WANDER_RANGE, dt, map);
+      return;
+    }
+    if (Math.hypot(ob.x + 0.5 - r.x, ob.y + 0.5 - r.y) > V1_REACH + 0.6) {
+      r._docking = 0;
+      chaseTarget(r, ob.x + 0.5, ob.y + 0.5, map);
+      moveToward(r, r.wanderTarget ? r.wanderTarget.x : ob.x + 0.5,
+        r.wanderTarget ? r.wanderTarget.y : ob.y + 0.5, V1_SPEED, dt, map);
+      return;
+    }
+    r._docking = (r._docking || 0) + dt;
+    if (r._docking >= V1_PICKUP_T) { r._docking = 0; r.cargo = true; r.beepT = 0.4; }
+    return;
+  }
+
+  // Carrying: find the fallen. With nobody down it holds the cell and patrols,
+  // which is what makes cutting the supply line worth doing — the cell is
+  // already spent from the tower's point of view.
+  if (!casualty) { patrol(r, V1_SPEED, V1_WANDER_RANGE, dt, map); return; }
+  const d = Math.hypot(casualty.x - r.x, casualty.y - r.y);
+  if (d > V1_REACH) {
+    chaseTarget(r, casualty.x, casualty.y, map);
+    moveToward(r, r.wanderTarget ? r.wanderTarget.x : casualty.x,
+      r.wanderTarget ? r.wanderTarget.y : casualty.y, V1_SPEED, dt, map);
+    return;
+  }
+  v1Deliver(r, casualty);
+}
+
+// Hand the cell over. The revived machine is on its feet with enough charge to
+// walk itself home and finish the job on the existing recharge path.
+function v1Deliver(r, target) {
+  r.cargo = false;
+  r._cargoCool = V1_COOLDOWN;
+  r.beepT = 0.6;
+  target.battery = Math.max(target.battery || 0, V1_DELIVER_TO);
+  target.drained = false;
+  target.recharging = false;
+  target.limping = false;
+  target.reserveSpent = false;
+  target.disabledT = 0;
+  target._revivedBy = r;
+  achieveEvent('unitRevived', { type: target.type, by: 'v1' });
+}
+
+function v1GoHome(r, dt, map) {
+  const ob = homeObelisk(r, map);
+  const hx = ob ? ob.x + 0.5 : r.home.x, hy = ob ? ob.y + 0.5 : r.home.y;
+  if (Math.hypot(hx - r.x, hy - r.y) > 0.9) moveToward(r, hx, hy, V1_SPEED, dt, map);
+}
+
 // A W4 laser hunter-killer: holds at range and fires rather than closing to
 // melee, backing off if the player gets within its minimum range so it
 // always keeps a clear line to shoot down. Losing line of sight (a wall or
@@ -1954,14 +2701,45 @@ function updateW5(r, dt, map) {
 function updateW4(r, dt, player, map) {
   r.attackTimer = Math.max(0, r.attackTimer - dt);
   const ease = player.threatEase ? player.threatEase() : 1;
+
+  // The program decides; this function acts. With no program, a faulted one,
+  // or a unit under recall, `intent`/`fireWish` come back null and the reflex
+  // aggro detection below runs — which is what a W-4 did before it had a
+  // program at all.
+  const dThink = distTo(r, player);
+  botThink(r, dThink, dt, map, player);
+  const intent = (r.program && !r.fault && !unitOverridden(r)) ? r.intent : null;
+  if (intent === 'route') { runRoute(r, dt, map, player); return; }
+  if (intent === 'follow' || intent === 'defend') { updateEscort(r, dt, map, player, intent); return; }
+  // The weapon's orders for this tick: null means "reflex" — fire when able.
+  // hold and reload both keep the trigger up; reload is a deliberate cooldown.
+  // A constitution outranks the trigger: `never fire` holds even on a faulted
+  // program, when fireWish is null and the reflex would otherwise shoot.
+  const mayFire = r.fireWish !== 'hold' && r.fireWish !== 'reload' && constitutionAllows(r, 'fire');
+
+  if (intent) {
+    r.aggro = intent === 'hunt';
+    r.returning = false;
+  }
+
   drainBattery(r, r.aggro ? DRAIN_CHASE : DRAIN_PATROL, dt);
   if (r.drained) return;
 
   if (!r.aggro) {
-    // Given up (generic line-of-sight give-up in updateRobots): head back
-    // to the factory and wander, re-acquiring by plain distance once its
-    // cooldown expires.
-    if (!(r.loseInterestT > 0) && distTo(r, player) < HUNTER_REACQUIRE_RANGE * ease) {
+    // A program told it not to hunt: honour home/flee/wait, else patrol. With
+    // no program this is the reflex — give-up return, or re-acquire by distance.
+    if (intent === 'home') {
+      if (Math.hypot(r.home.x - r.x, r.home.y - r.y) > 0.8) moveToward(r, r.home.x, r.home.y, W4_SPEED * 0.6, dt, map);
+      return;
+    }
+    if (intent === 'flee') {
+      const fx = r.x - player.x, fy = r.y - player.y, fm = Math.hypot(fx, fy) || 1;
+      moveToward(r, r.x + (fx / fm) * 3, r.y + (fy / fm) * 3, W4_SPEED, dt, map);
+      return;
+    }
+    if (intent === 'wait') { r.wanderTarget = null; return; }
+    // Reflex (no program): give-up return, or re-acquire by plain distance.
+    if (!intent && !(r.loseInterestT > 0) && constitutionAllows(r, 'hunt') && distTo(r, player) < HUNTER_REACQUIRE_RANGE * ease) {
       r.aggro = true;
     } else if (r.returning) {
       moveToward(r, r.home.x, r.home.y, W4_SPEED * 0.6, dt, map);
@@ -1991,7 +2769,10 @@ function updateW4(r, dt, player, map) {
   }
   if (d <= W4_RANGE && d > 1e-4 && canSee) {
     r.facing = { x: (player.x - r.x) / d, y: (player.y - r.y) / d };
-    if (r.attackTimer <= 0) {
+    // The shot itself is the one thing a program can veto: `hold`/`reload` keep
+    // the trigger up while the machine still tracks and lines up. Facing the
+    // target happens either way — a held weapon still aims.
+    if (r.attackTimer <= 0 && mayFire) {
       r.attackTimer = W4_FIRE_COOLDOWN;
       (map.projectiles ??= []).push({ x0: r.x, y0: r.y, x1: player.x, y1: player.y, prog: 0, kind: 'laser' });
       sfx.play('laser');
@@ -2000,7 +2781,7 @@ function updateW4(r, dt, player, map) {
       const block = player.blockRangedShot ? player.blockRangedShot(r.x, r.y) : null;
       if (block === 'reflect') {
         // A mirror shield throws the bolt straight back and destroys the shooter.
-        r.hp -= 999; r.hurt = true;
+        r.hp -= 999; r.hurt = true; r._lastHitBy = 'reflect';
         for (let s = 0; s < 5; s++) (map.sparks ??= []).push({ x: r.x + (s - 2) * 0.15, y: r.y + (s % 2) * 0.2, ttl: 0.35, max: 0.35 });
         map.projectiles.push({ x0: player.x, y0: player.y, x1: r.x, y1: r.y, prog: 0, kind: 'laser' });
       } else if (!block) {
@@ -2241,7 +3022,7 @@ function updateM5(r, dt, player, map, ease, d) {
     sfx.play('laser');
     const block = player.blockRangedShot ? player.blockRangedShot(r.x, r.y) : null;
     if (block === 'reflect') {
-      r.hp -= 999; r.hurt = true;
+      r.hp -= 999; r.hurt = true; r._lastHitBy = 'reflect';
       map.projectiles.push({ x0: player.x, y0: player.y, x1: r.x, y1: r.y, prog: 0, kind: 'laser_m5' });
     } else if (!block) {
       guardHit(player, M5_DAMAGE * ease, 'machine');
@@ -2472,10 +3253,13 @@ function drawUnitTag(ctx, r, c) {
   const tag = unitTagger(r);
   if (!tag) return;
   ctx.save();
-  ctx.font = 'bold 8px ui-monospace, monospace';
+  ctx.font = 'bold 7px ui-monospace, monospace';
   ctx.textAlign = 'center';
-  const w = ctx.measureText(tag).width + 8;
-  const x = c.x - w / 2, y = c.y - 40;   // under the health bar band, over the head
+  const w = ctx.measureText(tag).width + 6;
+  // Ride just over the head. The T1 is a low tank, so its head sits well below a
+  // standing chassis' — a shorter lift keeps its label close instead of floating.
+  const lift = r.type === 't1' ? 31 : 48;
+  const x = c.x - w / 2, y = c.y - lift;   // under the health bar band, over the head
   ctx.fillStyle = 'rgba(10,24,32,0.78)';
   ctx.fillRect(x, y, w, 12);
   ctx.strokeStyle = 'rgba(90,190,235,0.7)'; ctx.lineWidth = 1;
@@ -2686,13 +3470,25 @@ function drawT2(ctx, r, c) {
   ctx.fillRect(-4 + swing, -10, 3, 10);
   ctx.fillRect(1 - swing, -10, 3, 10);
 
-  const bodyBase = r.type === 'w1' ? W1_BODY : r.type === 'w3' ? W3_BODY : r.type === 'w4' ? W4_BODY : r.type === 'w5' ? W5_BODY : r.type === 'm6' ? M6_BODY : r.type === 'm5' ? M5_BODY : r.type === 'm4' ? M4_BODY : T2_BODY;
-  const headBase = r.type === 'w1' ? W1_HEAD : r.type === 'w3' ? W3_HEAD : r.type === 'w4' ? W4_HEAD : r.type === 'w5' ? W5_HEAD : r.type === 'm6' ? M6_HEAD : r.type === 'm5' ? M5_HEAD : r.type === 'm4' ? M4_HEAD : T2_HEAD;
+  const bodyBase = r.type === 'w1' ? W1_BODY : r.type === 'w3' ? W3_BODY : r.type === 'w4' ? W4_BODY : r.type === 'w5' ? W5_BODY : r.type === 'v1' ? V1_BODY : r.type === 'm6' ? M6_BODY : r.type === 'm5' ? M5_BODY : r.type === 'm4' ? M4_BODY : T2_BODY;
+  const headBase = r.type === 'w1' ? W1_HEAD : r.type === 'w3' ? W3_HEAD : r.type === 'w4' ? W4_HEAD : r.type === 'w5' ? W5_HEAD : r.type === 'v1' ? V1_HEAD : r.type === 'm6' ? M6_HEAD : r.type === 'm5' ? M5_HEAD : r.type === 'm4' ? M4_HEAD : T2_HEAD;
   ctx.fillStyle = bodyTone(bodyBase, r); // blocky torso, roughly player height overall
   ctx.fillRect(-6, -25, 12, 16);
   if (!r.fused) {
     ctx.fillStyle = 'rgba(255,255,255,0.06)'; // dull sheen along the shoulders
     ctx.fillRect(-6, -25, 12, 2);
+  }
+  // A V-1's cell cradle, slung LOW on the chest — under the designation badge,
+  // which sits mid-torso. A laden courier still has to read as a V-1.
+  if (r.type === 'v1' && !r.fused) {
+    ctx.fillStyle = '#0d1620';
+    ctx.fillRect(-5, -13, 10, 4);
+    if (r.cargo) {
+      ctx.fillStyle = V1_CELL;
+      ctx.fillRect(-4, -12, 8, 2);
+      ctx.fillStyle = 'rgba(127,224,176,0.22)';   // the charge, bleeding past the socket
+      ctx.fillRect(-6, -14, 12, 6);
+    }
   }
 
   ctx.fillStyle = r.fused ? FUSED_DARK : headBase; // small head

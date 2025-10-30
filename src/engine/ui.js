@@ -396,15 +396,13 @@ export const uiMethods = {
     const bookLog = player.skillLog && player.skillLog.length ? player.skillLog
       : [...(player.skills || [])].map((s) => ({ skill: s }));
     ctx.font = `${Math.round(12 * k)}px ui-monospace, monospace`;
-    const obLines = (player.killLog && player.killLog.length)
-      // Bracketed, so a run of hex codes reads as a list of separate names
-      // rather than one long string of characters.
-      ? this._wrapText(ctx, player.killLog.map((c) => `[${c}]`).join(' '), pw - 50) : [];
+    // The roll of downed obelisks moved to KLEOS (#130); the Record keeps the
+    // count on its OBs stat and no longer reserves height for the list.
     const H_HEAD = Math.round(68 * k);                                    // title + subtitle
     const H_RECORD = pad + 3 * row + Math.round(12 * k);                    // heading + 3 rows
     const H_PRACTICE = pad + Math.round(26 * k);                           // heading + one inline row
     const H_BOOKS = pad + (bookLog.length ? bookLog.length * pad : pad) + Math.round(12 * k);
-    const H_OBS = obLines.length ? pad + obLines.length * Math.round(16 * k) + Math.round(12 * k) : 0;
+    const H_OBS = 0;
     const H_CHIPS = Math.round((18 + 34 + 14) * k);                         // heading + chip + pad
     const ph = Math.min(this.h - 40,
       H_HEAD + H_RECORD + H_PRACTICE + H_BOOKS + H_OBS + H_CHIPS + 14);
@@ -502,17 +500,6 @@ export const uiMethods = {
         }
         y += pad; n += 1;
       }
-    }
-
-    // Kill record: the obelisks you've brought down, by their hex code names.
-    if (obLines.length) {
-      y += Math.round(12 * k);
-      ctx.font = fsb(12);
-      ctx.fillStyle = 'rgba(207,216,195,0.6)';
-      ctx.fillText(`OBs DOWNED (${player.killLog.length})`, px + pad, y); y += Math.round(18 * k);
-      ctx.font = `${Math.round(12 * k)}px ui-monospace, monospace`;
-      ctx.fillStyle = '#e0503a';
-      for (const line of obLines) { ctx.fillText(line, px + Math.round(30 * k), y); y += Math.round(16 * k); }
     }
 
     // AIs DEFEATED — the four daemons drawn as actual silicon, a row of DIP
@@ -2068,6 +2055,7 @@ export const uiMethods = {
     { icon: 'star',    action: 'skills',  name: 'Record', sub: 'Skills and knowledge (K)' },
     { icon: 'map',     action: 'minimap', name: 'Minimap', sub: 'Show or hide the corner map (])' },
     { icon: 'swords',  action: 'weapons', name: 'Armoury', sub: 'What each weapon is for (V)' },
+    { icon: 'laurel',  action: 'kleos',   name: 'Kleos', sub: 'Achievements: the song of this run (9)' },
   ],
 
   // THE PANEL RAIL: one placement, every screen. It stands at the right-hand
@@ -2200,6 +2188,23 @@ export const uiMethods = {
         ctx.beginPath();
         ctx.moveTo(...P(bx - dir * 1.3, 7.4)); ctx.lineTo(...P(bx + dir * 1.5, 8.6));
         ctx.stroke();
+      }
+    } else if (kind === 'laurel') {
+      // a laurel wreath: two curved sprays meeting at the foot, open at the top
+      // where a name would go. Kleos is what the wreath was for.
+      ctx.lineWidth = 1.2;
+      for (const dir of [1, -1]) {
+        ctx.beginPath();
+        ctx.moveTo(...P(5.5 + dir * 0.6, 10));
+        ctx.quadraticCurveTo(...P(5.5 + dir * 5.2, 7.4), ...P(5.5 + dir * 3.4, 1.6));
+        ctx.stroke();
+        for (let i = 0; i < 3; i++) {
+          const t = 0.3 + i * 0.24;
+          const lx = 5.5 + dir * (1.2 + t * 3.4), ly = 9.2 - t * 6.4;
+          ctx.beginPath();
+          ctx.ellipse(...P(lx, ly), 1.5, 0.85, dir * (0.7 - t * 0.5), 0, Math.PI * 2);
+          ctx.stroke();
+        }
       }
     } else if (kind === 'map') {
       // a map folded in three, creased up and down
@@ -2717,5 +2722,308 @@ export const uiMethods = {
       ctx.fillText(String(qty), x + size - 3, y + size - 4);
       ctx.textAlign = 'left';
     }
+  },
+
+  // ---- KLEOS (docs/achievements-plan.md) ------------------------------------
+  // The song of the run: tracks down the left, badges and the lifetime ledger
+  // down the right. Everything here renders from achieveModel() — the panel
+  // holds no state of its own, so it can never disagree with the engine.
+
+  // A badge is DRAWN, not lettered: a shape you learn to recognise at a glance,
+  // lit when earned and a bare outline when not. The shape is inferred from the
+  // badge's own id, so a new registry row gets a sensible icon for free (a star)
+  // without the renderer having to be told about it.
+  _kleosBadgeShape(id, ai) {
+    if (ai) return 'chip';
+    if (id.startsWith('card-')) return 'card';
+    if (['needle-drop', 'both-sides', 'discography', 'b-side'].includes(id)) return 'tape';
+    if (['bookworm', 'rtfm', 'hello-world'].includes(id)) return 'book';
+    if (['first-tincan', 'perseus'].includes(id)) return 'blade';
+    if (['copyleft', 'four-freedoms', 'viral', 'free-as-in'].includes(id)) return 'copyleft';
+    return 'star';
+  },
+
+  _kleosBadge(x, y, s, badge) {
+    const ctx = this.ctx;
+    const lit = badge.earned;
+    const ink = lit ? (badge.ai ? '#7fd0ff' : '#e8c96a') : 'rgba(207,216,195,0.22)';
+    const fill = lit ? (badge.ai ? 'rgba(60,120,160,0.30)' : 'rgba(150,120,40,0.28)') : 'rgba(255,255,255,0.03)';
+    const cx = x + s / 2, cy = y + s / 2, r = s * 0.42;
+    ctx.save();
+    ctx.lineWidth = 1.4;
+    ctx.strokeStyle = ink;
+    ctx.fillStyle = fill;
+    const shape = this._kleosBadgeShape(badge.id, badge.ai);
+    ctx.beginPath();
+    if (shape === 'chip') {
+      // A hexagon: the AI-safety set, and the shape of every die ever packaged.
+      for (let i = 0; i < 6; i++) {
+        const a = (Math.PI / 3) * i - Math.PI / 6;
+        const px = cx + Math.cos(a) * r, py = cy + Math.sin(a) * r;
+        i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+      }
+      ctx.closePath();
+    } else if (shape === 'card') {
+      ctx.rect(cx - r, cy - r * 0.68, r * 2, r * 1.36);
+    } else if (shape === 'tape') {
+      ctx.rect(cx - r, cy - r * 0.62, r * 2, r * 1.24);
+    } else if (shape === 'book') {
+      ctx.rect(cx - r * 0.8, cy - r, r * 1.6, r * 2);
+    } else if (shape === 'blade') {
+      ctx.moveTo(cx, cy - r); ctx.lineTo(cx + r * 0.55, cy + r); ctx.lineTo(cx - r * 0.55, cy + r); ctx.closePath();
+    } else if (shape === 'copyleft') {
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    } else {
+      // A five-pointed star for everything else.
+      for (let i = 0; i < 10; i++) {
+        const a = (Math.PI / 5) * i - Math.PI / 2;
+        const rr = i % 2 ? r * 0.46 : r;
+        const px = cx + Math.cos(a) * rr, py = cy + Math.sin(a) * rr;
+        i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+      }
+      ctx.closePath();
+    }
+    ctx.fill(); ctx.stroke();
+    // The details that make each shape read as the thing it is.
+    if (lit) {
+      ctx.fillStyle = ink;
+      if (shape === 'tape') {
+        ctx.beginPath(); ctx.arc(cx - r * 0.38, cy, r * 0.2, 0, Math.PI * 2);
+        ctx.arc(cx + r * 0.38, cy, r * 0.2, 0, Math.PI * 2); ctx.fill();
+      } else if (shape === 'card') {
+        ctx.fillRect(cx - r * 0.7, cy - r * 0.34, r * 0.7, r * 0.22);
+      } else if (shape === 'chip') {
+        ctx.fillRect(cx - r * 0.32, cy - r * 0.32, r * 0.64, r * 0.64);
+      } else if (shape === 'copyleft') {
+        // A reversed C: the copyleft mark, which is the joke drawn.
+        ctx.strokeStyle = ink; ctx.lineWidth = 1.8;
+        ctx.beginPath(); ctx.arc(cx, cy, r * 0.5, Math.PI * 1.75, Math.PI * 0.75); ctx.stroke();
+      } else if (shape === 'book') {
+        ctx.fillRect(cx - r * 0.5, cy - r * 0.5, r, 1.2);
+        ctx.fillRect(cx - r * 0.5, cy - r * 0.1, r, 1.2);
+      }
+    }
+    ctx.restore();
+  },
+
+  // The four tier pips a track climbs. The last is the summit, drawn as a star
+  // rather than a diamond, so a finished track is visibly finished.
+  _kleosPips(x, y, tier, total = 4) {
+    const ctx = this.ctx;
+    ctx.save();
+    for (let i = 0; i < total; i++) {
+      const cx = x + i * 11, cy = y;
+      const on = i < tier;
+      ctx.fillStyle = on ? '#e8c96a' : 'rgba(207,216,195,0.18)';
+      ctx.beginPath();
+      if (i === total - 1) {
+        for (let k = 0; k < 10; k++) {
+          const a = (Math.PI / 5) * k - Math.PI / 2;
+          const rr = k % 2 ? 1.9 : 4.2;
+          const px = cx + Math.cos(a) * rr, py = cy + Math.sin(a) * rr;
+          k ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+        }
+      } else {
+        ctx.moveTo(cx, cy - 3.6); ctx.lineTo(cx + 3.2, cy); ctx.lineTo(cx, cy + 3.6); ctx.lineTo(cx - 3.2, cy);
+      }
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  },
+
+  // Cut a line to fit a width, with an ellipsis if it had to be cut.
+  _clampText(ctx, text, maxW) {
+    if (ctx.measureText(text).width <= maxW) return text;
+    let t = text;
+    while (t.length > 1 && ctx.measureText(t + '…').width > maxW) t = t.slice(0, -1);
+    return t + '…';
+  },
+
+  drawKleosModal(model) {
+    const ctx = this.ctx;
+    ctx.fillStyle = 'rgba(6,8,5,0.86)';
+    ctx.fillRect(0, 0, this.w, this.h);
+    const wide = this.w >= 700;
+    const pw = Math.min(wide ? 760 : 420, this.w - 24);
+    const k = Math.max(0.72, Math.min(1, pw / 760));
+    const fs = (n) => `${Math.round(n * k)}px system-ui, sans-serif`;
+    const fsb = (n) => `bold ${Math.round(n * k)}px system-ui, sans-serif`;
+    const pad = Math.round(18 * k);
+    const trackRow = Math.round(26 * k);
+    const bs = Math.round(26 * k), bgap = Math.round(5 * k);   // badge cell + gap
+    const colW = wide ? Math.round((pw - pad * 3) / 2) : pw - pad * 2;
+    const perRow = Math.max(6, Math.floor((colW + bgap) / (bs + bgap)));
+    const badgeRows = Math.ceil(model.badges.length / perRow);
+
+    const hTracks = Math.round(30 * k) + model.tracks.length * trackRow;
+    // The badge column also carries LIFETIME, LAURELS and the roll of downed
+    // obelisks, so the panel has to be tall enough for however long that roll is.
+    const nKills = (model.killLog || []).length;
+    const killRows = nKills ? Math.min(6, Math.ceil(nKills / 8)) + 1 : 0;
+    const hBadges = Math.round(30 * k) + badgeRows * (bs + bgap)
+      + Math.round(26 * k) + killRows * Math.round(13 * k);
+    const body = wide ? Math.max(hTracks, hBadges) : hTracks + hBadges;
+    const ph = Math.min(this.h - 24, Math.round(76 * k) + body + pad * 2);
+    const px = Math.round((this.w - pw) / 2), py = Math.round((this.h - ph) / 2);
+    this._kleosRect = { x: px, y: py, w: pw, h: ph };   // click-away-to-close (main.js)
+
+    ctx.fillStyle = '#12160e';
+    ctx.fillRect(px, py, pw, ph);
+    ctx.strokeStyle = 'rgba(232,201,106,0.45)';
+    ctx.strokeRect(px + 0.5, py + 0.5, pw - 1, ph - 1);
+
+    // Header
+    ctx.fillStyle = '#e8c96a';
+    ctx.font = fsb(17);
+    ctx.fillText('KLEOS', px + pad, py + Math.round(30 * k));
+    ctx.font = fs(11);
+    ctx.fillStyle = 'rgba(207,216,195,0.55)';
+    ctx.fillText('the song of this run — 9 or Esc to close', px + pad + Math.round(62 * k), py + Math.round(30 * k));
+    const hrs = Math.floor((model.playSeconds || 0) / 3600);
+    ctx.textAlign = 'right';
+    ctx.fillText(`day ${model.day || 0}${hrs ? ` · ${hrs}h played` : ''}`, px + pw - pad, py + Math.round(30 * k));
+    ctx.textAlign = 'left';
+    ctx.strokeStyle = 'rgba(207,216,195,0.18)';
+    ctx.beginPath(); ctx.moveTo(px + pad, py + Math.round(44 * k)); ctx.lineTo(px + pw - pad, py + Math.round(44 * k)); ctx.stroke();
+
+    // ---- tracks
+    const lx = px + pad;
+    let y = py + Math.round(66 * k);
+    ctx.font = fsb(10);
+    ctx.fillStyle = 'rgba(207,216,195,0.5)';
+    ctx.fillText('TRACKS', lx, y); y += Math.round(16 * k);
+    this._kleosTrackCells = [];
+    for (const t of model.tracks) {
+      // The whole row is the hover target, so the blurb explaining what a track
+      // MEANS is one hover away — the names alone (CASSANDRA, DAEDALUS) do not
+      // tell you what you are being asked to do.
+      this._kleosTrackCells.push({
+        x: lx, y: y - Math.round(11 * k), w: colW, h: trackRow, track: t,
+      });
+      const broken = t.purity && !t.purity.intact;
+      ctx.font = fsb(11);
+      ctx.fillStyle = t.summited ? '#e8c96a' : broken ? 'rgba(207,216,195,0.42)' : '#cfd8c3';
+      ctx.fillText(t.name, lx, y);
+      this._kleosPips(lx + Math.round(124 * k), y - Math.round(4 * k), t.tier);
+      ctx.font = fs(10);
+      ctx.fillStyle = 'rgba(207,216,195,0.6)';
+      const right = lx + Math.round(178 * k);
+      if (broken) {
+        ctx.fillStyle = '#d98a6a';
+        ctx.fillText(`✕ ${t.purity.why} (day ${t.purity.day})`, right, y);
+      } else if (t.summited) {
+        ctx.fillStyle = '#e8c96a';
+        ctx.fillText(`${t.tierLabel} — all of it`, right, y);
+      } else {
+        // A holding conduct track flies its flag at the right edge, so the
+        // detail has to stop short of it: DAEDALUS on a narrow panel ran
+        // straight through the word.
+        const room = colW - Math.round(178 * k) - (t.purity && t.purity.intact ? Math.round(40 * k) : 0);
+        ctx.fillText(this._clampText(ctx, `${t.have}/${t.next} ${t.unit || ''}${t.summitName ? ` → ${t.summitName}` : ''}`, room), right, y);
+      }
+      // A conduct track still holding says so: it is the thing you are spending
+      // the run to keep.
+      if (t.purity && t.purity.intact) {
+        ctx.fillStyle = 'rgba(140,200,140,0.75)';
+        ctx.textAlign = 'right';
+        ctx.fillText('holds', lx + colW, y);
+        ctx.textAlign = 'left';
+      }
+      y += trackRow;
+    }
+
+    // ---- badges + the ledger
+    const rx = wide ? px + pad * 2 + colW : lx;
+    let ry = wide ? py + Math.round(66 * k) : y + Math.round(10 * k);
+    ctx.font = fsb(10);
+    ctx.fillStyle = 'rgba(207,216,195,0.5)';
+    ctx.fillText(`BADGES  ${model.badgesEarned}/${model.badges.length}`, rx, ry);
+    ry += Math.round(16 * k);
+    this._kleosBadgeCells = [];
+    model.badges.forEach((b, i) => {
+      const bx = rx + (i % perRow) * (bs + bgap);
+      const by = ry + Math.floor(i / perRow) * (bs + bgap);
+      this._kleosBadge(bx, by, bs, b);
+      this._kleosBadgeCells.push({ x: bx, y: by, w: bs, h: bs, badge: b });
+    });
+    ry += badgeRows * (bs + bgap) + Math.round(10 * k);
+
+    // The lifetime ledger, in one line: what survives every death.
+    const earnedM = model.milestones.filter((m) => m.earned);
+    ctx.font = fs(10);
+    ctx.fillStyle = 'rgba(207,216,195,0.55)';
+    ctx.fillText(earnedM.length ? `LIFETIME  ${earnedM.map((m) => m.name).join(' · ')}`
+      : 'LIFETIME  nothing yet — it accrues across every run', rx, ry);
+    ry += Math.round(15 * k);
+    if (model.laurels.length) {
+      ctx.fillStyle = '#e8c96a';
+      ctx.fillText(`LAURELS  ${model.laurels.map((l) => `${l.name}·${String(l.island).toUpperCase()}`).join('  ')}`, rx, ry);
+      ry += Math.round(15 * k);
+    }
+
+    // The roll of downed obelisks, by their hex code names. Bracketed, so a run
+    // of hex reads as separate names rather than one long string of characters.
+    const killLog = model.killLog || [];
+    if (killLog.length) {
+      ry += Math.round(6 * k);
+      ctx.font = fsb(10);
+      ctx.fillStyle = 'rgba(207,216,195,0.5)';
+      ctx.fillText(`OBs DOWNED  ${killLog.length}`, rx, ry);
+      ry += Math.round(15 * k);
+      ctx.font = `${Math.round(10 * k)}px ui-monospace, monospace`;
+      ctx.fillStyle = '#e0503a';
+      const wrapped = this._wrapText(ctx, killLog.map((c) => `[${c}]`).join(' '), colW);
+      // Whatever room is left below the badge grid; the panel is already sized.
+      const room = Math.max(0, (py + ph - pad) - ry);
+      const fit = Math.floor(room / Math.round(13 * k));
+      for (const line of wrapped.slice(0, fit)) { ctx.fillText(line, rx, ry); ry += Math.round(13 * k); }
+      if (wrapped.length > fit) {
+        ctx.fillStyle = 'rgba(207,216,195,0.45)';
+        ctx.fillText(`… and ${killLog.length - fit * 4} more`, rx, ry);
+      }
+    }
+  },
+
+  // The hovered badge's name and blurb, drawn last so it sits over the grid.
+  drawKleosTip(mx, my) {
+    const inside = (c) => mx >= c.x && mx <= c.x + c.w && my >= c.y && my <= c.y + c.h;
+    const hitT = (this._kleosTrackCells || []).find(inside);
+    if (hitT) return this._kleosTip(mx, my, hitT.track.name, this._kleosTrackTip(hitT.track), true);
+    const hit = (this._kleosBadgeCells || []).find(inside);
+    if (!hit) return;
+    const b = hit.badge;
+    return this._kleosTip(mx, my, b.name, b.earned ? b.blurb : 'Not yet earned.', b.earned);
+  },
+
+  // What a track is asking of you, in the words the panel cannot fit inline:
+  // its blurb, then how it is measured and (for a conduct track) what breaks it.
+  _kleosTrackTip(t) {
+    const how = t.summited
+      ? `Complete: ${t.tierLabel}.`
+      : `${t.have} of ${t.next} ${t.unit || ''} to the next tier${t.summitName ? `; ${t.summitName} at the summit` : ''}.`;
+    const purity = !t.purity ? ''
+      : t.purity.intact
+        ? ' The constraint still holds this run — win an island without breaking it and the laurel is yours.'
+        : ` Broken on day ${t.purity.day}: ${t.purity.why}.`;
+    return `${t.blurb} ${how}${purity}`;
+  },
+
+  _kleosTip(mx, my, title, body, lit) {
+    const ctx = this.ctx;
+    ctx.font = '11px system-ui, sans-serif';
+    const lines = this._wrapText(ctx, body, 250);
+    const w = 266, h = 30 + lines.length * 14;
+    const x = Math.min(Math.max(8, mx - w / 2), this.w - w - 8);
+    const y = my > this.h / 2 ? my - h - 14 : my + 18;
+    ctx.fillStyle = 'rgba(10,14,10,0.96)';
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = lit ? 'rgba(232,201,106,0.6)' : 'rgba(207,216,195,0.3)';
+    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    ctx.fillStyle = lit ? '#e8c96a' : 'rgba(207,216,195,0.6)';
+    ctx.font = 'bold 11px system-ui, sans-serif';
+    ctx.fillText(title, x + 10, y + 18);
+    ctx.font = '11px system-ui, sans-serif';
+    ctx.fillStyle = 'rgba(207,216,195,0.75)';
+    lines.forEach((l, i) => ctx.fillText(l, x + 10, y + 34 + i * 14));
   },
 };

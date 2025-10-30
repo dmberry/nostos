@@ -46,6 +46,8 @@ changes.
 | 4 | `Tape-04 Meme vs Xan - 24 EP` | Meme vs Xan | 24 EP | 24 · High | Release · Världen · Incognito | scattered in the ruins |
 | 5 | `Tape-05 meme - maieutics` | meme | maieutics | maieutics 1 · 2 | maieutics 3 | scattered in the ruins |
 | 6 | `Tape-06 WARD - bear stanhope` | WARD | bear stanhope | five · glock | tau bootis | yellow box, first underworld room (`backspaceOnly`) |
+| 7 | `Tape-07 ML Oslo EP` | ML | Oslo EP | Oslo · Heavy Artillery · Standard Size | Automotive Hydraulic · Etch Geometry | scattered in the ruins |
+| 8 | `Tape-08 ML Abstract Machines EP` | ML | Abstract Machines EP | Daisy Cutter · Logarithm | Translation · United | scattered in the ruins |
 
 > The **order is display-only** — playback and placement are keyed off each tape's
 > `num`/flags, not its position, so tapes can be re-numbered freely. The one tape

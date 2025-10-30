@@ -928,6 +928,16 @@ export const TAPES = [
     a: { label: 'five · glock', tracks: ['01 five.mp3', '02 glock.mp3'] },
     b: { label: 'tau bootis', tracks: ['03 tau bootis.mp3'] },
   },
+  {
+    num: 7, artist: 'ML', title: 'Oslo EP', dir: 'Tape-07 ML Oslo EP', color: '#4a7f8c',
+    a: { label: 'Oslo · Heavy Artillery · Standard Size', tracks: ['01 Oslo.mp3', '02 Heavy Artillery.mp3', '03 Standard Size.mp3'] },
+    b: { label: 'Automotive Hydraulic · Etch Geometry', tracks: ['04 Automotive Hydraulic.mp3', '05 Etch Geometry.mp3'] },
+  },
+  {
+    num: 8, artist: 'ML', title: 'Abstract Machines EP', dir: 'Tape-08 ML Abstract Machines EP', color: '#6a5a9c',
+    a: { label: 'Daisy Cutter · Logarithm', tracks: ['01 Daisy Cutter.mp3', '02 Logarithm.mp3'] },
+    b: { label: 'Translation · United', tracks: ['03 Translation.mp3', '04 United.mp3'] },
+  },
 ];
 for (const t of TAPES) {
   const side = (s) => ({ label: s.label, tracks: s.tracks.map((f) => `assets/audio/${t.dir}/${s === t.a ? 'A' : 'B'}/${f}`) });

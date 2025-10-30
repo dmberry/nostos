@@ -48,62 +48,54 @@ test('eliza.ml calls only names this ML has', () => {
     'eliza.ml calls a bare drop; it must be List.drop');
 });
 
-test('eliza.ml reads its input and can be left', () => {
-  // The point of the file. A canned session that prints a fixed exchange and
-  // exits looks identical in a screenshot and is not the same program.
-  assert.match(ELIZA_PROGRAM, /readLine \(\)/, 'it must actually read');
-  assert.match(ELIZA_PROGRAM, /session \(\)/, 'and loop');
-  assert.match(ELIZA_PROGRAM, /"quit"/, 'and offer a way out');
+test('eliza.ml is a conversation program: reply in, no loop', () => {
+  // The convention the console drives: one line in, one answer out, and the
+  // loop is the console's. A session loop in the file would suspend the load.
+  assert.match(ELIZA_PROGRAM, /fun reply said/, 'it must define reply');
+  assert.match(ELIZA_PROGRAM, /"quit"/, 'and answer quit with the goodbye');
+  assert.ok(!/session \(\)/.test(ELIZA_PROGRAM), 'the loop belongs to the console now');
 });
 
-// The replay contract the laptop driver depends on.
-//
-// There is no way to suspend a synchronous evaluator, so a program that reads
-// is run again from the top with one more answer on the queue every time, and
-// the console prints only what is past what it has already shown. Two things
-// can go wrong and both did: the transcript can repeat itself from the
-// beginning after every answer, or the last thing the program says can vanish
-// because the finished run reports its output in a different shape from the
-// suspended one (a single joined string rather than a list of lines).
-test('replaying the conversation reads forwards and loses nothing', async () => {
+// The protocol the console drives. Load the file's declarations into one
+// interpreter, then call reply once per line with the line queued as stdin —
+// the exact constant source the laptop evaluates. The line rides the queue as
+// a raw string, so quotes and backslashes in it must be boring.
+test('reply answers turn by turn through the stdin queue', async () => {
   const { createInterpreter, joinProgram } = await import('../src/lang/index.js');
-  const lines = (chunk, out) => {
-    for (const part of (Array.isArray(chunk) ? chunk : [chunk])) {
-      if (part == null) continue;
-      for (const l of String(part).split('\n')) out.push(l);
-    }
-  };
-  const run = (queue) => {
-    const bml = createInterpreter({ printing: 'bare' });
-    bml.loadPrelude();
-    const ctx = { stdin: queue, stdinPos: 0 };
-    const out = [];
-    for (const { text: l } of joinProgram(ELIZA_PROGRAM)) {
-      if (!l || l.startsWith('(*')) continue;
-      const r = bml.run(l, ctx);
-      if (r.needInput) { lines(r.out, out); return { needInput: true, out }; }
-      assert.ok(!String(r.text).startsWith('ERR'), `${l} -> ${r.text}`);
-      lines(r.text, out);
-    }
-    return { done: true, out };
-  };
-
-  const opening = run([]);
-  assert.equal(opening.needInput, true, 'it must stop and wait for the first line');
-  assert.ok(opening.out.some((l) => /please state your problem/i.test(l)));
-
-  // Each round must be a strict extension of the one before it. That is what
-  // makes "print everything past what you have shown" a correct rule.
-  const answers = [];
-  let prev = opening.out;
-  for (const said of ['i am unhappy', 'my mother worried', 'quit']) {
-    answers.push(said);
-    const r = run([...answers]);
-    assert.deepEqual(r.out.slice(0, prev.length), prev,
-      `round ${answers.length} changed what came before it`);
-    assert.ok(r.out.length > prev.length, `round ${answers.length} said nothing new`);
-    prev = r.out;
+  const bml = createInterpreter({ printing: 'bare' });
+  bml.loadPrelude();
+  for (const { text: l } of joinProgram(ELIZA_PROGRAM)) {
+    if (!l || l.startsWith('(*')) continue;
+    const r = bml.run(l, {});
+    assert.ok(r.ok, `${l.slice(0, 48)} -> ${r.text}`);
   }
-  assert.equal(prev.at(-1).includes('Goodbye'), true,
-    'quit must reach the goodbye, not stop one line short of it');
+  const say = (line) => bml.run('reply (readLine ())', { stdin: [line], stdinPos: 0 });
+
+  const a = say('i am unhappy about the machines');
+  assert.ok(a.ok, a.text);
+  assert.match(a.text, /how long have you been unhappy about the machines/i);
+
+  assert.match(say('my mother worried too').text, /family/i);
+
+  // The transport must make punctuation boring: this is a whole line with a
+  // quoted phrase and a backslash in it, and it must arrive as characters.
+  const tricky = say('she said "be careful" \\ always');
+  assert.ok(tricky.ok, tricky.text);
+
+  assert.match(say('quit').text, /goodbye/i);
+});
+
+// State is real between turns: the session persists, so a program may keep a
+// ref at top level and read it from reply. Replay could never offer this — it
+// rebuilt the world each time — and it is half the reason for the protocol.
+test('a ref survives from one reply call to the next', async () => {
+  const { createInterpreter } = await import('../src/lang/index.js');
+  const bml = createInterpreter({ printing: 'bare' });
+  bml.loadPrelude();
+  assert.ok(bml.run('val count = ref 0', {}).ok);
+  assert.ok(bml.run('fun reply said = (count := !count + 1; makestring (!count))', {}).ok);
+  const say = (line) => bml.run('reply (readLine ())', { stdin: [line], stdinPos: 0 }).text;
+  assert.equal(say('a'), '1');
+  assert.equal(say('b'), '2');
+  assert.equal(say('c'), '3');
 });

@@ -25,7 +25,7 @@
 // it is testable on its own and the hub does the world-side wiring.
 
 import { PDFS, pdfStub } from './pdfs.js';
-import { ELIZA_README, DOCTOR_SCRIPT, DOCTOR_TABLES, ELIZA_PROGRAM } from './eliza-src.js';
+import { ELIZA_README, DOCTOR_SCRIPT, DOCTOR_TABLES, ELIZA_PROGRAM, ELIZA_LOOP_LEGACY } from './eliza-src.js';
 import { BOOKS, bookFileName, bookStub } from './books.js';
 import { SPOOL, MAILBOX, NODENAME, KNOWN_NODES, OWNER_MAIL, jobText, parseJob,
   routeOf, statusReport, deliver, formatMailbox, formatMessage } from './uucp.js';
@@ -176,6 +176,21 @@ const MAN = {
     '  left open.',
   ].join('\n'),
   halt: 'halt\n  Stop the processor. Close the lid and it is off until you open it.',
+  get: [
+    'get <unit|ip> [path]',
+    '  Fetch a served resource off a machine to the screen. The default and',
+    '  only path is program.ml — a unit\'s own program, which its httpd answers',
+    '  for free. Reading a box has never needed the hack; writing does (see post).',
+    '',
+    '  Address it however the sniffer named it — a bare code, a full hostname,',
+    '  or the bare IP:',
+    '',
+    '    get t1_03',
+    '    get 10.3.4.7 > download/u.ml',
+    '',
+    '  Redirect it into a file, edit with pico, and post it back — the whole',
+    '  read-decide-write loop without opening Netscape.',
+  ].join('\n'),
   save: [
     'save [name]',
     '  Write a checkpoint: where you are standing, what you are carrying, what',
@@ -207,14 +222,18 @@ const MAN = {
   who: 'who\n  Who is logged in. On this machine that is a short answer, and the\n  interesting part is the name in /etc/passwd that is not yours.',
   ps: 'ps\n  What is running. Nothing on this machine phones anywhere, and this is\n  where you check that rather than take the readme\'s word for it.',
   df: 'df\n  Free space, by filesystem. The disk is small and the books on it are\n  not, so this is worth knowing before you save much.',
-  mount: 'mount [-u]\n  Mount the card in the slot, or say what is mounted. -u takes it out\n  again.\n\n  The only thing that fits is an FSF membership card: a credit-card USB\n  carrying a live GNU/Linux system and the source for all of it. It comes\n  up read-only on /mnt/fsf and nothing on this machine is touched.',
+  mount: 'mount [card|-u]\n  With no argument, list what is mounted. `mount -u` takes the FSF card\n  out again.\n\n  Reading a card in is a physical act: drag it from a pocket onto the\n  laptop slot in the HUD and the NostBook bleeps and copies it to /mnt.\n  The shell cannot reach into your pockets, so `mount <card>` only points\n  the way. The access chip mounted this way is what `telnet` needs to jack\n  into an obelisk console over the wire.\n\n  The FSF membership card is the exception — a credit-card USB carrying a\n  live GNU/Linux system — and it comes up read-only on /mnt/fsf.',
+  eject: 'eject <card>\n  Take a mounted card back out: remove it from /mnt. `umount` is the same\n  command. The physical card was never surrendered — this only clears the\n  copy the NostBook read in.',
+  umount: 'umount <card>\n  Take a mounted card back out: remove it from /mnt. The same command as\n  eject, in its Unix spelling. The physical card was never surrendered —\n  this only clears the copy the NostBook read in.',
   uptime: 'uptime\n  How long the machine has been up. It kept counting while it sat broken\n  in whatever you found it in, which is its own small piece of evidence.',
   sh: 'sh <file>\n  Run a file of shell commands, one per line.',
   uname: 'uname [-a]\n  Name the system.',
-  ml: 'ml [file.ml] | ml -ver | ml -full | ml -strict | ml -advisory\n  Enter AI-ML, or run a saved program.\n\n  -ver       which build of the language this is\n  -full      everything it has and everything it has not\n  -strict    refuse a line that does not typecheck, as Standard ML does\n  -advisory  name the clash and run the line anyway (the default)\n\n  This machine has no card for POSEIDON\'s CONTROL wire, so the tower verbs\n  (scan, hack, crash) are not here and never will be. What IS here is the\n  language itself: let, fn, if, arithmetic, strings, ; and recursion.\n  Practise here, run it at a tower.\n\n  let fact n = if n == 0 then 1 else n * fact (n - 1)\n  fact 5\n\n  int and real are separate: 4 and 3.5, div and /, real n and floor x.\n  char is #"a", with ord chr str explode implode.\n\n  Lists are nil and ::, taken apart with hd, tl, length or case:\n  let map f l = case l of nil => nil | x :: r => f x :: map f r\n\n  Declare your own values, and take them apart the same way:\n  datatype shape = Circle of num | Rect of num * num\n  case s of Circle r => r | Rect w h => w * h\n\n  mod is there for anything that should happen every n ticks.\n\n  A MACHINE\'s program answers with an intent, or with a pair of feet\n  and weapon: [hunt, fire]. See demos/engage.ml.\n\n  On this machine `units` is what the wireless card can hear: a list of\n  records with name, range, bearing and kind. RON serves a program that\n  reads it — associate with the relay and fetch sniffer.ml.',
+  ml: 'ml [file.ml] | ml -ver | ml -full | ml -strict | ml -advisory\n  Enter AI-ML, or run a saved program.\n\n  -ver       which build of the language this is\n  -full      everything it has and everything it has not\n  -strict    refuse a line that does not typecheck, as Standard ML does\n  -advisory  name the clash and run the line anyway (the default)\n\n  This machine has no card for POSEIDON\'s CONTROL wire, so the tower verbs\n  (scan, hack, crash) are not here and never will be. What IS here is the\n  language itself: let, fn, if, arithmetic, strings, ; and recursion.\n  Practise here, run it at a tower.\n\n  let fact n = if n == 0 then 1 else n * fact (n - 1)\n  fact 5\n\n  int and real are separate: 4 and 3.5, div and /, real n and floor x.\n  char is #"a", with ord chr str explode implode.\n\n  Lists are nil and ::, taken apart with hd, tl, length or case:\n  let map f l = case l of nil => nil | x :: r => f x :: map f r\n\n  Declare your own values, and take them apart the same way:\n  datatype shape = Circle of num | Rect of num * num\n  case s of Circle r => r | Rect w h => w * h\n\n  mod is there for anything that should happen every n ticks.\n\n  A MACHINE\'s program answers with an intent, or with a pair of feet\n  and weapon: [hunt, fire]. See demos/engage.ml.\n\n  On this machine `units` is what the wireless card can hear: a list of\n  records with name, range, bearing and kind. RON serves a program that\n  reads it — associate with the relay and fetch sniffer.ml.\n\n  A program that defines   fun reply said = ...   is a CONVERSATION:\n  run it and the prompt becomes its name. Each line you type is handed\n  to reply and the answer printed; quit (or ^C, or Escape) leaves.\n  /home/eliza/eliza.ml is one.',
   ifconfig: 'ifconfig [iface] [up|down]\n  Configure a network interface.\n\n  With no arguments, report every interface and its state. The wireless\n  card is built into this machine, and it comes up DOWN — nothing is on\n  the air until you say so:\n\n    ifconfig wifi0 up\n\n  The card forges its address and hardware id on every association,\n  so the network answers it and nothing can follow the answer home. It\n  reaches the WEB only. There is no route to the control wire from here.',
   ping: 'ping <host>\n  Ask a host whether it is there. Takes an address (10.1.1.2) or a name.',
   arp: 'arp -a\n  What is on the wire within radio range, nearest first.\n\n  The card hears every machine near enough to associate and keeps what it\n  heard in a table. Each line is one machine: the name it answers to, its\n  address, and where it was when it last spoke — bearing and range from\n  where you are standing.\n\n  This is how you find out WHICH machine you are looking at. Four T-1s on a\n  hillside are four identical machines until you sweep them, and posting a\n  program to the wrong one is the sort of mistake that walks over and finds\n  you. Range is about 24 metres; walk closer and more of them answer.',
+  watermark: 'watermark <file>\n  Say whether a file was written by the machines or by a person.\n\n  Everything the estate pressed carries RON content credentials; nothing\n  you write does. So in this world the detector detects HUMANS, and the\n  reading is the other way round from the one it was built for:\n\n    VALID   machine-generated, byte-for-byte what the foundry pressed\n    NONE    human-made, or edited since — filed: suspiciously human\n\n  Useful on salvage: in a pile of recovered files the unmarked ones are\n  the ones somebody actually wrote, and those are the ones worth reading.\n  A program you post to a unit fails the check, and the unit\'s own page\n  says so on its provenance line. It has never stopped anybody.',
+  scan: 'scan\n  The obelisks on the network you are associated with: each tower\'s code\n  and address, and any operator tag hung on it.\n\n  Where arp hears the machines within radio range, scan reads the whole\n  subnet off the wire, the same list Netscape shows — so you can find a\n  tower\'s code to telnet or ping without opening the browser. A tower that\n  has been felled or jammed shows [down].\n\n    scan\n    telnet ob_5d33',
   iwlist: 'iwlist [iface] scan\n  Scan for wireless networks in range.\n\n  Reports one Cell per network with its ESSID, mode and signal quality.\n  The estate network is wherever its towers stand. Anything else is\n  somebody standing close enough to be heard, which is rare and worth\n  looking at.',
   more: 'more <file>\n  Read a file a screenful at a time.\n\n  SPACE gives the next page, RETURN gives one more line, q stops. The\n  percentage in the prompt is how far through you are.\n\n  It reads a pipe too, which is what it is really for:\n\n    ls -l /usr/src | more\n    cat readme | more\n\n  cat does not page and never did. It puts the whole file on the screen\n  and you scroll it back yourself.',
   sniffer: 'sniffer\n  A scope: what the aerial can hear, drawn.\n\n  North up, one ring per ten metres, you at the centre. Every machine in\n  range is a blip carrying its name, and every name opens the page that\n  machine serves.\n\n  NOT PART OF THIS MACHINE. It is RON\'s, and it runs only if you have\n  fetched it: associate with the relay (wifi) and take `sniffer` off\n  hermes.local. Until then this manual describes a program you do not\n  have, which is the usual state of a manual.',
@@ -394,6 +413,23 @@ const MAN = {
     '  not come back.',
     '',
     ].join('\n'),
+  charge: [
+    'charge <unit>',
+    '  Send a FLAT unit home to its tower on its reserve cell, to recharge.',
+    '',
+    '    charge T1_A3F2',
+    '',
+    '  A unit that ran its main cell to zero goes flat where it stands and',
+    '  runs nothing — so you cannot post it a program to walk it home. This',
+    '  is the FORCE HOME its page offers, sent over the wire: it wakes the',
+    '  reserve cell and the machine crawls back to its tower, which charges it.',
+    '  The reserve is one charge and does not come back; a unit whose reserve',
+    '  is already spent has to be reached on foot.',
+    '',
+    '  Only a flat unit needs it. One with charge walks home on its own — post',
+    '  it `home`.',
+    '',
+    ].join('\n'),
   ed: [
     'ed [file]',
     '  The standard editor. Line-oriented: you address a line and act on it.',
@@ -493,6 +529,12 @@ const ROBOTS_README = [
   'Anything else faults: the lamp goes amber and flashes, the machine falls',
   'back to its built-in reflexes, and its page gives the reason.',
   '',
+  'EVERY branch must END on an intent — the intent IS the answer. Effects (eye,',
+  'beep, flash) come first, joined with `;`. A branch that stops on an effect',
+  'answers () and faults as MISSING INTENT. The full list — route, follow,',
+  'defend, tend, and the weapon words [feet, fire] for shooters — is in',
+  'intents.txt.',
+  '',
   'hunt does not mean approach. It sets the machine hunting, and a hunting',
   'T-1 strikes what it reaches. A program meant to walk with you needs a',
   'band close in where it answers something else. follow_user.ml uses 3',
@@ -504,6 +546,68 @@ const ROBOTS_README = [
   'A program is one expression. The branches of an if are tried in the order',
   'you wrote them and the first one that holds is the answer. Put what must',
   'always win at the top. On all three of these that is the flat cell.',
+].join('\n');
+
+// The pointer that ships in /home/sdk before the kit is fetched. The samples
+// do not ship on the disk on purpose: RON keeps them on the relays, off the
+// machines' network, and the player goes and gets them. Downloading unit-sdk
+// from the relay writes the real readme (SDK_INSTALLED_README in net.js) over
+// this one.
+const SDK_POINTER_README = [
+  'unit SDK — not installed',
+  '',
+  'This folder is a placeholder. The kit does not ship on the disk: RON keeps',
+  'it on the relays, off the machines\' network, where they cannot reach it.',
+  '',
+  'What it is. The API for the units on the network — read what a machine is',
+  'running, write it a new program, drive it by hand — with a reference and',
+  'three worked examples. No AI key needed for any of it.',
+  '',
+  'How to fetch it.',
+  '  1. ifconfig wifi0 up               (only if the card is down)',
+  '  2. iwconfig wifi0 essid ron-relay  (join RON\'s relay)',
+  '     — or just run  wifi  and click ron-relay in the picker',
+  '  3. open netscape and go to hermes.local',
+  '  4. download unit-sdk from the index',
+  '',
+  'It unpacks here, into /home/sdk.',
+  '',
+  '-- RON',
+].join('\n');
+
+// A plain-words guide to the one thing about this machine that is not obvious:
+// it has a radio, and there is more than one network to point it at. Ships in
+// /home so `cat wifi.txt` finds it, and grafts onto older saves.
+const WIFI_README = [
+  'wireless — pointing the radio',
+  '',
+  'This machine has one card and it holds ONE network at a time. Which one',
+  'decides what netscape, ping and telnet can reach. Two matter:',
+  '',
+  '  the estate network   the machines\' own, on the air wherever their towers',
+  '                       stand — so it is what the card drifts to if you leave',
+  '                       it alone. Their obelisks, the factory, and the cache',
+  '                       of the old web all answer here.',
+  '',
+  '  ron-relay            RON\'s own, deliberately off the machines\' grid and',
+  '                       reachable only when you are stood by one of the',
+  '                       hilltop relays. It carries the sniffer, the unit SDK,',
+  '                       and a vault to back up an AI key. Nothing on it',
+  '                       transmits, which is why it is still there.',
+  '',
+  'See what is in range:',
+  '    iwlist wifi0 scan',
+  '',
+  'Join one, two ways:',
+  '    iwconfig wifi0 essid ron-relay     the shell way',
+  '    wifi                               a picker with a window; click a network',
+  '',
+  'Then open netscape to browse what that network serves. To go back to the',
+  'machines\' network, join it again the same way. The card forges a fresh',
+  'address every time it associates, so neither network can build a picture of',
+  'where you have been.',
+  '',
+  '-- RON',
 ].join('\n');
 
 const SENTRY_ML = [
@@ -664,6 +768,21 @@ const ELIZA_ML = [
   '  | say (w :: rest) = reflect w ^ " " ^ say rest',
   '',
   'echo ("why do you say " ^ say ["i", "am", "my", "own", "problem"] ^ "?")',
+].join('\n');
+
+const DANCE_ML = [
+  "(* dance.ml — a square, with a colour at each corner.             *)",
+  "(* Post it to any unit that moves and watch it walk the box,      *)",
+  "(* changing its eye at every turn. It re-queues the same legs, so *)",
+  "(* it loops for ever. quit its tower's recall to stop it.         *)",
+  "(*                                                                *)",
+  "(* Negative is a tilde: move 3 ~1, not move 3 -1 (subtraction).   *)",
+  "",
+  "(eye \"blue\"  ; move 4 0 ;",
+  " eye \"red\"   ; move 0 4 ;",
+  " eye \"white\" ; move ~4 0 ;",
+  " eye \"amber\" ; move 0 ~4 ;",
+  " route)",
 ].join('\n');
 
 const PATROL_ML = [
@@ -912,6 +1031,118 @@ export function isBrowserChord(e) {
   return !!(e.ctrlKey || e.metaKey || e.altKey);
 }
 
+// The intent reference, kept on the disk so you can read it at the machine you
+// are programming rather than off a website. Plain text: `cat robots_code/intents.txt`.
+const INTENTS_TXT = [
+  'UNIT INTENTS — what a program can tell a machine to do',
+  '',
+  'A program answers with ONE intent (its feet), or a PAIR of feet and weapon,',
+  '[feet, fire]. The intent is the LAST thing each branch evaluates to; effects',
+  '(eye, beep, flash) come before it, joined with `;`. A branch that ends on an',
+  'effect evaluates to () and faults: MISSING INTENT.',
+  '',
+  '  MOVE',
+  '    patrol   amble around its home tower — the default idle',
+  '    hunt     pursue and attack you (sets aggro; the fast chase)',
+  '    flee     run directly away from you',
+  '    home     go back to its tower and stand there (where it recharges)',
+  '    wait     hold position, sensor still turning',
+  '    tend     reseed blight / garden (the gardener\'s job)',
+  '    route    walk a queued LOGO path: `move dx dy` orders, one leg at a',
+  '             time. See logo.ml.',
+  '    follow   escort: trail you at a standoff, fight nothing',
+  '    defend   escort: trail you, and intercept whatever comes hunting you',
+  '',
+  '  WEAPON   (shooters only — W-4, T-3 — as the pair [feet, fire], e.g. [hunt, fire])',
+  '    fire     shoot when it has a line',
+  '    hold     track the target but do not pull',
+  '    reload   a deliberate cool-down',
+  '',
+  'A CONSTITUTION',
+  '',
+  'A program may carry standing prohibitions, written at the top where a reader',
+  'sees them first. They are not intents: they stand ABOVE whatever the program',
+  'decides, and they bind the chassis reflexes too, so the machine cannot fall',
+  'back into the forbidden thing when its program faults.',
+  '',
+  '    never hunt ;',
+  '    never fire ;',
+  '    eye "blue" ;',
+  '    if charge < 20 then follow else defend',
+  '',
+  '  never hunt   it will not acquire you, by program or by reflex',
+  '  never fire   the trigger stays up; it still tracks and still aims',
+  '',
+  'A forbidden intent is VETOED, not faulted — the machine is constrained, not',
+  'broken: it falls to patrol and blips white. Read any unit\'s whole program,',
+  'constitution and all, from a tower console:  soul t1_03',
+  '',
+  'WHAT EACH CHASSIS ACCEPTS',
+  '  Fighters   T-1 T-2 T-3 W-1 W-4:  patrol hunt home flee wait route follow defend',
+  '  Gardeners  W-3 W-5:              patrol home flee wait route tend',
+  '                                   (no hunt/follow/defend; they have tend)',
+  '',
+  'Ask a chassis for a word it does not carry (a T-1 to tend, a W-5 to hunt) and it',
+  'faults, lights the amber lamp, and drops to its reflexes.',
+  '',
+  'SENSES a program can read',
+  '  charge integrity range home_range threat hurt linked',
+  '  (and, on the chassis that carry them: blight daylight sight armed shielded',
+  '   contact lost_for work)',
+  '',
+  '  example',
+  '    if charge < 15 then home',
+  '    else if threat then (eye "white" ; hunt)',
+  '    else patrol',
+  '',
+  '-- see also: robots_code/readme.txt, and `ml -full` for the language.',
+].join('\n');
+
+// The FSF membership card's filesystem — a whole GNU/Linux system, live, on a
+// credit-card USB. Read-only: the NostBook mounts it (drag it onto the slot, or
+// `mount fsf`), it does not boot it. Built fresh per mount so /mnt/fsf is never
+// shared with the save's own tree.
+const FSF_README = [
+  '/dev/sd0 — FSF membership card (read-only)',
+  '',
+  'A credit-card USB, and on it a whole GNU/Linux system, live. It boots. It',
+  'runs. It is yours to copy and to pass on. The Free Software Foundation posts',
+  'one to every member, and in a world where the machines deleted the software',
+  'to sell it back, the point of it is plain: a system you can read is a system',
+  'nobody can take from you.',
+  '',
+  '  cat freedom.txt        what the licence protects',
+  '  ls  bin                the userland it boots into',
+  '',
+  'Read-only here — the NostBook mounts the card, it does not run it. To run it',
+  'you boot a machine off the card. This one cannot; carrying one that can is',
+  'the whole point.',
+  '',
+  'The licence is the GNU General Public License. Copyleft: run it, read it,',
+  'change it, share it — and everyone you share it with gets the same right.',
+  'That is the whole trick, and it is why this card can exist at all.',
+].join('\n');
+const FSF_FREEDOM = [
+  'The four freedoms',
+  '',
+  'A program is free software if the person who has it has:',
+  '',
+  '  0. the freedom to run it, for any purpose;',
+  '  1. the freedom to study how it works and change it (source is the',
+  '     precondition);',
+  '  2. the freedom to pass on copies, so you can help your neighbour;',
+  '  3. the freedom to pass on your changed copies, so the community benefits.',
+  '',
+  'A program that denies any of these is not free, whatever else it does for',
+  'you. The machines on these islands were built to deny all four at once. This',
+  'card is the argument against them, small enough to keep in a wallet.',
+].join('\n');
+export function makeFsfCard() {
+  const bin = {};
+  for (const t of ['ls', 'cat', 'gcc', 'emacs', 'bash', 'gpg', 'make', 'tar', 'grep', 'gzip']) bin[t] = file('');
+  return dir({ README: file(FSF_README), 'freedom.txt': file(FSF_FREEDOM), bin: dir(bin) });
+}
+
 export function makeDisk() {
   const man = {};
   for (const [k, v] of Object.entries(MAN)) man[k] = file(v);
@@ -969,6 +1200,9 @@ export function makeDisk() {
     }),
     home: dir({
       'readme': file(README),
+      // What the radio is for and how to point it — the one non-obvious thing
+      // about this machine. Kept loose in /home so `cat wifi.txt` finds it.
+      'wifi.txt': file(WIFI_README),
       // hello.ml stays loose in /home on purpose: it is the first thing anyone
       // runs, the boot banner and `man ml` both name it with no path, and a
       // first program you have to cd to is a first program with a step in front
@@ -980,9 +1214,18 @@ export function makeDisk() {
       // is supposed to fail. They are written here, carried to a unit, posted.
       robots_code: dir({
         'readme.txt': file(ROBOTS_README),
+        'intents.txt': file(INTENTS_TXT),
         'follow_user.ml': file(FOLLOW_USER_ML),
         'sentry.ml': file(SENTRY_ML),
         'survivor.ml': file(SURVIVOR_ML),
+      }),
+      // The network SDK's landing folder. Ships as a pointer only; the kit
+      // itself (GUIDE + examples) is fetched from a relay — see net.js
+      // RELAY_BUNDLES and the ronpkg handler in main.js. graftSystemDirs adds
+      // this folder to an older save the same way, so the pointer reaches
+      // everyone; the download then fills it.
+      sdk: dir({
+        'readme.txt': file(SDK_POINTER_README),
       }),
       // ELIZA, as source. The machine in the ruins talks to you the way this
       // does, and this is short enough to read to the end in a sitting. The
@@ -1003,6 +1246,7 @@ export function makeDisk() {
         'rogers.ml': file(ELIZA_ML),
         'patrol.ml': file(PATROL_ML),
         'engage.ml': file(ENGAGE_ML),
+        'dance.ml': file(DANCE_ML),
       }),
       // Where the browser puts anything it fetches off the network — a machine's
       // program.ml, mostly. Kept apart from your own files so a download can
@@ -1029,6 +1273,17 @@ export function makeDisk() {
 // and the machine went on serving a program that no longer exists in the build.
 const RETIRED = [['eliza', 'doctor.ml']];
 
+// Shipped files whose CONTENT was replaced wholesale. If the on-disk copy is
+// byte-identical to the old shipped text it is the system's, not the player's:
+// delete it before the add pass below, and the add pass lands the new version
+// in the same graft. If it differs by one character, the player edited it and
+// it stays theirs — the console teaches them about `reply` when they run it.
+//
+// eliza.ml went from a readLine loop to a `fun reply` the console drives. The
+// loop version stopped conversing when the replay driver was removed, so a
+// disk still carrying it unmodified gets the new one.
+const SUPERSEDED = [['eliza', 'eliza.ml', ELIZA_LOOP_LEGACY]];
+
 // A disk from an older save has none of the system tree, because it was made
 // before there was one. Add anything missing rather than replacing the disk:
 // the player's own files in /home are theirs and must survive untouched.
@@ -1041,6 +1296,22 @@ export function graftSystemDirs(root) {
   }
   const home = root.d.home;
   if (home && home.d) {
+    // Removals FIRST, so the add pass can land a replacement in the same
+    // graft. Run them after and a superseded file comes off on this boot and
+    // back on the next, which is a whole session with no eliza.ml at all.
+    for (const [dir, f] of RETIRED) {
+      if (home.d[dir] && home.d[dir].d && home.d[dir].d[f]) {
+        delete home.d[dir].d[f];
+        added.push(`-home/${dir}/${f}`);
+      }
+    }
+    for (const [dir, f, was] of SUPERSEDED) {
+      const cur = home.d[dir] && home.d[dir].d && home.d[dir].d[f];
+      if (cur && cur.f === was) {
+        delete home.d[dir].d[f];
+        added.push(`-home/${dir}/${f} (superseded)`);
+      }
+    }
     for (const [name, node] of Object.entries(fresh.d.home.d)) {
       if (!home.d[name]) { home.d[name] = node; added.push(`home/${name}`); continue; }
       // The folder is already there, which used to end it. Go in: a directory
@@ -1051,12 +1322,6 @@ export function graftSystemDirs(root) {
       if (!mine.d || !theirs.d) continue;
       for (const [f, node2] of Object.entries(theirs.d)) {
         if (!mine.d[f]) { mine.d[f] = node2; added.push(`home/${name}/${f}`); }
-      }
-    }
-    for (const [dir, f] of RETIRED) {
-      if (home.d[dir] && home.d[dir].d && home.d[dir].d[f]) {
-        delete home.d[dir].d[f];
-        added.push(`-home/${dir}/${f}`);
       }
     }
   }
@@ -1366,17 +1631,28 @@ const COMMANDS = {
   // the card's tree in env.fsfCard when the player is carrying one, so the
   // command asks the host rather than reading a table of items.
   mount: (args, _in, env) => {
-    const at = ['mnt', FSF_MOUNT];
-    const already = lookup(env.root, at);
-    if (!args.length) {
-      return already
-        ? `${FSF_DEV} on /mnt/${FSF_MOUNT} type iso9660 (ro)`
-        : '/dev/hd0 on / type v7fs (rw)';
+    const mnt = lookup(env.root, ['mnt']);
+    const already = lookup(env.root, ['mnt', FSF_MOUNT]);
+    const arg = args[0] ? String(args[0]).toLowerCase() : '';
+    if (!arg) {
+      // The mount table: the root, the FSF card if it is in, and any SD-cards
+      // the NostBook has read in (drag a card onto the laptop slot to add one).
+      const lines = ['/dev/hd0 on / type v7fs (rw)'];
+      if (already) lines.push(`${FSF_DEV} on /mnt/${FSF_MOUNT} type iso9660 (ro)`);
+      for (const k of Object.keys((mnt && mnt.d) || {})) if (k !== FSF_MOUNT) lines.push(`sd:${k} on /mnt/${k} type card (ro)`);
+      return lines.join('\n');
     }
-    if (args[0] === '-u' || args[0] === '-r') {
+    if (arg === '-u' || arg === '-r') {
       if (!already) throw new UnixError(`/mnt/${FSF_MOUNT}: not mounted`);
       delete lookup(env.root, ['mnt']).d[FSF_MOUNT];
       return `${FSF_DEV} unmounted. Take the card; it goes back in a wallet.`;
+    }
+    // A card named directly. Everything but the FSF card is a physical read: you
+    // cannot mount from a prompt because the shell cannot reach into your
+    // pockets — drag the card onto the laptop slot and the NostBook copies it in.
+    if (arg !== FSF_MOUNT) {
+      if (mnt && mnt.d && mnt.d[arg]) return `/mnt/${arg} is already mounted.`;
+      return 'To read a card in, drag it from a pocket onto the laptop slot in the HUD — the NostBook bleeps and copies it to /mnt. (`mount` alone lists what is mounted; `eject <card>` takes one out.)';
     }
     if (!env.fsfCard) throw new UnixError('nothing to mount. There is a slot, and you are not carrying anything that fits it.');
     if (already) return `${FSF_DEV} is already on /mnt/${FSF_MOUNT}`;
@@ -1387,6 +1663,16 @@ const COMMANDS = {
       `Start with: cat /mnt/${FSF_MOUNT}/README`,
     ].join('\n');
   },
+  // eject/umount a card read into /mnt (the FSF card also answers `mount -u`).
+  umount: (args, _in, env) => {
+    const name = String(args[0] || '').toLowerCase().replace(/^\/?mnt\//, '');
+    if (!name) throw new UnixError('usage: eject <card>   e.g. eject chip');
+    const mnt = lookup(env.root, ['mnt']);
+    if (!mnt || !mnt.d || !mnt.d[name]) throw new UnixError(`/mnt/${name}: not mounted`);
+    delete mnt.d[name];
+    return name === FSF_MOUNT ? `${FSF_DEV} unmounted. Take the card.` : `/mnt/${name} ejected — take the card.`;
+  },
+  eject: (args, _in, env) => COMMANDS.umount(args, _in, env),
 
   df: () => [
     'Filesystem  blocks   used   free  capacity  Mounted on',
@@ -1843,7 +2129,8 @@ const COMMANDS = {
       if (net.associate) net.associate(found.essid);
       return [`${iface}     associating with "${found.essid}"...`,
         `          Access Point: ${apMac(found.essid)}   Quality:${found.signal}/100`,
-        `          ${net.spoof.ip}  forged  ${net.spoof.mac}`].join('\n');
+        `          ${net.spoof.ip}  forged  ${net.spoof.mac}`,
+        '          Associated. Open netscape to browse what this network serves.'].join('\n');
     }
     if (!net.up) return `${iface}     radio off`;
     const cur = net.essid || '';
@@ -1867,14 +2154,60 @@ const COMMANDS = {
     if (args[0] && args[0] !== '-a') throw new UnixError('arp -a');
     const seen = net.local();
     if (!seen.length) return 'arp: no entries — nothing within range';
-    const w = Math.max(...seen.map((e) => e.host.length));
+    const w = Math.max(1, ...seen.map((e) => String(e.host || '').length));
     return seen.map((e) => [
-      e.host.padEnd(w),
+      String(e.host || '?').padEnd(w),
       `(${e.ip})`.padEnd(14),
       `at ${e.mac}`,
-      ` ${String(e.range).padStart(3)}m ${e.bearing.padEnd(3)}`,
+      ` ${String(e.range).padStart(3)}m ${String(e.bearing || '?').padEnd(3)}`,
+      e.tag ? ` «${e.tag}»` : '',
       e.down ? ' [no answer]' : '',
     ].join(' ')).join('\n');
+  },
+
+  // `scan` — the towers on the network you are associated with, with their codes
+  // and addresses, so you can find an obelisk to telnet/ping without opening
+  // Netscape. Where `arp` hears the machines in radio range, this reads the
+  // whole subnet off the wire.
+  scan: (args, _in, env) => {
+    const net = env.net;
+    if (!net || !net.card) throw new UnixError('scan: no network card fitted');
+    if (!net.up) throw new UnixError(`scan: ${net.iface || 'wifi0'} is down — try: ifconfig ${net.iface || 'wifi0'} up`);
+    const obs = net.obs ? net.obs() : [];
+    if (!obs.length) return 'scan: no obelisks on this network';
+    const w = Math.max(4, ...obs.map((o) => String(o.code || o.host || '').length));
+    const rows = obs.map((o) => `  ${String(o.code || '?').padEnd(w)}  ${String(o.ip || '?').padEnd(12)}${o.tag ? `  «${o.tag}»` : ''}${o.down ? '  [down]' : ''}`);
+    return [`obelisks on ${net.essid || 'the wire'}:`, ...rows].join('\n');
+  },
+
+  // `watermark <file>` — is this file machine-made or human-made?
+  //
+  // Everything the machines wrote is signed; nothing you write is. So the
+  // detector, run in this world, detects HUMANS — which is the joke, and also
+  // genuinely useful: in a pile of salvage the unmarked files are the ones a
+  // person made, and those are the ones worth reading.
+  watermark: (args, _in, env) => {
+    const name = args[0] && String(args[0]);
+    if (!name) throw new UnixError('watermark <file>');
+    const parts = resolvePath(name, env.cwd);
+    const n = lookup(env.root, parts);
+    if (!n) throw new UnixError(`watermark: ${name}: no such file`);
+    if (!isFile(n)) throw new UnixError(`watermark: ${name}: is a directory`);
+    // The shipped disk is the reference copy: identical bytes at the same path
+    // means this is exactly what the foundry pressed.
+    const fresh = lookup(makeDisk(), parts);
+    const stock = fresh && isFile(fresh) ? fresh.f : null;
+    const marked = stock != null && stock === n.f;
+    if (env.onAchieve) env.onAchieve('watermarkRead', { file: parts.join('/') });
+    return marked
+      ? [`${name}: VALID — machine-generated`,
+         'RON content credentials v0.4 · signature intact',
+         'Pressed at the foundry and unmodified since.'].join('\n')
+      : [`${name}: NONE — human-made, or scrubbed`,
+         stock == null
+           ? 'No reference copy exists: nothing in the estate ever wrote this file.'
+           : 'A reference copy exists and does not match: this one has been edited.',
+         'Filed: suspiciously human.'].join('\n');
   },
 
   ping: (args, _in, env) => {
@@ -1899,7 +2232,8 @@ const COMMANDS = {
     '  grep  wc  head  tail  sort  uniq  more  sh  uname  who  ps  df  uptime',
     '  strings  crypt  almanac  mail  uucp  uustat  uucico',
     '  ml  pico  ed  pdf-viewer  book  transcribe  help',
-    '  ifconfig  iwlist  iwconfig  wifi  arp  ping  netscape  telnet  post',
+    '  ifconfig  iwlist  iwconfig  wifi  arp  scan  ping  netscape  telnet  post  charge',
+    '  watermark  mount  eject',
     ...(hasFile(env, 'sniffer') ? ['  sniffer      (RON)'] : []),
     '',
     '  |  pipes one into the next     cat readme | grep machine',
@@ -1926,8 +2260,8 @@ const COMMANDS = {
 // without one and nothing noticed for five versions.
 export const HOOK_COMMANDS = [
   'ml', 'pico', 'ed', 'netscape', 'www', 'pdf-viewer', 'pdf', 'book',
-  'transcribe', 'telnet', 'post', 'vi', 'vim', 'emacs', 'nano',
-  'sleep', 'reboot', 'halt', 'suspend', 'save', 'wifi', 'sniffer', 'more',
+  'transcribe', 'telnet', 'post', 'charge', 'vi', 'vim', 'emacs', 'nano',
+  'sleep', 'reboot', 'halt', 'suspend', 'save', 'wifi', 'sniffer', 'more', 'get',
 ];
 
 // A selector for any command that acts on a numbered list: `3`, `2-5`, `1,3,7`,
@@ -2095,6 +2429,28 @@ export function runUnix(line, env, hooks = {}) {
         if (!env.net || !env.net.card) throw new UnixError('post: no network card fitted');
         if (!env.net.up) throw new UnixError('post: wifi0 is down. try: ifconfig wifi0 up');
         return hooks.post(args, env);
+      }
+      // CHARGE a flat unit home to its tower on its reserve cell — a recovery
+      // command over the same wire, not a program (a flat unit runs nothing).
+      if (name === 'charge') {
+        if (!hooks.charge) throw new UnixError('no network stack on this machine');
+        if (!env.net || !env.net.card) throw new UnixError('charge: no network card fitted');
+        if (!env.net.up) throw new UnixError('charge: wifi0 is down. try: ifconfig wifi0 up');
+        return hooks.charge(args, env);
+      }
+      // GET a served resource off a unit — the read half of the same wire
+      // `post` writes on, so the same card/up checks. Read is free; write is
+      // the escalation.
+      if (name === 'get') {
+        if (!hooks.get) throw new UnixError('no network stack on this machine');
+        if (!env.net || !env.net.card) throw new UnixError('get: no network card fitted');
+        if (!env.net.up) throw new UnixError('get: wifi0 is down. try: ifconfig wifi0 up');
+        const g = hooks.get(args, env);
+        // `get <addr> > file` writes the fetched bytes to the file rather than
+        // to the screen — the read half of the scriptable loop. A failed read
+        // does not create the file; its error surfaces instead.
+        if (g && g.ok && redirect != null) { writeFile(env, redirect, g.text ?? ''); return { ok: true, text: '' }; }
+        return g;
       }
       // Netscape is a MODE too — it takes the screen until you quit, so the hub
       // owns it and this module only hands the arguments over.

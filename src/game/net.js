@@ -40,6 +40,7 @@
 // This module is pure: plain descriptors in, text out, no world objects, so it
 // tests without a map or a canvas, like blight.js and unix.js.
 
+import { CHECKPOINTS } from './v-model.js';
 import { islandProfile } from './islands.js';
 import { docsPage, docTitle, DOC_TOPICS } from './ml-docs.js';
 import { CACHE_SUB, ARCHIVED_SITES, archivedSite, archivedDomains, stubBody, CATEGORIES, categoryOf } from './archive.js';
@@ -128,6 +129,14 @@ export function relayHosts(state = {}) {
     name: 'HERMES', title: 'HERMES RELAY — LOCAL', down: false, ref: null,
     relay: state,
   }];
+}
+
+// Whether the network is speaking over a unit's own program right now: a
+// tower's recall (repel), or a spoofer answering with its tower's voice
+// (friendly). Mirrors `unitOverridden` in robots.js — kept local so this pure
+// module needs no engine import. If one changes, change the other.
+function unitOverridden(r) {
+  return !!(r && (r.repelledT > 0 || r.singing || r.friendly));
 }
 
 export function hostTable(world) {
@@ -229,7 +238,7 @@ export function hostTable(world) {
     const code = String(ob.code || `ob_${i + 1}`);
     hosts.push({
       ip: ipFor(idx, 'obelisk', i + 1), host: `${lc(code)}.${dom}`, kind: 'obelisk',
-      name: code, title: `NODE ${code}`, code, down: !!ob.down, ref: ob,
+      name: code, title: `NODE ${code}`, code, tag: ob.tag || null, down: !!ob.down, ref: ob,
     });
   });
 
@@ -237,7 +246,7 @@ export function hostTable(world) {
     const id = String(r.id || `unit_${i + 1}`);
     hosts.push({
       ip: ipFor(idx, 'robot', i + 1), host: `${lc(id)}.${dom}`, kind: 'robot',
-      name: id, title: `UNIT ${id.toUpperCase()}`, type: lc(r.type, '?'),
+      name: id, title: `UNIT ${id.toUpperCase()}`, type: lc(r.type, '?'), tag: r.tag || null,
       homeCode: r.homeCode || null, down: !!r.down, ref: r,
       // A unit that runs on a stored program serves it. Read access is free:
       // the embedded httpd was built to answer GETs about the machine, and its
@@ -535,7 +544,7 @@ function robotPage(host, hosts) {
       row('policy', 'program.ml'),
       row('language', 'AI-ML'),
       row('decides', 'four times a second'),
-      row('state', r.fault ? `FAULTED — ${r.fault}` : `running${r.intent ? ` — ${r.intent}` : ''}`),
+      row('state', r.fault ? `FAULTED — ${r.fault}` : unitOverridden(r) ? 'OVERRIDDEN — under network recall' : `running${r.intent ? ` — ${r.intent}` : ''}`),
       r.fault ? row('lamp', 'AMBER, flashing — the fault tell') : (r.lamp ? row('lamp', `${r.lamp}${r.lampFlash ? `, flashing ${r.lampFlash}/s` : ''}`) : ''),
       `<p><a href="prog:${host.host}">program.ml</a> — this unit's own program, as it is running now.</p>`,
     );
@@ -560,7 +569,7 @@ export function programPage(host, hosts, opts = {}) {
   const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const docs = (hosts || []).find((h) => h.kind === 'docs');
   return [
-    `<h1>${host.name} · program.ml</h1>`,
+    `<h1>${host.name}${host.tag ? ` «${esc(String(host.tag))}»` : ''} · program.ml</h1>`,
     `<p><small>${host.host} · ${SERVER.robot} · text/plain · ${src.length} bytes</small></p>`,
     // EDIT IN PLACE. Saving it, opening pico, editing, and posting it back is
     // four steps for a one-word change, and three of them are ceremony. The
@@ -572,14 +581,32 @@ export function programPage(host, hosts, opts = {}) {
     '<h2>Notes</h2>',
     r.fault
       ? `<p><b>This program is not running.</b> ${esc(String(r.fault))}. The unit is on its built-in reflexes until the program is replaced.</p>`
-      : `<p>Running${r.intent ? `. Last decision: <b>${esc(String(r.intent))}</b>` : ''}.</p>`,
+      : unitOverridden(r)
+        ? `<p><b>This program is overridden.</b> The unit is under a recall order from the network and will not obey it until the recall lapses. Nothing is wrong with it — deal with the tower.</p>`
+        : `<p>Running${r.intent ? `. Last decision: <b>${esc(String(r.intent))}</b>` : ''}.</p>`,
     '<p>The words this unit answers to are its own: what it can sense, and what',
     'it can be told to do. Anything else evaluates, and then faults.</p>',
-    row('sensors', 'charge · integrity · range · home_range · threat · hurt · linked · blight · daylight'),
+    // A V-class page says what it is up front. The listing below is not code
+    // anybody wrote: it is weights, and reading them tells you nothing about
+    // what the machine will do. That is the point, and the page should say so.
+    ...(r && r.type === 'v1'
+      ? ['<p><b>GROWN, NOT WRITTEN.</b> This unit runs a model, not a rule. The listing is its weights: seven inputs, six hidden units, five outputs, and an argmax. Every number is readable and none of them is an explanation. Change one and watch what it does differently.</p>']
+      : []),
+    row('sensors', 'charge · integrity · range · home_range · threat · hurt · linked · blight · daylight · work'),
+    ...(r && r.type === 'v1' ? [row('courier', 'cargo · casualty_range — carrying a cell, and how far the nearest machine lying flat is')] : []),
     row('fire control', 'sight · armed · shielded · contact · lost_for'),
-    row('intents', 'patrol · hunt · home · flee · tend · wait'),
+    // A constitution is the one thing on this page that outranks the program
+    // below it, so it is stated above the listing rather than inside it.
+    ...(r && r._unwatermarked
+      ? ['<p><b>PROVENANCE:</b> unwatermarked (human?) — this program carries no RON content credentials. Filed, and run anyway.</p>']
+      : []),
+    ...(r && r.constitution && Object.keys(r.constitution).length
+      ? [`<p><b>CONSTITUTION:</b> ${Object.keys(r.constitution).map((c) => `never ${esc(c)}`).join(' &middot; ')} — this unit cannot choose it, and cannot fall back into it when its program faults.</p>`]
+      : []),
+    row('intents', 'patrol · hunt · home · flee · tend · wait · route · follow · defend'),
+    row('escort', 'follow trails you; defend trails you and fires on what hunts you'),
     row('weapon', 'fire · hold · reload — answer [hunt, fire] to say both at once'),
-    row('service', 'beep · eye &lt;colour&gt; · flash &lt;rate&gt;'),
+    row('service', 'beep · eye &lt;colour&gt; · flash &lt;rate&gt; · move &lt;dx&gt; &lt;dy&gt;'),
     `<p><a href="save:${host.host}">SAVE</a></p>`,
     // The upload form. A file chooser and a button, which is all a 1995 page
     // needed and all this one needs: the browser is running ON the machine that
@@ -594,7 +621,7 @@ export function programPage(host, hosts, opts = {}) {
         '</select>',
         '<input id="ns-post-go" type="submit" value="Upload">',
         '</form>',
-        '<p><small>A program that will not run is not refused: the machine accepts it, faults, and stands there with its lamp flashing amber.</small></p>',
+        '<p><small>A program that will not run is loaded on the robot anyway: the machine accepts it, faults, and stands there with its lamp flashing amber.</small></p>',
       ].join('\n')
       : '<p>No AI-ML files on this machine to send. Save this one first, edit it, then come back.</p>',
     docs ? `<p>${link(docs, 'AI-ML reference')} — the language this is written in.</p>` : '',
@@ -700,30 +727,64 @@ export function searchResults(hosts, query) {
  * Netscape, and Explorer at an obelisk renders the same page, so the machines'
  * own browser announced itself as somebody else's.
  */
+// Little flat GIF-era icons, drawn inline so they cost no request and scale
+// with the text. One or two colours each, in the key of a 1995 bookmark file.
+// Kept to one line apiece so the plain-text renderer can drop them cleanly.
+const BM_ICONS = {
+  find: '<svg class="bm-i" viewBox="0 0 20 20"><circle cx="8" cy="8" r="5" fill="#dbe8ff" stroke="#1a56c4" stroke-width="2"/><line x1="12" y1="12" x2="17.5" y2="17.5" stroke="#1a56c4" stroke-width="2.6"/></svg>',
+  talk: '<svg class="bm-i" viewBox="0 0 20 20"><path d="M2 3h16v10H8l-4 4v-4H2z" fill="#ff5722"/><circle cx="7" cy="8" r="1.3" fill="#fff"/><circle cx="13" cy="8" r="1.3" fill="#fff"/></svg>',
+  news: '<svg class="bm-i" viewBox="0 0 20 20"><rect x="2" y="3" width="16" height="14" fill="#f2f6ee" stroke="#264d1a"/><rect x="4" y="5" width="6.5" height="4" fill="#3a7d22"/><g stroke="#264d1a" stroke-width="1"><line x1="12" y1="6" x2="16" y2="6"/><line x1="12" y1="8" x2="16" y2="8"/><line x1="4" y1="11" x2="16" y2="11"/><line x1="4" y1="13" x2="16" y2="13"/><line x1="4" y1="15" x2="16" y2="15"/></g></svg>',
+  beeb: '<svg class="bm-i" viewBox="0 0 20 20"><rect x="2" y="5" width="16" height="10" rx="1.5" fill="#111"/><g fill="#fff"><rect x="3.6" y="7" width="3.5" height="6"/><rect x="8.2" y="7" width="3.5" height="6"/><rect x="12.8" y="7" width="3.5" height="6"/></g></svg>',
+  book: '<svg class="bm-i" viewBox="0 0 20 20"><path d="M10 4C7.5 2.4 4 3 2.5 4v12.5C4 15.5 7.5 15 10 16.5 12.5 15 16 15.5 17.5 16.5V4C16 3 12.5 2.4 10 4z" fill="#f6f6f0" stroke="#8a5a2b"/><line x1="10" y1="4" x2="10" y2="16.5" stroke="#8a5a2b"/></svg>',
+  note: '<svg class="bm-i" viewBox="0 0 20 20"><path d="M8 3h9v3H8z" fill="#7a1f8a"/><path d="M7 4v9.5" stroke="#7a1f8a" stroke-width="2"/><path d="M16 3v9.5" stroke="#7a1f8a" stroke-width="2"/><circle cx="5" cy="14" r="2.4" fill="#7a1f8a"/><circle cx="14" cy="13" r="2.4" fill="#7a1f8a"/></svg>',
+  home: '<svg class="bm-i" viewBox="0 0 20 20"><path d="M10 3l8 7h-2v7H4v-7H2z" fill="#e0b34a" stroke="#8a5a1e"/><rect x="8" y="12" width="4" height="5" fill="#8a5a1e"/></svg>',
+  palm: '<svg class="bm-i" viewBox="0 0 20 20"><path d="M1 17h18" stroke="#c9a24a" stroke-width="2"/><path d="M10 17V8" stroke="#7a5a1e" stroke-width="1.6"/><path d="M10 8C7 6 3.5 6 2.5 8.5M10 8c3-2 6.5-2 7.5.5M10 8c-1-3-1-5.2 0-6.5" fill="none" stroke="#2ea24b" stroke-width="1.6"/></svg>',
+  map: '<svg class="bm-i" viewBox="0 0 20 20"><path d="M2 5l5-2 6 2 5-2v12l-5 2-6-2-5 2z" fill="#eaf3e2" stroke="#3a7d22"/><path d="M7 3v14M13 5v14" stroke="#3a7d22" stroke-width="1"/><circle cx="10" cy="9" r="1.6" fill="#c0392b"/></svg>',
+  globe: '<svg class="bm-i" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="#bfe3ff" stroke="#1a6bb0" stroke-width="1.4"/><path d="M2.2 10h15.6M10 2.2v15.6M4.5 5.2c3.4 2.4 7.6 2.4 11 0M4.5 14.8c3.4-2.4 7.6-2.4 11 0" fill="none" stroke="#1a6bb0" stroke-width="1"/></svg>',
+  disk: '<svg class="bm-i" viewBox="0 0 20 20"><path d="M3 3h11l3 3v11H3z" fill="#3a4a63"/><rect x="6" y="3" width="6" height="4" fill="#c9d3e0"/><rect x="10" y="4" width="1.5" height="2" fill="#3a4a63"/><rect x="6" y="11" width="8" height="6" fill="#c9d3e0"/></svg>',
+  gear: '<svg class="bm-i" viewBox="0 0 20 20"><g stroke="#5a5f66" stroke-width="2" fill="none"><circle cx="10" cy="10" r="3"/><path d="M10 1.5v3M10 15.5v3M1.5 10h3M15.5 10h3M4 4l2 2M14 14l2 2M16 4l-2 2M6 14l-2 2"/></g></svg>',
+};
+const BM_GLOBE = '<svg class="bm-globe" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8.5" fill="#2a6ea8" stroke="#fff" stroke-width="1.2"/><path d="M1.5 10h17M10 1.5v17M4 5c3.6 2.6 8.4 2.6 12 0M4 15c3.6-2.6 8.4-2.6 12 0" fill="none" stroke="#fff" stroke-width="1"/></svg>';
+
+// The previous owner's start page. It is somebody's habits — search, the front
+// pages they refreshed at night, what they read and listened to, the trip they
+// were planning — grouped and coloured the way a page of 1995 would, with a
+// little icon on every line. Everything here is a real address in the cache, so
+// each one goes somewhere; the melancholy is that the person does not.
 export function bookmarksPage(hosts, agent = 'Netscape Navigator 1.1') {
-  const search = hosts.find((h) => h.kind === 'search');
-  const tour = hosts.find((h) => h.kind === 'tourism');
+  const byKind = (k) => hosts.find((h) => h.kind === k);
+  const byName = (d) => hosts.find((h) => h.host === d || h.cached === d);
+  const row = (ico, host, label, note) => host
+    ? `<div class="bm-row">${BM_ICONS[ico] || ''}${link(host, label)}<span class="bm-note">${note}</span></div>`
+    : '';
+  const search = byKind('search');
+  const tour = byKind('tourism');
+  const cache = hosts.find((h) => h.kind === 'archive' && !h.cached);
+  const docs = byKind('docs');
+  const sec = (cls, title) => `<h2 class="bm-h ${cls}">${title}</h2>`;
   return [
-    '<h1>BOOKMARKS</h1>',
-    `<p>${agent} — bookmarks.htm</p>`,
-    '<hr>',
-    search ? link(search, 'AltaVista — search the web') : '',
-    tour ? link(tour, `${tour.place} Tourist Board — before you travel`) : '',
-    (hosts.find((h) => h.kind === 'docs')) ? link(hosts.find((h) => h.kind === 'docs'), 'AI-ML — engineering documentation') : '',
-    // ONE addition, deliberately: a bookmark list is somebody's habits, not a
-    // directory (New&Cool is the directory). The cache earns the slot because
-    // it is the one address that leads to all the rest.
-    (hosts.find((h) => h.kind === 'archive' && !h.cached))
-      ? link(hosts.find((h) => h.kind === 'archive' && !h.cached), 'cache — the old Net, as stored') : '',
-    // Somebody's habits, and this is the one everybody had. The front page is a
-    // list of rooms; whoever owned this machine had been going into one of them
-    // most nights.
-    // `host`, not `domain` — the cache's entries key the address under `host`
-    // and a `.domain` that is never set is undefined for every one of them, so
-    // the find failed silently and the bookmark simply was not there.
-    (hosts.find((h) => h.host === 'reddit.com'))
-      ? link(hosts.find((h) => h.host === 'reddit.com'), 'reddit — the front page') : '',
-    '<hr>',
+    `<div class="bm-band">${BM_GLOBE}<span class="bm-t">Bookmarks</span></div>`,
+    `<p class="bm-sub"><small>${agent} &mdash; file:///bookmarks.htm</small></p>`,
+    '<div class="bm">',
+    sec('bm-blue', 'Search the web'),
+    row('find', search, 'AltaVista', 'the whole Net, indexed'),
+    sec('bm-red', 'The front pages'),
+    row('talk', byName('reddit.com'), 'reddit', 'the front page of the internet'),
+    row('news', byName('slashdot.org'), 'Slashdot', 'news for nerds, stuff that matters'),
+    row('beeb', byName('bbc.co.uk'), 'BBC News', 'the world, still turning'),
+    sec('bm-purple', 'After hours'),
+    row('book', byName('goodreads.com'), 'Goodreads', 'the to-read shelf, never shorter'),
+    row('note', byName('soundonsound.com'), 'Sound on Sound', 'gear they could not afford'),
+    row('home', byName('geocities.com/siliconvalley/heights/4412'), 'a stranger&rsquo;s home page', 'best viewed at 800&times;600'),
+    sec('bm-green', 'Getting away'),
+    tour ? row('palm', tour, `${tour.place} Tourist Board`, 'before you travel') : '',
+    row('map', byName('roughguides.com'), 'Rough Guides', 'the trip that did not happen'),
+    sec('bm-steel', 'Reference &amp; work'),
+    row('globe', byName('wikipedia.org'), 'Wikipedia', 'the encyclopaedia anyone could edit'),
+    row('disk', cache, 'the cache', 'the old Net, as it was stored'),
+    row('gear', docs, 'AI-ML', 'engineering documentation'),
+    '</div>',
+    '<div class="bm-rainbow"></div>',
     '<p>Type an address to go there, or a link number to follow it.</p>',
     '<p><small>These are not yours. Whoever owned this machine was going somewhere.</small></p>',
   ].filter(Boolean).join('\n');
@@ -1259,6 +1320,214 @@ export function relayFile(name) {
   return f ? f.body : null;
 }
 
+// ---- The unit SDK -------------------------------------------------------
+// A relay carries more than the sniffer. This is the kit for the OTHER half
+// of what the network gives you: not just seeing the machines but reading
+// what they are running, writing them a new mind, and driving them by hand.
+// It downloads as a package rather than a file — one link, several files,
+// unpacked into /home/sdk on the NostBook, because the API only makes sense
+// as a reference plus the examples that use it. Everything here runs off no
+// AI key; reading a unit is free, writing one is the whole escalation.
+const SDK_GUIDE = [
+  'UNIT SDK — reading and rewriting the machines over the wire',
+  'RON field kit. Runs on a NostBook. Nothing here needs an AI key.',
+  '',
+  'Every unit on the estate network is a small web server. It serves the',
+  'program it is running, it will take a new one if you can reach it, and it',
+  'answers to its address whether or not it can see you. A scope and three',
+  'verbs are the whole of it.',
+  '',
+  '  sniffer            draw what the aerial hears: every unit, its id, its',
+  '                     address, its range, each name a link to that unit.',
+  '                     A separate download from this same relay. Run it',
+  '                     from the shell: sniffer',
+  '',
+  '  get <addr>         read a unit\'s running program to the screen. Free —',
+  '                     reading a box has never needed the hack. Keep a copy',
+  '                     with a redirect:  get 10.3.4.7 > u.ml  — then edit',
+  '                     that and post it back.',
+  '',
+  '  fetch "<addr>"     the same read, from inside a program: it returns the',
+  '                     program as a string, or "" when the unit is out of',
+  '                     range or dark. See braincode.ml.',
+  '',
+  '  post <file> <unit> write a program onto a unit. This is the escalation:',
+  '                     it changes what the machine does. The unit reads it',
+  '                     on its next decision, a quarter-second later, and its',
+  '                     page runs it once against the senses it has right now',
+  '                     and prints the branch it took — a program that faults',
+  '                     says so before you walk away.',
+  '',
+  'Addresses. A unit answers to its numeric address (10.3.4.7), to its id',
+  '(t1_03), and to that id as a name. The sniffer gives you all three. REPORT,',
+  'on a unit\'s own page, makes it hold still and blink so you can tell which of',
+  'four standing in front of you it is.',
+  '',
+  'What a program is. One expression, read whole, four times a second. It reads',
+  'the unit\'s senses and answers with what the unit should do. The branches of',
+  'an if are tried top to bottom and the first that holds wins, so put what must',
+  'always win — a flat cell — at the top.',
+  '',
+  '  senses   charge  integrity  range  home_range  threat  hurt  sight',
+  '           armed  work  linked      (not every chassis carries every one)',
+  '  intents  patrol  hunt  home  flee  wait  tend  route',
+  '  escort   follow (trail you) · defend (trail you and fight for you). A',
+  '           shooter defending fires on what hunts you; a melee one rams it.',
+  '  fire     a shooter answers a pair, [feet, fire] — the weapon word rides',
+  '           alongside the legs. A melee chassis faults on a pair.',
+  '  service  eye "red|amber|green|blue|white|off"    flash <n>    beep',
+  '  logo     move <dx> <dy> queues a leg; route walks the queue. ~ is minus.',
+  '           An eye order between two legs colours the leg after it. See',
+  '           logo.ml.',
+  '',
+  'A unit only does what its chassis can. Ask a T-1 to tend and it faults — no',
+  'toolhead — lights its amber lamp and falls back to its reflexes. The page',
+  'tells you why, so a wrong word costs you a lamp, not a guess.',
+  '',
+  'The examples in this folder',
+  '  reprogram.ml   strip the hunt: turn a hunter into a patroller, green-eyed',
+  '  braincode.ml   read a unit\'s mind with fetch',
+  '  logo.ml        drive a unit round a square, a colour to a side',
+  '  escort.ml      a bodyguard: trail you and fight what hunts you',
+  '',
+  '-- RON',
+].join('\n');
+
+const SDK_REPROGRAM_ML = [
+  '(* reprogram.ml — turn a hunter into something that leaves you alone. *)',
+  '(*                                                                    *)',
+  '(* The stock program hunts on `threat`. Take that branch away and the *)',
+  '(* unit has nothing to close on you with: it walks its patrol and goes *)',
+  '(* home when the cell runs low. The green eye is so you can pick the   *)',
+  '(* one you have turned out of a garrison that you have not.            *)',
+  '(*                                                                    *)',
+  '(* Get the id from the sniffer, then post it standing near the unit:   *)',
+  '(*   post sdk/reprogram.ml t1_03                                      *)',
+  '',
+  'eye "green" ; flash 1 ;',
+  'if charge < 15 then home',
+  'else patrol',
+].join('\n');
+
+const SDK_BRAINCODE_ML = [
+  '(* braincode.ml — read a unit\'s mind off its own web face.            *)',
+  '(*                                                                    *)',
+  '(* A unit serves its running program at program.ml, and reading it    *)',
+  '(* costs nothing: no hack, no key. fetch takes the address the        *)',
+  '(* sniffer gave you and hands back the program as a string, or ""      *)',
+  '(* when the unit is out of range or dark.                             *)',
+  '(*                                                                    *)',
+  '(* This one runs HERE, on the NostBook:  ml sdk/braincode.ml          *)',
+  '(* Change the address to the unit you want to read.                   *)',
+  '',
+  'let addr = "10.0.0.1" in',
+  'let mind = fetch addr in',
+  'if size mind == 0 then echo (addr ^ ": no answer")',
+  'else echo mind',
+].join('\n');
+
+const SDK_LOGO_ML = [
+  '(* logo.ml — drive a unit LOGO-style: a square, a new colour a side.  *)',
+  '(*                                                                    *)',
+  '(* move dx dy queues one leg; route walks the whole queue, a leg at a *)',
+  '(* time, and an eye order between two legs colours the leg after it.   *)',
+  '(* ~ is minus (a plain - would be read as subtraction). The unit must *)',
+  '(* have clear ground for each leg and charge above its home threshold. *)',
+  '(*                                                                    *)',
+  '(* Post it and watch it box the compass:  post sdk/logo.ml t1_03      *)',
+  '',
+  'eye "red"   ; move 4 0 ;',
+  'eye "green" ; move 0 4 ;',
+  'eye "blue"  ; move ~4 0 ;',
+  'eye "white" ; move 0 ~4 ;',
+  'route',
+].join('\n');
+
+const SDK_ESCORT_ML = [
+  '(* escort.ml — a bodyguard. Trail the player and fight for them.      *)',
+  '(*                                                                    *)',
+  '(* defend trails you and engages what hunts you: a W-4 or T-3 fires   *)',
+  '(* its laser on the attacker, a T-1/T-2/W-1 closes in and rams it.    *)',
+  '(* follow is the same trailing with no fighting — so drop to it when   *)',
+  '(* the cell runs low and let a tired escort keep station instead of   *)',
+  '(* charging a hunter it cannot see off.                               *)',
+  '(*                                                                    *)',
+  '(* Post it standing near the unit:  post sdk/escort.ml w4_02          *)',
+  '(* The blue eye is so you can tell your guard from the wild ones.     *)',
+  '',
+  'eye "blue" ;',
+  'if charge < 20 then follow',
+  'else defend',
+].join('\n');
+
+// The readme the package lays down over the pointer that shipped on the disk:
+// once the kit is here, the folder should say what it holds, not how to fetch
+// what it no longer lacks.
+const SDK_INSTALLED_README = [
+  'unit SDK — installed',
+  '',
+  'The kit is here. Start with GUIDE.txt: the network API for reading and',
+  'rewriting the machines, and the sense and intent words a unit program is',
+  'written in.',
+  '',
+  '  GUIDE.txt      the API reference',
+  '  reprogram.ml   strip the hunt: turn a hunter into a patroller',
+  '  braincode.ml   read a unit\'s mind with fetch  (runs here: ml sdk/braincode.ml)',
+  '  logo.ml        drive a unit round a square, a colour to a side',
+  '  escort.ml      a bodyguard: trail you and fight what hunts you',
+  '',
+  'The .ml examples meant for a MACHINE go onto one with post, standing',
+  'near it:  post sdk/reprogram.ml t1_03. braincode.ml runs on this laptop.',
+  '',
+  '-- RON',
+].join('\n');
+
+// The package the relay serves. A bundle rather than a file: `dir` is the
+// folder it unpacks into under /home, `files` are its contents. The download
+// handler in main.js creates the folder and writes each file, overwriting the
+// pointer readme with the installed one.
+export const SDK_FILES = [
+  { name: 'readme.txt', body: SDK_INSTALLED_README },
+  { name: 'GUIDE.txt', body: SDK_GUIDE },
+  { name: 'reprogram.ml', body: SDK_REPROGRAM_ML },
+  { name: 'braincode.ml', body: SDK_BRAINCODE_ML },
+  { name: 'logo.ml', body: SDK_LOGO_ML },
+  { name: 'escort.ml', body: SDK_ESCORT_ML },
+];
+
+// The checkpoint archive (#127 §3). Weight files, not code: two screens of
+// numbers each, three of them different from the next. A directory listing
+// tells you at a glance which files are weights and which are written.
+const CHECKPOINT_README = [
+  'RON // checkpoint archive',
+  '',
+  'Weights for the V-class. Post one to a courier and watch what changes.',
+  'Reading them will not tell you: that is what a checkpoint is.',
+  '',
+  ...CHECKPOINTS.map((c) => `  ${c.name.padEnd(30)} ${c.blurb}`),
+  '',
+  'Post one standing near the unit:  post weights/vector_scared.ml v1_04',
+  'Keep vector_courier.ml. A courier you have broken is one post from fixed.',
+  '',
+  '-- RON',
+].join('\n');
+
+export const CHECKPOINT_FILES = [
+  { name: 'readme.txt', body: CHECKPOINT_README },
+  ...CHECKPOINTS.map((c) => ({ name: c.name, body: c.body })),
+];
+
+export const RELAY_BUNDLES = [
+  { name: 'unit-sdk', dir: 'sdk', files: SDK_FILES,
+    blurb: 'the unit kit: read, rewrite and drive the machines over the wire' },
+  { name: 'checkpoints', dir: 'weights', files: CHECKPOINT_FILES,
+    blurb: 'pretrained weights for the V-class: four models, no training' },
+];
+
+export function relayBundle(name) {
+  return RELAY_BUNDLES.find((b) => b.name === name) || null;
+}
+
 // The relay's own status, the way a box built to be left alone reports itself:
 // what it is running on, what it is holding, and who else it can still hear.
 // Everything here is real state — the queue, the backup, the mesh, the light.
@@ -1313,8 +1582,10 @@ function relayPage(host) {
     ...relayRows(host.relay || {}),
     '<h2>Index of /</h2>',
     ...RELAY_FILES.map((f) => `<p><a href="ronfile:${f.name}">${f.name}</a> \u2014 ${f.blurb} <small>(${f.body.length} bytes)</small></p>`),
-    '<p>Saved files land in <code>/home/download</code>. The programs run on the',
-    'NostBook: <code>ml sniffer.ml</code>.</p>',
+    ...RELAY_BUNDLES.map((b) => `<p><a href="ronpkg:${b.name}">${b.name}</a> \u2014 ${b.blurb} <small>(package, ${b.files.length} files)</small></p>`),
+    '<p>A file lands in <code>/home/download</code>; a package unpacks into its',
+    'own folder under <code>/home</code>. The programs run on the NostBook:',
+    '<code>ml sniffer.ml</code>.</p>',
     '<h2>The air</h2>',
     '<p>The estate network is on the air wherever their towers stand, so it is',
     'what your card joins if you leave it alone. Come back to this one with',

@@ -21,6 +21,7 @@
 // player.js and this module import them from one place.
 
 import { ITEMS } from './items.js';
+import { achieveEvent } from './achieve.js';
 import { sfx } from '../engine/sound.js';
 
 // Survival score awards. A felled tree is the baseline point; skilled tools
@@ -82,6 +83,8 @@ function pierceShot(player, tool, map, animals, robots) {
     // zombie behaviour is gone; existing zombies still fall to it too).
     if (robot && tool.effect === 'burn') {
       e.hp = 0; e.hurt = true; wiped = true;
+      e._lastHitBy = 'weapon';
+      achieveEvent('handDamage', {});
       e.scrapPenalty = true; // gunfire ruins the salvage, this most of all
       player.sparkAt(map, e.x, e.y);
       // A KILL IS A KILL, whatever fired it. This paid a flat 2, so wiping a
@@ -95,6 +98,8 @@ function pierceShot(player, tool, map, animals, robots) {
     if (robot && zombieImmune(e, tool)) return;
     e.hp -= robot ? (tool.robotDamage + player.xpLevel('guns')) : (tool.animalDamage + player.xpLevel('guns'));
     e.hurt = true;
+    // The shot is yours: the kill will be attributed to your hand (KLEOS).
+    if (robot) { e._lastHitBy = 'weapon'; achieveEvent('handDamage', {}); }
     if (robot) { e.scrapPenalty = true; player.sparkAt(map, e.x, e.y); }
     player.gainXp('guns', e.hp <= 0 ? KILL_XP : 2);
     if (e.hp <= 0 && !robot) { e.dead = true; map.groundItems.push({ item: 'meat', qty: 1, x: e.x, y: e.y }); player.addScore(SCORE.animal); }
@@ -133,6 +138,7 @@ function coneShot(player, tool, map, animals, robots) {
     if (!map.hasLineOfSight(player.x, player.y, e.x, e.y)) return; // a wall shadows this one
     e.hp -= robot ? tool.robotDamage : tool.animalDamage;
     e.hurt = true;
+    if (robot) { e._lastHitBy = 'weapon'; achieveEvent('handDamage', {}); }
     if (robot) { e.scrapPenalty = true; player.sparkAt(map, e.x, e.y); }
     hitCount++;
     if (e.hp <= 0) killCount++;
@@ -313,6 +319,8 @@ export function fire(player, tool, map, animals, robots) {
     target.scrapPenalty = true; // gunfire mangles the salvage
     target.hp -= tool.robotDamage + player.xpLevel('guns');
     target.hurt = true;
+    target._lastHitBy = 'weapon';
+    achieveEvent('handDamage', {});
     player.sparkAt(map, target.x, target.y);
     player.gainXp('guns', target.hp <= 0 ? KILL_XP : 1);
     if (target.hp <= 0) player.addScore(SCORE.robot);
