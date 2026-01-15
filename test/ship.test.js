@@ -30,7 +30,7 @@ function shoreMap() {
 
 function stubShipwright({ x = 2.5, y = 2.5, wood = 12, recipe = true, parts = true } = {}) {
   const inv = { wood };
-  if (recipe) inv.golden_axe = 1;
+  if (recipe) inv.bronze_axe = 1;
   if (parts) { inv.oar = 1; inv.rope = 1; inv.sail = 1; }
   return {
     x, y, shipBuilt: false, said: [], _inv: inv,
@@ -70,7 +70,7 @@ test('greek ship: crafting consumes wood + parts, keeps the recipe, and beaches 
   assert.equal(p.countItem('oar'), 0);
   assert.equal(p.countItem('rope'), 0);
   assert.equal(p.countItem('sail'), 0);
-  assert.equal(p.countItem('golden_axe'), 1, 'recipe is NOT consumed');
+  assert.equal(p.countItem('bronze_axe'), 1, 'recipe is NOT consumed');
   assert.equal(p.shipBuilt, true);
   const ship = map.objects.find((o) => o.type === 'greek_ship');
   assert.ok(ship, 'a greek_ship object exists');
@@ -80,11 +80,21 @@ test('greek ship: crafting consumes wood + parts, keeps the recipe, and beaches 
 
 test('departure: a seaworthy greek ship leaves Ogygia', () => {
   const p = stubShipwright();
+  p.seaPermission = true;   // #141: the second gate, and Poseidon holds it
   p.boardBoat(shoreMap(), { seaworthy: true });
   assert.ok(p.deathCert, 'a certificate is issued');
   assert.equal(p.deathCert.escaped, true);
   assert.equal(p.deathCert.victory, true);
   assert.equal(p._ended, true);
+});
+
+test('#141: a sound ship without permission is turned back like any other', () => {
+  const p = stubShipwright();
+  p.seaPermission = false;
+  const x0 = p.x;
+  p.boardBoat(shoreMap(), { seaworthy: true });
+  assert.ok(!p.deathCert, 'the hull is sound and the sea still says no');
+  assert.notEqual(p.x, x0, 'and it puts you back on the sand');
 });
 
 test('departure: a plain boat (not seaworthy) is washed back, no escape', () => {

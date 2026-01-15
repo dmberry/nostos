@@ -30,6 +30,10 @@ export const FLOORS = {
   // ZEUS's fortress (the map's southern annex): a cold metal-panel deck
   // for the corridors and maze, a paved quadrangle for the open killing-ground,
   // and a dark charcoal deck for the inner sanctum. All walkable.
+  // CALYPSO's grove (F2a): the floor that draws figures in light. The base is
+  // the sanctum's own dark deck — the studs on top are the fortress's lights
+  // doing something else, so the ground under them is the same ground.
+  lumen:  { color: '#26282c', solid: false },
   panel:  { color: '#3c4045', solid: false },
   quad:   { color: '#55575c', solid: false },
   sanctum:{ color: '#26282c', solid: false },

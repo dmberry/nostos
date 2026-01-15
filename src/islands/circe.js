@@ -175,17 +175,17 @@ export function createCirce(seed) {
     obeliskObjs.forEach((ob, i) => { ob.circuitNum = nums[i]; });
   }
 
-  const fortress = createFortress(map, IS, spawn, {
+  const hold = createFortress(map, IS, spawn, {
     aiName: 'CIRCE', winMode: 'kill', obColor: OB_COLOR, obAlertColor: OB_ALERT,
   });
-  const mainframe = fortress.core;
+  const mainframe = hold.core;
 
   stampCoast(map, spawn);
   map.temples = placeRuins(map, makeRng((IS ^ 0x2c01dd) >>> 0), { spawn, clusters: 4 });
-  robots.push(...fortress.spawnGuards(spawnM4));
+  robots.push(...hold.spawnGuards(spawnM4));
   // A garrisoned labyrinth: M6 packs patrol the corridors, M5 snipers hold the
   // deep straights. Without this the maze is an empty walk to the quad.
-  robots.push(...fortress.garrisonMaze(spawnM6, spawnM5));
+  robots.push(...hold.garrisonMaze(spawnM6, spawnM5));
 
   // MOLY grows where HERMES stands. The relays are the god's gift on Aeaea: a
   // clutch of the herb at the foot of each TOR, so landing here is a race to a
@@ -265,7 +265,7 @@ export function createCirce(seed) {
     combat: true,
     transmute: true, // AEAEA: main.js runs CIRCE's swine-magic on you while you're ashore
   });
-  world.fortress = fortress;
+  world.hold = hold;
   world.wfactory = wfactory;
   world.mainframe = mainframe;
   world.torObjs = torObjs;

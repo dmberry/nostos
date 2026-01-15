@@ -47,13 +47,18 @@ test('every milestone names a real counter, and every badge a real event', () =>
 });
 
 test('thresholds ascend, and every dynamic target resolves to a real number', () => {
+  // TEN RUNGS, or fewer where ten would repeat themselves. A five-item
+  // collection cannot have ten distinct thresholds, and a panel showing five
+  // pips lit for one book read would be a lie about where you are — so the
+  // duplicates collapse and the track simply has fewer rungs.
   for (const t of TRACKS) {
     const tiers = tierThresholds(t);
-    assert.equal(tiers.length, 4, `${t.id} should have four tiers`);
+    assert.ok(tiers.length >= 1 && tiers.length <= 10, `${t.id} has ${tiers.length} tiers`);
+    if (Array.isArray(t.tiers)) assert.equal(tiers.length, 10, `${t.id} spells its rungs out; it should have ten`);
     for (let i = 1; i < tiers.length; i++) {
       assert.ok(tiers[i].at > tiers[i - 1].at, `${t.id} tier ${i} does not ascend`);
     }
-    assert.ok(tiers[3].name, `${t.id} has no summit name`);
+    assert.ok(tiers[tiers.length - 1].name, `${t.id} has no summit name on its last rung`);
     if (t.target) assert.ok(t.target() > 0, `${t.id} target is not positive`);
   }
 });
@@ -75,20 +80,29 @@ test('ids are unique across the registry', () => {
 // ---- tiers ------------------------------------------------------------------
 
 test('a track climbs its tiers as its counter fills, once each', () => {
-  for (let i = 0; i < 9; i++) assert.equal(kill().filter((a) => a.kind === 'tier').length, 0);
-  const awards = kill();                    // the tenth: WARRIOR I
-  const tier = awards.find((a) => a.kind === 'tier' && a.id === 'warrior');
-  assert.ok(tier, 'the tenth kill should award WARRIOR I');
-  assert.equal(tier.tier, 1);
-  assert.equal(tier.tierName, 'I');
-  for (let i = 0; i < 5; i++) assert.equal(kill().filter((a) => a.kind === 'tier').length, 0,
-    'a tier is awarded once, not on every event after it');
+  // WARRIOR's rungs are 1, 3, 6, ... so the first kill is I and the third is II.
+  // Read off the registry rather than hardcoded, so retuning the ladder does not
+  // break a test that is about the CLIMBING.
+  const at = tierThresholds(TRACKS.find((t) => t.id === 'warrior')).map((x) => x.at);
+  const first = kill().find((a) => a.kind === 'tier' && a.id === 'warrior');
+  assert.ok(first, `the first kill should award WARRIOR I (rung one is at ${at[0]})`);
+  assert.equal(first.tier, 1);
+  assert.equal(first.tierName, 'I');
+  // Nothing again until the next rung.
+  for (let n = at[0] + 1; n < at[1]; n++) {
+    assert.equal(kill().filter((a) => a.kind === 'tier').length, 0,
+      'a tier is awarded once, not on every event after it');
+  }
+  const second = kill().find((a) => a.kind === 'tier' && a.id === 'warrior');
+  assert.ok(second, `kill ${at[1]} should award WARRIOR II`);
+  assert.equal(second.tier, 2);
 });
 
 test('the summit tier carries the mythic name', () => {
-  for (let i = 0; i < 150; i++) kill();
+  const rungs = tierThresholds(TRACKS.find((t) => t.id === 'warrior'));
+  for (let i = 0; i < rungs[rungs.length - 1].at; i++) kill();
   const t = achieveModel().tracks.find((x) => x.id === 'warrior');
-  assert.equal(t.tier, 4);
+  assert.equal(t.tier, rungs.length, 'the summit is the last rung, whatever the count');
   assert.equal(t.tierLabel, 'ACHILLES');
   assert.ok(t.summited);
 });
@@ -203,19 +217,37 @@ test('laurels are judged per island — a break elsewhere does not cost this one
 
 // ---- scopes -----------------------------------------------------------------
 
-test('the profile outlives the run; the run does not', () => {
+// CHANGED ON PURPOSE at v1.507. Badges and tiers used to survive death, on the
+// argument that kleos is the glory which outlives the run. In play a fresh run
+// opened the panel already showing a wall of earned badges, which reads as the
+// game claiming credit you have not earned (David, 2026-08-13). A run's song is
+// the run's; the lifetime view is a tab, and the MILESTONES are what genuinely
+// outlive you.
+test('death takes the run with it, and the lifetime view keeps its own count', () => {
   for (let i = 0; i < 10; i++) kill();
   achieveEvent('summit', {});
-  const before = achieveModel();
-  assert.equal(before.tracks.find((t) => t.id === 'warrior').tier, 1);
+  const reached = achieveModel().tracks.find((t) => t.id === 'warrior').tier;
+  assert.ok(reached > 0, 'ten kills should be worth some rungs');
+  assert.ok(achieveModel().badges.find((b) => b.id === 'pilgrim').earned);
 
   resetRun();      // death, or a New Game
-  const after = achieveModel();
-  assert.equal(after.tracks.find((t) => t.id === 'warrior').tier, 1, 'kleos survives the run');
-  assert.ok(after.badges.find((b) => b.id === 'pilgrim').earned, 'so does a badge');
+
+  const now = achieveModel();
+  assert.equal(now.tracks.find((t) => t.id === 'warrior').tier, 0, 'the run starts at nothing');
+  assert.ok(!now.badges.find((b) => b.id === 'pilgrim').earned, 'and so do its badges');
   assert.equal(achieveRunState().counters.unitKillsByHand || 0, 0, 'the run starts clean');
-  assert.ok(achieveModel().tracks.find((t) => t.id === 'pacifist').purity.intact,
+  assert.ok(now.tracks.find((t) => t.id === 'pacifist').purity.intact,
     'and its purity starts intact again');
+
+  // ALL GAMES still remembers, which is the point of having three views.
+  const all = achieveModel('all');
+  assert.ok(all.badges.find((b) => b.id === 'pilgrim').earned, 'the lifetime tally holds it');
+  assert.equal(all.tracks.find((t) => t.id === 'warrior').tier, reached, 'and the best tier reached');
+
+  // LAST GAME is the run that just ended, whole.
+  const last = achieveModel('last');
+  assert.ok(last.badges.find((b) => b.id === 'pilgrim').earned, 'the finished run kept its badges');
+  assert.equal(last.tracks.find((t) => t.id === 'warrior').tier, reached);
 });
 
 test('both scopes survive a JSON round trip', () => {
@@ -228,7 +260,12 @@ test('both scopes survive a JSON round trip', () => {
   const m = achieveModel();
   assert.equal(m.tracks.find((t) => t.id === 'warrior').have, 12);
   assert.equal(m.tracks.find((t) => t.id === 'librarian').have, 1);
-  assert.equal(m.tracks.find((t) => t.id === 'warrior').tier, 1);
+  // The TIER has to come back too, not just the counter it was earned from —
+  // tiers live in the run scope now, so a round trip that dropped them would
+  // silently re-award every rung on the next kill.
+  const rungs = tierThresholds(TRACKS.find((t) => t.id === 'warrior')).map((x) => x.at);
+  const want = rungs.filter((a) => a <= 12).length;
+  assert.equal(m.tracks.find((t) => t.id === 'warrior').tier, want);
 });
 
 test('an unknown award id from another build is kept, not eaten', () => {

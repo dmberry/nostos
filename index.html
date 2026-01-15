@@ -225,19 +225,36 @@
   #help .helpPanel { display: none; }
   #help .helpPanel.active { display: block; }
   #help .settingsRow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  /* Custom range: the fill goes edge-to-edge (0%→100%) via a gradient driven by
-     the --v var (set in main.js), so it truly hits empty/full with no end gap. */
-  #help .settingsRow input[type="range"] { width: 220px; height: 10px; -webkit-appearance: none; appearance: none;
+  /* Custom range. THE THUMB IS DRAWN, not the browser's.
+     A native range thumb cannot reach either end of its track — it stops half
+     its own width short at each — so a fill drawn to the true percentage runs
+     past it at 100% and sits behind it at 0%, and the two only agree halfway.
+     Compensating for that is possible and fiddly; not having the problem is
+     better. The real thumb is kept for the dragging and made invisible, and the
+     visible one is drawn in the same background stack as the fill, centred on
+     --v. Both read the one number, so they cannot disagree.
+
+     The thumb is an SVG rather than a gradient because it is a SQUIRCLE, and a
+     radial-gradient can only give you a circle. `calc(var(--v) - 9px)` puts its
+     centre on --v rather than its left edge, so it still reaches both ends. */
+  #help .settingsRow input[type="range"] { width: 220px; height: 14px; -webkit-appearance: none; appearance: none;
     border-radius: 5px; cursor: pointer; outline: none; margin: 0;
-    background: linear-gradient(to right, #9db284 0, #9db284 var(--v, 100%), #3b4231 var(--v, 100%), #3b4231 100%); }
-  #help .settingsRow input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px;
-    border-radius: 50%; background: #eef3e6; border: 2px solid #4a5340; box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
-  #help .settingsRow input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; border: 2px solid #4a5340;
-    border-radius: 50%; background: #eef3e6; box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
+    background-image:
+      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='18' height='18'><rect x='1.5' y='1.5' width='15' height='15' rx='5' ry='5' fill='%23eef3e6' stroke='%234a5340' stroke-width='2'/></svg>"),
+      linear-gradient(to right, #9db284 0, #9db284 var(--v, 100%), #3b4231 var(--v, 100%), #3b4231 100%);
+    background-repeat: no-repeat, no-repeat;
+    background-position: calc(var(--v, 100%) - 9px) center, 0 0;
+    background-size: 18px 18px, 100% 100%; }
+  /* Invisible, and still the thing you grab: hiding it entirely would take the
+     drag with it. */
+  #help .settingsRow input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px;
+    border-radius: 5px; background: transparent; border: none; opacity: 0; }
+  #help .settingsRow input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border: none;
+    border-radius: 5px; background: transparent; opacity: 0; }
   #help .musicChoice label { display: inline-flex; align-items: center; gap: 5px;
     color: #cfd8c3; font-size: 13px; margin-right: 4px; cursor: pointer; }
   #help .musicChoice input[type="radio"] { accent-color: #9db284; flex: 0 0 auto; width: 14px; height: 14px; margin: 0; }
-  #help #volumeLabel { color: #9db284; font: 12px ui-monospace, monospace; min-width: 38px; }
+  #help #volumeLabel, #help #fxLabel, #help #musicLabel { color: #9db284; font: 12px ui-monospace, monospace; min-width: 38px; }
   /* Obelisk terminal — a VT220-ish green CRT. */
   #obterminal { display: none; position: fixed; inset: 0; z-index: 20;
     background: rgba(0,0,0,0.72); align-items: center; justify-content: center; }
@@ -1253,13 +1270,25 @@
       <input type="range" id="volumeSlider" min="0" max="100" value="100">
       <span id="volumeLabel">100%</span>
     </p>
+    <p class="meta">Everything at once.</p>
+
+    <h2>Sound</h2>
+    <p class="settingsRow">
+      <input type="range" id="fxSlider" min="0" max="100" value="100">
+      <span id="fxLabel">100%</span>
+    </p>
+    <p class="meta">Footsteps, weather, machines, the sea. And the robot choir, which is singing but is something you made happen.</p>
 
     <h2>Music</h2>
+    <p class="settingsRow">
+      <input type="range" id="musicSlider" min="0" max="100" value="70">
+      <span id="musicLabel">70%</span>
+    </p>
     <p class="settingsRow musicChoice">
       <label><input type="radio" name="musicMode" value="synth"> piano bed</label>
       <label><input type="radio" name="musicMode" value="off"> off</label>
     </p>
-    <p class="meta">Same as pressing <kbd>M</kbd>. Found tapes play on the <b>walkman</b> on the dashboard, not here.</p>
+    <p class="meta">The bed and the <b>walkman</b> together. The radio buttons are the same as pressing <kbd>M</kbd>; the slider is how loud it is when it is on.</p>
     </div><!-- /settings -->
 
     <p class="meta">Press <kbd>H</kbd> or click anywhere outside this panel to close.</p>

@@ -727,7 +727,29 @@ export const uiMethods = {
     const ctx = this.ctx;
     ctx.fillStyle = 'rgba(4,6,3,0.85)';
     ctx.fillRect(0, 0, this.w, this.h);
-    const pw = Math.min(496, this.w - 48), ph = 390;
+    // The sheet has to hold the song as well as the ledger (#134), so it is
+    // sized to what this run actually earned: no badges and it stays short.
+    const K = cert.kleos || null;
+    const earned = K ? K.badges.filter((b) => b.earned) : [];
+    const climbed = K ? K.tracks.filter((t) => t.tier > 0 || t.summited) : [];
+    const lifetime = K ? K.milestones.filter((m) => m.earned) : [];
+    const perRow = 12;
+    const badgeRows = Math.ceil(earned.length / perRow);
+    const pw = Math.min(520, this.w - 48);
+    // The rank is set from the BOTTOM of the sheet and the song flows down from
+    // the ledger, so the height has to be the real sum of what gets drawn or
+    // the two collide. Measured, not estimated.
+    const songH = (withBadges) => (K
+      ? 34 + climbed.length * 19
+        + (earned.length && withBadges ? 34 + badgeRows * 26 : earned.length ? 18 : 0)
+        + (lifetime.length ? 18 : 0)
+      : 0);
+    const BASE = 458;                       // title, epitaph, four ledger rows, footer
+    const room = this.h - 24;
+    // On a short window the badge grid is the first thing to go: the count line
+    // says the same in one line, and a crushed sheet says nothing.
+    const showBadges = BASE + songH(true) <= room;
+    const ph = Math.min(room, BASE + songH(showBadges));
     const px = Math.round((this.w - pw) / 2), py = Math.round((this.h - ph) / 2);
     this._certBounds = { x: px, y: py, w: pw, h: ph }; // for the S-to-share capture
     const cx = px + pw / 2;
@@ -803,6 +825,69 @@ export const uiMethods = {
     row('Final score', cert.score);
     row('Skills mastered', cert.skills.length ? cert.skills.join(', ') : 'none');
     row('Deaths so far', cert.deaths);
+    if (cert.killLog && cert.killLog.length) row('Obelisks downed', cert.killLog.join(', '));
+
+    // THE SONG (#134). The certificate is the run's KLEOS set on paper: the
+    // tracks it climbed, the badges it earned drawn as their own shapes, and
+    // what carries over into the next life. A run that earned nothing still
+    // gets the heading and the line saying so.
+    if (K) {
+      y += 4;
+      ctx.strokeStyle = 'rgba(150,120,74,0.55)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(lx, y - 8); ctx.lineTo(px + pw - 58, y - 8); ctx.stroke();
+      ctx.textAlign = 'center';
+      ctx.font = 'italic 15px Georgia, serif'; ctx.fillStyle = FAINT;
+      ctx.fillText('the song of this run', cx, y + 10);
+      ctx.textAlign = 'left';
+      y += 30;
+
+      ctx.font = '15px Georgia, serif';
+      if (climbed.length) {
+        for (const t of climbed) {
+          ctx.fillStyle = t.summited ? '#7a5a12' : VAL;
+          ctx.fillText(`${t.name} ${t.tierLabel}`, lx, y);
+          ctx.fillStyle = FAINT;
+          ctx.font = 'italic 14px Georgia, serif';
+          ctx.fillText(t.summited ? `${t.summitName} — all of it` : `${t.have} ${t.unit || ''}`.trim(),
+            lx + 168, y);
+          ctx.font = '15px Georgia, serif';
+          y += 19;
+        }
+      } else {
+        ctx.fillStyle = FAINT;
+        ctx.font = 'italic 15px Georgia, serif';
+        ctx.fillText('No track was climbed, and no device earned.', lx, y);
+        y += 19;
+      }
+
+      if (earned.length && !showBadges) {
+        ctx.fillStyle = FAINT;
+        ctx.font = 'italic 14px Georgia, serif';
+        ctx.fillText(`${earned.length} of ${K.badges.length} devices earned`, lx, y + 4);
+        y += 18;
+      } else if (earned.length) {
+        y += 14;
+        const bs = 22, gap = 4;
+        const pal = { ink: '#6b4f1c', dim: 'rgba(58,46,31,0.18)', fill: 'rgba(150,120,42,0.14)' };
+        earned.forEach((b, i) => {
+          this._kleosBadge(lx + (i % perRow) * (bs + gap),
+            y + Math.floor(i / perRow) * (bs + gap), bs, b, pal);
+        });
+        y += badgeRows * (bs + gap) + 2;
+        ctx.fillStyle = FAINT;
+        ctx.font = 'italic 13px Georgia, serif';
+        ctx.fillText(`${earned.length} of ${K.badges.length} devices`, lx, y + 11);
+        y += 20;
+      }
+
+      if (lifetime.length) {
+        ctx.fillStyle = FAINT;
+        ctx.font = 'italic 13px Georgia, serif';
+        const line = this._clampText(ctx, `carried over: ${lifetime.map((m) => m.name).join(' · ')}`,
+          pw - 116);
+        ctx.fillText(line, lx, y + 8);
+      }
+    }
 
     // Rank, carved, with a small "rank:" label so it reads as a grade. The
     // label + engraved title are centred together as one group.
@@ -2743,11 +2828,15 @@ export const uiMethods = {
     return 'star';
   },
 
-  _kleosBadge(x, y, s, badge) {
+  // `pal` overrides the panel's gold-on-dark for a surface that is not the
+  // panel — the death certificate prints the same shapes in sepia on paper.
+  _kleosBadge(x, y, s, badge, pal) {
     const ctx = this.ctx;
     const lit = badge.earned;
-    const ink = lit ? (badge.ai ? '#7fd0ff' : '#e8c96a') : 'rgba(207,216,195,0.22)';
-    const fill = lit ? (badge.ai ? 'rgba(60,120,160,0.30)' : 'rgba(150,120,40,0.28)') : 'rgba(255,255,255,0.03)';
+    const ink = pal ? (lit ? pal.ink : pal.dim)
+      : lit ? (badge.ai ? '#7fd0ff' : '#e8c96a') : 'rgba(207,216,195,0.22)';
+    const fill = pal ? (lit ? pal.fill : 'rgba(0,0,0,0)')
+      : lit ? (badge.ai ? 'rgba(60,120,160,0.30)' : 'rgba(150,120,40,0.28)') : 'rgba(255,255,255,0.03)';
     const cx = x + s / 2, cy = y + s / 2, r = s * 0.42;
     ctx.save();
     ctx.lineWidth = 1.4;
@@ -2808,23 +2897,31 @@ export const uiMethods = {
 
   // The four tier pips a track climbs. The last is the summit, drawn as a star
   // rather than a diamond, so a finished track is visibly finished.
-  _kleosPips(x, y, tier, total = 4) {
+  // `total` is the track's OWN rung count now, not a constant: a five-item
+  // collection has five rungs and drawing ten pips for it would be inventing
+  // four. `step` shrinks with the count so ten still fit the column that four
+  // used to, and the pips scale with it.
+  _kleosPips(x, y, tier, total = 10, step = 11) {
     const ctx = this.ctx;
+    // The pip grows with its spacing rather than being pinned at the size it
+    // needed when there were four of them in a narrow column.
+    const sc = Math.max(0.6, Math.min(1.5, step / 11));
     ctx.save();
     for (let i = 0; i < total; i++) {
-      const cx = x + i * 11, cy = y;
+      const cx = x + i * step, cy = y;
       const on = i < tier;
       ctx.fillStyle = on ? '#e8c96a' : 'rgba(207,216,195,0.18)';
       ctx.beginPath();
       if (i === total - 1) {
         for (let k = 0; k < 10; k++) {
           const a = (Math.PI / 5) * k - Math.PI / 2;
-          const rr = k % 2 ? 1.9 : 4.2;
+          const rr = (k % 2 ? 1.9 : 4.2) * sc;
           const px = cx + Math.cos(a) * rr, py = cy + Math.sin(a) * rr;
           k ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
         }
       } else {
-        ctx.moveTo(cx, cy - 3.6); ctx.lineTo(cx + 3.2, cy); ctx.lineTo(cx, cy + 3.6); ctx.lineTo(cx - 3.2, cy);
+        ctx.moveTo(cx, cy - 3.6 * sc); ctx.lineTo(cx + 3.2 * sc, cy);
+        ctx.lineTo(cx, cy + 3.6 * sc); ctx.lineTo(cx - 3.2 * sc, cy);
       }
       ctx.closePath(); ctx.fill();
     }
@@ -2839,18 +2936,234 @@ export const uiMethods = {
     return t + '…';
   },
 
+  // ---- CALYPSO's cabinet: draughts, in NeXTSTEP chrome ---------------------
+  //
+  // Her machine is a NeXT running Mach (docs/ai-codebase-plan.md §3b), and it
+  // must look NOTHING like the estate's green obelisk consoles. Warm greys, a
+  // ribbed title bar, bevelled buttons, black Helvetica: the friendly face over
+  // the microkernel, which is the island's argument told in chrome rather than
+  // in prose.
+
+  // A NeXT bevel: light from the top-left, dark to the bottom-right. `out`
+  // false sinks the panel instead of raising it.
+  _nextBevel(x, y, w, h, out = true) {
+    const ctx = this.ctx;
+    ctx.fillStyle = out ? '#e6e6e6' : '#7d7d7d';
+    ctx.fillRect(x, y, w, 1); ctx.fillRect(x, y, 1, h);
+    ctx.fillStyle = out ? '#7d7d7d' : '#e6e6e6';
+    ctx.fillRect(x, y + h - 1, w, 1); ctx.fillRect(x + w - 1, y, 1, h);
+  },
+
+  // The ribbed title bar every NeXT window wore, with the title knocked out of
+  // the middle of the ribbing.
+  _nextTitleBar(x, y, w, title) {
+    const ctx = this.ctx;
+    const H = 20;
+    ctx.fillStyle = '#aaaaaa';
+    ctx.fillRect(x, y, w, H);
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    for (let i = 3; i < H - 3; i += 2) ctx.fillRect(x + 3, y + i, w - 6, 1);
+    ctx.font = 'bold 12px Helvetica, system-ui, sans-serif';
+    const tw = ctx.measureText(title).width;
+    const tx = x + (w - tw) / 2;
+    ctx.fillStyle = '#aaaaaa';
+    ctx.fillRect(tx - 8, y + 2, tw + 16, H - 4);
+    ctx.fillStyle = '#161616';
+    ctx.textAlign = 'left';
+    ctx.fillText(title, tx, y + 14);
+    this._nextBevel(x, y, w, H);
+    return H;
+  },
+
+  _nextButton(x, y, w, h, label, on = false) {
+    const ctx = this.ctx;
+    ctx.fillStyle = on ? '#8f8f8f' : '#bdbdbd';
+    ctx.fillRect(x, y, w, h);
+    this._nextBevel(x, y, w, h, !on);
+    ctx.fillStyle = '#141414';
+    ctx.font = '11px Helvetica, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, x + w / 2, y + h / 2 + 4);
+    ctx.textAlign = 'left';
+    return { x, y, w, h, label };
+  },
+
+  drawDraughts(cab) {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.fillStyle = 'rgba(20,20,22,0.92)';
+    ctx.fillRect(0, 0, this.w, this.h);
+
+    // The window. Board on the left, her scoreboard down the right.
+    const cell = Math.max(22, Math.min(46, Math.floor(Math.min((this.w - 300) / 8, (this.h - 150) / 8))));
+    const bw = cell * 8;
+    const side = 210;
+    const pad = 12;
+    const winW = bw + side + pad * 3;
+    const winH = bw + pad * 2 + 20 + 34;
+    const wx = Math.round((this.w - winW) / 2), wy = Math.round((this.h - winH) / 2);
+
+    ctx.fillStyle = '#aaaaaa';
+    ctx.fillRect(wx, wy, winW, winH);
+    this._nextBevel(wx, wy, winW, winH);
+    const barH = this._nextTitleBar(wx, wy, winW, 'Draughts');
+
+    const bx = wx + pad, by = wy + barH + pad;
+
+    // ---- the board ---------------------------------------------------------
+    // Sunk into the window, the way a NeXT content view sits.
+    this._nextBevel(bx - 2, by - 2, bw + 4, bw + 4, false);
+    const picked = cab.sel;
+    const dests = picked != null ? this._dgDests(cab) : [];
+    for (let r = 0; r < 8; r++) {
+      for (let c = 0; c < 8; c++) {
+        const dark = ((r + c) & 1) === 1;
+        const x = bx + c * cell, y = by + r * cell;
+        ctx.fillStyle = dark ? '#6f6f6f' : '#c8c8c8';
+        ctx.fillRect(x, y, cell, cell);
+        const sq = r * 8 + c;
+        if (sq === picked) { ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fillRect(x, y, cell, cell); }
+        else if (dests.includes(sq)) {
+          ctx.fillStyle = 'rgba(255,255,255,0.22)';
+          ctx.beginPath(); ctx.arc(x + cell / 2, y + cell / 2, cell * 0.16, 0, Math.PI * 2); ctx.fill();
+        }
+        const p = (cab.phase === 'selfplay' ? cab.self.game : cab.game).board[sq];
+        if (!p) continue;
+        const black = p === 'b' || p === 'B';
+        const king = p === 'B' || p === 'W';
+        const cx = x + cell / 2, cy = y + cell / 2, rad = cell * 0.36;
+        ctx.beginPath(); ctx.arc(cx, cy + 1.5, rad, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fill();
+        ctx.beginPath(); ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+        ctx.fillStyle = black ? '#20242c' : '#efece4'; ctx.fill();
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = black ? '#454b57' : '#a9a498'; ctx.stroke();
+        if (king) {
+          ctx.beginPath(); ctx.arc(cx, cy, rad * 0.52, 0, Math.PI * 2);
+          ctx.strokeStyle = black ? '#8f9cb5' : '#8a8578'; ctx.lineWidth = 2; ctx.stroke();
+        }
+      }
+    }
+    this._dgBoard = { x: bx, y: by, cell };
+
+    // ---- the scoreboard ----------------------------------------------------
+    const sx = bx + bw + pad, sy = by;
+    ctx.fillStyle = '#9d9d9d';
+    ctx.fillRect(sx, sy, side, bw);
+    this._nextBevel(sx, sy, side, bw, false);
+    ctx.fillStyle = '#141414';
+    ctx.font = 'bold 11px Helvetica, system-ui, sans-serif';
+    ctx.fillText('RECORD', sx + 8, sy + 16);
+    ctx.font = '10px Helvetica, system-ui, sans-serif';
+    let y = sy + 32;
+    const t = cab.totals;
+    const line = (a, b) => {
+      ctx.fillStyle = '#2a2a2a'; ctx.fillText(a, sx + 8, y);
+      ctx.textAlign = 'right'; ctx.fillText(String(b), sx + side - 8, y); ctx.textAlign = 'left';
+      y += 13;
+    };
+    line('games on file', t.played + cab.played);
+    line('against the guest', t.guest + cab.played);
+    line('guest wins', t.guestWins + cab.youWon);
+    line('drawn', t.draws);
+    y += 6;
+
+    // The tail. The OPPONENT column is the thing worth reading: most of these
+    // say CALYPSO, and nothing in the game points that out.
+    ctx.fillStyle = '#141414';
+    ctx.font = 'bold 10px Helvetica, system-ui, sans-serif';
+    ctx.fillText('NO.   OPPONENT     RESULT', sx + 8, y); y += 12;
+    ctx.font = '10px Helvetica, system-ui, sans-serif';
+    const tail = cab.prior.slice(-7).concat(cab.log);
+    for (const g of tail.slice(-Math.max(4, Math.floor((sy + bw - y - 8) / 12)))) {
+      ctx.fillStyle = g.opponent === 'GUEST' ? '#1d1d1d' : '#4a4a4a';
+      ctx.fillText(String(g.no).padStart(4, ' '), sx + 8, y);
+      ctx.fillText(g.opponent, sx + 46, y);
+      ctx.fillText(g.result, sx + 132, y);
+      y += 12;
+      if (y > sy + bw - 8) break;
+    }
+
+    // ---- the buttons and the state line ------------------------------------
+    const byy = by + bw + 8;
+    this._dgButtons = [];
+    if (cab.phase === 'selfplay') {
+      // Nothing to press while she is playing herself. You watch.
+    } else if (cab.phase === 'attract') {
+      this._dgButtons.push({ ...this._nextButton(bx, byy, 92, 24, 'New Game'), id: 'start' });
+    } else if (cab.phase === 'over') {
+      this._dgButtons.push({ ...this._nextButton(bx, byy, 92, 24, 'Play Again'), id: 'start' });
+      this._dgButtons.push({ ...this._nextButton(bx + 100, byy, 72, 24, 'Leave'), id: 'close' });
+    } else {
+      this._dgButtons.push({ ...this._nextButton(bx, byy, 72, 24, 'Resign'), id: 'resign' });
+      this._dgButtons.push({ ...this._nextButton(bx + 80, byy, 72, 24, 'Leave'), id: 'close' });
+    }
+
+    ctx.font = '11px Helvetica, system-ui, sans-serif';
+    ctx.fillStyle = '#1c1c1c';
+    let status;
+    if (cab.phase === 'attract') status = 'CALYPSO is Black, and Black opens.';
+    else if (cab.phase === 'thinking') status = 'CALYPSO is thinking...';
+    else if (cab.phase === 'selfplay') {
+      const sp = cab.self;
+      status = `CALYPSO v CALYPSO — game ${Math.min(sp.games + 1, 3)}${sp.results.length ? `  (${sp.results.join(', ')})` : ''}`;
+    } else if (cab.phase === 'over') { const c = this._dgCard(cab); status = `${c.head}. ${c.sub}`; }
+    else status = cab.message || 'Your move.';
+    ctx.fillText(status, bx + (cab.phase === 'attract' ? 104 : 164), byy + 16);
+
+    if (cab.streak >= 2 && cab.phase !== 'selfplay') {
+      ctx.fillStyle = '#3a3a3a';
+      ctx.font = 'italic 10px Helvetica, system-ui, sans-serif';
+      ctx.fillText(`resigned ${cab.streak} in a row`, sx + 8, byy + 16);
+    }
+
+    ctx.restore();
+  },
+
+  // Kept as tiny hooks so the draw method needs no import from the session.
+  _dgDests(cab) { return cab._dests || []; },
+  _dgCard(cab) { return cab._card || { head: '', sub: '' }; },
+
+  /** Which square a click landed on, or null. */
+  draughtsSquareAt(mx, my) {
+    const b = this._dgBoard;
+    if (!b) return null;
+    const c = Math.floor((mx - b.x) / b.cell), r = Math.floor((my - b.y) / b.cell);
+    if (r < 0 || c < 0 || r > 7 || c > 7) return null;
+    return r * 8 + c;
+  },
+
+  /** Which cabinet button a click landed on, or null. */
+  draughtsButtonAt(mx, my) {
+    for (const b of (this._dgButtons || [])) {
+      if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h) return b.id;
+    }
+    return null;
+  },
+
   drawKleosModal(model) {
+    const KLEOS_TABS = [
+      { id: 'run', label: 'THIS GAME' },
+      { id: 'last', label: 'LAST GAME' },
+      { id: 'all', label: 'ALL GAMES' },
+    ];
     const ctx = this.ctx;
     ctx.fillStyle = 'rgba(6,8,5,0.86)';
     ctx.fillRect(0, 0, this.w, this.h);
+    // THE PANEL IS THE SIZE IT WAS. The problem was never that it wanted more
+    // room — it was that a fifth of each row went to the pips and the rest to
+    // white space (David, 2026-08-13). The columns below take a real share of
+    // what is already there.
     const wide = this.w >= 700;
     const pw = Math.min(wide ? 760 : 420, this.w - 24);
     const k = Math.max(0.72, Math.min(1, pw / 760));
     const fs = (n) => `${Math.round(n * k)}px system-ui, sans-serif`;
     const fsb = (n) => `bold ${Math.round(n * k)}px system-ui, sans-serif`;
     const pad = Math.round(18 * k);
-    const trackRow = Math.round(26 * k);
-    const bs = Math.round(26 * k), bgap = Math.round(5 * k);   // badge cell + gap
+    // Room to breathe. At 26 the rows sat on each other and ten pips had nowhere
+    // vertical to be either.
+    const trackRow = Math.round(34 * k);
+    const bs = Math.round(28 * k), bgap = Math.round(7 * k);   // badge cell + gap
     const colW = wide ? Math.round((pw - pad * 3) / 2) : pw - pad * 2;
     const perRow = Math.max(6, Math.floor((colW + bgap) / (bs + bgap)));
     const badgeRows = Math.ceil(model.badges.length / perRow);
@@ -2863,7 +3176,15 @@ export const uiMethods = {
     const hBadges = Math.round(30 * k) + badgeRows * (bs + bgap)
       + Math.round(26 * k) + killRows * Math.round(13 * k);
     const body = wide ? Math.max(hTracks, hBadges) : hTracks + hBadges;
-    const ph = Math.min(this.h - 24, Math.round(76 * k) + body + pad * 2);
+    // MEASURED, not estimated. The height used to come from a formula that
+    // guessed the badge grid's row count and the ledger's line count, and it
+    // guessed high — the panel ended in a hand's width of nothing (David,
+    // 2026-08-13). The draw now records where its content actually stopped and
+    // the next frame sizes to that; the estimate is only the first frame's
+    // fallback. There is no feedback loop, because nothing in the layout below
+    // reads the panel's HEIGHT — only its width.
+    const est = Math.round(94 * k) + body + pad * 2;
+    const ph = Math.min(this.h - 24, this._kleosContentH || est);
     const px = Math.round((this.w - pw) / 2), py = Math.round((this.h - ph) / 2);
     this._kleosRect = { x: px, y: py, w: pw, h: ph };   // click-away-to-close (main.js)
 
@@ -2878,7 +3199,7 @@ export const uiMethods = {
     ctx.fillText('KLEOS', px + pad, py + Math.round(30 * k));
     ctx.font = fs(11);
     ctx.fillStyle = 'rgba(207,216,195,0.55)';
-    ctx.fillText('the song of this run — 9 or Esc to close', px + pad + Math.round(62 * k), py + Math.round(30 * k));
+    ctx.fillText('9 or Esc to close', px + pad + Math.round(62 * k), py + Math.round(30 * k));
     const hrs = Math.floor((model.playSeconds || 0) / 3600);
     ctx.textAlign = 'right';
     ctx.fillText(`day ${model.day || 0}${hrs ? ` · ${hrs}h played` : ''}`, px + pw - pad, py + Math.round(30 * k));
@@ -2886,9 +3207,31 @@ export const uiMethods = {
     ctx.strokeStyle = 'rgba(207,216,195,0.18)';
     ctx.beginPath(); ctx.moveTo(px + pad, py + Math.round(44 * k)); ctx.lineTo(px + pw - pad, py + Math.round(44 * k)); ctx.stroke();
 
+    // THREE VIEWS, as tabs (David, 2026-08-13). The scope question — is a badge
+    // this run's or a lifetime's — had no answer that was right for everybody
+    // looking at the panel, so the panel answers all three and lets you pick.
+    // The hit rects go on the instance for main.js to click-test, the same way
+    // the badge cells do.
+    this._kleosTabs = [];
+    {
+      let tx = px + pad;
+      const ty = py + Math.round(58 * k);
+      ctx.font = fsb(10);
+      for (const t of KLEOS_TABS) {
+        const w = Math.round(ctx.measureText(t.label).width) + Math.round(16 * k);
+        const on = (model.scope || 'run') === t.id;
+        ctx.fillStyle = on ? 'rgba(232,201,106,0.16)' : 'rgba(207,216,195,0.05)';
+        ctx.fillRect(tx, ty - Math.round(11 * k), w, Math.round(17 * k));
+        ctx.fillStyle = on ? '#e8c96a' : 'rgba(207,216,195,0.5)';
+        ctx.fillText(t.label, tx + Math.round(8 * k), ty);
+        this._kleosTabs.push({ x: tx, y: ty - Math.round(11 * k), w, h: Math.round(17 * k), id: t.id });
+        tx += w + Math.round(5 * k);
+      }
+    }
+
     // ---- tracks
     const lx = px + pad;
-    let y = py + Math.round(66 * k);
+    let y = py + Math.round(84 * k);
     ctx.font = fsb(10);
     ctx.fillStyle = 'rgba(207,216,195,0.5)';
     ctx.fillText('TRACKS', lx, y); y += Math.round(16 * k);
@@ -2901,40 +3244,48 @@ export const uiMethods = {
         x: lx, y: y - Math.round(11 * k), w: colW, h: trackRow, track: t,
       });
       const broken = t.purity && !t.purity.intact;
+      // PROPORTIONAL COLUMNS, not fixed pixel offsets. The row used to place the
+      // pips at 124px and the detail at 178px whatever the panel was, so on a
+      // wide screen everything huddled at the left with a third of the row
+      // empty, and on a narrow one the detail had to be clipped to fit. The
+      // three columns are fractions of the row now, so they spread into
+      // whatever space there is (David, 2026-08-13).
+      const colName = lx;
+      const colPips = lx + Math.round(colW * 0.32);
+      const colDetail = lx + Math.round(colW * 0.64);
+      // THE NAME CARRIES THE VERDICT (David, 2026-08-13). A conduct track is
+      // still-possible or gone, and that is a property of the TRACK, so it
+      // belongs on the track's name rather than in a symbol at the far end of
+      // the row. Bright while it can still be had, dim once it cannot, gold when
+      // it is done. A thumb was tried and it was saying twice what the colour
+      // was already saying once — the name has been dimming on a broken track
+      // since the panel was written.
       ctx.font = fsb(11);
-      ctx.fillStyle = t.summited ? '#e8c96a' : broken ? 'rgba(207,216,195,0.42)' : '#cfd8c3';
-      ctx.fillText(t.name, lx, y);
-      this._kleosPips(lx + Math.round(124 * k), y - Math.round(4 * k), t.tier);
+      ctx.fillStyle = t.summited ? '#e8c96a' : broken ? 'rgba(207,216,195,0.34)' : '#eef3e6';
+      ctx.fillText(this._clampText(ctx, t.name, colPips - colName - Math.round(6 * k)), colName, y);
+      // The pip strip gets its own column width, so ten rungs spread into
+      // whatever the panel has rather than running under the detail text.
+      const pipRoom = colDetail - colPips - Math.round(10 * k);
+      this._kleosPips(colPips, y - Math.round(4 * k), t.tier, t.rungs,
+        Math.max(8, Math.min(20 * k, pipRoom / Math.max(1, t.rungs))));
       ctx.font = fs(10);
       ctx.fillStyle = 'rgba(207,216,195,0.6)';
-      const right = lx + Math.round(178 * k);
+      const room = lx + colW - colDetail - Math.round(4 * k);
       if (broken) {
         ctx.fillStyle = '#d98a6a';
-        ctx.fillText(`✕ ${t.purity.why} (day ${t.purity.day})`, right, y);
+        ctx.fillText(this._clampText(ctx, `${t.purity.why} (day ${t.purity.day})`, room), colDetail, y);
       } else if (t.summited) {
         ctx.fillStyle = '#e8c96a';
-        ctx.fillText(`${t.tierLabel} — all of it`, right, y);
+        ctx.fillText(this._clampText(ctx, `${t.tierLabel} — all of it`, room), colDetail, y);
       } else {
-        // A holding conduct track flies its flag at the right edge, so the
-        // detail has to stop short of it: DAEDALUS on a narrow panel ran
-        // straight through the word.
-        const room = colW - Math.round(178 * k) - (t.purity && t.purity.intact ? Math.round(40 * k) : 0);
-        ctx.fillText(this._clampText(ctx, `${t.have}/${t.next} ${t.unit || ''}${t.summitName ? ` → ${t.summitName}` : ''}`, room), right, y);
-      }
-      // A conduct track still holding says so: it is the thing you are spending
-      // the run to keep.
-      if (t.purity && t.purity.intact) {
-        ctx.fillStyle = 'rgba(140,200,140,0.75)';
-        ctx.textAlign = 'right';
-        ctx.fillText('holds', lx + colW, y);
-        ctx.textAlign = 'left';
+        ctx.fillText(this._clampText(ctx, `${t.have}/${t.next} ${t.unit || ''}${t.summitName ? ` → ${t.summitName}` : ''}`, room), colDetail, y);
       }
       y += trackRow;
     }
 
     // ---- badges + the ledger
     const rx = wide ? px + pad * 2 + colW : lx;
-    let ry = wide ? py + Math.round(66 * k) : y + Math.round(10 * k);
+    let ry = wide ? py + Math.round(84 * k) : y + Math.round(10 * k);
     ctx.font = fsb(10);
     ctx.fillStyle = 'rgba(207,216,195,0.5)';
     ctx.fillText(`BADGES  ${model.badgesEarned}/${model.badges.length}`, rx, ry);
@@ -2980,8 +3331,19 @@ export const uiMethods = {
       if (wrapped.length > fit) {
         ctx.fillStyle = 'rgba(207,216,195,0.45)';
         ctx.fillText(`… and ${killLog.length - fit * 4} more`, rx, ry);
+        ry += Math.round(13 * k);
       }
     }
+    // Where the content really ended, for the next frame's height.
+    this._kleosContentH = Math.max(y, ry) - py + pad;
+  },
+
+  /** Which KLEOS tab a click landed on, or null. */
+  kleosTabAt(mx, my) {
+    for (const t of (this._kleosTabs || [])) {
+      if (mx >= t.x && mx <= t.x + t.w && my >= t.y && my <= t.y + t.h) return t.id;
+    }
+    return null;
   },
 
   // The hovered badge's name and blurb, drawn last so it sits over the grid.

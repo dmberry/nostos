@@ -64,7 +64,7 @@ const CLASS_BY_KIND = {
   record: 'media',
   tape: 'media',
   map: 'media',
-  recipe: 'media',           // a recipe is a thing you read, even a golden one
+  recipe: 'media',           // a recipe is a thing you read, even a bronze one
   shield: 'wearable',
   wearable: 'wearable',
   backpack: 'wearable',
@@ -114,7 +114,7 @@ export const CRAFT_INPUTS = new Set([
   'wood',             // a boat, and then a ship
   'scrap',            // blades and plate
   'oar', 'rope', 'sail',  // the greek ship, one each and scarce on purpose
-  'anvil', 'large_stone', // the golden axe
+  'anvil', 'large_stone', // the bronze axe
 ]);
 
 // ONE entry point, taking an item DEFINITION (items.js stamps `key` onto every

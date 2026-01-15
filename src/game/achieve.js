@@ -16,13 +16,21 @@
 // TWO SCOPES, and the split is the design:
 //
 //   PROFILE   survives death and New Game, the way weaponsFound and the stage
-//             checkpoints already do. Holds earned awards and lifetime counters.
-//             Kleos is the glory that outlives the run; taking it back when you
-//             die would be the one thing the word cannot mean.
-//   RUN       dies with the run. Holds this run's counters and the purity state
-//             of each conduct track. Reloading an earlier checkpoint restores
-//             the earlier purity with it — checkpoint discipline is the
+//             checkpoints already do. Holds the MILESTONES and the lifetime
+//             counters they are measured against — hours played, nights
+//             survived, the long accrual that is not about any one run.
+//   RUN       dies with the run. This run's counters, the purity state of each
+//             conduct track, AND THE BADGES. Reloading an earlier checkpoint
+//             restores the earlier state with it — checkpoint discipline is the
 //             player's to spend, and spending it is a real choice.
+//
+// BADGES WERE PROFILE-SCOPED UNTIL v1.507, on the argument that kleos is the
+// glory which outlives the run and taking it back when you die is the one thing
+// the word cannot mean. It reads badly in play (David, 2026-08-13): a fresh run
+// opened the panel already showing a wall of badges, which looks exactly like
+// the game claiming credit you have not earned. The idea survives where it
+// belongs — the MILESTONES are the thing that outlives you, and the panel now
+// says so in one word at the bottom.
 
 import { TRACKS, BADGES, MILESTONES, COUNTERS, PURITY_BREAKS, LAURELS_LIVE, tierThresholds, TIER_NAMES } from './achievements-registry.js';
 
@@ -43,7 +51,7 @@ function emptyProfile() {
   return { v: PROFILE_VERSION, lifetime: {}, distinct: {}, badges: {}, tiers: {}, milestones: {}, laurels: {} };
 }
 function emptyRun() {
-  return { counters: {}, distinct: {}, breaks: {}, island: null, day: 0, badgeCounts: {} };
+  return { counters: {}, distinct: {}, breaks: {}, island: null, day: 0, badges: {}, badgeCounts: {}, tiers: {} };
 }
 
 // Rebuild a saved scope, keeping anything we do not recognise. An award id this
@@ -61,7 +69,7 @@ function reviveProfile(saved) {
 function reviveRun(saved) {
   const r = emptyRun();
   if (!saved || typeof saved !== 'object') return r;
-  for (const k of ['counters', 'distinct', 'breaks', 'badgeCounts']) {
+  for (const k of ['counters', 'distinct', 'breaks', 'badges', 'badgeCounts', 'tiers']) {
     if (saved[k] && typeof saved[k] === 'object') r[k] = { ...saved[k] };
   }
   r.island = saved.island || null;
@@ -77,10 +85,14 @@ export function initAchievements({ profile: p, run: r } = {}) {
 export function achieveRunState() { return run ? JSON.parse(JSON.stringify(run)) : emptyRun(); }
 export function achieveProfile() { return profile ? JSON.parse(JSON.stringify(profile)) : emptyProfile(); }
 
-// Start a fresh run, keeping the profile. Called on New Game and after death:
-// the run's counters and its purity go, the song of what you have already done
-// stays.
-export function resetRun() { run = emptyRun(); }
+// Start a fresh run, keeping the profile. Called on New Game and after death.
+// The outgoing run is kept whole as `lastRun` — that is the panel's LAST GAME
+// tab, and it is the only place the shape of a finished run survives: the
+// profile has totals, and totals cannot tell you how the last one went.
+export function resetRun() {
+  if (run) profile.lastRun = JSON.parse(JSON.stringify(run));
+  run = emptyRun();
+}
 
 // ---- counting ---------------------------------------------------------------
 // A distinct counter stores its seen set as a plain object so the whole scope
@@ -113,8 +125,11 @@ function bumpCounter(scope, name, def, data) {
 
 function counterValue(scope, name) { return storeOf(scope)[name] || 0; }
 
-function trackProgress(track) {
-  return track.counters.reduce((sum, c) => sum + counterValue(profile, c), 0);
+// Progress along a track, in whichever scope is being asked about. The default
+// is the RUN, because that is what the panel's first tab shows and what the
+// tiers are awarded against; pass the profile for the lifetime view.
+function trackProgress(track, scope = run) {
+  return track.counters.reduce((sum, c) => sum + counterValue(scope, c), 0);
 }
 
 // ---- purity -----------------------------------------------------------------
@@ -166,11 +181,12 @@ export function achieveEvent(name, data = {}) {
     bumpCounter(profile, cname, def, data);
   }
 
-  // 2. badges — count occurrences (or distinct payload values) in the PROFILE,
-  //    because a badge is a thing you have done once, ever.
+  // 2. badges — counted in the RUN, because a badge is a thing you have done
+  //    THIS TIME. `badgeCounts` has been sitting in the run scope unused since
+  //    the system was written, which is a fair hint at where this belonged.
   for (const b of BADGES) {
     if (b.on.event !== name) continue;
-    if (profile.badges[b.id]) continue;
+    if (run.badges[b.id]) continue;
     if (b.on.when && !b.on.when(data)) continue;
     // A threshold may be a function, so a badge over a manifest ("every tape")
     // follows the content instead of freezing at whatever the count was today.
@@ -178,14 +194,18 @@ export function achieveEvent(name, data = {}) {
     let have;
     if (b.on.distinct) {
       const key = String(data[b.on.distinct] ?? '');
-      const seen = (profile.distinct[`badge:${b.id}`] ||= {});
+      const seen = (run.distinct[`badge:${b.id}`] ||= {});
       if (key && !seen[key]) seen[key] = 1;
       have = Object.keys(seen).length;
     } else {
-      have = (profile.lifetime[`badge:${b.id}`] = (profile.lifetime[`badge:${b.id}`] || 0) + 1);
+      have = (run.badgeCounts[b.id] = (run.badgeCounts[b.id] || 0) + 1);
     }
     if (have >= need) {
-      profile.badges[b.id] = { day: run.day };
+      run.badges[b.id] = { day: run.day };
+      // The profile keeps its own all-time record of the same thing, so the
+      // panel's ALL GAMES tab has something to show. It is a tally, not the
+      // thing the run is judged on.
+      profile.badges[b.id] = profile.badges[b.id] || { day: run.day };
       awards.push({ kind: 'badge', id: b.id, name: b.name, blurb: b.blurb });
     }
   }
@@ -195,10 +215,11 @@ export function achieveEvent(name, data = {}) {
     if (!track.counters.some((c) => COUNTERS[c] && COUNTERS[c].on === name)) continue;
     const have = trackProgress(track);
     const tiers = tierThresholds(track);
-    const at = profile.tiers[track.id] || 0;
+    const at = run.tiers[track.id] || 0;
     for (let i = at; i < tiers.length; i++) {
       if (have < tiers[i].at) break;
-      profile.tiers[track.id] = i + 1;
+      run.tiers[track.id] = i + 1;
+      profile.tiers[track.id] = Math.max(profile.tiers[track.id] || 0, i + 1);   // the all-time best
       awards.push({
         kind: 'tier', id: track.id, name: track.name, tier: i + 1,
         tierName: tiers[i].name || TIER_NAMES[i], summit: i === tiers.length - 1,
@@ -262,31 +283,60 @@ export function achieveTick(seconds) {
 
 // ---- the model the notebook renders ----------------------------------------
 // Everything computed here, nothing stored: the tab holds no state of its own.
-export function achieveModel() {
+/**
+ * The panel's model, for one of three views (David, 2026-08-13):
+ *
+ *   'run'   THIS GAME  — what you have done since you last started or died
+ *   'last'  LAST GAME  — the same, for the run before this one
+ *   'all'   ALL GAMES  — the lifetime tally, and the milestones
+ *
+ * Three views beats arguing about which one the panel is, which is what the
+ * badges-are-lifetime question had turned into.
+ */
+export function achieveModel(scope = 'run') {
   if (!profile || !run) initAchievements({});
+  const view = scope === 'last' ? (profile.lastRun ? reviveRun(profile.lastRun) : null)
+    : scope === 'all' ? null : run;
+  const all = scope === 'all';
   const tracks = TRACKS.map((track) => {
-    const have = trackProgress(track);
+    const have = trackProgress(track, all ? profile : (view || emptyRun()));
     const tiers = tierThresholds(track);
-    const tier = profile.tiers[track.id] || 0;
+    // THE DISPLAYED TIER IS DERIVED FROM `have`, not read from the stored index.
+    // A stored index means nothing once the ladder changes: profiles written
+    // under the old four-rung WARRIOR carried tier 3 for 75 kills, and against
+    // the ten-rung ladder that index points at rung 12 — so ALL GAMES showed
+    // "82/12", a player with eighty-two kills being told the next rung is at
+    // twelve. Counting the rungs actually cleared is right whatever the ladder
+    // does next, and it heals every old profile without a migration.
+    //
+    // The AWARDING still uses the stored index, because that is what makes a
+    // tier fire once rather than on every event after it.
+    const tier = tiers.filter((x) => have >= x.at).length;
     const next = tiers[tier] || null;
     const summitName = tiers[tiers.length - 1].name || null;
-    const broken = track.purity ? (run.breaks[track.id] || [])[0] : null;
+    // Purity is a run's property. ALL GAMES has no single answer to "did you
+    // keep it", so it does not claim one.
+    const broken = track.purity && !all && view ? ((view.breaks[track.id] || [])[0] || null) : null;
     return {
       id: track.id, name: track.name, blurb: track.blurb, kind: track.kind, unit: track.unit,
-      tier, tierLabel: tier ? (tiers[tier - 1].name || TIER_NAMES[tier - 1]) : '',
+      tier, rungs: tiers.length,
+      tierLabel: tier ? (tiers[tier - 1].name || TIER_NAMES[tier - 1]) : '',
       have, next: next ? next.at : null, summitName, summited: tier >= tiers.length,
-      purity: track.purity ? (broken ? { intact: false, why: broken.why, day: broken.day } : { intact: true }) : null,
+      purity: track.purity && !all
+        ? (broken ? { intact: false, why: broken.why, day: broken.day } : (view ? { intact: true } : null))
+        : null,
     };
   });
   const badges = BADGES.map((b) => ({
-    id: b.id, name: b.name, blurb: b.blurb, ai: !!b.ai, earned: !!profile.badges[b.id],
+    id: b.id, name: b.name, blurb: b.blurb, ai: !!b.ai,
+    earned: all ? !!profile.badges[b.id] : !!(view && view.badges[b.id]),
   }));
   const milestones = MILESTONES.map((m) => ({
     id: m.id, name: m.name, blurb: m.blurb, at: m.at, counter: m.counter,
     have: profile.lifetime[m.counter] || 0, earned: !!profile.milestones[m.id],
   }));
   return {
-    tracks, badges, milestones,
+    scope, tracks, badges, milestones,
     badgesEarned: badges.filter((b) => b.earned).length,
     laurels: Object.keys(profile.laurels).map((k) => {
       const [track, island] = k.split('@');

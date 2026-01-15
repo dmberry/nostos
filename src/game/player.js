@@ -62,6 +62,12 @@ const CLANG_PITCH = {
 };
 const TEMPLE_HEAL_R = 7;      // tiles from a temple-grove centre that count as inside it
 const TEMPLE_HEAL_MULT = 3;   // health regen multiplier among the old stones
+// A sanctuary is a place you can crawl to (#128). Among the stones you mend
+// whether or not you have eaten, and you mend all the way — everywhere else on
+// these islands recovery stops when the food does. It costs you the walk and
+// the daylight, and POSEIDON's blight shuts it off, which is what keeps it from
+// being a way to ignore hunger.
+const TEMPLE_HURT_ENOUGH = 0.5;   // arrive under half and the mending is worth a name
 const KNOCKBACK_DIST = 0.5; // tiles a melee hit shoves an animal/robot back
 const KNOCKBACK_STUN = 0.4; // seconds it's frozen (no move, no attack) after
 const TREE_HP = 4;        // penknife swings to fell a tree
@@ -92,6 +98,19 @@ const TORPOR_TIME = 9;        // seconds of daze added per fruit eaten
 const TORPOR_MAX = 22;        // stacking cap, so a fistful doesn't strand you forever
 const TORPOR_SLOW = 0.5;      // movement multiplier while dazed
 const TORPOR_SWAY = 1.0;      // radians of peak heading roll while dazed (scaled by ease)
+// G1 (CALYPSO's grove): her hold is a DEFLECTION, not a wall. It drags at your
+// pace a little and turns a step aimed at her a lot, and it never stops you.
+const GRIP_SLOW = 0.3;        // most of your pace it may take, at full grip
+// Radians a step aimed at her is turned aside, at full grip. PAST A RIGHT
+// ANGLE on purpose: at 90 degrees an inward step becomes purely sideways and
+// you orbit her, which a determined player simply walks around by zigzagging.
+// Past it the inward part of your step is REVERSED, and there is no angle of
+// approach that closes the distance.
+const GRIP_TURN = 2.0;
+// And a current, outward, on top of the turn. The turn alone leaves you able to
+// hold your ground and shuffle in a tile at a time; this means pressing in
+// loses ground, which is what "you cannot get to her" has to mean.
+const GRIP_PUSH = 2.6;        // tiles/sec drift away from her, at full grip
 const ANVIL_SLOW = 0.1;       // carrying the anvil, anywhere on you: a tenth of your pace
 const TORPOR_FOOD_DRAIN = 2;  // extra food/sec while dazed — you forget to look after yourself
 // Depart mode (R3): how her fortress guards DETAIN before they wound.
@@ -217,6 +236,13 @@ export class Player {
     this.aboard = null;                      // {type, mirror, wob} while under way — the renderer draws hull + man as one
     this.shipBuilt = false;                  // one greek ship at a time (independent of the plain boat)
     this.calypsoLeave = false;               // Calypso refunctioned (retire): the sea will let you go (decision #8)
+    // #141 — THE SECOND GATE, and it is a different KIND of gate. The ship is
+    // material and Calypso gives the means; the permission is juridical and
+    // POSEIDON honours it or does not. R0 established that he is already the
+    // one who turns you back (onDepartFail), so a leave that only reached
+    // Calypso was never going to be enough. Set by uploading permission.ml at
+    // any obelisk, which propagates it across the net he runs on.
+    this.seaPermission = false;
     this.detainMode = false;                 // R3: on a depart-mode island her fortress guards detain, not slay (main.js sets it per world)
     // Which daemons the card is armed against. Each island's HERMES relay holds
     // only its own virus, so arming is PER ISLAND: a card forged on Ogygia opens
@@ -257,6 +283,11 @@ export class Player {
     this.message = null;  // {text, ttl} transient HUD line
     this.daemonVoice = null;  // {text, ttl, tier, ai} — the core speaking as you break it
     this.torpor = 0;          // seconds of lotus daze remaining
+    // G1: how hard CALYPSO's grove is holding you, 0..1. Set every frame from
+    // your distance to her core (game/grove.js hold()), and zero on the green
+    // path. Not a timer like torpor — it is WHERE YOU ARE STANDING, so walking
+    // out of it is the whole of the cure.
+    this.grip = 0;
 
     this.name = 'Nobody';   // Odysseus's 'Outis' to the Cyclops — and the 'nobody' the OB terminals accept
     this.gender = 'm';    // 'm' | 'f' | 'u'
@@ -749,13 +780,13 @@ export class Player {
     return true;
   }
 
-  // A proper sea-going ship (Stage 1d). Needs Calypso's recipe (the golden axe,
+  // A proper sea-going ship (Stage 1d). Needs Calypso's recipe (the bronze axe,
   // dropped when you refunction her via `retire`) plus wood and the three found
   // parts — oar, rope, sail. The recipe is NOT consumed, so you can build again.
   // Beached at the shore like the boat, but seaworthy: only a greek_ship leaves.
   canCraftGreekShip(map) {
     if (this.shipBuilt) return false;
-    if (!this.hasItem('golden_axe')) return false;
+    if (!this.hasItem('bronze_axe')) return false;
     if (this.countItem('wood') < WOOD_PER_SHIP) return false;
     if (!this.hasItem('oar') || !this.hasItem('rope') || !this.hasItem('sail')) return false;
     return !!this._findLaunchTile(map);
@@ -763,7 +794,7 @@ export class Player {
 
   craftGreekShip(map) {
     if (this.shipBuilt) { this.say('Your ship is already beached at the shore.'); return false; }
-    if (!this.hasItem('golden_axe')) { this.say("You need Calypso's recipe — the golden axe — to build a sea-worthy ship. Refunction her at the fortress first."); return false; }
+    if (!this.hasItem('bronze_axe')) { this.say("You need Calypso's recipe — her bronze axe — to build a sea-worthy ship. She gives it up when she lets you go."); return false; }
     if (this.countItem('wood') < WOOD_PER_SHIP) { this.say(`You need ${WOOD_PER_SHIP} wood for a proper ship; you have ${this.countItem('wood')}.`); return false; }
     if (!this.hasItem('oar') || !this.hasItem('rope') || !this.hasItem('sail')) {
       this.say('A sea-worthy ship needs an oar, a rope, and a sail. Find them at the wrecks and huts along the coast.');
@@ -786,6 +817,17 @@ export class Player {
   // sea-ready, so Poseidon's swell flings it back onto the sand.
   boardBoat(map, boat) {
     if (this._ended || this.deathCert) return;
+    // A sea-worthy hull is not enough on its own (#141). Poseidon runs on the
+    // obelisk net and the net has to have been told. Without that the launch
+    // still HAPPENS — you row out and the sea sends you home — because the
+    // refusal has always belonged to him rather than to a locked door.
+    if (boat && boat.seaworthy && !this.seaPermission) {
+      if (this.onDepartFail && this.onDepartFail(this, boat) !== false) return;
+      this.say('You push off, and the swell stands up against you. The ship is sound. Something else is not.');
+      this.x -= this.facing.x * 1.5;
+      this.y -= this.facing.y * 1.5;
+      return;
+    }
     if (boat && boat.seaworthy) {
       // The crossing switches worlds, which is a main.js concern (goToWorld, and
       // it must defer to a clean frame boundary), so hand off to the wired hook:
@@ -826,7 +868,7 @@ export class Player {
   // What you still need before the sea will have you. Shared by the instant
   // bounce and the failed-crossing sequence, so they can never drift apart.
   launchHint() {
-    return this.hasItem('golden_axe')
+    return this.hasItem('bronze_axe')
       ? "This is no ship for the open sea. Build a proper one to Calypso's recipe — wood, oar, rope, and sail."
       : "This is no ship for the open sea, and Calypso has not released you. Refunction her at the fortress, then build a proper ship to her recipe.";
   }
@@ -1212,7 +1254,15 @@ export class Player {
 
     // Hunger: food drains steadily, faster while sprinting. At zero you
     // starve; health only recovers when you are properly fed.
-    this.food = Math.max(0, this.food - FOOD_DRAIN * (this.sprinting ? FOOD_SPRINT_MULT : 1) * dt);
+    // F1 (#140): on an island of PLENTY you do not get hungry. Ogygia is the
+    // one place in the game where nothing is scarce, because comfort is the
+    // trap and the trap should be comfortable. Everywhere else the clock in
+    // your stomach runs.
+    if (!(map && map.plenty)) {
+      this.food = Math.max(0, this.food - FOOD_DRAIN * (this.sprinting ? FOOD_SPRINT_MULT : 1) * dt);
+    } else if (this.food < this.maxFood) {
+      this.food = Math.min(this.maxFood, this.food + FOOD_DRAIN * dt);
+    }
     if (this.food <= 0) {
       this.health -= STARVE_DRAIN * dt;
       if (this.health <= 0) { this.die(map, 'starvation'); return; }
@@ -1220,11 +1270,21 @@ export class Player {
 
     // Venom drains health over time; otherwise health slowly recovers
     // while well fed.
+    // Standing among the old stones, on ground POSEIDON has not killed. Worked
+    // out every tick rather than inside the regen branch, because the sanctuary
+    // has to be known even at full health — that is when you leave it.
+    {
+      const gf0 = map.floorAt ? map.floorAt(Math.floor(this.x), Math.floor(this.y)) : null;
+      const dead = gf0 === 'blight' || gf0 === 'blight_sick';
+      this._inTemple = !dead && !!(map.temples
+        && map.temples.some((t) => Math.hypot(t.x - this.x, t.y - this.y) < TEMPLE_HEAL_R));
+      if (!this._inTemple) this._templeFrom = null;   // leaving resets the reckoning
+    }
     if (this.venom > 0) {
       this.venom = Math.max(0, this.venom - dt);
       this.health -= VENOM_DRAIN * dt;
       if (this.health <= 0) this.die(map, 'the venom');
-    } else if (this.health < this.maxHealth && this.food > 50) {
+    } else if (this.health < this.maxHealth && (this.food > 50 || this._inTemple)) {
       // The marble temples hold a healing vibe: within an old grove, recovery
       // runs faster — the stones remember being sacred (map.temples is set
       // from placeRuins' grove centres in main.js).
@@ -1237,6 +1297,9 @@ export class Player {
       const temples = map.temples;
       if (!onBlight && temples && temples.some((t) => Math.hypot(t.x - this.x, t.y - this.y) < TEMPLE_HEAL_R)) {
         regen *= TEMPLE_HEAL_MULT;
+        // Remember how badly you arrived, so coming down whole can be told from
+        // topping up a scratch.
+        if (this._templeFrom == null) this._templeFrom = this.health / this.maxHealth;
         if (!this._templeSaid) { this._templeSaid = true; this.say('A stillness among the old stones. Your wounds knit faster here.'); }
       } else if (this._templeSaid) this._templeSaid = false;
       if (onBlight) {
@@ -1244,6 +1307,13 @@ export class Player {
         if (!this._blightSaid) { this._blightSaid = true; this.say('The dead ground gives nothing back. You will not mend here.'); }
       } else if (this._blightSaid) this._blightSaid = false;
       this.health = Math.min(this.maxHealth, this.health + regen * dt);
+      if (this._inTemple && this.health >= this.maxHealth) {
+        if (this._templeFrom != null && this._templeFrom < TEMPLE_HURT_ENOUGH) {
+          achieveEvent('templeHealed', { from: Math.round(this._templeFrom * 100) });
+          this.say('Whole again, among the stones. The machines have nothing that does this.');
+        }
+        this._templeFrom = null;
+      }
     }
 
     // Lotus torpor: the daze bleeds off slowly, drains you while it lasts,
@@ -1253,13 +1323,32 @@ export class Player {
     if (this.torpor > 0) {
       this.torpor = Math.max(0, this.torpor - dt);
       this.food = Math.max(0, this.food - TORPOR_FOOD_DRAIN * dt);
-      // The woozy clock: two slow sines out of phase make the roll, and every
-      // second or so the lean re-seeds so the stagger never metronomes.
+    }
+    // The woozy clock: two slow sines out of phase make the roll, and every
+    // second or so the lean re-seeds so the stagger never metronomes. It runs
+    // for the lotus AND for G1's grove-grip, which uses the same stagger with a
+    // different cause — a clock that only ticked while a fruit was digesting
+    // would leave the grove's sway frozen at whatever it happened to be.
+    if (this.torpor > 0 || this.grip > 0) {
       this._woozyT = (this._woozyT || 0) + dt;
       this._woozyLurchT = (this._woozyLurchT || 0) - dt;
       if (this._woozyLurchT <= 0) {
         this._woozyLurchT = 1 + Math.random() * 1.2;
         this._woozyBias = (Math.random() - 0.5) * 1.6;
+      }
+    }
+
+    // G1: the current. Her grove does not hold you in place, it eases you back
+    // out — so this runs whether or not you are walking, and standing still deep
+    // in it drifts you gently away from her. It is applied before the movement
+    // below so a step and the drift compose rather than fight.
+    if (this.grip > 0 && this._gripAt && !this._ended) {
+      const ax = this.x - this._gripAt.x, ay = this.y - this._gripAt.y;
+      const al = Math.hypot(ax, ay);
+      if (al > 0.001) {
+        const p = GRIP_PUSH * this.grip * this.grip * dt;
+        this.moveAxis((ax / al) * p, 0, map);
+        this.moveAxis(0, (ay / al) * p, map);
       }
     }
 
@@ -1305,6 +1394,10 @@ export class Player {
       if (objHere && objHere.type === 'tree') speed *= 0.75;
       // Lotus daze: heavy limbs. Fighting the pull out of the grove is slow work.
       if (this.torpor > 0) speed *= TORPOR_SLOW;
+      // G1: her grove, and it drags at you less than a lotus fruit does. The
+      // point is not that you cannot move — it is that you cannot move TOWARD
+      // her, and that is the deflection below rather than this.
+      if (this.grip > 0) speed *= 1 - GRIP_SLOW * this.grip;
       // Burden items (the anvil, the large stone): heavy is heavy, wherever
       // you put it. 10% pace, and the game says so once per pickup.
       const burden = this.carryingBurden();
@@ -1323,14 +1416,38 @@ export class Player {
       // you — a drunken heading sway you steer against, easing off as the
       // daze does.
       let mdx = dir.x, mdy = dir.y;
-      if (this.torpor > 0) {
-        const ease = Math.min(1, this.torpor / 3);
+      // G1: A STEP AIMED AT HER SLIDES OFF. The turn is applied only to the part
+      // of your heading that points at her core, so walking away is clean and
+      // walking in is not — press straight at her and you arc past. Which way it
+      // turns comes from where you are standing rather than from a coin, so it
+      // is consistent: the room is not random, it is simply not letting you.
+      if (this.grip > 0 && this._gripAt) {
+        const tx = this._gripAt.x - this.x, ty = this._gripAt.y - this.y;
+        const tl = Math.hypot(tx, ty) || 1;
+        const toward = (dir.x * tx + dir.y * ty) / tl;   // -1..1
+        if (toward > 0) {
+          // The turn is the FULL angle for any step with an inward component,
+          // rather than being scaled by how directly you are aiming. Scaling it
+          // by `toward` was the first version and it has an obvious defeat:
+          // approach at forty-five degrees, take the smaller turn, repeat. The
+          // room does not negotiate about the angle you chose.
+          const side = ((Math.floor(this.x) + Math.floor(this.y)) & 1) ? 1 : -1;
+          const a = GRIP_TURN * this.grip * side;
+          const cs = Math.cos(a), sn = Math.sin(a);
+          mdx = dir.x * cs - dir.y * sn;
+          mdy = dir.x * sn + dir.y * cs;
+        }
+      }
+      const woozy = Math.max(this.torpor > 0 ? Math.min(1, this.torpor / 3) : 0, this.grip);
+      if (woozy > 0) {
+        const ease = woozy;
         const sway = (Math.sin(this._woozyT * 2.1) * 0.55
           + Math.sin(this._woozyT * 0.9 + 1.7) * 0.3
           + (this._woozyBias || 0) * 0.35) * TORPOR_SWAY * ease;
         const cs = Math.cos(sway), sn = Math.sin(sway);
-        mdx = dir.x * cs - dir.y * sn;
-        mdy = dir.x * sn + dir.y * cs;
+        const bx = mdx, by = mdy;
+        mdx = bx * cs - by * sn;
+        mdy = bx * sn + by * cs;
       }
       this.moveAxis(mdx * speed * dt, 0, map);
       this.moveAxis(0, mdy * speed * dt, map);

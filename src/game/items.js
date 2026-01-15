@@ -387,20 +387,23 @@ export const ITEMS = {
   // survives the crossing off Ogygia.
   greek_ship: {
     name: 'Greek ship',
-    built: 'the golden axe, wood, a sail, an oar and a rope. calypso\'s recipe first.',
+    built: 'the bronze axe, wood, a sail, an oar and a rope. calypso\'s recipe first.',
     kind: 'vehicle',
     stack: 1,
     color: '#9a7038',
   },
-  // Calypso's shipwright recipe — the "golden axe". Dropped when you refunction
+  // Calypso's shipwright recipe, her bronze axe (#141). Given up when she
   // her at the fortress (AI-ML `retire`). Holding it unlocks the greek_ship
   // craft; it is not consumed, so you can build more than one ship.
-  golden_axe: {
-    name: "Golden axe (Calypso's recipe)",
-    use: 'Calypso\'s recipe, and the only thing that will build a sea-worthy ship. Refunction her at the fortress to get it.',
+  // Homer's Calypso gives Odysseus a BRONZE axe, double-bladed, fitted with an
+  // olive handle, along with an adze and augers and cloth for a sail (Od. 5).
+  // The gold was ours and had no reason (#141).
+  bronze_axe: {
+    name: "Bronze axe (Calypso's recipe)",
+    use: 'Her shipwright\'s axe: double-bladed, olive-handled, and the only thing that will lay a sea-worthy keel. She gives it up when she lets you go.',
     kind: 'recipe',
     stack: 1,
-    color: '#e8c24a',
+    color: '#b0763a',
   },
   // The three ship parts — found at wrecks and huts along the coast, not crafted.
   oar: { name: 'Oar', kind: 'part', stack: 4, color: '#8a6437', use: 'One of the three parts the boat-house wants before it will build you a ship. Keep it.' },

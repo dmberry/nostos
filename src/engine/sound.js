@@ -67,7 +67,16 @@ class Sound {
     const saved = loadSettings();
     this.ctx = null;
     this.master = null;
+    // THREE LEVELS, not one. Everything used to hang off a single master, so
+    // turning the music down turned the game down with it and there was no way
+    // to have a quiet bed under loud footsteps (David, 2026-08-13). `master` is
+    // still the output stage; SOUND and MUSIC are buses under it, and the two
+    // sliders in Settings drive those.
     this._volume = typeof saved.volume === 'number' ? Math.max(0, Math.min(1, saved.volume)) : 1;
+    this._fxVolume = typeof saved.fxVolume === 'number' ? Math.max(0, Math.min(1, saved.fxVolume)) : 1;
+    this._musicVolume = typeof saved.musicVolume === 'number' ? Math.max(0, Math.min(1, saved.musicVolume)) : 0.7;
+    this.fx = null;                  // everything that is not music
+    this.musicBus = null;            // the synth bed and the walkman together
     this._last = new Map();          // debounce timestamps by key
     this._ambience = { night: false, dusk: false, wind: 1, robotNear: false };
     this._droneGain = null;
@@ -115,6 +124,16 @@ class Sound {
       this.master.gain.value = MASTER_GAIN * this._volume;
       this.master.connect(ctx.destination);
 
+      // The two buses. Effects and ambience on one, the music bed and the
+      // walkman on the other, so either can be turned down without touching
+      // what the game itself sounds like.
+      this.fx = ctx.createGain();
+      this.fx.gain.value = this._fxVolume;
+      this.fx.connect(this.master);
+      this.musicBus = ctx.createGain();
+      this.musicBus.gain.value = this._musicVolume;
+      this.musicBus.connect(this.master);
+
       this._noise = this._makeNoise(1, false);
       this._brown = this._makeNoise(2, true);
       this._buildWind();
@@ -145,6 +164,34 @@ class Sound {
   get volume() {
     return this._volume;
   }
+
+  // The two that the Settings sliders drive. Both persisted, both independent
+  // of `setVolume`, which is still the output stage over the top of them.
+  _rampBus(node, target) {
+    try {
+      if (!this.ctx || !node) return;
+      const t = this.ctx.currentTime;
+      node.gain.cancelScheduledValues(t);
+      node.gain.setValueAtTime(node.gain.value, t);
+      node.gain.linearRampToValueAtTime(target, t + 0.05);
+    } catch (e) { /* ignore */ }
+  }
+
+  setFxVolume(v) {
+    this._fxVolume = Math.max(0, Math.min(1, v));
+    saveSettings({ fxVolume: this._fxVolume });
+    this._rampBus(this.fx, this._fxVolume);
+  }
+
+  setMusicVolume(v) {
+    this._musicVolume = Math.max(0, Math.min(1, v));
+    saveSettings({ musicVolume: this._musicVolume });
+    this._rampBus(this.musicBus, this._musicVolume);
+  }
+
+  get fxVolume() { return this._fxVolume; }
+
+  get musicVolume() { return this._musicVolume; }
 
   // ---- one-shot effects ------------------------------------------------
 
@@ -450,7 +497,7 @@ class Sound {
     const ctx = this.ctx;
     this._droneGain = ctx.createGain();
     this._droneGain.gain.value = 0;
-    this._droneGain.connect(this.master);
+    this._droneGain.connect(this.fx || this.master);
     const a = ctx.createOscillator();
     a.type = 'sawtooth';
     a.frequency.value = 58;
@@ -473,7 +520,7 @@ class Sound {
     const ctx = this.ctx;
     this._windGain = ctx.createGain();
     this._windGain.gain.value = 0;
-    this._windGain.connect(this.master);
+    this._windGain.connect(this.fx || this.master);
 
     const src = ctx.createBufferSource();
     src.buffer = this._brown;
@@ -502,7 +549,7 @@ class Sound {
     const ctx = this.ctx;
     this._cricketGain = ctx.createGain();
     this._cricketGain.gain.value = 0;
-    this._cricketGain.connect(this.master);
+    this._cricketGain.connect(this.fx || this.master);
 
     const carrier = ctx.createOscillator();
     carrier.type = 'triangle';
@@ -554,7 +601,7 @@ class Sound {
     if (this._musicGain) return; // already running (e.g. unlock() called twice)
     this._musicGain = this.ctx.createGain();
     this._musicGain.gain.value = 0;
-    this._musicGain.connect(this.master);
+    this._musicGain.connect(this.musicBus || this.master);
     this._scheduleNote();
     this._applyMusicGain(0.1);
   }
@@ -606,7 +653,7 @@ class Sound {
       const gain = this.ctx.createGain();
       gain.gain.value = 0;
       src.connect(gain);
-      gain.connect(this.master);
+      gain.connect(this.musicBus || this.master);   // the walkman IS music
       this._tapeEl = el;
       this._tapeGain = gain;
     } catch (e) { /* audio must never crash the game */ }
@@ -705,7 +752,12 @@ class Sound {
       // the singers — walk away and the singing quietens.
       const bus = ctx.createGain();
       bus.gain.value = 0.85;
-      bus.connect(this.master);
+      // On the EFFECTS bus, not the music one, even though it is literally
+      // singing. The music slider is about the bed you have playing underneath;
+      // the choir is a thing the robots do in front of you because you told
+      // them to, and somebody who has turned the music down still wants to hear
+      // it happen.
+      bus.connect(this.fx || this.master);
       this._choirBus = bus;
       this._choirLevel = 0.85;
       for (const [t, d, m] of CHOIR_NOTES) {
@@ -745,7 +797,7 @@ class Sound {
   // Shared output stage: gain envelope into the given bus (master by
   // default). Linear attack to the peak, then an exponential decay to
   // (near) silence at when + dur.
-  _out(when, dur, peak, attack = 0.005, bus = this.master) {
+  _out(when, dur, peak, attack = 0.005, bus = this.fx || this.master) {
     const g = this.ctx.createGain();
     g.gain.setValueAtTime(0, when);
     g.gain.linearRampToValueAtTime(peak, when + Math.min(attack, dur * 0.9));
