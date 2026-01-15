@@ -32,6 +32,10 @@
 
 // One cached document long enough to want its own file. See poplog.js.
 import { POPLOG_TITLE, POPLOG_BODY } from './poplog.js';
+// The computing-history pages (docs/web-history-plan.md W1). Split into their
+// own module because this file is already long and that plan adds a great many
+// more; see #143 for the wider refactor this is the first slice of.
+import { HISTORY_SITES } from './archive-history.js';
 
 export const CACHE_SUB = 'cache';
 
@@ -51,6 +55,7 @@ export const pic = (name, cap, side) =>
 // The sites written out properly. Each one gets the page it deserves: not a
 // stub with its name on, but the specific thing that is broken about it.
 export const ARCHIVED_SITES = [
+  ...HISTORY_SITES,
   // ---- the catalogue, reviewed by people who are about to need it ----------
   //
   // Every one of these is a paperback the player can actually find and read in

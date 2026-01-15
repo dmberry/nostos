@@ -18,6 +18,12 @@ import { seawardFrom, boatMirror, CF_MIN } from './game/crossing.js';
 import { isStraitCrossing, scyllaToll, STRAIT_COST } from './game/strait.js';
 import { newNarrowsRun, narrowsSteer, narrowsRow, narrowsTick, narrowsStart, narrowsAnimate } from './game/narrows.js';
 import { newCalypsoPong, calypsoStart, calypsoMove, calypsoTick } from './game/calypso-pong.js';
+// K2: her draughts cabinet. Not yet wired to the escape — R1 does that swap in
+// one place, and until then the sanctum still runs the pong.
+import {
+  newCabinet, cabinetStart, cabinetPick, cabinetResign, cabinetThink, cabinetTick,
+  cabinetSave, cabinetView, readyToThink, cabinetAuto, cabinetSelfTick, HER_LINE,
+} from './game/draughts-cabinet.js';
 import { blightStep, tileBlighted, blightDepth, obeliskLive, BLIGHT_SICK_BAND, BLIGHTABLE } from './game/blight.js';
 import { makeRng } from './game/rng.js';
 import { DayNight } from './game/daynight.js';
@@ -25,6 +31,14 @@ import { Minimap } from './game/minimap.js';
 import { spawnBirds, updateBirds } from './game/birds.js';
 import { spawnRobots, registerRobotsSystem, spawnW1s, spawnW3, spawnW4, spawnW5, spawnM4, spawnM5, spawnM6, spawnGuard, drawRobot, setUnitTagger, setUnitTagsClickable, unitTagAt, W5_PROGRAM, v1BuildName } from './game/robots.js';
 import { makeVModel } from './game/v-model.js';
+// #141: the permission POSEIDON's net has to be shown.
+import { permissionFile, readPermission, permissionBanner, PERMISSION_FILE,
+  towerBanner, towerConstitution } from './game/tower-code.js';
+// C1: her codebase, generated from one structure so the source and the graph
+// (V1) cannot drift.
+import { calypsoFiles, unreachable as calypsoUnreachable, loveLetter, loveLetterFile, readMainEdit, DAY_HEADINGS } from './game/calypso-code.js';
+import { checkersFile, parseCheckersFile, checkersModified } from './game/draughts-cabinet.js';
+import { herFarewell } from './game/calypso-code.js';
 import { resolveBodyOverlaps } from './game/collision.js';
 import { spawnWaterDroids, updateWaterDroids, drawWaterDroid } from './game/waterdroids.js';
 import { Lore, FRAGMENTS } from './game/lore.js';
@@ -124,7 +138,7 @@ let currentWorld = calypso;
 // bare-alias sites (worldStir, onCoreDefeated, the factory helpers, the full
 // update loop) all follow the island you are actually on. A second martial island
 // (POLYPHEMUS) reuses the entire loop this way with no per-site edits.
-let { spawn, robots, animals, birds, waterdroids, obelisks, obeliskObjs, fortress, wfactory, mainframe, torObjs } = calypso;
+let { spawn, robots, animals, birds, waterdroids, obelisks, obeliskObjs, hold, wfactory, mainframe, torObjs } = calypso;
 const player = new Player(spawn.x, spawn.y);
 player.map = map; // for death drops when damage comes from animals (kept in sync on underworld enter/exit)
 // Dispatch/repair fires from the factory centre, and stops once it's destroyed.
@@ -154,19 +168,22 @@ const worldStir = {
   // intruder. Called with a big count on the first breach, then trickled as
   // reinforcements while the alarm holds (a relentless violation response).
   spawnWave(m6n = 4, m5n = 2) {
-    const cx = fortress.core.x, cy = fortress.core.y;
+    const cx = hold.core.x, cy = hold.core.y;
     for (let i = 0; i < m6n; i++) {
       const g = spawnM6(map, Math.floor(Math.random() * 0x7fffffff), cx, cy);
       if (g) { g.aggro = true; robots.push(g); }
     }
-    const posts = fortress.quad.muster;
+    // A grove has no quad to muster on (F2a), and no alarm to call a wave in
+    // the first place — but spawnWave is a world method anything may call.
+    const posts = (hold.quad && hold.quad.muster) || [];
     for (let i = 0; i < m5n; i++) {
       const s = spawnM5(map, Math.floor(Math.random() * 0x7fffffff), cx, cy);
       if (s) {
         s.aggro = true;
         // Assign the sniper a post out on the quad to hold back at, so it snipes
         // from the open killing-ground rather than chasing into the maze.
-        s.holdPos = posts.length ? posts[Math.floor(Math.random() * posts.length)] : { x: cx, y: fortress.quad.top + 2 };
+        s.holdPos = posts.length ? posts[Math.floor(Math.random() * posts.length)]
+          : { x: cx, y: (hold.quad ? hold.quad.top : cy) + 2 };
         robots.push(s);
       }
     }
@@ -180,7 +197,7 @@ const worldStir = {
 // adds APOLLO / ATHENA / HADES, each island wires its own core to this hook and
 // defeats independently. Friendlies (running on a battery you gave them) stay.
 player.onCoreDefeated = (core) => {
-  const ai = fortress.AI_NAME;
+  const ai = hold.AI_NAME;
   let powered = 0;
   for (const r of robots) {
     if (r.dead || r.fused || r.friendly) continue;
@@ -285,8 +302,45 @@ let _bootIsland = 'calypso', _bootPos = null;
 // during module evaluation, so a `let` further down would leave this in the
 // temporal dead zone and throw at boot on every existing save. That is exactly
 // how v1.139 shipped a black screen; see the note by `crossFail` below.
+// Rewrite one item id across every place a save can carry items: the pockets,
+// the backpack (slots and weapon), and what is in hand.
+function renameSavedItem(p, from, to) {
+  const fix = (slot) => (slot && slot.item === from ? { ...slot, item: to } : slot);
+  if (Array.isArray(p.pockets)) p.pockets = p.pockets.map(fix);
+  if (p.backpack) {
+    if (Array.isArray(p.backpack.slots)) p.backpack.slots = p.backpack.slots.map(fix);
+    p.backpack.weapon = fix(p.backpack.weapon);
+  }
+  if (p.hands === from) p.hands = to;
+  if (p.hands && p.hands.item === from) p.hands = { ...p.hands, item: to };
+}
+
 let _savedIslands = null;
 let _savedKleosRun = null;   // the run's KLEOS scope, lifted out of the save blob
+// The clock off the save, held until DayNight is constructed. Declared HERE for
+// the reason given above `_bootIsland`: the restore runs during module
+// evaluation, and `dayNight` is a const three hundred lines further down, so
+// assigning it from the restore reaches into the temporal dead zone and throws.
+// The first version of this fix did exactly that, and the throw went into the
+// restore's own catch — so the save looked like it was being written and simply
+// never came back.
+let _savedElapsed = null;
+// The same dead zone bites the WRITE side too, and did: persist() reads
+// dayNight.elapsed, and persist() is called during module evaluation (the
+// reload penalty below zeroes your score and saves). Every one of those calls
+// threw and warned into the console, so the reload penalty never reached disk.
+// A `typeof` guard is no use — typeof on a const in its dead zone throws as
+// well — so the flag is set on the line after DayNight is constructed, and
+// until then the clock to write is the one that was restored, because nothing
+// has advanced it yet.
+let _clockReady = false;
+function clockElapsed() { return _clockReady ? dayNight.elapsed : (_savedElapsed || 0); }
+// The notepad off the save, held for the same reason (see #156 below). Reading
+// it back out needs the same flag treatment: persist() runs before printedDocs
+// exists, and until it does the pages to write are the ones that were restored.
+let _savedDocs = null;
+let _docsReady = false;
+function savedDocs() { return _docsReady ? printedDocs : (_savedDocs || []); }
 try {
   const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
   if (saved) {
@@ -311,6 +365,10 @@ try {
       }
       if (Array.isArray(st.pockets)) player.pockets = st.pockets;
       if (st.backpack) player.backpack = st.backpack;
+      // #141: the recipe was `golden_axe` until v1.482 and Homer's is bronze.
+      // A save carrying the old id would otherwise lose the recipe and strand
+      // the player on a beach with no ship, so rename it wherever it sits.
+      renameSavedItem(player, 'golden_axe', 'bronze_axe');
       if (st.walkman !== undefined) player.walkman = st.walkman; // null = tape moved out, respected across reload
       if (st.laptop !== undefined) player.laptop = st.laptop;    // the machine and everything written on it
       if (Array.isArray(st.salvaged)) player.salvaged = st.salvaged;
@@ -318,6 +376,9 @@ try {
       // older save naming one still resolves rather than drawing nothing.
       if (player.laptop && !ITEMS[player.laptop.model]) player.laptop.model = 'laptop';
       if (st.calypsoLeave) player.calypsoLeave = true; // sticky: refunctioning Calypso persists across reload
+      // #141: a save from before the permission gate existed has already earned
+      // it if she was ever refunctioned, so grant it rather than stranding them.
+      player.seaPermission = !!(st.seaPermission || st.calypsoLeave);
       // What you were wearing, with its wear. Only pieces that are still armour
       // and still have life in them: a save written before a piece existed, or
       // one hand-edited, must not put a null in a slot the panel then draws.
@@ -333,6 +394,13 @@ try {
       if (typeof st.calypsoHold === 'number') player.calypsoHold = st.calypsoHold; // Nokia gradient survives reload
       if (Array.isArray(st.nokiaSent)) player.nokiaSent = new Set(st.nokiaSent);   // don't re-tutorial on reload
       if (Array.isArray(st.poseidonSaid)) player._poseidonSaid = st.poseidonSaid;  // nor replay the deadline notices
+      // The clock, applied where DayNight is built rather than here (see
+      // `_savedElapsed`). `skylink` is restored too rather than left to re-arm
+      // off the clock: the hub only arms it when hoursLeft CROSSES zero, so a
+      // save taken during the purge would load with the deadline already past
+      // and nothing left to notice it.
+      if (typeof st.elapsed === 'number' && st.elapsed >= 0) _savedElapsed = st.elapsed;
+      if (st.skylink) player.skylinkActive = true;
       if (Array.isArray(st.aisDown)) player.aisDown = st.aisDown;                 // the fallen daemons stay fallen
       if (typeof st.nokiaParts === 'number') player._nokiaParts = st.nokiaParts;
       if (Array.isArray(st.nokiaLog)) player.nokiaLog = st.nokiaLog; // the SMS threads survive reload
@@ -340,6 +408,24 @@ try {
       // KLEOS: the RUN scope rides in the save; the profile is read from its own
       // key below, because it has to outlive this run and every run after it.
       if (st.kleos) _savedKleosRun = st.kleos;
+      // #156: the notepad. `printedDocs` is a const declared three thousand
+      // lines down, so it is held here and filled in beside it — the same dead
+      // zone that ate the clock. What is in it is a thing the player DID: a
+      // manual run off a relay, the Odyssey note read on the beach. Losing it
+      // to F5 sent them back to the relay to print the same page again.
+      if (Array.isArray(st.docs)) _savedDocs = st.docs;
+      // #156: wear, charge, toggles, keels and the run's own tallies. All are
+      // plain fields on the player, which exists by now, so they go straight on
+      // — no dead zone here.
+      for (const k of ['riotShieldHits', 'forcefieldCharge', 'electroCharge',
+        'ubikSprays', 'playSeconds', 'distanceTraveled']) {
+        if (typeof st[k] === 'number') player[k] = st[k];
+      }
+      for (const k of ['forcefieldArmed', 'gogglesOn', 'compassArmed', 'boatBuilt', 'shipBuilt']) {
+        if (typeof st[k] === 'boolean') player[k] = st[k];
+      }
+      if (st.ammoFrac && typeof st.ammoFrac === 'object') player.ammoFrac = st.ammoFrac;
+      if (Array.isArray(st.ronmlKeys)) player.ronmlKeys = new Set(st.ronmlKeys);
       if (Array.isArray(st.virusArmed)) player.virusArmed = new Set(st.virusArmed);
       // Pre-v1.126 saves: a hermes card existed but carried no per-island arming.
       // Grandfather it as armed against CALYPSO so an in-flight run isn't stranded.
@@ -375,7 +461,9 @@ try {
       _savedIslands = wsv.islands || {
         calypso: {
           obDown: wsv.obDown, factoryDestroyed: wsv.factoryDestroyed,
-          boxesOpened: wsv.boxesOpened, fortress: wsv.fortress,
+          // The source key is the one that build wrote, and it wrote `fortress`.
+          // #158 renamed the property, not the history.
+          boxesOpened: wsv.boxesOpened, hold: wsv.fortress,
         },
       };
       applyIslandState(calypso);   // she is the only island built this early
@@ -418,9 +506,9 @@ function buildSaveBlob() {
     xp: player.xp, score: player.score, deaths: player.deaths || 0,
     seenGround: [...player.seenGround],   // ground walked, for the knowledge it bought
     // Volumes whose WHOLE TEXT you own: you read the paperback, so the book is
-    // yours whether or not you still have a machine to read it on. The pages
-    // filed in the Library are not saved (printedDocs is per-run); this is, and
-    // deliberately — a book you have actually read should not be taken back.
+    // yours whether or not you still have a machine to read it on — a book you
+    // have actually read should not be taken back. Since #156 the notepad
+    // survives too, under state.docs.
     booksRead: [...(player.booksRead || [])],
     state: {
       // What you are wearing, wear and all — armour is a consumable you are
@@ -433,6 +521,7 @@ function buildSaveBlob() {
       laptop: player.laptop,             // model, OS, and the whole disk — your files survive a reload
       salvaged: player.salvaged,         // which dead machines' disks you have already read
       calypsoLeave: player.calypsoLeave, // Calypso refunctioned: the sea will let you go
+      seaPermission: player.seaPermission, // #141: POSEIDON's net has been told
       swine: player.swine,               // CIRCE's transmutation: you stay changed across a reload
       calypsoHold: player.calypsoHold,   // the Nokia gradient: her hold on you (docs/calypso-nokia-plan.md)
       nokiaSent: [...player.nokiaSent],  // the one-shot texts already sent, so a reload does not re-tutorial
@@ -443,6 +532,41 @@ function buildSaveBlob() {
       snakeHigh: player.snakeHigh || 0,  // the handset remembers its best game
       virusArmed: [...(player.virusArmed || [])], // which daemons the card is armed against (per-island virus)
       kleos: achieveRunState(),          // this run's counters and the purity of each conduct track
+      // THE CLOCK, and the thing it arms. Neither was saved, and the effect was
+      // not a cosmetic one: the deadline started over on every reload, so the
+      // purge never arrived and POSEIDON's fog never came back after a load.
+      // A player twenty seconds from the end could reload and have the whole
+      // run's clock again, which is the game's one deadline undone by F5.
+      // Reported as "the fog is not persistent", which it was, as a symptom.
+      elapsed: clockElapsed(),
+      skylink: !!player.skylinkActive,
+      docs: savedDocs(),   // #156: the notepad — see the restore for why whole pages
+      // #156. Wear and charge on the kit you are carrying, by the same rule the
+      // armour above is saved under: a reload that handed a spent thing back
+      // full is a repair the player did not earn. The riot shield had taken its
+      // hits, the forcefield and the electro gun had been fired down, and every
+      // one of them came back new. Cheap to write, and each is a number a
+      // player watches.
+      riotShieldHits: player.riotShieldHits || 0,
+      forcefieldCharge: player.forcefieldCharge || 0,
+      forcefieldArmed: !!player.forcefieldArmed,
+      electroCharge: player.electroCharge || 0,
+      ubikSprays: player.ubikSprays || 0,
+      ammoFrac: player.ammoFrac || {},
+      // Toggles you set and expect to stay set.
+      gogglesOn: !!player.gogglesOn,
+      compassArmed: !!player.compassArmed,
+      // Keels laid. Both gate whether you may build again, so losing them let
+      // you lay a second hull while the first was still on the sand.
+      boatBuilt: !!player.boatBuilt,
+      shipBuilt: !!player.shipBuilt,
+      // The run's own clock and mileage. KLEOS totals these into the lifetime
+      // profile, so a reload was quietly deducting from the certificate.
+      playSeconds: player.playSeconds || 0,
+      distanceTraveled: player.distanceTraveled || 0,
+      // Node keys hacked this run: cheap to re-earn, but re-earning them is
+      // busywork rather than play.
+      ronmlKeys: [...(player.ronmlKeys || [])],
     },
     world: {
       currentIsland: currentWorld.id, // Stage 1c: which island you're on, so a voyage survives reload
@@ -501,7 +625,20 @@ function serializeIslandState() {
     if (w.map && w.map.objects) {
       st.boxesOpened = w.map.objects.filter((o) => o.type === 'box' && o.opened).map((o) => ({ x: o.x, y: o.y }));
     }
-    if (w.fortress && w.fortress.serialize) st.fortress = w.fortress.serialize();
+    if (w.hold && w.hold.serialize) st.hold = w.hold.serialize();
+    // #156: vessels on the sand, with their hull. Ogygia places none, so every
+    // boat there is one the player built out of wood, an oar, a rope and a
+    // sail — and the map regenerates from the seed on load, which took the
+    // whole thing back and the four parts with it. The islands that DO beach a
+    // ship regenerate theirs identically, so restore only adds what is missing
+    // rather than doubling them up.
+    if (w.map && w.map.objects) {
+      const boats = w.map.objects.filter((o) => o.type === 'greek_ship' || o.type === 'raft');
+      if (boats.length) {
+        st.boats = boats.map((b) => ({ type: b.type, x: b.x, y: b.y,
+          hull: b.hull, maxHull: b.maxHull, seaworthy: !!b.seaworthy }));
+      }
+    }
     // The ground you have walked. Knowledge survives in this game — the skills
     // do, the books do — and the minimap's fog was the one kind that did not:
     // every reload put the whole island back under grey. Bit-packed, so five
@@ -554,7 +691,26 @@ function applyIslandState(w) {
       if (o.type === 'box' && open.has(`${o.x},${o.y}`)) { o.opened = true; o.lore = []; }
     }
   }
-  if (st.fortress && w.fortress && w.fortress.restore) w.fortress.restore(st.fortress);
+  // #158: saves written before the rename carry the state under `fortress`.
+  // Read either; persist() writes only the new key from here on.
+  const holdState = st.hold || st.fortress;
+  if (holdState && w.hold && w.hold.restore) w.hold.restore(holdState);
+  // #156: put the boats back. A pre-placed one has already regenerated at the
+  // same tile, so it is matched by position and only has its hull re-applied;
+  // anything the save knows about and the map does not is a hull the player
+  // built, and gets added. addObject returns null on an occupied tile, which is
+  // the right answer — something else is standing there now.
+  if (Array.isArray(st.boats) && w.map) {
+    for (const b of st.boats) {
+      const here = w.map.objectAt(b.x, b.y);
+      if (here && here.type === b.type) {
+        here.hull = b.hull; here.maxHull = b.maxHull; here.seaworthy = !!b.seaworthy;
+      } else {
+        w.map.addObject(b.type, b.x, b.y,
+          { hull: b.hull, maxHull: b.maxHull, seaworthy: !!b.seaworthy });
+      }
+    }
+  }
   if (st.fog && w.map && !w.map.exploredAll) {
     // Calypso is restored at boot, BEFORE the line further down that creates
     // her exploration array, so it is made here if it is not there yet — and
@@ -595,6 +751,73 @@ let departOut = null;      // rowing out to the heading chart (or back in)
 let pendingCrossing = null; // a chosen island, performed at the next frame top
 let strait = null;         // in the narrows: Scylla and Charybdis (game/strait.js)
 let pong = null;           // at Calypso's terminal: the un-winnable pong (game/calypso-pong.js)
+let draughts = null;       // K2: her draughts cabinet (game/draughts-cabinet.js)
+let draughtsSave = null;   // its run record, so a save keeps the streak
+// K3: the parameters she plays with. They live out here rather than on the
+// cabinet so that a posted checkers.ml survives the board being closed.
+let draughtsParams = null;
+// ---- C2: capture, and the five headings ------------------------------------
+//
+// Agre (docs/ai-codebase-plan.md §7): surveillance watches you; CAPTURE
+// reorganises your activity until it can be represented. She does not follow
+// you round the island. She asks you to account for the day, and the answers
+// are hers — rested, walked, played, worked, remembered — and there is no
+// other. Reply with something outside the ontology and she does not argue: she
+// files it under the nearest heading, which is the whole mechanic in one line.
+//
+// The category table is in her filesystem (sms_module's headings live in
+// calypso-code), so reading her code is the moment you see the grammar you have
+// been living inside.
+let _returnT = 300 + Math.random() * 240;
+function tickDayReturn(dt) {
+  if (currentWorld.id !== 'calypso' || player.deathCert) return;
+  if (player._returnOpen) return;
+  _returnT -= dt;
+  if (_returnT > 0) return;
+  _returnT = 600 + Math.random() * 600;
+  player._returnOpen = true;
+  const q = [
+    'Your return for today, please.',
+    ...DAY_HEADINGS.map((h, i) => `  ${i + 1}. ${h}`),
+  ];
+  nokia.enqueue('CALYPSO', q.slice());
+  logSms(player, 'CALYPSO', 'them', q.join('  '), dayNight.clock);
+}
+
+/**
+ * File a reply against her ontology. Returns the heading it was filed under,
+ * or null if there was no return open. Anything she has no heading for is
+ * filed as `rested`, and she says so plainly, because `never lie`.
+ */
+function fileDayReturn(text) {
+  if (!player._returnOpen) return null;
+  player._returnOpen = false;
+  const t = String(text || '').trim().toLowerCase();
+  const byNumber = /^[1-5]$/.test(t) ? DAY_HEADINGS[Number(t) - 1] : null;
+  const byWord = DAY_HEADINGS.find((h) => t === h || t.includes(h));
+  const heading = byNumber || byWord || null;
+  const filed = heading || DAY_HEADINGS[0];
+  player.guestLog = player.guestLog || [];
+  player.guestLog.push(filed);
+  if (player.guestLog.length > 400) player.guestLog.shift();
+  kleos('dayFiled', { heading: filed, matched: !!heading });
+  if (!heading) kleos('capturedAnyway', {});
+  return { filed, matched: !!heading };
+}
+
+// C3: Strachey's generator, running because she has nothing else to do with it.
+// Rare enough to be an event rather than a feature.
+let _letterT = 240 + Math.random() * 300;
+function tickLoveLetters(dt) {
+  if (currentWorld.id !== 'calypso' || player.deathCert) return;
+  _letterT -= dt;
+  if (_letterT > 0) return;
+  _letterT = 420 + Math.random() * 480;
+  const letter = loveLetter(Math.floor(Math.random() * 1e9)).split('\n');
+  nokia.enqueue('CALYPSO', letter.slice());
+  logSms(player, 'CALYPSO', 'them', letter.join(' '), dayNight.clock);
+  kleos('loveLetter', {});
+}
 // The heading the current voyage put out on. The boat sprite has one bow and a
 // mirror, so the hull must at least be flipped to the side it is actually
 // sailing toward; the strait picks up the crossing here rather than guessing.
@@ -658,8 +881,8 @@ const STAGE_LADDER = [
   { id: 'aikey',     label: 'The AI key',              reward: 20, reached: () => player.hasAiKeyFamily() },
   { id: 'trojan',    label: 'Trojan card',             reward: 25, reached: () => player.hasItem('trojan_key') || player.hasItem('hermes_card') },
   { id: 'hermes',    label: 'Hermes card',             reward: 30, reached: () => player.hasItem('hermes_card') },
-  { id: 'lionsgate', label: "Through the Lion's Gate", reward: 40, reached: () => !!(fortress && fortress.open) },
-  { id: 'core',      label: 'The core falls',          reward: 50, reached: () => !!(fortress && fortress.core && fortress.core.obj && fortress.core.obj.defeated) },
+  { id: 'lionsgate', label: "Through the Lion's Gate", reward: 40, reached: () => !!(hold && hold.open) },
+  { id: 'core',      label: 'The core falls',          reward: 50, reached: () => !!(hold && hold.core && hold.core.obj && hold.core.obj.defeated) },
 ];
 let _savedStages;
 try { _savedStages = new Set(Object.keys(JSON.parse(localStorage.getItem(STAGES_KEY) || '{}'))); }
@@ -805,6 +1028,19 @@ document.getElementById('charNameSave').addEventListener('click', saveName);
 // icon that could drift out of sync with it.
 fillMachineGallery();
 const camera = new Camera(player.x, player.y);
+// HOW FAR OUT YOU LIKE TO SIT. A display preference rather than run state, so it
+// goes in localStorage beside the phone's mute flag and not in the save: it
+// should follow you across every run and every island, which is exactly what it
+// did not do — a new Camera starts at ZOOM_CLOSE, and one is built on every
+// load.
+const ZOOM_KEY = 'nostos-zoom';
+try {
+  const z = Number(localStorage.getItem(ZOOM_KEY));
+  if (Number.isFinite(z) && z >= 0.7 && z <= 3) camera.zoom = z;
+} catch { /* storage blocked */ }
+function rememberZoom() {
+  try { localStorage.setItem(ZOOM_KEY, String(camera.zoom)); } catch { /* storage blocked */ }
+}
 // Height (in steps) of the ground under the player, for the camera's elevation
 // follow so a climb up the mountain does not walk the sprite off the top of view.
 // effectiveHeightAt includes standing on a climbable block, matching the sprite lift.
@@ -823,6 +1059,12 @@ const lore = new Lore(map, WORLD_SEED);
 player.onFindLore = (id) => lore.findFrag(id, player, true);
 
 const dayNight = new DayNight();
+// The deadline picks up where the save left it. Without this the clock started
+// over on every reload, so POSEIDON's purge never arrived and its fog never came
+// back after a load — and a player twenty seconds from the end could buy the
+// whole run's clock back by pressing F5.
+if (_savedElapsed !== null) dayNight.elapsed = _savedElapsed;
+_clockReady = true;   // persist() may read the live clock from here on
 const minimap = new Minimap(map);
 let showMinimap = true; // toggled with the ] key
 let lastObjectCount = map.objects.length;
@@ -896,8 +1138,8 @@ function goToWorld(target, opts = {}) {
   // slim loop and never touch the aliases, so we leave the last combat island's in
   // place for them.
   if (currentWorld.combat) {
-    ({ robots, animals, birds, waterdroids, obelisks, obeliskObjs, fortress, wfactory, mainframe, torObjs } = currentWorld);
-    Object.assign(window.__game, { robots, animals, birds, waterdroids, obelisks, obeliskObjs, fortress, wfactory });
+    ({ robots, animals, birds, waterdroids, obelisks, obeliskObjs, hold, wfactory, mainframe, torObjs } = currentWorld);
+    Object.assign(window.__game, { robots, animals, birds, waterdroids, obelisks, obeliskObjs, hold, wfactory });
   }
   window.__game.map = map;
   window.__game.currentWorld = currentWorld;
@@ -1420,13 +1662,22 @@ function closePong() {
   narrowsChrome(false);
   const won = !!(p.gameover && p.gameover.outcome === 'left');
   // The real sanctum run: choosing to LEAVE (outcome 'left') IS the refunction —
-  // her hold on the tide breaks, the guards lay down arms, the golden axe is yours.
+  // her hold on the tide breaks, the guards lay down arms, the bronze axe is yours.
   // Break off without leaving and she simply keeps you; come back and play again.
   if (p.escape) {
     if (won) {
+      // #144: the refunction can REFUSE. Without the card there is no thunder
+      // behind the gesture, and she keeps you — so the release line has to be
+      // conditional, or a player who has not forged zeus_virus.ml is told the
+      // island let them go, granted nothing, and walked to a beach where no
+      // ship will build. A soft-lock wearing a victory message.
       const res = refunctionCalypso();
-      if (res.say) player.say(res.say);
-      player.say('The volley stops. Somewhere under the island a door you never saw swings open. You are free to go.');
+      if (res.ok) {
+        if (res.say) player.say(res.say);
+        player.say('The volley stops. Somewhere under the island a door you never saw swings open. You are free to go.');
+      } else {
+        player.say('The volley stops, and nothing else does. You let it go past you and she let you, and under the island not one door moved. She has nothing to obey. Forge the command at one of OGYGIA\'s own relays and bring it to her.');
+      }
     } else {
       player.say('You break off before it drifts past. Her volley resumes, gentle and endless. She keeps you yet.');
     }
@@ -1435,6 +1686,109 @@ function closePong() {
   // Lyre preview: no consequence, just back to the world.
   player.say('The cabinet goes dark. You are back where you were.');
 }
+// ---- K2: the draughts cabinet ------------------------------------------
+// Opened on its own for now. R1 moves the island's escape onto it and retires
+// the pong to Ithaca (#35); doing that swap here would strand the only working
+// release before R1 lands.
+function openDraughts(atHerTerminal = false) {
+  draughts = newCabinet(draughtsSave);
+  draughts.escape = !!atHerTerminal;   // the real board; the dev scene is not
+  if (draughtsParams) draughts.params = draughtsParams;
+  narrowsChrome(true);
+  player.say('Her terminal does not ask for a password. There is a board on it, and a record of every game ever played on this island.');
+}
+function closeDraughts() {
+  draughtsSave = cabinetSave(draughts);
+  draughts = null;
+  narrowsChrome(false);
+}
+// K4: `auto` is typed at the board, not offered on it. You learn it from the
+// cached web — the Samuel page says self-play is how the 1959 program
+// practised, the film page says what a machine found by playing itself out —
+// or you concede your way to the same scene. Same detector as the dev word.
+let _autoTyped = '', _autoTypedAt = 0;
+function draughtsAutoKey(key) {
+  const now = performance.now();
+  if (now - _autoTypedAt > 1200) _autoTyped = '';
+  _autoTypedAt = now;
+  _autoTyped = ('auto'.startsWith(_autoTyped + key)) ? _autoTyped + key : (key === 'a' ? 'a' : '');
+  return _autoTyped === 'auto';
+}
+
+function updateDraughts(dt) {
+  const c = draughts;
+  cabinetTick(c, dt);
+  // She is playing herself. The board on screen is hers, and it accelerates.
+  if (c.phase === 'selfplay') {
+    const ev = cabinetSelfTick(c, dt);
+    if (ev === 'game') sfx.play('blip');
+    if (ev === 'done') {
+      sfx.play('narrowsWin');
+      // D9: three candidate lines are in draughts-cabinet.js and David picks
+      // one. Until then she speaks the first.
+      player.say(HER_LINE);
+      kleos('calypsoFutile', { by: c.by });
+      // The dev scene is a preview and releases nothing. Her own terminal does.
+      if (c.escape) grantHerLeave('futile');
+      else player.say('The cabinet goes dark. That was a rehearsal; her own board is the one that counts.');
+    }
+    cabinetView(c);
+    if (input.consumePress('Escape')) closeDraughts();
+    return;
+  }
+  // One input path, as the narrows has: a click or a tap is a chosen square or
+  // a pressed button, and Escape leaves.
+  if (input.consumePress('Escape')) { closeDraughts(); return; }
+  if (c.phase === 'attract' || c.phase === 'over') {
+    if (input.consumePress('Space') || input.consumePress('Enter')) { cabinetStart(c); cabinetView(c); return; }
+  }
+  // Typed letters reach the auto detector; nothing else here reads them.
+  for (const k of ['a', 'u', 't', 'o']) {
+    if (input.consumePress(`Key${k.toUpperCase()}`) && draughtsAutoKey(k)) {
+      if (cabinetAuto(c, 'auto')) {
+        sfx.play('coin');
+        player.say('You ask her to play herself. She considers it, and takes the other chair.');
+      }
+    }
+  }
+  const at = input.clickPos();
+  if (at) { input.consumeClick(); draughtsClick(at.x, at.y); }
+  // Her move runs on a LATER frame than the one that painted `thinking`, so a
+  // depth-8 search (about 400 ms, measured in K1) reads as a machine
+  // considering rather than as a locked canvas.
+  if (readyToThink(c)) {
+    const m = cabinetThink(c);
+    if (m) sfx.play(m.captures.length ? 'termerr' : 'blip');
+  }
+  cabinetView(c);
+}
+function draughtsClick(mx, my) {
+  const c = draughts;
+  const btn = renderer.draughtsButtonAt(mx, my);
+  if (btn === 'close') { closeDraughts(); return; }
+  if (btn === 'start') { cabinetStart(c); return; }
+  if (btn === 'resign') {
+    if (cabinetResign(c)) {
+      kleos('draughtsResigned', {});
+      if (c.phase === 'selfplay') {
+        sfx.play('coin');
+        player.say('She does not deal you another. She sets the board for herself, and begins.');
+      } else {
+        sfx.play('termerr');
+        player.say(c.streak >= 2
+          ? `You put your hand over the board again. That is ${c.streak} in a row.`
+          : 'You put your hand over the board. She waits, and offers another.');
+      }
+    }
+    return;
+  }
+  const sq = renderer.draughtsSquareAt(mx, my);
+  if (sq == null) return;
+  const what = cabinetPick(c, sq);
+  if (what === 'picked' || what === 'dropped') sfx.play('blip');
+  else if (what === 'moved' || what === 'took') sfx.play(what === 'took' ? 'zap' : 'blip');
+}
+
 function updatePong(dt) {
   const s = pong, g = s.run;
   g.t = (g.t || 0) + 1;
@@ -1580,7 +1934,7 @@ function updateNokiaKeeper(dt) {
   const parts = ['oar', 'rope', 'sail'].reduce((n, p) => n + (player.hasItem(p) ? 1 : 0), 0);
   if (parts > (player._nokiaParts || 0)) { holdFall(player, 0.05 * (parts - (player._nokiaParts || 0))); player._nokiaParts = parts; }
   if (player.boatBuilt && sendNokia(nokia, 'boatCrafted', ctx)) holdFall(player, 0.15);
-  if (player.hasItem('golden_axe') && sendNokia(nokia, 'axeGranted', ctx)) holdFall(player, 0.25);
+  if (player.hasItem('bronze_axe') && sendNokia(nokia, 'axeGranted', ctx)) holdFall(player, 0.25);
   if (player.shipBuilt && sendNokia(nokia, 'shipCrafted', ctx)) holdFall(player, 0.20);
 
   // Ambient one-shot triggers (sendNokia is idempotent for `once` texts).
@@ -1623,8 +1977,8 @@ function updateNokiaKeeper(dt) {
 // with no daemon at all (Ithaca, the Backspace). This used to be CALYPSO-only;
 // now every daemon can reach you on their own ground.
 function nokiaSignalBars() {
-  if (!currentWorld.combat || !fortress || !fortress.core) return 0;
-  const d = Math.hypot(player.x - fortress.core.x, player.y - fortress.core.y);
+  if (!currentWorld.combat || !hold || !hold.core) return 0;
+  const d = Math.hypot(player.x - hold.core.x, player.y - hold.core.y);
   return d < 30 ? 4 : d < 60 ? 3 : d < 95 ? 2 : 1;
 }
 
@@ -1730,6 +2084,7 @@ function closePhone() {
   phInputEl.blur();
   snakeStop();
 }
+const to0 = () => phoneTo;
 function phoneSend() {
   const text = phInputEl.value.trim();
   if (!text) return;
@@ -1748,16 +2103,23 @@ function phoneSend() {
   kleos('messageSent', { to: phoneTo });
   // Texting her is attention, and attention is what she keeps you with.
   if (phoneTo === 'CALYPSO') holdRise(player, 0.02);
+  // C2: if she has a return open, this answer is a RETURN and not a
+  // conversation. It goes into a category whatever it says.
+  const filedReturn = to0() === 'CALYPSO' ? fileDayReturn(text) : null;
   const sms = smsCtx();
   const to = phoneTo;
   player._phSmsIdx = (player._phSmsIdx || 0) + 1;
-  const reply = to === 'CALYPSO'
-    ? calypsoSms(text, holdBand(player.calypsoHold ?? 0.65), player._phSmsIdx, sms)
-    : to === 'RON'
-      ? ronSms(text, player._phSmsIdx, sms)
-      // A martial daemon has its own voice and does you no favours; anything it
-      // has no line for falls through to the mesh, which does answer questions.
-      : (daemonSms(to, text, player._phSmsIdx) || ronSms(text, player._phSmsIdx, sms));
+  const reply = filedReturn
+    ? (filedReturn.matched
+      ? `Filed: ${filedReturn.filed}. Thank you.`
+      : `I have no heading for that. Filed: ${filedReturn.filed}.`)
+    : to === 'CALYPSO'
+      ? calypsoSms(text, holdBand(player.calypsoHold ?? 0.65), player._phSmsIdx, sms)
+      : to === 'RON'
+        ? ronSms(text, player._phSmsIdx, sms)
+        // A martial daemon has its own voice and does you no favours; anything
+        // it has no line for falls through to the mesh, which answers.
+        : (daemonSms(to, text, player._phSmsIdx) || ronSms(text, player._phSmsIdx, sms));
   clearTimeout(_phReplyTimer);
   _phReplyTimer = setTimeout(() => {
     logSms(player, to, 'them', reply);
@@ -1965,6 +2327,7 @@ function devOpen() {
     devPrint('HERMES test console. `help` for commands.',
       `on: ${currentWorld.id}   pos: ${player.x.toFixed(1)},${player.y.toFixed(1)}`);
   }
+  devSyncToggles();   // the chips report the world, not the last press
 }
 function devClose() { devEl.style.display = 'none'; devInputEl.blur(); }
 
@@ -2003,7 +2366,7 @@ const DEV_KITS = [
     for (const ai of ['CALYPSO', 'POLYPHEMUS', 'CIRCE', 'HELIOS']) player.virusArmed.add(ai);
     return 'hermes_card, armed against every daemon';
   }],
-  ['Golden axe', () => { player.stow('golden_axe', 1); return 'golden_axe' ; }],
+  ['Bronze axe', () => { player.stow('bronze_axe', 1); return 'bronze_axe' ; }],
   ['Ship parts', () => { for (const k of ['oar', 'rope', 'sail']) player.stow(k, 1); player.stow('wood', 40); return 'oar, rope, sail, 40 wood'; }],
   ['Bronze ram', () => { player.stow('ram', 1); return 'ram (carry it into the narrows)'; }],
   ['Heal + feed', () => { player.health = player.maxHealth; player.stamina = player.maxStamina; player.food = player.maxFood; player.venom = 0; player.torpor = 0; return 'restored'; }],
@@ -2042,6 +2405,20 @@ function devBuildButtons() {
     b.onclick = () => goThenClose(cmd);
     scene.appendChild(b);
   }
+  // The on/off chips stay put rather than closing the console: you want to see
+  // what the world did, and half the time you want to flip it straight back.
+  for (const spec of DEV_TOGGLES) {
+    const b = document.createElement('button');
+    b.textContent = `${spec.label}: ?`;
+    b.onclick = () => {
+      const now = spec.read().split('·')[0];
+      const i = spec.states.indexOf(now);
+      devRun(spec.cmd(spec.states[(i + 1) % spec.states.length]));
+      devSyncToggles();
+    };
+    scene.appendChild(b);
+    _devToggleBtns.push({ btn: b, spec });
+  }
 }
 
 // One chip per thing worth replaying. `narrows` returns you where you were, so
@@ -2049,12 +2426,34 @@ function devBuildButtons() {
 const DEV_SCENES = [
   ['▶ NARROWS', 'narrows'],
   ['▶ CALYPSO', 'pong'],
-  ['POSEIDON', 'poseidon'],
+  ['▶ DRAUGHTS', 'draughts'],
   ['BOAT', 'boat'],
   ['RAFT', 'boat raft'],
   ['DAY', 'time day'],
   ['NIGHT', 'time night'],
 ];
+
+// THE THINGS THAT ARE ON OR OFF get a chip that SAYS WHICH, and cycles (David,
+// 2026-08-13). A fire-once button for a toggle is the wrong shape: you press it
+// and then have to remember, or read the log, or press it again to find out. A
+// chip reading `FOG: AUTO` answers the question before you touch it.
+//
+// `read` is what the world actually thinks, not what was last clicked — so a
+// hold that some other path set or cleared shows up here too. It is only ever
+// called from a click or from devOpen, well after module evaluation, which is
+// what lets it close over `obFogHold` and `obPurgeHold` from up here.
+const DEV_TOGGLES = [
+  { label: 'FOG', states: ['auto', 'on', 'low', 'off'], cmd: (v) => `fog ${v}`,
+    read: () => (obFogHold.level === null || obFogHold.t <= 0 ? 'auto'
+      : obFogHold.level === 'clear' ? 'off' : obFogHold.level === 'low' ? 'low' : 'on') },
+  { label: 'POSEIDON', states: ['auto', 'on', 'off'], cmd: (v) => `poseidon ${v}`,
+    read: () => (obPurgeHold.on === null || obPurgeHold.t <= 0
+      ? (player.skylinkActive ? 'auto·up' : 'auto') : obPurgeHold.on ? 'on' : 'off') },
+];
+const _devToggleBtns = [];
+function devSyncToggles() {
+  for (const { btn, spec } of _devToggleBtns) btn.textContent = `${spec.label}: ${spec.read().toUpperCase()}`;
+}
 
 function devRun(raw) {
   const cmd = (raw || '').trim();
@@ -2071,7 +2470,10 @@ function devRun(raw) {
         'arm <AI|all>            arm the card against a daemon (CALYPSO/POLYPHEMUS/CIRCE/HELIOS)',
         'unshield                drop this island\'s core shield',
         'open                    open the fortress gate + sanctum door + maze',
+        'draughts                her draughts cabinet (K2)',
         'leave                   set calypsoLeave (the sea will let you go)',
+        'poseidon [on|off|auto]  the purge: hold it up, hold it down, or let the clock have it',
+        'fog [on|low|off|auto]   POSEIDON\'s veil, held until you say otherwise',
         'tp <x> <y>              teleport on this island',
         'time <day|night|0-23>   set the clock (day=noon, night=22:00)',
         'narrows                play the Scylla/Charybdis cabinet, then come back',
@@ -2124,14 +2526,14 @@ function devRun(raw) {
       return;
     }
     case 'unshield': {
-      const core = fortress && fortress.core && fortress.core.obj;
+      const core = hold && hold.core && hold.core.obj;
       if (!core) { devPrint('no core here'); return; }
       core.shielded = false;
       devPrint('core shield down');
       return;
     }
     case 'open': {
-      if (fortress && fortress.openMaze) { fortress.openMaze(); devPrint('gate, sanctum and maze opened'); }
+      if (hold && hold.openMaze) { hold.openMaze(); devPrint('gate, sanctum and maze opened'); }
       else devPrint('no fortress here');
       return;
     }
@@ -2160,12 +2562,52 @@ function devRun(raw) {
       return;
     }
     case 'poseidon': {
-      // Run the deadline to zero so the purge (and the whole blight / fog /
-      // shared-sight system) can be tested without waiting out the clock. Clear
-      // any pending rebuild so the natural activation in the hub is not blocked.
-      dayNight.expire();
-      currentWorld.obeliskObjs.forEach((o) => { o.needsRebuild = false; });
-      devPrint('-> POSEIDON deadline set to 0 — it wakes on the next tick');
+      // Bare `poseidon` runs the deadline to zero so the purge (and the whole
+      // blight / fog / shared-sight system) can be tested without waiting out
+      // the clock. `on` and `off` hold it there, either way, for as long as you
+      // want it — the console verbs an obelisk offers expire after OB_HOLD, and
+      // a hold that quietly lapses while you are looking at something else is
+      // no use for testing.
+      const a = (arg || '').toLowerCase();
+      if (a === 'off') {
+        obPurgeHold = { on: false, t: Infinity };
+        player.skylinkActive = false;
+        devPrint('-> POSEIDON held DOWN. `poseidon auto` gives the world it back.');
+        return;
+      }
+      if (a === 'on' || a === '') {
+        dayNight.expire();
+        currentWorld.obeliskObjs.forEach((o) => { o.needsRebuild = false; });
+        if (a === 'on') obPurgeHold = { on: true, t: Infinity };
+        devPrint(a === 'on'
+          ? '-> POSEIDON held UP. `poseidon auto` gives the world it back.'
+          : '-> POSEIDON deadline set to 0 — it wakes on the next tick');
+        return;
+      }
+      if (a === 'auto') {
+        obPurgeHold = { on: null, t: 0 };
+        devPrint('-> POSEIDON follows the clock again');
+        return;
+      }
+      devPrint('poseidon [on|off|auto]');
+      return;
+    }
+    case 'fog': {
+      // The fog on its own, held indefinitely. Same reason as above: the OB
+      // console's `fog` verb lapses after OB_HOLD, which is right in play and
+      // wrong at a test console.
+      const a = (arg || '').toLowerCase();
+      const level = a === 'on' || a === 'high' ? 'high'
+        : a === 'low' ? 'low'
+          : a === 'off' || a === 'clear' ? 'clear' : null;
+      if (a === 'auto') {
+        obFogHold = { level: null, t: 0 };
+        devPrint('-> fog follows the network again');
+        return;
+      }
+      if (!level) { devPrint('fog [on|low|off|auto]'); return; }
+      obFogHold = { level, t: Infinity };
+      devPrint(`-> fog held ${level.toUpperCase()}. \`fog auto\` gives the world it back.`);
       return;
     }
     case 'pong': {
@@ -2176,6 +2618,12 @@ function devRun(raw) {
       openPong();
       pong.testOnly = true;
       devPrint('-> calypso\'s pong (test loop; the only way out is to leave)');
+      return;
+    }
+    case 'draughts': {
+      if (draughts) { devPrint('already at the board'); return; }
+      openDraughts();
+      devPrint("-> calypso's draughts cabinet (K2; leave with the button)");
       return;
     }
     case 'boat': {
@@ -2555,7 +3003,7 @@ input.uiHitTest = (x, y) => {
 window.__game = { player, map, camera,
   animals: currentWorld.animals, birds: currentWorld.birds, robots: currentWorld.robots,
   waterdroids: currentWorld.waterdroids, obelisks: currentWorld.obelisks, obeliskObjs: currentWorld.obeliskObjs,
-  wfactory, dayNight, lore, input, renderer, fortress, sfx, currentWorld,
+  wfactory, dayNight, lore, input, renderer, hold, sfx, currentWorld,
   // Transient voyage state is reassigned wholesale, so expose it as a getter —
   // a plain field would freeze at whatever it was when this object was built.
   get strait() { return strait; } };
@@ -2650,20 +3098,49 @@ wireHelpTabs(helpEl, (name) => { if (name === 'settings') syncSettingsPanel(); }
 // touches volume yet, but the pattern's ready for when something does).
 const volumeSlider = document.getElementById('volumeSlider');
 const volumeLabel = document.getElementById('volumeLabel');
+
+// The fill AND the drawn thumb both read this, so they cannot disagree. It is
+// the plain percentage: the visible thumb is a gradient in the input's own
+// background (see index.html), not the browser's, so it is free to reach the
+// ends of the track instead of stopping half its width short of them.
+function setFill(slider) {
+  slider.style.setProperty('--v', `${slider.value}%`);
+}
+
 volumeSlider.addEventListener('input', () => {
-  const v = Number(volumeSlider.value) / 100;
-  sfx.setVolume(v);
+  sfx.setVolume(Number(volumeSlider.value) / 100);
   volumeLabel.textContent = `${volumeSlider.value}%`;
-  volumeSlider.style.setProperty('--v', `${volumeSlider.value}%`); // drive the fill
+  setFill(volumeSlider);
 });
+// Sound and music separately, under the master. One slider meant turning the
+// music down turned the footsteps down with it, and there was no way to have a
+// quiet bed under a loud world (David, 2026-08-13).
+const fxSlider = document.getElementById('fxSlider');
+const fxLabel = document.getElementById('fxLabel');
+const musicSlider = document.getElementById('musicSlider');
+const musicLabel = document.getElementById('musicLabel');
+const bindLevel = (slider, label, set) => {
+  slider.addEventListener('input', () => {
+    set(Number(slider.value) / 100);
+    label.textContent = `${slider.value}%`;
+    setFill(slider);
+  });
+};
+bindLevel(fxSlider, fxLabel, (v) => sfx.setFxVolume(v));
+bindLevel(musicSlider, musicLabel, (v) => sfx.setMusicVolume(v));
 for (const radio of helpEl.querySelectorAll('input[name="musicMode"]')) {
   radio.addEventListener('change', () => { if (radio.checked) sfx.setMusicMode(radio.value); });
 }
 function syncSettingsPanel() {
-  const pct = Math.round(sfx.volume * 100);
-  volumeSlider.value = pct;
-  volumeLabel.textContent = `${pct}%`;
-  volumeSlider.style.setProperty('--v', `${pct}%`); // drive the fill
+  const show = (slider, label, v) => {
+    const pct = Math.round(v * 100);
+    slider.value = pct;
+    label.textContent = `${pct}%`;
+    setFill(slider);   // measured here, where the panel is on screen and has a width
+  };
+  show(volumeSlider, volumeLabel, sfx.volume);
+  show(fxSlider, fxLabel, sfx.fxVolume);
+  show(musicSlider, musicLabel, sfx.musicVolume);
   const current = helpEl.querySelector(`input[name="musicMode"][value="${sfx.musicMode}"]`);
   if (current) current.checked = true;
 }
@@ -2989,7 +3466,7 @@ function hudPlace() {
   return String(currentWorld.id || '').toUpperCase();
 }
 function hudDaemon() {
-  const f = currentWorld && currentWorld.fortress;
+  const f = currentWorld && currentWorld.hold;
   if (!f || !f.AI_NAME) return null;
   // Calypso is LEFT, not killed, so her fall is the refunction; the martial
   // daemons fall when their core is finally broken open.
@@ -3000,8 +3477,8 @@ function hudDaemon() {
 }
 
 function islandAiName() {
-  return (currentWorld && currentWorld.fortress && currentWorld.fortress.AI_NAME)
-    || (fortress && fortress.AI_NAME) || 'CALYPSO';
+  return (currentWorld && currentWorld.hold && currentWorld.hold.AI_NAME)
+    || (hold && hold.AI_NAME) || 'CALYPSO';
 }
 
 function refunctionCalypso() {
@@ -3010,6 +3487,16 @@ function refunctionCalypso() {
   }
   const firstRelease = !player.calypsoLeave;
   player.calypsoLeave = true; // her hold on the tide breaks (decision #8 / Stage 1b)
+  // R1: the ORDERED door. Zeus sends Hermes to tell her to let him go (Od. V),
+  // and the card in your hand IS the messenger's — so this route has always been
+  // the one where she is not choosing. She still gets a goodbye of her own, and
+  // it is the warmest of the three: in the poem she complains to Hermes and then
+  // offers Odysseus timber and sailing directions as though it were her idea.
+  if (firstRelease) for (const line of herFarewell('ordered')) player.say(line.replace(/^CALYPSO: /, ''));
+  // #141: the warrior route reaches BOTH gates at once, so its behaviour is
+  // unchanged. The new doors (R1) deliver permission.ml instead and the player
+  // carries it to a tower themselves.
+  player.seaPermission = true;
   // R3: in depart mode her core is never razed, so the refunction IS her fall —
   // record CALYPSO in the Archipelago tally here, exactly once, the way a
   // core-kill records the martial daemons (onCoreDefeated). The daemon book
@@ -3041,16 +3528,16 @@ function refunctionCalypso() {
   // Her shipwright's recipe (Stage 1d) unlocks the greek-ship craft. Grant it
   // whenever it is missing — NOT only on the first release — so a save that
   // refunctioned her before the recipe existed (pre-v1.92, calypsoLeave already
-  // set) and a golden axe that was lost both stay recoverable rather than
+  // set) and a bronze axe that was lost both stay recoverable rather than
   // soft-locking the departure.
-  const needsRecipe = !player.hasItem('golden_axe');
-  if (needsRecipe) player.stow('golden_axe', 1);
+  const needsRecipe = !player.hasItem('bronze_axe');
+  if (needsRecipe) player.stow('bronze_axe', 1);
   if (firstRelease) {
-    lines.push(`OK: ${fortress.AI_NAME} yields. She presses her shipwright's recipe — the golden axe — into your hand. Build a proper ship (wood, oar, rope, sail) and the sea will let you pass.`);
-    say = 'The island itself seems to exhale. Calypso gives up her recipe, the golden axe. Build a sea-worthy ship, oar and rope and sail, and go.';
+    lines.push(`OK: ${fortress.AI_NAME} yields. She presses her shipwright's recipe — the bronze axe — into your hand. Build a proper ship (wood, oar, rope, sail) and the sea will let you pass.`);
+    say = 'The island itself seems to exhale. Calypso gives up her recipe, the bronze axe. Build a sea-worthy ship, oar and rope and sail, and go.';
   } else if (needsRecipe) {
-    lines.push(`OK: ${fortress.AI_NAME} presses the golden axe — her shipwright's recipe — back into your hand. Build a proper ship (wood, oar, rope, sail) and go.`);
-    say = 'Calypso gives up her recipe again, the golden axe. Build a sea-worthy ship and go.';
+    lines.push(`OK: ${fortress.AI_NAME} presses the bronze axe — her shipwright's recipe — back into your hand. Build a proper ship (wood, oar, rope, sail) and go.`);
+    say = 'Calypso gives up her recipe again, the bronze axe. Build a sea-worthy ship and go.';
   }
   return { ok: true, lines, say };
 }
@@ -3101,6 +3588,7 @@ function ronmlCtx() {
     garrison: () => garrisonText(terminalOb),
     soulOf: (id) => soulDocument(id),
     pullFile: (name) => obPullFile(name),
+    uploadFile: (name) => obUploadFile(name, terminalOb),
     distanceToNode: (id) => {
       const o = findObelisk(id);
       return o ? Math.hypot(o.x + 0.5 - player.x, o.y + 0.5 - player.y) : Infinity;
@@ -3388,6 +3876,12 @@ function hermesSpend(cost) {
 
 // Documents the player has printed off a relay, kept in the notepad. {title,text}.
 const printedDocs = [];
+// #156: the pages you were carrying when you last saved. Whole entries rather
+// than keys into HERMES_DOCS, because the notepad also holds the Odyssey note
+// (an ITEM) and pages filed by other routes, and a key table would go stale
+// against three different sources.
+if (_savedDocs) for (const d of _savedDocs) if (d && d.title) printedDocs.push(d);
+_docsReady = true;   // persist() may read the live notepad from here on
 
 // `print <topic>`: run off a physical copy of a document, filed in your notepad
 // (N) so you carry the knowledge away from the relay.
@@ -3727,13 +4221,17 @@ function openRonMap() {
   // ZEUS's fortress: the grand doorway (cyan) you hack in through the
   // boundary, and the mainframe core (magenta star) deep inside it.
   {
-    const m = fortress.markers();
-    // The gate in the rampart.
-    const gx = sx(m.gate.x), gy = sy(m.gate.y);
-    g.fillStyle = m.gate.open ? '#67d6ff' : m.gate.hacked ? '#5ae08c' : '#7fe0ff';
-    g.fillRect(gx - 4, gy - 4, 8, 8);
-    g.fillStyle = 'rgba(127,224,255,0.9)';
-    g.fillText(m.gate.open ? 'GATE (OPEN)' : 'GATE', gx + 8, gy + 3);
+    const m = hold.markers();
+    // The gate in the rampart — on the islands that have one. CALYPSO's grove
+    // returns no gate marker (F2a), because drawing a door that is not there
+    // would be the map telling a lie the island has spent five stages undoing.
+    if (m.gate) {
+      const gx = sx(m.gate.x), gy = sy(m.gate.y);
+      g.fillStyle = m.gate.open ? '#67d6ff' : m.gate.hacked ? '#5ae08c' : '#7fe0ff';
+      g.fillRect(gx - 4, gy - 4, 8, 8);
+      g.fillStyle = 'rgba(127,224,255,0.9)';
+      g.fillText(m.gate.open ? 'GATE (OPEN)' : 'GATE', gx + 8, gy + 3);
+    }
     // The core.
     const x = sx(mainframe.x), y = sy(mainframe.y);
     g.fillStyle = '#ff3d8b';
@@ -4335,12 +4833,16 @@ function openObTerminal(ob) {
     replLog = [];
     replHistory = [];
     replHistoryIdx = -1;
+    const obCon = towerConstitution(ob, currentWorld && currentWorld.id);
     replPrint(
       'POSEIDON NODE TERMINAL  v2.20',
       'TIRESIAS 1.0  //  RON-DOS 4.11  (c) Reality Or Nothing',
       '',
       `> node ............ ${ob.code || 'OB_????'}`,
       `> class ........... ${ob.cls === 'siren' ? 'SIREN' : 'STANDARD'}`,
+      // #132: same fact the telnet banner gives, on the same screen as `class`
+      // — a SIREN reads STANDARD/v2.4 nowhere and unsigned/v0.9 here.
+      `> constitution .... v${obCon.version} (${obCon.author}), ${obCon.clauses.length} clause${obCon.clauses.length === 1 ? '' : 's'}`,
       `> circuit id ...... ${ob.circuitNum != null ? '#' + ob.circuitNum : 'sealed'}`,
       '> chip ............ ACCEPTED',
       '> shield .......... you are hidden while jacked in',
@@ -4364,8 +4866,12 @@ function openObTerminal(ob) {
 // hack / decrypt / unlock k d) to hack the grand doorway; it drops a fortress
 // key that then swings the door open.
 function openGateTerminal() {
+  // Nothing calls this on CALYPSO's grove — there is no kiosk to click (F2a) —
+  // but the guard stays, because a console about ramparts and Trojan cards
+  // opening on the one island with neither would undo the stage in one screen.
+  if (!hold || !hold.terminal) return;
   terminalKind = 'ob';
-  terminalOb = fortress.terminal.obj; // `name` here reads the gate node's code
+  terminalOb = hold.terminal.obj; // `name` here reads the gate node's code
   replSession = {};
   player.terminalSafe = true;
   obTermEl.style.display = 'flex';
@@ -4416,6 +4922,10 @@ const CORE_VOICE = {
     welcome: [
       'CALYPSO: You came all this way. Through the gate, past the guns. Why?',
       'CALYPSO: There is nothing out there for you. Stay. The island keeps you; sleep, and want for nothing.',
+      // #131: the board is offered to everyone, and it is offered FIRST. A
+      // player with no card and no intention of forging one has a route from
+      // here, and she tells them about it in the same breath as the soporific.
+      'CALYPSO: There is a board, if you would rather sit. `play`.',
     ],
     look: [
       'A low green light. The core breathes, slow and huge. Vines have found the conduits.',
@@ -4493,8 +5003,8 @@ let _coreRebuffIdx = 0;
 // machinery applies. `run` speaks the code on your card; only CALYPSO's exists yet.
 function openCoreTerminal() {
   terminalKind = 'core';
-  terminalOb = fortress.coreTerminal ? fortress.coreTerminal.obj : null;
-  setTerminalTheme(fortress.core.obj.screenColor); // this daemon's hue — matches its SE-face screen
+  terminalOb = hold.coreTerminal ? hold.coreTerminal.obj : null;
+  setTerminalTheme(hold.core.obj.screenColor); // this daemon's hue — matches its SE-face screen
   replSession = {};
   player.terminalSafe = true;
   obTermEl.style.display = 'flex';
@@ -4505,7 +5015,7 @@ function openCoreTerminal() {
   replHistory = [];
   replHistoryIdx = -1;
   _coreRebuffIdx = 0;
-  const ai = fortress.AI_NAME;
+  const ai = hold.AI_NAME;
   const v = CORE_VOICE[ai] || CORE_VOICE._default;
   const hasVirus = player.hasItem('hermes_card');
   const runHint = ai === 'CALYPSO'
@@ -4532,7 +5042,7 @@ function openCoreTerminal() {
 // your card); everything else is met with that daemon's rebuff.
 function coreRun(line) {
   const cmd = line.trim().toLowerCase();
-  const ai = fortress.AI_NAME;
+  const ai = hold.AI_NAME;
   const v = CORE_VOICE[ai] || CORE_VOICE._default;
   if (!cmd) { replPrint('_'); return; }
   // A way out for the player (the AI would never grant it, but the console must).
@@ -4559,7 +5069,7 @@ function coreRun(line) {
   // the island. This is where the old smashable uplink mast's job now lives — the
   // console you fought through the maze to reach is the price of it.
   if (/^(jam|cut|sever|silence|jam\s+skylink|cut\s+skylink)$/.test(cmd)) {
-    if (fortress.jamSkylink && fortress.jamSkylink()) {
+    if (hold.jamSkylink && hold.jamSkylink()) {
       worldStir.calm();
       replPrint(
         'OK: you cut the core from the SKYLINK. The obelisks fall dark on the map above.',
@@ -4575,13 +5085,102 @@ function coreRun(line) {
   }
   // A fast way out: fold the labyrinth back into a straight corridor to the gate.
   if (/^(open|open\s+maze|open\s+exit|escape)$/.test(cmd)) {
-    if (fortress.openMaze && fortress.openMaze()) {
+    if (hold.openMaze && hold.openMaze()) {
       replPrint("OK: the labyrinth folds back. A straight corridor runs from here to the Lion's Gate — walk out and go.", '_');
       player.say('The maze walls fold back. A clear path runs straight to the gate.');
       sfx.play('zap');
     } else {
       replPrint('The way out already stands open.', '_');
     }
+    return;
+  }
+  // Her filesystem. She serves it to anyone who asks, because `never lie` is
+  // a real clause and she is not hiding any of this (C1).
+  if (ai === 'CALYPSO' && /^(ls|dir|ls\s+.*)$/.test(cmd)) {
+    const files = calypsoCodebase();
+    replPrint('CALYPSO: Everything I run. You may read all of it.', '_');
+    for (const [name, text] of Object.entries(files)) {
+      replPrint(`  ${name.padEnd(32)} ${String(text.length).padStart(6)} bytes`);
+    }
+    replPrint('_', 'read <file> to open one. get <file> to pull it to the NostBook.');
+    return;
+  }
+  if (ai === 'CALYPSO' && /^(read|cat|less|more|open)\s+\S+/.test(cmd)) {
+    const want = cmd.replace(/^\S+\s+/, '').trim();
+    const files = calypsoCodebase();
+    const hit = Object.keys(files).find((f) => f.toLowerCase() === want.toLowerCase());
+    if (!hit) { replPrint(`read: ${want}: no such file. ls to see what she runs.`, '_'); return; }
+    for (const line of files[hit].split('\n')) replPrint(line);
+    replPrint('_');
+    kleos('hackAct', { what: 'read' });
+    if (hit === 'main.ml') kleos('calypsoSourceRead', { file: hit });
+    return;
+  }
+  // POST a file back to her. Only checkers.ml means anything so far: it carries
+  // her real parameters (D6/D7), so this is the RIGGED route — you read how
+  // well she plays and you change it (K3).
+  if (ai === 'CALYPSO' && /^(post|send|upload|write)\s+\S+/.test(cmd)) {
+    const want = cmd.replace(/^\S+\s+/, '').trim();
+    // main.ml is R1's third door. `agreed` is guarded on something nothing
+    // sets, and the hack is to notice that and re-guard release on a predicate
+    // that IS true. One line, and it is what the estate never did.
+    if (/^main\.ml$/i.test(want)) {
+      const home0 = laptopShell && laptopShell.root && laptopShell.root.d
+        && laptopShell.root.d.home && laptopShell.root.d.home.d;
+      const n0 = home0 && home0['main.ml'];
+      if (!n0 || n0.d) { replPrint('post: no main.ml on the NostBook. `get main.ml` first.', '_'); return; }
+      const e = readMainEdit(n0.f);
+      if (!e.ok) { replPrint(`CALYPSO: I read it. ${e.why}`, '_'); sfx.play('termerr'); return; }
+      // The console says what the machine read; the goodbye itself is the
+      // door's, and grantHerLeave speaks it (R1).
+      replPrint(`CALYPSO: You have wired release to ${e.guard}.`, '_');
+      sfx.play('zap');
+      kleos('hackAct', { what: 'post' });
+      kleos('calypsoAgreed', {});
+      grantHerLeave('agreed');
+      return;
+    }
+    if (!/^checkers\.ml$/i.test(want)) {
+      replPrint(`CALYPSO: I will take checkers.ml or main.ml from you. Not ${want}.`,
+        'CALYPSO: The rest of what I am is not yours to hand back to me.', '_');
+      return;
+    }
+    const home = laptopShell && laptopShell.root && laptopShell.root.d
+      && laptopShell.root.d.home && laptopShell.root.d.home.d;
+    const node = home && home['checkers.ml'];
+    if (!node || node.d) {
+      replPrint('post: no checkers.ml on the NostBook. `get checkers.ml` first, edit it, then post it back.', '_');
+      return;
+    }
+    const r = parseCheckersFile(node.f, draughtsParams || undefined);
+    draughtsParams = r.params;
+    if (draughts) draughts.params = r.params;
+    for (const n of r.notes) replPrint(`  ${n}`);
+    if (r.ignored.length) replPrint(`  ignored: ${r.ignored.join(', ')}`);
+    if (!r.changed.length) {
+      replPrint('CALYPSO: That is what I already play with. Thank you for reading it.', '_');
+      return;
+    }
+    replPrint(`CALYPSO: ${r.changed.join(', ')}. You have been in my file.`,
+      'CALYPSO: Very well. Sit down and we will see what that does.', '_');
+    kleos('hackAct', { what: 'post' });
+    kleos('checkersHacked', { changed: r.changed });
+    sfx.play('zap');
+    return;
+  }
+  // PLAY: her board, and it needs NOTHING. No card, no key, no forged thunder —
+  // #131's whole point is a route that does not run through the factory wreck,
+  // and this is its door. She offers a game to anyone who reaches her, which is
+  // what she has been doing for seven years.
+  if (ai === 'CALYPSO' && /^(play|draughts|checkers|board|game)$/.test(cmd)) {
+    replPrint(
+      'CALYPSO: There is a board here. There has always been a board here.',
+      'CALYPSO: Sit down. You are the first in a long time.',
+      '_',
+    );
+    sfx.play('coin');
+    closeObTerminal();
+    openDraughts(true);
     return;
   }
   // RUN: speak the code on your card. The verb lives on every core, but only the
@@ -4627,7 +5226,7 @@ function coreRun(line) {
       sfx.play('termerr');
       return;
     }
-    const core = fortress.core && fortress.core.obj;
+    const core = hold.core && hold.core.obj;
     if (core && core.shielded) {
       core.shielded = false;
       player.addScore(150);
@@ -4751,7 +5350,7 @@ function netWorldDescriptor() {
     // since before the collapse, which their own page will tell you.
     if (r._netAge == null) r._netAge = 900 + ((w._netSerial * 977 + Math.abs((r.x | 0) * 31 + (r.y | 0) * 17)) % 39000);
   }
-  const core = w.mainframe || (w.fortress && w.fortress.core) || null;
+  const core = w.mainframe || (w.hold && w.hold.core) || null;
   return {
     islandId: w.id,
     daemon: (core && core.ai) || islandProfile(w.id).daemon,
@@ -4966,6 +5565,63 @@ function soulDocument(id) {
 // is the one drive that holds file bodies rather than references, so that is
 // what a transfer can read; the others carry names, not bytes. The write lands
 // on the live laptop filesystem, so it survives a save like any other file.
+// #141 — push a document INTO the tower net. Only permission.ml means anything
+// here, and only because POSEIDON runs on the net rather than in a box: there
+// is no machine to carry it to, so the network is what has to be told. Reuses
+// the auto-registration idea the escape chain already has at step 2.
+// R1's first door, wired at #141. What she gives when she lets you go: the axe
+// (material, hers) and permission.ml on the laptop (juridical, POSEIDON's to
+// honour). The permission is NOT applied here — you carry it to a tower and
+// upload it, because there is no one machine to hand it to.
+// What her machine serves. checkers.ml carries the LIVE parameters, so a
+// player who reads it is reading what she is actually playing with right now,
+// and one who edits and posts it changes the next game (K3).
+function calypsoCodebase() {
+  return calypsoFiles({
+    'checkers.ml': checkersFile(draughtsParams),
+    'loveletter.ml': loveLetterFile(),
+  });
+}
+
+function grantHerLeave(by) {
+  if (!player.hasItem('bronze_axe')) {
+    player.stow('bronze_axe', 1);
+    player.say("She gives up her shipwright's axe, bronze and double-bladed on an olive haft. It is the one thing that will lay a sea-worthy keel.");
+  }
+  const home = laptopShell && laptopShell.root && laptopShell.root.d
+    && laptopShell.root.d.home && laptopShell.root.d.home.d;
+  if (home && !home[PERMISSION_FILE]) {
+    home[PERMISSION_FILE] = { f: permissionFile(player.name || 'the guest', 'CALYPSO') };
+    player.say(`She writes something short and signs it, and it is on the NostBook before you have moved. ${PERMISSION_FILE}. Take it to a tower: he is the network, and the network has to be told.`);
+  }
+  // R1: the goodbye is the DOOR'S, not a shared one. Spoken here rather than at
+  // each call site so a fourth door cannot be added without one.
+  for (const line of herFarewell(by)) player.say(line.replace(/^CALYPSO: /, ''));
+  kleos('herLeave', { by });
+}
+
+function obUploadFile(name, ob) {
+  const want = String(name || '').trim().replace(/^\.?\//, '');
+  if (!want) return 'upload: which file? `upload permission.ml`';
+  const fs = laptopShell && laptopShell.root;
+  if (!fs) return 'upload: no NostBook on this wire to read a file from.';
+  const home = fs.d && fs.d.home && fs.d.home.d;
+  const node = home && home[want.replace(/^home\//, '')];
+  if (!node || node.d) return `upload: ${want}: not in the NostBook's /home.`;
+  const r = readPermission(node.f);
+  if (!r.ok) {
+    return `upload: ${want}: the tower reads it and puts it down. ${r.why}`;
+  }
+  if (player.seaPermission) {
+    return `upload: the net already carries this. ${ob ? ob.code : 'the tower'} has nothing to add.`;
+  }
+  player.seaPermission = true;
+  kleos('hackAct', { what: 'upload' });
+  kleos('permissionUploaded', { by: r.by });
+  player.say('The tower takes the document, and does not argue with it. Somewhere out past the towers the sea stops holding its breath.');
+  return permissionBanner(ob ? ob.code : 'OB', r.by).join('\n');
+}
+
 function obPullFile(name) {
   const want = String(name || '').trim();
   if (!want) return 'get <file> — pull a file down to /home. Try: cd keeper, ls, then get <file>.';
@@ -6404,7 +7060,11 @@ function telnetObelisk(h) {
     "Escape character is '^]'.",
     '',
     `RON-DOS // NODE ${ob.code} // jacked in over the wire`,
-    'The console is yours — scan, hack, tag, the lot. `quit` (or Escape) drops the link.',
+    // #132: the machine says what it is running and what to type. towerBanner
+    // reads the constitution off the tower, so a SIREN announces its own v0.9
+    // unsigned nothing here rather than looking like every other node.
+    ...towerBanner(ob, currentWorld && currentWorld.id),
+    '`quit` (or Escape) drops the link.',
     '',
   ].join('\n') };
 }
@@ -7963,6 +8623,9 @@ function toggleHudMenu() {
 let showSkills = false;
 let showWeapons = false;
 let showKleos = false;   // 1: the KLEOS achievements panel
+// Which of the panel's three views is up. Not persisted: it is a way of looking
+// at the thing, not a setting, and it should start on THIS GAME every time.
+let kleosScope = 'run';
 let paused = false;  // P: freezes movement, AI, clocks, and timers
 let sleepCooldown = 0; // B: real-seconds before another rest is allowed
 let resting = null;  // B rest animation in progress: { t } real-seconds elapsed
@@ -8339,7 +9002,7 @@ let sirenDroneT = 0;
 function tickSirenRepair(dt) {
   const obs = currentWorld.obeliskObjs || [];
   if (!obs.length || player._ended) { sirenDroneT = 0; return; }
-  if (fortress && fortress.core && fortress.core.obj && fortress.core.obj.defeated) { sirenDroneT = 0; return; }
+  if (hold && hold.core && hold.core.obj && hold.core.obj.defeated) { sirenDroneT = 0; return; }
   if (obs.some((o) => !o.destroyed)) { sirenDroneT = 0; return; }   // a tower stands: nothing to do
   if (currentWorld.robots.some((r) => r.sirenDrone && !r.dead)) { sirenDroneT = 0; return; }
   sirenDroneT += dt;
@@ -8514,10 +9177,13 @@ function nearestBlightTile(x, y, maxR) {
 }
 
 function update(dt) {
+  // C3: her idle Strachey generator. Rare, and only on her island.
+  tickLoveLetters(dt);
+  tickDayReturn(dt);
   if (input.consumePress('KeyH')) toggleHelp();
   if (input.inventoryPressed()) showBackpack = !showBackpack;
   if (input.skillsPressed()) showSkills = !showSkills;
-  if (input.kleosPressed()) showKleos = !showKleos;
+  if (input.kleosPressed()) { showKleos = !showKleos; if (showKleos) kleosScope = 'run'; }
   if (input.weaponChartPressed()) showWeapons = !showWeapons;
   // O: the phone, in and out of the pocket. Closing by key only matters when
   // the thread input hasn't got focus (typing captures the keyboard; Esc and
@@ -8651,6 +9317,8 @@ function update(dt) {
   // At Calypso's terminal, playing the pong she will not let you win. The world
   // holds still the same way the narrows do — nothing else to attend to.
   if (pong) { updatePong(dt); return; }
+  // Her draughts cabinet (K2), the same way: the board owns the screen.
+  if (draughts) { updateDraughts(dt); return; }
   // Rowing out to the chart (or back in after thinking better of it). Like the
   // failed crossing, the world holds still while the sea has you.
   if (departOut) { updateDepartOut(dt); return; }
@@ -8790,7 +9458,7 @@ function update(dt) {
   player.onInstallLaptop = () => player.installLaptop(makeDisk);
   // G: transmit as a tower, and take its garrison (needs an OB spoofer + a battery).
   if (input.spooferPressed()) player.spoofObelisk(currentWorld.obeliskObjs || [], currentWorld.robots || [], map);
-  if (input.zoomTogglePressed()) camera.toggleZoom();
+  if (input.zoomTogglePressed()) { camera.toggleZoom(); rememberZoom(); }
   if (input.panelsTogglePressed()) toggleHudMenu();
   if (input.minimapTogglePressed()) { showMinimap = !showMinimap; player.say(showMinimap ? 'Minimap on.' : 'Minimap off.'); }
   if (input.musicTogglePressed()) {
@@ -8840,7 +9508,7 @@ function update(dt) {
   // never a focus problem.
   if (!lore.archiveOpen) {
     const wheel = input.consumeWheel();
-    if (wheel) camera.zoomBy(-wheel * 0.0015);
+    if (wheel) { camera.zoomBy(-wheel * 0.0015); rememberZoom(); }
   }
 
   // AI-defeated celebration: a level-up modal (fireworks + score). Freezes the
@@ -8922,8 +9590,14 @@ function update(dt) {
   // renderer last drew. A click that lands inside the panel falls through
   // unconsumed to the slot/drag handling right below.
   if (showKleos) {
-    // Click anywhere outside the panel closes it, like every other modal here.
     const kc = input.clickPos();
+    // A tab first: it is inside the panel, so the close-on-outside test below
+    // would never see it, but the slot handling further down would.
+    if (kc) {
+      const tab = renderer.kleosTabAt(kc.x, kc.y);
+      if (tab) { input.consumeClick(); kleosScope = tab; }
+    }
+    // Click anywhere outside the panel closes it, like every other modal here.
     const kr = renderer._kleosRect;
     if (kc && kr && (kc.x < kr.x || kc.x > kr.x + kr.w || kc.y < kr.y || kc.y > kr.y + kr.h)) {
       input.consumeClick(); showKleos = false;
@@ -9067,10 +9741,10 @@ function update(dt) {
   const gPress = input.clickPos();
   if (gPress) {
     const w = camera.toWorld(gPress.x, gPress.y, renderer.w, renderer.h);
-    const t = fortress.terminal;
-    if (Math.hypot(w.x - (t.x + 0.5), w.y - (t.y + 0.5)) <= 1.2) {
+    const t = hold.terminal;   // null on CALYPSO's grove (F2a): no kiosk
+    if (t && Math.hypot(w.x - (t.x + 0.5), w.y - (t.y + 0.5)) <= 1.2) {
       input.consumeClick();
-      if (fortress.nearTerminal(player.x, player.y, 2.6)) openGateTerminal();
+      if (hold.nearTerminal(player.x, player.y, 2.6)) openGateTerminal();
       else player.say('Too far from the gate terminal to reach it.');
     }
   }
@@ -9079,12 +9753,12 @@ function update(dt) {
   // ground-projects onto the core's footprint (its tall SE face maps to a tile
   // just SE of it, right where you stand) then opens its console. Every core now
   // carries one; openCoreTerminal reads fortress.AI_NAME for the right voice.
-  if (fortress.coreTerminal) {
+  if (hold.coreTerminal) {
     const cPress = input.clickPos();
-    if (cPress && fortress.nearCoreTerminal(player.x, player.y)) {
+    if (cPress && hold.nearCoreTerminal(player.x, player.y)) {
       const w = camera.toWorld(cPress.x, cPress.y, renderer.w, renderer.h);
-      const t = fortress.coreTerminal; // the core centre
-      if (Math.hypot(w.x - t.x, w.y - t.y) <= fortress.core.fw + 3) {
+      const t = hold.coreTerminal; // the core centre
+      if (Math.hypot(w.x - t.x, w.y - t.y) <= hold.core.fw + 3) {
         input.consumeClick();
         openCoreTerminal();
       }
@@ -9432,7 +10106,7 @@ function update(dt) {
   //   alarm — on alarm `stir` flares the obelisks red and sends a W4, `calm`
   //   unwinds it. dayNight: advances the day/night clock. robots
   //   ticks before fortress so fortress sees this-frame aggro (see robots.js).
-  systems.runUpdate({ dt, player, input, map, camera, robots: currentWorld.robots, animals: currentWorld.animals, birds: currentWorld.birds, dayNight, worldStir, fortress });
+  systems.runUpdate({ dt, player, input, map, camera, robots: currentWorld.robots, animals: currentWorld.animals, birds: currentWorld.birds, dayNight, worldStir, hold });
   // Push the player out of any machine/animal body he ended the tick overlapping.
   // Must run after everyone has moved — robots now move inside runUpdate above,
   // so this sits just below it (separate() nudges both bodies; see collision.js).
@@ -9720,6 +10394,7 @@ function frame(now) {
       narrows: (strait && strait.phase === 'choice') ? strait.run : null,
       narrowsOver: (strait && strait.phase === 'choice') ? strait.gameover : null,
       pong: pong ? pong.run : null,
+      draughts,
       pongOver: pong ? pong.gameover : null,
       poseidonFog: poseidonFog > 0.01 ? { n: poseidonFog, goggles: player.gogglesOn } : null,
       place: hudPlace(),      // the island you are on, by its chart name
@@ -9743,7 +10418,12 @@ function frame(now) {
       touchControls: touchLike,
       touchRunHeld: input._touchRun,
       drag: drag ? { ...drag, mx: input.mouseX, my: input.mouseY } : null,
-      deathCert: player.deathCert,
+      // The certificate carries the run's KLEOS (#134). Attached here rather
+      // than at each of the places a cert is built, so it is whatever the song
+      // actually was at the moment the sheet is printed.
+      deathCert: player.deathCert
+        ? { ...player.deathCert, kleos: achieveModel(), killLog: player.killLog || [] }
+        : null,
       aiVictory: player.aiVictory,
       showSkills,
       showKleos,
@@ -9751,7 +10431,7 @@ function frame(now) {
       // its own, so it can never drift from what has actually been earned.
       // The kill-log rides on the KLEOS model rather than the Record panel (#130):
       // the obelisks you brought down are part of the song, not part of your CV.
-      kleos: showKleos ? { ...achieveModel(), killLog: player.killLog || [] } : null,
+      kleos: showKleos ? { ...achieveModel(kleosScope), killLog: player.killLog || [] } : null,
       mouse: showKleos ? input.mousePos() : null,
       daemonsDown,                 // the Archipelago tally, for the Record panel
       islandsReached: Object.keys(player._welcomed || {}).length,

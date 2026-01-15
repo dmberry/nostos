@@ -63,10 +63,11 @@ test('never is an effect, not an intent: the clause rides alongside the answer',
 });
 
 test('a constitution can forbid only what a constitution can forbid', () => {
-  assert.deepEqual(NEVER_CLAUSES, ['hunt', 'fire']);
+  // The unit words, then the tower words (docs/machine-braincode-plan.md §2).
+  assert.deepEqual(NEVER_CLAUSES, ['hunt', 'fire', 'report', 'feed', 'call', 'lure']);
   const bad = decide('never dance ; patrol', SENSE);
   assert.equal(bad.ok, false);
-  assert.match(bad.fault, /never takes hunt or fire/);
+  assert.match(bad.fault, /never takes/);
 });
 
 test('clauses on a branch not taken do not assert', () => {

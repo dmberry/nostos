@@ -136,3 +136,25 @@ to solve. That may make (b) the practical one.
 - **Refactor first.** Before cabinet two, lift attract/hold/GAME OVER out of
   `narrows.js`. Doing it during cabinet two is how the shell ends up shaped like
   whichever game happened to be second.
+
+
+## The mapping (2026-08-12, from docs/ai-codebase-plan.md §5)
+
+Settled in the AI-codebase design session; supersedes any earlier candidate
+lists below. Each cabinet passes the test above because the game IS how that
+daemon thinks:
+
+| host | game | year | the fit |
+|---|---|---|---|
+| CALYPSO | Draughts | Strachey 1951, Samuel 1959 | first game a machine played, first machine that learned. Build plan: docs/calypso-build-plan.md K1-K4 |
+| POLYPHEMUS | Adventure | Crowther 1976 | a real cave mapped; a daemon you must NAME belongs on the parser island |
+| CIRCE | ELIZA | Weizenbaum 1966 | a rewriting system on the rewriting daemon; already implemented on the laptop |
+| HELIOS | Hammurabi | 1968 | husbanding a herd while people starve, on the island of the forbidden cattle |
+| POSEIDON | Spacewar! | 1962 | two ships round a gravity well: the strait |
+| ITHACA | Pong | 1972 | home, and the one you can win; calypso-pong.js moves here and loses its rig |
+| the fortresses | Doom | 1993 | a corridor crawl found while crawling a corridor; the one cabinet that rewards what the warrior was doing anyway |
+
+Shared chassis rule holds: each is one rules module in the shape of
+narrows.js. Draughts is the only large new engine and ships first (it is on
+the critical path to #131); Adventure is content-heavy rather than
+engine-heavy; ELIZA and Pong are placement work.

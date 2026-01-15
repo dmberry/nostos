@@ -419,6 +419,14 @@ function makeBuiltins(station) {
     // reads false or 24 rather than faulting a program that asks for it.
     cargo: SENSE('cargo', 'bool'),
     casualty_range: SENSE('casualty_range', 'num'),
+    // ---- a TOWER's senses (docs/machine-braincode-plan.md §2) -------------
+    // An obelisk reads the world differently from a unit: it does not move, so
+    // it has no range to home and no hull to worry about. It knows whether
+    // there is a person at its foot, how sure it is, whether one of its own is
+    // at the plinth wanting charge, and how many of its own are left standing.
+    alert: SENSE('alert', 'num'),
+    docked: SENSE('docked', 'bool'),
+    garrison_size: SENSE('garrison_size', 'num'),
     // ---- a machine's own EFFECTS ----------------------------------------
     // Sensors read; these do. They are not intents: a program still evaluates
     // to exactly one intent, and these happen along the way, exactly like
@@ -611,6 +619,18 @@ function makeBuiltins(station) {
         const name = f && (f.name || f.id || (f.tag === 'str' ? f.v : '')) || '';
         if (!ctx.pullFile) throw new RonmlError('no file transfer at this console — get pulls a file down a telnet link.');
         return { tag: 'str', v: ctx.pullFile(String(name)) };
+      },
+    },
+    // #141 — the other direction. `get` pulls a file off the tower; `upload`
+    // pushes one INTO the net the tower belongs to. It exists for permission.ml
+    // and it is deliberately not a general write: a tower takes a document, it
+    // does not take a filesystem.
+    upload: {
+      arity: 1,
+      fn: ([f], ctx) => {
+        const name = f && (f.name || f.id || (f.tag === 'str' ? f.v : '')) || '';
+        if (!ctx.uploadFile) throw new RonmlError('nothing to upload into from here — upload pushes a document into the tower net.');
+        return { tag: 'str', v: ctx.uploadFile(String(name)) };
       },
     },
     sz: {
@@ -904,7 +924,7 @@ function makeBuiltins(station) {
 // (work at both an obelisk and a HERMES relay). A verb tagged for one station is
 // refused at the other; the file verbs must move files at either terminal, and
 // `save` must write a checkpoint from whichever one you are logged into.
-const OB_VERBS = ['scan', 'garrison', 'soul', 'nearest', 'keys', 'name', 'tag', 'timer', 'echo', 'not', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'sing', 'map', 'print', 'decrypt', 'unlock', 'eliza', 'retire', 'read', 'get', 'sz',
+const OB_VERBS = ['upload', 'play', 'post', 'ls', 'scan', 'garrison', 'soul', 'nearest', 'keys', 'name', 'tag', 'timer', 'echo', 'not', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'sing', 'map', 'print', 'decrypt', 'unlock', 'eliza', 'retire', 'read', 'get', 'sz',
   // The control verbs, all of which want a decrypted AI key.
   'fog', 'poseidon', 'robots', 'net', 'spread', 'explorer'];
 // Note: HERMES's `print` is added as an override in makeBuiltins (it takes a
@@ -934,7 +954,11 @@ const LAPTOP_VERBS = ['echo', 'not', 'hd', 'tl', 'length', 'abs', 'sqrt', 'min',
 // What a constitution may forbid. Prohibitions only: they compose, where a
 // positive obligation would be a second decision system competing with the
 // program proper (docs/ml-constitution-plan.md).
-export const NEVER_CLAUSES = ['hunt', 'fire'];
+// A constitution can forbid a word the machine would otherwise choose. The
+// tower words are here too (docs/machine-braincode-plan.md §2): `never report`
+// stops the spying, and `never feed` cuts a garrison off from power, which is
+// the strongest single hack in the game.
+export const NEVER_CLAUSES = ['hunt', 'fire', 'report', 'feed', 'call', 'lure'];
 
 const MACHINE_ONLY = ['charge', 'integrity', 'range', 'home_range',
   'threat', 'hurt', 'linked', 'blight', 'daylight', 'work', 'beep', 'eye', 'flash', 'move', 'never',
@@ -944,7 +968,10 @@ const MACHINE_ONLY = ['charge', 'integrity', 'range', 'home_range',
   'sight', 'armed', 'shielded', 'contact', 'lost_for',
   // V-class courier senses (#127). On every chassis, because a sense a unit
   // does not have should read false rather than crash a program that asks.
-  'cargo', 'casualty_range'];
+  'cargo', 'casualty_range',
+  // Tower senses. On the MACHINE_ONLY list so a unit console says plainly that
+  // `docked` is not its word, and so a tower program can read them.
+  'alert', 'docked', 'garrison_size'];
 const ROBOT_VERBS = [...MACHINE_ONLY, 'not', 'echo', 'hd', 'tl', 'length', 'abs', 'sqrt', 'min', 'max', 'size',
   'real', 'floor', 'ord', 'chr', 'str', 'explode', 'implode', 'makestring'];
 // Retired verbs kept only so typing one gives a clean "not a command" instead
@@ -1303,6 +1330,23 @@ function runStar(rest, ctx) {
 // returns is a fault — a machine that asks for something it cannot do is broken,
 // not creative.
 export const INTENTS = ['patrol', 'hunt', 'flee', 'home', 'tend', 'wait', 'route', 'follow', 'defend'];
+// A tower does not patrol or hunt (docs/machine-braincode-plan.md §2). It has
+// its own repertoire, and `hold` is its `wait`. These live in the same list as
+// the unit intents so `decide` needs no second code path: what a given machine
+// may CHOOSE is the chassis's CAN list, which is where a tower is stopped from
+// hunting and a unit from singing.
+// `lure`, not `sing`: `sing` is already the obelisk console's own verb (the
+// Portal easter egg), and a word cannot be a console command and an intent at
+// once. `lure` is the better name for what a siren does to you regardless.
+export const TOWER_INTENTS = ['watch', 'report', 'call', 'feed', 'lure', 'jam', 'hold'];
+for (const w of TOWER_INTENTS) INTENTS.push(w);
+// What each class of tower is allowed to answer. A SIREN sings and a standard
+// tower cannot; only the eye may `call`.
+export const TOWER_CAN = {
+  standard: ['watch', 'report', 'feed', 'jam', 'hold'],
+  eye: ['watch', 'report', 'call', 'feed', 'jam', 'hold'],
+  siren: ['watch', 'report', 'feed', 'lure', 'jam', 'hold'],
+};
 // The most a `route` may queue in one evaluation, and how far one leg may go.
 // A route that re-queues the same orders loops for ever — that is how circles
 // are written — so the machine cannot be allowed to hold an unbounded list.

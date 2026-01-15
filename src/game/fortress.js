@@ -447,6 +447,9 @@ export function createFortress(map, seed, spawn, opts = {}) {
 
     nearTerminal,
     nearCoreTerminal,
+    // Exposed for F1 (#140): CALYPSO's island opens its gate at build time,
+    // because she has nothing to keep out.
+    openDoor,
     openMaze,
     get mazeOpened() { return !!state.mazeOpened; },
 
@@ -547,7 +550,7 @@ export function createFortress(map, seed, spawn, opts = {}) {
       // The AI is dead: the fortress is inert — no alarm, no manufacture, and the
       // maze sconces stop strobing. (The island power-down itself is handled by
       // main.js's onCoreDefeated hook, kept island-agnostic there.)
-      if (core.defeated) { state.alarm = false; map.fortressAlarm = false; return; }
+      if (core.defeated) { state.alarm = false; map.holdAlarm = false; return; }
       // The Lion's Gate opens to a Trojan card (its factory_id.ml + root_access.ml
       // read at the gate) — the escape-chain hack IS the way in now; the old
       // fortress_key is retired. Bare ai_key won't do it; refunction it first.
@@ -631,7 +634,7 @@ export function createFortress(map, seed, spawn, opts = {}) {
           if (world && world.calm) world.calm();
         }
       }
-      map.fortressAlarm = state.alarm; // renderer: maze sconces strobe red while alarmed
+      map.holdAlarm = state.alarm; // renderer: maze sconces strobe red while alarmed
     },
 
     // Save/restore the fortress's mutable state so a loaded game resumes the

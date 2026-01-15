@@ -182,18 +182,18 @@ export function createPolyphemus(seed) {
   }
 
   // POLYPHEMUS's fortress: the kill-raid, ember-coloured, named for the Cyclops.
-  const fortress = createFortress(map, IS, spawn, {
+  const hold = createFortress(map, IS, spawn, {
     aiName: 'POLYPHEMUS', winMode: 'kill', obColor: OB_COLOR, obAlertColor: OB_ALERT,
   });
-  const mainframe = fortress.core;
+  const mainframe = hold.core;
 
   stampCoast(map, spawn);
   map.temples = placeRuins(map, makeRng((IS ^ 0x2c01dd) >>> 0), { spawn, clusters: 3 });
-  robots.push(...fortress.spawnGuards(spawnM4));
+  robots.push(...hold.spawnGuards(spawnM4));
   // The labyrinth is garrisoned, not empty. Polyphemus carries the HARD raid
   // (islands-odyssey-revision §4), so it takes the heaviest watch of the three
   // kill islands: M6 packs in the corridors, M5 snipers on the deep straights.
-  robots.push(...fortress.garrisonMaze(spawnM6, spawnM5, { m6: 7, m5: 4 }));
+  robots.push(...hold.garrisonMaze(spawnM6, spawnM5, { m6: 7, m5: 4 }));
 
   const birds = spawnBirds(map, IS);
 
@@ -220,7 +220,7 @@ export function createPolyphemus(seed) {
     obColor: OB_COLOR, obAlertColor: OB_ALERT,
     combat: true, // martial island: main.js runs the full combat/fortress loop here
   });
-  world.fortress = fortress;
+  world.hold = hold;
   world.wfactory = wfactory;
   world.mainframe = mainframe;
   world.torObjs = torObjs;

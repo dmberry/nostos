@@ -34,24 +34,47 @@ export class GameMap {
     return x >= 0 && y >= 0 && x < this.w && y < this.h;
   }
 
+  // #138. Every accessor below takes a POINT and answers about the TILE THAT
+  // CONTAINS IT, so a caller holding an entity's position may ask directly.
+  //
+  // Before this, a fractional coordinate produced a fractional array index:
+  // `objectGrid[5.7]` is undefined, so objectAt said "nothing here" while a
+  // factory stood on the tile, and isSolid said "walkable" for the same reason.
+  // Wrong answers, in the shape of ordinary ones, from the accessors the whole
+  // game asks about collision. That is how #136 (robots printed inside the
+  // factory) happened, and every call site that hand-floors is a place someone
+  // had to know. Flooring here is idempotent for the callers that already do.
+  //
+  // Returns -1 for a point outside the map, which each caller reads as its own
+  // kind of nothing (null floor, no object, height 0, solid).
+  idx(x, y) {
+    const tx = Math.floor(x), ty = Math.floor(y);
+    return this.inBounds(tx, ty) ? ty * this.w + tx : -1;
+  }
+
   floorAt(x, y) {
-    return this.inBounds(x, y) ? this.floor[y * this.w + x] : null;
+    const i = this.idx(x, y);
+    return i < 0 ? null : this.floor[i];
   }
 
   setFloor(x, y, type) {
-    if (this.inBounds(x, y)) this.floor[y * this.w + x] = type;
+    const i = this.idx(x, y);
+    if (i >= 0) this.floor[i] = type;
   }
 
   shadeAt(x, y) {
-    return this.inBounds(x, y) ? this.shade[y * this.w + x] : 0;
+    const i = this.idx(x, y);
+    return i < 0 ? 0 : this.shade[i];
   }
 
   heightAt(x, y) {
-    return this.inBounds(x, y) ? this.height[y * this.w + x] : 0;
+    const i = this.idx(x, y);
+    return i < 0 ? 0 : this.height[i];
   }
 
   setHeight(x, y, h) {
-    if (this.inBounds(x, y)) this.height[y * this.w + x] = h;
+    const i = this.idx(x, y);
+    if (i >= 0) this.height[i] = h;
   }
 
   // Ground height, plus the extra step of standing on top of a climbable
@@ -67,14 +90,19 @@ export class GameMap {
   }
 
   objectAt(x, y) {
-    return this.inBounds(x, y) ? this.objectGrid[y * this.w + x] : null;
+    const i = this.idx(x, y);
+    return i < 0 ? null : this.objectGrid[i];
   }
 
+  // The object records its tile, not the point it was placed from, so
+  // removeObject's grid lookup finds the same cell addObject wrote.
   addObject(type, x, y, props = {}) {
-    if (!this.inBounds(x, y) || this.objectGrid[y * this.w + x]) return null;
-    const obj = { type, x, y, ...props };
+    const tx = Math.floor(x), ty = Math.floor(y);
+    const i = this.idx(tx, ty);
+    if (i < 0 || this.objectGrid[i]) return null;
+    const obj = { type, x: tx, y: ty, ...props };
     this.objects.push(obj);
-    this.objectGrid[y * this.w + x] = obj;
+    this.objectGrid[i] = obj;
     return obj;
   }
 
@@ -115,10 +143,11 @@ export class GameMap {
   }
 
   isSolid(x, y) {
-    if (!this.inBounds(x, y)) return true;
-    const f = FLOORS[this.floor[y * this.w + x]];
+    const i = this.idx(x, y);
+    if (i < 0) return true;
+    const f = FLOORS[this.floor[i]];
     if (f && f.solid) return true;
-    const o = this.objectGrid[y * this.w + x];
+    const o = this.objectGrid[i];
     return !!(o && OBJECTS[o.type].solid);
   }
 
@@ -127,8 +156,9 @@ export class GameMap {
   // solid floor (deep water) blocks walking but must never block a shot
   // fired across or over it.
   blocksShot(x, y) {
-    if (!this.inBounds(x, y)) return true;
-    const o = this.objectGrid[y * this.w + x];
+    const i = this.idx(x, y);
+    if (i < 0) return true;
+    const o = this.objectGrid[i];
     return !!(o && OBJECTS[o.type].solid);
   }
 
@@ -145,14 +175,11 @@ export class GameMap {
     const dx = x1 - x0, dy = y1 - y0;
     const dist = Math.hypot(dx, dy);
     if (dist < 1e-6) return true;
-    const ceiling = Math.max(
-      this.heightAt(Math.floor(x0), Math.floor(y0)),
-      this.heightAt(Math.floor(x1), Math.floor(y1)),
-    ) + 0.5;
+    const ceiling = Math.max(this.heightAt(x0, y0), this.heightAt(x1, y1)) + 0.5;
     const steps = Math.ceil(dist * 4);
     for (let i = 1; i < steps; i++) {
       const t = i / steps;
-      const x = Math.floor(x0 + dx * t), y = Math.floor(y0 + dy * t);
+      const x = x0 + dx * t, y = y0 + dy * t;
       if (this.blocksShot(x, y)) return false;
       if (this.heightAt(x, y) > ceiling) return false;
     }

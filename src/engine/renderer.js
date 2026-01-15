@@ -12,6 +12,9 @@ import { tileHash, fogNoise, FOG_BANK, FOG_WIND_X, FOG_WIND_Y, FOG_STEP } from '
 import { runDrawWorld, runDrawScreen } from './systems.js';
 import { uiMethods, DASH_H } from './ui.js';
 import { FLOORS } from '../game/tiles.js';
+import { fieldAt, lumenOf } from '../game/spiralism.js';
+// Below this the light is off and the tile is bare deck — see drawFloor's lumen.
+const OFF = 0.07;
 import { buildingPalette } from '../game/buildings.js';
 import { ITEMS, WEAPON_ORDER } from '../game/items.js';
 import { armourTint } from '../game/armour.js';
@@ -226,7 +229,7 @@ export class Renderer {
     this.torHits = []; // clickable HERMES relays (world-screen rects, lift-adjusted), rebuilt each frame
     this.coreTermHit = null; // CALYPSO's terminal screen on the core's SE face (screen-space centre), rebuilt each frame
     this.hudPlayer = player; // referenced by drawWfactory for the near-by damage bar
-    this._fortressAlarm = map.fortressAlarm; // maze sconces pulse red while the breach alarm holds
+    this._holdAlarm = map.holdAlarm; // maze sconces pulse red while the breach alarm holds
     this.hudMap = map; // referenced by drawPlayer for the Ubik-patch reality-hiccup check
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.fillStyle = '#0b0e0a';
@@ -688,7 +691,7 @@ export class Renderer {
     // rail — which is the thing that opened the panel in the first place.
     // (The lore archive draws in runDrawScreen below, so it counts as a panel.)
     const modalOpen = !!(hud.showBackpack || hud.showSkills || hud.showWeapons || hud.showKleos
-      || hud.narrows || hud.pong           // an arcade cabinet owns the screen
+      || hud.narrows || hud.pong || hud.draughts  // an arcade cabinet owns the screen
       || (hud.lore && hud.lore.archiveOpen));
     if (SIGHT_CONE && !hud.rest && !hud.deathCert && !hud.paused) {
       const z = camera.zoom || 1;
@@ -794,7 +797,10 @@ export class Renderer {
     else if (modalOpen) this._nokiaToastRect = null;   // nor tappable-to-dismiss behind a panel
     if (hud.detail && !modalOpen) this.drawDetail(hud.detail);
     if (hud.drag) this.drawDragGhost(hud.drag, player);
-    if (player.torpor > 0) this.drawTorporHaze(player.torpor);
+    // The soft sight. Torpor is seconds, G1's grip is 0..1 and is where you are
+    // standing, so the grip is scaled into the same units the haze expects.
+    const haze = Math.max(player.torpor || 0, (player.grip || 0) * 8);
+    if (haze > 0) this.drawTorporHaze(haze);
     if (hud.rest) this.drawRestOverlay(hud.rest.dim);
     if (hud.deathCert) this.drawDeathCert(hud.deathCert);
     if (hud.aiVictory) this.drawAiVictory(hud.aiVictory);
@@ -813,6 +819,9 @@ export class Renderer {
       else this.drawCalypsoPong(hud.pong, hud.touchControls);
       if (hud.pongOver) this.drawCalypsoPongOver(hud.pong, hud.pongOver);
     }
+    // Her draughts cabinet (K2), in NeXTSTEP chrome rather than the estate's
+    // green: her machine is a NeXT and it should not look like theirs.
+    if (hud.draughts) this.drawDraughts(hud.draughts);
     if (hud.paused) this.drawPausedOverlay();
   }
 
@@ -1424,6 +1433,60 @@ export class Renderer {
         ctx2.beginPath(); ctx2.ellipse(cx, cy, 5 + 4 * hx, 3 + 2 * hy, 0, 0, Math.PI * 2); ctx2.fill();
       }
       ctx2.restore();
+    }
+    // CALYPSO's grove (F2a): the floor draws figures in light — spirals, a
+    // labyrinth, a path winding across the room — and you may follow one or
+    // ignore it. The field is a pure function of tile and clock
+    // (game/spiralism.js), so nothing is stored and the tiles can be drawn in
+    // any order — and the room answers your feet: the tile you stand on is
+    // always lit and always the brightest thing in the room, and every tile you
+    // step onto sends a train of rings out across the floor (grove.js pushes
+    // them; the field screen-blends everything, so light only ever adds).
+    //
+    // THESE ARE THE FORTRESS'S OWN LIGHTS (David, 2026-08-12). Same call as the
+    // solved-maze guide trail two branches down — one textured floor-stud per
+    // tile, same size, same bloom, same grate over it. Only the colour and the
+    // brightness are different, and they come from the field instead of from a
+    // fixed green. The estate lit its labyrinth to show you the one way out; the
+    // same studs here draw a labyrinth you can walk straight across.
+    if (type === 'lumen') {
+      const o = map.lumenOrigin || { x: map.w / 2, y: map.h / 2 };
+      const u = tx - o.x, v = ty - o.y;
+      const c = lumenOf(fieldAt(map.lumenField, u, v), u, v, performance.now() / 1000);
+      const cx = (corners[0].x + corners[2].x) / 2, cy = (corners[0].y + corners[2].y) / 2;
+      // The guide trail's own stud, at its own size (David preferred the small
+      // ones, 2026-08-12 — the big overlapping version turned the room into one
+      // sheet of light and lost the grid the figures are drawn on).
+      //
+      // AND THE STUD GOES OUT. texturedGlow lays its grate over the fixture at a
+      // FIXED alpha, independent of the colour it is given, so a tile at 2%
+      // light still got a half-strength grate ellipse stamped on it — which is
+      // why every tile in the room looked identical no matter what the field
+      // said. The texture and the bloom now ride the light, and below a
+      // threshold nothing is drawn at all: an unlit tile is bare deck.
+      // G1: THE GREEN PATH. Where the trojan card has opened a way across the
+      // floor, the studs stop taking part in the figure and go steady — one
+      // colour, one brightness, in a line from the trees to her core. It is the
+      // only thing in this room that holds still, which is what makes it read
+      // as a way through from the other side of the clearing.
+      //
+      // A branch rather than an early return, deliberately: drawFloor has more
+      // passes after this one, and a return here would quietly skip whatever
+      // gets added to them next.
+      let onPath = false;
+      const pth = map.lumenPath;
+      if (pth) {
+        const vx = pth.x1 - pth.x0, vy = pth.y1 - pth.y0;
+        const t = Math.max(0, Math.min(1,
+          ((tx - pth.x0) * vx + (ty - pth.y0) * vy) / (vx * vx + vy * vy)));
+        onPath = Math.hypot(tx - (pth.x0 + vx * t), ty - (pth.y0 + vy * t)) <= pth.w;
+      }
+      if (onPath) {
+        this.texturedGlow(cx, cy, 6, 3.1, 'rgba(96,236,140,0.92)', 14, 0.42, 'aigrate');
+      } else if (c.a > OFF) {
+        this.texturedGlow(cx, cy, 6, 3.1, `rgba(${c.r},${c.g},${c.b},${c.a.toFixed(3)})`,
+          12 * c.a, 0.42 * c.a, 'aigrate');
+      }
     }
     // Fortress decks read as a lit grid: a dim green floor-stud on every panel /
     // quad / sanctum tile, so the maze is clear to move through rather than a dark
@@ -2186,7 +2249,7 @@ export class Renderer {
       // On intruder alert the whole maze switches to a hard, fast RED pulse
       // (mostly in sync — a klaxon strobe); otherwise each sconce glows slowly
       // on its own cyan/amber phase.
-      const alarm = this._fortressAlarm;
+      const alarm = this._holdAlarm;
       const hue = alarm ? [255, 45, 35] : obj.lightHue === 'amber' ? [255, 176, 64] : [95, 214, 255];
       const period = alarm ? 230 : 900;
       const phase = alarm ? (obj.lightPhase || 0) * 0.25 : (obj.lightPhase || 0);
@@ -4687,15 +4750,20 @@ export class Renderer {
         }
         break;
       }
-      case 'golden_axe': {
-        // A small gold axe: shaft + head, for Calypso's recipe.
-        ctx.strokeStyle = '#7a5a2a'; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.moveTo(-2, 9); ctx.lineTo(3, -8); ctx.stroke();
+      case 'bronze_axe': {
+        // DOUBLE-BLADED, on an olive haft: Homer's axe rather than ours (#141).
+        ctx.strokeStyle = '#6b5a34'; ctx.lineWidth = 2;   // olive wood
+        ctx.beginPath(); ctx.moveTo(-1, 10); ctx.lineTo(2, -9); ctx.stroke();
         ctx.fillStyle = itemDef.color;
+        // the head, sharpened both ways
         ctx.beginPath();
-        ctx.moveTo(3, -9); ctx.quadraticCurveTo(12, -7, 9, 1);
-        ctx.quadraticCurveTo(5, -1, 1, -2); ctx.closePath(); ctx.fill();
-        ctx.strokeStyle = 'rgba(120,90,20,0.6)'; ctx.lineWidth = 1; ctx.stroke();
+        ctx.moveTo(2, -10); ctx.quadraticCurveTo(11, -8, 8, 0);
+        ctx.quadraticCurveTo(5, -2, 2, -3); ctx.closePath(); ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(2, -10); ctx.quadraticCurveTo(-7, -8, -4, 0);
+        ctx.quadraticCurveTo(-1, -2, 2, -3); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = 'rgba(90,60,20,0.65)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(2, -10); ctx.lineTo(2, -3); ctx.stroke();
         break;
       }
       case 'wood':

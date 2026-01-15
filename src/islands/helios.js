@@ -175,17 +175,17 @@ export function createHelios(seed) {
     obeliskObjs.forEach((ob, i) => { ob.circuitNum = nums[i]; });
   }
 
-  const fortress = createFortress(map, IS, spawn, {
+  const hold = createFortress(map, IS, spawn, {
     aiName: 'HELIOS', winMode: 'kill', obColor: OB_COLOR, obAlertColor: OB_ALERT,
   });
-  const mainframe = fortress.core;
+  const mainframe = hold.core;
 
   stampCoast(map, spawn);
   map.temples = placeRuins(map, makeRng((IS ^ 0x2c01dd) >>> 0), { spawn, clusters: 4 });
-  robots.push(...fortress.spawnGuards(spawnM4));
+  robots.push(...hold.spawnGuards(spawnM4));
   // A garrisoned labyrinth: M6 packs patrol the corridors, M5 snipers hold the
   // deep straights. Without this the maze is an empty walk to the quad.
-  robots.push(...fortress.garrisonMaze(spawnM6, spawnM5));
+  robots.push(...hold.garrisonMaze(spawnM6, spawnM5));
 
   // THE CATTLE OF THE SUN. A herd grazes on open pasture, well clear of the spawn
   // and the fortress guns, so you meet them in peace and choose in peace. They are
@@ -201,7 +201,7 @@ export function createHelios(seed) {
         const f = map.floorAt(x, y);
         if ((f !== 'grass' && f !== 'tallgrass') || map.objectAt(x, y)) continue;
         if (Math.hypot(x - spawn.x, y - spawn.y) < 18) continue;          // not on top of you at landfall
-        if (Math.hypot(x - fortress.core.x, y - fortress.core.y) < 20) continue; // not under the fortress guns
+        if (Math.hypot(x - hold.core.x, y - hold.core.y) < 20) continue; // not under the fortress guns
         pasture.push([x, y]);
       }
     }
@@ -246,7 +246,7 @@ export function createHelios(seed) {
     combat: true,
     prohibition: true, // THRINACIA: main.js watches the herd while you're ashore
   });
-  world.fortress = fortress;
+  world.hold = hold;
   world.wfactory = wfactory;
   world.mainframe = mainframe;
   world.torObjs = torObjs;

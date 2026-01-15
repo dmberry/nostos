@@ -10,11 +10,57 @@
 // CALYPSO, island one: the current overworld, built as a World (islands Stage 0c,
 // docs/islands-plan.md §3). createIsland(seed) runs the whole overworld construction
 // that used to sit inline in main.js's boot, and returns a World carrying the entity
-// arrays plus the calypso-specific controllers (fortress, wfactory, mainframe, torObjs)
+// arrays plus the calypso-specific controllers (hold, wfactory, mainframe, torObjs)
 // as named fields for main.js to alias. Moved VERBATIM (same RNG call order) so the
 // world is seed-identical to before the extraction; the only change is WORLD_SEED->seed.
 // Nothing here touches the player or lore: those, and the player/lore-coupled controllers
 // (worldStir, onCoreDefeated), stay in main.js.
+//
+// ---------------------------------------------------------------------------
+// HOW YOU LEAVE OGYGIA, as of R0 (docs/calypso-build-plan.md). Written down
+// before the Calypso work starts, because everything in that plan has to keep
+// this working and nobody should have to re-derive it from six files.
+//
+// THE MECHANICAL GATE IS THE SHIP, NOT A FLAG. `player.boardBoat` checks one
+// thing: `boat.seaworthy`. Nothing else in the departure reads `calypsoLeave`.
+// The only source of a seaworthy hull is `craftGreekShip`, so the real chain is
+// a chain of ITEMS, and it runs:
+//
+//   1. wreck the W-factory (or reprint at an OB)   -> ai_key
+//   2. ELIZA factory_id.ml at an OB -> root_access.ml, copied onto the key
+//                                                  -> trojan_key
+//   3. forge zeus_lightning.ml at a HERMES relay, copied on
+//                                                  -> hermes_card
+//      (docs/calypso-escape-chain.md has the file-level detail)
+//   4. player.hasVirusFor('CALYPSO')  ==  hasTrojanCard() && virusArmed has her
+//   5. refunctionCalypso() in main.js, from the OB `retire` verb or her own
+//      terminal. It sets player.calypsoLeave, retires her guards into W5
+//      gardeners, scores 500, records her in the Archipelago tally, AND
+//   6. --> grants `bronze_axe`, her shipwright's recipe. THIS is the object
+//      that actually opens the sea. It is granted whenever missing, not only
+//      on first release, so an old save cannot soft-lock.
+//   7. craftGreekShip needs: bronze_axe + 12 wood + oar + rope + sail + a free
+//      land tile adjacent to 'sea' within BOAT_LAUNCH_RADIUS. It stamps
+//      `seaworthy: true` on the hull and sets player.shipBuilt.
+//   8. boardBoat(seaworthy) -> player.onDepart -> main.js sails you out.
+//
+// WHAT calypsoLeave ACTUALLY DOES: it is the HUD's "daemon fallen" answer for
+// this island (hudDaemon reads it instead of a broken core, because her core is
+// never razed) and the once-only guard on the score and the tally. Departure
+// does not consult it. A later stage that sets calypsoLeave and expects a boat
+// will be disappointed; it must grant the recipe too.
+//
+// AN UNSEAWORTHY HULL STILL LAUNCHES. `onDepartFail` runs the failed crossing
+// (OUT / SWELL / BACK) when `currentWorld.departTrial` is set, and returns
+// false when there is no open water to row into, in which case the player just
+// gets `washedBack`. Poseidon does the refusing, not a locked door.
+//
+// winMode: 'depart' gates three things and nothing else: her core is
+// indestructible, her guards detain rather than kill (main.js sets
+// player.detainMode from it), and hudDaemon reads calypsoLeave for her fall.
+//
+// test/calypso-depart.test.js pins all of the above.
+// ---------------------------------------------------------------------------
 
 import { buildWorld } from '../game/worldgen.js';
 import { spawnAnimals } from '../game/animals.js';
@@ -26,7 +72,7 @@ import { placeRuins } from '../game/ruins.js';
 import { stampCoast } from '../engine/coast.js';
 import { placeShipParts } from '../game/ships.js';
 import { placeBoatYard } from '../game/boatyard.js';
-import { createFortress } from '../game/fortress.js';
+import { createGrove } from '../game/grove.js';
 import { makeRng } from '../game/rng.js';
 import { applyIslandPalette, islandTerrain } from '../game/palettes.js';
 import { TAPES } from '../game/items.js';
@@ -142,10 +188,15 @@ export function createIsland(seed) {
       if (Math.hypot(x - spawn.x, y - spawn.y) < 16) continue;
       if (obelisks.some((o) => Math.hypot(o.x - x, o.y - y) < 14)) continue;
       // OB classes: exactly ONE tower in the world is the SIREN — a singular,
-      // teal-lit landmark whose song pulls you in up close (see the obelisk loop
-      // below). The first obelisk placed is it; every other is standard.
-      const cls = obelisks.length === 0 ? 'siren' : undefined;
-      map.addObject('obelisk', x, y, { cls });
+      // teal-lit landmark whose song pulls you in up close (see the obelisk
+      // loop below).
+      //
+      // F1 (#140): it is the tower NEAREST THE SEA. With the guards gone, the
+      // song is the only thing on Ogygia that holds you at all, and it should
+      // stand where leaving happens: walk toward the water and you walk into
+      // it, and the tape in your pocket is what gets you past. The class is
+      // assigned after the loop, once every tower has a position to compare.
+      map.addObject('obelisk', x, y, {});
       obelisks.push({ x, y });
     }
 
@@ -392,22 +443,56 @@ export function createIsland(seed) {
     obeliskObjs.forEach((ob, i) => { ob.circuitNum = nums[i]; });
   }
 
-  // ZEUS's fortress — one of the four AI daemons. Grown as a sealed annex onto the
-  // south edge of the map (all overworld spawning above has already happened on
-  // the 128x128 grid, so the annex stays clean). Reached only by hacking the
-  // boundary gate terminal in AI-ML. `mainframe` points at the core so the
-  // existing map overlay marks it; `fortress` owns the gate/door logic. (fortress.js
-  // now names the AI ZEUS at source, so no override is needed here.)
-  // Depart mode (R3): Calypso is the daemon you leave, not the one you kill. Her
-  // core is indestructible and her fortress guards detain rather than slay; the
-  // win is launching the ship, not razing the mind.
-  const fortress = createFortress(map, seed, spawn, { aiName: 'CALYPSO', winMode: 'depart' });
-  const mainframe = fortress.core; // { x, y } of the core, for the AI-ML map star
+  // F2a (#147, docs/calypso-build-plan.md): HER GROUND IS NOT A FORTRESS AND NO
+  // LONGER PRETENDS TO BE ONE. F1 took the behaviour off and left the object;
+  // this takes the object. `game/grove.js` builds into the same southern annex
+  // createFortress uses — a good mechanism, and it costs the overworld no ground
+  // — and puts nothing in it that keeps anybody anywhere: no rampart, no gate,
+  // no labyrinth, no quad, no garrison, no alarm, and no walls of any kind. The
+  // edge of her ground is a treeline, and trees are soft in this game, so the
+  // boundary is one you walk straight through.
+  //
+  // The labyrinth is not deleted. It moved into the floor, which draws it in
+  // light along with spirals and a path winding across the room, and you may
+  // follow one or ignore it (game/spiralism.js). Spiralism is already the
+  // daemons' method in this game's own lore — lore.js says outright that this is
+  // where she learnt it — so the room preaches the way she does: never an
+  // instruction, present for a long time, and the walking is your own idea.
+  const grove = createGrove(map, seed, { aiName: 'CALYPSO', obAlertColor: '#4b5cc4' });
+  const mainframe = grove.core; // { x, y } of the core, for the AI-ML map star
   // Ring the island in sea: stamp a dithered sand+water coast into the border
   // tiles now that the towers, relays and fortress are placed (so it leaves them
   // standing). Beyond the outer water band the map edge is still the hard bound,
   // with the open ocean drawn past it.
   stampCoast(map, spawn);
+
+  // F1 (#140): the SIREN is the tower nearest open water. With the guards gone
+  // the song is the only thing on Ogygia that holds you at all, and it should
+  // stand where leaving happens: walk toward the sea and you walk into it, and
+  // the tape in your pocket is what gets you past.
+  //
+  // This runs AFTER stampCoast, and it has to: before the coast is stamped
+  // there is no 'sea' floor to be near, every tower measures as infinitely far
+  // from the water, and nothing gets the class at all.
+  if (obeliskObjs.length) {
+    const seaDist = (o) => {
+      for (let r = 1; r < 60; r++) {
+        for (let a = 0; a < 16; a++) {
+          const x = Math.round(o.x + Math.cos((a * Math.PI) / 8) * r);
+          const y = Math.round(o.y + Math.sin((a * Math.PI) / 8) * r);
+          if (map.inBounds(x, y) && map.floorAt(x, y) === 'sea') return r;
+        }
+      }
+      return Infinity;
+    };
+    let best = obeliskObjs[0], bestD = Infinity;
+    for (const o of obeliskObjs) {
+      const d = seaDist(o);
+      if (d < bestD) { bestD = d; best = o; }
+    }
+    best.cls = 'siren';
+  }
+
   // Washed ashore: the game starts on the beach itself, not on the road into
   // town. Walk the spawn row east until the sea and take the last dry sand
   // tile before it — that is where the water left you (main.js starts a fresh
@@ -433,11 +518,14 @@ export function createIsland(seed) {
   // if no shore site is found, so the parts can never be unobtainable. After the
   // coast so shore tiles exist. (src/game/boatyard.js, src/game/ships.js)
   if (!placeBoatYard(map, seed, spawn)) placeShipParts(map, seed, spawn);
-  // The dormant fortress's only garrison: one or two light M4 report drones on
-  // the quad. Sneak past them; if one holds you in sight the breach reports and
-  // the core spits out its M6 pack + M5 snipers (worldStir.spawnWave below).
-  robots.push(...fortress.spawnGuards(spawnM4));
+  // F1: NO GARRISON. Anyone may visit her; she entrances rather than guards.
+  // The other four islands keep theirs, and Polyphemus becomes the first real
+  // fortress a player meets, which is an improvement: the first one should have
+  // something behind the door.
 
+  // F1: the flag rides on the MAP, because that is what the player's own hunger
+  // loop can see without reaching for the world.
+  map.plenty = true;
   const birds = spawnBirds(map, seed);
   applyIslandPalette(map, 'calypso'); // per-island ground + foliage colour (B2)
   const world = createWorld('calypso', {
@@ -447,9 +535,13 @@ export function createIsland(seed) {
     departTrial: true, // Ogygia's gate IS the boat: launch an unfinished one and the sea sends you home
     keeper: true, // Calypso's island: main.js runs the Nokia channel + her interventions here
     winMode: 'depart', // R3: the win is leaving. Her core is unbreakable; her guards detain (main.js sets player.detainMode)
+    // F1: the one island where you never starve. Comfort is the trap, so the
+    // trap should be comfortable. A player will not notice for an hour and will
+    // find it horrible when they do.
+    plenty: true,
   });
   // calypso-specific controllers, aliased by name in main.js (its ~60 runtime sites use these names).
-  world.fortress = fortress;
+  world.hold = grove;   // #158: `hold` — Calypso's is a grove, not a fortress
   world.wfactory = wfactory;
   world.mainframe = mainframe;
   world.torObjs = torObjs;

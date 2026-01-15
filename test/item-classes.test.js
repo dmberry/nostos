@@ -118,7 +118,7 @@ test('the opaque items say what they are for', () => {
   // The list David named, plus the cards. These are the ones a player meets
   // with no idea what to do; anything else can be filled in later.
   const MUST = ['bluebox', 'ob_spoofer', 'wifiblock', 'forcefield', 'mirror_shield', 'compass',
-    'goggles', 'grass_seed', 'moly', 'golden_axe', 'oar', 'rope', 'sail', 'chip',
+    'goggles', 'grass_seed', 'moly', 'bronze_axe', 'oar', 'rope', 'sail', 'chip',
     'chip_fragment', 'circuit', 'ai_key', 'trojan_key', 'hermes_card'];
   const silent = MUST.filter((k) => !(ITEM_DEFS[k] && ITEM_DEFS[k].use));
   assert.deepEqual(silent, [], `these still only give their name: ${silent.join(', ')}`);

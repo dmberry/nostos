@@ -706,18 +706,41 @@ function baseRobot(type, x, y, hp, rng) {
   };
 }
 
-// A tile a robot may be seated on: in bounds, walkable, and at ground level
-// or above (the towers do not deploy machines into hollows).
+// A tile a robot may be seated on: in bounds, walkable, at ground level or
+// above (the towers do not deploy machines into hollows), and NOT on the
+// factory's own floor.
+//
+// That last one is a bug fix (#136). A factory dispatch seats its unit in a
+// ring of up to eight tiles around the muster point, and the muster point is
+// a tile and a half in front of the doors — so the ring reaches back over the
+// building. The factory's interior tiles are walkable, because units stand in
+// it while it prints, but they are enclosed: a unit seated there is walled in
+// for good. Every footprint tile carries the factory in the object grid, so
+// asking what is on the tile is enough to keep the ring off the roof.
 function seatable(map, x, y, avoid, used) {
   if (map.isSolid(x, y)) return false;
   if (map.heightAt(x, y) < 0) return false;
+  const on = map.objectAt ? map.objectAt(x, y) : null;
+  if (on && on.type === 'wfactory') return false;
   if (Math.hypot(x + 0.5 - avoid.x, y + 0.5 - avoid.y) < avoid.r) return false;
   return !used.has(`${x},${y}`);
 }
 
 // Pick a free tile in a ring around the tower, widening the ring if the
 // near ground is all solid or spoken for. Returns [x, y] or null.
+//
+// THE ORIGIN IS FLOORED FIRST, and that is the other half of #136. The map's
+// grids are indexed `grid[y * w + x]` with no rounding, so a fractional
+// coordinate reads off the end of the array and comes back undefined: heightAt
+// gives undefined (and `undefined < 0` is false), objectAt gives undefined, and
+// isSolid gives FALSE for every tile it is asked about. A factory musters at
+// `wfactory.y + fh + 1.5`, which is always fractional, so every candidate in
+// its ring was landing on a half-tile and passing every test unexamined —
+// walls, water, hollows and the factory's own floor alike. Flooring here puts
+// the search back on real tiles, and the checks in seatable start working.
 function seatNear(map, ox, oy, avoid, used, rng, maxR) {
+  ox = Math.floor(ox);
+  oy = Math.floor(oy);
   const candidates = [];
   for (let dy = -maxR; dy <= maxR; dy++) {
     for (let dx = -maxR; dx <= maxR; dx++) {

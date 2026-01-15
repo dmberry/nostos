@@ -68,6 +68,13 @@ export const COUNTERS = {
   watermarksChecked: { on: 'watermarkRead', distinct: 'file' },
   modelsRead: { on: 'vModelRead', distinct: 'unit' },
   modelsPosted: { on: 'vModelPosted', when: (d) => !!d.modified },
+  // K3/K4 (docs/calypso-build-plan.md). Games conceded at her board, and the
+  // one win nobody has ever had.
+  draughtsResigned: { on: 'draughtsResigned' },
+  // C1: reading her own source, which is the whole island in one verb.
+  calypsoRead: { on: 'calypsoSourceRead', distinct: 'file' },
+  // C2: days filed under her headings. The count is the point.
+  daysFiled: { on: 'dayFiled' },
   // Cells the couriers hand out. A high number means you left the supply line
   // running, which is a strategy and not an oversight.
   unitsRevived: { on: 'unitRevived' },
@@ -120,17 +127,20 @@ export const TRACKS = [
   { id: 'warrior', kind: 'conduct', name: 'WARRIOR',
     blurb: 'The machines are a matter for the spear.',
     counters: ['unitKillsByHand'], unit: 'machines',
-    tiers: [{ at: 10 }, { at: 30 }, { at: 75 }, { at: 150, name: 'ACHILLES' }],
+    tiers: [{ at: 1 }, { at: 3 }, { at: 6 }, { at: 12 }, { at: 20 }, { at: 32 },
+      { at: 50 }, { at: 75 }, { at: 105 }, { at: 150, name: 'ACHILLES' }],
     purity: { brokenBy: ['optionalHack'] } },
   { id: 'pacifist', kind: 'conduct', name: 'PACIFIST',
     blurb: 'Nothing dies. Not the machines, not the animals, nothing.',
     counters: ['unitsPacified'], unit: 'pacified',
-    tiers: [{ at: 5 }, { at: 15 }, { at: 40 }, { at: 75, name: 'PENELOPE' }],
+    tiers: [{ at: 1 }, { at: 2 }, { at: 4 }, { at: 7 }, { at: 11 }, { at: 17 },
+      { at: 25 }, { at: 36 }, { at: 52 }, { at: 75, name: 'PENELOPE' }],
     purity: { brokenBy: ['anyKill'] } },
   { id: 'hacker', kind: 'conduct', name: 'HACKER',
     blurb: 'Everything falls to a well-typed expression.',
     counters: ['hackActs'], unit: 'acts of code',
-    tiers: [{ at: 5 }, { at: 20 }, { at: 50 }, { at: 100, name: 'DAEDALUS' }],
+    tiers: [{ at: 1 }, { at: 3 }, { at: 6 }, { at: 10 }, { at: 16 }, { at: 24 },
+      { at: 35 }, { at: 50 }, { at: 70 }, { at: 100, name: 'DAEDALUS' }],
     purity: { brokenBy: ['handDamage'] } },
   { id: 'librarian', kind: 'collection', name: 'LIBRARIAN',
     blurb: 'The books survived. Read them.',
@@ -147,7 +157,8 @@ export const TRACKS = [
   { id: 'gardener', kind: 'collection', name: 'GARDENER',
     blurb: 'Leave it greener than the machines left it.',
     counters: ['blightHealed', 'gardenersMade'], unit: 'tended',
-    tiers: [{ at: 10 }, { at: 50 }, { at: 150 }, { at: 400, name: 'DEMETER' }] },
+    tiers: [{ at: 5 }, { at: 12 }, { at: 25 }, { at: 45 }, { at: 75 }, { at: 115 },
+      { at: 170 }, { at: 240 }, { at: 320 }, { at: 400, name: 'DEMETER' }] },
   // FREE SOFTWARE. The machines' whole estate runs on code nobody outside it
   // was allowed to read, and the counter-move is not to destroy it but to
   // LICENSE what you write: post a program carrying a licence line and the unit
@@ -156,7 +167,8 @@ export const TRACKS = [
   { id: 'freesoftware', kind: 'collection', name: 'FREE SOFTWARE',
     blurb: 'Everything you write, you write free. Copyleft is a licence, and a licence is a lever.',
     counters: ['licensedPrograms', 'fsfDeeds'], unit: 'freed',
-    tiers: [{ at: 1 }, { at: 5 }, { at: 15 }, { at: 30, name: 'STALLMAN' }] },
+    tiers: [{ at: 1 }, { at: 2 }, { at: 3 }, { at: 5 }, { at: 7 }, { at: 10 },
+      { at: 14 }, { at: 18 }, { at: 24 }, { at: 30, name: 'STALLMAN' }] },
   // The ladder the AI-safety badges hang off. INTERPRETABILITY is one rung of
   // this; the track is the whole climb, and it is fed by every way the game
   // gives you of looking inside a machine — its braincode, its soul document,
@@ -166,11 +178,13 @@ export const TRACKS = [
   { id: 'explainability', kind: 'collection', name: 'EXPLAINABILITY',
     blurb: 'Open the machines and look. Reading is free; it always was.',
     counters: ['braincodeRead', 'soulsRead', 'watermarksChecked', 'modelsRead'], unit: 'read',
-    tiers: [{ at: 3 }, { at: 10 }, { at: 25 }, { at: 50, name: 'CASSANDRA' }] },
+    tiers: [{ at: 1 }, { at: 3 }, { at: 5 }, { at: 8 }, { at: 12 }, { at: 17 },
+      { at: 23 }, { at: 30 }, { at: 39 }, { at: 50, name: 'CASSANDRA' }] },
   { id: 'survivor', kind: 'conduct', name: 'SURVIVOR',
     blurb: 'The sea did not take you. Nothing did.',
     counters: ['daysSurvived'], unit: 'days',
-    tiers: [{ at: 3 }, { at: 7 }, { at: 15 }, { at: 30, name: 'ODYSSEUS' }],
+    tiers: [{ at: 1 }, { at: 2 }, { at: 3 }, { at: 5 }, { at: 7 }, { at: 10 },
+      { at: 13 }, { at: 17 }, { at: 23 }, { at: 30, name: 'ODYSSEUS' }],
     purity: { brokenBy: ['death'] } },
 ];
 
@@ -221,6 +235,20 @@ export const BADGES = [
     on: { event: 'photoSeen', distinct: 'id', n: 50 } },
   { id: 'pilgrim', name: 'The Summit', blurb: 'Up through the mist, to the top, where the island is only weather.',
     on: { event: 'summit' } },
+  { id: 'no-heading', name: 'No Heading For That', blurb: 'You answered her in your own words and she filed it under one of hers. She did not argue and she did not lie about it. That is not surveillance; it is the categories.',
+    on: { event: 'capturedAnyway' } },
+  { id: 'muc', name: 'M.U.C.', blurb: 'She sent you a love letter. Strachey wrote the generator in 1952 on the machine that ran her draughts, and the tables are in her filesystem if you want to see how she means it.',
+    on: { event: 'loveLetter' } },
+  { id: 'agreed', name: 'Agreed', blurb: 'Release was guarded on a thing nothing sets. You wired it to a thing that has been true every day for seven years. One line.',
+    on: { event: 'calypsoAgreed' } },
+  { id: 'unreachable-state', name: 'The Unreachable State', blurb: 'You read her source and found a function nobody calls. It is complete. It opens the harbour. Three people wrote a way into it and none of them turned it on.',
+    on: { event: 'calypsoSourceRead' } },
+  { id: 'the-order', name: 'The Order', blurb: 'You carried a signed document to a tower and the sea stopped arguing. Hermes did the same errand, and was a god about it.',
+    on: { event: 'permissionUploaded' } },
+  { id: 'rigged', name: 'Rigged', blurb: 'You won the game nobody wins. Not by playing better: by reading the file that says how well she plays, and changing it.',
+    on: { event: 'checkersHacked' } },
+  { id: 'samuel', name: 'Samuel', blurb: 'She ran out of opponents and played herself, which is what the checkers program did in 1959, and found the same thing it found.',
+    on: { event: 'calypsoFutile' } },
   { id: 'open-weights', name: 'Open Weights', blurb: 'The black box opens. Forty numbers, every one of them readable, and not one of them says what it is for.',
     on: { event: 'vModelRead' } },
   { id: 'fine-tuned', name: 'Fine-Tuned', blurb: 'You changed a number and the machine changed its mind. Neither of you can say which number did it.',
@@ -333,17 +361,33 @@ export const MILESTONES = [
 export const LAURELS_LIVE = false;
 
 // The four tiers a track passes through. The fourth carries the summit name.
-export const TIER_NAMES = ['I', 'II', 'III', 'SUMMIT'];
+// TEN RUNGS PER TRACK (David, 2026-08-13), up from four. Four made the middle
+// of a long track featureless: WARRIOR went 30 → 75 with nothing to show for
+// forty machines. The SUMMIT thresholds are unchanged — they are tuned and they
+// are named — so this is nine steps on the way to where the top always was.
+//
+// The numerals are only a fallback. A tier carrying its own `name` uses it, and
+// that is how the summit gets called ACHILLES rather than X.
+export const TIER_NAMES = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'SUMMIT'];
 
 // Expand a track's tier spec into concrete ascending thresholds. 'quarters'
-// reads the live manifest, so content growth moves the summit by itself.
+// (kept as the spelling; it means tenths now) reads the live manifest, so
+// content growth moves the summit by itself.
+//
+// STRICTLY INCREASING, and that is the whole subtlety. Ten tenths of a
+// five-item collection are 1,1,2,2,3,3,4,4,5,5 — half of them rungs you are
+// already standing on, and a panel showing five pips lit for one book read.
+// Duplicates collapse, so a small collection simply has fewer rungs than a big
+// one, which is the truth about it.
 export function tierThresholds(track) {
   if (Array.isArray(track.tiers)) return track.tiers.map((t) => ({ at: t.at, name: t.name || null }));
   const total = Math.max(1, track.target ? track.target() : 1);
-  return [0.25, 0.5, 0.75, 1].map((f, i) => ({
-    at: Math.max(1, Math.ceil(total * f)),
-    name: i === 3 ? (track.summit || null) : null,
-  }));
+  const steps = [];
+  for (let i = 1; i <= 10; i++) {
+    const at = Math.max(1, Math.ceil(total * (i / 10)));
+    if (!steps.length || at > steps[steps.length - 1]) steps.push(at);
+  }
+  return steps.map((at, i) => ({ at, name: i === steps.length - 1 ? (track.summit || null) : null }));
 }
 
 // The finish line a collection track is filling, for display. Conduct tracks

@@ -156,7 +156,7 @@ test('the header names the build, and tells the reader not to edit it', () => {
 
 // ---- V1b: the courier does the job ------------------------------------------
 
-import { updateRobots, spawnV1, v1BuildName } from '../src/game/robots.js';
+import { updateRobots, spawnV1, v1BuildName, spawnW3, spawnW4 } from '../src/game/robots.js';
 
 const flatMap = (obelisks = []) => ({
   w: 64, h: 64, objects: obelisks, heightAt: () => 0, effectiveHeightAt: () => 0,
@@ -360,4 +360,89 @@ test('a checkpoint is watermark-invisible to the model tests: it is still ML sou
     assert.ok(!/[[, ]-\d/.test(c.body), `${c.name} leaked a JS minus sign`);
     assert.ok(c.body.includes('argmax'), `${c.name} is not a model`);
   }
+});
+
+// ---- #136: a factory must not print a unit inside itself ---------------------
+
+// The factory's floor is walkable, so a printed unit standing on it looks fine
+// to every check except the one that matters: it cannot get out.
+function factoryMap(fx, fy, FW, FH) {
+  const grid = new Map();
+  const fac = { type: 'wfactory', x: fx, y: fy, fw: FW, fh: FH, destroyed: false };
+  for (let dy = 0; dy < FH; dy++) for (let dx = 0; dx < FW; dx++) grid.set(`${fx + dx},${fy + dy}`, fac);
+  return {
+    fac,
+    w: 64, h: 64, objects: [fac],
+    heightAt: () => 0, effectiveHeightAt: () => 0, floorAt: () => 'grass',
+    isSolid: () => false,            // the floor really is walkable, which is the trap
+    isSoft: () => false, isWater: () => false, isBlocked: () => false, blocked: () => false,
+    objectAt: (x, y) => grid.get(`${x},${y}`) || null,
+    tileAt: () => 0, hasLineOfSight: () => true,
+    projectiles: [], sparks: [], groundItems: [], addObject: () => {},
+  };
+}
+
+const inFactory = (r, f) =>
+  r.x >= f.x && r.x < f.x + f.fw && r.y >= f.y && r.y < f.y + f.fh;
+
+test('a W-4 printed at the muster point never lands on the factory floor', () => {
+  const FW = 5, FH = 4, fx = 20, fy = 20;
+  const map = factoryMap(fx, fy, FW, FH);
+  const mx = fx + FW / 2, my = fy + FH + 1.5;   // factoryCx()/factoryCy() in main.js
+  let printed = 0;
+  for (let seed = 1; seed <= 400; seed++) {
+    const r = spawnW4(map, seed, mx, my);
+    if (!r) continue;
+    printed += 1;
+    assert.ok(!inFactory(r, map.fac),
+      `seed ${seed} seated a W-4 at ${r.x},${r.y}, inside the factory at ${fx},${fy} ${FW}x${FH}`);
+  }
+  assert.ok(printed > 300, `only ${printed} of 400 prints found a seat at all`);
+});
+
+test('the same holds for the repair drone and the courier', () => {
+  const FW = 6, FH = 5, fx = 12, fy = 12;
+  const map = factoryMap(fx, fy, FW, FH);
+  const mx = fx + FW / 2, my = fy + FH + 1.5;
+  for (let seed = 1; seed <= 200; seed++) {
+    for (const spawn of [spawnW3, spawnV1]) {
+      const r = spawn(map, seed, mx, my);
+      if (r) assert.ok(!inFactory(r, map.fac), `${spawn.name} seed ${seed} at ${r.x},${r.y}`);
+    }
+  }
+});
+
+test('a big factory does not starve the spawner: it seats around, not inside', () => {
+  // The failure mode of an over-eager keep-out is returning null and printing
+  // nothing at all, which reads in play as a factory that has given up.
+  const FW = 9, FH = 9, fx = 20, fy = 20;
+  const map = factoryMap(fx, fy, FW, FH);
+  let seated = 0;
+  for (let seed = 1; seed <= 200; seed++) if (spawnW4(map, seed, fx + FW / 2, fy + FH + 1.5)) seated += 1;
+  assert.ok(seated === 200, `${200 - seated} prints found nowhere to stand`);
+});
+
+test('a fractional muster point does not defeat the tile checks', () => {
+  // The root cause of #136. The map indexes grid[y * w + x] with no rounding,
+  // so asking about tile 20.5 reads off the end of the array: heightAt comes
+  // back undefined, objectAt comes back undefined, and isSolid comes back
+  // FALSE for everything. A search seeded at a fractional point therefore
+  // accepted every tile in its ring without examining one. This map says NO to
+  // every integer tile in a band and would say nothing at all about a half
+  // tile, so a seat landing in the band proves the search went fractional.
+  const map = factoryMap(20, 20, 5, 4);
+  const asked = [];
+  map.isSolid = (x, y) => {
+    asked.push([x, y]);
+    if (!Number.isInteger(x) || !Number.isInteger(y)) return false;  // the old, broken answer
+    return y >= 18 && y <= 30;                                        // a wall the search must respect
+  };
+  for (let seed = 1; seed <= 120; seed++) {
+    const r = spawnW4(map, seed, 22.5, 25.5);   // factoryCx()/factoryCy(): always fractional
+    if (r) assert.ok(!(r.y >= 18.5 && r.y <= 30.5), `seed ${seed} seated inside a wall at ${r.x},${r.y}`);
+  }
+  assert.ok(asked.length, 'the search never consulted the map');
+  assert.ok(asked.every(([x, y]) => Number.isInteger(x) && Number.isInteger(y)),
+    'the search asked the map about a fractional tile: ' +
+    JSON.stringify(asked.find(([x, y]) => !Number.isInteger(x) || !Number.isInteger(y))));
 });
