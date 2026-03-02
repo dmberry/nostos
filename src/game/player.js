@@ -138,6 +138,14 @@ const MIRROR_HEAT_PER_HIT = 0.17; // heat gained per bolt reflected (0..1 scale)
 const MIRROR_HEAT_COOL = 0.13;    // heat/sec shed while not being hit
 const MIRROR_HEAT_FADE = 0.6;     // above this it's too hot to reflect — only absorbs
 const FORCEFIELD_HIT_COST = 2;    // seconds of charge burned per blow the field eats
+// #159 — WHAT A SWARM COSTS THE FIELD. A w-unit is a cheap machine whose whole
+// contribution is to be one of many, and against an energy shell that makes it
+// a drain rather than a threat: it earths itself on the shell and takes a bite
+// of the cell doing it. Eight times an ordinary blow, because the alternative
+// is what Henrik found — carry a forcefield and a stack of batteries and the
+// B-1's waves cannot touch you, so the fight the swarm exists to create simply
+// does not happen. The field is meant to be a costly minute, not an off-switch.
+const FORCEFIELD_SWARM_COST = 16;
 
 const WIFI_MAX = 600;    // Wi-Fi block charge in seconds (10 real minutes)
 const SWIM_STAMINA_DRAIN = 8;  // stamina/sec while in deep water
@@ -196,6 +204,10 @@ export class Player {
     this.mirrorHeat = 0;       // 0..1 mirror-shield overheat; reflects while cool, melts at 1
     this.compassArmed = false; // toggled by clicking the electro-compass in any slot
     this.gogglesOn = false;    // night-vision goggles worn: they cut POSEIDON's fog
+    // #121: what the bluebox is loaded with, and the file it came from. Null
+    // means it writes the gardener it was soldered to write.
+    this.blueboxProgram = null;
+    this.blueboxFile = null;
     this.ronmlKeys = new Set(); // node ids AI-ML's `hack` has cracked open this session
     this.ammoFrac = {};        // accumulated fractional ammo per gun
     this.electroCharge = (ITEMS.electrogun && ITEMS.electrogun.internalMax) || 4; // electro-gun's self-charging internal cell
@@ -248,6 +260,10 @@ export class Player {
     // only its own virus, so arming is PER ISLAND: a card forged on Ogygia opens
     // nothing on Aeaea. Names are AI_NAMEs ('CALYPSO', 'POLYPHEMUS', ...).
     this.virusArmed = new Set();
+    // #159: the card in hand was cut off a dead carrier rather than forged at a
+    // relay (docs/hermes-warrior-path.md). It opens her door exactly as the
+    // forged one does; POSEIDON's net has simply read that it went missing.
+    this.hermesTraced = false;
     // The Nokia 3310 — Calypso's channel (docs/calypso-nokia-plan.md). A worn
     // fixture like the walkman: never dropped, never a pocket slot. `calypsoHold`
     // is her hold on you AND her protection of you (0..1); `nokiaSent` records the
@@ -674,9 +690,20 @@ export class Player {
     }
     if (this.countItem('circuit') < BLUEBOX_CONVERT_COST) { this.say('The bluebox needs a circuit board to write with. Fell a tower for one.'); return; }
     for (let n = 0; n < BLUEBOX_CONVERT_COST; n++) this.removeItem('circuit');
-    bot.gardener = true;
+    // #121: the box writes what you loaded into it (`bluebox <file>` on the
+    // NostBook), or the gardener if you loaded nothing. The gardener stays the
+    // default because it is the one conversion that needs no programming at all
+    // — a player who never opens the laptop still gets the whole mechanic.
+    //
+    // FRIENDLY EITHER WAY. What the bluebox does is take the machine off the
+    // network, and a machine off the network is not the estate's any more
+    // whatever it then does with its legs. Writing your own program changes what
+    // it does; it does not put it back under the tower.
+    const custom = this.blueboxProgram || null;
+    bot.gardener = !custom;
     bot.friendly = true;      // reads friendly: green eye, nothing targets it, it targets nothing
-    bot.program = W5_PROGRAM;  // its page reads as the gardener it now is
+    bot.program = custom || W5_PROGRAM;  // its page reads as whatever it now runs
+    bot._unwatermarked = !!custom;       // #126: your program carries no RON credentials
     bot.fault = null; bot.intent = null;
     bot.aggro = false;
     bot.hurt = false;
@@ -689,10 +716,12 @@ export class Player {
     // Three things at once, and each is a different achievement's business: a
     // gardener made, a machine pacified rather than killed, and a machine that
     // can no longer hurt anyone by any route at all.
-    achieveEvent('gardenerMade', { type: bot.type });
+    if (!custom) achieveEvent('gardenerMade', { type: bot.type });
     achieveEvent('unitPacified', { how: 'convert' });
     achieveEvent('madeSafe', { how: 'convert' });
-    this.say(`You splice the bluebox into the ${bot.type.toUpperCase()}. Its eye flushes green and it turns to the dead ground — a gardener now.`);
+    this.say(custom
+      ? `You splice the bluebox into the ${bot.type.toUpperCase()}. Its eye flushes green and it comes up running ${this.blueboxFile || 'your program'} — off the network, and yours.`
+      : `You splice the bluebox into the ${bot.type.toUpperCase()}. Its eye flushes green and it turns to the dead ground — a gardener now.`);
   }
 
   // THE BOT SNIFFER. Two boards and a cell: an aerial, a receiver and a screen.
@@ -2409,6 +2438,30 @@ export class Player {
   }
 
   // A melee blow on the W-factory hull.
+  /**
+   * #149 — an usher's shove. Moves the player by (dx, dy) tiles, refusing any
+   * step that would put them inside something solid, so being moved off her
+   * floor can never post you into a tree or a wall.
+   *
+   * Deliberately NOT damage and deliberately not `detainHit`: the T-8s are
+   * amenity units, and detainHit counts strikes toward a limit after which the
+   * guards start wounding. An usher that eventually kills you is a guard with a
+   * nicer name. All it can ever cost you is ground.
+   */
+  shove(map, dx, dy) {
+    const solid = (x, y) => (map.isSolid ? map.isSolid(Math.floor(x), Math.floor(y)) : false);
+    // Step it out rather than teleporting, so a shove past a wall stops at the
+    // wall instead of skipping over it.
+    const STEPS = 6;
+    for (let i = 0; i < STEPS; i++) {
+      const nx = this.x + dx / STEPS, ny = this.y + dy / STEPS;
+      if (solid(nx, this.y) && solid(this.x, ny)) break;
+      if (!solid(nx, this.y)) this.x = nx;
+      if (!solid(this.x, ny)) this.y = ny;
+    }
+    this.hurtTimer = 0.14;   // the flash, so the shove is felt without a wound
+  }
+
   hitFactory(obj, map, tool) {
     if (obj.destroyed) { this.say('The factory is already a smoking ruin.'); return; }
     this.swingTimer = tool.swingCooldown || 0.5;
@@ -2822,6 +2875,14 @@ export class Player {
       // A found Wi-Fi block comes with a charge — a genuine reward, and
       // usable at once (hold it, and top it up with batteries later).
       if (gi.item === 'wifiblock') this.wifiPower = (gi.power != null) ? gi.power : this.wifiMax;
+      // #159 — a HERMES card cut off a dead carrier rather than forged at a
+      // relay. It works; it is also a credential the net has already listed as
+      // missing, and the flag is what everything downstream reads to know which
+      // of the two routes the player took. Sticky: nothing washes it off.
+      if (gi.item === 'hermes_card' && gi.traced) {
+        this.hermesTraced = true;
+        if (this.onHermesSeized) this.onHermesSeized(this);
+      }
       sfx.play('pickup');
       this.say(gi.item === 'wifiblock'
         ? 'You find a Wi-Fi block — hold it and the machines cannot see you.'
@@ -2830,6 +2891,32 @@ export class Player {
         : `+${stored} ${ITEMS[gi.item].name.toLowerCase()}`);
     }
     map.groundItems = map.groundItems.filter((gi) => gi.qty > 0);
+  }
+
+  /**
+   * #159 — a swarm unit earthing itself on the field. Burns charge and nothing
+   * else: the field still stops the blow, it just costs to keep standing there.
+   * Returns true if the field was up and took it.
+   */
+  drainField(seconds = FORCEFIELD_SWARM_COST) {
+    if (!this.forcefieldActive()) return false;
+    this.forcefieldCharge = Math.max(0, this.forcefieldCharge - seconds);
+    return true;
+  }
+
+  /**
+   * #159 — how armed this person looks to a machine sizing up a response, 0-3.
+   * Read off what is actually IN HAND plus whether an energy shell is up, which
+   * is the pair Henrik found trivialised the B-1 (a robot-sword behind a
+   * forcefield). Deliberately not a tally of everything in the bag: the factory
+   * can see what you are holding, not what you are carrying.
+   */
+  weaponThreat() {
+    const d = ITEMS[this.hands];
+    const dmg = (d && d.robotDamage) || 0;
+    let n = dmg >= 9 ? 2 : dmg >= 5 ? 1 : 0;
+    if (this.forcefieldActive()) n += 1;
+    return n;
   }
 
   forcefieldActive() {

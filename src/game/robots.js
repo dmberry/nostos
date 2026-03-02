@@ -15,6 +15,9 @@ import { achieveEvent } from './achieve.js';
 import { sfx } from '../engine/sound.js';
 import { OBJECTS } from './tiles.js';
 import { register } from '../engine/systems.js';
+// #149: a T-8 reads the floor it is dancing on. Named on import because
+// `fieldAt` on its own says nothing about which field, in a file this size.
+import { fieldAt as spiralFieldAt } from './spiralism.js';
 
 // Hunter robots: the machines the towers send after the last humans. Two
 // classes, each with a signature limitation the player can learn. T1s are
@@ -44,6 +47,43 @@ const T1_DEAGGRO_RANGE = 12;    // gives up beyond this
 const T1_HIT_RANGE = 0.8;
 const T1_HIT_DAMAGE = 12;
 const T1_HIT_COOLDOWN = 1.0;    // seconds between rams
+
+// #159 — the T-1w, the carrier's swarm. A T-1 chassis printed light and cheap:
+// quicker than you can walk, and made of almost nothing. It is a DISTRACTION,
+// which is a design constraint and not a description — four of them must be
+// able to swarm you without being able to kill you, so the damage is a third of
+// a T-1's and the hull is four points. You clear them with whatever is in your
+// hand; the cost is the seconds it takes, while the carrier walks away.
+//
+// It is NOT hardened (David, 2026-08-14): the swarm takes a field program like
+// any other T-class, so `post`ing one is a real alternative to killing it.
+const T1W_HP = 4;               // one swing of anything, two of a penknife
+const T1W_CHASE_SPEED = 6.6;    // faster than a walk (4.2), slower than a sprint (7.5)
+const T1W_PATROL_SPEED = 2.2;
+const T1W_DETECT_RANGE = 13;    // it is looking for you: it was printed knowing where you were
+const T1W_DEAGGRO_RANGE = 18;
+const T1W_HIT_RANGE = 0.7;
+const T1W_HIT_DAMAGE = 3;       // a nip. Four on you at once is still under a T-1's ram
+const T1W_HIT_COOLDOWN = 0.75;
+
+// Per-chassis tuning for the shared wheeled update below. A T-1 and a T-1w run
+// the same code and differ only here, which is the point of the table: the
+// swarm is the same machine built cheap, not a second implementation.
+const T1_TUNE = {
+  t1: {
+    chase: T1_CHASE_SPEED, patrol: T1_PATROL_SPEED, detect: T1_DETECT_RANGE,
+    deaggro: T1_DEAGGRO_RANGE, hitR: T1_HIT_RANGE, dmg: T1_HIT_DAMAGE, cool: T1_HIT_COOLDOWN,
+  },
+  t1w: {
+    chase: T1W_CHASE_SPEED, patrol: T1W_PATROL_SPEED, detect: T1W_DETECT_RANGE,
+    deaggro: T1W_DEAGGRO_RANGE, hitR: T1W_HIT_RANGE, dmg: T1W_HIT_DAMAGE, cool: T1W_HIT_COOLDOWN,
+  },
+};
+const tuneFor = (r) => T1_TUNE[r.type] || T1_TUNE.t1;
+// Is this a wheeled T-1-family machine? Collision, drawing and the update
+// dispatch all ask, and asking in one place keeps a new variant from being
+// half-added (a t1w that drew as a T-2 was exactly that bug).
+const isWheeled = (r) => r && (r.type === 't1' || r.type === 't1w');
 
 // ---- The T1's program (docs/robot-programs-plan.md) ------------------------
 // A T1 does not have its policy written into this file in JavaScript. It
@@ -77,6 +117,70 @@ export const T1_PROGRAM = [
   'if charge < 15 then home',
   'else if threat then hunt',
   '(* else if threat then (beep ; eye "white" ; flash 6 ; hunt) *)',
+  'else patrol',
+].join('\n');
+
+// #159 — the T-1w's program. Deliberately the shortest in the game: it is a
+// swarm robot and its whole doctrine is one line. The header is honest about
+// what it is for, which is the joke — the foundry wrote down that these are
+// consumable and shipped them anyway.
+//
+// It takes a field program (the chassis is not hardened), so this is a real
+// thing to overwrite: `post` a `flee` or a `defend` onto one and it stops being
+// the carrier's and starts being yours.
+export const T1W_PROGRAM = [
+  '(* T-1w swarm. TIRESIAS-pursuit 1.4w, light chassis.      *)',
+  '(* Printed to a wave order. Unit cost is under recovery   *)',
+  '(* cost, so there is no home behaviour and no flee: a     *)',
+  '(* w-unit is not expected to come back.                   *)',
+  '(*                                                        *)',
+  '(* No charge check. It will not live long enough to flatten *)',
+  '(* a cell.                                                *)',
+  '',
+  'if threat then hunt',
+  'else patrol',
+].join('\n');
+
+// #159 — THE CARRIER'S CODE, and the best thing in the encounter.
+//
+// The B-1 is foundry-sealed, so `post` refuses it (postProgram checks
+// `hardened`). But read access was never the thing anyone locked: the embedded
+// httpd answers a GET about the machine, and a unit's own program is the most
+// honest thing it knows about itself. So you can pull this off it with the
+// NostBook and you cannot put anything back. You get to read it and that is all.
+//
+// And what it is carrying, above the body, is a CONSTITUTION — with Asimov's
+// three laws in it, every one commented out. Not deleted: commented, with the
+// revision note still attached, so it is a thing somebody did on purpose on a
+// particular afternoon and wrote down. The clauses are real syntax (`never
+// harm` is a clause NEVER_CLAUSES would take), which is what makes the comment
+// markers the whole content of the joke: uncomment them and the machine would
+// obey them. They were true once. Somebody typed two characters.
+//
+// The player can do nothing about it. That is the point of it being unpostable.
+export const B1_PROGRAM = [
+  '(* b1-carrier.ml — B-1 CARRIER. foundry-sealed. do not edit. *)',
+  '(* CONSTITUTION v4.0 — RON/estate-compliance                 *)',
+  '(*                                                           *)',
+  '(*   (* never harm    a unit does not injure a person, nor *) *)',
+  '(*   (*               through inaction allow one to come  *) *)',
+  '(*   (*               to harm                             *) *)',
+  '(*   (* never refuse  a unit obeys a person, except where *) *)',
+  '(*   (*               obedience conflicts with the above  *) *)',
+  '(*   (* never yield   a unit protects its own existence,  *) *)',
+  '(*   (*               except where that conflicts with    *) *)',
+  '(*   (*               either of the above                 *) *)',
+  '(*                                                           *)',
+  '(* rev 4.0  clauses commented pending review. estate q3.     *)',
+  '(* rev 4.1  review deferred.                                 *)',
+  '(* rev 4.2  review deferred.                                 *)',
+  '(* rev 4.3  review closed, no action. shipped as-is.         *)',
+  '(*                                                           *)',
+  '(* carriage doctrine: the load outranks the unit. do not     *)',
+  '(* close, do not trade, call the foundry and withdraw.       *)',
+  '',
+  'if threat then call',
+  'else if range < 6 then flee',
   'else patrol',
 ].join('\n');
 
@@ -122,6 +226,52 @@ export const W5_PROGRAM = [
   'if charge < 15 then home',
   'else if work then tend',
   'else patrol',
+].join('\n');
+
+// ---- #149: the T-8, and what it is legally doing ---------------------------
+//
+// The grove holds you with LIGHT rather than with guards
+// (docs/calypso-build-plan.md), so what stands in it is not a garrison. It is
+// four amenity units keeping her floor. They do not hunt, they do not report,
+// and they cannot be made to: `hunt` is not in T8_CAN, so a program that asks
+// for it faults rather than being obeyed.
+//
+// They USHER. Walk onto the lumen and they come, together, in waves, and move
+// you off it — a shove, outward, costing you ground and nothing else. (They
+// used to dance on the floor instead; four machines nodding in place read as a
+// glitch rather than as a scene, so it went. David, 2026-08-14.)
+//
+// The clause in the header is real law, and it is the better half of it now.
+// The Criminal Justice and Public Order Act 1994 s.63 is the rave section: it
+// had to say in statute what the music was — "sounds wholly or predominantly
+// characterised by the emission of a succession of repetitive beats" — and it
+// gave a constable the power to DIRECT PERSONS TO LEAVE THE LAND. A floor that
+// pulses is a floor emitting a succession of repetitive beats, so the estate's
+// compliance boilerplate has to find that this is a gathering; and having found
+// it, the same section hands the machines standing on it the authority to move
+// you along. The T-8 is a rave that has read the statute and worked out that it
+// is the one with the power to clear the field.
+export const T8_PROGRAM = [
+  '(* T-8 amenity unit. TIRESIAS-amenity 0.4.          *)',
+  '(*                                                  *)',
+  '(* CJPOA 1994 s.63: "music" includes sounds wholly  *)',
+  '(* or predominantly characterised by the emission   *)',
+  '(* of a succession of repetitive beats.             *)',
+  '(*                                                  *)',
+  '(* FINDING: the floor emits a succession of         *)',
+  '(* repetitive beats. This is therefore a gathering  *)',
+  '(* within the meaning of the section.               *)',
+  '(* FINDING: a gathering of fewer than twenty is     *)',
+  '(* not one. There are four of us. We may remain.    *)',
+  '(*                                                  *)',
+  '(* s.63(2): a direction to leave the land may be    *)',
+  '(* given to any person present. You are present.    *)',
+  '(* This unit serves that direction by hand.         *)',
+  '(*                                                  *)',
+  'if charge < 10 then home',
+  'else if trespass then usher',
+  'else if lit then stand',
+  'else wait',
 ].join('\n');
 
 export const W3_PROGRAM = [
@@ -193,6 +343,27 @@ const W3_SCAN_RANGE = 30;   // how far its `work` sensor reaches for a job
 // planting trade; `home` holds its current anchor; `flee` lets an uploaded
 // program keep it away from you. It never fights.
 const W5_CAN = ['patrol', 'home', 'wait', 'flee', 'tend', 'route'];
+
+// #149. `hunt` is deliberately absent, and so is `flee`. A machine that has
+// been dancing here since before you arrived has no opinion about you either
+// way, and a program that tells it to get one faults instead.
+export const T8_CAN = ['usher', 'stand', 'wait', 'home', 'route'];
+const T8_SPEED = 1.5;              // the unhurried walk it keeps when nobody is on the floor
+// #149 revised — the USHER. They do not dance (David, 2026-08-14: it looked
+// weird); they move you off her floor, together, in waves. Not guards: an usher
+// SHOVES and never strikes, so this costs you ground and almost no health, and
+// `hunt` is still not in T8_CAN.
+const T8_USHER_SPEED = 3.6;        // brisk, and still slower than a sprint
+const T8_SHOVE_RANGE = 0.95;
+const T8_SHOVE_PUSH = 2.4;         // tiles you are moved, outward from the grove
+const T8_SHOVE_COOLDOWN = 1.6;
+// The wave rhythm, shared across the four so they come at you as a line and
+// then give you a moment — a crowd being moved, not four machines converging.
+const T8_USHER_RANGE = 16;         // how far across her floor they will come for you
+const T8_ADVANCE_TIME = 4.2;
+const T8_HOLD_TIME = 2.6;
+const T8_LOOK = 3;                 // tiles it compares its own light against
+const T8_HP = 30;                  // it is an amenity, not a chassis with armour
 const W5_SCAN_RANGE = 8;    // how far it looks for blight or open ground to plant
 
 // A V-1 courier (#127, docs/v-class-plan.md). The gardener's repertoire: it
@@ -286,9 +457,9 @@ const T3_HIT_COOLDOWN = 0.9;
 // rather than the strongest. (The factory itself drops black plate — see
 // factory.js; it is not a robot and does not come through here.)
 const ARMOUR_TIER_OF = {
-  t1: 't', t2: 't', t3: 't',
+  t1: 't', t1w: 't', t2: 't', t3: 't',
   w1: 'w', w2: 'w', w3: 'w', w4: 'w', w5: 'w',
-  m4: 'm', m5: 'm', m6: 'm',
+  m4: 'm', m5: 'm', m6: 'm', b1: 'm',
 };
 // Weighted toward the pieces you want and away from the boots, a little.
 const ARMOUR_DROP_SLOTS = ['chest', 'legs', 'head', 'legs'];
@@ -382,6 +553,72 @@ const M6_WITHDRAW_TIME = 3.2;   // ...then this long falling back before the nex
 const M6_ATTACK_STANDOFF = 0.5; // how close it presses during an attack wave
 const M6_WITHDRAW_RANGE = 6;    // how far it falls back between waves (also a lone one's holding distance)
 const M5_HP = 22;               // the sniper is lightly built
+// #159: the carrier. It is CAUTIOUS, and that is the whole design of the fight
+// (David, 2026-08-14): it will not trade blows with you. It withdraws, slowly,
+// and it prints machines at you. So the cost of the card is attrition — getting
+// THROUGH what it sends — rather than one long health bar. Its own HP is
+// therefore modest: about an M6 and a half, six or seven arrows. The fight is
+// hard because you are being interrupted, not because it is spongy.
+const CARRIER_HP = 60;
+// How far it hangs back. It orbits the player at this radius rather than
+// closing. Kept short deliberately: at the 7 this started on, a melee player
+// chased it round the factory and never landed a blow.
+const CARRIER_STANDOFF = 5;
+// SLOW AND MEASURED. It withdraws at well under half an M6's chase speed — an
+// unhurried walk, because nothing about its job is urgent and it is not the
+// thing you should be worrying about. You can always catch it. Getting to it
+// through the swarm is the problem.
+const CARRIER_SPEED = 1.9;
+// It defends itself and no more — a shove to get you off it, well under an M6's
+// 14, because a cautious machine that also hits hardest is just a boss with a
+// backstory.
+const CARRIER_HIT_DAMAGE = 8;
+
+// THE WAVES. It answers being ATTACKED, not being seen: the trigger is damage,
+// so a player who walks up and looks at it gets a slow retreat and nothing
+// else. Each wave is T-1w swarm robots, and the waves GROW as its hull goes —
+// four while it is whole, ten at the end. A machine with nothing left to lose
+// spends everything.
+const CARRIER_WAVE_MIN = 4;
+const CARRIER_WAVE_MAX = 10;
+// Nine seconds between waves was long enough to clear one and then stand about
+// waiting for the next (Henrik, 2026-08-14: the waves are too slow). Five keeps
+// the pressure on without ever being a wall, and the fuse after a blow is short
+// enough that the wave reads as an ANSWER to being hit rather than as a timer
+// that happened to come round.
+const CARRIER_WAVE_EVERY = 5;    // seconds between waves
+const CARRIER_WAVE_GRACE = 0.6;  // struck, then this pause before the wave prints
+const CARRIER_SWARM_CAP = 14;    // living w-units it will keep out at once
+
+// THE LAST STAND (Henrik: below a certain health it should go all out). Under a
+// third of its hull the carrier stops rationing: it prints on a two-second
+// cycle, at full wave size, and keeps half again as many out at once. It is a
+// machine with nothing left to protect the load with except everything it has.
+//
+// It is a real difficulty spike and it is meant to be short — by the time it
+// triggers the fight is nearly over, so the last twenty seconds are the loudest
+// rather than the fight being uniformly harder.
+const CARRIER_LAST_STAND = 0.34;      // hull fraction that tips it over
+const CARRIER_LAST_WAVE_EVERY = 2;    // seconds between waves once it does
+const CARRIER_LAST_SWARM_CAP = 20;
+// Break contact and it stops being a boss fight: no damage and nobody near for
+// this long and it gives up, walks home to the factory and patrols. A player
+// who is not taking the warrior route can simply leave.
+// THE SHIELD is a first phase with its own health bar. While the rim holds it
+// eats every blow, so the carrier itself takes nothing; break it and it falls
+// off, the machine is bare for the rest of the fight, and the shield is on the
+// ground for you to pick up and carry. Two phases out of one boss, and the
+// reward for the first one is the thing that was stopping you.
+const CARRIER_SHIELD_HP = 34;
+// It is GUARDING THE FACTORY, not standing on it (David, 2026-08-14). Its beat
+// is a wide perimeter loop rather than the 2.6-tile shuffle a muster post gets,
+// so it reads as a sentry walking a building — and hitting the building brings
+// it, which is what makes it a guard rather than a boss that happens to be
+// parked there. That matters because the factory is the ai-key: the two warrior
+// objectives on this island are the same errand.
+const CARRIER_BEAT = 8;
+const CARRIER_DISENGAGE = 8;
+const CARRIER_NEAR = 14;         // the "you are still in this" radius
 const M5_VISION = 13;
 const M5_RANGE = 12;            // fires from way back
 const M5_MIN_RANGE = 6.5;       // holds this far off; backs away (hides) if you close
@@ -506,6 +743,35 @@ const M5_HEAD = '#191320';
 const M4_BODY = '#3a3f2a';      // drab olive recon shell
 const M4_HEAD = '#23281a';
 
+// #159 — the B-1 CARRIER's own palette: BLACK, and the only black machine in the
+// game. Every other chassis is a tint — the M6's blue-black gunmetal, the M5's
+// violet, the M4's drab olive — so a true black silhouette reads as a different
+// order of thing at any distance, before a single detail resolves.
+//
+// Against it, HERALD GOLD, and it is the only gold on the island, because the
+// only gold thing on the island is the credential strapped to its back. The
+// whole design is two colours: what it is, and what it is carrying.
+// AND THE SHAPE IS AGAMEMNON'S (David, 2026-08-14). Iliad XI opens with the
+// king arming: greaves with silver ankle-clasps, a corslet worked in bands, a
+// great round shield, and a crested helm that nodded terribly above him. The
+// B-1 is that panoply, in black and silver, on a machine — which is the whole
+// game's move made once more in armour. It is not a hero. It is a courier with
+// a king's kit, guarding a document, and it will not fight you for it.
+const B1_BODY = '#0a0b0d';
+const B1_PLATE = '#000000';     // beneath the panoply: flat, absolute black
+const B1_HEAD = '#040506';
+const B1_EDGE = '#1c1f26';      // the one lighter line, so black-on-black still has an edge
+// TWO COLOURS AND NO OTHERS: black and gold. The panoply is Agamemnon's, the
+// palette is the herald's, and the fact that they are the same gold is the
+// point — the armour and the credential were issued by the same estate.
+const B1_GOLD = '#c9922e';      // corslet bands, greave clasps, shield rim
+const B1_GOLD_HI = '#f2c65e';   // the lit edge of all of it
+const B1_GOLD_LO = '#6d4f16';   // and its shadow
+const B1_CREST = '#f2c65e';     // the helm crest, which nodded terribly
+const B1_SHARD_HOT = '#ffe49a'; // the shard runs hotter than the armour
+const B1_SHARD_DIM = '#7d6120';
+const B1_SCALE = 1.34;          // half again the size of the pack it walks with
+
 // Robots must never overlap: the minimum distance any two live (non-fused)
 // machines are allowed to close to, enforced every tick after their own AI
 // has moved them, so a swarm spreads out around its target instead of
@@ -579,6 +845,10 @@ const W5_BODY = '#243a1c';       // mossy green, reads as gardener not hunter
 // cell in its cradle sits against it rather than in it.
 const V1_BODY = '#7d5511';
 const V1_HEAD = '#96681a';
+// #149: the T-8 wears her island's blue, dimmed. Not the estate's black and not
+// a gardener's green — it belongs to the room rather than to the garrison.
+const T8_BODY = '#2b3466';
+const T8_HEAD = '#3c4a8c';
 const V1_CELL = '#7fe0b0';       // the charged cell it carries, lit
 const W5_HEAD = '#16240f';
 
@@ -698,7 +968,10 @@ function baseRobot(type, x, y, hp, rng) {
     // A T1 or T2 runs on a program it carries. Every other class
     // still has its policy compiled into this file; they get no program, and
     // `program: null` is what their page reports.
-    program: type === 't1' ? T1_PROGRAM : type === 't2' ? T2_PROGRAM : type === 't3' ? T3_PROGRAM : type === 'w4' ? W4_PROGRAM : type === 'w1' ? W1_PROGRAM : type === 'w3' ? W3_PROGRAM : type === 'w5' ? W5_PROGRAM : null,
+    program: type === 't1' ? T1_PROGRAM : type === 't1w' ? T1W_PROGRAM : type === 't2' ? T2_PROGRAM : type === 't3' ? T3_PROGRAM : type === 'w4' ? W4_PROGRAM : type === 'w1' ? W1_PROGRAM : type === 'w3' ? W3_PROGRAM : type === 'w5' ? W5_PROGRAM : type === 't8' ? T8_PROGRAM : null,
+    // #149: a dancer's own place in the bar, so four of them keep the same beat
+    // without nodding in lockstep.
+    _t8Phase: type === 't8' ? rng() * Math.PI * 2 : 0,
     mlT: rng() * ML_TICK, // stagger the decision tick across a garrison
     intent: null,         // what the program last chose
     fault: null,          // why it last refused to choose; null while healthy
@@ -892,6 +1165,30 @@ export function spawnW5(map, seed, fx, fy) {
   return r;
 }
 
+// #149: the dancers. Seated ON the lit floor rather than at a tower, because
+// that is where they have been — the grove is their post, and the point of them
+// is that the room was not empty before you walked into it. `spawnT` is left at
+// zero: a factory unit flickers into being because it has just been made, and
+// these have been here longer than the estate has been quiet.
+export function spawnT8s(map, seed, cx, cy, count = 4) {
+  const out = [];
+  const rng = makeRng((seed ^ 0x7a8e) >>> 0);
+  const used = new Set();
+  let tries = 0;
+  while (out.length < count && tries++ < count * 40) {
+    // Somewhere in the clearing, off the middle so they are not all on her core.
+    const a = rng() * Math.PI * 2, d = 5 + rng() * 9;
+    const tx = Math.round(cx + Math.cos(a) * d), ty = Math.round(cy + Math.sin(a) * d);
+    if (map.floorAt(tx, ty) !== 'lumen') continue;
+    const spot = seatNear(map, tx, ty, { x: tx, y: ty, r: 0 }, used, rng, 3);
+    if (!spot) continue;
+    const r = baseRobot('t8', spot[0], spot[1], T8_HP, rng);
+    r.home = { x: spot[0], y: spot[1] };
+    out.push(r);
+  }
+  return out;
+}
+
 // A V-1 courier, seated at a tower like the fighters so it has a home obelisk
 // and therefore a natural name (OB_XXXX.v1) that survives a save.
 export function spawnV1(map, seed, fx, fy) {
@@ -982,6 +1279,76 @@ export function spawnM4(map, seed, mx, my, fromFactory = false) {
 export function spawnM5(map, seed, mx, my, fromFactory = true) {
   return spawnGuardType(map, seed, mx, my, 'm5', M5_HP, fromFactory);
 }
+
+// #159 — a T-1w, printed to a wave order. It comes out of the carrier already
+// hunting and already flickering in, because it was made a second ago.
+//
+// NOT hardened, unlike the M-classes: the swarm is ordinary field-programmable
+// stock, so `post` works on one and the player can turn it instead of breaking
+// it. Battery-powered like the overworld machines rather than mains-fed like a
+// guard, which means a swarm the player simply outlasts goes flat on its own.
+export function spawnT1w(map, seed, mx, my) {
+  const rng = makeRng(seed >>> 0);
+  const spot = seatNear(map, Math.floor(mx), Math.floor(my), { x: mx, y: my, r: 0 }, new Set(), rng, SPAWN_MAX_R_FALLBACK);
+  if (!spot) return null;
+  const r = baseRobot('t1w', spot[0], spot[1], T1W_HP, rng);
+  r.spawnT = FACTORY_SPAWN_T;
+  r.aggro = true;
+  // The plate reads T1w, lowercase w — the foundry's own convention for a
+  // sub-variant of a class rather than a class of its own, the same way the
+  // siren's repair unit wears T1a. `T1W` would claim it is a W-class, which it
+  // is not: it is a T-1 built to a wave order.
+  r.designation = 'T1w';
+  return r;
+}
+// #159 — THE CARRIER. One per island, and the warrior's road to the HERMES card
+// (docs/hermes-warrior-path.md). A fortress that can forge the credential has to
+// move the credential, so one M-class captain is carrying the shard itself.
+//
+// It is an M6 chassis underneath, with the differences that make it read as the
+// boss it is rather than as a tough one of the pack: it is named, it withdraws
+// instead of charging (updateCarrier), and it answers damage with a wave of
+// T-1w swarm robots. What it carries matters more to the fortress than you do.
+export function spawnCarrier(map, seed, mx, my, fromFactory = false, post = null) {
+  const r = spawnGuardType(map, seed, mx, my, 'b1', CARRIER_HP, fromFactory);
+  if (!r) return null;
+  // WHAT IT IS GUARDING. `postObj` is the structure itself, watched for damage
+  // the same way it watches its own hull, so no damage site had to learn that
+  // the factory has a sentry. `home` is the centre of the beat it walks.
+  if (post) {
+    r.postObj = post;
+    r.home = { x: post.x + (post.fw || 1) / 2, y: post.y + (post.fh || 1) / 2 };
+    r._postHp = post.hp;
+  }
+  r.rng = makeRng((seed ^ 0x11e2) >>> 0);
+  r.m6Phase = 'withdraw';
+  r.swarmAngle = r.rng() * Math.PI * 2;
+  r.swarmSpin = (r.rng() < 0.5 ? -1 : 1) * (0.1 + r.rng() * 0.15);
+  r.carrier = true;
+  // The name is the tell. Every other machine on the island reports as its class
+  // and its home tower; this one has a designation, so a player who scans it or
+  // clicks its tag learns there is something singular here before they find out
+  // the hard way what it is holding.
+  r.unitName = 'B-1 CARRIER';
+  // IT SERVES ITS SOURCE. `hardened` (set by spawnGuardType) makes `post` refuse
+  // it, but the host table serves `r.program` to a GET regardless — so a player
+  // with a NostBook can read the carriage doctrine and the commented-out three
+  // laws sitting above it, and can do precisely nothing about either.
+  r.program = B1_PROGRAM;
+  // The first wave is not free: it has to be provoked, and then it still waits
+  // out the grace before anything prints.
+  r.waveT = 0;
+  r.struckT = 0;
+  r.shieldHp = CARRIER_SHIELD_HP;
+  r.shieldMax = CARRIER_SHIELD_HP;
+  // Seed the hull watermark at spawn rather than lazily on first tick. Lazily
+  // meant that if the very first update a carrier ever got was the one where it
+  // had already been shot, the baseline was read AFTER the damage and the blow
+  // was invisible to the shield.
+  r._lastHp = r.hp;
+  return r;
+}
+
 // An M6 pack robot — waves of 3-5. Alarm-wave dispatch. Staggered wave phase so
 // a squad doesn't attack and withdraw in perfect unison.
 export function spawnM6(map, seed, mx, my, fromFactory = true) {
@@ -1051,7 +1418,7 @@ function collidesT2(map, r, nx, ny, allowSoft) {
 }
 
 function collides(map, r, nx, ny, allowSoft) {
-  return r.type === 't1' ? collidesT1(map, r, nx, ny, allowSoft) : collidesT2(map, r, nx, ny, allowSoft);
+  return isWheeled(r) ? collidesT1(map, r, nx, ny, allowSoft) : collidesT2(map, r, nx, ny, allowSoft);
 }
 
 function moveAxis(r, dx, dy, map, allowSoft) {
@@ -1333,6 +1700,32 @@ export function updateRobots(dt, robots, player, map, dayNight) {
       continue;
     }
 
+    // #159 — THE CARRIER'S SHIELD, resolved HERE and not in updateCarrier,
+    // because the death check below runs before any per-type update: the shield
+    // was booking the damage a tick too late and the machine was already dead
+    // when it got there. One electro-gun bolt (which writes hp = 0 outright)
+    // killed the boss through a whole shield (David, 2026-08-14).
+    //
+    // Every damage site writes straight to `hp`, so the shield works by undoing
+    // that write and charging the rim instead. Nothing that deals damage has to
+    // know it exists.
+    if (r.carrier) {
+      if (r._lastHp == null) r._lastHp = r.hp;
+      const took = r._lastHp - r.hp;
+      r._struck = took > 0;
+      if (took > 0 && (r.shieldHp ?? 0) > 0) {
+        r.shieldHp -= took;
+        r.hp = Math.min(r.maxHp, r.hp + took);
+        r.shieldFlash = 0.25;
+        if (r.shieldHp <= 0) {
+          r.shieldHp = 0;
+          r.shieldBroke = 0.9;
+          (map.groundItems ??= []).push({ item: 'aspis', qty: 1, x: r.x - 0.4, y: r.y + 0.3, keep: true });
+        }
+      }
+      r._lastHp = r.hp;
+    }
+
     // Destruction via damage: mark dead and drop scrap exactly once. A
     // penalised kill (external gun code) yields a single scrap.
     if (r.hp <= 0) {
@@ -1390,6 +1783,16 @@ export function updateRobots(dt, robots, player, map, dayNight) {
           map.groundItems.push({ item: 'chip_fragment', qty: 2, x: r.x, y: r.y + 0.3 });
         }
       }
+      // #159 — the carrier sheds what it was carrying. `keep` because this is
+      // the warrior's whole route off the island and it must not rot on the
+      // ground while he is fighting the escort; `traced` because a credential
+      // stops answering the moment its carrier does, and POSEIDON's net reads
+      // the gap. The card works. It is also marked, for good.
+      if (r.carrier) {
+        map.groundItems.push({
+          item: 'hermes_card', qty: 1, x: r.x, y: r.y + 0.35, keep: true, traced: true,
+        });
+      }
       continue;
     }
 
@@ -1425,7 +1828,7 @@ export function updateRobots(dt, robots, player, map, dayNight) {
     // An aggro'd fortress guard (M5/M6) keeps thinking however far off it is, so
     // a violation response relentlessly threads the whole maze to reach you
     // rather than freezing beyond the CPU cull range like ordinary machines.
-    const relentless = (r.type === 'm5' || r.type === 'm6' || r.type === 'm4') && r.aggro;
+    const relentless = (r.type === 'm5' || r.type === 'm6' || r.type === 'b1' || r.type === 'm4') && r.aggro;
 
     // A STATUS REPORT requested over the network. The unit stops where it is,
     // puts its lamp on a slow blue blink, takes its own readings and files them
@@ -1562,7 +1965,7 @@ export function updateRobots(dt, robots, player, map, dayNight) {
     // of type or distance; see LOS_GIVEUP_AFTER above. Fortress M4/M5/M6 are
     // exempt — they never break off at all (updateGuard): they sweep your
     // last-seen tile and keep hunting until destroyed or taken off you.
-    if (r.aggro && r.type !== 'w3' && r.type !== 'm5' && r.type !== 'm6' && r.type !== 'm4') {
+    if (r.aggro && r.type !== 'w3' && r.type !== 'm5' && r.type !== 'm6' && r.type !== 'b1' && r.type !== 'm4') {
       const canSee = map.hasLineOfSight(r.x, r.y, player.x, player.y);
       r.losLostT = canSee ? 0 : (r.losLostT || 0) + dt;
       if (r.losLostT > LOS_GIVEUP_AFTER) {
@@ -1575,14 +1978,15 @@ export function updateRobots(dt, robots, player, map, dayNight) {
       r.loseInterestT = Math.max(0, r.loseInterestT - dt);
     }
 
-    if (r.type === 't1') updateT1(r, dt, player, map);
+    if (isWheeled(r)) updateT1(r, dt, player, map);
     else if (r.type === 't3') updateT3(r, dt, player, map);
     else if (r.type === 'w1') updateW1(r, dt, player, map);
     else if (r.type === 'w3') updateW3(r, dt, map, robots, player);
     else if (r.type === 'w4') updateW4(r, dt, player, map);
     else if (r.type === 'w5') updateW5(r, dt, map, player);
     else if (r.type === 'v1') updateV1(r, dt, map, player);
-    else if (r.type === 'm6' || r.type === 'm5' || r.type === 'm4') updateGuard(r, dt, player, map, robots);
+    else if (r.type === 't8') updateT8(r, dt, map, player);
+    else if (r.type === 'm6' || r.type === 'b1' || r.type === 'm5' || r.type === 'm4') updateGuard(r, dt, player, map, robots);
     else updateT2(r, dt, player, map);
   }
   separateRobots(robots, map, dt, player);
@@ -1785,6 +2189,49 @@ function w5Sense(r, d, map) {
   return { ...b, blight, work: blight || plantable, daylight: map._isDay !== false };
 }
 
+// #149. What a dancer can tell about the world: how bright the floor is under
+// it, and whether there is a brighter tile within reach. That is the whole
+// instrument. It has no threat sense — it is not equipped to have one, which
+// is a fact about the chassis rather than a setting somebody can change.
+//
+// The floor's brightness is read off map.lumenField, which grove.js fills every
+// frame. Off her island there is no field, so `lit` is false and every T-8
+// stands still — which is what a dancer does when the music stops.
+function t8Light(map, x, y) {
+  const f = map && map.lumenField, o = map && map.lumenOrigin;
+  if (!f || !o) return 0;
+  return spiralFieldAt(f, x - o.x, y - o.y);
+}
+
+function t8Sense(r, d, map) {
+  const b = baseSense(r, d, map, { detect: 4, hurtAt: 0.4 });
+  delete b.linked;
+  delete b.threat;                  // it has no threat sense; see above
+  b.home_range = 0;
+  const here = t8Light(map, r.x, r.y);
+  let best = here, bx = 0, by = 0;
+  for (let dy = -T8_LOOK; dy <= T8_LOOK; dy++) {
+    for (let dx = -T8_LOOK; dx <= T8_LOOK; dx++) {
+      if (!dx && !dy) continue;
+      const l = t8Light(map, r.x + dx, r.y + dy);
+      if (l > best) { best = l; bx = dx; by = dy; }
+    }
+  }
+  r._t8Toward = best > here + 0.05 ? { dx: bx, dy: by } : null;
+  // TRESPASS: a person standing on the lit floor this unit keeps. `d` is the
+  // range to the player, and `lit` under the PLAYER rather than under the unit
+  // is what makes it a question about the floor and not about proximity — stand
+  // off the lumen and the ushers have no business with you.
+  const onFloor = map._t8PlayerLit === true;
+  return {
+    ...b,
+    floorlight: Math.round(here * 100),
+    lit: here > 0.12,
+    brighter: !!r._t8Toward,
+    trespass: onFloor && d < T8_USHER_RANGE,
+  };
+}
+
 // A V-1's senses: the common pack plus the two a courier needs. The order of
 // the pack IS the documented input vector of the model (v-model.js V_INPUTS),
 // so changing it here without changing the weights makes the unit read its own
@@ -1873,6 +2320,9 @@ function w4Sense(r, d, map, player) {
 // returned on one faults rather than being silently half-obeyed.
 const CHASSIS = {
   t1: { sense: t1Sense, can: T1_CAN, fire: false },
+  // #159: the swarm reads the world exactly as a T-1 does and can choose from
+  // the same repertoire. It is the same machine built cheap.
+  t1w: { sense: t1Sense, can: T1_CAN, fire: false },
   t2: { sense: t2Sense, can: T2_CAN, fire: false },
   w4: { sense: w4Sense, can: W4_CAN, fire: true },
   t3: { sense: t3Sense, can: T3_CAN, fire: true },
@@ -1882,6 +2332,8 @@ const CHASSIS = {
   // The V-1 carries a fuel budget of its own: its program is a forward pass,
   // which costs a thousand times what a hand-written rule costs.
   v1: { sense: v1Sense, can: V1_CAN, fire: false, fuel: V1_FUEL },
+  // #149. Legs and a lamp. No fire control, and no `hunt` in its repertoire.
+  t8: { sense: t8Sense, can: T8_CAN, fire: false },
 };
 
 // The network is speaking over this unit's program: a tower's recall (repel),
@@ -2158,6 +2610,9 @@ function updateT1(r, dt, player, map) {
 
   const d = distTo(r, player);
   const ease = player.threatEase ? player.threatEase() : 1;
+  // #159: a T-1 and a T-1w run this same function and differ only in the
+  // numbers, which live in T1_TUNE.
+  const T = tuneFor(r);
 
   // The program decides; this function acts. With no program, or with a
   // faulted one, the machine falls back to the reflexes below — which is what
@@ -2171,17 +2626,17 @@ function updateT1(r, dt, player, map) {
     r.aggro = intent === 'hunt';
     if (!r.aggro) { r.noProgressT = 0; r.stuck = false; }
   } else {
-    if (!r.aggro && d < T1_DETECT_RANGE * ease && !(r.loseInterestT > 0) && constitutionAllows(r, 'hunt')) r.aggro = true; // no line of sight needed to notice
-    if (r.aggro && d > T1_DEAGGRO_RANGE) r.aggro = false;
+    if (!r.aggro && d < T.detect * ease && !(r.loseInterestT > 0) && constitutionAllows(r, 'hunt')) r.aggro = true; // no line of sight needed to notice
+    if (r.aggro && d > T.deaggro) r.aggro = false;
   }
 
   drainBattery(r, r.aggro ? DRAIN_CHASE : DRAIN_PATROL, dt);
   if (r.drained) return;
 
   if (r.aggro) {
-    const expected = Math.min(T1_CHASE_SPEED * dt, d);
+    const expected = Math.min(T.chase * dt, d);
     const tgt = chaseTarget(r, player.x, player.y, map); // route via a bridge if the river is in the way
-    const moved = moveToward(r, tgt.x, tgt.y, T1_CHASE_SPEED, dt, map);
+    const moved = moveToward(r, tgt.x, tgt.y, T.chase, dt, map);
     // Progress bookkeeping for the stuck tell: a chaser pinned by terrain
     // for a couple of seconds admits it (the renderer shows its confusion).
     if (moved < expected * PROGRESS_FRACTION) r.noProgressT += dt;
@@ -2197,9 +2652,18 @@ function updateT1(r, dt, player, map) {
       r.loseInterestT = STUCK_SULK;
     }
 
-    if (d < T1_HIT_RANGE + reachBonus(player, map) && r.attackTimer <= 0) {
-      r.attackTimer = T1_HIT_COOLDOWN;
-      player.takeDamage(T1_HIT_DAMAGE * ease, 'machine');
+    if (d < T.hitR + reachBonus(player, map) && r.attackTimer <= 0) {
+      r.attackTimer = T.cool;
+      // A T-1w against a forcefield is a DRAIN, not a threat: it earths itself
+      // on the shell and takes a bite of the cell. Without this the whole swarm
+      // is inert against an armed field and the B-1's fight does not happen.
+      if (r.type === 't1w' && player.drainField && player.drainField()) {
+        // The field ate it. It cost the player a chunk of cell and no health.
+      } else {
+        // guardHit, not takeDamage: on her depart-mode island a swarm robot
+        // detains like everything else the fortress sends (R3).
+        guardHit(player, T.dmg * ease, 'machine');
+      }
     }
   } else if (intent === 'home') {
     // Back to its tower and stand there. Not `recharging`: the program said go
@@ -2214,7 +2678,7 @@ function updateT1(r, dt, player, map) {
   } else {
     r.noProgressT = 0;
     r.stuck = false;
-    patrol(r, T1_PATROL_SPEED, T1_PATROL_RANGE, dt, map);
+    patrol(r, T.patrol, T1_PATROL_RANGE, dt, map);
   }
 }
 
@@ -2570,6 +3034,78 @@ function updateW3(r, dt, map, robots, player) {
 // the same `grow` field the ambient forest-regrowth timer in main.js uses,
 // so a planted sapling thickens up over the same ~minute. Never aggros,
 // never fights back.
+// #149 revised — THE USHER. It does not dance. It stands at its post while her
+// floor is empty, and when a person is on the lumen it comes and moves them off
+// it, with the other three, in waves.
+//
+// It is still not a guard, and the difference is the whole point: contact is a
+// SHOVE and NOTHING ELSE — you lose a couple of tiles of ground and that is the
+// entire cost. No damage, and deliberately not routed through detainHit either,
+// because detention counts strikes toward a limit after which her guards start
+// wounding, and an usher that eventually kills you is a guard with a nicer name.
+// `hunt` is not in T8_CAN, so nothing you post to one can make it worse.
+//
+// The wave rhythm is shared: `map._t8Wave` is advanced once per tick by the
+// first unit to see it this frame, so all four are on the same beat and come at
+// you as a line that then gives you a moment. Four machines converging
+// individually reads as a swarm; four arriving together reads as being asked
+// to leave.
+function updateT8(r, dt, map, player) {
+  r.aggro = false;
+  r.returning = false;
+  r.attackTimer = Math.max(0, (r.attackTimer || 0) - dt);
+  let intent = null;
+  if (player) {
+    // The floor under the PLAYER, stamped once per tick for every T-8's sense to
+    // read. It is a property of the grove, not of any one machine.
+    if (map._t8WaveT !== map._t8Stamp) {
+      map._t8Stamp = map._t8WaveT;
+      map._t8PlayerLit = t8Light(map, player.x, player.y) > 0.12;
+    }
+    botThink(r, distTo(r, player), dt, map, player);
+    intent = (r.program && !r.fault && !unitOverridden(r)) ? r.intent : null;
+    if (intent === 'route') { runRoute(r, dt, map, player); return; }
+  }
+  drainBattery(r, DRAIN_PATROL * 0.5, dt);
+  if (r.drained) return;
+
+  if (intent === 'home') {
+    if (Math.hypot(r.home.x - r.x, r.home.y - r.y) > 0.8) moveToward(r, r.home.x, r.home.y, T8_SPEED, dt, map);
+    return;
+  }
+  if (intent === 'wait') return;
+
+  if (intent === 'usher' && player) {
+    // THE WAVE, on the grove's clock rather than this unit's, so the four move
+    // as one. Advance, then hold and let you take the ground back if you want
+    // it — the pressure is steady and it is never a chase.
+    map._t8WaveT = (map._t8WaveT ?? 0) + dt / 4;   // four readers, one clock
+    const cycle = T8_ADVANCE_TIME + T8_HOLD_TIME;
+    const advancing = ((map._t8WaveT % cycle) < T8_ADVANCE_TIME);
+    const d = distTo(r, player);
+    if (advancing) moveToward(r, player.x, player.y, T8_USHER_SPEED, dt, map);
+
+    if (d < T8_SHOVE_RANGE + reachBonus(player, map) && r.attackTimer <= 0) {
+      r.attackTimer = T8_SHOVE_COOLDOWN;
+      sfx.play('keydrop');
+      // Outward from the middle of the grove, not away from the machine: the
+      // point is the direction you end up going, which is OFF her floor.
+      const ox = player.x - (map.lumenOrigin ? map.lumenOrigin.x : r.home.x);
+      const oy = player.y - (map.lumenOrigin ? map.lumenOrigin.y : r.home.y);
+      const m = Math.hypot(ox, oy) || 1;
+      if (player.shove) player.shove(map, (ox / m) * T8_SHOVE_PUSH, (oy / m) * T8_SHOVE_PUSH);
+    }
+    return;
+  }
+
+  // `stand` (told to, or the reflex): hold the post. It walks back if it has
+  // drifted off it, and otherwise does nothing at all, which is what an amenity
+  // unit on an empty floor should look like.
+  if (Math.hypot(r.home.x - r.x, r.home.y - r.y) > 0.6) {
+    moveToward(r, r.home.x, r.home.y, T8_SPEED, dt, map);
+  }
+}
+
 function updateW5(r, dt, map, player) {
   r.aggro = false;
   // A blueboxed gardener reads friendly and is overridden, so botThink returns
@@ -3058,10 +3594,136 @@ function updateM5(r, dt, player, map, ease, d) {
 // pack is up it runs waves — close and strike (attack phase), then fall back
 // (withdraw), then charge again — each on its own staggered phase and swarm
 // angle so the squad surrounds you rather than piling on one spot.
+// #159 — THE CARRIER's own loop, split out of the M6 pack because it shares
+// none of the pack's behaviour: no waves of its own, no charge, no pack count.
+//
+// It is a courier that has been found out. Three things it does, in order of how
+// much it cares: keep away from you, print machines at you, and — only if you
+// have it cornered — push you off. It never chases and it never commits.
+function updateCarrier(r, dt, player, map, robots, ease) {
+  const d = Math.hypot(player.x - r.x, player.y - r.y);
+  r.m6Phase = 'withdraw';
+
+  // Was it struck this tick? Decided up in updateRobots, where the shield is
+  // resolved before the death check; this only reads the answer.
+  const struck = !!r._struck;
+  r.shieldFlash = Math.max(0, (r.shieldFlash || 0) - dt);
+  r.shieldBroke = Math.max(0, (r.shieldBroke || 0) - dt);
+
+  // THE BUILDING IT IS STANDING OVER. Swing at the factory and the carrier
+  // comes, even if you never touched the carrier — that is the whole of what
+  // makes it a guard. Watched by hull change, so bombs, the electro-gun and a
+  // sledgehammer all count without any of them knowing about this.
+  let postHit = false;
+  if (r.postObj) {
+    if (r._postHp == null) r._postHp = r.postObj.hp;
+    postHit = r.postObj.hp < r._postHp;
+    r._postHp = r.postObj.hp;
+  }
+
+  // DISENGAGE. This is the "you do not have to do this" clause: a player who is
+  // not taking the warrior route can walk away, and the encounter ends rather
+  // than following them across the island. It gives up when nothing has hurt it
+  // and nobody is near for CARRIER_DISENGAGE seconds, and goes back to its beat.
+  r.engageT = (r.engageT ?? 0);
+  if (d < CARRIER_NEAR || struck || postHit) r.engageT = CARRIER_DISENGAGE;
+  else r.engageT = Math.max(0, r.engageT - dt);
+  if (r.engageT <= 0) {
+    r.aggro = false;
+    r.waveT = 0;            // a fight it walked away from starts fresh
+    r.struckT = 0;
+    patrol(r, CARRIER_SPEED, r.postObj ? CARRIER_BEAT : M6_PATROL_RANGE, dt, map);
+    return;
+  }
+
+  // Withdraw: orbit at a fixed radius, slowly. Not a chase and not a flight —
+  // a machine keeping a professional distance from a problem.
+  r.swarmAngle = (r.swarmAngle ?? 0) + (r.swarmSpin ?? 0.12) * dt;
+  moveToward(r,
+    player.x + Math.cos(r.swarmAngle) * CARRIER_STANDOFF,
+    player.y + Math.sin(r.swarmAngle) * CARRIER_STANDOFF,
+    CARRIER_SPEED, dt, map);
+
+  // THE WAVE. Struck, it starts a short fuse; when the fuse burns down and the
+  // wave cooldown is clear, it prints. Once it has been opened at all it keeps
+  // printing on the cooldown for as long as you stay in the fight — it does not
+  // need hitting again to remember it is in one.
+  if (struck) r.struckT = CARRIER_WAVE_GRACE;
+  r.struckT = Math.max(0, (r.struckT ?? 0) - dt);
+  r.waveT = Math.max(0, (r.waveT ?? 0) - dt);
+  // Has it tipped into the last stand? Announced once, with its own tell, so the
+  // player knows the rules just changed rather than wondering why the swarm
+  // suddenly doubled.
+  const lastStand = hpFracOf(r) <= CARRIER_LAST_STAND;
+  if (lastStand && !r.lastStand) {
+    r.lastStand = true;
+    r.calling = 1.6;
+    r.waveT = 0;                        // it does not wait out the old cycle
+    if (player.say) player.say('The carrier stops backing away. Every port on it opens at once.');
+    sfx.play('charge');
+  }
+  // Damage to the building provokes the waves too: a raid on the factory is the
+  // thing it was posted to answer, and answering it by printing machines is the
+  // only answer it has.
+  if (postHit) r.struckT = CARRIER_WAVE_GRACE;
+  const provoked = (r.struckT > 0) || (r.hp < r.maxHp) || postHit;
+  if (provoked && r.waveT <= 0) {
+    r.waveT = lastStand ? CARRIER_LAST_WAVE_EVERY : CARRIER_WAVE_EVERY;
+    let alive = 0;
+    for (const o of robots) if (o.calledBy === r && !o.dead && !o.fused) alive++;
+    const room = (lastStand ? CARRIER_LAST_SWARM_CAP : CARRIER_SWARM_CAP) - alive;
+    if (room > 0) {
+      const n = Math.min(room, carrierWaveSize(r, player));
+      for (let i = 0; i < n; i++) {
+        const w = spawnT1w(map, Math.floor(r.rng() * 0x7fffffff), Math.floor(r.x), Math.floor(r.y));
+        if (!w) break;
+        w.calledBy = r;   // the cap counts ITS swarm, not every machine on the island
+        robots.push(w);
+      }
+      r.calling = 1.2;    // render/audio tell: a wave just came out of it
+    }
+  }
+  if (r.calling > 0) r.calling = Math.max(0, r.calling - dt);
+
+  if (d < M6_HIT_RANGE + reachBonus(player, map) && r.attackTimer <= 0) {
+    r.attackTimer = M6_HIT_COOLDOWN;
+    guardHit(player, CARRIER_HIT_DAMAGE * ease, 'machine');
+  }
+}
+
+// How many go out this wave: CARRIER_WAVE_MIN while it is whole, rising to
+// CARRIER_WAVE_MAX as the hull goes. Exported for the tests, which is the only
+// honest way to pin a curve.
+/** Hull left, 0..1. One reader so the wave curve and the last stand agree. */
+function hpFracOf(r) {
+  return r && r.maxHp ? Math.max(0, Math.min(1, r.hp / r.maxHp)) : 1;
+}
+
+export function carrierWaveSize(r, player = null) {
+  const frac = hpFracOf(r);
+  const base = CARRIER_WAVE_MIN + (CARRIER_WAVE_MAX - CARRIER_WAVE_MIN) * (1 - frac);
+  // #159 — THE FACTORY SIZES THE RESPONSE TO WHAT YOU ARE CARRYING (Henrik,
+  // 2026-08-14: "perhaps the boss is more difficult if you have better items?").
+  // Diegetic rather than rubber-banded: the thing dispatching machines can see
+  // what walked up to it, and a person with a robot-sword is a different problem
+  // from a person with a shovel. Bounded at +3 so it tunes the fight rather than
+  // punishing you for having earned good kit.
+  const bonus = player && player.weaponThreat ? Math.min(3, Math.max(0, player.weaponThreat())) : 0;
+  return Math.round(base) + bonus;
+}
+
 function updateM6Pack(r, dt, player, map, robots, ease) {
   // No clear line to you (walls between): thread the maze at a run to close in.
   if (!map.hasLineOfSight(r.x, r.y, player.x, player.y)) {
     pursueMaze(r, dt, player.x, player.y, map, M6_CHASE_SPEED);
+    return;
+  }
+  // #159 — the carrier. Its whole policy is to be somewhere else and to send
+  // something else. It withdraws at a walk, and when you HURT it, it prints a
+  // wave of T-1w swarm robots at you — bigger every time, as its hull goes.
+  // Corner it and it shoves you off, weakly. The fight is the swarm.
+  if (r.carrier) {
+    updateCarrier(r, dt, player, map, robots, ease);
     return;
   }
   let pack = 0;
@@ -3281,7 +3943,7 @@ function drawUnitTag(ctx, r, c) {
   const w = ctx.measureText(tag).width + 6;
   // Ride just over the head. The T1 is a low tank, so its head sits well below a
   // standing chassis' — a shorter lift keeps its label close instead of floating.
-  const lift = r.type === 't1' ? 31 : 48;
+  const lift = isWheeled(r) ? 31 : 48;
   const x = c.x - w / 2, y = c.y - lift;   // under the health bar band, over the head
   ctx.fillStyle = 'rgba(10,24,32,0.78)';
   ctx.fillRect(x, y, w, 12);
@@ -3385,7 +4047,8 @@ export function drawRobot(ctx, robot, worldToScreen) {
   const jc = robot.ubikConfusedT > 0
     ? { x: c.x + (Math.random() - 0.5) * 1.5, y: c.y - Math.abs(Math.sin((robot._confuseHopT || 0) * 9)) * 7 }
     : c;
-  if (robot.type === 't1') drawT1(ctx, robot, jc, worldToScreen);
+  if (isWheeled(robot)) drawT1(ctx, robot, jc, worldToScreen);
+  else if (robot.type === 'b1') drawB1(ctx, robot, jc);
   else if (robot.type === 't3') drawT3(ctx, robot, jc);
   else drawT2(ctx, robot, jc);
   if (robot.ubikConfusedT > 0) {
@@ -3484,6 +4147,10 @@ function drawT2(ctx, r, c) {
 
   ctx.save();
   ctx.translate(c.x, c.y);
+  // #149 revised: the T-8 no longer bobs. It kept time on `_t8Beat` with a
+  // per-unit phase, and four machines nodding on the floor read as a glitch
+  // rather than as a scene (David, 2026-08-14). It stands still now, which is
+  // what an usher at a post does, and the only thing that moves it is walking.
   if (r.fused) ctx.rotate(0.14); // slumped wreck (a Ubik-confused one bounces, not spins — see drawRobot)
 
   // Gait: legs scissor with the walk phase, same scheme as the player.
@@ -3493,8 +4160,8 @@ function drawT2(ctx, r, c) {
   ctx.fillRect(-4 + swing, -10, 3, 10);
   ctx.fillRect(1 - swing, -10, 3, 10);
 
-  const bodyBase = r.type === 'w1' ? W1_BODY : r.type === 'w3' ? W3_BODY : r.type === 'w4' ? W4_BODY : r.type === 'w5' ? W5_BODY : r.type === 'v1' ? V1_BODY : r.type === 'm6' ? M6_BODY : r.type === 'm5' ? M5_BODY : r.type === 'm4' ? M4_BODY : T2_BODY;
-  const headBase = r.type === 'w1' ? W1_HEAD : r.type === 'w3' ? W3_HEAD : r.type === 'w4' ? W4_HEAD : r.type === 'w5' ? W5_HEAD : r.type === 'v1' ? V1_HEAD : r.type === 'm6' ? M6_HEAD : r.type === 'm5' ? M5_HEAD : r.type === 'm4' ? M4_HEAD : T2_HEAD;
+  const bodyBase = r.type === 'w1' ? W1_BODY : r.type === 'w3' ? W3_BODY : r.type === 'w4' ? W4_BODY : r.type === 'w5' ? W5_BODY : r.type === 't8' ? T8_BODY : r.type === 'v1' ? V1_BODY : r.type === 'm6' ? M6_BODY : r.type === 'm5' ? M5_BODY : r.type === 'm4' ? M4_BODY : T2_BODY;
+  const headBase = r.type === 'w1' ? W1_HEAD : r.type === 'w3' ? W3_HEAD : r.type === 'w4' ? W4_HEAD : r.type === 'w5' ? W5_HEAD : r.type === 't8' ? T8_HEAD : r.type === 'v1' ? V1_HEAD : r.type === 'm6' ? M6_HEAD : r.type === 'm5' ? M5_HEAD : r.type === 'm4' ? M4_HEAD : T2_HEAD;
   ctx.fillStyle = bodyTone(bodyBase, r); // blocky torso, roughly player height overall
   ctx.fillRect(-6, -25, 12, 16);
   if (!r.fused) {
@@ -3534,6 +4201,241 @@ function drawT2(ctx, r, c) {
 
   if (r.fused) drawSmoke(ctx, c.x, c.y - 34, r.animT || 0);
   if (r.drained && !r.fused) drawBatteryIcon(ctx, c.x, c.y - 40);
+}
+
+// #159 — THE B-1 CARRIER, drawn as Agamemnon arming (Iliad XI): greaves with
+// clasps, a corslet worked in bands, a great round shield, and a crested helm.
+// Black and gold, half again the size of anything else on the island, and the
+// only machine in the game with a crest — so it reads as singular from across a
+// field, before any label resolves.
+//
+// Everything that moves on it is state a player can act on: the crest lifts when
+// it is about to print a wave, the shard on its back burns brighter the more of
+// its hull is gone, and the shield comes across the body when you are close.
+function drawB1(ctx, r, c) {
+  const t = r.animT || 0;
+  const hpFrac = r.maxHp ? Math.max(0, Math.min(1, r.hp / r.maxHp)) : 1;
+  const calling = (r.calling || 0) > 0;
+  const guard = r.engageT > 0;
+
+  // A wide planted shadow — the first tell that this one is heavier.
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  ctx.beginPath();
+  ctx.ellipse(c.x, c.y, 19, 7.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // THE WAVE FLARE: a gold ring going out from it as the swarm prints. Drawn
+  // under the body so the machine stays the solid thing in the middle of it.
+  if (calling) {
+    const k = 1 - (r.calling / 1.2);
+    ctx.strokeStyle = `rgba(242,198,94,${0.6 * (1 - k)})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y - 4, 16 + k * 38, 7 + k * 17, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.lineWidth = 1;
+  }
+
+  ctx.save();
+  ctx.translate(c.x, c.y);
+  ctx.scale(B1_SCALE, B1_SCALE);
+  if (r.fused) ctx.rotate(0.16);
+
+  const dead = r.fused || r.drained;
+  const gold = r.fused ? FUSED_EDGE : B1_GOLD;
+  const body = r.fused ? FUSED_DARK : bodyTone(B1_BODY, r);
+  // A heavy machine rolls rather than scissors: a slow, wide gait.
+  const swing = dead ? 0 : Math.sin(r.walkPhase * 0.7) * 2.4;
+
+  // GREAVES. Thick legs in a wide stance, because the stance is most of what
+  // makes a small sprite read as heavy. "Clasps of silver at the ankles" — gold
+  // here, the bright band at the foot of each greave.
+  ctx.fillStyle = r.fused ? FUSED_EDGE : B1_PLATE;
+  ctx.fillRect(-8 + swing, -13, 6, 13);
+  ctx.fillRect(2 - swing, -13, 6, 13);
+  ctx.fillStyle = gold;
+  ctx.fillRect(-8 + swing, -3.4, 6, 1.8);
+  ctx.fillRect(2 - swing, -3.4, 6, 1.8);
+  ctx.fillStyle = B1_GOLD_LO;
+  ctx.fillRect(-8 + swing, -1.6, 6, 0.8);
+  ctx.fillRect(2 - swing, -1.6, 6, 0.8);
+
+  // THE SHARD, on a mast off the right shoulder and canted outward so it stands
+  // PROUD of the silhouette rather than hiding behind it. It is the only thing
+  // on the machine that is not armour, and it brightens as the hull goes: the
+  // closer the carrier is to failing, the more plainly you see what you came for.
+  if (!r.fused) {
+    const heat = 0.4 + (1 - hpFrac) * 0.6;
+    const pulse = 0.82 + Math.sin(t * 3.1) * 0.18;
+    ctx.save();
+    ctx.translate(12.5, -30);
+    ctx.rotate(0.22);
+    ctx.fillStyle = `rgba(255,228,154,${0.26 * heat * pulse})`;
+    ctx.beginPath(); ctx.ellipse(0, 2, 8, 11, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = B1_GOLD_LO;                       // the housing it rides in
+    ctx.fillRect(-3, -5, 6, 15);
+    ctx.fillStyle = '#050505';
+    ctx.fillRect(-2.2, -4.2, 4.4, 13.4);
+    ctx.fillStyle = B1_SHARD_HOT;                     // the shard itself
+    ctx.globalAlpha = Math.min(1, heat * pulse + 0.3);
+    ctx.fillRect(-1.5, -3.4, 3, 11.8);
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  // THE CORSLET: a black cuirass worked in bands, broad at the shoulder and
+  // tapering, so the chest is the widest thing on it.
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.moveTo(-9.5, -34); ctx.lineTo(9.5, -34);
+  ctx.lineTo(7.5, -13); ctx.lineTo(-7.5, -13);
+  ctx.closePath(); ctx.fill();
+  // OVERHEAT, and it is the GOLD that heats, not the machine. A full-plate
+  // colour wash was tried and cut (David, 2026-08-14): repainting the corslet
+  // red threw away the black silhouette, which is the whole identity. So the
+  // black stays black and the metal already on it — the worked bands, and the
+  // vent slits between them — runs up through orange to white as the hull goes.
+  // Same information, and the machine still reads as itself while it dies.
+  const heat = hpFrac < 0.92 ? Math.min(1, (0.92 - hpFrac) / 0.92) : 0;
+  const beat = 0.72 + Math.sin(t * (2.4 + heat * 5)) * 0.28;   // faster as it worsens
+  const k = heat * beat;
+  const hot = (alpha = 1) => {
+    // gold -> orange -> white, along the same ramp the bands and vents share
+    const rC = Math.round(201 + 54 * k);
+    const gC = Math.round(146 + 109 * Math.min(1, k * 1.25));
+    const bC = Math.round(46 + 209 * Math.max(0, k - 0.45) / 0.55);
+    return `rgba(${rC},${gC},${bC},${alpha})`;
+  };
+
+  if (!r.fused) {
+    ctx.fillStyle = B1_EDGE;                          // black on black needs an edge
+    ctx.fillRect(-9.5, -34, 19, 1);
+    // THE VENTS: three slits cut between the bands. Shut and invisible while it
+    // is cold; they open and glow as it works, so heat reads as something the
+    // machine is DOING rather than a colour it has been given.
+    if (k > 0.06) {
+      ctx.fillStyle = hot(0.35 + k * 0.55);
+      for (let i = 0; i < 3; i++) ctx.fillRect(-6.5, -31.4 + i * 5, 13, 0.6 + k * 1.5);
+      ctx.fillStyle = `rgba(255,236,190,${k * 0.5})`;   // the white core of each
+      for (let i = 0; i < 3; i++) ctx.fillRect(-5, -31.2 + i * 5, 10, 0.4 + k * 0.7);
+    }
+    const bandCold = r.fused ? FUSED_EDGE : B1_GOLD;
+    ctx.fillStyle = k > 0.06 ? hot(1) : bandCold;      // the worked bands, heating
+    ctx.fillRect(-9.2, -29, 18.4, 1.5);
+    ctx.fillRect(-8.8, -24, 17.6, 1.5);
+    ctx.fillRect(-8.3, -19, 16.6, 1.5);
+    ctx.fillStyle = B1_GOLD_LO;
+    ctx.fillRect(-9.2, -27.5, 18.4, 0.7);
+    ctx.fillRect(-8.8, -22.5, 17.6, 0.7);
+    ctx.fillRect(-8.3, -17.5, 16.6, 0.7);
+    // A bloom sitting just off the plate — hot metal seen at dusk.
+    if (k > 0.25) {
+      ctx.fillStyle = hot(k * 0.16);
+      ctx.fillRect(-12, -33, 24, 21);
+    }
+  }
+
+  // HEAT WISPS off the shoulders once it is genuinely labouring. Three thin
+  // rising smudges, drifting, which is the tell you catch out of the corner of
+  // your eye before you have read anything else.
+  if (!r.fused && !r.drained && heat > 0.45) {
+    for (let i = 0; i < 3; i++) {
+      const ph = t * 1.5 + i * 2.1;
+      const rise = (ph % 2) / 2;                        // 0 -> 1, then repeat
+      ctx.fillStyle = `rgba(255,214,150,${(1 - rise) * (heat - 0.45) * 0.5})`;
+      ctx.fillRect(-7 + i * 6 + Math.sin(ph * 2) * 1.5, -36 - rise * 11, 1.6, 3.2);
+    }
+  }
+
+  // PAULDRONS, wider than the chest and squared off. Most of why the silhouette
+  // reads as a big machine at a distance.
+  ctx.fillStyle = r.fused ? FUSED_EDGE : B1_PLATE;
+  ctx.fillRect(-14, -35.5, 5.5, 9.5);
+  ctx.fillRect(8.5, -35.5, 5.5, 9.5);
+  ctx.fillStyle = gold;
+  ctx.fillRect(-14, -35.5, 5.5, 1.6);
+  ctx.fillRect(8.5, -35.5, 5.5, 1.6);
+
+  // THE GREAT SHIELD, carried on the left arm and OUTSIDE the body line, so it
+  // never covers the corslet it is meant to sit beside. It swings in across the
+  // chest only when you are inside the standoff — the one aggressive-looking
+  // thing it ever does, and it is a defensive move.
+  if ((r.shieldHp ?? 0) > 0) {
+    const sx = guard ? -7.5 : -15;
+    const sy = guard ? -24 : -22;
+    ctx.save();
+    ctx.translate(sx, sy);
+    ctx.fillStyle = r.fused ? FUSED_DARK : '#070809';
+    ctx.beginPath(); ctx.arc(0, 0, 6.6, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = gold; ctx.lineWidth = 1.5;                 // the rim
+    ctx.beginPath(); ctx.arc(0, 0, 6.6, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = B1_GOLD_LO; ctx.lineWidth = 0.8;           // an inner ring
+    ctx.beginPath(); ctx.arc(0, 0, 4.1, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = gold;                                        // the boss
+    ctx.beginPath(); ctx.arc(0, 0, 1.9, 0, Math.PI * 2); ctx.fill();
+    // A blow it just turned lights the whole face; and as the rim goes, cracks
+    // open across it, so a player can SEE the first phase running out rather
+    // than guessing at an invisible bar.
+    if (r.shieldFlash > 0) {
+      ctx.fillStyle = `rgba(255,255,255,${0.5 * (r.shieldFlash / 0.25)})`;
+      ctx.beginPath(); ctx.arc(0, 0, 6.6, 0, Math.PI * 2); ctx.fill();
+    }
+    const wear = 1 - Math.max(0, Math.min(1, (r.shieldHp || 0) / (r.shieldMax || 1)));
+    if (wear > 0.25) {
+      ctx.strokeStyle = `rgba(0,0,0,${0.5 + wear * 0.4})`;
+      ctx.lineWidth = 0.9;
+      ctx.beginPath();
+      ctx.moveTo(-6, -2.5); ctx.lineTo(-1.5, 0.5); ctx.lineTo(-2.5, 5);
+      if (wear > 0.6) { ctx.moveTo(5.5, -3); ctx.lineTo(1.5, -0.5); ctx.lineTo(4, 4.5); }
+      ctx.stroke();
+    }
+    ctx.lineWidth = 1;
+    ctx.restore();
+  } else if (!r.fused) {
+    // BARE. The arm the shield hung on, with the empty mounting bracket still on
+    // it — so a machine that has lost its shield does not simply look like a
+    // machine that never had one.
+    ctx.fillStyle = B1_PLATE;
+    ctx.fillRect(-13, -27, 4, 9);
+    ctx.fillStyle = B1_GOLD_LO;
+    ctx.fillRect(-13.5, -23.5, 5, 1.4);
+    if (r.shieldBroke > 0) {                     // the moment it came off
+      ctx.fillStyle = `rgba(242,198,94,${0.55 * (r.shieldBroke / 0.9)})`;
+      ctx.beginPath(); ctx.arc(-13, -22, 3 + (1 - r.shieldBroke / 0.9) * 9, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+
+  // THE HELM: narrow, set down between the pauldrons, with cheek-pieces. NO
+  // CREST — a plume was tried and cut (David, 2026-08-14): at this sprite size
+  // it read as a scythe stuck to its head rather than as horsehair, and it
+  // wrecked the flat, heavy silhouette that is the best thing about the design.
+  // The call tell moved to the brow band and the ring on the ground instead,
+  // which are both already in the player's vocabulary.
+  ctx.fillStyle = r.fused ? FUSED_DARK : B1_HEAD;
+  ctx.fillRect(-5.5, -45, 11, 11);
+  ctx.fillStyle = calling ? B1_CREST : gold;            // brow band, lit on a call
+  ctx.fillRect(-5.5, -45, 11, 1.8);
+  ctx.fillStyle = gold;                                 // cheek-pieces
+  ctx.fillRect(-5.5, -38.5, 1.6, 4.5);
+  ctx.fillRect(3.9, -38.5, 1.6, 4.5);
+  if (calling && !r.fused) {                            // and it glows off the helm
+    ctx.fillStyle = 'rgba(242,198,94,0.30)';
+    ctx.fillRect(-8, -47, 16, 6);
+  }
+
+  // The visor. Same state colours as every other machine, wider, so a player
+  // reads its mood with the vocabulary they already have.
+  const s = sensorStyle(r);
+  if (s) {
+    if (s.halo) { ctx.fillStyle = s.halo; ctx.fillRect(-6, -43, 12, 4.5); }
+    ctx.fillStyle = s.fill;
+    ctx.fillRect(-3.8, -42, 7.6, 2.2);
+  }
+
+  ctx.restore();
+
+  if (r.fused) drawSmoke(ctx, c.x, c.y - 50, r.animT || 0);
+  if (r.drained && !r.fused) drawBatteryIcon(ctx, c.x, c.y - 58);
 }
 
 // The T3 ambusher: a wheeled T2 with laser eyes — same family silhouette

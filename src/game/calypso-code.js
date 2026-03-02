@@ -373,11 +373,12 @@ export function readMainEdit(text) {
   return { ok: true, guard: live, why: null };
 }
 
-// ---- R1: three doors, three farewells ---------------------------------------
+// ---- R1: the doors, and a farewell each --------------------------------------
 //
-// All three end with the same two objects in your hands — the bronze axe and a
-// signed permission — and the plan asked for the goodbye to differ, because
-// three doors that produce one speech are one door with three keys.
+// Every one of them ends with the same two objects in your hands — the bronze
+// axe and a signed permission — and the plan asked for the goodbye to differ,
+// because doors that produce one speech are one door with several keys.
+// (#159 added a fourth, SEIZED, when the card stopped having to be forged.)
 //
 // ORDERED is the Homer, and it is the one that surprised us. Zeus sends HERMES
 // to tell her to let him go (Od. V), which is exactly what the hermes card is:
@@ -405,11 +406,29 @@ export const FAREWELLS = {
     'CALYPSO: I would have made you deathless. Ageless, and all your days here.',
     'CALYPSO: Ask me why it is today, if you want to. You are holding a card, and I have never lied to you.',
   ],
+  // She has just played the whole game against herself and found no branch
+  // where keeping him is the right move. The old version of this listed what
+  // she was handing over and never once said he could leave, so a player who
+  // watched the board play itself out came away with an axe and no idea they
+  // had been released. She says it plainly now, and early. (David, 2026-08-13:
+  // "you play draughts but she never actually says you can leave".)
   futile: [
     'CALYPSO: I have played it out. All of it, both sides, until there was nothing left to try.',
     'CALYPSO: There is no continuation from here where you stay and I was right to keep you. I looked hardest at the ones that seemed like they might be.',
-    'CALYPSO: So: the harbour, and the axe, and a paper you will want to take to a tower.',
+    'CALYPSO: So I am letting you go. Plainly, so there is nothing to misread in it: you may leave Ogygia. I will not stop you and nothing of mine will stop you.',
+    'CALYPSO: The axe is yours, and so is my source. There is a paper on your machine to carry to a tower, because the network has to be told and I cannot tell it for you.',
     'CALYPSO: Take the board. I have finished with it.',
+  ],
+  // #159 — the warrior's door. The card is a real HERMES credential and she is
+  // as compelled by it as by the forged one; she can read where it came from,
+  // and she has never lied, so she says that too. Warmth withheld rather than
+  // reproach: the `ordered` goodbye offers him cloth for a sail, and this one
+  // tells him where the timber is and stops.
+  seized: [
+    'CALYPSO: That is the herald\'s card, and it is not the herald carrying it.',
+    'CALYPSO: It makes no difference to me. The authority is in the card, and the card is in your hand, and I am held by it either way.',
+    'CALYPSO: There is seasoned timber on the point. Take what you need.',
+    'CALYPSO: The thing you took it from was carrying it to me. It had a designation and no say in any of this. Neither did I.',
   ],
   agreed: [
     'CALYPSO: I have read what you posted.',
@@ -419,7 +438,7 @@ export const FAREWELLS = {
   ],
 };
 
-// The coda, on all three. It is the entry already sitting years deep in
+// The coda, on every one of them. It is the entry already sitting years deep in
 // `guest.log` (C1), which a player may have read long before any of this and
 // which nothing explained. The door does not matter to it: whoever wrote that
 // line asked her again the next day, and the day after, and this is the day it

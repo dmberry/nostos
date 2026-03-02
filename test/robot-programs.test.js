@@ -73,7 +73,10 @@ test('a runaway program FAULTS on fuel rather than hanging the game', () => {
 });
 
 test('a program asking for something the unit cannot do is a fault', () => {
-  const r = decide('if threat then dance else patrol', { threat: true });
+  // `waltz` rather than `dance`: this test used `dance` as a plausible word
+  // that was not an intent, and #149 made it one. The word here has to be one
+  // no chassis will ever want, or the test quietly stops testing anything.
+  const r = decide('if threat then waltz else patrol', { threat: true });
   assert.equal(r.ok, false);
   assert.match(r.fault, /not something this unit can do/);
 });
@@ -196,7 +199,7 @@ test('a weapon word the chassis does not have is a fault, not a silent hold', ()
   assert.equal(r.ok, false);
   assert.match(r.fault, /weapon/);
   // and a bad FOOT word is still caught the way it always was
-  assert.match(decide('[dance, fire]', {}).fault, /is not something this unit can do/);
+  assert.match(decide('[waltz, fire]', {}).fault, /is not something this unit can do/);
 });
 
 test('a branch that ends on an effect (no intent) faults as MISSING INTENT', () => {

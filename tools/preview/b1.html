@@ -1,0 +1,70 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>B-1 CARRIER — design</title>
+<style>
+  body { margin:0; background:#171a1f; color:#d7dbe2;
+         font:13px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+  .wrap { padding:26px 30px 34px; }
+  h1 { font:600 15px/1.2 inherit; letter-spacing:.14em; text-transform:uppercase; margin:0 0 3px; }
+  .sub { color:#8d95a3; margin:0 0 22px; }
+  canvas { display:block; background:#3f4a3a; border:1px solid #000; border-radius:2px; }
+  .row { display:grid; grid-template-columns:repeat(4,158px); gap:18px 20px; align-items:start; }
+  figure { margin:0; }
+  figcaption { color:#9aa3b1; margin-top:6px; max-width:158px; font-size:11.5px; line-height:1.42; }
+  b { color:#f2c65e; font-weight:600; }
+</style>
+<div class="wrap">
+  <h1>B-1 Carrier</h1>
+  <p class="sub">Live render from <code>drawB1()</code> in src/game/robots.js — grass ground, 3&times; zoom.</p>
+  <div class="row" id="row"></div>
+</div>
+<script type="module">
+import { drawRobot, spawnCarrier, spawnM6, spawnT1w } from '../../src/game/robots.js';
+
+const flat = {
+  w:64,h:64,objects:[],groundItems:[],projectiles:[],sparks:[],
+  heightAt:()=>0, effectiveHeightAt:()=>0, floorAt:()=>'grass',
+  isSolid:()=>false, isSoft:()=>false, isWater:()=>false, isBlocked:()=>false,
+  blocked:()=>false, objectAt:()=>null, tileAt:()=>0, hasLineOfSight:()=>true,
+};
+
+function panel(title, caption, make, w=158, h=232, zoom=2.35) {
+  const fig = document.createElement('figure');
+  const cv = document.createElement('canvas');
+  cv.width = w * devicePixelRatio; cv.height = h * devicePixelRatio;
+  cv.style.width = w+'px'; cv.style.height = h+'px';
+  const ctx = cv.getContext('2d');
+  ctx.scale(devicePixelRatio, devicePixelRatio);
+  ctx.imageSmoothingEnabled = false;
+  ctx.save();
+  ctx.translate(w/2, h*0.86);
+  ctx.scale(zoom, zoom);
+  const r = make();
+  // worldToScreen in this local, already-translated space.
+  const w2s = (x,y)=>({ x:(x-r.x)*16, y:(y-r.y)*16 });
+  drawRobot(ctx, r, w2s);
+  ctx.restore();
+  const cap = document.createElement('figcaption');
+  cap.innerHTML = '<b>'+title+'</b><br>'+caption;
+  fig.append(cv, cap);
+  document.getElementById('row').append(fig);
+}
+
+const mk = (over={}) => {
+  const r = spawnCarrier(flat, 7, 30, 30);
+  r.spawnT = 0; r.animT = 1.2; r.walkPhase = 0.8;
+  Object.assign(r, over);
+  return r;
+};
+
+panel('At rest', 'Full hull, shield whole and held off the body. Shard just warm. It has not seen you.', () => mk());
+panel('Engaged', 'Inside its standoff: the great shield swings across the chest. Visor hot.', () => mk({ engageT: 8, aggro: true }));
+panel('Shield failing', 'Phase one has its own bar, and you can see it go: cracks open across the face as the rim wears through.', () => mk({ engageT: 8, aggro: true, shieldHp: 6 }));
+panel('Shield gone', 'It drops the aspis for you to pick up. Bare arm, empty bracket — and the hull takes everything from here.', () => mk({ engageT: 8, aggro: true, shieldHp: 0 }));
+panel('Printing a wave', 'The brow band lights and a gold ring goes out from it, a beat before the swarm arrives.', () => mk({ engageT: 8, aggro: true, calling: 0.9, shieldHp: 0 }));
+panel('Overheating — 60%', 'Printing costs it. The corslet starts to run dull red through the black.', () => mk({ engageT: 8, aggro: true, hp: 36, shieldHp: 0 }));
+panel('Overheating — 30%', 'Up through orange, pulsing faster the worse it gets.', () => mk({ engageT: 8, aggro: true, hp: 18, shieldHp: 0 }));
+panel('Almost gone — 8%', 'White-hot, and the shard on its back is at its brightest. You can read the end of the fight off its chest.', () => mk({ engageT: 8, aggro: true, hp: 5, shieldHp: 0, animT: 0.35 }));
+panel('M6 — for scale', 'The ordinary pack guard it walks with. Same foundry, no crest, no gold.', () => { const r = spawnM6(flat, 3, 30, 30); r.spawnT = 0; r.animT = 1; return r; }, 150);
+panel('T-1w — the swarm', 'What it prints. Four hull, three damage. Reprogrammable.', () => { const r = spawnT1w(flat, 5, 30, 30); r.spawnT = 0; r.animT = 1; return r; }, 150);
+</script>

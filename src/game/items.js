@@ -466,6 +466,21 @@ export const ITEMS = {
     reflect: false,
     color: '#5a6b7a',
   },
+  // #159 — the B-1 CARRIER's great round shield, cut off it when the rim finally
+  // gives. Agamemnon's, in the arming scene it was drawn from: a black field, a
+  // gold rim, a boss in the middle. Better than the riot shield because it came
+  // off something that was using it properly, and it is the one piece of the
+  // panoply a person can pick up and wear themselves — the whole game's move,
+  // handed to the player as an object.
+  aspis: {
+    name: 'Great shield',
+    use: 'Hold it in your hands and it stops a laser bolt. It was carried by something that meant it.',
+    kind: 'shield',
+    tier: 4,
+    reflect: false,
+    aspis: true,      // the renderer draws this one round, not as a heater
+    color: '#c9922e',
+  },
   mirror_shield: {
     name: 'Mirror shield',
     use: 'Hold it in your hands and a laser goes back the way it came, taking the machine that fired it.',

@@ -30,6 +30,7 @@ import {
   narrowsProgress, narrowsCalm, narrowsRunOut, narrowsRunOutT,
 } from '../game/narrows.js'; // the Scylla/Charybdis arcade run
 import { PADDLE_H, calypsoVoice } from '../game/calypso-pong.js'; // Calypso's un-winnable pong
+import * as CB from '../game/console-buffer.js'; // #145 V1b: the canvas console model
 
 // What an empty armour slot says it is for, so the column teaches itself.
 const ARMOUR_SLOT_LABEL = { head: 'HEAD', chest: 'BODY', legs: 'LEGS', feet: 'FEET' };
@@ -2988,20 +2989,34 @@ export const uiMethods = {
     return { x, y, w, h, label };
   },
 
-  drawDraughts(cab) {
+  /**
+   * The draughts cabinet. `at` places it as a window on her desktop —
+   * a real one, layered with the rest and dragged by its title bar. Without
+   * `at` it is the standalone scene, centred over a dimmed world, which is
+   * what the dev preview and the pre-Workspace path still use.
+   */
+  drawDraughts(cab, at = null) {
     const ctx = this.ctx;
     ctx.save();
-    ctx.fillStyle = 'rgba(20,20,22,0.92)';
-    ctx.fillRect(0, 0, this.w, this.h);
+    if (!at) {
+      ctx.fillStyle = 'rgba(20,20,22,0.92)';
+      ctx.fillRect(0, 0, this.w, this.h);
+    }
 
-    // The window. Board on the left, her scoreboard down the right.
-    const cell = Math.max(22, Math.min(46, Math.floor(Math.min((this.w - 300) / 8, (this.h - 150) / 8))));
+    // The window. Board on the left, her scoreboard down the right. On the
+    // desktop it takes a fixed board rather than filling the screen: a window
+    // that grows to the canvas is not a window, it is a takeover.
+    const cell = at
+      ? 30
+      : Math.max(22, Math.min(46, Math.floor(Math.min((this.w - 300) / 8, (this.h - 150) / 8))));
     const bw = cell * 8;
     const side = 210;
     const pad = 12;
     const winW = bw + side + pad * 3;
     const winH = bw + pad * 2 + 20 + 34;
-    const wx = Math.round((this.w - winW) / 2), wy = Math.round((this.h - winH) / 2);
+    const wx = at ? Math.round(at.x) : Math.round((this.w - winW) / 2);
+    const wy = at ? Math.round(at.y) : Math.round((this.h - winH) / 2);
+    this._dgWin = { x: wx, y: wy, w: winW, h: winH };
 
     ctx.fillStyle = '#aaaaaa';
     ctx.fillRect(wx, wy, winW, winH);
@@ -3087,12 +3102,35 @@ export const uiMethods = {
     // ---- the buttons and the state line ------------------------------------
     const byy = by + bw + 8;
     this._dgButtons = [];
+    // #145: the board is an application on her machine now, launched from the
+    // dock, so its window wears a close box on the right like every other
+    // window. Without one the only way out was a `Leave` button that is not
+    // there in every phase (David, 2026-08-13).
+    //
+    // No miniaturise box on the left yet: closing the cabinet keeps the record
+    // but not the position, so a box that promised to put the game down and
+    // pick it up again would be lying. That waits for the board to live in the
+    // Workspace's own window list.
+    const cbx = wx + winW - 18;
+    ctx.fillStyle = '#bdbdbd';
+    ctx.fillRect(cbx, wy + 3, 14, 14);
+    this._nextBevel(cbx, wy + 3, 14, 14);
+    ctx.fillStyle = '#242424';
+    ctx.font = 'bold 10px Helvetica, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('✕', cbx + 7, wy + 14);
+    ctx.textAlign = 'left';
+    this._dgButtons.push({ x: cbx, y: wy + 3, w: 14, h: 14, id: 'close' });
+    // With Calypso Self-Learn set (Preferences), the start button reads
+    // SELF-PLAY and starts her playing herself, so the switch is picked up on
+    // the very button the player presses (David, 2026-08-13).
+    const startLabel = cab.selfLearn ? 'Self-Play' : (cab.phase === 'over' ? 'Play Again' : 'New Game');
     if (cab.phase === 'selfplay') {
       // Nothing to press while she is playing herself. You watch.
     } else if (cab.phase === 'attract') {
-      this._dgButtons.push({ ...this._nextButton(bx, byy, 92, 24, 'New Game'), id: 'start' });
+      this._dgButtons.push({ ...this._nextButton(bx, byy, 92, 24, startLabel), id: 'start' });
     } else if (cab.phase === 'over') {
-      this._dgButtons.push({ ...this._nextButton(bx, byy, 92, 24, 'Play Again'), id: 'start' });
+      this._dgButtons.push({ ...this._nextButton(bx, byy, 92, 24, startLabel), id: 'start' });
       this._dgButtons.push({ ...this._nextButton(bx + 100, byy, 72, 24, 'Leave'), id: 'close' });
     } else {
       this._dgButtons.push({ ...this._nextButton(bx, byy, 72, 24, 'Resign'), id: 'resign' });
@@ -3109,12 +3147,55 @@ export const uiMethods = {
       status = `CALYPSO v CALYPSO — game ${Math.min(sp.games + 1, 3)}${sp.results.length ? `  (${sp.results.join(', ')})` : ''}`;
     } else if (cab.phase === 'over') { const c = this._dgCard(cab); status = `${c.head}. ${c.sub}`; }
     else status = cab.message || 'Your move.';
-    ctx.fillText(status, bx + (cab.phase === 'attract' ? 104 : 164), byy + 16);
+    // The status line starts AFTER the buttons, measured off the buttons that
+    // actually got drawn rather than off a hardcoded offset. The offset was 164
+    // and the `over` row ends at 172, so the state line ran through the Leave
+    // button (David, 2026-08-14: "text is overlapping"). And it is clipped to
+    // what is left of the window: `WINNER: NONE. A strange game...` is longer
+    // than the panel, and the board is already saying it in full behind this.
+    const lastBtn = this._dgButtons.reduce(
+      (m, b) => (b.id === 'close' && b.h === 14 ? m : Math.max(m, b.x + b.w)), bx);
+    const stx = lastBtn + 12;
+    const stMax = (wx + winW - 10) - stx;
+    // In `over` there is nothing to say down here: the board behind is already
+    // showing the whole card in full, three lines of it, and repeating it in a
+    // gap two words wide only ever produced an ellipsis.
+    if (cab.phase !== 'over' && stMax > 40) {
+      let line = status;
+      if (ctx.measureText(line).width > stMax) {
+        while (line.length > 1 && ctx.measureText(line + '…').width > stMax) line = line.slice(0, -1);
+        line = line.replace(/[\s.,;:]+$/, '') + '…';
+      }
+      // A stub of two or three characters is noise, not information.
+      if (line.length > 6) ctx.fillText(line, stx, byy + 16);
+    }
 
     if (cab.streak >= 2 && cab.phase !== 'selfplay') {
       ctx.fillStyle = '#3a3a3a';
       ctx.font = 'italic 10px Helvetica, system-ui, sans-serif';
       ctx.fillText(`resigned ${cab.streak} in a row`, sx + 8, byy + 16);
+    }
+
+    // The WarGames ending: when she has played herself to WINNER: NONE, the
+    // WOPR speech runs over the darkened board. She has learned the only
+    // winning move, and stands down. (David, 2026-08-13.)
+    if (cab.phase === 'over' && cab.result === 'futile') {
+      const bx0 = bx, by0 = by, side = bw;
+      ctx.fillStyle = 'rgba(12,14,16,0.92)';
+      ctx.fillRect(bx0, by0, side, side);
+      ctx.textAlign = 'center';
+      const cxp = bx0 + side / 2;
+      const lines = [
+        { t: 'WINNER: NONE', c: '#7fe07f', f: 'bold 15px "Courier New", ui-monospace, monospace', dy: 0 },
+        { t: 'A STRANGE GAME.', c: '#cfe8cf', f: '12px "Courier New", ui-monospace, monospace', dy: 34 },
+        { t: 'THE ONLY WINNING MOVE', c: '#cfe8cf', f: '12px "Courier New", ui-monospace, monospace', dy: 52 },
+        { t: 'IS NOT TO PLAY.', c: '#cfe8cf', f: '12px "Courier New", ui-monospace, monospace', dy: 70 },
+        { t: 'She stands down from the board.', c: '#8fb08f', f: 'italic 10px Helvetica, system-ui, sans-serif', dy: 104 },
+        { t: 'HOW ABOUT A NICE GAME OF CHESS?', c: '#7fe07f', f: 'bold 11px "Courier New", ui-monospace, monospace', dy: 132 },
+      ];
+      const y0 = by0 + side / 2 - 70;
+      for (const l of lines) { ctx.font = l.f; ctx.fillStyle = l.c; ctx.fillText(l.t, cxp, y0 + l.dy); }
+      ctx.textAlign = 'left';
     }
 
     ctx.restore();
@@ -3139,6 +3220,799 @@ export const uiMethods = {
       if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h) return b.id;
     }
     return null;
+  },
+
+  // ---- #145 V1a: the Workspace ---------------------------------------------
+  //
+  // State lives in game/workspace.js and none of it is computed here. This draws
+  // that state and records a hit rect for everything clickable, so main.js can
+  // ask `workspaceHit(x, y)` and get back an action rather than doing geometry.
+  //
+  // Later rects win, and the draw order is back to front, so the topmost thing
+  // under the pointer is the last one recorded.
+
+  _WS_MENU_W: 148,
+  _WS_MENU_TOP: 40,   // below the game's top-left help control
+  _WS_ROW_H: 19,
+  _WS_BAR_H: 20,
+  _WS_DOCK_W: 60,
+
+  // Every clickable rect carries a stacking `z` (which window it belongs to;
+  // menu and dock sit above all windows at Z_TOP) and a `pri` within that stack
+  // (close/mini box > drag handle > content > raise-anywhere). workspaceHit then
+  // returns the rect with the highest (z, pri) under the point, so a front
+  // window's title bar always wins over a back window's content — which is what
+  // "pick up the title bar even when it is over another window" needs.
+  _wsHit(x, y, w, h, act) {
+    this._wsHits.push({ x, y, w, h, ...act, z: act.z ?? this._wsZcur ?? 1000, pri: act.pri ?? 1 });
+    return act;
+  },
+
+  /**
+   * A title bar with its two boxes: miniaturise LEFT, close RIGHT. Getting
+   * those the wrong way round is the one mistake a player would feel without
+   * being able to name it. The close box wears a hole when the window is
+   * unsaved, which is the same glyph the Windows menu uses.
+   */
+  _wsTitleBar(x, y, w, title, focus, dirty, id) {
+    const ctx = this.ctx;
+    const H = this._WS_BAR_H;
+    const lit = focus !== 'none';
+    ctx.fillStyle = lit ? '#aaaaaa' : '#8e8e8e';
+    ctx.fillRect(x, y, w, H);
+    if (lit) {
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      for (let i = 3; i < H - 3; i += 2) ctx.fillRect(x + 24, y + i, w - 48, 1);
+    }
+    ctx.font = 'bold 11px Helvetica, system-ui, sans-serif';
+    const tw = ctx.measureText(title).width;
+    const tx = x + (w - tw) / 2;
+    ctx.fillStyle = lit ? '#aaaaaa' : '#8e8e8e';
+    ctx.fillRect(tx - 6, y + 2, tw + 12, H - 4);
+    ctx.fillStyle = focus === 'key' ? '#101010' : '#3c3c3c';
+    ctx.textAlign = 'left';
+    ctx.fillText(title, tx, y + 14);
+
+    const box = (bx, glyph, act) => {
+      ctx.fillStyle = '#bdbdbd';
+      ctx.fillRect(bx, y + 3, 14, 14);
+      this._nextBevel(bx, y + 3, 14, 14);
+      ctx.fillStyle = '#242424';
+      ctx.font = 'bold 10px Helvetica, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(glyph, bx + 7, y + 14);
+      ctx.textAlign = 'left';
+      this._wsHit(bx, y + 3, 14, 14, act);
+    };
+    box(x + 4, '▪', { act: 'mini', id, pri: 3 });
+    box(x + w - 18, dirty ? '⊗' : '✕', { act: 'close', id, pri: 3 });
+    this._nextBevel(x, y, w, H);
+    return H;
+  },
+
+  /** One menu row: label left, key equivalent right, a `▷` if it opens more. */
+  _wsMenuRow(x, y, w, row, act) {
+    const ctx = this.ctx;
+    const h = this._WS_ROW_H;
+    ctx.fillStyle = '#bdbdbd';
+    ctx.fillRect(x, y, w, h);
+    this._nextBevel(x, y, w, h);
+    ctx.font = '11px Helvetica, system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = row.on === false ? '#8a8a8a' : '#131313';
+    ctx.fillText(row.label, x + 7, y + 13);
+    if (row.key) {
+      ctx.textAlign = 'right';
+      ctx.fillText(row.key, x + w - (row.sub ? 18 : 7), y + 13);
+      ctx.textAlign = 'left';
+    }
+    if (row.sub) {
+      ctx.fillStyle = row.on === false ? '#8a8a8a' : '#131313';
+      ctx.fillText('▷', x + w - 14, y + 13);
+    }
+    if (act) this._wsHit(x, y, w, h, act);
+  },
+
+  _wsMenuPanel(x, y, rows, path, title) {
+    const ctx = this.ctx;
+    const w = this._WS_MENU_W;
+    const h = this._WS_ROW_H;
+    if (title != null) {
+      // A torn-off menu keeps a title bar with a close box, and nothing else.
+      ctx.fillStyle = '#aaaaaa';
+      ctx.fillRect(x, y, w, h);
+      this._nextBevel(x, y, w, h);
+      ctx.font = 'bold 11px Helvetica, system-ui, sans-serif';
+      ctx.fillStyle = '#131313';
+      ctx.textAlign = 'left';
+      ctx.fillText(title, x + 7, y + 13);
+      ctx.fillStyle = '#bdbdbd';
+      ctx.fillRect(x + w - 16, y + 3, 13, 13);
+      this._nextBevel(x + w - 16, y + 3, 13, 13);
+      ctx.fillStyle = '#242424';
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 9px Helvetica, system-ui, sans-serif';
+      ctx.fillText('✕', x + w - 9, y + 13);
+      ctx.textAlign = 'left';
+      this._wsHit(x + w - 16, y + 3, 13, 13, { act: 'tearclose', label: title });
+      y += h;
+    }
+    rows.forEach((row, i) => {
+      this._wsMenuRow(x, y + i * h, w, row,
+        { act: 'menu', path: [...path, row.label], row: i, label: row.label, winId: row.winId, on: row.on });
+    });
+    return { x, y, w, h: rows.length * h };
+  },
+
+  /** A file or folder icon. Folders are the NeXT suspension-file shape. */
+  _wsIcon(x, y, s, kind, label) {
+    const ctx = this.ctx;
+    ctx.save();
+    if (kind === 'home') {
+      ctx.fillStyle = '#d8d4c8';
+      ctx.beginPath();
+      ctx.moveTo(x + s / 2, y + 2); ctx.lineTo(x + s - 3, y + s * 0.45);
+      ctx.lineTo(x + s - 3, y + s - 3); ctx.lineTo(x + 3, y + s - 3);
+      ctx.lineTo(x + 3, y + s * 0.45); ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#4a4a4a'; ctx.stroke();
+      ctx.fillStyle = '#6f7d8c';
+      ctx.fillRect(x + s / 2 - 3, y + s - 11, 6, 8);
+    } else if (kind === 'dir') {
+      ctx.fillStyle = '#c9c9c9';
+      ctx.fillRect(x + 3, y + 5, s - 6, s - 9);
+      ctx.strokeStyle = '#4a4a4a';
+      ctx.strokeRect(x + 3.5, y + 5.5, s - 7, s - 10);
+      ctx.fillStyle = '#9a9a9a';
+      ctx.fillRect(x + 3, y + 5, s - 6, 3);
+    } else {
+      ctx.fillStyle = '#efefef';
+      ctx.fillRect(x + 5, y + 3, s - 12, s - 6);
+      ctx.strokeStyle = '#4a4a4a';
+      ctx.strokeRect(x + 5.5, y + 3.5, s - 13, s - 7);
+      ctx.strokeStyle = '#9a9a9a';
+      for (let i = 0; i < 4; i++) {
+        ctx.beginPath();
+        ctx.moveTo(x + 8, y + 8 + i * 4); ctx.lineTo(x + s - 9, y + 8 + i * 4); ctx.stroke();
+      }
+    }
+    if (label) {
+      ctx.fillStyle = '#1b1b1b';
+      ctx.font = '9px Helvetica, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      const t = label.length > 11 ? `${label.slice(0, 10)}…` : label;
+      ctx.fillText(t, x + s / 2, y + s + 9);
+      ctx.textAlign = 'left';
+    }
+    ctx.restore();
+  },
+
+  /** The File Viewer: shelf, icon path, browser. Its three parts have names. */
+  // #145 V1b — Terminal.app as a real window on the canvas.
+  //
+  // The DOM overlay could never sit behind another window or be clicked
+  // through, and suspend/resume was the interim around that. This draws the
+  // console from `game/console-buffer.js` inside the window rect instead, so it
+  // stacks, drags and resizes like Files and Edit do.
+  //
+  // Black on white, monospace, because hers is NeXTSTEP's Terminal.app and the
+  // estate's obelisks are green CRTs. The cell size is MEASURED rather than
+  // assumed: the buffer wraps to `cols`, and if the renderer disagreed with the
+  // model about how many characters fit, the wrap would land in a different
+  // place from the drawing. So the window's size decides cols/rows and the
+  // model is told, once, here.
+  _wsTerminal(w, ws, api) {
+    const ctx = this.ctx;
+    const cx = w.cx;
+    if (!cx) return;
+    const PAD = 6;
+    const bx = w.x + 2, by = w.y + this._WS_BAR_H;
+    const bw = w.w - 4, bh = w.h - this._WS_BAR_H - 12;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(bx, by, bw, bh);
+    this._nextBevel(bx, by, bw, bh, false);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(bx + 1, by + 1, bw - 2, bh - 2);
+    ctx.clip();
+    ctx.font = '12px "Courier New", Courier, monospace';
+    ctx.textAlign = 'left';
+    const cw = ctx.measureText('M').width || 7;
+    const lh = 14;
+    const cols = Math.max(8, Math.floor((bw - PAD * 2) / cw));
+    const rows = Math.max(1, Math.floor((bh - PAD * 2) / lh));
+    if (cx.cols !== cols) cx.cols = cols;      // the model wraps where we draw
+    const shown = CB.view(cx, rows);
+    ctx.fillStyle = '#111111';
+    shown.forEach((row, i) => {
+      const ty = by + PAD + (i + 1) * lh - 3;
+      ctx.fillText(row.text, bx + PAD, ty);
+      // The caret sits on the input row, and only when this window has focus:
+      // two consoles both blinking would say you could type into either.
+      if (row.input && api.focusOf(ws, w.id)) {
+        const col = CB.caretCol(cx);
+        ctx.fillStyle = '#111111';
+        ctx.fillRect(bx + PAD + col * cw, ty - 10, cw, 12);
+        // The character under the block is knocked out, the way a terminal does.
+        const under = row.text[col];
+        if (under && under !== ' ') {
+          ctx.fillStyle = '#ffffff';
+          ctx.fillText(under, bx + PAD + col * cw, ty);
+        }
+        ctx.fillStyle = '#111111';
+      }
+    });
+    ctx.restore();
+    // Clicking the body focuses the window, which is what makes typing land.
+    this._wsHit(bx, by, bw, bh, { act: 'raise', id: w.id, pri: 1 });
+  },
+
+  /**
+   * A NeXTSTEP scroller: a knob in a sunken track, with the two arrow buttons
+   * PAIRED AT THE BOTTOM rather than one at each end. That pairing is the thing
+   * a NeXT user would notice; Windows and the Mac split them.
+   *
+   * `first` is the top visible row, `rows` how many fit, `total` how many there
+   * are. The act is fired with dir -1/+1 for the arrows and a page distance for
+   * a click in the track.
+   */
+  _wsScroller(x, y, w, h, first, rows, total, act) {
+    const ctx = this.ctx;
+    const AR = 16;                    // the arrow pair, at the foot
+    const th = Math.max(20, h - AR);  // the track above them
+    ctx.fillStyle = '#8f8f8f'; ctx.fillRect(x, y, w, h);
+    this._nextBevel(x, y, w, th, false);
+    if (total > rows) {
+      const frac = rows / total;
+      const kh = Math.max(18, Math.floor((th - 4) * frac));
+      const ky = y + 2 + Math.round((th - 4 - kh) * (first / (total - rows)));
+      ctx.fillStyle = '#bdbdbd'; ctx.fillRect(x + 2, ky, w - 4, kh);
+      this._nextBevel(x + 2, ky, w - 4, kh);
+      // Above the knob pages back, below it pages on.
+      this._wsHit(x, y, w, ky - y, { ...act, dir: -rows });
+      this._wsHit(x, ky + kh, w, y + th - (ky + kh), { ...act, dir: rows });
+    }
+    const ay = y + th;
+    [['\u25b2', -1], ['\u25bc', 1]].forEach(([glyph, dir], i) => {
+      const bx = x + i * (w / 2);
+      ctx.fillStyle = '#bdbdbd'; ctx.fillRect(bx, ay, w / 2, AR);
+      this._nextBevel(bx, ay, w / 2, AR);
+      ctx.fillStyle = total > rows ? '#141414' : '#8a8a8a';
+      ctx.font = '9px Helvetica, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(glyph, bx + w / 4, ay + 11);
+      ctx.textAlign = 'left';
+      this._wsHit(bx, ay, w / 2, AR, { ...act, dir });
+    });
+  },
+
+  // Mail.app, laid out as the reference does it: the index above, the open
+  // message below, split about half way. The list is her texts and yours, in
+  // the order the handset carried them.
+  _wsMail(w, ws, api) {
+    const ctx = this.ctx;
+    const msgs = api.mailboxFrom(ws.mail || []);
+    const x = w.x + 3, W = w.w - 6;
+    const bar = w.y + this._WS_BAR_H + 2;
+    // The button strip. Every one of them is a write, and she has not given
+    // this account a write. They are drawn live rather than greyed because the
+    // refusal is hers to state, not something the interface should pre-empt.
+    const BTN = ['Compose', 'Reply', 'Forward', 'Delete'];
+    const bw = Math.min(78, Math.floor((W - 8) / BTN.length) - 4);
+    BTN.forEach((label, i) => {
+      const bx = x + 4 + i * (bw + 4);
+      this._nextButton(bx, bar + 2, bw, 20, label);
+      this._wsHit(bx, bar + 2, bw, 20, { act: 'maillocked', id: w.id, label, pri: 3 });
+    });
+    ctx.font = '10px Helvetica, system-ui, sans-serif';
+    ctx.fillStyle = '#4a4a4a';
+    ctx.textAlign = 'right';
+    ctx.fillText('read only', x + W - 6, bar + 16);
+    ctx.textAlign = 'left';
+    const top = bar + 26;
+    const listH = Math.max(60, Math.floor((w.h - this._WS_BAR_H - 38) * 0.45));
+    const SBW = 16;  // the scroller, down the right of the index
+    // ---- the index
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(x, top, W, listH);
+    this._nextBevel(x, top, W, listH, false);
+    ctx.save(); ctx.beginPath(); ctx.rect(x + 1, top + 1, W - SBW - 2, listH - 2); ctx.clip();
+    ctx.font = '11px "Courier New", ui-monospace, monospace';
+    const rowH = 14;
+    const rows = Math.floor((listH - 6) / rowH);
+    const sel = Math.min(w.sel || 0, Math.max(0, msgs.length - 1));
+    // THE LIST SCROLLS, THE SELECTION DOES NOT DRIVE IT. This centred on the
+    // selected row, so every click yanked the whole index under the pointer
+    // (David, 2026-08-14). `top` is the window's own scroll position now and
+    // moves only when scrolled, or when a selection would otherwise be off
+    // screen. `maxTop` is recomputed here because messages arrive while it is
+    // open and a stale top would strand the view past the end.
+    const maxTop = Math.max(0, msgs.length - rows);
+    if (w.top == null) w.top = 0;
+    w.top = Math.max(0, Math.min(w.top, maxTop));
+    if (sel < w.top) w.top = sel;
+    else if (sel >= w.top + rows) w.top = Math.min(maxTop, sel - rows + 1);
+    const first = w.top;
+    if (!msgs.length) {
+      ctx.fillStyle = '#666';
+      ctx.fillText('No messages. The handset has carried nothing yet.', x + 8, top + 20);
+    }
+    msgs.slice(first, first + rows).forEach((m, i) => {
+      const idx = first + i;
+      const ry = top + 4 + i * rowH;
+      if (idx === sel) { ctx.fillStyle = '#c8c8c8'; ctx.fillRect(x + 2, ry, W - 4, rowH); }
+      ctx.fillStyle = '#141414';
+      // The arrow marks the open one; a dot marks the rest, as the reference does.
+      ctx.fillText(idx === sel ? '\u2192' : '\u2022', x + 6, ry + 11);
+      ctx.fillText(String(m.n).padStart(3), x + 20, ry + 11);
+      ctx.fillText(m.at.padEnd(6), x + 48, ry + 11);
+      ctx.fillText(m.from.slice(0, 8).padEnd(9), x + 96, ry + 11);
+      ctx.fillText(m.subject, x + 176, ry + 11);
+      this._wsHit(x + 2, ry, W - SBW - 4, rowH, { act: 'mailsel', id: w.id, i: idx, pri: 2 });
+    });
+    ctx.restore();
+    this._wsScroller(x + W - SBW, top, SBW, listH, first, rows, msgs.length,
+      { act: 'mailscroll', id: w.id, pri: 3 });
+    // ---- the open message
+    const by = top + listH + 4;
+    const bh = w.h - (by - w.y) - 10;
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(x, by, W, bh);
+    this._nextBevel(x, by, W, bh, false);
+    const m = msgs[sel];
+    if (!m) return;
+    ctx.save(); ctx.beginPath(); ctx.rect(x + 1, by + 1, W - 2, bh - 2); ctx.clip();
+    ctx.font = 'bold 11px Helvetica, system-ui, sans-serif';
+    ctx.fillStyle = '#141414';
+    ctx.fillText(`From: ${m.from}`, x + 8, by + 16);
+    ctx.fillText(`To: ${m.to}`, x + 8, by + 30);
+    ctx.fillText(`Subject: ${m.subject}`, x + 8, by + 44);
+    ctx.font = '11px Helvetica, system-ui, sans-serif';
+    // Wrap the body to the window rather than letting it run off the edge.
+    const cw = ctx.measureText('n').width || 6;
+    const cols = Math.max(16, Math.floor((W - 20) / cw));
+    const words = String(m.body).split(/\s+/);
+    let line = '', ly = by + 64;
+    for (const word of words) {
+      if ((line + ' ' + word).trim().length > cols) { ctx.fillText(line, x + 8, ly); ly += 14; line = word; }
+      else line = (line ? line + ' ' : '') + word;
+      if (ly > by + bh - 6) break;
+    }
+    if (line && ly <= by + bh - 6) ctx.fillText(line, x + 8, ly);
+    ctx.restore();
+  },
+
+  // The Info panel. Small, and it says what the machine is.
+  _wsAbout(w, ws, api) {
+    const ctx = this.ctx;
+    const x = w.x + 3, W = w.w - 6;
+    const top = w.y + this._WS_BAR_H + 2;
+    const H = w.h - this._WS_BAR_H - 10;
+    ctx.fillStyle = '#aaaaaa'; ctx.fillRect(x, top, W, H);
+    this._nextBevel(x, top, W, H);
+    this._wsIcon(x + 16, top + 18, 40, 'dir', '');
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#141414';
+    ctx.font = 'bold 15px Helvetica, system-ui, sans-serif';
+    ctx.fillText('NeXTSTEP 3.3', x + 74, top + 30);
+    ctx.font = '11px Helvetica, system-ui, sans-serif';
+    for (const [i, line] of (api.aboutLines ? api.aboutLines(ws) : []).entries()) {
+      ctx.fillText(line, x + 74, top + 48 + i * 14);
+    }
+  },
+
+  // The bin, which now holds things.
+  _wsRecycler(w, ws, api) {
+    const ctx = this.ctx;
+    const x = w.x + 3, W = w.w - 6;
+    const top = w.y + this._WS_BAR_H + 2;
+    const H = w.h - this._WS_BAR_H - 10;
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(x, top, W, H);
+    this._nextBevel(x, top, W, H, false);
+    const bin = ws.bin || [];
+    ctx.font = '11px Helvetica, system-ui, sans-serif';
+    ctx.fillStyle = '#141414';
+    if (!bin.length) {
+      ctx.fillText('Empty.', x + 10, top + 22);
+      ctx.fillStyle = '#555';
+      ctx.fillText('She has thrown nothing away in seven years.', x + 10, top + 40);
+      return;
+    }
+    bin.slice(0, Math.floor((H - 16) / 16)).forEach((b, i) => {
+      this._wsIcon(x + 10, top + 8 + i * 16, 12, b.node && b.node.d ? 'dir' : 'file', '');
+      ctx.fillStyle = '#141414';
+      ctx.fillText(`${b.name}`, x + 30, top + 19 + i * 16);
+      ctx.fillStyle = '#666';
+      ctx.fillText(`/${b.from}`, x + 160, top + 19 + i * 16);
+    });
+  },
+
+  _wsViewer(w, ws, api) {
+    const ctx = this.ctx;
+    const { x, y, w: W, h: H } = w;
+    const shelfH = 46, pathH = 30;
+    ctx.fillStyle = '#9d9d9d';
+    ctx.fillRect(x + 2, y + this._WS_BAR_H, W - 4, shelfH);
+    this._nextBevel(x + 2, y + this._WS_BAR_H, W - 4, shelfH, false);
+    ws.shelf.forEach((p, i) => {
+      const ix = x + 8 + i * 44, iy = y + this._WS_BAR_H + 4;
+      const parts = p.split('/');
+      this._wsIcon(ix, iy, 26, i === 0 ? 'home' : (api.isDir(api.nodeAt(ws.tree, parts)) ? 'dir' : 'file'),
+        i === 0 ? 'me' : parts[parts.length - 1]);
+      this._wsHit(ix, iy, 26, 26, { act: 'shelf', path: parts });
+    });
+
+    // The icon path: the trail from the machine down to where you are.
+    const py = y + this._WS_BAR_H + shelfH;
+    ctx.fillStyle = '#b4b4b4';
+    ctx.fillRect(x + 2, py, W - 4, pathH);
+    ctx.font = '10px Helvetica, system-ui, sans-serif';
+    ctx.fillStyle = '#1b1b1b';
+    const trail = ['/', ...ws.sel];
+    let tx = x + 8;
+    trail.forEach((step, i) => {
+      const lab = i === 0 ? 'NeXT' : step;
+      const tw = ctx.measureText(lab).width + 10;
+      ctx.fillStyle = i === trail.length - 1 ? '#dfdfdf' : '#b4b4b4';
+      ctx.fillRect(tx, py + 6, tw, 18);
+      this._nextBevel(tx, py + 6, tw, 18, i !== trail.length - 1);
+      ctx.fillStyle = '#1b1b1b';
+      ctx.fillText(lab, tx + 5, py + 19);
+      this._wsHit(tx, py + 6, tw, 18, { act: 'select', path: ws.sel.slice(0, i) });
+      tx += tw;
+      if (i < trail.length - 1) { ctx.fillText('▷', tx + 1, py + 19); tx += 12; }
+    });
+
+    // The browser. Columns of names, the selection scrolling in from the right.
+    const by = py + pathH;
+    const bh = H - (by - y) - 4;
+    const cols = api.browserColumns(ws.tree, ws.sel);
+    const shown = cols.slice(-3);
+    const cw = Math.floor((W - 8) / Math.max(1, shown.length));
+    shown.forEach((col, ci) => {
+      const cx = x + 4 + ci * cw;
+      ctx.fillStyle = '#dcdcdc';
+      ctx.fillRect(cx, by, cw - 2, bh);
+      this._nextBevel(cx, by, cw - 2, bh, false);
+      ctx.font = '10px Helvetica, system-ui, sans-serif';
+      col.items.slice(0, Math.floor(bh / 15)).forEach((it, i) => {
+        const ry = by + 2 + i * 15;
+        const on = it.name === col.selected;
+        if (on) { ctx.fillStyle = '#8ea6c0'; ctx.fillRect(cx + 1, ry, cw - 4, 15); }
+        ctx.fillStyle = '#111111';
+        ctx.textAlign = 'left';
+        ctx.fillText(it.name.length > 20 ? `${it.name.slice(0, 19)}…` : it.name, cx + 5, ry + 11);
+        if (it.dir) ctx.fillText('▷', cx + cw - 14, ry + 11);
+        this._wsHit(cx + 1, ry, cw - 4, 15, { act: 'browse', path: [...col.path, it.name] });
+      });
+    });
+  },
+
+  /**
+   * Preferences: NeXTSTEP's own shape, an icon strip across the top choosing a
+   * section and that section's switches below. A switch that cannot be thrown
+   * stays where it is, greyed, saying nothing about why.
+   */
+  _wsPrefs(w, ws, api) {
+    const ctx = this.ctx;
+    const { x, y, w: W } = w;
+    const ty = y + this._WS_BAR_H;
+    ctx.fillStyle = '#9d9d9d';
+    ctx.fillRect(x + 2, ty, W - 4, 52);
+    this._nextBevel(x + 2, ty, W - 4, 52, false);
+    api.prefsSections.forEach((s, i) => {
+      const sx = x + 10 + i * 74, sy = ty + 5;
+      const on = ws.prefs.section === s.id;
+      ctx.fillStyle = on ? '#dcdcdc' : '#9d9d9d';
+      ctx.fillRect(sx, sy, 66, 42);
+      if (on) this._nextBevel(sx, sy, 66, 42);
+      this._wsIcon(sx + 20, sy + 2, 26, s.id === 'draughts' ? 'file' : 'dir', '');
+      ctx.fillStyle = '#141414';
+      ctx.font = '9px Helvetica, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(s.label, sx + 33, sy + 38);
+      ctx.textAlign = 'left';
+      this._wsHit(sx, sy, 66, 42, { act: 'prefsection', id: s.id });
+    });
+    api.prefsRows(ws).forEach((r, i) => {
+      const ry = ty + 62 + i * 40;
+      // A NeXT switch: a small sunk box with a tick in it when it is on.
+      ctx.fillStyle = r.enabled ? '#dcdcdc' : '#a6a6a6';
+      ctx.fillRect(x + 12, ry, 14, 14);
+      this._nextBevel(x + 12, ry, 14, 14, false);
+      if (r.on) {
+        ctx.strokeStyle = r.enabled ? '#141414' : '#7d7d7d';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x + 15, ry + 7); ctx.lineTo(x + 18, ry + 11); ctx.lineTo(x + 23, ry + 3);
+        ctx.stroke();
+        ctx.lineWidth = 1;
+      }
+      ctx.font = '11px Helvetica, system-ui, sans-serif';
+      ctx.fillStyle = r.enabled ? '#131313' : '#787878';
+      ctx.textAlign = 'left';
+      ctx.fillText(r.label, x + 34, ry + 11);
+      if (r.note) {
+        ctx.font = '10px Helvetica, system-ui, sans-serif';
+        ctx.fillStyle = '#4a4a4a';
+        ctx.fillText(r.note, x + 34, ry + 25);
+      }
+      this._wsHit(x + 12, ry - 2, W - 24, 20, { act: 'pref', id: r.id });
+    });
+  },
+
+  /** Edit: a code window, with a white arrow where a block is contracted. */
+  _wsEdit(w, ws, api) {
+    const ctx = this.ctx;
+    const { x, y, w: W, h: H } = w;
+    const ty = y + this._WS_BAR_H;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(x + 3, ty + 2, W - 6, H - this._WS_BAR_H - 5);
+    this._nextBevel(x + 3, ty + 2, W - 6, H - this._WS_BAR_H - 5, false);
+    ctx.font = '11px "Courier New", ui-monospace, monospace';
+    const rows = api.visibleLines(w);
+    const maxRows = Math.floor((H - this._WS_BAR_H - 10) / 13);
+    // Clip to the page, so a long line ends at the right margin instead of
+    // spilling past the window's edge (David, 2026-08-13). The char-count
+    // truncation was an estimate and always let some through; a clip is exact.
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x + 6, ty + 2, W - 12, H - this._WS_BAR_H - 5);
+    ctx.clip();
+    rows.slice(0, maxRows).forEach((r, i) => {
+      const ry = ty + 14 + i * 13;
+      if (r.arrow) {
+        // The white arrow standing for contracted code, and it is clickable.
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(x + 16, ry - 8, 26, 10);
+        ctx.strokeStyle = '#333333';
+        ctx.strokeRect(x + 16.5, ry - 7.5, 25, 9);
+        ctx.beginPath();
+        ctx.moveTo(x + 36, ry - 7.5); ctx.lineTo(x + 41.5, ry - 3); ctx.lineTo(x + 36, ry + 1.5);
+        ctx.stroke();
+        this._wsHit(x + 16, ry - 9, 28, 12, { act: 'expand', id: w.id, line: r.line });
+      } else {
+        ctx.fillStyle = '#141414';
+        ctx.textAlign = 'left';
+        ctx.fillText(r.text || '', x + 8, ry);
+      }
+    });
+    ctx.restore();
+  },
+
+  /**
+   * Draw the whole Workspace. `api` carries the pure functions from
+   * game/workspace.js so this file imports nothing from the game layer.
+   */
+  drawWorkspace(ws, api, cab = null) {
+    const ctx = this.ctx;
+    // The module owns the furniture's measurements, because it is the one that
+    // keeps windows clear of them. Read rather than repeated.
+    if (api.menuW) this._WS_MENU_W = api.menuW;
+    if (api.dockW) this._WS_DOCK_W = api.dockW;
+    this._wsHits = [];
+    this._wsZcur = 1000;   // default: hits belong to the top layer (menu/dock)
+    ctx.save();
+
+    // The boot. Mach counts its pages on a black console before the window
+    // server starts, which is the one moment her machine looks like the
+    // estate's — and then it stops.
+    if (ws.booting) {
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, this.w, this.h);
+      ctx.font = '13px "Courier New", ui-monospace, monospace';
+      ctx.textAlign = 'left';
+      const x = Math.max(20, Math.round(this.w / 2 - 210));
+      const y = Math.max(40, Math.round(this.h / 2 - 110));
+      const lines = api.bootLines || [];
+      for (let i = 0; i < ws.bootShown; i++) {
+        ctx.fillStyle = i < 3 ? '#8a8a8a' : '#d6d6d6';
+        ctx.fillText(lines[i] || '', x, y + i * 17);
+      }
+      ctx.restore();
+      return;
+    }
+
+    // The desktop: NeXT's grey, with the fine stipple it had.
+    ctx.fillStyle = '#5a5a5a';
+    ctx.fillRect(0, 0, this.w, this.h);
+    ctx.fillStyle = 'rgba(255,255,255,0.045)';
+    for (let yy = 0; yy < this.h; yy += 3) for (let xx = (yy / 3) % 2 ? 0 : 1; xx < this.w; xx += 2) ctx.fillRect(xx, yy, 1, 1);
+
+    // Windows, back to front, so the front one is drawn over the rest. The
+    // stacking index becomes each rect's `z`, so a front window's controls
+    // outrank a back window's content under the same point.
+    let _wsZ = 0;
+    for (const w of api.windowsBack(ws)) {
+      if (w.mini) continue;
+      this._wsZcur = ++_wsZ;
+      // The board is an application with a window of its own, so it is drawn
+      // HERE, in the z-order, rather than over the top of everything. It paints
+      // its own frame and its own close box; all this loop owes it is a place
+      // in the stack and a title bar to be dragged by.
+      if (w.kind === 'draughts') {
+        if (cab) {
+          this.drawDraughts(cab, { x: w.x, y: w.y });
+          w.w = this._dgWin.w; w.h = this._dgWin.h;
+        }
+        this._wsHit(w.x, w.y, w.w, w.h, { act: 'raise', id: w.id, pri: 0 });
+        this._wsHit(w.x, w.y, w.w, this._WS_BAR_H, { act: 'drag', id: w.id, pri: 2 });
+        continue;
+      }
+      ctx.fillStyle = '#aaaaaa';
+      ctx.fillRect(w.x, w.y, w.w, w.h);
+      this._nextBevel(w.x, w.y, w.w, w.h);
+      this._wsTitleBar(w.x, w.y, w.w, w.title, api.focusOf(ws, w.id), w.dirty, w.id);
+      if (w.kind === 'edit') this._wsEdit(w, ws, api);
+      else if (w.kind === 'prefs') this._wsPrefs(w, ws, api);
+      else if (w.kind === 'terminal') this._wsTerminal(w, ws, api);
+      else if (w.kind === 'mail') this._wsMail(w, ws, api);
+      else if (w.kind === 'about') this._wsAbout(w, ws, api);
+      else if (w.kind === 'recycler') this._wsRecycler(w, ws, api);
+      else this._wsViewer(w, ws, api);
+      // The resize bar at the foot, which every NeXT window wore.
+      ctx.fillStyle = '#9a9a9a';
+      ctx.fillRect(w.x + 2, w.y + w.h - 10, w.w - 4, 8);
+      this._nextBevel(w.x + 2, w.y + w.h - 10, w.w - 4, 8);
+      // raise-anywhere (pri 0, lowest) and the drag handle (pri 2). The close
+      // and miniaturise boxes (pri 3, set in _wsTitleBar) win over the drag.
+      this._wsHit(w.x, w.y, w.w, w.h, { act: 'raise', id: w.id, pri: 0 });
+      this._wsHit(w.x, w.y, w.w, this._WS_BAR_H, { act: 'drag', id: w.id, pri: 2 });
+      // The foot resize bar drags the size — for the file/text windows, not the
+      // fixed-size board or panels.
+      if (w.kind === 'viewer' || w.kind === 'edit' || w.kind === 'terminal' || w.kind === 'mail') {
+        this._wsHit(w.x + 2, w.y + w.h - 11, w.w - 4, 11, { act: 'resize', id: w.id, pri: 3 });
+      }
+    }
+    this._wsZcur = 1000;   // everything below sits above the windows
+
+    // Miniaturised windows sit on the desktop floor and come back on a click.
+    let mx = 8;
+    for (const w of api.windowsBack(ws)) {
+      if (!w.mini) continue;
+      const my = this.h - 56;
+      ctx.fillStyle = '#9d9d9d';
+      ctx.fillRect(mx, my, 48, 48);
+      this._nextBevel(mx, my, 48, 48);
+      this._wsIcon(mx + 11, my + 4, 26, w.kind === 'edit' ? 'file' : 'dir', '');
+      ctx.fillStyle = '#141414';
+      ctx.font = '8px Helvetica, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(w.title.split(' ')[0].slice(0, 9), mx + 24, my + 43);
+      ctx.textAlign = 'left';
+      this._wsHit(mx, my, 48, 48, { act: 'restore', id: w.id });
+      mx += 52;
+    }
+
+    // The dock: the cube fixed at the top, the recycler fixed at the foot.
+    const dx = this.w - this._WS_DOCK_W;
+    ctx.fillStyle = '#8b8b8b';
+    ctx.fillRect(dx, 0, this._WS_DOCK_W, this.h);
+    this._nextBevel(dx, 0, this._WS_DOCK_W, this.h);
+    (api.dockTiles(ws) || []).forEach((t, i) => {
+      const ty = 4 + i * 62;
+      if (ty + 56 > this.h - 62) return;
+      ctx.fillStyle = '#a4a4a4';
+      ctx.fillRect(dx + 3, ty, 54, 56);
+      this._nextBevel(dx + 3, ty, 54, 56);
+      ctx.textAlign = 'center';
+      if (t.kind === 'clock') {
+        ctx.fillStyle = '#1d2b1d';
+        ctx.fillRect(dx + 7, ty + 4, 46, 34);
+        ctx.fillStyle = '#7fe07f';
+        ctx.font = 'bold 15px "Courier New", ui-monospace, monospace';
+        ctx.fillText(t.label, dx + 30, ty + 26);
+      } else if (t.kind === 'calendar') {
+        ctx.fillStyle = '#efefe6';
+        ctx.fillRect(dx + 7, ty + 4, 46, 34);
+        ctx.fillStyle = '#b03030';
+        ctx.fillRect(dx + 7, ty + 4, 46, 10);
+        ctx.fillStyle = '#141414';
+        ctx.font = 'bold 15px Helvetica, system-ui, sans-serif';
+        ctx.fillText(t.label, dx + 30, ty + 34);
+      } else {
+        this._wsIcon(dx + 17, ty + 6, 26, t.kind === 'recycler' ? 'dir' : 'file', '');
+        ctx.fillStyle = '#141414';
+        ctx.font = '9px Helvetica, system-ui, sans-serif';
+        ctx.fillText(t.label, dx + 30, ty + 46);
+        // Three dots: the app is not running.
+        if (!t.running) {
+          ctx.fillStyle = '#2b2b2b';
+          for (let d = 0; d < 3; d++) ctx.fillRect(dx + 24 + d * 5, ty + 51, 2, 2);
+        }
+      }
+      ctx.textAlign = 'left';
+      this._wsHit(dx + 3, ty, 54, 56, { act: 'dock', id: t.id });
+    });
+
+    // The menu last, because it opens over everything. Dropped below the game's
+    // own top-left help control so the two do not overlap (David, 2026-08-13).
+    const MT = this._WS_MENU_TOP;
+    const top = api.menuRows(ws);
+    this._wsMenuPanel(4, MT, top, [], null);
+    ctx.fillStyle = '#aaaaaa';
+    for (let d = 1; d <= ws.menuPath.length; d++) {
+      const rows = api.menuRows(ws, ws.menuPath.slice(0, d));
+      if (!rows.length) break;
+      const parentRows = api.menuRows(ws, ws.menuPath.slice(0, d - 1));
+      const at = parentRows.findIndex((r) => r.label === ws.menuPath[d - 1]);
+      const px = 4 + d * this._WS_MENU_W;
+      const py = MT + Math.max(0, at) * this._WS_ROW_H;
+      this._wsMenuPanel(px, py, rows, ws.menuPath.slice(0, d), null);
+      // Dragging a submenu away keeps it. This is the tear-off handle, above
+      // the menu rows it sits over.
+      this._wsHit(px, py - 6, this._WS_MENU_W, 6, { act: 'tear', path: ws.menuPath.slice(0, d), pri: 5 });
+    }
+    for (const t of ws.torn) {
+      const rows = api.menuRows(ws, t.path);
+      this._wsMenuPanel(t.x, t.y, rows, t.path, t.label);
+    }
+
+    // The attention panel, over everything: an empty black title bar, an icon,
+    // the message, and an OK button carrying the ⏎ default glyph.
+    if (ws.notice) this._wsNotice(ws.notice);
+
+    ctx.restore();
+  },
+
+  _wsNotice(n) {
+    const ctx = this.ctx;
+    const pw = 320;
+    // The panel GROWS to its text. It was a fixed 132 tall, which was fine for
+    // the one-line refusals it was built for and ran straight through the OK
+    // button the first time something had a paragraph to say (her release, #159).
+    // Blank lines in the body are kept as blank lines, so a notice can have
+    // paragraphs.
+    ctx.font = '11px Helvetica, system-ui, sans-serif';
+    const lines = [];
+    if (n.body) {
+      for (const para of String(n.body).split('\n')) {
+        if (!para.trim()) { lines.push(''); continue; }
+        lines.push(...this._wrapText(ctx, para, pw - 74));
+      }
+    }
+    const ph = Math.max(132, 60 + lines.length * 14 + 40);
+    const px = Math.round((this.w - pw) / 2), py = Math.round((this.h - ph) / 2.4);
+    ctx.fillStyle = 'rgba(20,20,22,0.35)';
+    ctx.fillRect(0, 0, this.w, this.h);
+    ctx.fillStyle = '#aaaaaa';
+    ctx.fillRect(px, py, pw, ph);
+    this._nextBevel(px, py, pw, ph);
+    // The attention panel's title bar is empty and black.
+    ctx.fillStyle = '#161616';
+    ctx.fillRect(px + 2, py + 2, pw - 4, 18);
+    // The app icon, large, at the left.
+    this._wsIcon(px + 14, py + 30, 34, 'file', '');
+    ctx.fillStyle = '#141414';
+    ctx.font = 'bold 12px Helvetica, system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(n.title, px + 60, py + 42);
+    if (lines.length) {
+      ctx.font = '11px Helvetica, system-ui, sans-serif';
+      for (const [i, ln] of lines.entries()) ctx.fillText(ln, px + 60, py + 60 + i * 14);
+    }
+    // The default button, with OK and the return glyph BOTH inside it.
+    const bw = 86, bx = px + pw - bw - 14, by = py + ph - 32;
+    this._nextButton(bx, by, bw, 24, '', true);
+    ctx.fillStyle = '#141414';
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 11px Helvetica, system-ui, sans-serif';
+    ctx.fillText('OK', bx + bw / 2 - 8, by + 16);
+    ctx.font = '12px Helvetica, system-ui, sans-serif';
+    ctx.fillText('↵', bx + bw - 15, by + 16);
+    ctx.textAlign = 'left';
+    this._wsHit(px, py, pw, ph, { act: 'noticeblock', pri: 9, z: 3000 });
+    this._wsHit(bx, by, bw, 24, { act: 'noticeok', pri: 10, z: 3000 });
+  },
+
+  /** What a click at (mx, my) landed on: the highest (z, pri) rect under it. */
+  workspaceHit(mx, my) {
+    const hits = this._wsHits || [];
+    let best = null;
+    for (const b of hits) {
+      if (mx < b.x || mx > b.x + b.w || my < b.y || my > b.y + b.h) continue;
+      if (!best || b.z > best.z || (b.z === best.z && b.pri >= best.pri)) best = b;
+    }
+    return best;
   },
 
   drawKleosModal(model) {

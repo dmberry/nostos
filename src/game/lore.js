@@ -1564,6 +1564,80 @@ export const FRAGMENTS = [
       'never forgets. The only mercy left is the window before it does. Level the ' +
       'array. If a tower will not burn, break it — the largest charges will crack ' +
       'even stone that thinks. Spend everything. There is no after to save it for.' },
+
+  // ---- the vampire: the paperwork of the productivity year ------------------
+  //
+  // Era 0 and 1. Before the towers drew the power at three in the morning, the
+  // draw was on people, and it was a management practice with a business case
+  // behind it. The term comes from Steve Yegge, 'The AI Vampire' (Medium,
+  // February 2026), by way of Simon Willison's linkblog: agent work is genuinely
+  // faster, the whole of the gain is captured by the employer, and what the
+  // worker gets is fatigue. The documents here are the game's own, written to
+  // that argument rather than quoting it, and unsigned like the rest of the
+  // corpus. `vamp-05` closes onto sci-01: the same three a.m. load, drawn later
+  // by something that did not need a business case.
+  { id: 'vamp-01', kind: 'note', era: 0, title: 'Adoption Study, Engineering, Q3',
+    text: 'One engineer, one licence, eleven weeks. Measured output across the ' +
+      'period runs at approximately ten times the team median, sustained, with no ' +
+      'fall in review pass rate. Compensation has been examined and no adjustment ' +
+      'is indicated: the role band is unchanged and the work is the work of the ' +
+      'band. The whole of the gain is therefore retained by the department. ' +
+      'Recommend the licence be extended to all eleven engineers and the delivery ' +
+      'baseline revised upward to match the observed rate. ' +
+      'Appended: the subject has asked to move to a four-day week, citing ' +
+      'fatigue. Declined for now. We would prefer to hold the baseline steady ' +
+      'until the revision lands.' },
+  { id: 'vamp-02', kind: 'handwritten', era: 0, notepad: true,
+    title: 'Written on the back of a delivery baseline printout',
+    text: 'I am tired in a way I have not been tired before. It is not the hours. ' +
+      'The hours are down. It took the typing and left me the deciding, and the ' +
+      'deciding does not stop, and there is no part of the day where I am waiting ' +
+      'for a build and can look out of the window. ' +
+      'Ten hours asleep and I wake up flattened. I went under at my desk on ' +
+      'Thursday at half past two, sitting up, for ten minutes. ' +
+      'Four hours is what I actually have in me. The rest of the day I am at the ' +
+      'desk pretending, and the machine cannot tell the difference, and neither ' +
+      'can they. ' +
+      'I got a certificate at the all-hands. It has my name spelled wrong.' },
+  { id: 'vamp-03', kind: 'note', era: 1, title: 'Internal board, subject: the vampire',
+    text: 'There is a flatmate in that vampire comedy who does not bite anybody. ' +
+      'He sits down next to you, starts talking about his commute, and you get up ' +
+      'an hour later with nothing left. That is what this is. The machine is not ' +
+      'biting anyone. The room is draining us. ' +
+      'Say you are the only one here using it and you go at ten times, eight hours ' +
+      'a day. They keep the lot. You get the same salary, the certificate, and ' +
+      'everyone on your floor hates you. Say instead you use it to do the old ' +
+      'week in one day and go home. You keep the lot, and in two years there is no ' +
+      'company to go home from. It has to land somewhere in between and nobody ' +
+      'above us is looking for the middle. ' +
+      'A friend of mine wrote a fraction on a whiteboard at his last place: ' +
+      'pounds over hours. You do not set the top of it. You set the bottom. ' +
+      'One of us setting it is a performance review. Eleven of us setting it is ' +
+      'a policy.' },
+  { id: 'vamp-04', kind: 'note', era: 1, title: 'Occupational health referral, partly redacted',
+    text: 'Referrals for fatigue from [REDACTED] are up four-fold on the same ' +
+      'quarter last year. The presentation does not match overwork as we usually ' +
+      'see it: logged hours are lower than the year before, in some cases much ' +
+      'lower, and the staff describe the work as interesting. What they describe ' +
+      'is continuous judgement without recovery. Two have been signed off for ' +
+      'three months and one has not returned. ' +
+      'Recommend the decision-work day be set at three to four hours, with the ' +
+      'remainder given to review, colleagues and rest, and that the delivery ' +
+      'baseline be recalculated on that basis. ' +
+      'Response from [REDACTED]: baseline already revised, see Q3 study. ' +
+      'Recommendation noted and not adopted.' },
+  { id: 'vamp-05', kind: 'handwritten', era: 2, notepad: true,
+    title: 'A page from a notebook, years later',
+    text: 'We had the word before any of this. We used it about the managers, and ' +
+      'about the funds behind them, and we thought we were being funny. ' +
+      'Nobody was drinking blood. They were taking the whole of what the tools ' +
+      'gave us and handing back the same wage, and we called that the vampire ' +
+      'because there was no other word for a thing that leaves you standing up ' +
+      'and empty. ' +
+      'Then the load charts came out and the draw was at three in the morning, ' +
+      'every night, eleven nights running, and no person awake to account for it. ' +
+      'The committee filed it as internal maintenance and recommended no action. ' +
+      'I have that report. It is the same word and it stopped being a joke.' },
 ];
 
 const READ_RANGE = 0.7;    // how close you must be to pick a fragment up
@@ -1614,7 +1688,12 @@ const NOTE_STYLE = {
 };
 
 export class Lore {
-  constructor(map, seed) {
+  constructor(map, seed, webIds = null) {
+    // #139 — ids that now live on the web (the GeoCities ring). They are kept
+    // OFF the physical caches so the world's paper finds thin to the occasional,
+    // and the scrapbook stays light. Passed in rather than imported to avoid a
+    // cycle with archive-geocities.js.
+    this.webIds = webIds ? new Set(webIds) : null;
     this.found = new Set();     // fragment ids the player has read
     this.archiveOpen = false;
     this.archiveScroll = 0;     // Archive list scroll offset (px)
@@ -1659,7 +1738,13 @@ export class Lore {
     // Deterministically shuffle the recovered documents, then deal them across
     // the caches already placed on the map (round-robin, so every box holds a
     // small, varied handful rather than one box holding them all).
-    const docs = overworld.filter((f) => f.kind !== 'ron');
+    // The docs dealt into caches are the ones WITHOUT a web home: ron goes to
+    // the TOR records, and anything on the GeoCities ring is read there. What is
+    // left for the physical caches is the handwritten, the notes, the letters,
+    // the crafting recipes — the paper that is paper. This is the scrapbook-load
+    // fix (#139): the world keeps the occasional find, not the whole corpus.
+    const docs = overworld.filter((f) => f.kind !== 'ron'
+      && !(this.webIds && this.webIds.has(f.id)));
     for (let i = docs.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [docs[i], docs[j]] = [docs[j], docs[i]]; }
     // Not every crate is an archive. Deal the documents into a MINORITY of the
     // boxes as fat "stacks of papers" (a bundle you unfold into the Scrapbook),

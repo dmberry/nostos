@@ -419,6 +419,18 @@ function makeBuiltins(station) {
     // reads false or 24 rather than faulting a program that asks for it.
     cargo: SENSE('cargo', 'bool'),
     casualty_range: SENSE('casualty_range', 'num'),
+    // ---- the T-8's floor (#149) ------------------------------------------
+    // An usher's instrument is the floor: how bright the tile under it is
+    // (0-100), whether that counts as lit at all, and — the one that matters —
+    // whether there is a PERSON standing on the lit floor it keeps. On every
+    // chassis for the same reason as the courier's pair: a sense a unit does not
+    // have reads false or 0 rather than faulting a program that asks after it.
+    // Off her island there is no lit floor, so these read dark and every T-8
+    // stands at its post with nothing to do.
+    floorlight: SENSE('floorlight', 'num'),
+    lit: SENSE('lit', 'bool'),
+    brighter: SENSE('brighter', 'bool'),
+    trespass: SENSE('trespass', 'bool'),
     // ---- a TOWER's senses (docs/machine-braincode-plan.md §2) -------------
     // An obelisk reads the world differently from a unit: it does not move, so
     // it has no range to home and no hull to worry about. It knows whether
@@ -969,6 +981,11 @@ const MACHINE_ONLY = ['charge', 'integrity', 'range', 'home_range',
   // V-class courier senses (#127). On every chassis, because a sense a unit
   // does not have should read false rather than crash a program that asks.
   'cargo', 'casualty_range',
+  // The T-8's floor (#149). `floorlight` rather than `light`: `light` reads as
+  // a bare node identifier at a console and a sense cannot also be that, which
+  // is what the first version of this did — the program faulted with "node
+  // light is not a number" and said nothing about why.
+  'floorlight', 'lit', 'brighter', 'trespass',
   // Tower senses. On the MACHINE_ONLY list so a unit console says plainly that
   // `docked` is not its word, and so a tower program can read them.
   'alert', 'docked', 'garrison_size'];
@@ -1340,6 +1357,19 @@ export const INTENTS = ['patrol', 'hunt', 'flee', 'home', 'tend', 'wait', 'route
 // once. `lure` is the better name for what a siren does to you regardless.
 export const TOWER_INTENTS = ['watch', 'report', 'call', 'feed', 'lure', 'jam', 'hold'];
 for (const w of TOWER_INTENTS) INTENTS.push(w);
+// #149, revised. The T-8's own words, which no other chassis carries.
+//
+// `dance` and `sway` are gone: four machines nodding on the floor read as a
+// glitch rather than as a scene (David, 2026-08-14). What replaced them is what
+// an amenity unit on a private estate is actually for — `usher` advances on a
+// person and moves them off the floor, and `stand` holds the post. Neither is
+// `hunt`: an usher shoves, it does not strike, and `hunt` is still absent from
+// T8_CAN so a program that asks for it faults rather than being obeyed.
+//
+// They live here with the rest because the vocabulary is one list — what a
+// given machine may CHOOSE is its chassis's CAN.
+export const AMENITY_INTENTS = ['usher', 'stand'];
+for (const w of AMENITY_INTENTS) INTENTS.push(w);
 // What each class of tower is allowed to answer. A SIREN sings and a standard
 // tower cannot; only the eye may `call`.
 export const TOWER_CAN = {

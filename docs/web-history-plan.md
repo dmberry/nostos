@@ -128,3 +128,55 @@ pen and left it where you found it? If not, it belongs on a server. Run that
 audit first (deliverable: item / current home / proposed home / keep-move-cut),
 then land these history pages into the reorganised web. Expect some lore to be
 cut rather than moved; 70% relocated is the target, not the floor.
+
+**THE AUDIT IS DONE (2026-08-13): `docs/lore-audit-139.md`, regenerable with
+`node tools/lore-audit.mjs`.** It classifies all 243 fragments by rule plus a
+named exception list, so a rule can be disagreed with and the items it moved
+can be seen.
+
+**It says 40%, not 70%, and the reason matters.** Most of the corpus PASSES the
+test: it is genuinely handwritten, sprayed, torn, taped or scratched, and the
+paper is not a delivery mechanism that could have been a web page — it is what
+the fragment is. The `src-*` set is the clearest case: fanfold, paper tape, a
+diskette with DO NOT RUN in biro. Moving those to a web page destroys the item.
+
+So the target as framed is not reachable by the stated test, and the audit
+recommends the third option rather than the first two: **add web lore rather
+than move it**, so the proportion shifts by growth. That is what W1 already
+does, and it costs nothing that currently works.
+
+**Nothing is proposed for cutting.** The weakest are the middle of the `ron-*`
+broadcast run, where several make the same point about the towers in slightly
+different words — and those are the ones that MOVE, where a relay holding
+twenty of them reads as an archive rather than as repetition. Cutting is the
+wrong tool for that; grouping is.
+
+The 97 that move are tabulated with a proposed home each: the estate intranet
+for the reports and memos, a served source tree for the logs and configs, a
+HERMES relay for the broadcasts (a transmission is held by the thing that
+received it), and an intercept log behind the L9 httpd break for the signals.
+
+---
+
+## Additions log
+
+**2026-08-13 — Samuel and Strachey pages expanded (v1.535).** Two real
+photographs added (the first shown images on these history pages, which had
+used the broken-image convention until now): `pygame-ls.jpg` as the fan-page
+author's own screen on the CHECKERSBOT page, and `marked-up-paper.jpg` as a
+marked-up copy of the essay on the MANCHESTER page. New text, all verified
+against sources David supplied:
+
+- **CHECKERSBOT (Samuel).** The afterlife of the program: retired from IBM to
+  the Stanford AI Lab, the ~1972 PDP-10 port that runs under WAITS (`R CHECKE`,
+  moves as squares 1–32), source on saildart, and the 1977 VideoBrain 1KB
+  cut-down. Source: Rupert Lane, "Time Reshared" — https://timereshared.com/waits-samuel-checkers/
+- **MANCHESTER (Strachey).** The pre-Manchester origin on Turing's Pilot ACE at
+  NPL (ran out of store), bitboards for white/black/kings, the national anthem
+  played on completion (hedged: sources say "God Save the King"), and the love
+  letters' randomness drawn from the Mark I's resistance-noise RNG. Source:
+  https://chessprogramming.org/Christopher_Strachey
+
+`pic()` is now imported into `archive-history.js` (safe since #143 moved it to
+`archive-pic.js`); the old "no pic() here" note is updated. archive-links.test
+still passes — both assets exist.

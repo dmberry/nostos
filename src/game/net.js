@@ -46,6 +46,7 @@ import { docsPage, docTitle, DOC_TOPICS } from './ml-docs.js';
 import { CACHE_SUB, ARCHIVED_SITES, archivedSite, archivedDomains, stubBody, CATEGORIES, categoryOf } from './archive.js';
 import { pressDomains, pressPaper, isPaper, pressIndexBody, pressEditionBody } from './press.js';
 import { wikiArticle, departmentPage } from './archive.js';
+import { towerProgram, towerConstitution, towerCan, factoryProgram, FACTORY_CONSTITUTION } from './tower-code.js';
 
 export { docsPage, docTitle, DOC_TOPICS };
 
@@ -231,6 +232,11 @@ export function hostTable(world) {
       ip: ipFor(idx, 'factory', 1), host: `factory.${dom}`, kind: 'factory',
       name: 'W-FACTORY', title: 'W-FACTORY — FOUNDRY CONTROL',
       down: !!world.factory.down, ref: world.factory,
+      // #137: the foundry serves its dispatch policy, the way a tower and a
+      // unit serve theirs. The W-5 suspension has been on this page as a line
+      // of prose forever; this is where it comes from.
+      program: factoryProgram(),
+      constitution: FACTORY_CONSTITUTION,
     });
   }
 
@@ -239,6 +245,14 @@ export function hostTable(world) {
     hosts.push({
       ip: ipFor(idx, 'obelisk', i + 1), host: `${lc(code)}.${dom}`, kind: 'obelisk',
       name: code, title: `NODE ${code}`, code, tag: ob.tag || null, down: !!ob.down, ref: ob,
+      // #133. A tower serves the program it runs, at the same path a unit does.
+      // tower-code.js has written and tested this since it was added and
+      // nothing has ever asked it for one — the same shape towerBanner was in
+      // before #132. A tower that decides in compiled JavaScript with nothing
+      // to read is the least readable thing in a game about reading machines.
+      program: towerProgram(ob, world.islandId || world.id),
+      constitution: towerConstitution(ob, world.islandId || world.id),
+      towerCan: towerCan(ob),
     });
   });
 
@@ -385,6 +399,8 @@ function factoryPage(host, hosts) {
     '<p>W-3 repair ........ on demand</p>',
     '<p>W-4 hunter ........ on demand</p>',
     '<p>W-5 horticultural . suspended pending review</p>',
+    // #137: that last line is a policy, and now you can read the policy.
+    `<p><a href="prog:${host.host}">factory.ml</a> — the dispatch policy this line is running.</p>`,
     '<h2>Towers served</h2>',
     ...obs.map((h) => link(h, `${h.name}${h.down ? ' — NO RESPONSE' : ''}`)),
     '<h2>Units on the register</h2>',
@@ -416,6 +432,13 @@ function obeliskPage(host, hosts) {
     row('model', 'TIRESIAS-node 3.6'),
     row('uptime', hours(ob.hours)),
     row('rebuild', ob.needsRebuild ? 'a repair drone has been dispatched' : 'not required'),
+    // #133: the tower serves its own reasoning, the same way a unit does. The
+    // constitution version is stated here as well as on that page, because it
+    // is the one number on this machine worth noticing from the index — a
+    // SIREN reads v0.9/unsigned where every other tower reads a signed one.
+    row('constitution', `v${host.constitution ? host.constitution.version : '?'} `
+      + `(${host.constitution ? host.constitution.author : 'unknown'})`),
+    `<p><a href="prog:${host.host}">program.ml</a> — the braincode this tower is running.</p>`,
     '<h2>Garrison</h2>',
     mine.length ? '' : '<p>No units are homed to this node.</p>',
     ...mine.map((h) => link(h, `${h.name} — ${h.type.toUpperCase()}${h.down ? ' (offline)' : ''}`)),
@@ -560,6 +583,78 @@ function robotPage(host, hosts) {
   return out.filter(Boolean).join('\n');
 }
 
+// #133 — a TOWER's braincode page. Read only, and it says so; see the note at
+// the branch in programPage for why there is no Send button here yet.
+//
+// What makes it worth serving even read-only: the header carries a VERSION and
+// an AUTHOR, and that is the joke and the mechanic together. Three towers ship
+// a signed, numbered constitution with a clause in it. The SIREN — the one that
+// drags you toward it, on the island you cannot leave — carries v0.9, unsigned,
+// with nothing in it at all, and you find that out by reading its page.
+function towerProgramPage(host, src, esc) {
+  const ob = host.ref || {};
+  const con = host.constitution || { version: '?', author: '?', clauses: [] };
+  const can = host.towerCan || [];
+  const siren = con.cls === 'siren';
+  return [
+    `<h1>${host.name}${host.tag ? ` «${esc(String(host.tag))}»` : ''} · program.ml</h1>`,
+    `<p><small>${host.host} · ${SERVER.obelisk || SERVER.robot} · text/plain · ${src.length} bytes</small></p>`,
+    `<pre class="ns-prog">${esc(src)}</pre>`,
+    '<h2>Notes</h2>',
+    // The whole point of the class, stated where it can be read.
+    siren
+      ? `<p><b>CONSTITUTION: v${esc(con.version)}, ${esc(con.author)} — no clauses in force.</b> `
+        + `${esc(con.note || '')} The other towers on this island run a signed one. This tower does not.</p>`
+      : `<p><b>CONSTITUTION: v${esc(con.version)}, ${esc(con.author)}.</b> `
+        + `${con.clauses.map((c) => `never ${esc(c)}`).join(' &middot; ') || 'no clauses in force'}. `
+        + `${esc(con.note || '')}</p>`,
+    row('class', esc(con.cls || 'standard')),
+    row('senses', 'alert &middot; docked &middot; garrison_size &mdash; who is at its foot, how sure it is, and what it has to send'),
+    row('intents', can.map(esc).join(' &middot; ') || '&mdash;'),
+    '<p>A tower does not patrol and cannot hunt. <b>hold</b> is its <b>wait</b>.</p>',
+    // Say plainly what this page does NOT do. A player who has read a unit's
+    // page arrives here expecting the text area that is on that one.
+    '<p><b>READ ONLY.</b> This listing is what the tower is running. Unlike a unit,'
+    + ' a tower does not yet take a posted program: its watching and reporting are'
+    + ' still wired into the estate rather than driven by this text. Reading it is'
+    + ' the point for now &mdash; it is the only place the version and the signature'
+    + ' are written down.</p>',
+    `<p><a href="save:${host.host}">SAVE</a></p>`,
+    ...(ob.down ? ['<p><b>This tower is dark.</b> The listing is what it ran before it went.</p>'] : []),
+  ].filter(Boolean).join('\n');
+}
+
+// #137 — the foundry's dispatch policy. Read only for the same reason the
+// tower's is: the line's behaviour is wired into the game, not driven by this.
+//
+// The reason it is worth a page of its own is the last three lines of it. The
+// foundry's index has always said "W-5 horticultural — suspended pending
+// review", and the W-5 is the GARDENER: the only machine on the island whose
+// job is to put something back. Here is the policy that sentence comes from,
+// and the suspension is a COMMENT rather than a branch — the gardener is not
+// something this program decides against, it is not in the program at all.
+function factoryProgramPage(host, src, esc) {
+  const con = host.constitution || { version: '?', author: '?', clauses: [] };
+  return [
+    `<h1>${host.name} · factory.ml</h1>`,
+    `<p><small>${host.host} · ${SERVER.factory || SERVER.obelisk} · text/plain · ${src.length} bytes</small></p>`,
+    `<pre class="ns-prog">${esc(src)}</pre>`,
+    '<h2>Notes</h2>',
+    `<p><b>CONSTITUTION: v${esc(con.version)}, ${esc(con.author)}.</b> `
+      + `${con.clauses.map(([c, g]) => `${esc(c)} — ${esc(g)}`).join(' &middot; ')}.</p>`,
+    row('senses', 'breach &middot; losses &middot; repair_due'),
+    row('intents', 'print &lt;class&gt; &middot; hold'),
+    '<p><b>The horticultural line is not a branch in this program.</b> It was'
+    + ' suspended pending a review, in a quarter, by a body that stopped meeting.'
+    + ' The line above it goes on printing hunters. Nothing here decided that the'
+    + ' island should stop being mended; a line item was parked and the meeting'
+    + ' never reconvened.</p>',
+    '<p><b>READ ONLY.</b> The foundry does not take a posted program.</p>',
+    `<p><a href="save:${host.host}">SAVE</a></p>`,
+    ...(host.down ? ['<p><b>The line has stopped.</b> This is what it was running.</p>'] : []),
+  ].filter(Boolean).join('\n');
+}
+
 // GET /program.ml — the machine's reasoning, served as the plain text it is.
 // Not a description of the program and not a copy kept for the record: this IS
 // the string the unit evaluates, four times a second, to decide what to do.
@@ -568,6 +663,16 @@ export function programPage(host, hosts, opts = {}) {
   const src = String(host.program || '');
   const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const docs = (hosts || []).find((h) => h.kind === 'docs');
+  // #133: a TOWER serves its braincode too, and it is a different page. Its
+  // verbs are its own (a tower does not patrol and cannot hunt), its
+  // constitution is signed and numbered, and — for now — it is READ ONLY.
+  //
+  // No Send button, deliberately. A tower's watch/report/call/lure behaviour is
+  // still compiled into the game rather than driven by this text, so an edit
+  // box here would take your program, accept it, and change nothing. A page
+  // that lies about what it did is worse than a page that says it is a listing.
+  if (host.kind === 'obelisk') return towerProgramPage(host, src, esc);
+  if (host.kind === 'factory') return factoryProgramPage(host, src, esc);
   return [
     `<h1>${host.name}${host.tag ? ` «${esc(String(host.tag))}»` : ''} · program.ml</h1>`,
     `<p><small>${host.host} · ${SERVER.robot} · text/plain · ${src.length} bytes</small></p>`,
@@ -776,6 +881,20 @@ export function bookmarksPage(hosts, agent = 'Netscape Navigator 1.1') {
     row('book', byName('goodreads.com'), 'Goodreads', 'the to-read shelf, never shorter'),
     row('note', byName('soundonsound.com'), 'Sound on Sound', 'gear they could not afford'),
     row('home', byName('geocities.com/siliconvalley/heights/4412'), 'a stranger&rsquo;s home page', 'best viewed at 800&times;600'),
+    // GeoCities is thirty-odd pages deep and all of it is one click from any
+    // other page, so the bookmark bar is the wrong place for a list. Five are
+    // named instead, chosen to be five different KINDS of page rather than the
+    // five most important: the sysadmin who kept logs nobody asked for, the
+    // scanner crank, the one nobody can explain, the argument, and the page
+    // that answers a question the player will already have. The webring at the
+    // foot of each one does the rest.
+    sec('bm-orange', 'GeoCities &mdash; the neighbourhood'),
+    row('home', byName('geocities.com'), 'GeoCities', 'get your OWN free homepage'),
+    row('home', byName('davescorner.geocities.ws'), 'Dave&rsquo;s Corner', 'i keep the logs nobody else keeps'),
+    row('home', byName('thesignal.geocities.ws'), 'The Signal Page', 'a scanner off the ridge, and the dates are real'),
+    row('home', byName('theeidolon.geocities.ws'), 'On The Eidolon', 'the strangest thing I have'),
+    row('home', byName('freeasinfreedom.geocities.ws'), 'Free As In Freedom', 'they metered thought and called it a service'),
+    row('home', byName('thebackspace.geocities.ws'), 'Why We Call It The Backspace', 'you have probably been there'),
     sec('bm-green', 'Getting away'),
     tour ? row('palm', tour, `${tour.place} Tourist Board`, 'before you travel') : '',
     row('map', byName('roughguides.com'), 'Rough Guides', 'the trip that did not happen'),
@@ -1163,6 +1282,10 @@ export function whatsNewPage(hosts) {
     '<a href="www.sunkenlibrary.org">The Sunken Library — 3,000 books online!</a>',
     '<a href="www.rec.boats.faq">rec.boats FAQ — everything about small craft</a>',
     '<a href="www.weatherwatch.net">WeatherWatch — forecasts for the archipelago</a>',
+    // #139 — a way in to the salvage webring, so a browsing player finds the
+    // homepages that hold the lore. This one still answers; the rest of the ring
+    // is one Next >> away.
+    '<a href="thesignal.geocities.ws">The Signal Page — "wake up" — a webring of homepages that survived</a>',
     '<a href="www.helloworld.geo">Dave\'s Homepage — my cat, my boat, my links</a>',
     '<p><small>Editors\' picks are hosted off-island and may be unavailable.</small></p>',
     '<hr>',

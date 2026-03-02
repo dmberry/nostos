@@ -85,7 +85,7 @@ export const FADE_SECONDS = 3.5;
 // The order alternates hard-edged figures with soft ones so no two neighbours
 // look alike across a fade.
 export const FIGURES = [
-  'spiral', 'circles', 'heart', 'labyrinth', 'serpentine', 'twin', 'drift',
+  'spiral', 'circles', 'heart', 'labyrinth', 'serpentine', 'twin', 'words', 'drift',
 ];
 
 const TAU = Math.PI * 2;
@@ -221,7 +221,144 @@ function drift(u, v, t) {
     + 0.24 * Math.sin((u + v) * 0.05 + t * 0.17));
 }
 
-const FIG = { spiral, circles, heart, labyrinth, serpentine, twin, drift };
+// ---- #152: the floor writes ------------------------------------------------
+//
+// Every other figure here is a shape. This one is her CONSTITUTION, in letters,
+// on the floor of the room it is about. The clauses are hers and she wrote them
+// (CONSTITUTION.author is 'CALYPSO/self'), so this is the room saying its own
+// rules to itself while nobody is in it — and to the guest when he is standing
+// on them. NEVER RELEASE, lit under your feet, in the room you cannot leave.
+//
+// The lines are passed IN, not imported: this file stays a pure field module
+// with no idea what island it is on. grove.js hands it hers.
+
+// A 3x5 face. Written out as '#' and '.' so the source shows the letterforms —
+// at this size a hex table is unreadable and gets a stroke wrong silently.
+// U and V, and M and N, are the pairs 3 columns makes hardest; they are drawn
+// apart on purpose rather than sharing a shape.
+const GLYPH_W = 3, GLYPH_H = 5, GLYPH_GAP = 1;
+const GLYPHS = {
+  A: ['.#.', '#.#', '###', '#.#', '#.#'], B: ['##.', '#.#', '##.', '#.#', '##.'],
+  C: ['.##', '#..', '#..', '#..', '.##'], D: ['##.', '#.#', '#.#', '#.#', '##.'],
+  E: ['###', '#..', '##.', '#..', '###'], F: ['###', '#..', '##.', '#..', '#..'],
+  G: ['.##', '#..', '#.#', '#.#', '.##'], H: ['#.#', '#.#', '###', '#.#', '#.#'],
+  I: ['###', '.#.', '.#.', '.#.', '###'], J: ['..#', '..#', '..#', '#.#', '.#.'],
+  K: ['#.#', '#.#', '##.', '#.#', '#.#'], L: ['#..', '#..', '#..', '#..', '###'],
+  M: ['#.#', '###', '###', '#.#', '#.#'], N: ['#.#', '###', '#.#', '#.#', '#.#'],
+  O: ['.#.', '#.#', '#.#', '#.#', '.#.'], P: ['##.', '#.#', '##.', '#..', '#..'],
+  Q: ['.#.', '#.#', '#.#', '###', '.##'], R: ['##.', '#.#', '##.', '#.#', '#.#'],
+  S: ['.##', '#..', '.#.', '..#', '##.'], T: ['###', '.#.', '.#.', '.#.', '.#.'],
+  U: ['#.#', '#.#', '#.#', '#.#', '.##'], V: ['#.#', '#.#', '#.#', '.#.', '.#.'],
+  W: ['#.#', '#.#', '###', '###', '#.#'], X: ['#.#', '#.#', '.#.', '#.#', '#.#'],
+  Y: ['#.#', '#.#', '.#.', '.#.', '.#.'], Z: ['###', '..#', '.#.', '#..', '###'],
+  '.': ['...', '...', '...', '...', '.#.'], "'": ['.#.', '.#.', '...', '...', '...'],
+  ' ': ['...', '...', '...', '...', '...'],
+};
+const ADVANCE = GLYPH_W + GLYPH_GAP;
+
+/** Tiles a line of text occupies, trailing gap trimmed. */
+export function textWidth(s) {
+  return s.length === 0 ? 0 : s.length * ADVANCE - GLYPH_GAP;
+}
+
+/** Is the cell at (col, row) of `s` inked? col/row are integers. */
+function inked(s, col, row) {
+  if (row < 0 || row >= GLYPH_H || col < 0) return false;
+  const n = Math.floor(col / ADVANCE);
+  if (n >= s.length) return false;
+  const gx = col - n * ADVANCE;
+  if (gx >= GLYPH_W) return false;                 // the gap between letters
+  const gl = GLYPHS[s[n]] || GLYPHS[' '];
+  return gl[row][gx] === '#';
+}
+
+/**
+ * A message, set in the floor. `lines` is an array of strings (already
+ * upper-case), stacked and centred on the middle of the room.
+ *
+ * The letters come out HARD-EDGED, and that is the point: every other figure in
+ * this file is a soft band, so writing reads as a different KIND of thing
+ * happening rather than as one more pattern. It also has to be readable, and a
+ * smoothed 3x5 letter is a smudge.
+ *
+ * It does not move. A crawl was the first idea and it is the wrong one twice
+ * over: the floor is 43 tiles wide, so a scrolling line takes half a minute to
+ * say seven letters, and a stroke sweeping across a tile turns it on and off
+ * again on a cycle the flash budget has to argue with. Standing still, a lit
+ * tile stays lit for the whole eleven seconds the figure holds.
+ */
+function words(u, v, t, rot = 0, msg = null) {
+  if (!msg) return 0;
+  // The message arrives either as a bare array of lines or as {lines, scale}
+  // from fitWords. A bare array is scale 1, which is what the tests that build
+  // one by hand mean.
+  const lines = Array.isArray(msg) ? msg : msg.lines;
+  const SC = Math.max(1, Math.round(Array.isArray(msg) ? 1 : (msg.scale || 1)));
+  if (!lines || !lines.length) return 0;
+  // Undo the room's slow turn, so the writing stays the right way up while the
+  // floor it is written on goes round. Everything else here WANTS the rotation.
+  const c = Math.cos(rot), s = Math.sin(rot);
+  // SNAP BACK TO THE TILE FIRST. renderField hands whole tiles, rotates them,
+  // and this rotates them back — and a rotate followed by its inverse is not
+  // quite the identity in floating point, so a coordinate that should be 3
+  // arrives as 2.9999999999999996. Every offset below is then integer
+  // arithmetic. Without this, centring a two-line block puts the row test on an
+  // exact .5 boundary, the error tips it either way, and letters shimmered by a
+  // tile as the room turned. Caught by the upright test, which is why that test
+  // sweeps four angles rather than checking one.
+  const x = Math.round(u * c + v * s), y = Math.round(-u * s + v * c);
+  // SCALE. One tile of the face becomes an SC x SC block of floor tiles, so a
+  // short word can be set large enough to fill the room instead of sitting in
+  // the middle of it at a size you have to walk over to read. The block is
+  // measured in FACE cells and the tile is divided down into one, which keeps
+  // every offset below integer and the letterform exact at any scale.
+  const LINE_H = GLYPH_H + 2;
+  const blockH = lines.length * LINE_H - 2;
+  const rowPx = y + ((blockH * SC) >> 1);
+  if (rowPx < 0 || rowPx >= blockH * SC) return 0;
+  const row = Math.floor(rowPx / SC);
+  const li = Math.floor(row / LINE_H);
+  const ry = row - li * LINE_H;
+  if (ry >= GLYPH_H) return 0;                     // the space between lines
+  const line = lines[li] || '';
+  const colPx = x + ((textWidth(line) * SC) >> 1);
+  if (colPx < 0) return 0;
+  return inked(line, Math.floor(colPx / SC), ry) ? 1 : 0;
+}
+
+/**
+ * The largest whole scale at which `lines` still fits a field of radius rx/ry,
+ * with a tile of margin. Returned as {lines, scale} for `words`.
+ *
+ * The floor is a fixed size and the message is not, so the sizing belongs here
+ * rather than in a constant somebody has to remember to change: STAY comes up
+ * at scale 2 and thirty tiles across, and a longer line would quietly come back
+ * down to 1 rather than running off the edge of the room.
+ */
+export function fitWords(lines, rx, ry, maxScale = 4) {
+  if (!lines || !lines.length) return null;
+  const w = Math.max(...lines.map((l) => textWidth(l)));
+  const h = lines.length * (GLYPH_H + 2) - 2;
+  const roomW = 2 * rx - 1, roomH = 2 * ry - 1;
+  let scale = 1;
+  for (let s = maxScale; s > 1; s--) {
+    if (w * s <= roomW && h * s <= roomH) { scale = s; break; }
+  }
+  return { lines, scale };
+}
+
+/**
+ * Which message is showing. It advances once per full turn of the figure list,
+ * so a clause is not repeated until every other figure has had its turn — the
+ * room says one thing, then goes back to drawing, then says the next.
+ */
+export function messageAt(t, lines) {
+  if (!lines || !lines.length) return null;
+  const turn = (FIG_SECONDS + FADE_SECONDS) * FIGURES.length;
+  return lines[Math.floor(Math.max(0, t) / turn) % lines.length];
+}
+
+const FIG = { spiral, circles, heart, labyrinth, serpentine, twin, drift, words };
 
 /**
  * Which figure is being drawn at time `t`, and how far into the next one.
@@ -246,11 +383,11 @@ export function figureAt(t) {
  * The light under one tile. `u`, `v` are tiles from the middle of the floor,
  * `t` is seconds. Returns 0..1.
  */
-export function intensity(u, v, t) {
+export function intensity(u, v, t, rot = 0, msg = null) {
   const f = figureAt(t);
-  const a = FIG[f.from](u, v, t);
+  const a = FIG[f.from](u, v, t, rot, msg);
   if (f.mix === 0) return a;
-  return a + (FIG[f.to](u, v, t) - a) * f.mix;
+  return a + (FIG[f.to](u, v, t, rot, msg) - a) * f.mix;
 }
 
 // ---- the ripple -------------------------------------------------------------
@@ -431,8 +568,8 @@ export function halo(u, v, you) {
  * caller's live list of { u, v, t0 }. Screen-blended, so light only ever adds
  * and the result cannot leave 0..1.
  */
-export function intensityWith(u, v, t, rings, you) {
-  let i = intensity(u, v, t);
+export function intensityWith(u, v, t, rings, you, msg = null) {
+  let i = intensity(u, v, t, 0, msg);
   if (rings) {
     for (const r of rings) {
       const w = ripple(u, v, t, r);
@@ -651,12 +788,40 @@ export const CALM_RISE = 2.2;
  * the room.
  */
 export function renderField(f, t, rings, you, ambient = 1, life = null, lifeMix = 0, daze = null,
-  lifePrev = null, lifeAt = 1) {
+  lifePrev = null, lifeAt = 1, words = null, skip = null) {
   const cos = Math.cos(f.rot), sin = Math.sin(f.rot);
+  // TILES NOBODY WILL LOOK AT (David, 2026-08-13). Two sets of them, and both
+  // were being computed in full and then covered up:
+  //
+  //   - the ones under her core, which is a 6x6 SOLID. The floor draws its stud
+  //     and the cube is then drawn on top of it. Thirty-six tiles of figure,
+  //     ripple, pond and daze, every frame, for a stud inside a black box.
+  //   - the ones on the green path, once the card has opened it. Those draw a
+  //     FIXED green — the whole point of the path is that it holds still while
+  //     the room moves — so the field value under them is read by nothing.
+  //
+  // Written to 0 rather than left stale, because fieldAt is read elsewhere (the
+  // T-8s steer by it) and a stale value there would have them dancing toward a
+  // light that is not lit any more.
+  const sk = skip && skip.rect ? skip.rect : null;
+  const sp = skip && skip.path ? skip.path : null;
+  const spvx = sp ? sp.x1 - sp.x0 : 0, spvy = sp ? sp.y1 - sp.y0 : 0;
+  const spLen = sp ? (spvx * spvx + spvy * spvy) || 1 : 1;
+  // #152: whichever clause of hers is showing this turn, hoisted out of the
+  // per-tile loop — it is the same for all 1,333 of them.
+  // Sized to THIS floor, once per frame rather than per tile.
+  const msg = fitWords(messageAt(t, words), f.rx, f.ry);
   const fig = ambient * (1 - lifeMix);
   let k = 0;
   for (let v = -f.ry; v <= f.ry; v++) {
     for (let u = -f.rx; u <= f.rx; u++) {
+      // The two skips, first, before any of the maths below.
+      if (sk && u >= sk.u0 && u <= sk.u1 && v >= sk.v0 && v <= sk.v1) { f.data[k++] = 0; continue; }
+      if (sp) {
+        const tt = Math.max(0, Math.min(1, ((u - sp.x0) * spvx + (v - sp.y0) * spvy) / spLen));
+        const dx = u - (sp.x0 + spvx * tt), dy = v - (sp.y0 + spvy * tt);
+        if (dx * dx + dy * dy <= sp.w * sp.w) { f.data[k++] = 0; continue; }
+      }
       // DAZE. Near her core the light stops behaving: the figure is sampled
       // from a point that has been swirled around her, so the pattern winds
       // into a slow whirlpool, and the further in the harder it winds. It is
@@ -682,7 +847,7 @@ export function renderField(f, t, rings, you, ambient = 1, life = null, lifeMix 
       let i = 0;
       if (fig > 0) {
         const ru = du * cos - dv * sin, rv = du * sin + dv * cos;
-        i = intensity(ru, rv, t) * fig;
+        i = intensity(ru, rv, t, f.rot, msg) * fig;
       }
       if (life && lifeMix > 0) {
         // CELLS FADE, THEY DO NOT SWITCH. A cell going hard on and hard off

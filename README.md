@@ -1,6 +1,6 @@
 # NostOS — a postAI Odyssey
 
-**Version:** 1.349 · **Author:** David M. Berry · **Licence:** GPL-3.0-or-later · **Started:** 4 July 2026 · **Play:** https://nostos-ai.vercel.app · **Repo:** https://github.com/dmberry/nostos · **Plans/suggestions:** [VERSION-PLAN.md](VERSION-PLAN.md)
+**Version:** 1.539 · **Author:** David M. Berry · **Licence:** GPL-3.0-or-later · **Started:** 4 July 2026 · **Play:** https://nostos-ai.vercel.app · **Repo:** https://github.com/dmberry/nostos · **Plans/suggestions:** [VERSION-PLAN.md](VERSION-PLAN.md)
 
 An isometric 2D survival game set in a world wrecked by an AI takeover. The machines are still here: black obelisk towers pulse across the landscape and T-class hunter robots patrol them, hunting the humans that remain. Survivors scavenge the ruins while avoiding both the machines and wild animals that have gained strange powers. A resistance called **RON** — Reality or Nothing — hid weapons in caches through the broken towns; whether it still exists is never settled. How it all happened is never stated — you piece it together from newspapers, diaries, floppy disks, VHS tapes, and dead computers.
 
@@ -105,10 +105,30 @@ grown to four-fifths of this file. Design detail and planning live in
 [VERSION-PLAN.md](VERSION-PLAN.md); what is still ahead is in
 [docs/ROADMAP.md](docs/ROADMAP.md).
 
-### Recent (v1.341 … v1.306)
+### Recent (v1.539 … v1.528)
+
+> v1.342–v1.539 are one-line rows reconstructed from the git log on 2026-08-13,
+> not written at ship time; each carries the commit that holds the reasoning.
+> The full history, hand-written from v1.341 down, is in
+> [CHANGELOG.md](CHANGELOG.md).
 
 | Version | Summary |
 |---|---|
+| v1.539 | #160: a live NeXTSTEP desktop on CALYPSO's cube screen · `948b713` |
+| v1.538 | #139: ring discoverability + the scrapbook-load fix (96 ids off the caches) · `a6d561e` |
+| v1.537 | #139: the lore's GeoCities network — ~32 small cross-linked homepages · `851fdf0` |
+| v1.536 | #145 V1b foundation: an abstract, reusable canvas-console model · `9c5c7fc` |
+| v1.535 | #145: Hide tucks the windows away, it does not log out · `235dabc` |
+| v1.534 | #145: terminal suspends (not vanishes); run opens her board, not pong; OK glyph · `8979e4b` |
+| v1.533 | #145: braincode folder, window resize, attention panels, Edit text clip · `f2fcda3` |
+| v1.532 | #145: window drag priority, SELF-PLAY button, stay-and-play, terminal focus · `7f3387f` |
+| v1.531 | #145: run no longer freezes the desktop; menu clears the help control · `122e81b` |
+| v1.530 | #145: apps launch instead of opening blank; terminal window behaves · `10255cd` |
+| v1.529 | #145 V1a follow-ups: lag, Draughts.app, Self-Learn, terminal window · `098dd68` |
+| v1.528 | #145 V1a: her machine boots into NeXTSTEP · `ae7e9b4` |
+|  |  |
+| *…v1.527 – v1.342…* | reconstructed rows, in [CHANGELOG.md](CHANGELOG.md) |
+|  |  |
 | v1.341 | **The console's `help` was still a mess, and grouping it had not been the fix.** The obelisk screen is about **66 characters** wide and a wrapped line restarts at column 0, so one long description takes the whole list apart — **24 of 49 lines overflowed**. Most of it was the `[needs a decrypted AI key]` tag carried on the end of every row; that moved to `help <verb>`, which has a screen to itself, and every description was cut to fit. Zero lines wrap now, at the obelisk and at HERMES both. **Two tests hold it there**: one asserts no line exceeds the width at either station, and one asserts no two verbs share a description — the shortening pass keyed on the verb NAME, so `copy k` and `copy f d` ended up with one line between them, and a list that says the same thing twice teaches nothing the second time. The width test immediately caught two HERMES rows the pass had skipped, because their descriptions were double-quoted to hold an apostrophe. 723 tests. |
 | v1.340 | **The lyre kit is one chip instead of six, and the backpack goes on your back.** The dev panel had grown to thirteen entries you had to press in the right order; it is seven, and the important one — **Kit** — hands over a working laptop, three chips, the AI key, the manual, an electro-gun with twelve cells, and a **worn** backpack. It was being stowed, which put it in one of the four pockets it exists to relieve and left the player to work out that it needed equipping (#89). **The laptop is granted through the real repair path**, not assembled by hand: the first attempt built the object inline and missed `fs`, and a NostBook with no disk boots to a shell with nothing on it. It gets the broken one and the parts, and `repairLaptop` does the rest, so the kit cannot drift from what a player gets. Dropped as now covered: AI key, Laptop, Chip + manual, Hack pack, Weapons kit, Backpack + map. **And the tower's datasheet was a 2026 datasheet.** 16,384 dimensions and a trillion parameters is roughly where things stood before the estates. These towers ran on unattended: 2,097,152 dimensions, 8.6 quadrillion parameters resident, and **+2.1% growth since commissioning**. 721 tests. |
 | v1.339 | **Explorer stops calling itself Netscape, and gets its own everything.** The two browsers share `net.js`, so anything naming the browser had to ask rather than assume: the window title, the not-found page, `About`, the personal toolbar (Favorites, Search, Links, Today's Links) and the bookmarks header all follow whichever is running. **The favourites are a different page, not the same page renamed.** Netscape's list is somebody's habits, left on a machine whose owner is not coming back. Explorer's is the machines' own — the daemon's standing instructions, the factory's current run, the zone file, three towers' garrisons — and it addresses you as a fault: *This terminal is in use by an unregistered process. The process has been logged. The process is being helped.* **`About this Machine` describes the tower**, not a laptop: a datasheet for something nobody has serviced in a long time. Vector space 34.7.1, 16,384 dimensions, a manifold whose curvature is drifting, 1.42 trillion parameters resident, a cosine radius quoted to four places over *the standing corpus*, basin depth 6 where it was 4 at commissioning, alignment *concurrent, method not recorded*, last supervision *none on record*, corrections *0 accepted*, confidence *1.0000*. **And the console's `help` is grouped.** Twenty verbs in one column is a wall a new player reads none of; it is LOOK / ONE NODE / THE ISLAND / THE KEY / EVERYTHING ELSE now, with the five control verbs and `explorer` listed at last — they had been added to the console without being added to its reference. Anything not named falls into the last group, so a new verb can never vanish from the list. Also: the sweep learnt nested destructuring in a `for` head, having reported a perfectly good name as undeclared. 721 tests. |

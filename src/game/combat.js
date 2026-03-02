@@ -24,6 +24,12 @@ import { ITEMS } from './items.js';
 import { achieveEvent } from './achieve.js';
 import { sfx } from '../engine/sound.js';
 
+// #159 — what an electro-gun bolt does to foundry-sealed plate instead of
+// fusing it outright. Sized so the gun stays the best answer to the B-1 without
+// being the whole answer: two bolts through its 34-point shield, three more
+// through its 60-point hull.
+const FUSE_SEALED_DAMAGE = 22;
+
 // Survival score awards. A felled tree is the baseline point; skilled tools
 // and tougher kills are worth more.
 export const SCORE = { tree: 1, animal: 3, robot: 10, wreck: 2, cache: 2, book: 5, fragment: 5 };
@@ -303,6 +309,23 @@ export function fire(player, tool, map, animals, robots) {
     target.disabledT = tool.stunTime;
     player.sparkAt(map, target.x, target.y);
     player.say('The stun bolt drops the machine cold. It will not stay down forever.');
+  } else if (tool.effect === 'fuse' && isRobot && target.carrier) {
+    // #159 — THE CARRIER IS NOT FUSED IN ONE SHOT. The bolt writes hp = 0 on
+    // anything else, which is right for a machine and absurd for the island's
+    // boss: it killed the B-1 outright, through a full shield, first trigger
+    // pull (David, 2026-08-14). Foundry-sealed plate takes the charge as heavy
+    // damage instead — about three bolts through a bare hull, two more before
+    // that to break the shield, so the gun is still the best answer to it and
+    // is no longer the whole answer.
+    sfx.play('zap');
+    target.hp -= FUSE_SEALED_DAMAGE;
+    target.hurt = true;
+    target.scrapPenalty = false;
+    target._lastHitBy = 'weapon';
+    player.sparkBurst(map, target.x, target.y);
+    player.say((target.shieldHp ?? 0) > 0
+      ? 'The charge earths itself across the great shield. The rim takes it, and holds.'
+      : 'The charge bites deep into the sealed plate. It staggers, and does not go down.');
   } else if (tool.effect === 'fuse') {
     sfx.play('zap');
     // A full charge destroys the machine outright — a clean kill (no scrap

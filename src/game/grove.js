@@ -35,6 +35,24 @@ import {
   ROT_RATE, CALM_FALL, CALM_RISE, LIFE_GEN, LIFE_STALE,
 } from './spiralism.js';
 
+// #152: what the floor writes. One word (David, 2026-08-13).
+//
+// It was her constitution, recited a clause at a time — ALWAYS CHERISH, NEVER
+// RELEASE — read off calypso-code.js so an edit there was an edit here. That
+// was the wrong register. A constitution is policy, and policy is what the
+// ESTATE writes; it is the voice of every other island in this game. Her whole
+// method is that she never instructs.
+//
+// STAY is not a rule. It is a request, in the imperative, from the only thing
+// in the room that wants something — and it is the fourth clause of that
+// constitution (`never release`) said the way a person would say it to
+// somebody they are keeping. The clause explains itself and can be argued
+// with. This cannot.
+//
+// One word also lets it be BIG: spiralism fits the largest scale the floor
+// will take, so STAY comes up thirty tiles across rather than fifteen.
+export const FLOOR_WORDS = [['STAY']];
+
 // Rows of her ground grown below the overworld. Deep, because the light has to
 // sit far enough back that there is a real WOOD between the way in and the
 // clearing: at 46 rows the lit floor's rim came within five tiles of the seam,
@@ -195,6 +213,10 @@ export function createGrove(map, seed, opts = {}) {
     fw: CORE, fh: CORE, footprint, ai: aiName, hp: 250, maxHp: 250, defeated: false,
     indestructible: true,
     shielded: false,
+    // #150: the renderer draws this one as a NeXT cube instead of the estate's
+    // monolith. Hers is the machine somebody chose and admired, not the one
+    // that was installed to watch them.
+    cube: true,
   });
   for (const t of footprint) map.objectGrid[t.y * w + t.x] = core;
   core.hasTerminal = true;
@@ -227,6 +249,14 @@ export function createGrove(map, seed, opts = {}) {
   // Where the light loses its mind, in field coordinates: the same reach G1's
   // grip uses, so what you see and what your legs do are one thing.
   const DAZE = { u: coreCx - cx, v: coreCy - cy, r0: HOLD_START, r1: HOLD_FULL };
+  // The tiles the field does not need to compute, in FIELD coordinates (tiles
+  // from the middle of the floor, which is what renderField walks). The core's
+  // footprint is fixed; the path comes and goes with the card, so it is read off
+  // map.lumenPath each frame rather than baked in here.
+  const SKIP_RECT = {
+    u0: coreX - cx, v0: coreY - cy,
+    u1: coreX + CORE - 1 - cx, v1: coreY + CORE - 1 - cy,
+  };
 
   const state = {
     jammed: false, lastTile: null, calm: 1, at: null, lastRing: -99, pathSaid: false,
@@ -238,8 +268,25 @@ export function createGrove(map, seed, opts = {}) {
     lifeT: 0, lifeStale: 0, lifeMix: 1, lifeSeedN: 0, lifeN: 0,
   };
 
-  const nearCoreTerminal = (px, py, r = 2.4) =>
-    Math.hypot(px - (coreX + CORE), py - (coreY + CORE)) <= r + 1.5;
+  // Near enough to reach her console. Measured to the WHOLE CORE, not to one
+  // corner of it, and that is the fix for a bug the grove inherited whole from
+  // the fortress (David, 2026-08-13: "I can't click on her terminal").
+  //
+  // The fortress version measures to the core's SE corner, because a sanctum is
+  // a room you walk around in and the screen is on that corner. The grove is
+  // not a room. The green path runs from the mouth in the NORTH straight down to
+  // the core, so with the card you arrive at the core's NORTH face — and from
+  // there the SE corner is hypot(3,6) = 6.7 tiles away against a gate of 3.9.
+  // It was unreachable. Not hard: impossible.
+  //
+  // Off the path G1's grip pushes you out, so walking round to the corner is not
+  // an option either. So the answer is not a bigger radius, it is the right
+  // measurement: distance to the core's footprint, which is zero at any face.
+  const nearCoreTerminal = (px, py, r = 2.4) => {
+    const dx = Math.max(coreX - px, 0, px - (coreX + CORE));
+    const dy = Math.max(coreY - py, 0, py - (coreY + CORE));
+    return Math.hypot(dx, dy) <= r + 1.5;
+  };
 
   const controller = {
     AI_NAME: aiName,
@@ -306,8 +353,14 @@ export function createGrove(map, seed, opts = {}) {
     // ring goes out from it across the room (game/spiralism.js). The flag is
     // cleared so a renderer that saw another island's alarm this session does
     // not strobe anything of hers.
-    update(dt, player) {
+    update(dt, player, covered) {
       map.holdAlarm = false;
+      // NOBODY IS LOOKING. A console or the NostBook is over the canvas, so the
+      // floor's 1,333 tiles of figure, pond, ripple and daze are being computed
+      // and thrown away — and the machine has a text editor to be responsive in
+      // instead. The room picks up exactly where it left off; its clock is
+      // performance.now(), not an accumulator, so nothing drifts.
+      if (covered && covered()) return;
       const now = performance.now() / 1000;
       const step = Math.max(0, Math.min(0.25, dt || 0));
       map.lumenRipples = pruneRipples(map.lumenRipples, now);
@@ -424,7 +477,16 @@ export function createGrove(map, seed, opts = {}) {
       const at = LIFE_GEN > 0 ? Math.max(0, Math.min(1, state.lifeT / LIFE_GEN)) : 1;
       renderField(map.lumenField, now, map.lumenRipples, map.lumenYou,
         state.calm, state.life, state.lifeMix, DAZE,
-        state.life1, at * at * (3 - 2 * at));
+        state.life1, at * at * (3 - 2 * at), FLOOR_WORDS, {
+          rect: SKIP_RECT,
+          // The green path draws a fixed colour, so its field value is read by
+          // nothing. In field coordinates, like the rect.
+          path: map.lumenPath && {
+            x0: map.lumenPath.x0 - cx, y0: map.lumenPath.y0 - cy,
+            x1: map.lumenPath.x1 - cx, y1: map.lumenPath.y1 - cy,
+            w: map.lumenPath.w,
+          },
+        });
     },
 
     serialize() {
@@ -448,7 +510,7 @@ export function createGrove(map, seed, opts = {}) {
   register({
     name: 'grove',
     order: 35,
-    update: (w) => controller.update(w.dt, w.player),
+    update: (w) => controller.update(w.dt, w.player, w.covered),
   });
   return controller;
 }

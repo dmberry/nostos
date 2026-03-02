@@ -64,7 +64,7 @@
 
 import { buildWorld } from '../game/worldgen.js';
 import { spawnAnimals } from '../game/animals.js';
-import { spawnRobots, spawnW5, spawnGardeners, spawnCouriers, spawnM4 } from '../game/robots.js';
+import { spawnRobots, spawnW5, spawnGardeners, spawnCouriers, spawnM4, spawnM6, spawnCarrier, spawnT8s } from '../game/robots.js';
 import { spawnWaterDroids } from '../game/waterdroids.js';
 import { spawnBirds } from '../game/birds.js';
 import { placeTors } from '../game/hermes.js';
@@ -414,6 +414,33 @@ export function createIsland(seed) {
   // One V-class courier per island (#127): the network's answer to its own
   // flat machines. Cut it and the fallen stay down.
   robots.push(...spawnCouriers(map, seed, obelisks, 1));
+  // #159 — the B-1 CARRIER, and the warrior's road off the island
+  // (docs/hermes-warrior-path.md). It is seated at the W-factory rather than in
+  // her grove for two reasons: the grove's guard is the light and putting a boss
+  // in it would undo G1, and the factory is what builds and dispatches, so a
+  // shard in transit is a thing the factory is moving. It is also where a player
+  // who fights rather than reads is already going, for the ai-key.
+  if (wfactory) {
+    // Seated OFF the building, on the perimeter it walks, rather than standing
+    // on top of it: it is guarding the factory (David, 2026-08-14), and a sentry
+    // parked in the doorway does not read as one. Passing `wfactory` as its post
+    // gives it the beat and makes hitting the building bring it.
+    const fw = wfactory.fw || 1, fh = wfactory.fh || 1;
+    const carrier = spawnCarrier(
+      map, seed ^ 0x11e2,
+      wfactory.x + fw + 2, wfactory.y + Math.floor(fh / 2),
+      false, wfactory,
+    );
+    if (carrier) robots.push(carrier);
+    // A small standing escort, not a wall: two ordinary pack M6s, so the thing
+    // reads as a formation with something worth guarding in the middle of it.
+    // The rest of the pressure is the carrier's own doing — it calls the factory
+    // for more the moment you engage (robots.js, updateM6Pack).
+    for (let i = 0; i < 2; i++) {
+      const g = spawnM6(map, (seed ^ (0x5e0 + i * 613)) >>> 0, wfactory.x, wfactory.y, false);
+      if (g) robots.push(g);
+    }
+  }
   const waterdroids = spawnWaterDroids(map, seed);
   // The tower objects themselves (for alert/blink state): {x,y} plus the
   // alert level cannot live on the plain {x,y} obelisks list, since that's
@@ -460,6 +487,11 @@ export function createIsland(seed) {
   // instruction, present for a long time, and the walking is your own idea.
   const grove = createGrove(map, seed, { aiName: 'CALYPSO', obAlertColor: '#4b5cc4' });
   const mainframe = grove.core; // { x, y } of the core, for the AI-ML map star
+  // #149: four T-8s already on her floor. G1's guard is the LIGHT, so what
+  // stands in the clearing is not a garrison — it is four machines that have
+  // been dancing here a very long time and will still be at it when you go.
+  // They spawn after the grove because they need its lit tiles to stand on.
+  robots.push(...spawnT8s(map, seed, map.lumenOrigin.x, map.lumenOrigin.y, 4));
   // Ring the island in sea: stamp a dithered sand+water coast into the border
   // tiles now that the towers, relays and fortress are placed (so it leaves them
   // standing). Beyond the outer water band the map edge is still the hard bound,
