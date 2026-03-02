@@ -385,6 +385,28 @@ const MAN = {
     '  Use this one. ed is here because it always was, but pico tells you how',
     '  to get out of it, which ed has never once done for anybody.',
   ].join('\n'),
+  // #121. `post` needs the unit on the network. The bluebox does not: it is a
+  // pair of clips and a soldering job, and it writes to a machine lying at your
+  // feet with its aerial dead. That is the whole difference between them, and
+  // it is why the bluebox is the one that works on a stunned guard's cousin out
+  // in the hills where there is no tower left standing to route through.
+  bluebox: [
+    'bluebox <file>',
+    '  Load a program into the bluebox you are carrying. Then stun a machine,',
+    '  stand over it and press U: the box writes what you loaded instead of the',
+    '  gardener it writes by default.',
+    '',
+    '    bluebox robots_code/sentry.ml',
+    '    bluebox              show what is loaded',
+    '    bluebox -            clear it, back to the gardener',
+    '',
+    '  The program is checked HERE, at the prompt, and refused if it faults —',
+    '  you do not want to find out standing over a machine that is about to get',
+    '  up. Loading survives a save.',
+    '',
+    '  Unlike post, this needs no network and no address. It is clips on a board.',
+    '',
+  ].join('\n'),
   post: [
     'post <file> <unit>',
     '  Write a program into a live unit. It picks it up on its next decision,',
@@ -2262,6 +2284,7 @@ export const HOOK_COMMANDS = [
   'ml', 'pico', 'ed', 'netscape', 'www', 'pdf-viewer', 'pdf', 'book',
   'transcribe', 'telnet', 'post', 'charge', 'vi', 'vim', 'emacs', 'nano',
   'sleep', 'reboot', 'halt', 'suspend', 'save', 'wifi', 'sniffer', 'more', 'get',
+  'bluebox',
 ];
 
 // A selector for any command that acts on a numbered list: `3`, `2-5`, `1,3,7`,
@@ -2429,6 +2452,14 @@ export function runUnix(line, env, hooks = {}) {
         if (!env.net || !env.net.card) throw new UnixError('post: no network card fitted');
         if (!env.net.up) throw new UnixError('post: wifi0 is down. try: ifconfig wifi0 up');
         return hooks.post(args, env);
+      }
+      // #121: LOAD the bluebox. Note what is NOT checked here — no card, no
+      // wifi0, no address. The bluebox is clips and a soldering job, and that
+      // is the whole difference between it and `post`: it writes to a machine
+      // lying at your feet out where there is no tower left to route through.
+      if (name === 'bluebox') {
+        if (!hooks.bluebox) throw new UnixError('bluebox: nothing here to load one from');
+        return hooks.bluebox(args, env);
       }
       // CHARGE a flat unit home to its tower on its reserve cell — a recovery
       // command over the same wire, not a program (a flat unit runs nothing).

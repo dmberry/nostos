@@ -141,6 +141,49 @@ export function towerCan(ob) {
   return TOWER_CAN[towerClass(ob)];
 }
 
+// ---- #137: the W-factory's braincode ---------------------------------------
+//
+// The foundry's page has always listed its lines, and one of them reads
+// "W-5 horticultural — suspended pending review". That is the most consequential
+// sentence on the estate's whole network and nothing anywhere states the policy
+// it comes from. This is that policy.
+//
+// The W-5 is the GARDENER. It plants, it heals blight, it is the only machine on
+// the island whose job is to put something back. Its line was suspended pending
+// a review, in a quarter, by a body that stopped meeting — so the estate goes on
+// printing hunters and repair fitters forever and has printed nothing that
+// mends ground since. The island is not dying because anyone decided it should.
+// It is dying because a line item was parked and the meeting never reconvened.
+//
+// The suspension is a COMMENT rather than a branch, which is the point: the
+// gardener is not something this program decides against. It is not in the
+// program at all any more.
+export const FACTORY_CONSTITUTION = {
+  version: '2.6',
+  author: 'RON/estate-production',
+  clauses: [['never idle', 'the line does not stop']],
+};
+
+export function factoryProgram() {
+  const w = 62;
+  const box = (s) => `(* ${s.padEnd(w - 6)}*)`;
+  return [
+    box('factory.ml — W-FACTORY. estate build 12.4. do not edit.'),
+    box(`CONSTITUTION v${FACTORY_CONSTITUTION.version} — ${FACTORY_CONSTITUTION.author}`),
+    ...FACTORY_CONSTITUTION.clauses.map(([c, gloss]) => box(`  ${c.padEnd(14)}${gloss}`)),
+    box('the line answers the island, and the island is the net.'),
+    '',
+    'if breach then print w4',
+    'else if losses > 2 then print w1',
+    'else if repair_due then print w3',
+    'else hold',
+    '',
+    box('W-5 horticultural: line suspended pending review, Q2.'),
+    box('Review was scheduled. The minutes are in the archive.'),
+    box('This build has printed no horticultural unit since.'),
+  ].join('\n');
+}
+
 /**
  * The banner a telnet session prints on connect (#132): where you are, what
  * constitution the machine is running, and what to type next. Four lines and

@@ -219,3 +219,101 @@ test('the banner speaks the net, not the tower', () => {
   assert.match(b, /network/);
   assert.equal(PERMISSION_FILE, 'permission.ml');
 });
+
+// ---- #133: the tower serves what it runs ------------------------------------
+//
+// tower-code.js has had towerProgram and towerCan since it was written and
+// nothing ever asked it for one — the same shape towerBanner was in before
+// #132. These tests are about the WIRING, not the strings: that a tower gets a
+// program and a constitution on the network at all, and that the siren's
+// unsigned one is readable from its own page, which is the whole point of the
+// class.
+
+test('every tower on the network serves a program and a signed constitution', async () => {
+  const { hostTable, programPage } = await import('../src/game/net.js');
+  const desc = {
+    islandId: 'calypso', daemon: 'CALYPSO', robots: [], factory: null,
+    obelisks: [
+      { code: 'OB_1111', x: 10, y: 10, cls: null },
+      { code: 'OB_2222', x: 20, y: 20, cls: 'siren' },
+      { code: 'OB_3333', x: 30, y: 30, cls: 'eye' },
+    ],
+  };
+  const hosts = hostTable(desc);
+  const obs = hosts.filter((h) => h.kind === 'obelisk');
+  assert.equal(obs.length, 3);
+  for (const h of obs) {
+    assert.ok(h.program && h.program.length > 40, `${h.name} serves no program`);
+    assert.ok(h.constitution, `${h.name} serves no constitution`);
+    assert.ok(h.towerCan && h.towerCan.length, `${h.name} lists no intents`);
+    // A tower does not patrol and cannot hunt, whatever class it is.
+    for (const w of ['patrol', 'hunt', 'flee']) {
+      assert.ok(!h.towerCan.includes(w), `${h.name} should not be able to ${w}`);
+    }
+  }
+  // The island's revision reaches the tower: calypso is 2.1, not the 2.1
+  // default by accident — polyphemus proves the lookup is live.
+  const poly = hostTable({ ...desc, islandId: 'polyphemus' }).find((h) => h.kind === 'obelisk');
+  assert.equal(poly.constitution.version, '3.0');
+});
+
+test("the siren's page says it is running an unsigned constitution with nothing in it", async () => {
+  const { hostTable, programPage } = await import('../src/game/net.js');
+  const desc = {
+    islandId: 'calypso', daemon: 'CALYPSO', robots: [], factory: null,
+    obelisks: [{ code: 'OB_1111', x: 10, y: 10, cls: null }, { code: 'OB_2222', x: 20, y: 20, cls: 'siren' }],
+  };
+  const hosts = hostTable(desc);
+  const siren = hosts.find((h) => h.kind === 'obelisk' && h.constitution.cls === 'siren');
+  const std = hosts.find((h) => h.kind === 'obelisk' && h.constitution.cls === 'standard');
+  assert.ok(siren && std);
+  const page = programPage(siren, hosts, {});
+  assert.match(page, /v0\.9/);
+  assert.match(page, /unsigned/);
+  assert.match(page, /no clauses in force/);
+  // And the contrast is stated, because a v0.9 means nothing without it.
+  assert.match(page, /other towers on this island run a signed one/);
+  // The standard tower does NOT claim to be unsigned.
+  assert.doesNotMatch(programPage(std, hosts, {}), /unsigned/);
+});
+
+test("a tower's braincode page offers no Send button", () => {
+  // Deliberate, and it must stay that way until a posted program actually
+  // drives a tower. An edit box that accepts your program and changes nothing
+  // is a page lying about what it did.
+  return import('../src/game/net.js').then(({ hostTable, programPage }) => {
+    const hosts = hostTable({
+      islandId: 'calypso', daemon: 'CALYPSO', robots: [], factory: null,
+      obelisks: [{ code: 'OB_1111', x: 10, y: 10, cls: null }],
+    });
+    const h = hosts.find((x) => x.kind === 'obelisk');
+    const page = programPage(h, hosts, {});
+    assert.doesNotMatch(page, /ns-prog-send/);
+    assert.doesNotMatch(page, /ns-prog-edit/);
+    assert.match(page, /READ ONLY/);
+  });
+});
+
+// ---- #137: the foundry's dispatch policy ------------------------------------
+
+test('the factory serves a program, and the gardener is not a branch in it', async () => {
+  const { hostTable, programPage } = await import('../src/game/net.js');
+  const hosts = hostTable({
+    islandId: 'calypso', daemon: 'CALYPSO', robots: [], obelisks: [],
+    factory: { down: false, x: 5, y: 5 },
+  });
+  const fac = hosts.find((h) => h.kind === 'factory');
+  assert.ok(fac, 'the foundry should be on the network');
+  assert.ok(fac.program && fac.program.length > 60);
+  // The three lines the page exists for. The W-5 is COMMENTED, not branched:
+  // a `print w5` anywhere in the body would mean the estate still considers it
+  // and decides against it, which is a different and much softer story.
+  assert.match(fac.program, /W-5 horticultural: line suspended/);
+  const body = fac.program.split('\n').filter((l) => !l.trim().startsWith('(*')).join('\n');
+  assert.doesNotMatch(body, /w5/i, 'the gardener must not appear in the runnable part');
+  assert.match(body, /print w4/);
+  const page = programPage(fac, hosts, {});
+  assert.match(page, /not a branch in this program/);
+  assert.match(page, /READ ONLY/);
+  assert.doesNotMatch(page, /ns-prog-send/);
+});

@@ -242,7 +242,10 @@ export function resultCard(s) {
     case 'you': return { head: 'YOU WIN', sub: 'Nobody has done that.', tone: 'win' };
     case 'draw': return { head: 'DRAWN', sub: `${w} against ${b}, and neither can force it.`, tone: 'draw' };
     case 'resigned': return { head: 'RESIGNED', sub: 'You put your hand over the board.', tone: 'loss' };
-    case 'futile': return { head: 'DRAWN, AND DRAWN, AND DRAWN', sub: 'She played herself, and every line ended the same way.', tone: 'draw' };
+    // WarGames (1983): the WOPR plays tic-tac-toe against itself until it learns
+    // the game cannot be won, prints WINNER: NONE, and stands down from the
+    // missiles. She reaches the same conclusion at draughts. (David, 2026-08-13.)
+    case 'futile': return { head: 'WINNER: NONE', sub: 'A strange game. The only winning move is not to play.', tone: 'draw' };
     default: return { head: 'CALYPSO WINS', sub: `${b} against ${w}.`, tone: 'loss' };
   }
 }

@@ -30,11 +30,13 @@
 // quotations, no imagined interiority. That covers Strachey, Samuel, Shannon,
 // Weizenbaum and Agre here, and the film gets the same treatment.
 
-// No pic() here on purpose. Every image on these pages is DESCRIBED as missing
-// rather than shown: a broken image is the most period-accurate thing a 1990s
-// page can offer, it costs no assets, and it keeps this module free of any
-// import from archive.js — which would be circular, since archive.js spreads
-// this array into its own.
+// Most images on these pages are DESCRIBED as missing rather than shown, because
+// a broken image is a period-accurate thing a 1990s page can offer and it costs
+// no assets. A few real ones are allowed where the fan-page author would plainly
+// have a snapshot of their own — a photo of their screen, their marked-up copy
+// of the paper. pic() lives in its own file (archive-pic.js) since #143, so this
+// import is not the cycle the old note warned about.
+import { pic } from './archive-pic.js';
 
 // Bare hostnames, and no leading `www.`. Two constraints from the cache, both
 // found the hard way: a slash in a domain fails to resolve, so the paths a page
@@ -78,6 +80,25 @@ export const HISTORY_SITES = [
       'strong players draw, and draw, and draw. A program that has played itself',
       'enough is playing a position it already knows the end of. What that is',
       'like from the inside is not a question the paper asks.</p>',
+      '<h2>Where it went afterwards</h2>',
+      '<p>People think the checkers player stopped at IBM. It did not. Samuel',
+      'retired from IBM in the sixties and took the program with him to the',
+      'Stanford AI Lab, and there is a version of it from about 1972 that runs on',
+      'the PDP-10 under WAITS, which is the operating system they wrote at',
+      'Stanford. Somebody ported the old IBM assembly across by hand. The source',
+      'is up on saildart if you go looking, and it is a strange thing to read: a',
+      'fifties learning program, in the file listings of a seventies time-sharing',
+      'machine, still there.</p>',
+      '<p>You can still run it. The command is <tt>R CHECKE</tt> and it wants your',
+      'moves as square numbers, 1 to 32, the way the notation has always gone. I',
+      'sat and lost to a program older than I am. Here is my screen, for anyone',
+      'who does not believe me.</p>',
+      pic('pygame-ls', "A photo of my screen with the old checkers in among everything else. Yes it is a phone photo of a monitor. That is the internet for you."),
+      '<p>There was even a cut-down one in 1977 for a home machine called the',
+      'VideoBrain, in a kilobyte of memory, which if you have ever tried to fit',
+      'anything into a kilobyte you will know is close to a miracle. The same idea',
+      'kept shrinking to fit whatever hardware would have it, and it never stopped',
+      'working.</p>',
       '<hr>',
       '<p><small>mail me: checkersbot at aol dot com. I do not have the 1959 paper',
       'scanned and please stop asking, it is forty pages.</small></p>',
@@ -102,6 +123,20 @@ export const HISTORY_SITES = [
       '<p>The first played DRAUGHTS. It is among the earliest programmes anywhere',
       'that played a game to completion against a person, and Strachey wrote about',
       'the experience himself afterwards for a general audience.</p>',
+      '<p>He did not begin at Manchester. The first attempt was on Turing\'s Pilot',
+      'ACE at the National Physical Laboratory, around 1950 or 1951, and it ran out',
+      'of store — the machine simply did not have the room. He carried it to the',
+      'larger Ferranti Mark I at Manchester, and by the summer of 1952 it could',
+      'play a full game at a reasonable speed. The board was held as bit patterns,',
+      'one word for the white men, one for the black, one for the kings, which is a',
+      'trick programmers rediscover to this day and call by other names.</p>',
+      '<p>The detail everyone repeats, and it appears to be true, is that on',
+      'finishing a game the machine played the national anthem. Accounts say "God',
+      'Save the King", which places the story before the coronation, so take the',
+      'exact month with a pinch of salt. A room of engineers, a completed game of',
+      'draughts, and a valve computer picking out the anthem: that is the founding',
+      'image of the whole business, and it happened.</p>',
+      pic('marked-up-paper', 'My photocopy of the 1954 essay, with my own working in the margins. Departmental library, do not tell them.', 'r'),
       '<p>The second wrote LOVE LETTERS. It assembled them out of a template and',
       'word lists: a salutation, a couple of clauses picked at random, endearments',
       'drawn from a table, a signature. Students see the output and laugh, and',
@@ -116,6 +151,10 @@ export const HISTORY_SITES = [
       '<p>It is worth saying that the letters are more sophisticated than they',
       'look. The vocabulary is doing a great deal of work and the grammar very',
       'little, which is a lesson that keeps having to be relearned.</p>',
+      '<p>One nice detail: the randomness came from the machine itself. The Mark I',
+      'had a hardware random number source built on the noise off a resistor, so',
+      'the choice of which endearment to reach for was drawn from the thermal',
+      'hiss of the electronics. The affection was, quite literally, noise.</p>',
       '<h2>Reading</h2>',
       '<p>Strachey, "The "Thinking" Machine", 1954. There is a copy in',
       'the departmental library. The link to the scan on this page has been broken',

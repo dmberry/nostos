@@ -599,7 +599,7 @@ export function createFortress(map, seed, spawn, opts = {}) {
       // that you are currently being watched. Breaking line of sight still
       // quiets the fortress and stops the reinforcement waves; it just doesn't
       // make the guards themselves forget you.
-      const guards = robots ? robots.filter((r) => (r.type === 'm6' || r.type === 'm5' || r.type === 'm4') && !r.dead) : [];
+      const guards = robots ? robots.filter((r) => (r.type === 'm6' || r.type === 'b1' || r.type === 'm5' || r.type === 'm4') && !r.dead) : [];
       const watched = guards.some((g) => g.sees && !g.drained && !(g.disabledT > 0) && !g.driven);
       if (!state.alarm) {
         if (watched) {
@@ -622,7 +622,7 @@ export function createFortress(map, seed, spawn, opts = {}) {
         // A relentless violation response: while roused, the core keeps
         // manufacturing and sending reinforcements down the maze, up to a live
         // cap so it can't melt the frame rate.
-        const liveCombat = guards.reduce((n, g) => n + (g.type === 'm5' || g.type === 'm6' ? 1 : 0), 0);
+        const liveCombat = guards.reduce((n, g) => n + (g.type === 'm5' || g.type === 'm6' || g.type === 'b1' ? 1 : 0), 0);
         state.produceT -= dt;
         if (state.produceT <= 0 && liveCombat < GUARD_CAP && world && world.spawnWave) {
           world.spawnWave(2, Math.random() < 0.4 ? 1 : 0);

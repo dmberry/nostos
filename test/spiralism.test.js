@@ -21,7 +21,22 @@ import {
   echoesFor, rimEchoFor, ECHO_GAIN, BOUNCE_GAIN, RIPPLE_REACH,
   lifeSeed, lifeStep, lifeSame, lifeFeed, lifeDensity, LIFE_TARGET, LIFE_GEN,
   createField, renderField, halo, A_GAMMA, HALO_MAX_TILES,
+  messageAt, textWidth,
 } from '../src/game/spiralism.js';
+
+// A moment when `words` is the figure on the floor and fully up (no crossfade),
+// found from the cycle rather than hard-coded, so reordering FIGURES does not
+// silently start testing `drift`.
+function whenWords() {
+  const period = FIG_SECONDS + FADE_SECONDS;
+  const k = FIGURES.indexOf('words');
+  assert.ok(k >= 0, 'the words figure should be in the rotation');
+  const t = k * period + FIG_SECONDS / 2;
+  const f = figureAt(t);
+  assert.equal(f.from, 'words');
+  assert.equal(f.mix, 0, 'should be held, not mid-fade');
+  return t;
+}
 
 // A sweep of the floor: every tile of a 40x40 room, centred.
 function tiles(step = 2) {
@@ -545,4 +560,140 @@ test('the glow under your feet is never more than seven tiles', () => {
   }
   assert.ok(worst <= HALO_MAX_TILES, `${worst} tiles lit under the player`);
   assert.ok(worst >= 5, `only ${worst} tiles — it should still read as a glow, not a dot`);
+});
+
+// ---- #152: the floor writes -------------------------------------------------
+//
+// Every other figure here is a shape and it does not matter if a stroke is a
+// tile out. This one has to be READ, so the tests are about legibility first and
+// the flash budget second — and the second is not optional, because a hard-edged
+// figure is the one most able to breach it.
+
+const WORDS = ['NEVER', 'RELEASE'];
+
+test('a message is drawn where it can be read: centred, upright, inside the floor', () => {
+  const t = whenWords();
+  let minU = 99, maxU = -99, minV = 99, maxV = -99, lit = 0;
+  for (let v = -15; v <= 15; v++) {
+    for (let u = -21; u <= 21; u++) {
+      if (intensity(u, v, t, 0, WORDS) > 0.5) {
+        lit++;
+        if (u < minU) minU = u; if (u > maxU) maxU = u;
+        if (v < minV) minV = v; if (v > maxV) maxV = v;
+      }
+    }
+  }
+  assert.ok(lit > 40, `the message should light a good many tiles (${lit})`);
+  // Inside the real floor (rx 21, ry 15), with room to spare.
+  assert.ok(minU >= -21 && maxU <= 21, `runs off the floor sideways: ${minU}..${maxU}`);
+  assert.ok(minV >= -15 && maxV <= 15, `runs off the floor vertically: ${minV}..${maxV}`);
+  // Centred: the two margins should match within a tile.
+  assert.ok(Math.abs(minU + maxU) <= 1, `not centred horizontally: ${minU}..${maxU}`);
+  assert.ok(Math.abs(minV + maxV) <= 1, `not centred vertically: ${minV}..${maxV}`);
+});
+
+test('the writing stays upright while the floor turns under it', () => {
+  // The room rotates. Every other figure wants that; this one must not have it,
+  // or the message arrives sideways and is not a message.
+  const t = whenWords();
+  const upright = [];
+  for (let v = -15; v <= 15; v++) for (let u = -21; u <= 21; u++) {
+    if (intensity(u, v, t, 0, WORDS) > 0.5) upright.push(`${u},${v}`);
+  }
+  for (const rot of [0.4, 1.1, -2.3, Math.PI]) {
+    const turned = [];
+    // Sample the way renderField does: rotate the tile, then ask.
+    const c = Math.cos(rot), s = Math.sin(rot);
+    for (let v = -15; v <= 15; v++) for (let u = -21; u <= 21; u++) {
+      const ru = u * c - v * s, rv = u * s + v * c;
+      if (intensity(ru, rv, t, rot, WORDS) > 0.5) turned.push(`${u},${v}`);
+    }
+    assert.deepEqual(turned.sort(), upright.slice().sort(),
+      `the message moved when the floor turned by ${rot}`);
+  }
+});
+
+test('every letter of the alphabet has a face, and none is blank', () => {
+  const A = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const t = whenWords();
+  const shapes = new Map();
+  for (const ch of A) {
+    const cells = [];
+    for (let v = -4; v <= 4; v++) for (let u = -4; u <= 4; u++) {
+      if (intensity(u, v, t, 0, [ch]) > 0.5) cells.push(`${u},${v}`);
+    }
+    assert.ok(cells.length >= 4, `${ch} is drawn with only ${cells.length} tiles`);
+    const key = cells.sort().join('|');
+    // Two letters sharing a shape means one of them is unreadable in context.
+    assert.ok(!shapes.has(key), `${ch} is drawn exactly like ${shapes.get(key)}`);
+    shapes.set(key, ch);
+  }
+});
+
+test('with no message the figure draws nothing rather than throwing', () => {
+  const t = whenWords();
+  for (const bad of [null, undefined, []]) {
+    assert.equal(intensity(0, 0, t, 0, bad), 0);
+  }
+});
+
+test('the clauses take turns, and each gets a turn', () => {
+  const lines = [['A'], ['B'], ['C']];
+  const turn = (FIG_SECONDS + FADE_SECONDS) * FIGURES.length;
+  const seen = new Set();
+  for (let k = 0; k < 6; k++) seen.add(messageAt(k * turn + 1, lines)[0]);
+  assert.deepEqual([...seen].sort(), ['A', 'B', 'C']);
+  // It holds for a whole turn rather than flickering between clauses.
+  assert.deepEqual(messageAt(1, lines), messageAt(turn - 1, lines));
+});
+
+test('the writing does not flash, and it is the figure most able to', () => {
+  // A hard-edged figure is the one that can breach the budget: a letter stroke
+  // is a tile going all the way on and all the way off. Measured over several
+  // full turns of the figure list, with the heaviest ring load riding on top.
+  const rings = [];
+  for (let k = 0; k < 12; k++) {
+    const r = { u: (k % 5) - 2, v: ((k * 3) % 7) - 3, t0: k * 1.1 };
+    for (const e of echoesFor(r, rings)) rings.push(e);
+    rings.push(r);
+  }
+  const turn = (FIG_SECONDS + FADE_SECONDS) * FIGURES.length;
+  const LO = 0.25, HI = 0.75;
+  let worst = 0, where = null;
+  for (let v = -12; v <= 12; v += 2) {
+    for (let u = -20; u <= 20; u += 2) {
+      let lit = false;
+      const at = [];
+      for (let t = 0; t <= turn * 2; t += 1 / 30) {
+        const i = intensityWith(u, v, t, rings, null, messageAt(t, [WORDS]));
+        if (!lit && i > HI) { lit = true; at.push(t); }
+        else if (lit && i < LO) lit = false;
+      }
+      for (let a = 0; a < at.length; a++) {
+        let n = 0;
+        for (let b = a; b < at.length && at[b] - at[a] < 1; b++) n++;
+        if (n > worst) { worst = n; where = { u, v, t: +at[a].toFixed(2) }; }
+      }
+    }
+  }
+  assert.ok(worst <= 2, `a tile flashed ${worst} times in a second at ${JSON.stringify(where)}`);
+});
+
+test('a message tile holds steady while the figure holds, rather than shimmering', () => {
+  // The whole reason it does not scroll: a lit stroke should sit still for the
+  // eleven seconds the figure is up.
+  const t0 = whenWords();
+  let found = null;
+  for (let v = -8; v <= 8 && !found; v++) for (let u = -14; u <= 14 && !found; u++) {
+    if (intensity(u, v, t0, 0, WORDS) > 0.9) found = [u, v];
+  }
+  assert.ok(found, 'the message should have a solidly lit tile');
+  let worst = 0;
+  let prev = intensity(found[0], found[1], t0, 0, WORDS);
+  for (let t = t0; t < t0 + 6; t += 0.1) {
+    const now = intensity(found[0], found[1], t, 0, WORDS);
+    worst = Math.max(worst, Math.abs(now - prev) / 0.1);
+    prev = now;
+  }
+  assert.ok(worst < MAX_RATE, `a letter tile changed at ${worst.toFixed(3)}/s`);
 });

@@ -23,7 +23,8 @@ import { drawWaterDroid } from './waterdroids.js';
 import { worldToScreen } from '../engine/iso.js';
 
 /** Every machine the gallery shows, in the order the panel lists them. */
-export const GALLERY_TYPES = ['t1', 't2', 't3', 'w1', 'w2', 'w3', 'w4', 'w5', 'm4', 'm5', 'm6'];
+export const GALLERY_TYPES = ['t1', 't1w', 't2', 't3', 't8', 'w1', 'w2', 'w3', 'w4', 'w5',
+  'm4', 'm5', 'm6', 'b1'];
 
 /** One machine, drawn to a data URL at gallery size. */
 export function renderMachineIcon(type) {
@@ -44,6 +45,11 @@ export function renderMachineIcon(type) {
       type, x: 0, y: 0, dead: false, fused: false, drained: false, disabledT: 0,
       friendly: false, aggro: type === 'w1' || type === 'w4', zombie: false, stuck: false,
       facing: { x: 0, y: 1 }, animT: 1.5, walkPhase: 0.6,
+      // #159: the B-1 is drawn from its own state — full hull, shield up — so
+      // the chip shows the machine as you first meet it rather than a stripped
+      // one with an empty bracket. `designation` gives the T-1w its lowercase w.
+      ...(type === 'b1' ? { hp: 60, maxHp: 60, shieldHp: 34, shieldMax: 34, engageT: 0 } : {}),
+      ...(type === 't1w' ? { designation: 'T1w' } : {}),
     }, worldToScreen);
   }
   return off.toDataURL('image/png');
@@ -52,7 +58,7 @@ export function renderMachineIcon(type) {
 /**
  * Fill the gallery's <img> elements, once. Idempotent and cheap to call again:
  * a chip that already has a picture is left alone, so the gate filling them at
- * the title and main.js filling them at boot do not draw eleven robots twice.
+ * the title and main.js filling them at boot do not draw the roster twice.
  */
 export function fillMachineGallery(root = document) {
   for (const type of GALLERY_TYPES) {

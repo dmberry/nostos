@@ -82,3 +82,29 @@ test('a name imported into a file is not also declared in it', () => {
   }
   assert.deepEqual(clashes, []);
 });
+
+// ---- #158 fallout: the rename that a template literal hid --------------------
+//
+// F2b renamed the `fortress` identifier to `hold` with a script that skips
+// strings and comments, so player-facing prose about the Lion's Gate survived.
+// It also skipped the INSIDE of `${...}` in a template literal, which is code —
+// and eight sites came through unrenamed. Every one of them was a
+// ReferenceError waiting for somebody to open the gate terminal or fire
+// zeus_lightning, and the whole suite passed with them in place.
+//
+// This is the guard. It is written against the symptom rather than the tool
+// because the tool is gone and the symptom is what matters: there is no live
+// binding called `fortress` any more, so a bare one in an interpolation is a
+// crash whatever put it there.
+test('no ${...} interpolation refers to the removed `fortress` binding', () => {
+  const bad = [];
+  for (const rel of files) {
+    const src = readFileSync(join(ROOT, rel), 'utf8');
+    src.split('\n').forEach((line, i) => {
+      for (const m of line.matchAll(/\$\{([^}]*)\}/g)) {
+        if (/\bfortress\b/.test(m[1])) bad.push(`${rel}:${i + 1}: ${m[0]}`);
+      }
+    });
+  }
+  assert.deepEqual(bad, [], `bare \`fortress\` in an interpolation:\n${bad.join('\n')}`);
+});

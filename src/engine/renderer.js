@@ -227,6 +227,8 @@ export class Renderer {
     this.uiSlots = []; // clickable dashboard/backpack slots, rebuilt each frame
     this.obeliskHits = []; // clickable obelisk towers (world-screen rects), rebuilt each frame
     this.torHits = []; // clickable HERMES relays (world-screen rects, lift-adjusted), rebuilt each frame
+    this._studs = new Map();       // #143/perf: tinted floor-stud sprites, keyed by colour+brightness
+    this._studMasterCv = null;     // the one white master they are all tinted from
     this.coreTermHit = null; // CALYPSO's terminal screen on the core's SE face (screen-space centre), rebuilt each frame
     this.hudPlayer = player; // referenced by drawWfactory for the near-by damage bar
     this._holdAlarm = map.holdAlarm; // maze sconces pulse red while the breach alarm holds
@@ -234,6 +236,19 @@ export class Renderer {
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.fillStyle = '#0b0e0a';
     ctx.fillRect(0, 0, this.w, this.h);
+
+    // #145: her Workspace fills the canvas edge to edge and is opaque, so the
+    // whole world behind it is a thousand lit floor studs nobody can see. Draw
+    // the desktop and nothing else — this is what stops the lag, not the update
+    // gate (the world was still being PAINTED under an opaque grey sheet). The
+    // cabinet, if it is up, is drawn as a window inside drawWorkspace.
+    // Pong and the narrows own the whole screen; if either is somehow live with
+    // the Workspace still set, draw the game, not the desktop over it.
+    if (hud.workspace && !hud.pong && !hud.narrows) {
+      this.drawWorkspace(hud.workspace.ws, hud.workspace.api, hud.draughts);
+      if (hud.paused) this.drawPausedOverlay();
+      return;
+    }
 
     ctx.save();
     camera.applyTransform(ctx, this.w, this.h);
@@ -819,9 +834,10 @@ export class Renderer {
       else this.drawCalypsoPong(hud.pong, hud.touchControls);
       if (hud.pongOver) this.drawCalypsoPongOver(hud.pong, hud.pongOver);
     }
-    // Her draughts cabinet (K2), in NeXTSTEP chrome rather than the estate's
-    // green: her machine is a NeXT and it should not look like theirs.
-    if (hud.draughts) this.drawDraughts(hud.draughts);
+    // Her draughts cabinet (K2) on its OWN — from the dev scene — centred over a
+    // dimmed world. Inside the Workspace it is a window, drawn by the early
+    // return at the top of draw() instead.
+    if (hud.draughts && !hud.workspace) this.drawDraughts(hud.draughts);
     if (hud.paused) this.drawPausedOverlay();
   }
 
@@ -1481,12 +1497,24 @@ export class Renderer {
           ((tx - pth.x0) * vx + (ty - pth.y0) * vy) / (vx * vx + vy * vy)));
         onPath = Math.hypot(tx - (pth.x0 + vx * t), ty - (pth.y0 + vy * t)) <= pth.w;
       }
-      if (onPath) {
-        this.texturedGlow(cx, cy, 6, 3.1, 'rgba(96,236,140,0.92)', 14, 0.42, 'aigrate');
-      } else if (c.a > OFF) {
-        this.texturedGlow(cx, cy, 6, 3.1, `rgba(${c.r},${c.g},${c.b},${c.a.toFixed(3)})`,
-          12 * c.a, 0.42 * c.a, 'aigrate');
-      }
+      // ONE BLIT PER STUD, not a blur and a clip per stud (David asked what the
+      // per-tile overlay costs, 2026-08-13 — it was the answer).
+      //
+      // texturedGlow is right for a dozen fixtures and wrong for thirteen
+      // hundred. Per call it does a shadowBlur ellipse (canvas blurs that on
+      // the spot, per draw), then an ellipse clip(), then a scaled drawImage of
+      // the grate. The blur and the clip are the expensive two, and the grove
+      // lights up to ~1300 tiles a frame — so the room was asking the canvas
+      // for 1300 blurs and 1300 clip regions every sixteen milliseconds, which
+      // is what made the NostBook feel like treacle with the grove behind it.
+      //
+      // The stud does not vary in SHAPE, only in colour and brightness. So it
+      // is drawn once per (hue, brightness) into a small offscreen canvas and
+      // blitted after that. Brightness is quantised to 24 steps, which is finer
+      // than the eye reads on a 12px ellipse and turns an unbounded cache into
+      // a few dozen entries.
+      if (onPath) this.drawStud(cx, cy, 96, 236, 140, 0.92);
+      else if (c.a > OFF) this.drawStud(cx, cy, c.r, c.g, c.b, c.a);
     }
     // Fortress decks read as a lit grid: a dim green floor-stud on every panel /
     // quad / sanctum tile, so the maze is clear to move through rather than a dark
@@ -1900,7 +1928,9 @@ export class Renderer {
       case 'fortwall': this.drawFortWall(obj); break;
       case 'fortdoor': this.drawFortDoor(obj); break;
       case 'gateterm': this.drawGateTerm(obj); break;
-      case 'mainframe': this.drawMainframe(obj); break;
+      // #150: one 'mainframe' type, two bodies. The estate's daemons get the
+      // monolith; CALYPSO's core is flagged `cube` by grove.js and gets the NeXT.
+      case 'mainframe': (obj.cube ? this.drawNextCube(obj) : this.drawMainframe(obj)); break;
       case 'furniture': this.drawFurniture(obj); break;
       case 'exitdoor': this.drawExitDoor(obj); break;
       case 'lamp': this.drawLamp(obj); break;
@@ -2186,6 +2216,94 @@ export class Renderer {
   // glow (the factory-vent trick). If you add a new light, use texturedGlow.
   // An optional soft bloom behind, the glow colour, then an AI grate texture
   // clipped to the ellipse so it reads as a lit fixture caged in the hull.
+  // A floor stud, blitted from a cache. See the note at the lumen branch in
+  // drawFloor for why this exists rather than a texturedGlow call.
+  //
+  // The sprite is the fixture PLUS its bloom, baked together with the blur
+  // already applied, so drawing one is a single drawImage with no shadow state
+  // and no clip. The canvas is padded by the bloom radius so the halo is not
+  // clipped off at the sprite's edge.
+  // ONE MASTER, TINTED (David's improvement on the first version, 2026-08-13:
+  // "can we clip an image of the tile, store it in a buffer and then paste that
+  // — colouring it instead?"). It is the better shape and by some distance.
+  //
+  // The first version cached a finished sprite per colour, which took the blur
+  // and the clip off the per-tile path but still paid them once per colour
+  // bucket — and the room uses a lot of colours. This bakes the SHAPE exactly
+  // once, in white, with its bloom already blurred and its grate already
+  // clipped in. A colour bucket is then that master plus one `source-in` fill,
+  // which keeps the master's alpha gradient and takes the fill's colour. So the
+  // expensive two happen once, ever, for the whole game.
+  //
+  // Per tile it is one drawImage. No shadow state, no clip, no gradient.
+  _studMaster() {
+    if (this._studMasterCv) return this._studMasterCv;
+    const RX = 6, RY = 3.1, PAD = 14;
+    const w = Math.ceil((RX + PAD) * 2), h = Math.ceil((RY + PAD) * 2);
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const c2 = cv.getContext('2d');
+    const mx = w / 2, my = h / 2;
+    const W = 'rgba(255,255,255,1)';
+    // The bloom. Blurred here and never again.
+    c2.save();
+    c2.shadowColor = W; c2.shadowBlur = 12;
+    c2.fillStyle = W;
+    c2.beginPath(); c2.ellipse(mx, my, RX, RY, 0, 0, Math.PI * 2); c2.fill();
+    c2.restore();
+    // The crisp fixture and its grate. Clipped here and never again.
+    c2.save();
+    c2.beginPath(); c2.ellipse(mx, my, RX, RY, 0, 0, Math.PI * 2); c2.clip();
+    c2.fillStyle = W;
+    c2.fillRect(mx - RX, my - RY, RX * 2, RY * 2);
+    const tex = WALL_TEXTURES.aigrate || WALL_TEXTURES.metal;
+    const texReady = !!(tex && tex.complete && tex.naturalWidth);
+    if (texReady) {
+      // The grate darkens the fixture rather than tinting it, so it goes on as
+      // a multiply and survives the source-in tint below as shading.
+      c2.globalAlpha = 0.42;
+      const sz = Math.max(RX, RY) * 2;
+      c2.drawImage(tex, mx - sz / 2, my - sz / 2, sz, sz);
+    }
+    c2.restore();
+    this._studMasterCv = { cv, ox: mx, oy: my, w, h, texReady };
+    return this._studMasterCv;
+  }
+
+  drawStud(cx, cy, r, g, b, a) {
+    let m = this._studMaster();
+    // The grate texture loads late, and a master baked before it arrived would
+    // stay grateless for the whole session. Rebuild once, the frame it lands,
+    // and drop the tints with it.
+    if (!m.texReady) {
+      const tex = WALL_TEXTURES.aigrate || WALL_TEXTURES.metal;
+      if (tex && tex.complete && tex.naturalWidth) {
+        this._studMasterCv = null; this._studs.clear();
+        m = this._studMaster();
+      }
+    }
+    // 24 brightness steps: finer than the eye reads on a 12px ellipse, and it
+    // turns an unbounded set of colours into a few dozen cached tints.
+    const q = Math.max(1, Math.min(24, Math.round(a * 24)));
+    const key = `${r},${g},${b},${q}`;
+    let s = this._studs.get(key);
+    if (!s) {
+      const cv = document.createElement('canvas');
+      cv.width = m.w; cv.height = m.h;
+      const c2 = cv.getContext('2d');
+      c2.drawImage(m.cv, 0, 0);
+      // source-in: keep the master's alpha, take this colour. The bloom's
+      // gradient comes through multiplied by the colour's own alpha, which is
+      // exactly the falloff the per-tile version drew by hand.
+      c2.globalCompositeOperation = 'source-in';
+      c2.fillStyle = `rgba(${r},${g},${b},${(q / 24).toFixed(3)})`;
+      c2.fillRect(0, 0, m.w, m.h);
+      s = cv;
+      this._studs.set(key, s);
+    }
+    this.ctx.drawImage(s, cx - m.ox, cy - m.oy);
+  }
+
   texturedGlow(cx, cy, rx, ry, color, bloom = 0, texAlpha = 0.5, texKey = 'aigrate') {
     const ctx = this.ctx;
     // 1. A soft outer bloom drawn BEHIND, so its blurred bleed reads as a halo
@@ -2455,14 +2573,38 @@ export class Renderer {
     // centre is recorded for the click-to-open in main.js. Every core carries one;
     // the flowing log is that daemon's own (CORE_SCREENS, keyed by obj.ai).
     if (obj.hasTerminal && !dead) {
-      const A = g.bottom, B = g.right, C = r.right, D = r.bottom; // SE-face corners
-      const face = (u, v) => ({
-        x: A.x * (1 - u) * (1 - v) + B.x * u * (1 - v) + D.x * (1 - u) * v + C.x * u * v,
-        y: A.y * (1 - u) * (1 - v) + B.y * u * (1 - v) + D.y * (1 - u) * v + C.y * u * v,
-      });
-      // v runs UP the wall (D sits H above A), so q = [bottom-left, bottom-right,
-      // top-right, top-left] of the panel as it lies on the face. Inset a little
-      // from the face so it reads as a screen set into the block, not the whole side.
+      this.drawCoreScreen(obj, g.bottom, g.right, r.right, r.bottom);
+    }
+    const labelC = worldToScreen(cx, obj.y + fh);
+    ctx.font = 'bold 14px system-ui, sans-serif'; ctx.textAlign = 'center';
+    ctx.fillStyle = dead ? '#6a6a72' : '#e0a8e6';
+    ctx.fillText((obj.ai || 'ZEUS').toUpperCase(), labelC.x, labelC.y - H * 0.62);
+    ctx.textAlign = 'left';
+    this.drawCoreDamage(obj, cx, cy, H, '#c24ac2');
+  }
+
+  // A face-local mapper for the quad [A,B,C,D], where A→B is the bottom edge and
+  // v runs UP the wall (D sits above A). Both core bodies place things on their
+  // faces through this, so a panel is positioned in the same (u, v) terms
+  // whichever shape it is sitting on.
+  faceMap(A, B, C, D) {
+    return (u, v) => ({
+      x: A.x * (1 - u) * (1 - v) + B.x * u * (1 - v) + D.x * (1 - u) * v + C.x * u * v,
+      y: A.y * (1 - u) * (1 - v) + B.y * u * (1 - v) + D.y * (1 - u) * v + C.y * u * v,
+    });
+  }
+
+  // The sanctum terminal set into a core's SE face: an isometric panel with the
+  // daemon's own log flowing up it. Lifted out of drawMainframe so the NeXT cube
+  // (#150) carries the same screen and the same click target rather than a copy
+  // of them that could drift.
+  drawCoreScreen(obj, A, B, C, D) {
+    const ctx = this.ctx;
+    {
+      const face = this.faceMap(A, B, C, D);
+      // q = [bottom-left, bottom-right, top-right, top-left] of the panel as it
+      // lies on the face. Inset a little from the face so it reads as a screen
+      // set into the block, not the whole side.
       const q = [face(0.29, 0.30), face(0.71, 0.30), face(0.71, 0.69), face(0.29, 0.69)];
       const scx = (q[0].x + q[1].x + q[2].x + q[3].x) / 4, scy = (q[0].y + q[1].y + q[2].y + q[3].y) / 4;
       const panel = () => {
@@ -2496,6 +2638,22 @@ export class Renderer {
       if (LW > 6 && LH > 8) {
         ctx.clip();
         ctx.transform(ex.x / LW, ex.y / LW, ey.x / LH, ey.y / LH, TL.x, TL.y);
+        // #160: HER machine is a NeXT, so the cube's screen shows a running
+        // NeXTSTEP desktop — the thing you get when you click it — not the green
+        // scroll the estate's cores wear. Filled rects only, no blur or per-line
+        // clip, so it stays cheap at ~1000 lit studs a frame.
+        if (obj.ai === 'CALYPSO' && obj.cube) {
+          this._drawCubeDesktop(ctx, LW, LH);
+          ctx.restore();
+          panel();
+          ctx.strokeStyle = screenBorder; ctx.lineWidth = 1.5; ctx.stroke();
+          const mtx0 = ctx.getTransform();
+          const dpr0 = (typeof devicePixelRatio === 'number' && devicePixelRatio) || 1;
+          const pc0 = mtx0.transformPoint(new DOMPoint(scx, scy));
+          const pe0 = mtx0.transformPoint(new DOMPoint(q[1].x, q[1].y));
+          this.coreTermHit = { obj, x: pc0.x / dpr0, y: pc0.y / dpr0, r: Math.max(16, Math.hypot(pe0.x - pc0.x, pe0.y - pc0.y) / dpr0) };
+          return;
+        }
         const LINES = Renderer.CORE_SCREENS[obj.ai] || Renderer.CORE_SCREENS._default, N = LINES.length;
         const widest = Renderer._screenWidest[obj.ai] || Renderer._screenWidest._default;
         const lineH = Math.max(4, LH / 9);
@@ -2523,20 +2681,229 @@ export class Renderer {
       ctx.restore();
       panel();
       ctx.strokeStyle = screenBorder; ctx.lineWidth = 1.5; ctx.stroke();
-      this.coreTermHit = { obj, x: scx, y: scy, r: Math.max(16, Math.hypot(q[1].x - q[0].x, q[1].y - q[0].y) * 0.7) };
+      // IN CSS PIXELS, NOT IN THE SPACE fillRect WAS HANDED.
+      //
+      // This is the second instance of a bug this codebase has already had and
+      // written down: the unit name tags stored their hit-rects in pre-transform
+      // space and did not respond to clicks (v1.262). Everything here is drawn
+      // through the camera's transform — pan, zoom, the elevation lift, the
+      // device pixel ratio — so the numbers going to `fill` are several
+      // transforms away from the numbers a mouse event carries. Measured on
+      // Ogygia this recorded (-2144, 4209) for a panel sitting in the middle of
+      // a 1400x900 canvas, which is why the console did not answer a click even
+      // once it was being tested against the panel instead of the ground.
+      //
+      // Pushed through the live matrix and divided by the device ratio, the way
+      // robots.js does it for the tags. Same fix, same reason, and the reason is
+      // worth the paragraph: a coordinate recorded during a draw is in whatever
+      // space the context is in AT THAT MOMENT, and that is never the mouse's.
+      const mtx = ctx.getTransform();
+      const dpr = (typeof devicePixelRatio === 'number' && devicePixelRatio) || 1;
+      const pc = mtx.transformPoint(new DOMPoint(scx, scy));
+      const pe = mtx.transformPoint(new DOMPoint(q[1].x, q[1].y));
+      this.coreTermHit = {
+        obj,
+        x: pc.x / dpr, y: pc.y / dpr,
+        r: Math.max(16, Math.hypot(pe.x - pc.x, pe.y - pc.y) / dpr),
+      };
     }
-    const labelC = worldToScreen(cx, obj.y + fh);
+  }
+
+  // #160: a tiny live NeXTSTEP desktop, drawn in the face's local pixel space
+  // (0..W across, 0..H down). Grey desktop, a vertical menu top-left, a dock
+  // down the right, and a Terminal window whose black-on-white text scrolls, so
+  // the machine reads as RUNNING before you touch it. Same greys as the real
+  // Workspace chrome, so the cube's screen and the desktop you open are one
+  // machine. Filled rects and two hairline strokes; nothing per-frame heavy.
+  _drawCubeDesktop(ctx, W, H) {
+    ctx.fillStyle = '#5a5a5a'; ctx.fillRect(0, 0, W, H);      // the desktop
+    // Vertical menu, top-left: a short stack of grey rows.
+    const mw = Math.max(6, W * 0.22), rh = Math.max(1.4, H * 0.052);
+    for (let i = 0; i < 6; i++) {
+      const ry = 1 + i * rh;
+      ctx.fillStyle = i % 2 ? '#bcbcbc' : '#c6c6c6';
+      ctx.fillRect(1, ry, mw, rh - 0.4);
+    }
+    // Dock down the right edge, a column of tiles.
+    const dw = Math.max(5, W * 0.14), dx = W - dw;
+    ctx.fillStyle = '#8b8b8b'; ctx.fillRect(dx, 0, dw, H);
+    const th = H * 0.17;
+    for (let i = 0; i < 5; i++) {
+      const ty = 2 + i * (H * 0.195);
+      if (ty + th > H) break;
+      ctx.fillStyle = '#a8a8a8'; ctx.fillRect(dx + 1, ty, dw - 2, th);
+      ctx.fillStyle = '#efefef'; ctx.fillRect(dx + 1.6, ty + 1, dw - 3, 0.6);
+    }
+    // A Terminal window in the middle: grey frame, ribbed title bar, white
+    // screen, black text lines scrolling up.
+    const wx = mw + W * 0.05, wy = H * 0.13, ww = dx - wx - W * 0.03, wh = H * 0.7;
+    if (ww > 6 && wh > 8) {
+      const bh = Math.max(1.4, H * 0.05);
+      ctx.fillStyle = '#a8a8a8'; ctx.fillRect(wx - 0.8, wy - 0.8, ww + 1.6, wh + 1.6);
+      ctx.fillStyle = '#c8c8c8'; ctx.fillRect(wx, wy, ww, bh);   // title bar
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(wx, wy + bh, ww, wh - bh);   // screen
+      const sTop = wy + bh + 1, sBot = wy + wh - 1, lh = Math.max(1.1, wh * 0.085);
+      const p = (this._nowMs() / 700) % lh;   // scroll offset within a line
+      ctx.fillStyle = '#232323';
+      for (let k = 0; sTop + k * lh - p < sBot; k++) {
+        const ly = sTop + k * lh - p;
+        if (ly < sTop) continue;
+        // A deterministic pseudo-length per line, so the text looks like text
+        // and does not shimmer (no Math.random, which is banned here).
+        const seed = ((((k + 1) * 2654435761) >>> 0) % 1000) / 1000;
+        ctx.fillRect(wx + 1.5, ly, (ww - 3) * (0.28 + 0.62 * seed), Math.max(0.5, lh * 0.34));
+      }
+    }
+  }
+
+  // performance.now() guarded, so a headless render (tests) does not throw.
+  _nowMs() {
+    return (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
+  }
+
+  // The damage bar that floats over a hurt core when you are near it. Shared,
+  // for the reason drawCoreScreen is: two bodies, one bar.
+  drawCoreDamage(obj, cx, cy, H, full) {
+    const ctx = this.ctx, p = this.hudPlayer;
+    if (obj.defeated || obj.hp == null || !obj.maxHp || obj.hp >= obj.maxHp) return;
+    if (!p || Math.hypot(p.x - cx, p.y - cy) >= 16) return;
+    const t = worldToScreen(cx, cy), bw = 130, bh = 9;
+    const bx = t.x - bw / 2, by = t.y - H - 24, frac = Math.max(0, obj.hp / obj.maxHp);
+    ctx.fillStyle = 'rgba(0,0,0,0.65)'; ctx.fillRect(bx - 2, by - 2, bw + 4, bh + 4);
+    ctx.fillStyle = '#3a3f46'; ctx.fillRect(bx, by, bw, bh);
+    ctx.fillStyle = frac > 0.5 ? full : frac > 0.25 ? '#e0b53a' : '#e05548';
+    ctx.fillRect(bx, by, bw * frac, bh);
+  }
+
+  // ---- #150: CALYPSO's core, which is a NeXT cube --------------------------
+  //
+  // The other four daemons sit in a monolith: a tall black slab with a slit of
+  // light up it, which is what a machine looks like when it is meant to be
+  // frightening. Hers is not meant to be frightening. Her island is the one
+  // that keeps you by being pleasant, and her machine is a NeXT running Mach
+  // (docs/ai-codebase-plan.md §3b, and her draughts cabinet already wears
+  // NeXTSTEP chrome in ui.js) — a desktop workstation, a matte black magnesium
+  // cube that sat on somebody's desk and was admired.
+  //
+  // TRUE CUBE PROPORTIONS, and that is the whole job. In this 2:1 projection a
+  // world unit of height is TILE_W/2 on screen, so a footprint of `fw` tiles
+  // makes a cube exactly when H = fw * TILE_W/2. The monolith's H is a fixed
+  // 122 against a 6-tile base, which is why it reads as a slab. Get the height
+  // wrong and every other detail here is decoration on the wrong shape.
+  drawNextCube(obj) {
+    const ctx = this.ctx, fw = obj.fw || 6, fh = obj.fh || 6;
+    const cx = obj.x + fw / 2, cy = obj.y + fh / 2, dead = obj.defeated;
+    const H = ((fw + fh) / 2) * (TILE_W / 2);
+    const g = {
+      top: worldToScreen(obj.x, obj.y), right: worldToScreen(obj.x + fw, obj.y),
+      bottom: worldToScreen(obj.x + fw, obj.y + fh), left: worldToScreen(obj.x, obj.y + fh),
+    };
+    const r = { top: { x: g.top.x, y: g.top.y - H }, right: { x: g.right.x, y: g.right.y - H },
+      bottom: { x: g.bottom.x, y: g.bottom.y - H }, left: { x: g.left.x, y: g.left.y - H } };
+
+    ctx.fillStyle = 'rgba(0,0,0,0.42)';
+    ctx.beginPath(); ctx.moveTo(g.top.x, g.top.y + 8); ctx.lineTo(g.right.x, g.right.y + 8);
+    ctx.lineTo(g.bottom.x, g.bottom.y + 8); ctx.lineTo(g.left.x, g.left.y + 8); ctx.closePath(); ctx.fill();
+
+    // Cast magnesium, painted matte black. The faces are held CLOSE in value
+    // (0.82 / 0.66 / 1.0 rather than the monolith's 0.7 / 0.5 / 0.9): a matte
+    // surface scatters, so it does not throw the hard face-to-face contrast a
+    // polished one does, and holding them close is most of what makes it read
+    // as matte rather than as black plastic.
+    const tex = WALL_TEXTURES.metal, base = dead ? [34, 34, 36] : [30, 29, 31];
+    this.drawTexturedQuad([g.left, g.bottom, r.bottom, r.left], tex, rgbScale(base, 0.82), rgbScale(base, 0.82), 'multiply', 0.34);
+    this.drawTexturedQuad([g.bottom, g.right, r.right, r.bottom], tex, rgbScale(base, 0.66), rgbScale(base, 0.66), 'multiply', 0.34);
+    this.drawTexturedQuad([r.top, r.right, r.bottom, r.left], tex, rgbScale(base, 1.0), rgbScale(base, 1.0), 'multiply', 0.22);
+    // The machined edge: a fine light line along the two top edges facing the
+    // camera, which is what actually tells the eye this is a solid block.
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = dead ? 'rgba(120,120,126,0.25)' : 'rgba(196,196,206,0.30)';
+    ctx.beginPath(); ctx.moveTo(r.left.x, r.left.y); ctx.lineTo(r.bottom.x, r.bottom.y);
+    ctx.lineTo(r.right.x, r.right.y); ctx.stroke();
+    this.diamondPath([r.top, r.right, r.bottom, r.left]);
+    ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 1.5; ctx.stroke();
+
+    // Vents cut across the top. Drawn as a dark groove with a lit lip below it,
+    // because a plain dark line on a near-black face is invisible — the pair
+    // reads as a cut rather than as a scratch.
+    const topFace = this.faceMap(r.left, r.bottom, r.right, r.top);
+    for (let i = 1; i <= 9; i++) {
+      const v = 0.18 + (i / 10) * 0.64;
+      const a = topFace(0.18, v), b = topFace(0.82, v);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = dead ? 'rgba(0,0,0,0.40)' : 'rgba(0,0,0,0.62)';
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = dead ? 'rgba(130,130,138,0.14)' : 'rgba(190,190,202,0.20)';
+      ctx.beginPath(); ctx.moveTo(a.x, a.y + 1.5); ctx.lineTo(b.x, b.y + 1.5); ctx.stroke();
+    }
+
+    // The logo, on the SW face. Paul Rand's mark is a black cube stood on a
+    // corner and tilted, with the word across it — and the thing to get right
+    // is the LOWERCASE e among the capitals, which is the whole joke of it and
+    // the part everyone remembers. The letter takes her own colour rather than
+    // a claim about Rand's palette, which I do not have to hand.
+    const swFace = this.faceMap(g.left, g.bottom, r.bottom, r.left);
+    const L0 = swFace(0.24, 0.30), L1 = swFace(0.76, 0.30), L3 = swFace(0.24, 0.76);
+    const lex = { x: L1.x - L0.x, y: L1.y - L0.y }, ley = { x: L3.x - L0.x, y: L3.y - L0.y };
+    const LW = Math.hypot(lex.x, lex.y), LH = Math.hypot(ley.x, ley.y);
+    if (LW > 20 && LH > 14) {
+      ctx.save();
+      // v runs UP the face, so the plate's own +y must run DOWN it: L3 is the
+      // top-left corner and ley points from bottom to top, hence the negation.
+      ctx.transform(lex.x / LW, lex.y / LW, -ley.x / LH, -ley.y / LH, L3.x, L3.y);
+      const s = Math.min(LW, LH);
+      ctx.fillStyle = dead ? 'rgba(16,16,18,0.9)' : 'rgba(9,9,11,0.96)';
+      ctx.save();
+      ctx.translate(LW / 2, LH / 2);
+      ctx.rotate(-28 * Math.PI / 180);         // the tilt the mark is drawn at
+      ctx.fillRect(-s * 0.40, -s * 0.40, s * 0.80, s * 0.80);
+      ctx.strokeStyle = dead ? 'rgba(90,90,96,0.35)' : 'rgba(150,150,160,0.45)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(-s * 0.40, -s * 0.40, s * 0.80, s * 0.80);
+      const fs = s * 0.26;
+      ctx.font = `bold ${fs.toFixed(1)}px Helvetica, system-ui, sans-serif`;
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      const parts = [['N', null], ['e', obj.screenColor || '#4b5cc4'], ['X', null], ['T', null]];
+      let tw = 0; for (const [ch] of parts) tw += ctx.measureText(ch).width;
+      let lx = -tw / 2;
+      for (const [ch, col] of parts) {
+        ctx.fillStyle = dead ? '#6a6a70' : (col || '#e8e8ea');
+        ctx.fillText(ch, lx, 0);
+        lx += ctx.measureText(ch).width;
+      }
+      ctx.restore();
+      ctx.restore();
+    }
+
+    // The optical drive slot and the power lamp, low on the SE face under the
+    // screen. The lamp is the only moving light on the whole body: a slow
+    // breath rather than the monolith's 520ms throb, because she is idling,
+    // not hunting.
+    const seFace = this.faceMap(g.bottom, g.right, r.right, r.bottom);
+    const slotA = seFace(0.33, 0.14), slotB = seFace(0.67, 0.14);
+    const slotC = seFace(0.67, 0.185), slotD = seFace(0.33, 0.185);
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.beginPath(); ctx.moveTo(slotA.x, slotA.y); ctx.lineTo(slotB.x, slotB.y);
+    ctx.lineTo(slotC.x, slotC.y); ctx.lineTo(slotD.x, slotD.y); ctx.closePath(); ctx.fill();
+    const lamp = seFace(0.26, 0.16);
+    const breath = 0.5 + 0.5 * Math.sin(performance.now() / 2600);
+    ctx.fillStyle = dead ? 'rgba(90,90,96,0.5)' : `rgba(120,255,170,${(0.45 + 0.45 * breath).toFixed(3)})`;
+    ctx.beginPath(); ctx.arc(lamp.x, lamp.y, 2.4, 0, Math.PI * 2); ctx.fill();
+    if (!dead) this.texturedGlow(lamp.x, lamp.y, 3, 3, `rgba(120,255,170,${(0.18 * breath).toFixed(3)})`, 10, 0.5);
+
+    if (obj.hasTerminal && !dead) this.drawCoreScreen(obj, g.bottom, g.right, r.right, r.bottom);
+
+    // The name goes ABOVE the cube, not across it: the monolith wears its label
+    // on the face because there is nothing else on that face, and here it
+    // landed squarely on the logo. Centred on the body's own screen midpoint —
+    // worldToScreen of the footprint centre is NOT that, it sits a half-depth
+    // to the left, which is why the first attempt hung off the cube's shoulder.
     ctx.font = 'bold 14px system-ui, sans-serif'; ctx.textAlign = 'center';
-    ctx.fillStyle = dead ? '#6a6a72' : '#e0a8e6';
-    ctx.fillText((obj.ai || 'ZEUS').toUpperCase(), labelC.x, labelC.y - H * 0.62);
+    ctx.fillStyle = dead ? '#6a6a72' : '#cfd8f0';
+    ctx.fillText((obj.ai || 'CALYPSO').toUpperCase(), (g.left.x + g.right.x) / 2, r.top.y - 10);
     ctx.textAlign = 'left';
-    const p = this.hudPlayer;
-    if (!dead && obj.hp != null && obj.maxHp && obj.hp < obj.maxHp && p && Math.hypot(p.x - cx, p.y - cy) < 16) {
-      const t = worldToScreen(cx, cy), bw = 130, bh = 9, bx = t.x - bw / 2, by = t.y - H - 24, frac = Math.max(0, obj.hp / obj.maxHp);
-      ctx.fillStyle = 'rgba(0,0,0,0.65)'; ctx.fillRect(bx - 2, by - 2, bw + 4, bh + 4);
-      ctx.fillStyle = '#3a3f46'; ctx.fillRect(bx, by, bw, bh);
-      ctx.fillStyle = frac > 0.5 ? '#c24ac2' : frac > 0.25 ? '#e0b53a' : '#e05548'; ctx.fillRect(bx, by, bw * frac, bh);
-    }
+    this.drawCoreDamage(obj, cx, cy, H, '#7a8ae0');
   }
 
   // The W-factory: a big 8x8 riveted-metal foundry, an extruded prism faced
@@ -3238,6 +3605,27 @@ export class Renderer {
     ctx.lineTo(c.x + W, c.y - 4 - H); ctx.lineTo(c.x, c.y - 10 - H);
     ctx.closePath();
     ctx.fill();
+    // #142: the maker's plate, low on the SW face where a plate goes. The
+    // towers are one machine — POSEIDON has no island and no core because he
+    // runs distributed across this net (docs/ai-codebase-plan.md), which is
+    // Sun's 1984 slogan taken literally. The console has said RON-DOS 4.11 all
+    // along, which is SunOS 4.1.1 with the badge filed off; this puts the badge
+    // back on the object itself, so the joke is available to somebody who never
+    // gets a chip and never sees a console.
+    //
+    // Six pixels of etched brass. It is not meant to be read at a glance — it
+    // is meant to be there when you walk up to one and look.
+    if (dmg < 3) {
+      const py = c.y - 22 - Math.round(H * 0.06);
+      ctx.save();
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = '#8a7c46';
+      ctx.fillRect(c.x - W + 2, py, W - 3, 5);
+      ctx.fillStyle = '#0b0b0e';
+      // Three scratches standing in for a line of type too small to set.
+      for (let i = 0; i < 3; i++) ctx.fillRect(c.x - W + 3, py + 1 + i * 1.5, W - 5 - i, 1);
+      ctx.restore();
+    }
     // Signal light: a dim, occasional blink at rest; when it has sensed
     // someone close (obj.alert) it flares a bright, fast-blinking red and
     // throws a soft halo — unmistakable that it's found you.
@@ -4206,6 +4594,23 @@ export class Renderer {
         ctx.fillRect(-5, -6, 3, 1.5);
         ctx.fillRect(-5, 2, 3, 1.5);
       }
+      ctx.restore();
+      return;
+    }
+    if (itemDef.kind === 'shield' && itemDef.aspis) {
+      // #159 — the B-1's great round shield: a ROUND aspis, not a heater, so it
+      // never reads as the riot shield sharing this kind. Black field, gold rim,
+      // gold boss — the machine's own two colours, off the machine.
+      ctx.fillStyle = '#0a0b0d';
+      ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = itemDef.color; ctx.lineWidth = 2;   // the rim
+      ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = 'rgba(201,146,46,0.45)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(0, 0, 5.5, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = itemDef.color;                        // the boss
+      ctx.beginPath(); ctx.arc(0, 0, 2.6, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.30)';             // a highlight off the rim
+      ctx.beginPath(); ctx.arc(-3, -4, 1.4, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
       return;
     }

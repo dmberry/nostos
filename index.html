@@ -225,6 +225,13 @@
   #help .helpPanel { display: none; }
   #help .helpPanel.active { display: block; }
   #help .settingsRow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  /* #157: the two disc buttons wear the same chrome as the help tabs. */
+  #help .saveDiscRow button { padding: 7px 14px; border-radius: 6px; cursor: pointer;
+    border: 1px solid rgba(207,216,195,0.3); background: rgba(207,216,195,0.07);
+    color: #cfd8c3; font: 13px/1 system-ui, sans-serif; }
+  #help .saveDiscRow button:hover { background: rgba(207,216,195,0.18); }
+  #help #saveDiscMsg.ok { color: #9db284; }
+  #help #saveDiscMsg.bad { color: #d08a72; }
   /* Custom range. THE THUMB IS DRAWN, not the browser's.
      A native range thumb cannot reach either end of its track — it stops half
      its own width short at each — so a fill drawn to the true percentage runs
@@ -344,6 +351,19 @@
   #obterminal.hermes #obterminal-connect { color: #e6a53a; text-shadow: 0 0 4px rgba(230,150,40,0.7); }
   #obterminal.hermes #obterminal-connect .connect-track { border-color: rgba(230,150,40,0.5); background: rgba(230,150,40,0.06); }
   #obterminal.hermes #obterminal-bar { background: rgba(230,150,40,0.55); box-shadow: 0 0 8px rgba(230,150,40,0.6); }
+  /* CALYPSO's Terminal.app was a DOM panel wearing .nextstep, and .on-desktop
+     made it a window on her Workspace. Both were retired at #145 V1b: hers is
+     drawn on the canvas now, so it can sit BEHIND another window, which is the
+     one thing a DOM layer above the canvas can never do. Nothing sets either
+     class any more, so the 58 lines of rules that styled them are gone with it.
+     The names stay in TERM_CHROMES in main.js, because that list's job is to
+     clear what it does not want.
+
+     These two defaults were INSIDE that block and are kept: they hide the title
+     bar and its close box, which only her window ever showed. Cutting them with
+     the rest would have put a ✕ on every estate console. */
+  #obterminal-titlebar { display: none; }
+  #obterminal-close { display: none; }
   #obterminal-batt { display: none; }
   #obterminal.hermes #obterminal-batt { display: block; position: absolute; top: 14px; right: 22px; z-index: 2;
     font: 11px ui-monospace, 'Courier New', monospace; color: #e6a53a; letter-spacing: 0.04em;
@@ -993,8 +1013,10 @@
     <p>The AIs still control this land. Their black <b>obelisk towers</b> pulse across the landscape, and their T-class hunters patrol around them.</p>
     <div class="machineGallery" id="machineGallery">
       <div class="machineChip"><img id="gal-t1" alt="T1"><span><b>T1</b>wheeled hunter</span></div>
+      <div class="machineChip"><img id="gal-t1w" alt="T1w"><span><b>T1w</b>swarm unit</span></div>
       <div class="machineChip"><img id="gal-t2" alt="T2"><span><b>T2</b>biped stalker</span></div>
       <div class="machineChip"><img id="gal-t3" alt="T3"><span><b>T3</b>ambush sniper</span></div>
+      <div class="machineChip"><img id="gal-t8" alt="T8"><span><b>T8</b>amenity usher</span></div>
       <div class="machineChip"><img id="gal-w1" alt="W1"><span><b>W1</b>revenge squad</span></div>
       <div class="machineChip"><img id="gal-w2" alt="W2"><span><b>W2</b>water droid</span></div>
       <div class="machineChip"><img id="gal-w3" alt="W3"><span><b>W3</b>repair drone</span></div>
@@ -1003,15 +1025,18 @@
       <div class="machineChip"><img id="gal-m4" alt="M4"><span><b>M4</b>report drone</span></div>
       <div class="machineChip"><img id="gal-m5" alt="M5"><span><b>M5</b>fortress sniper</span></div>
       <div class="machineChip"><img id="gal-m6" alt="M6"><span><b>M6</b>pack robot</span></div>
+      <div class="machineChip"><img id="gal-b1" alt="B1"><span><b>B1</b>carrier</span></div>
     </div>
     <table>
       <tr><td>T1</td><td>A wheeled hunter, faster than your walk. It cannot climb: put any rise between you, or lure it into a hollow and it is trapped for good. Sprinting outruns it.</td></tr>
       <tr><td>T2</td><td>A biped stalker that walks exactly at your pace and does not tire. Sprint to break away, or stand and fight.</td></tr>
+      <tr><td>T1w</td><td>A T-1 built cheap and printed to a wave order: quicker than your walk, and made of almost nothing — one swing of anything drops it. It is a <b>distraction</b> by design, and four of them at once still do less than a single T-1's ram. Only the <b>B-1 carrier</b> makes them, and it makes them by the handful. They are <b>not</b> foundry-sealed, so a NostBook can <code>post</code> a program onto one: turning the swarm is a real alternative to clearing it.</td></tr>
+      <tr><td>T8</td><td>An <b>amenity unit</b>, and the only machine in the game that cannot be made to fight — <code>hunt</code> is not in its repertoire, so a program that asks for it faults. Four of them keep the lit floor of CALYPSO's grove. Stand on the lumen and they come together, in waves, and <b>shove you off it</b>: you lose a couple of tiles of ground and nothing else. No damage, ever. Read its braincode and you find it has settled, on a technicality, that it is entitled to move you along.</td></tr>
       <tr><td>T3</td><td>Rare, and unlike a T1/T2 it never chases: a <b>wheeled sentinel</b> — a T2's trunk on a T1's undercarriage — that camps near its tower with a pair of <b>always-lit orange laser eyes</b>. It waits, unnoticed, until it actually gets a clear shot; the eyes flare, a charge-line joins them, and the twin volley lands at roughly double a W4's bolt, then a long quiet recovery. Get in close and it only rolls back far enough to keep the shot lined up; at point-blank range it claws instead.</td></tr>
     </table>
     <p>Every hunting machine — T1, T2, T3, W1, W4 — genuinely needs to <b>see</b> you: break its line of sight behind a wall or a hill for a few seconds straight and it gives up the chase and wanders off, only re-noticing you later if you wander back within range. Hiding is a real tactic, not just running far enough. The <b>T3</b> takes this furthest: unlike the others it never notices you by proximity alone, only by an actual clear line of sight, so staying out of its sight lines in the first place is the whole game against it.</p>
     <p>Whatever is in your hand can be swung at them, even nothing at all — bare fists land a weak hit, a proper tool or blade lands a much harder one. Your penknife barely scratches them. <b>RON</b> — a resistance calling itself Reality or Nothing, whether or not it's still out there — hid weapons in crates inside the buildings: search them (<kbd>E</kbd>) for crowbars, bats, machetes, and if you are lucky the guns: a <b>stun-gun</b> (drops a machine cold for a while), an <b>electro-gun</b> (destroys a machine outright in a shower of sparks, scares off nearby animals, and its arc even scorches <b>obelisks</b> — a slower way to fell a tower than the OB_gun, but it works; its internal cell slowly self-charges while carried, so it never stays flat for long), a <b>pistol</b> or a <b>shotgun</b> (holes in anything, but gunfire ruins the salvage). Guns are dead weight without <b>batteries, ammo, or shells</b>, hidden in the same crates. None of them shoot through a wall — a solid object blocks a shot exactly like it blocks a step. Pulling the trigger with nothing in your sights still fires — and still spends the round.</p>
-    <p>On defence, the crates sometimes hide <b>shields</b>. Just <b>carrying</b> one protects you — no need to hold it, and a faint deflector ring shows around you while it's up. A <b>riot shield</b> absorbs a laser from any direction, but it is only sheet metal: enough blows and it caves in to scrap. A rarer <b>mirror shield</b> throws the shot straight back to <b>destroy the machine that fired it</b>, but every reflection heats it — press it under sustained fire and it glows red, stops bouncing shots back, and finally melts into a lump of scrap (let the fire ease and it cools off again). Rarest of all is the <b>forcefield</b> — but it's the one exception that needs a deliberate switch: <b>click it</b> in whichever slot it's sitting in (hand, pocket, or pack) to <b>arm</b> it. Once armed and carried, a green energy shell wraps right around you that nothing — shot or blow — can get through, burning a battery a minute (faster under heavy fire, since every blow it eats costs extra charge) and pulling a fresh one from your kit when a cell dies; with none left, the field drops until you feed it one. Click it again any time to disarm it and stop the drain.</p>
+    <p>On defence, the crates sometimes hide <b>shields</b>. Just <b>carrying</b> one protects you — no need to hold it, and a faint deflector ring shows around you while it's up. A <b>riot shield</b> absorbs a laser from any direction, but it is only sheet metal: enough blows and it caves in to scrap. The <b>great shield</b> — the aspis, cut off the B-1 carrier when its rim finally gives — is the better one, and the only piece of a machine's panoply a person can take up and wear. A rarer <b>mirror shield</b> throws the shot straight back to <b>destroy the machine that fired it</b>, but every reflection heats it — press it under sustained fire and it glows red, stops bouncing shots back, and finally melts into a lump of scrap (let the fire ease and it cools off again). Rarest of all is the <b>forcefield</b> — but it's the one exception that needs a deliberate switch: <b>click it</b> in whichever slot it's sitting in (hand, pocket, or pack) to <b>arm</b> it. Once armed and carried, a green energy shell wraps right around you that nothing — shot or blow — can get through, burning a battery a minute (faster under heavy fire, since every blow it eats costs extra charge) and pulling a fresh one from your kit when a cell dies; with none left, the field drops until you feed it one. Click it again any time to disarm it and stop the drain. <b>A swarm eats it alive</b>: a <b>T1w</b> does not try to get through the shell, it <b>earths itself</b> on it and takes a bite of the cell doing so — many times what an ordinary blow costs. Against the B-1's waves the forcefield is a costly minute, not a way to stand still and be safe.</p>
     <p>Every machine runs on a battery: hunting drains it and they crawl home to their obelisk to recharge. One that gets stuck runs flat where it stands. A flat machine can be <b>reprogrammed</b> (<kbd>R</kbd>, costs a battery) — it turns friendly, follows you, and a friendly T2 fells trees for you — or, if you'd rather just be rid of it, it can be <b>destroyed</b> like any other kill: it can't fight back while flat, and it still drops scrap.</p>
     <p>There is a second way to turn a machine, and it is what <b>circuit boards</b> are for once POSEIDON's blight is loose: the <b>bluebox</b>, soldered from a couple of boards (<kbd>C</kbd>). You cannot bluebox a machine that is still hunting — <b>stun</b> one first (the stun-gun), or catch one <b>drained</b> or <b>recharging</b> — then press <kbd>U</kbd> beside it. It spends a circuit board, its eye flushes <b>green</b>, and it turns into a <b>gardener</b>: it stops fighting for good and walks the dead ground reseeding it, the same as a W5. So the boards a felled tower drops become a way to raise a green army against the blight — the machines that wrecked the island set to healing it. (It is a real drain on circuits, one board a splice, weighed against the wave gun that wants all eight.)</p>
     <p>The <b>OB spoofer</b> takes the opposite trade. Where the bluebox is surgical and safe — one machine at a time, and it has to be down already — the spoofer is a transmitter that impersonates a whole tower. Stand under an obelisk, press <kbd>X</kbd>, and it spends a battery to speak in that tower's voice: every unit <b>homed to that node</b> turns and takes its orders from you. Standing in the open under a live eye is the cost, and knowing whether the garrison is worth a cell is what the <b>NostBook</b> is for — a tower's own page on the machines' web lists the units homed to it, so you read first and transmit second.</p>
@@ -1022,6 +1047,10 @@
     <p>Somewhere on the map sits a <b>W-factory</b>: a huge 8×8 foundry where everything mechanical that isn't an obelisk-side T1/T2 is actually built, not at the towers. You can bring it down — hammer its hull with a weapon (a damage bar shows over it when you're close) or catch it in a bomb blast; after many blows it collapses into a walkable heap and drops an <b>AI key</b>, a way into one AI's mainframe (more use for that to come). Kill the factory and its waves and repair drones stop. Topple a tower and the factory dispatches a <b>revenge squad of W1 hunters</b>, tougher and faster than a T2, but strictly melee — a hit needs one standing right on top of you, not just nearby. W1s attack in real waves — each one closes in and strikes, then falls back to regroup, then closes in again — and a squad spreads out to surround you rather than piling onto one spot. They track a position <b>triangulated from the obelisk network</b>, refreshed every few seconds rather than live, so even a jammed Wi-Fi block only slows them down, not stops them. The factory also fields fresh W1 waves on its own clock, an unarmed <b>W3 repair drone</b> whenever a damaged tower is left standing, and a <b>W4 laser hunter-killer</b> — unlike a W1 it never closes to melee, holding its range and firing on you instead, both the instant you attack an obelisk and, independently, every half hour of game time.</p>
     <p>Out on the water, <b>W2 droids</b> hover in squads just above the river. Idle, they drift; but come near them and the whole squad turns and fires on you in waves. Their shots only reach you <b>while you're in the water</b> though — stay on dry land or a bridge and you can pick the squad off from the bank in safety.</p>
     <p>Deep in the south, past a hacked doorway and a maze, stands a walled <b>fortress</b> — the seat of one of the island's AI minds. It fields its own <b>M-class</b> guard. In peacetime only a drone or two patrol: the <b>M4</b> is an unarmed <b>report drone</b> — it never fights, it just holds you in sight and reports the breach — and if it loses sight of you it heads for the spot it last saw you and sweeps there before giving up, so ducking behind a wall isn't enough; you have to actually move on. Slipping past its cone unseen in the first place is how you stay quiet. Get spotted and the fortress core rouses into a relentless <b>violation response</b>: it manufactures wave after wave and throws them down the maze at you. <b>M6</b> are <b>pack robots</b> — they attack in threes to fives, closing to strike then falling back to regroup, and a lone one hangs back until the pack forms. <b>M5</b> are <b>snipers</b> — they hold back out on the open quad and plink you with a low-power orange laser, annoying rather than deadly. Break the core's hull down (heavy kit only) and the AI dies: every machine on the whole island powers down where it stands — and every obelisk goes dark with it.</p>
+    <p>Guarding the <b>W-factory</b> on CALYPSO's island stands the <b>B-1 CARRIER</b> — the only black-and-gold machine anywhere, half again the size of the pack it walks with, and drawn as a king in panoply: greaves, a corslet worked in gold bands, a great round shield and a helm. It is <b>carrying a HERMES credential</b>, and killing it is the <b>warrior's road off Ogygia</b> — the whole escape chain, without opening a single shell. It walks a wide beat around the building and it will <b>not</b> attack you for turning up: walk over and look at it and you get a slow, unhurried withdrawal and nothing else.</p>
+    <p>Hit it, or hit the factory it is standing over, and the fight starts. The B-1 <b>does not trade blows</b> — it backs away at a walk and <b>prints machines at you</b>, waves of <b>T1w</b> swarm units, four while it is whole and ten once it is nearly gone. Getting <i>through</i> the swarm is the fight; the carrier itself is only about an M6 and a half. Watch its chest: the gold bands and the vent slits between them run up through orange to <b>white-hot</b> as its hull goes, so you can read how close the end is off the machine itself.</p>
+    <p>Two phases. Its <b>great shield</b> eats every blow while the rim holds — cracks open across the face as it wears — and when it finally goes it <b>falls off</b>, the arm is bare, and the hull takes everything from then on. The shield it drops is the <b>aspis</b>, and you can pick it up and carry it yourself: black field, gold rim, and it stops a laser like any other shield. It came off something that was using it properly.</p>
+    <p>You can leave. No damage and nobody near for a few seconds and it stands down and goes back to its beat, with its shield whole again — so a player who is not taking the warrior route can simply walk away and forge the card the reading way instead. And you can <b>read its mind but not change it</b>: the B-1 serves its own program to a NostBook <code>get</code> and refuses every <code>post</code>, because it is foundry-sealed. What is in there is a <b>constitution</b> with Asimov's three laws in it, every clause commented out, with three deferred reviews and a "review closed, no action" logged underneath. They were true once. Somebody typed two characters.</p>
     <p>Weapon strikes on any machine now throw a shower of <b>sparks</b> on impact.</p>
     </div><!-- /machines -->
 
@@ -1232,6 +1261,7 @@
     <h2>Ogygia, and getting off it</h2>
     <p>You wake washed up on <b>OGYGIA</b>, and it is not your island. It belongs to <b>CALYPSO</b>, and she keeps you here — well, and kindly, and completely. Hers is the one island whose daemon you do not kill: her core cannot be broken, and her guards <b>detain</b> rather than finish you. The win on Ogygia is <b>leaving</b>, which turns out to be harder.</p>
     <p>Two things stand between you and the water. The first is her: go into the fortress, reach the terminal on the core itself, and <b>refunction</b> her with the right virus in hand — she is soporific, and will deflect almost anything you say until you have the thunder to say it with. The second is the boat. A raft lashed together out of wood is not a ship, and the sea knows it: launch one and Poseidon rows you back onto your own sand, every time. Refunctioning her hands you her shipwright's recipe, the <b>golden axe</b>, and with it you can build a sea-worthy <b>greek ship</b> from wood and three found parts — a <b>sail</b> at a beached wreck, an <b>oar</b> and a <b>rope</b> left in the fishermen's huts. Only the greek ship survives the crossing.</p>
+    <p>Her machine is <b>not</b> one of the estate's green obelisk consoles. It is a NeXT, and clicking her core boots it into <b>NeXTSTEP</b>: a grey desktop with a vertical menu top-left, a dock down the right edge, and windows you can move, resize, stack and miniaturise. Her source lives in a <b>braincode</b> folder in the File Viewer; open <b>main.ml</b> in <b>Edit</b> to find the release guard, or launch <b>Terminal</b> from the dock for the black-on-white console (<code>ls</code>, <code>read</code>, <code>get</code>, <code>post</code>, <code>play</code>, and <code>run</code> once you carry the thunder). There is a board, too, <b>Draughts</b> in the dock, and a switch in <b>Preferences</b> that sets her to <b>Calypso Self-Learn</b>, where she plays herself. On this island alone, the windows do exactly what you tell them.</p>
 
     <h2>Sailing</h2>
     <p>Board a beached boat and you do not pick a destination off a menu. You <b>row out</b> first: the land slides away behind you, the fog closes ahead, and only when there is no land in any direction does the <b>chart</b> open and ask which way you put the bow. Each landfall is listed with its Homeric epithet, the formula the poem itself uses. Change your mind and you can come about and pull back for the beach. You leave every later island in the ship you arrived in, so the sea only refuses you once, on Ogygia.</p>
@@ -1289,6 +1319,17 @@
       <label><input type="radio" name="musicMode" value="off"> off</label>
     </p>
     <p class="meta">The bed and the <b>walkman</b> together. The radio buttons are the same as pressing <kbd>M</kbd>; the slider is how loud it is when it is on.</p>
+
+    <!-- #157. The run lives in this browser's storage, which goes when site
+         data is cleared and does not travel between machines. These two put it
+         on your disc as a file you can keep, move, or hand to somebody else. -->
+    <h2>Save to disc</h2>
+    <p class="settingsRow saveDiscRow">
+      <button id="saveExportBtn" type="button">Export run&hellip;</button>
+      <button id="saveImportBtn" type="button">Import run&hellip;</button>
+      <input id="saveImportFile" type="file" accept=".json,application/json" hidden>
+    </p>
+    <p class="meta" id="saveDiscMsg">Export writes the whole run — progress, world, notepad, KLEOS and your settings — to one file. Import replaces what is in this browser with the file's contents and reloads, so export first if the run here is worth keeping.</p>
     </div><!-- /settings -->
 
     <p class="meta">Press <kbd>H</kbd> or click anywhere outside this panel to close.</p>
@@ -1299,6 +1340,10 @@
   <div class="lap-lid">
    <div class="lap-bezel">
   <div class="crt">
+    <!-- #145: the NeXTSTEP Terminal.app title bar. Only shown when her console
+         is a window on her Workspace (.on-desktop); it carries the shell/tty
+         branding the reference wears and is the drag handle. -->
+    <div id="obterminal-titlebar"><span id="obterminal-title">Terminal</span><button id="obterminal-close" title="Close">✕</button></div>
     <div id="obterminal-batt"></div>
     <div id="obterminal-connect">
       <div class="connect-label">OPENING CHANNEL...</div>
@@ -1627,6 +1672,7 @@
   #netscape .ns-page .bm-h.bm-purple { color: #7a1f8a; }
   #netscape .ns-page .bm-h.bm-green { color: #2c7d2c; }
   #netscape .ns-page .bm-h.bm-steel { color: #4a5a6a; }
+  #netscape .ns-page .bm-h.bm-orange { color: #b4560a; }
   #netscape .ns-page .bm-row { display: flex; align-items: center; gap: 8px; margin: 4px 0 4px 4px; }
   #netscape .ns-page .bm-i { width: 19px; height: 19px; flex: none; }
   #netscape .ns-page .bm-row a { display: inline; list-style: none; margin: 0; font-weight: bold; }
@@ -1739,6 +1785,43 @@
   #netscape .ns-page.bg-oxford hr { border-top-color: #24476f; }
   #netscape .ns-page.bg-oxford small { color: #b9cbe4; }
   #netscape .ns-page.bg-oxford figure figcaption { color: #b9cbe4; }
+  /* #139 — GeoCities. The amateur homepages that hold the salvaged lore. Loud
+     tiled backgrounds, garish text, glitter rules, a hit counter, a webring at
+     the foot. Every one of these was somebody's, made by hand, and the estate
+     never took them down because nobody thought them worth taking. */
+  #netscape .ns-page.bg-stars { background: #000010 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80'%3E%3Crect width='80' height='80' fill='%23000010'/%3E%3Ccircle cx='12' cy='20' r='1' fill='%23fff'/%3E%3Ccircle cx='54' cy='8' r='1.2' fill='%23cfe'/%3E%3Ccircle cx='68' cy='52' r='1' fill='%23fff'/%3E%3Ccircle cx='30' cy='64' r='1' fill='%23ffd'/%3E%3Ccircle cx='44' cy='40' r='0.8' fill='%23fff'/%3E%3C/svg%3E") repeat; color: #ffff66; }
+  #netscape .ns-page.bg-stars h1, #netscape .ns-page.bg-stars h2 { color: #00ff66; }
+  #netscape .ns-page.bg-stars a { color: #66ffff; } #netscape .ns-page.bg-stars a:visited { color: #ff99ff; }
+  #netscape .ns-page.bg-stars small { color: #aab; }
+  #netscape .ns-page.bg-teal { background: #008080 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24'%3E%3Crect width='24' height='24' fill='%23008080'/%3E%3Crect width='12' height='12' fill='%23009a9a'/%3E%3Crect x='12' y='12' width='12' height='12' fill='%23009a9a'/%3E%3C/svg%3E") repeat; color: #ffffcc; }
+  #netscape .ns-page.bg-teal h1, #netscape .ns-page.bg-teal h2 { color: #ffff00; }
+  #netscape .ns-page.bg-teal a { color: #ccffff; } #netscape .ns-page.bg-teal a:visited { color: #ffddff; }
+  #netscape .ns-page.bg-teal small { color: #cee; }
+  #netscape .ns-page.bg-lace { background: #ffe4f0 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Crect width='40' height='40' fill='%23ffe4f0'/%3E%3Ccircle cx='20' cy='20' r='6' fill='none' stroke='%23f7b8d6' stroke-width='1'/%3E%3C/svg%3E") repeat; color: #663355; }
+  #netscape .ns-page.bg-lace h1, #netscape .ns-page.bg-lace h2 { color: #cc3388; }
+  #netscape .ns-page.bg-lace a { color: #aa2277; } #netscape .ns-page.bg-lace a:visited { color: #772255; }
+  #netscape .ns-page.bg-parch { background: #f4ecd0 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Crect width='60' height='60' fill='%23f4ecd0'/%3E%3Crect y='0' width='60' height='1' fill='%23e6dcb8'/%3E%3C/svg%3E") repeat; color: #3a3320; }
+  #netscape .ns-page.bg-parch h1, #netscape .ns-page.bg-parch h2 { color: #7a4b00; }
+  /* GeoCities furniture, theme-independent. */
+  #netscape .ns-page .geo-band { text-align: center; margin: 2px 0 8px; }
+  #netscape .ns-page .geo-title { font: bold 30px 'Comic Sans MS', 'Comic Sans', cursive, sans-serif; letter-spacing: 1px; }
+  #netscape .ns-page .glit { display: block; height: 6px; margin: 8px 0; border: 0;
+    background: repeating-linear-gradient(90deg, #ff00ff 0 6px, #00ffff 6px 12px, #ffff00 12px 18px, #00ff00 18px 24px);
+    animation: geoGlit 0.6s steps(4) infinite; }
+  @keyframes geoGlit { to { background-position: 24px 0; } }
+  @media (prefers-reduced-motion: reduce) { #netscape .ns-page .glit { animation: none; } .geo-blink { animation: none !important; } }
+  #netscape .ns-page .geo-blink { animation: geoBlink 1s steps(1) infinite; }
+  @keyframes geoBlink { 50% { opacity: 0; } }
+  #netscape .ns-page .geo-under { display: inline-block; margin: 4px auto; padding: 2px 10px;
+    font: bold 12px 'Comic Sans MS', cursive; color: #000; background: #ffcc00;
+    border: 3px dashed #000; }
+  #netscape .ns-page .geo-counter { display: inline-block; font: bold 15px 'Courier New', monospace;
+    color: #33ff33; background: #000; border: 2px inset #999; padding: 1px 6px; letter-spacing: 3px; }
+  #netscape .ns-page .geo-ring { margin: 12px 0 2px; padding: 8px; text-align: center;
+    border: 3px ridge #c0c0c0; background: rgba(255,255,255,0.12); font: bold 13px Verdana, sans-serif; }
+  #netscape .ns-page .geo-doc { margin: 8px 0; padding: 6px 10px; border: 2px groove #ffffff;
+    background: rgba(255,255,255,0.14); }
+  #netscape .ns-page marquee { font: bold 14px 'Comic Sans MS', cursive; }
   /* A book is framed rather than injected: seven megabytes of Shakespeare
      through innerHTML would stall the browser, and a frame also keeps the
      book's own stylesheet, cover and chapter links working, since they resolve

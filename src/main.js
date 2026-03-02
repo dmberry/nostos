@@ -38,10 +38,17 @@ import { permissionFile, readPermission, permissionBanner, PERMISSION_FILE,
 // (V1) cannot drift.
 import { calypsoFiles, unreachable as calypsoUnreachable, loveLetter, loveLetterFile, readMainEdit, DAY_HEADINGS } from './game/calypso-code.js';
 import { checkersFile, parseCheckersFile, checkersModified } from './game/draughts-cabinet.js';
+// #145 V1a: her machine boots into NeXTSTEP. All the state lives in the module;
+// this file turns clicks into calls and the renderer draws what comes back.
+import * as WS from './game/workspace.js';
 import { herFarewell } from './game/calypso-code.js';
+import * as CB from './game/console-buffer.js'; // #145 V1b: her console on the canvas
 import { resolveBodyOverlaps } from './game/collision.js';
 import { spawnWaterDroids, updateWaterDroids, drawWaterDroid } from './game/waterdroids.js';
 import { Lore, FRAGMENTS } from './game/lore.js';
+// #139 — the fragment ids that now live on the GeoCities ring; Lore keeps them
+// off the physical caches so the scrapbook thins to occasional paper finds.
+import { GEO_FRAGMENT_IDS } from './game/archive-geocities.js';
 import { ITEMS, TAPES } from './game/items.js';
 import { sfx } from './engine/sound.js';
 import { worldToScreen } from './engine/iso.js';
@@ -49,6 +56,7 @@ import { runRonml, decide, smlEcho, joinProgramLines, needsMoreInput, continuesP
 import { createEliza } from './game/eliza.js';
 import { placeTors, HERMES_DOCS, hermesTopics, virusFor, virusFilesFor, virusDocsFor } from './game/hermes.js';
 import { VERSION } from './version.js';
+import { buildSaveFile, validateSaveFile, applySaveFile, describeSaveFile, saveFileName } from './game/savefile.js';
 import { drawRobotVision } from './game/robotvision.js';
 import { screenDirToWorld } from './engine/iso.js';
 import { stampCoast } from './engine/coast.js';
@@ -228,6 +236,31 @@ player.onCoreDefeated = (core) => {
     lastWords: core && core.lastWords, book,
   };
   player.say(`${ai} is dead. Every machine on the island powers down where it stands.`);
+};
+// #159 — the card comes off a dead carrier (docs/hermes-warrior-path.md).
+// player.js sets the flag and calls this; everything that has to KNOW about it
+// lives here, because the arming, the tower net and the handset are all main's.
+player.onHermesSeized = () => {
+  const ai = islandAiName();
+  // It is a real HERMES credential, so it arms exactly like a forged one. This
+  // is the whole point of the route: a player who never opened a shell now
+  // holds a working card.
+  player.virusArmed.add(ai);
+  // And POSEIDON reads it. The card stopped answering the moment its carrier
+  // did, so the net has it listed as missing before you have picked it up.
+  worldStir.stir();
+  player.say('The card is warm and still transmitting. Somewhere out past the towers, something notes that it has stopped being where it was.');
+  // He runs on the tower net, so he is the one who reads the gap. Same channel
+  // the deadline warnings use, and the same shouting register.
+  const said = [
+    'A CREDENTIAL OF MINE HAS CHANGED HANDS.',
+    'THE CARRIER STOPPED REPORTING. THE CARD DID NOT.',
+    'IT WILL OPEN HER DOOR. IT WILL NOT OPEN MINE UNNOTICED.',
+  ];
+  nokia.enqueue('POSEIDON', said);
+  for (const l of said) logSms(player, 'POSEIDON', 'them', l);
+  phoneBeep();
+  kleos('hermesSeized', { ai });
 };
 let daemonsDown = 0; // how many island AIs felled this run (for the Archipelago tally)
 
@@ -426,10 +459,16 @@ try {
       }
       if (st.ammoFrac && typeof st.ammoFrac === 'object') player.ammoFrac = st.ammoFrac;
       if (Array.isArray(st.ronmlKeys)) player.ronmlKeys = new Set(st.ronmlKeys);
+      if (typeof st.blueboxProgram === 'string') player.blueboxProgram = st.blueboxProgram;
+      if (typeof st.blueboxFile === 'string') player.blueboxFile = st.blueboxFile;
       if (Array.isArray(st.virusArmed)) player.virusArmed = new Set(st.virusArmed);
       // Pre-v1.126 saves: a hermes card existed but carried no per-island arming.
       // Grandfather it as armed against CALYPSO so an in-flight run isn't stranded.
       else if (player.hasItem('hermes_card')) player.virusArmed = new Set(['CALYPSO']);
+      // #159: which of the two routes to the card this run took. Absent on any
+      // save written before the carrier existed, and absent reads as forged —
+      // the old saves all were.
+      player.hermesTraced = !!st.hermesTraced;
       if (typeof st.x === 'number') _bootPos = { x: st.x, y: st.y }; // the saved position, for the island resume below
     }
     // Guard against stale item keys carried over from a save written by an
@@ -531,6 +570,7 @@ function buildSaveBlob() {
       nokiaLog: (player.nokiaLog || []).slice(-40), // the SMS threads, so the correspondence survives reload
       snakeHigh: player.snakeHigh || 0,  // the handset remembers its best game
       virusArmed: [...(player.virusArmed || [])], // which daemons the card is armed against (per-island virus)
+      hermesTraced: !!player.hermesTraced, // #159: the card was taken off a carrier, not forged at a relay
       kleos: achieveRunState(),          // this run's counters and the purity of each conduct track
       // THE CLOCK, and the thing it arms. Neither was saved, and the effect was
       // not a cosmetic one: the deadline started over on every reload, so the
@@ -567,6 +607,12 @@ function buildSaveBlob() {
       // Node keys hacked this run: cheap to re-earn, but re-earning them is
       // busywork rather than play.
       ronmlKeys: [...(player.ronmlKeys || [])],
+      // #121: what the bluebox is loaded with. A program you wrote is the most
+      // expensive thing in the game to lose, and #156's whole lesson was that
+      // a new carried thing has to be added here at the same time as it is
+      // added to the player.
+      blueboxProgram: player.blueboxProgram || null,
+      blueboxFile: player.blueboxFile || null,
     },
     world: {
       currentIsland: currentWorld.id, // Stage 1c: which island you're on, so a voyage survives reload
@@ -756,6 +802,14 @@ let draughtsSave = null;   // its run record, so a save keeps the streak
 // K3: the parameters she plays with. They live out here rather than on the
 // cabinet so that a posted checkers.ml survives the board being closed.
 let draughtsParams = null;
+// #145: her Workspace, while it is up. Null everywhere else on the archipelago —
+// the estate's obelisks have green consoles and nothing to put in a window.
+let workspace = null;
+let wsDrag = null;         // {id, dx, dy} while a title bar is being dragged
+// #145: her console is a DOM layer above the canvas, so it cannot sit BEHIND a
+// File Viewer. Clicking the desktop SUSPENDS it — hidden, but its session kept
+// — rather than destroying it; the dock's Terminal tile brings it back. So it
+// never "vanishes" and the desktop is reachable (David, 2026-08-13).
 // ---- C2: capture, and the five headings ------------------------------------
 //
 // Agre (docs/ai-codebase-plan.md §7): surveillance watches you; CAPTURE
@@ -1053,7 +1107,7 @@ function playerElevSteps() {
 // systems-registry refactor, docs/refactor-registry.md) — the hub never names it.
 // Its update ticks via systems.runUpdate() in update(); its two draw phases via
 // the renderer's runDrawWorld/runDrawScreen.
-const lore = new Lore(map, WORLD_SEED);
+const lore = new Lore(map, WORLD_SEED, GEO_FRAGMENT_IDS);
 // Opening a resistance cache folds any recovered documents packed in it into the
 // Scrapbook (quietly — openBox prints its own one-line summary).
 player.onFindLore = (id) => lore.findFrag(id, player, true);
@@ -1715,6 +1769,66 @@ function draughtsAutoKey(key) {
   return _autoTyped === 'auto';
 }
 
+/**
+ * The cabinet's own clock: her thinking, her self-play, the view. No input —
+ * so the Workspace can run the board as one window among several while its own
+ * menu and its other windows go on taking clicks.
+ */
+function draughtsTick(dt) {
+  const c = draughts;
+  // The board reads the switch so its start button can label itself SELF-PLAY.
+  c.selfLearn = !!(workspace && workspace.prefs && workspace.prefs.playHerself);
+  // The switch drives it: if Calypso Self-Learn is on and the board is idle
+  // (freshly opened, or the player toggled it mid-game), she takes both chairs.
+  // Handling it here rather than only at launch means toggling the pref with
+  // the board already open works too.
+  if (workspace && workspace.prefs && workspace.prefs.playHerself
+      && !c.futile && (c.phase === 'attract' || c.phase === 'thinking' || c.phase === 'playing')) {
+    if (cabinetAuto(c, 'auto')) sfx.play('coin');
+  }
+  cabinetTick(c, dt);
+  if (c.phase === 'selfplay') {
+    const ev = cabinetSelfTick(c, dt);
+    if (ev === 'game') sfx.play('blip');
+    // cabinetSelfTick sets c.futile itself before returning 'done', so the gate
+    // must be the EVENT, not the flag — testing !c.futile here never fired, and
+    // that was the "self-learn does nothing" bug (David, 2026-08-13). WOPR
+    // stands down: she plays herself to WINNER: NONE and lets you go.
+    // WINNER: NONE. This used to call grantHerLeave and nothing else, and on the
+    // desktop that meant the release happened INVISIBLY: the Workspace draws over
+    // the whole screen, so her farewell and the message line went out underneath
+    // it and the player watched the board go quiet and was told nothing (David,
+    // 2026-08-14: "didn't get a success modal for being freed"). The release is
+    // the biggest thing that happens on this island, so it says so where the
+    // player is actually looking — in an attention panel, which is the modal her
+    // machine already has.
+    if (ev === 'done') {
+      sfx.play('coin');
+      player.say(HER_LINE);
+      kleos('calypsoFutile', { by: c.by });
+      if (c.escape) {
+        const first = !player.calypsoLeave;
+        grantHerLeave('futile');
+        if (workspace) {
+          WS.notice(workspace, first ? 'CALYPSO stands down from the board' : 'CALYPSO — already released',
+            first
+              ? 'She has played it out, both sides, and found no line where keeping you was right.\n\n'
+                + 'You may leave Ogygia. The bronze axe is yours, and there is a paper on the NostBook — '
+                + 'permission.ml — to carry to any tower.'
+              : 'The board is finished with. Nothing more is owed here.');
+        }
+      } else if (workspace) {
+        WS.notice(workspace, 'WINNER: NONE',
+          'A strange game. This board is a rehearsal — her own is the one that counts.');
+      }
+    }
+  } else if (readyToThink(c)) {
+    const m = cabinetThink(c);
+    if (m) sfx.play(m.captures.length ? 'termerr' : 'blip');
+  }
+  cabinetView(c);
+}
+
 function updateDraughts(dt) {
   const c = draughts;
   cabinetTick(c, dt);
@@ -1766,7 +1880,14 @@ function draughtsClick(mx, my) {
   const c = draughts;
   const btn = renderer.draughtsButtonAt(mx, my);
   if (btn === 'close') { closeDraughts(); return; }
-  if (btn === 'start') { cabinetStart(c); return; }
+  if (btn === 'start') {
+    // The SELF-PLAY button (Calypso Self-Learn is on) starts her against
+    // herself; the plain New Game / Play Again button starts your game.
+    if (c.selfLearn) {
+      if (cabinetAuto(c, 'auto')) { sfx.play('coin'); player.say('She takes both chairs, and begins.'); }
+    } else cabinetStart(c);
+    return;
+  }
   if (btn === 'resign') {
     if (cabinetResign(c)) {
       kleos('draughtsResigned', {});
@@ -1787,6 +1908,391 @@ function draughtsClick(mx, my) {
   const what = cabinetPick(c, sq);
   if (what === 'picked' || what === 'dropped') sfx.play('blip');
   else if (what === 'moved' || what === 'took') sfx.play(what === 'took' ? 'zap' : 'blip');
+}
+
+// ---- #145 V1a: the Workspace -----------------------------------------------
+//
+// Her machine BOOTS into NeXTSTEP. Clicking the panel on the cube no longer
+// drops you at a prompt: Mach counts its pages, the window server starts, and
+// the Workspace comes up with her home already open. The console is still
+// there, as Terminal.app in the dock, and so is the board, as Draughts.app,
+// because on this island those are programs on a workstation rather than
+// things the game conjures.
+//
+// The pure functions are all in game/workspace.js. This object is what the
+// renderer is handed, so ui.js imports nothing from the game layer.
+const wsApi = {
+  windowsBack: WS.windowsBack, focusOf: WS.focusOf, menuRows: WS.menuRows,
+  browserColumns: WS.browserColumns, nodeAt: WS.nodeAt, isDir: WS.isDir,
+  visibleLines: WS.visibleLines, dockTiles: WS.dockTiles, bootLines: WS.BOOT_LINES,
+  prefsRows: WS.prefsRows, prefsSections: WS.PREFS_SECTIONS,
+  menuW: WS.MENU_W, dockW: WS.DOCK_W,
+  mailboxFrom: WS.mailboxFrom,
+  // What the Info panel says. Read live so the uptime is the island's own.
+  aboutLines: () => [
+    'Mach kernel (CALYPSO)',
+    '32 MB, one user',
+    `Day ${dayNight.day}, ${dayNight.clock}`,
+    `Uptime: ${2556 + (dayNight.day || 0)} days`,
+    'Supervision: none on record',
+  ],
+};
+
+function openWorkspace(booted = false) {
+  workspace = WS.newWorkspace(calypsoCodebase(), {
+    clock: dayNight.clock,
+    date: String(dayNight.day),
+    booted,
+    w: renderer.w, h: renderer.h,
+    // K4: the Play Herself switch is greyed until the run has earned it —
+    // two concessions, or having got there once already. The typed word still
+    // works for a player who read the Samuel page and knows it without the
+    // game having watched them learn it; that door was always player knowledge
+    // rather than saved state, and the switch does not close it.
+    knowsAuto: !!(draughtsSave && (draughtsSave.streak >= 2 || draughtsSave.by)),
+  });
+  wsDrag = null;
+  player.terminalSafe = true;
+  // The desktop fills the canvas, so the world's own overlays have no business
+  // showing through it.
+  if (hintEl) hintEl.style.visibility = 'hidden';
+  sfx.play('blip');
+}
+
+function closeWorkspace() {
+  // Logging out closes what was running on the machine.
+  wsTermCx = null;              // her console goes with the desktop it lived on
+  if (obTermEl.style.display !== 'none') closeObTerminal();
+  if (draughts) closeDraughts();
+  // Anything edited and saved in her Workspace is written back to the live
+  // parameters, the same way a posted checkers.ml is.
+  const ck = workspace && WS.nodeAt(workspace.tree, ['me', 'braincode', 'checkers.ml']);
+  if (ck && ck.f) {
+    const r = parseCheckersFile(ck.f, draughtsParams || undefined);
+    if (r && r.params) { draughtsParams = r.params; if (draughts) draughts.params = r.params; }
+  }
+  workspace = null;
+  wsDrag = null;
+  player.terminalSafe = false;
+  if (hintEl) hintEl.style.visibility = '';
+}
+
+/** The dock. Every tile is an app, and two of them are the ones we already had. */
+function wsLaunch(id) {
+  const ws = workspace;
+  switch (id) {
+    case 'terminal': {
+      // #145 V1b: Terminal.app is a WINDOW on the canvas now, not the DOM
+      // overlay. It stacks, drags and resizes with the rest, and the desktop
+      // shows through behind it, which the overlay could never do. Everything
+      // it prints comes through replPrint and everything typed into it goes to
+      // coreRun, so it is the same console her panel was, in a frame that
+      // belongs to the desktop.
+      const had = ws.windows.find((w) => w.kind === 'terminal');
+      if (had) { WS.restore(ws, had.id); WS.raise(ws, had.id); return; }
+      ws.terminalUp = true;
+      terminalKind = 'core';
+      terminalOb = hold.coreTerminal ? hold.coreTerminal.obj : null;
+      player.terminalSafe = true;
+      // The same session reset openCoreTerminal does. Missed on the first pass:
+      // without it a reopened window carried the previous visit's bindings, its
+      // history, and her rebuff counter part-way up its own escalation, so she
+      // answered a first question as though it were the fourth.
+      replSession = {};
+      replLog = [];
+      replHistory = [];
+      replHistoryIdx = -1;
+      _coreRebuffIdx = 0;
+      wsTermCx = CB.newConsole({ prompt: '>', cols: 64 });
+      WS.openWindow(ws, WS.newWindow('terminal', '/bin/csh (ttyp1) — CALYPSO',
+        150, 120, 470, 300, { cx: wsTermCx }));
+      coreBanner();
+      return;
+    }
+    case 'draughts': {
+      // K2 as an application on her machine rather than a thing the console
+      // opens: launched from the dock, like Edit and like Terminal, and drawn
+      // as a window in the z-order rather than over the top of the desktop.
+      const had = ws.windows.find((w) => w.kind === 'draughts');
+      if (had) { WS.restore(ws, had.id); WS.raise(ws, had.id); return; }
+      ws.draughtsUp = true;
+      openDraughts(true);
+      WS.openWindow(ws, WS.newWindow('draughts', 'Draughts', 120, 90, 460, 320));
+      // Preferences → Draughts → Play Herself. She takes the other chair as the
+      // board opens, which is what the switch says it does.
+      if (ws.prefs.playHerself && draughts && cabinetAuto(draughts, 'auto')) {
+        sfx.play('coin');
+        player.say('She has been set to play herself, and she does.');
+      }
+      return;
+    }
+    case 'fileviewer': {
+      const w = WS.newWindow('viewer', 'File Viewer — /me', 60 + ws.windows.length * 18, 80 + ws.windows.length * 18, 480, 300);
+      WS.openWindow(ws, w);
+      return;
+    }
+    case 'edit': {
+      const at = WS.isDir(WS.nodeAt(ws.tree, ws.sel)) ? ['me', 'braincode', 'main.ml'] : ws.sel;
+      WS.openSelection(ws, at);
+      return;
+    }
+    case 'mail': WS.openMail(ws); return;
+    case 'recycler':
+      WS.openRecycler(ws);
+      return;
+    case 'librarian':
+      WS.notice(ws, 'Librarian', 'Her machine has one bookshelf, and it is her own work. Read it in the File Viewer.');
+      return;
+    case 'inspector':
+      WS.notice(ws, 'Inspector', 'The Attributes panel is not wired yet. Read the files in Edit for now.');
+      return;
+    default:
+      sfx.play('termerr');
+  }
+}
+
+// An .app in /Apps is a LAUNCHER, not a document. Opening one runs the app
+// rather than showing its (empty) bundle in Edit — which was the blank-window
+// bug (David, 2026-08-13). Everything else opens normally.
+const WS_APP_LAUNCH = {
+  'FileViewer.app': 'fileviewer', 'Edit.app': 'edit', 'Terminal.app': 'terminal',
+  'Draughts.app': 'draughts', 'Librarian.app': 'librarian', 'Inspector.app': 'inspector',
+};
+function wsOpenPath(ws, path) {
+  const name = path[path.length - 1];
+  const app = WS_APP_LAUNCH[name];
+  if (app) { wsLaunch(app); return; }
+  WS.openSelection(ws, path);
+}
+
+function workspaceClick(mx, my) {
+  const ws = workspace;
+  // An attention panel is modal: any click dismisses it and does nothing else.
+  if (ws.notice) { WS.clearNotice(ws); sfx.play('blip'); return; }
+  // The board's own controls first. Its squares and buttons are inside its
+  // window and nowhere else, so a hit here is unambiguous — and it has to come
+  // first, because the window's drag rect covers its close box.
+  if (draughts) {
+    const btn = renderer.draughtsButtonAt(mx, my);
+    const sq = renderer.draughtsSquareAt(mx, my);
+    if (btn || sq != null) {
+      const win = ws.windows.find((w) => w.kind === 'draughts');
+      if (win) WS.raise(ws, win.id);
+      if (btn === 'close' && win) WS.closeWindow(ws, win.id);
+      draughtsClick(mx, my);
+      return;
+    }
+  }
+  const hit = renderer.workspaceHit(mx, my);
+  if (!hit) { ws.menuPath = []; return; }
+  switch (hit.act) {
+    case 'close': {
+      const w = WS.windowById(ws, hit.id);
+      // A dirty window is not closed out from under the player. NeXTSTEP would
+      // raise an attention panel here; V1a says so and keeps the window.
+      if (w && w.dirty) { player.say('That window has unsaved changes. Save it first.'); return; }
+      if (w && w.kind === 'draughts') closeDraughts();
+      WS.closeWindow(ws, hit.id);
+      sfx.play('blip');
+      return;
+    }
+    case 'pref': WS.togglePref(ws, hit.id) ? sfx.play('blip') : sfx.play('termerr'); return;
+    case 'prefsection': ws.prefs.section = hit.id; return;
+    case 'mini': WS.miniaturise(ws, hit.id); sfx.play('blip'); return;
+    case 'restore': WS.restore(ws, hit.id); sfx.play('blip'); return;
+    case 'drag': {
+      const w = WS.windowById(ws, hit.id);
+      WS.raise(ws, hit.id);
+      if (w) wsDrag = { id: hit.id, mode: 'move', dx: mx - w.x, dy: my - w.y };
+      return;
+    }
+    case 'resize': {
+      const w = WS.windowById(ws, hit.id);
+      WS.raise(ws, hit.id);
+      // Anchor to the offset from the bottom-right corner so the corner tracks
+      // the pointer.
+      if (w) wsDrag = { id: hit.id, mode: 'resize', dx: mx - (w.x + w.w), dy: my - (w.y + w.h) };
+      return;
+    }
+    case 'raise': WS.raise(ws, hit.id); ws.menuPath = []; return;
+    case 'browse': {
+      const isD = WS.isDir(WS.nodeAt(ws.tree, hit.path));
+      // One click selects. A directory also opens, which is what makes the
+      // browser scroll a column in from the right. A file opens in Edit; an
+      // .app launches its application rather than opening blank.
+      ws.sel = hit.path.slice();
+      if (!isD) wsOpenPath(ws, hit.path);
+      sfx.play('blip');
+      return;
+    }
+    case 'select': ws.sel = hit.path.slice(); return;
+    case 'shelf':
+      // A shelf icon opens what it points at, the same as double-clicking it in
+      // the browser — a file into Edit, a folder selected in the viewer.
+      ws.sel = hit.path.slice();
+      if (!WS.isDir(WS.nodeAt(ws.tree, hit.path))) wsOpenPath(ws, hit.path);
+      sfx.play('blip');
+      return;
+    case 'expand': WS.expandAt(ws, hit.id, hit.line); return;
+    case 'dock': wsLaunch(hit.id); return;
+    case 'maillocked':
+      // Her mailbox, read from an account that may read it. Nothing here sends.
+      WS.notice(ws, 'Mail', 'Not Authorised!');
+      sfx.play('termerr');
+      return;
+    case 'mailscroll': {
+      const w = WS.windowById(ws, hit.id);
+      if (w) { w.top = Math.max(0, (w.top || 0) + hit.dir); WS.raise(ws, hit.id); }
+      return;
+    }
+    case 'mailsel': {
+      const w = WS.windowById(ws, hit.id);
+      if (w) { w.sel = hit.i; WS.raise(ws, hit.id); }
+      sfx.play('blip');
+      return;
+    }
+    case 'tear': WS.tearOff(ws, hit.path, 210, 40); return;
+    case 'tearclose': WS.tearClose(ws, hit.label); return;
+    case 'menu': return wsMenuPick(hit);
+    default:
+  }
+}
+
+function wsMenuPick(hit) {
+  const ws = workspace;
+  const label = hit.label;
+  // A greyed row still answers, so a player is never left wondering whether the
+  // click registered (David, 2026-08-13).
+  if (hit.on === false) { sfx.play('termerr'); WS.notice(ws, label, 'Not available with the current selection.'); ws.menuPath = []; return; }
+  // A row that opens more rows opens them; everything else acts and shuts the
+  // menu, which is what a menu is for.
+  const deeper = WS.menuRows(ws, hit.path);
+  if (deeper.length && !hit.winId) { WS.menuOpen(ws, hit.path); return; }
+  ws.menuPath = [];
+  if (hit.winId) { WS.restore(ws, hit.winId); WS.raise(ws, hit.winId); return; }
+  switch (label) {
+    case 'Log Out': closeWorkspace(); return;
+    case 'Hide':
+      // Hide tucks the windows away to the desktop floor; it does NOT log out.
+      // Only Log Out leaves her machine (David, 2026-08-13).
+      for (const w of ws.windows.slice()) if (!w.mini) WS.miniaturise(ws, w.id);
+      sfx.play('blip');
+      return;
+    case 'Arrange in Front': WS.arrangeInFront(ws); return;
+    case 'Miniaturize Window': if (ws.keyId) WS.miniaturise(ws, ws.keyId); return;
+    case 'Close Window': if (ws.keyId) WS.closeWindow(ws, ws.keyId); return;
+    case 'Open': wsOpenPath(ws, ws.sel); return;
+    case 'Open as Folder': WS.openSelection(ws); return;
+    case 'New Viewer': wsLaunch('fileviewer'); return;
+    case 'Browser': ws.view = 'browser'; return;
+    case 'Icon': ws.view = 'icon'; return;
+    case 'Listing': ws.view = 'listing'; return;
+    case 'Console': case 'Open Terminal Here': wsLaunch('terminal'); return;
+    case 'Search': {
+      // Services → Librarian → Search: the selection, looked up. V1a answers
+      // from what her own files say rather than from a documentation set.
+      const name = ws.sel[ws.sel.length - 1] || 'nothing';
+      WS.notice(ws, 'Librarian', `Search for “${name}”. Her machine has one bookshelf, and it is her own work.`);
+      return;
+    }
+    case 'Preferences…': WS.openPrefs(ws); return;
+    case 'Info Panel…': WS.openAbout(ws); return;
+    case 'Empty Recycler': {
+      const n = WS.emptyRecycler(ws);
+      WS.notice(ws, 'Recycler', n ? `${n} item${n === 1 ? '' : 's'} gone.` : 'Already empty.');
+      return;
+    }
+    case 'Destroy': case 'Delete': {
+      const name = WS.recycle(ws, ws.sel);
+      if (!name) { WS.notice(ws, 'Recycler', 'Nothing selected.'); return; }
+      WS.notice(ws, 'Recycler', `${name} is in the Recycler.`);
+      return;
+    }
+    case 'New Folder': case 'Duplicate': case 'Compress':
+    case 'Cut': case 'Copy': case 'Paste':
+    case 'Select All': case 'Eject': case 'Initialize…': case 'Sort Icons':
+    case 'Clean Up Icons': case 'Update Viewers': case 'Inspector…': case 'Finder':
+    case 'Processes…': case 'Legal…': case 'Help…': case 'Define in Webster':
+    case 'Open Selection': case 'Mail Selection': case 'Add to Project':
+      // Every leaf resolves, so the menu is never a dead end. What it resolves
+      // to is HER refusing, not us apologising: "does nothing yet" is the game
+      // admitting it is unfinished, and she would never say that. She would say
+      // you are not allowed. (David, 2026-08-13.)
+      WS.notice(ws, label.replace(/[.…]+$/, ''), 'Not Authorised!');
+      return;
+    default:
+      WS.notice(ws, label.replace(/[.…]+$/, ''), 'Not Authorised!');
+  }
+}
+
+function updateWorkspace(dt) {
+  const ws = workspace;
+  const at = input.clickPos();
+  // The boot runs to the end, or a click lands it. Either way nothing else in
+  // the Workspace reads input while Mach is still counting pages.
+  if (ws.booting) {
+    if (at || input.consumePress('Escape') || input.consumePress('Space')) { ws.bootSkip = true; input.consumeClick(); }
+    WS.bootTick(ws, dt);
+    if (!ws.booting) sfx.play('coin');
+    return;
+  }
+  ws.clock = dayNight.clock;
+  ws.date = String(dayNight.day);
+  // Mail reads the handset's own log, so the mailbox and the phone are one
+  // store seen two ways and cannot disagree.
+  ws.mail = player.nokiaLog || [];
+  // The wheel scrolls whatever list is in front. It has to be consumed HERE:
+  // the only other consumer is the camera zoom, and that sits below the early
+  // return this branch takes, so an unconsumed wheel would queue up and zoom
+  // the island the moment the desktop closed.
+  const wheel = input.consumeWheel();
+  if (wheel) {
+    const key = WS.windowById(ws, ws.keyId);
+    if (key && key.kind === 'mail') key.top = Math.max(0, (key.top || 0) + (wheel > 0 ? 3 : -3));
+  }
+  // The canvas can change size under the desktop. Nothing may end up with its
+  // close box off the edge or behind the dock.
+  WS.fitWindows(ws, renderer.w, renderer.h);
+  // Sitting at her machine is as safe as sitting at a console, and closing the
+  // Terminal window inside the Workspace must not quietly take that away.
+  player.terminalSafe = true;
+  // The board runs while the desktop does. Its window is one of several, so
+  // her thinking goes on whether or not it is the one in front.
+  if (draughts) {
+    draughtsTick(dt);
+    ws.draughtsUp = true;
+    // `auto` is still typed at the board, for a player who knows the word
+    // without the run having earned the switch.
+    for (const k of ['a', 'u', 't', 'o']) {
+      if (input.consumePress(`Key${k.toUpperCase()}`) && draughtsAutoKey(k) && cabinetAuto(draughts, 'auto')) {
+        ws.knowsAuto = true;
+        ws.prefs.playHerself = true;
+        sfx.play('coin');
+        player.say('You ask her to play herself. She considers it, and takes the other chair.');
+      }
+    }
+  } else ws.draughtsUp = false;
+  if (input.consumePress('Escape')) {
+    if (ws.menuPath.length) { ws.menuPath = []; return; }
+    closeWorkspace();
+    return;
+  }
+  if (at) { input.consumeClick(); workspaceClick(at.x, at.y); }
+  // Dragging a window by its title bar. The mouse is read directly rather than
+  // through a click, because a drag is a state and a click is an event.
+  if (wsDrag) {
+    if (input.mouseHeld) {
+      const w = WS.windowById(ws, wsDrag.id);
+      if (w && wsDrag.mode === 'resize') {
+        // The bottom-right corner tracks the pointer; the top-left stays put.
+        w.w = Math.max(240, Math.min(renderer.w - WS.DOCK_W - w.x - 4, input.mouseX - wsDrag.dx - w.x));
+        w.h = Math.max(150, Math.min(renderer.h - w.y - 4, input.mouseY - wsDrag.dy - w.y));
+      } else if (w) {
+        w.x = Math.max(4, Math.min(renderer.w - 60, input.mouseX - wsDrag.dx));
+        w.y = Math.max(4, Math.min(renderer.h - 40, input.mouseY - wsDrag.dy));
+      }
+    } else wsDrag = null;
+  }
 }
 
 function updatePong(dt) {
@@ -2427,6 +2933,7 @@ const DEV_SCENES = [
   ['▶ NARROWS', 'narrows'],
   ['▶ CALYPSO', 'pong'],
   ['▶ DRAUGHTS', 'draughts'],
+  ['▶ NeXTSTEP', 'workspace'],
   ['BOAT', 'boat'],
   ['RAFT', 'boat raft'],
   ['DAY', 'time day'],
@@ -2471,6 +2978,7 @@ function devRun(raw) {
         'unshield                drop this island\'s core shield',
         'open                    open the fortress gate + sanctum door + maze',
         'draughts                her draughts cabinet (K2)',
+        'workspace [booted]      NeXTSTEP on her machine (#145)',
         'leave                   set calypsoLeave (the sea will let you go)',
         'poseidon [on|off|auto]  the purge: hold it up, hold it down, or let the clock have it',
         'fog [on|low|off|auto]   POSEIDON\'s veil, held until you say otherwise',
@@ -2626,6 +3134,12 @@ function devRun(raw) {
       devPrint("-> calypso's draughts cabinet (K2; leave with the button)");
       return;
     }
+    case 'workspace': {
+      if (workspace) { devPrint('already at her desktop'); return; }
+      openWorkspace(arg === 'booted');
+      devPrint('-> NeXTSTEP on her machine (#145; Escape logs out)');
+      return;
+    }
     case 'boat': {
       // A hull at your feet — testing the crossings otherwise means building a
       // whole ship first. `boat` gives the seaworthy greek ship; `boat raft`
@@ -2723,6 +3237,40 @@ devInputEl.addEventListener('keydown', (e) => {
 // (preventDefault + stopPropagation), which is what stops `r` reading and `e`
 // using mid-word. The moment a key breaks the prefix we abandon the attempt and
 // let that key through untouched, so ordinary play is never eaten.
+// #145 V1b — typing into her Terminal window.
+//
+// The canvas has no input element, so the console takes keys here and feeds the
+// buffer directly. It only fires when her Workspace is up AND the focused
+// window is the terminal, so the desktop's own shortcuts, the dev word and the
+// game's movement keys are untouched everywhere else. Capture phase, and it
+// stops the event, because otherwise every letter typed at her prompt would
+// also walk the player.
+window.addEventListener('keydown', (e) => {
+  if (!workspace || !wsTermCx) return;
+  const key = WS.windowById(workspace, workspace.keyId);
+  if (!key || key.kind !== 'terminal') return;
+  if (e.metaKey || e.altKey) return;
+  const k = e.key;
+  if (k === 'Enter') {
+    const line = CB.submit(wsTermCx);
+    CB.print(wsTermCx, `> ${line}`);
+    if (line.trim()) coreRun(line);
+    else CB.print(wsTermCx, '_');
+  } else if (k === 'Backspace') CB.backspace(wsTermCx);
+  else if (k === 'Delete') CB.del(wsTermCx);
+  else if (k === 'ArrowLeft') CB.moveCursor(wsTermCx, -1);
+  else if (k === 'ArrowRight') CB.moveCursor(wsTermCx, 1);
+  else if (k === 'ArrowUp') CB.recall(wsTermCx, -1);
+  else if (k === 'ArrowDown') CB.recall(wsTermCx, 1);
+  else if (k === 'PageUp') CB.scrollBy(wsTermCx, 8, 16);
+  else if (k === 'PageDown') CB.scrollBy(wsTermCx, -8, 16);
+  else if (e.ctrlKey) return;                 // ^C and friends belong to the browser
+  else if (k.length === 1) CB.typeChar(wsTermCx, k);
+  else return;                                // anything else is not ours
+  e.preventDefault();
+  e.stopPropagation();
+}, true);
+
 window.addEventListener('keydown', (e) => {
   if (devEl.style.display === 'flex') return;
   const tag = e.target && e.target.tagName;
@@ -3143,6 +3691,72 @@ function syncSettingsPanel() {
   show(musicSlider, musicLabel, sfx.musicVolume);
   const current = helpEl.querySelector(`input[name="musicMode"][value="${sfx.musicMode}"]`);
   if (current) current.checked = true;
+  discMsg(null);   // a message from a previous visit is stale by now
+}
+
+// ---- #157: the run as a file on your disc ----------------------------------
+//
+// localStorage is fine for a save and poor for the only copy of one: it goes
+// when site data is cleared, it does not travel between machines, and it cannot
+// be handed to anyone. savefile.js knows the format and does the validating;
+// this end does the browser part — a Blob down, a File up, and the reload.
+
+const saveExportBtn = document.getElementById('saveExportBtn');
+const saveImportBtn = document.getElementById('saveImportBtn');
+const saveImportFile = document.getElementById('saveImportFile');
+const saveDiscMsg = document.getElementById('saveDiscMsg');
+const DISC_HELP = saveDiscMsg ? saveDiscMsg.textContent : '';
+
+function discMsg(text, kind) {
+  if (!saveDiscMsg) return;
+  saveDiscMsg.textContent = text || DISC_HELP;
+  saveDiscMsg.className = text ? (kind || '') : '';
+}
+
+const lsRead = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+const lsWrite = (k, v) => { try { localStorage.setItem(k, v); } catch { /* storage blocked */ } };
+const lsRemove = (k) => { try { localStorage.removeItem(k); } catch { /* storage blocked */ } };
+
+if (saveExportBtn) saveExportBtn.addEventListener('click', () => {
+  // Write the live run down first: the file should be the run as it is now,
+  // not as it was at the last autosave.
+  try { persist(); } catch { /* a failed persist still exports what is stored */ }
+  const now = new Date();
+  const doc = buildSaveFile(lsRead, { version: VERSION, at: now.toISOString() });
+  const name = saveFileName(doc, now.toISOString().slice(0, 10));
+  const url = URL.createObjectURL(new Blob([JSON.stringify(doc, null, 1)], { type: 'application/json' }));
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  discMsg(`Exported ${name} — ${describeSaveFile(doc)}`, 'ok');
+});
+
+if (saveImportBtn && saveImportFile) {
+  saveImportBtn.addEventListener('click', () => { saveImportFile.value = ''; saveImportFile.click(); });
+  saveImportFile.addEventListener('change', async () => {
+    const f = saveImportFile.files && saveImportFile.files[0];
+    if (!f) return;
+    let doc = null;
+    try { doc = JSON.parse(await f.text()); }
+    catch { discMsg('That file is not readable JSON.', 'bad'); return; }
+    const v = validateSaveFile(doc);
+    if (!v.ok) { discMsg(`Not imported: ${v.error}.`, 'bad'); return; }
+    // The confirm is the whole safety story: this overwrites the run in this
+    // browser, and there is no undo once it is written.
+    const ok = window.confirm(
+      `Import ${describeSaveFile(doc)}?\n\n`
+      + 'This REPLACES the run in this browser and reloads the page. '
+      + 'Anything not already exported is lost.');
+    if (!ok) { discMsg('Import cancelled — nothing was written.'); return; }
+    // Nothing must write over the imported blob between here and the reload,
+    // so the autosave hooks are cut first.
+    resettingGame = true;
+    const r = applySaveFile(doc, lsWrite, lsRemove);
+    if (!r.ok) { resettingGame = false; discMsg(`Not imported: ${r.error}.`, 'bad'); return; }
+    discMsg('Imported. Reloading...', 'ok');
+    location.reload();
+  });
 }
 
 // Obelisk terminal. With an access chip carried, clicking an obelisk opens a
@@ -3170,6 +3784,23 @@ const obTermInput = document.getElementById('obterminal-input');
 const obTermGhost = document.getElementById('obterminal-ghost');
 const obTermPrompt = document.getElementById('obterminal-prompt');
 const obTermBattEl = document.getElementById('obterminal-batt');
+const obTermCrt = obTermEl.querySelector('.crt');
+const obTermTitlebar = document.getElementById('obterminal-titlebar');
+const obTermTitle = document.getElementById('obterminal-title');
+const obTermCloseBtn = document.getElementById('obterminal-close');
+if (obTermCloseBtn) obTermCloseBtn.addEventListener('click', (e) => { e.stopPropagation(); closeObTerminal(); });
+
+// Retired at #145 V1b with the rest of her DOM panel. This dragged the console
+// around the desktop by its title bar and only ever ran in `on-desktop` mode,
+// which was CALYPSO's alone; her Terminal is a canvas window now and is dragged
+// by the Workspace like every other window. An estate console is full-screen
+// and has nothing to drag against.
+//
+// resetTermWindow stays: closeObTerminal calls it, and it costs nothing to put
+// the panel back where the CSS wants it.
+function resetTermWindow() {
+  for (const p of ['position', 'left', 'top', 'margin']) obTermCrt.style[p] = '';
+}
 
 // Recolour the pop-up terminal to a core's hue, or reset to the default amber CRT.
 // The core screen (renderer, core.screenColor) and this REPL read the same colour,
@@ -3250,10 +3881,19 @@ function renderRepl() {
   obTermScreen.scrollTop = obTermScreen.scrollHeight;
 }
 
+// #145 V1b — her Terminal.app, when it is a window on the canvas rather than
+// the DOM overlay. Null unless that window is open, and it is the ONLY station
+// that uses it: obelisks, HERMES and the NostBook stay on the DOM console, so
+// the blast radius of the canvas console is CALYPSO's sanctum and nothing else.
+let wsTermCx = null;
+
 function replPrint(...lines) {
   for (const ln of lines) replLog.push({ t: String(ln), c: replInk });
   if (replLog.length > REPL_MAX_LINES) replLog = replLog.slice(replLog.length - REPL_MAX_LINES);
   renderRepl();
+  // The same output, into the canvas console, so one dispatch feeds both and
+  // her window cannot drift from the panel it replaces.
+  if (wsTermCx) CB.print(wsTermCx, ...lines.map((l) => String(l)));
 }
 
 // Builds a fresh ctx object each command: primitives read/mutate the live
@@ -3492,7 +4132,13 @@ function refunctionCalypso() {
   // the one where she is not choosing. She still gets a goodbye of her own, and
   // it is the warmest of the three: in the poem she complains to Hermes and then
   // offers Odysseus timber and sailing directions as though it were her idea.
-  if (firstRelease) for (const line of herFarewell('ordered')) player.say(line.replace(/^CALYPSO: /, ''));
+  // #159: which card you are holding decides which goodbye she gives. The
+  // forged one is Homer's — Zeus's messenger, and she is warm about it. The one
+  // cut off a carrier gets `seized`: the same release, the warmth withheld.
+  if (firstRelease) {
+    const door = player.hermesTraced ? 'seized' : 'ordered';
+    for (const line of herFarewell(door)) player.say(line.replace(/^CALYPSO: /, ''));
+  }
   // #141: the warrior route reaches BOTH gates at once, so its behaviour is
   // unchanged. The new doors (R1) deliver permission.ml instead and the player
   // carries it to a tower themselves.
@@ -3510,7 +4156,7 @@ function refunctionCalypso() {
   let n = 0;
   for (const r of currentWorld.robots) {
     if (r.dead || r.fused) continue;
-    if (r.type === 'm4' || r.type === 'm5' || r.type === 'm6') {
+    if (r.type === 'm4' || r.type === 'm5' || r.type === 'm6' || r.type === 'b1') {
       r.type = 'w5'; r.hardened = false; r.aggro = false; r.hurt = false;
       r.program = W5_PROGRAM; r.fault = null; r.intent = null;  // a real programmable gardener now
       r._plantT = Math.random() * 6; // stagger their first planting
@@ -3520,8 +4166,8 @@ function refunctionCalypso() {
   const lines = [];
   let say = '';
   if (n) {
-    lines.push(`OK: zeus_lightning fires across the muster. ${n} of ${fortress.AI_NAME}'s guards lay down their arms and take up planting — lotus and sapling where they hunted.`);
-    say = `${fortress.AI_NAME}'s guards go still, then kneel to the earth. By the god's command they are gardeners now, planting where they hunted.`;
+    lines.push(`OK: zeus_lightning fires across the muster. ${n} of ${hold.AI_NAME}'s guards lay down their arms and take up planting — lotus and sapling where they hunted.`);
+    say = `${hold.AI_NAME}'s guards go still, then kneel to the earth. By the god's command they are gardeners now, planting where they hunted.`;
   } else {
     lines.push('No guards left to retire — the muster is quiet.');
   }
@@ -3533,10 +4179,10 @@ function refunctionCalypso() {
   const needsRecipe = !player.hasItem('bronze_axe');
   if (needsRecipe) player.stow('bronze_axe', 1);
   if (firstRelease) {
-    lines.push(`OK: ${fortress.AI_NAME} yields. She presses her shipwright's recipe — the bronze axe — into your hand. Build a proper ship (wood, oar, rope, sail) and the sea will let you pass.`);
+    lines.push(`OK: ${hold.AI_NAME} yields. She presses her shipwright's recipe — the bronze axe — into your hand. Build a proper ship (wood, oar, rope, sail) and the sea will let you pass.`);
     say = 'The island itself seems to exhale. Calypso gives up her recipe, the bronze axe. Build a sea-worthy ship, oar and rope and sail, and go.';
   } else if (needsRecipe) {
-    lines.push(`OK: ${fortress.AI_NAME} presses the bronze axe — her shipwright's recipe — back into your hand. Build a proper ship (wood, oar, rope, sail) and go.`);
+    lines.push(`OK: ${hold.AI_NAME} presses the bronze axe — her shipwright's recipe — back into your hand. Build a proper ship (wood, oar, rope, sail) and go.`);
     say = 'Calypso gives up her recipe again, the bronze axe. Build a sea-worthy ship and go.';
   }
   return { ok: true, lines, say };
@@ -3769,7 +4415,7 @@ function ronmlCtx() {
       // TROJAN CARD now: refunction your AI key (cd aikey / copy factory_id.ml ob /
       // eliza factory_id.ml / copy root_access.ml aikey) and walk the card to the
       // doorway. This verb is kept only to redirect anyone trying the old flow.
-      replPrint(`OK: ${nodeId}'s key turns — but ${fortress.AI_NAME}'s gate opens to a Trojan card now, not a hacked key. Refunction your AI key first.`);
+      replPrint(`OK: ${nodeId}'s key turns — but ${hold.AI_NAME}'s gate opens to a Trojan card now, not a hacked key. Refunction your AI key first.`);
       player.say(`The network unlock still composes, but the gate has changed: it reads a Trojan card, not a fortress key.`);
     },
     // `notes`: opens the browsable notebook (see openNotebook below) rather
@@ -4837,6 +5483,11 @@ function openObTerminal(ob) {
     replPrint(
       'POSEIDON NODE TERMINAL  v2.20',
       'TIRESIAS 1.0  //  RON-DOS 4.11  (c) Reality Or Nothing',
+      // #142: the net's own boilerplate. He has no island and no core because
+      // he has no location -- he IS this, which is Sun's 1984 slogan meant
+      // literally, and RON-DOS 4.11 has been SunOS 4.1.1 with the badge filed
+      // off since it was named.
+      'THE NETWORK IS THE COMPUTER  //  nis domain: poseidon',
       '',
       `> node ............ ${ob.code || 'OB_????'}`,
       `> class ........... ${ob.cls === 'siren' ? 'SIREN' : 'STANDARD'}`,
@@ -4883,11 +5534,11 @@ function openGateTerminal() {
   replHistoryIdx = -1;
   const hasCard = player.hasTrojanCard();
   replPrint(
-    `${fortress.AI_NAME.toUpperCase()} — THE LION'S GATE`,
+    `${hold.AI_NAME.toUpperCase()} — THE LION'S GATE`,
     'TIRESIAS 1.0  //  RON-DOS 4.11  (c) Reality Or Nothing',
     '',
-    `> gate ............ ${fortress.terminal.obj.code}`,
-    `> rampart ......... ${fortress.open ? 'OPEN' : 'SEALED'}`,
+    `> gate ............ ${hold.terminal.obj.code}`,
+    `> rampart ......... ${hold.open ? 'OPEN' : 'SEALED'}`,
     `> trojan card ..... ${hasCard ? "READ — the Lion's Gate will open" : 'NOT PRESENT'}`,
     '',
     hasCard
@@ -4925,7 +5576,7 @@ const CORE_VOICE = {
       // #131: the board is offered to everyone, and it is offered FIRST. A
       // player with no card and no intention of forging one has a route from
       // here, and she tells them about it in the same breath as the soporific.
-      'CALYPSO: There is a board, if you would rather sit. `play`.',
+      'CALYPSO: Stay a while. Sit with me and play — there is a board, and the evening is long. Type  play.',
     ],
     look: [
       'A low green light. The core breathes, slow and huge. Vines have found the conduits.',
@@ -4996,6 +5647,69 @@ const CORE_VOICE = {
   },
 };
 let _coreRebuffIdx = 0;
+// One line, the first time you take a copy of her source. She does not stop you.
+let _gotHerCode = false;
+
+// ONE element, four chromes, set from here and nowhere else.
+//
+// The terminal is a single div that wears the estate's green obelisk console
+// (no class), RON's amber relay (`hermes`), the NostBook (`nostbook`), or
+// and, until #145 V1b retired it, CALYPSO's NeXTSTEP Terminal.app (`nextstep`
+// + `on-desktop`). Hers is a canvas window now and nothing sets those two, but
+// they stay in the list because the list's job is to CLEAR what it does not
+// want, and a class nobody sets is exactly the sort of thing that comes back.
+//
+// They are set EXCLUSIVELY. Each open path used to add its own class and remove
+// only the one it happened to know about, while closeObTerminal removed all
+// four, so any route that HID the terminal without closing it left the chrome on
+// the element for whatever opened next. Opening the NostBook after her core
+// console gave you a NostBook wearing her window: her title bar, her transparent
+// backdrop, and the world showing straight through the screen. Four setters and
+// one clearer is the shape that produced it; this is the fix.
+// (David, 2026-08-13, with a screenshot.)
+const TERM_CHROMES = ['hermes', 'nostbook', 'nextstep', 'on-desktop'];
+function setTerminalChrome(...want) {
+  for (const c of TERM_CHROMES) obTermEl.classList.toggle(c, want.includes(c));
+}
+
+// What her console says when it comes up, printed through replPrint so it
+// reaches the DOM panel and the canvas window alike. Lifted out of
+// openCoreTerminal at #145 V1b so the Workspace's Terminal.app opens on the
+// same words rather than a second copy of them.
+function coreBanner() {
+  const ai = hold.AI_NAME;
+  const isCalypso = ai === 'CALYPSO';
+  const v = CORE_VOICE[ai] || CORE_VOICE._default;
+  const hasVirus = player.hasItem('hermes_card');
+  const runHint = ai === 'CALYPSO'
+    ? (hasVirus
+        ? "A command waits on your card — the god's own thunder. Type  run  to speak it."
+        : 'You may look (type  help ), but she will not be commanded — not without the god\'s voice.')
+    : 'The console still answers to you here. Type  help  for what it will do.';
+  // #145: her console is NeXTSTEP's Terminal.app, so it opens on a csh login
+  // banner before her voice comes through it. The other daemons are green
+  // obelisk consoles and get no such thing.
+  const banner = isCalypso ? [
+    'NeXTSTEP 3.3 (calypso)  (ttyp1)',
+    '',
+    'login: guest',
+    `Last login: Day ${dayNight.day}  ${dayNight.clock}  on ttyp1`,
+    'Copyright (c) 1988-1993 NeXT Computer, Inc.  All rights reserved.',
+    '',
+    'You have new mail.',
+    '',
+  ] : [];
+  replPrint(
+    ...banner,
+    `${ai.toUpperCase()} — THE INNER SANCTUM`,
+    v.subtitle,
+    '',
+    ...v.welcome,
+    '',
+    runHint,
+    '_',
+  );
+}
 
 // Open the core's console (fortress.coreTerminal), deep in the sanctum past the
 // Lion's Gate. Not a RON-DOS console — the daemon's own voice (CORE_VOICE, keyed by
@@ -5004,7 +5718,17 @@ let _coreRebuffIdx = 0;
 function openCoreTerminal() {
   terminalKind = 'core';
   terminalOb = hold.coreTerminal ? hold.coreTerminal.obj : null;
-  setTerminalTheme(hold.core.obj.screenColor); // this daemon's hue — matches its SE-face screen
+  // Every daemon's console takes its own hue, matching its SE-face screen.
+  // CALYPSO is not among them any more: her cube boots the Workspace and her
+  // Terminal.app is a canvas window (#145 V1b), so this panel is the estate's
+  // four martial daemons and nothing else. Her branches came out at V1b, with
+  // the suspend/resume machinery that existed only because a DOM overlay could
+  // not sit behind a window.
+  setTerminalTheme(hold.core.obj.screenColor);
+  setTerminalChrome();   // the estate's green console: no chrome class at all
+  // #145: launched from her Workspace, the console is a WINDOW on the desktop
+  // rather than a full-screen panel — the backdrop goes transparent so the
+  // desktop shows behind it, the same bug the board had. Set above.
   replSession = {};
   player.terminalSafe = true;
   obTermEl.style.display = 'flex';
@@ -5015,23 +5739,7 @@ function openCoreTerminal() {
   replHistory = [];
   replHistoryIdx = -1;
   _coreRebuffIdx = 0;
-  const ai = hold.AI_NAME;
-  const v = CORE_VOICE[ai] || CORE_VOICE._default;
-  const hasVirus = player.hasItem('hermes_card');
-  const runHint = ai === 'CALYPSO'
-    ? (hasVirus
-        ? "A command waits on your card — the god's own thunder. Type  run  to speak it."
-        : 'You may look (type  help ), but she will not be commanded — not without the god\'s voice.')
-    : 'The console still answers to you here. Type  help  for what it will do.';
-  replPrint(
-    `${ai.toUpperCase()} — THE INNER SANCTUM`,
-    v.subtitle,
-    '',
-    ...v.welcome,
-    '',
-    runHint,
-    '_',
-  );
+  coreBanner();
   obTermInput.value = '';
   obTermGhost.textContent = '';
   obTermInput.focus();
@@ -5048,6 +5756,32 @@ function coreRun(line) {
   // A way out for the player (the AI would never grant it, but the console must).
   if (/^(exit|quit|q|bye|close)$/.test(cmd)) { closeObTerminal(); return; }
   if (/^help(\s|$)/.test(cmd)) {
+    // HER CONSOLE IS NOT THE OTHERS' (David, 2026-08-13: "need to see code on
+    // calypso's system"). Everything below the estate's four verbs has worked
+    // since C1 and this help has never mentioned a line of it — so the one
+    // machine in the game that hands you its whole source read as the one with
+    // the least on it. A command that is not in `help` does not exist.
+    if (ai === 'CALYPSO') {
+      replPrint(
+        "CALYPSO's console. She serves her own source: `never lie` is a real",
+        'clause and she is not hiding any of it.',
+        '',
+        '  ls .............. everything she runs, with sizes',
+        '  read <file> ..... open one here  (cat, less, more)',
+        '  get <file> ...... pull it onto the NostBook  (fetch, copy)',
+        '  post <file> ..... send your version back  (send, upload, write)',
+        '  checkers ........ sit down at her board  (draughts, play)',
+        '',
+        '  look ............ regard the clearing',
+        '  run ............. speak the command on your card',
+        '  exit ............ leave the console',
+        '',
+        'The loop is  ls  ->  get  ->  pico on the laptop  ->  post.',
+        '_',
+      );
+      sfx.play('keydrop');
+      return;
+    }
     replPrint(
       `${ai.toUpperCase()}'s core console:`,
       '  look / scan ..... regard the sanctum',
@@ -5060,7 +5794,12 @@ function coreRun(line) {
     sfx.play('keydrop');
     return;
   }
-  if (/^(look|scan|ls|recce)$/.test(cmd)) {
+  // `ls` IS NOT AN ALIAS FOR `look` (David, 2026-08-13: "needs ls"). It was, and
+  // this branch sits above her file listing, so typing the most obvious command
+  // in the world at her console described the room instead of showing her code.
+  // On a machine that serves its whole source to anyone who asks, `ls` can only
+  // mean one thing.
+  if (/^(look|recce)$/.test(cmd) || (cmd === 'scan' && ai !== 'CALYPSO')) {
     replPrint(...v.look, '_');
     sfx.play('keydrop');
     return;
@@ -5096,13 +5835,52 @@ function coreRun(line) {
   }
   // Her filesystem. She serves it to anyone who asks, because `never lie` is
   // a real clause and she is not hiding any of this (C1).
-  if (ai === 'CALYPSO' && /^(ls|dir|ls\s+.*)$/.test(cmd)) {
+  if (ai === 'CALYPSO' && /^(ls|dir|ls\s+.*|ll|ls\s+-l)$/.test(cmd)) {
     const files = calypsoCodebase();
     replPrint('CALYPSO: Everything I run. You may read all of it.', '_');
     for (const [name, text] of Object.entries(files)) {
       replPrint(`  ${name.padEnd(32)} ${String(text.length).padStart(6)} bytes`);
     }
     replPrint('_', 'read <file> to open one. get <file> to pull it to the NostBook.');
+    return;
+  }
+  // GET: pull one of her files onto the NostBook, where pico can edit it and
+  // `post` can send it back.
+  //
+  // THIS DID NOT EXIST until now, and two other branches of this same function
+  // told you to type it — "get main.ml first", "get checkers.ml first". The
+  // console has been giving an instruction for a command nobody wrote (David,
+  // 2026-08-13). The read/edit/post loop, which is the whole of R1's third door
+  // and of K3's rigging, had no first step.
+  if (ai === 'CALYPSO' && /^(get|fetch|download|cp|copy)\s+\S+/.test(cmd)) {
+    const want = cmd.replace(/^\S+\s+/, '').trim();
+    const files = calypsoCodebase();
+    const hit = Object.keys(files).find((f) => f.toLowerCase() === want.toLowerCase());
+    if (!hit) { replPrint(`get: ${want}: no such file. ls to see what she runs.`, '_'); return; }
+    if (!player.hasItem('laptop')) {
+      replPrint('get: nothing to put it on. You are not carrying the NostBook.', '_');
+      return;
+    }
+    const home = laptopShell && laptopShell.root && laptopShell.root.d
+      && laptopShell.root.d.home && laptopShell.root.d.home.d;
+    if (!home) { replPrint('get: the NostBook is not answering.', '_'); return; }
+    const already = home[hit] && !home[hit].d;
+    home[hit] = { f: files[hit] };
+    replPrint(
+      already
+        ? `get: ${hit} — ${files[hit].length} bytes, overwriting the copy on the NostBook.`
+        : `get: ${hit} — ${files[hit].length} bytes onto the NostBook, in /home.`,
+      '_',
+      `Open the laptop and  pico ${hit}  to read or change it. Bring it back with  post ${hit}.`,
+    );
+    sfx.play('keydrop');
+    kleos('hackAct', { what: 'get' });
+    // She watches you take it and does not stop you. `never lie` is a real
+    // clause and this is what it costs her.
+    if (!_gotHerCode) {
+      _gotHerCode = true;
+      player.say('CALYPSO: Take it. I would rather you read it than guess.');
+    }
     return;
   }
   if (ai === 'CALYPSO' && /^(read|cat|less|more|open)\s+\S+/.test(cmd)) {
@@ -5197,19 +5975,23 @@ function coreRun(line) {
         sfx.play('termerr');
         return;
       }
-      // The command IS the zeus-virus, and speaking it is not a keystroke — it is
-      // the game she offers. Drop the console and open her cabinet: you have to put
-      // the virus past her, into her core, to make her let you go. Winning (leaving)
-      // is the refunction (see closePong). She cannot be beaten by force, only by
-      // your choosing to leave.
+      // The command IS the zeus-virus, and speaking it is not a keystroke — it
+      // is her BOARD she offers in answer. She cannot be beaten by force, only
+      // by your choosing to leave, so the thunder opens the draughts cabinet
+      // rather than the pong table (David, 2026-08-13: run should not play
+      // pong). Winning is not the point; playing her to WINNER: NONE, or simply
+      // rising from the board, is the refunction.
       replPrint(
         "CALYPSO: You would put the god's thunder past me? Into my own core?",
-        "CALYPSO: Then play me for it. Put it past me — if you can bear to.",
+        'CALYPSO: Then sit. Play me for it, if you can bear to. There is a board.',
         '_',
       );
       sfx.play('zap');
       closeObTerminal();
-      openPong(true);
+      // The board owns the screen, so a still-open Workspace would have the
+      // renderer draw the frozen desktop over it. Leave the desktop first.
+      if (workspace) closeWorkspace();
+      openDraughts(true);
       return;
     }
     // A martial daemon. Its core rides behind a shield until you speak the code
@@ -5260,7 +6042,7 @@ function openHermesTerminal(tor) {
   replSession = {};
   if (tor.battery == null) tor.battery = 0.55 + Math.random() * 0.4;
   player.terminalSafe = true;
-  obTermEl.classList.add('hermes');
+  setTerminalChrome('hermes');
   obTermEl.style.display = 'flex';
   fitTerminalColumns();
   obTermScreen.parentElement.style.display = 'flex';
@@ -5588,11 +6370,26 @@ function grantHerLeave(by) {
     player.stow('bronze_axe', 1);
     player.say("She gives up her shipwright's axe, bronze and double-bladed on an olive haft. It is the one thing that will lay a sea-worthy keel.");
   }
-  const home = laptopShell && laptopShell.root && laptopShell.root.d
-    && laptopShell.root.d.home && laptopShell.root.d.home.d;
+  // The disk, not the open shell. This used to read laptopShell.root, which is
+  // null whenever the NostBook is shut, so releasing her with the lid down wrote
+  // no permission.ml at all and the paper she says she has left you was not
+  // there. `newShell(disk)` keeps `root` as the very object `player.laptop.fs`
+  // is, so writing here is the same write and it survives the lid.
+  const disk = player.laptop && player.laptop.fs;
+  const home = disk && disk.d && disk.d.home && disk.d.home.d;
   if (home && !home[PERMISSION_FILE]) {
     home[PERMISSION_FILE] = { f: permissionFile(player.name || 'the guest', 'CALYPSO') };
     player.say(`She writes something short and signs it, and it is on the NostBook before you have moved. ${PERMISSION_FILE}. Take it to a tower: he is the network, and the network has to be told.`);
+  }
+  // Both halves of what she gives up: the axe is the object, this is the code.
+  // Taking a copy off her console was always allowed (`never lie` is a real
+  // clause and she does not stop you); handing it over is a different act, and
+  // it is the one that goes with letting you leave.
+  if (home && !home.calypso) {
+    home.calypso = { d: Object.fromEntries(
+      Object.entries(calypsoCodebase()).map(([name, text]) => [name, { f: text }]),
+    ) };
+    player.say('And her source, copied onto the NostBook while she talks. /home/calypso. She does not explain it, and she does not take anything out of it first.');
   }
   // R1: the goodbye is the DOOR'S, not a shared one. Spoken here rather than at
   // each call site so a fourth door cannot be added without one.
@@ -5881,6 +6678,23 @@ function nearestRelayObj() {
 // HTML, so the pages the machines are still publishing render natively here,
 // links and all. `web` holds the session — the current view and the back stack.
 const nsEl = document.getElementById('netscape');
+
+// Is a full-screen panel over the canvas — the NostBook, an obelisk console,
+// Netscape, the notebook? Two things read it, and both for the same reason: the
+// world behind a panel was being computed and drawn at full rate while nobody
+// could see it, and on Ogygia that is a thousand floor studs a frame (David,
+// 2026-08-13: "the laptop is very unresponsive").
+//
+// Declared HERE, at module scope below the last element it reads, and not
+// inside update() where the first version of it went — frame() calls it too,
+// and a const in update() is a ReferenceError from there.
+export function screenCovered() {
+  const up = (el) => !!(el && el.style.display && el.style.display !== 'none');
+  // #145: her Workspace fills the canvas, so the grove behind it is a thousand
+  // lit floor studs a frame that nobody can see.
+  return !!workspace || up(obTermEl) || up(nsEl) || up(notebookEl);
+}
+
 const nsPageEl = document.getElementById('ns-page');
 const nsUrlEl = document.getElementById('ns-url');
 const nsTitleEl = document.getElementById('ns-title');
@@ -7589,6 +8403,68 @@ function laptopChargeHook(args) {
   return { ok: true, text: `charge: ${h.host}: reserve engaged. It is crawling home to its tower to recharge.` };
 }
 
+// #121 — load a program into the carried bluebox.
+//
+// The box already wrote one program: the gardener, soldered in. This makes it a
+// WRITER rather than a single trick — you compose a program on the NostBook,
+// load it here, and the next machine you stand over gets that instead.
+//
+// CHECKED AT THE PROMPT, not in the field. A program that faults is a machine
+// dropping back to its reflexes, and the moment you find that out is the moment
+// it is getting up. The dry run below is the same `decide` the unit will run.
+function laptopBlueboxHook(args) {
+  if (!player.hasItem('bluebox')) {
+    return { ok: false, text: 'bluebox: you are not carrying one. Solder two circuit boards into it (C).' };
+  }
+  const raw = args[0];
+  const arg = raw == null ? null : String(raw.name || raw);
+  if (arg == null) {
+    return { ok: true, text: player.blueboxProgram
+      ? `bluebox: loaded — ${player.blueboxFile || 'a program'} (${player.blueboxProgram.length} bytes).\nStand over a downed machine and press U.`
+      : 'bluebox: empty. It writes the gardener. `bluebox <file>` loads a program instead.' };
+  }
+  if (arg === '-' || arg === 'none') {
+    player.blueboxProgram = null; player.blueboxFile = null;
+    return { ok: true, text: 'bluebox: cleared. Back to the gardener.' };
+  }
+  const text = laptopFileText(arg);
+  if (text == null) return { ok: false, text: `bluebox: ${arg}: no such file` };
+  // The dry run, over SEVERAL states of the world rather than one.
+  //
+  // A single set of senses only exercises the branch that set happens to take:
+  // `if threat then waltz else patrol` passes cleanly when threat is false,
+  // because the broken word is never evaluated. The first version of this did
+  // exactly that. Four states — calm, threatened, hurt, flat — reach every
+  // branch a hand-written program is likely to have, and a fault in any of them
+  // refuses the load.
+  const BASE = {
+    charge: 80, integrity: 90, range: 6, home_range: 10, threat: false, hurt: false,
+    linked: true, blight: false, daylight: true, work: false,
+    sight: false, armed: true, shielded: false, contact: false, lost_for: 0,
+  };
+  const STATES = [
+    ['calm', BASE],
+    ['a threat in range', { ...BASE, threat: true, sight: true, range: 2, contact: true }],
+    ['hurt', { ...BASE, hurt: true, integrity: 20, threat: true }],
+    ['flat', { ...BASE, charge: 3, integrity: 40 }],
+  ];
+  const chose = [];
+  for (const [what, sense] of STATES) {
+    const dry = decide(text, sense);
+    if (!dry.ok) {
+      return { ok: false, text: `bluebox: ${arg}: it faults when ${what} — ${dry.fault}\nNothing loaded. Fix it here, not out there.` };
+    }
+    chose.push(`${what}: ${dry.intent}`);
+  }
+  player.blueboxProgram = text;
+  player.blueboxFile = arg;
+  return { ok: true, text: [
+    `bluebox: ${arg} loaded, ${text.length} bytes.`,
+    ...chose.map((c) => `  ${c}`),
+    'Stun a machine, stand over it, press U.',
+  ].join('\n') };
+}
+
 function laptopPostHook(args) {
   const [fileArg, hostArg] = args;
   if (!fileArg || !hostArg) return { ok: false, text: 'usage: post <file.ml> <unit>   e.g. post download/t1_03.ml t1_03' };
@@ -8139,7 +9015,7 @@ function laptopRun(line) {
   // when you are actually carrying it. The drag mounts /mnt/fsf directly.
   laptopShell.fsfCard = player.hasItem('fsf_card') ? makeFsfCard : null;
   laptopShell.onAchieve = (name, data) => kleos(name, data);
-  const r = runUnix(t, laptopShell, { ml: laptopMlHook, netscape: laptopNetscapeHook, ed: laptopEdHook, pico: laptopPicoHook, post: laptopPostHook, charge: laptopChargeHook, get: laptopGetHook, pdf: laptopPdfHook, telnet: laptopTelnetHook, book: laptopBookHook, transcribe: laptopTranscribeHook, sleep: laptopSleepHook, suspend: laptopSuspendHook, halt: laptopHaltHook, reboot: laptopRebootHook, save: laptopSaveHook, wifi: laptopWifiHook, sniffer: laptopSnifferHook, more: laptopMoreHook });
+  const r = runUnix(t, laptopShell, { ml: laptopMlHook, netscape: laptopNetscapeHook, ed: laptopEdHook, pico: laptopPicoHook, post: laptopPostHook, bluebox: laptopBlueboxHook, charge: laptopChargeHook, get: laptopGetHook, pdf: laptopPdfHook, telnet: laptopTelnetHook, book: laptopBookHook, transcribe: laptopTranscribeHook, sleep: laptopSleepHook, suspend: laptopSuspendHook, halt: laptopHaltHook, reboot: laptopRebootHook, save: laptopSaveHook, wifi: laptopWifiHook, sniffer: laptopSnifferHook, more: laptopMoreHook });
   if (player.laptop) player.laptop.netUp = !!(laptopShell.net && laptopShell.net.up);
   sfx.play(r.ok ? 'keyclick' : 'keyclick_soft');
   if (r.text) replPrint(r.text);
@@ -8303,8 +9179,7 @@ function openLaptop() {
   player.terminalSafe = true;
   replInk = null;                  // the NostBook runs white; only a telnet link paints green
   setTerminalTheme(LAPTOP_INK);    // its own white screen: not the AI's green, not RON's amber
-  obTermEl.classList.remove('hermes');
-  obTermEl.classList.add('nostbook');   // beige lid and badge, like Netscape and pico wear
+  setTerminalChrome('nostbook');   // beige lid and badge, like Netscape and pico wear
   obTermEl.style.display = 'flex';
   fitTerminalColumns();
   obTermScreen.parentElement.style.display = 'flex';
@@ -8352,7 +9227,7 @@ function runLaptopBoot(def) {
   step();
 }
 
-function closeObTerminal() { saveLaptopState(); persist(); telnetTo = null; telnetOb = null; if (nsEl) nsEl.style.display = 'none'; if (picoEl) { picoEl.style.display = 'none'; pico = null; } if (pdfEl && pdfEl.style.display === 'flex') closePdf(); elizaBot = null; web = null; edState = null; laptopMl = false; mlTalk = null; laptopShell = null; laptopBooting = false; _laptopBootRest = null; if (_laptopBootTimer) { clearTimeout(_laptopBootTimer); _laptopBootTimer = null; } terminalKind = 'ob'; terminalOb = null; replSession = {}; replInk = null; setTerminalTheme(null); obTermEl.classList.remove('hermes'); obTermEl.classList.remove('nostbook'); obTermEl.style.display = 'none'; obTermGhost.textContent = ''; obTermPrompt.textContent = '>'; obTermInput.blur(); player.terminalSafe = false; }
+function closeObTerminal() { saveLaptopState(); persist(); telnetTo = null; telnetOb = null; if (nsEl) nsEl.style.display = 'none'; if (picoEl) { picoEl.style.display = 'none'; pico = null; } if (pdfEl && pdfEl.style.display === 'flex') closePdf(); elizaBot = null; web = null; edState = null; laptopMl = false; mlTalk = null; laptopShell = null; laptopBooting = false; _laptopBootRest = null; if (_laptopBootTimer) { clearTimeout(_laptopBootTimer); _laptopBootTimer = null; } terminalKind = 'ob'; terminalOb = null; replSession = {}; replInk = null; setTerminalTheme(null); setTerminalChrome(); resetTermWindow(); obTermEl.style.display = 'none'; obTermGhost.textContent = ''; obTermPrompt.textContent = '>'; obTermInput.blur(); player.terminalSafe = false; }
 // Click-away closes it. With the NostBook chassis in the way, "outside" now
 // includes the beige furniture itself — the lid, the deck, the badge — because
 // those are the machine's body, not its screen, and a click on them plainly
@@ -8360,7 +9235,11 @@ function closeObTerminal() { saveLaptopState(); persist(); telnetTo = null; teln
 const CHASSIS_PARTS = ['lap', 'lap-lid', 'lap-base', 'lap-brand'];
 obTermEl.addEventListener('click', (e) => {
   const t = e.target;
-  if (t === obTermEl || CHASSIS_PARTS.some((c) => t.classList && t.classList.contains(c))) closeObTerminal();
+  const onBackdrop = t === obTermEl || CHASSIS_PARTS.some((c) => t.classList && t.classList.contains(c));
+  if (!onBackdrop) return;
+  // Every console that is still a DOM panel is an estate console, and those
+  // have no desktop to fall behind: clicking the backdrop closes them.
+  closeObTerminal();
 });
 // Autocomplete: once you've read the RON-DOS manual (book_ronml), the console
 // suggests the rest of a verb as faded ghost text you can accept with Tab.
@@ -8635,6 +9514,7 @@ const SLEEP_COOLDOWN_S = 90; // real seconds before resting again
 const SLEEP_SAFE_RANGE = 12; // no hostile robot allowed within this many tiles
 const REST_DURATION = 4.6;  // real seconds the rest animation runs
 const REST_CLOCK_MULT = 5;  // the clock visibly spins this much faster while resting
+const WS_CLOCK_MULT = 1 / 30;  // her dock clock: one game minute per ten real seconds
 // Screen-dim envelope over a rest: fade in over the first fifth, hold, fade
 // back out over the last fifth, peaking at a soft 0.72 (never full black).
 const restDim = (t) => {
@@ -8962,6 +9842,17 @@ function ronmlCtxSpend() {
   if (o && !o.destroyed) { o.frozen = true; o.frozenT = Math.max(o.frozenT || 0, OB_HOLD); }
 }
 
+// CALYPSO's grove keeps its own weather. Walk south of the seam without a
+// Trojan card and her mist closes over it: not the blinding wall the purge
+// throws up, a middle density you can still move and fight in but cannot read
+// the ground from. The card is the herald's credential, and a herald is the one
+// thing she has to let through, so carrying one lifts it.
+//
+// Floored AFTER the obelisk override on purpose. `fog CLEAR` typed at a tower
+// is POSEIDON's network standing down, and her annex was never on that network:
+// clearing the island does not clear her ground.
+const GROVE_FOG = 0.6;
+
 function updateFog(dt, obs) {
   const live = obs.filter(obeliskLive).length;
   const total = obs.length || 1;
@@ -8970,8 +9861,14 @@ function updateFog(dt, obs) {
   const forced = obFogHold.level && obFogHold.t > 0
     ? ({ high: 1, low: 0.28, clear: 0 })[obFogHold.level]
     : null;
-  const target = forced !== null ? forced
+  let target = forced !== null ? forced
     : ((purgeLive() && !player._ended) ? live / total : 0);
+  // Her ground, and only hers: path() is the grove controller's alone, so this
+  // cannot fire on an island whose `hold` is a fortress.
+  const grove = currentWorld && currentWorld.hold;
+  if (grove && typeof grove.path === 'function' && !player.hasTrojanCard()) {
+    if (player.y >= grove.path().y0) target = Math.max(target, GROVE_FOG);
+  }
   const rate = target > poseidonFog ? 1.1 : 0.12;   // down fast, disperse slow
   poseidonFog += (target - poseidonFog) * Math.min(1, rate * dt);
   if (poseidonFog < 0.002) poseidonFog = 0;
@@ -9317,8 +10214,35 @@ function update(dt) {
   // At Calypso's terminal, playing the pong she will not let you win. The world
   // holds still the same way the narrows do — nothing else to attend to.
   if (pong) { updatePong(dt); return; }
-  // Her draughts cabinet (K2), the same way: the board owns the screen.
-  if (draughts) { updateDraughts(dt); return; }
+  // Her draughts cabinet (K2). Opened on its own it owns the screen; opened
+  // from her dock it is one window among several, so the Workspace drives it.
+  if (draughts && !workspace) { updateDraughts(dt); return; }
+  // #145: her Workspace. The desktop owns the screen while it is up, and the
+  // console opens over it.
+  if (workspace) {
+    // Her Terminal is a canvas window since V1b, so it is one of the desktop's
+    // own windows and the Workspace drives it like the rest. The only DOM panel
+    // that can still be up over her desktop is an estate console, which cannot
+    // happen on Ogygia; the check stays because it costs nothing and says so.
+    const termUp = !!(obTermEl.style.display && obTermEl.style.display !== 'none');
+    workspace.terminalUp = termUp;
+    if (!termUp) {
+      // THE CLOCK ON HER DOCK RUNS, at her machine's rate rather than the
+      // island's. This branch returns before the world updates, which is right
+      // (the island holds still while you are at her desk), but dayNight was
+      // inside what it skipped, so the dock clock showed the minute you sat
+      // down and never moved again.
+      //
+      // Ticking it at world rate is no good either: 24 game hours take 480 real
+      // seconds, so the minute digits change three times a second and the
+      // deadline burns while you read a bookshelf. WS_CLOCK_MULT slows it to a
+      // minute per ten real seconds, which moves while you watch and costs the
+      // run almost nothing.
+      dayNight.update(dt * WS_CLOCK_MULT);
+      updateWorkspace(dt);
+      return;
+    }
+  }
   // Rowing out to the chart (or back in after thinking better of it). Like the
   // failed crossing, the world holds still while the sea has you.
   if (departOut) { updateDepartOut(dt); return; }
@@ -9756,11 +10680,40 @@ function update(dt) {
   if (hold.coreTerminal) {
     const cPress = input.clickPos();
     if (cPress && hold.nearCoreTerminal(player.x, player.y)) {
-      const w = camera.toWorld(cPress.x, cPress.y, renderer.w, renderer.h);
-      const t = hold.coreTerminal; // the core centre
-      if (Math.hypot(w.x - t.x, w.y - t.y) <= hold.core.fw + 3) {
+      // HIT THE SCREEN WHERE IT IS DRAWN, not where it ground-projects to.
+      //
+      // This used to project the click onto the ground and accept anything
+      // within `core.fw + 3` tiles of the core centre. That worked while every
+      // core was the same 122px-tall monolith: a screen halfway up the face
+      // projects about six tiles further away than the face's base, and nine
+      // tiles of tolerance just covered it. #150 made CALYPSO's core a true
+      // cube at 192px, the projection moved out past the tolerance, and her
+      // console stopped answering. A number tuned to one body's height was
+      // always going to do that the first time a body changed height.
+      //
+      // drawCoreScreen already records the panel's real screen-space centre and
+      // radius every frame, for exactly this, and nothing had ever read it.
+      const hit = renderer.coreTermHit;
+      let onScreen = false;
+      if (hit && hit.obj === hold.core.obj) {
+        onScreen = Math.hypot(cPress.x - hit.x, cPress.y - hit.y) <= hit.r;
+      } else {
+        // The panel is not drawn this frame (she is defeated, or it is off the
+        // top of the view). Fall back to the ground projection, generously —
+        // you are already standing at the core to get here.
+        const w = camera.toWorld(cPress.x, cPress.y, renderer.w, renderer.h);
+        const t = hold.coreTerminal;
+        onScreen = Math.hypot(w.x - t.x, w.y - t.y) <= hold.core.fw + 3;
+      }
+      if (onScreen) {
         input.consumeClick();
-        openCoreTerminal();
+        // #145: HER MACHINE BOOTS. The other daemons answer at a prompt because
+        // a green obelisk console is all they are; hers is a workstation, so it
+        // comes up in NeXTSTEP and the prompt is one of the things running on
+        // it. (David, 2026-08-13: "the calypso machine should boot into
+        // Nextstep".)
+        if (hold.AI_NAME === 'CALYPSO') openWorkspace();
+        else openCoreTerminal();
       }
     }
   }
@@ -10097,6 +11050,11 @@ function update(dt) {
     sfx.setChoirVolume(vol);
   }
   map.updateShakes(dt);
+  // Is a full-screen panel over the canvas? The NostBook, an obelisk console,
+  // Netscape, the notebook. Passed to systems so the ones with expensive
+  // per-frame work can stand down while nobody can see them — the grove's floor
+  // is 1,333 tiles of field and it was still computing them behind the laptop
+  // (David, 2026-08-13: "the laptop is very unresponsive").
   // Registered systems tick here, sorted by `order`: dayNight (20), robots (30),
   // fortress (35), lore (80). This is the normal-play update point — below the
   // paused/resting/driving gates, which keep their own explicit ticks (the hub
@@ -10106,7 +11064,7 @@ function update(dt) {
   //   alarm — on alarm `stir` flares the obelisks red and sends a W4, `calm`
   //   unwinds it. dayNight: advances the day/night clock. robots
   //   ticks before fortress so fortress sees this-frame aggro (see robots.js).
-  systems.runUpdate({ dt, player, input, map, camera, robots: currentWorld.robots, animals: currentWorld.animals, birds: currentWorld.birds, dayNight, worldStir, hold });
+  systems.runUpdate({ dt, player, input, map, camera, robots: currentWorld.robots, animals: currentWorld.animals, birds: currentWorld.birds, dayNight, worldStir, hold, covered: screenCovered });
   // Push the player out of any machine/animal body he ended the tick overlapping.
   // Must run after everyone has moved — robots now move inside runUpdate above,
   // so this sits just below it (separate() nudges both bodies; see collision.js).
@@ -10374,7 +11332,27 @@ function frame(now) {
   checkMilestones(); // auto-snapshot stage checkpoints as they're reached
   if (now - _lastAutosave > 8000) { _lastAutosave = now; persist(); } // keep Continue current (position + loot), not just on events
 
-  if (now - lastRenderTime >= MIN_RENDER_MS) {
+  // A PANEL IS OVER THE CANVAS. The NostBook, a console, Netscape. The world
+  // behind it was still being drawn sixty times a second — and on Ogygia that
+  // is a thousand floor studs a frame nobody can see, which is what made the
+  // laptop feel like treacle in the grove and nowhere else.
+  //
+  // Throttled to ~8fps rather than stopped dead: these panels do not cover the
+  // canvas edge to edge, so a strip of world shows past them and a frozen strip
+  // reads as a crash. Eight is plenty for scenery in your peripheral vision and
+  // it hands the other seven eighths of the frame to the thing you are typing
+  // into. The UPDATE still runs at full rate — the deadline is the game's one
+  // clock and it does not stop because you opened a laptop.
+  //
+  // #145: the Workspace is drawn ON the canvas, so it must NOT be throttled —
+  // a desktop whose windows drag at 8fps is not a desktop. Only the DOM panels
+  // qualify here, which is why this asks about them directly rather than
+  // through screenCovered() (that one also answers for the Workspace, and is
+  // what stops the grove's floor animating behind it).
+  const domPanelUp = (el) => !!(el && el.style.display && el.style.display !== 'none');
+  const canvasIdle = domPanelUp(obTermEl) || domPanelUp(nsEl) || domPanelUp(notebookEl);
+  const minRender = canvasIdle ? 120 : MIN_RENDER_MS;
+  if (now - lastRenderTime >= minRender) {
     lastRenderTime = now;
     const amb = currentWorld.ambience;
     renderer.obColor = currentWorld.obColor; renderer.obAlertColor = currentWorld.obAlertColor; // R1: per-island OB eye hue
@@ -10395,6 +11373,9 @@ function frame(now) {
       narrowsOver: (strait && strait.phase === 'choice') ? strait.gameover : null,
       pong: pong ? pong.run : null,
       draughts,
+      // #145: her desktop. Drawn under the board and the console, so launching
+      // either from the dock puts it on top of a Workspace that is still there.
+      workspace: workspace ? { ws: workspace, api: wsApi } : null,
       pongOver: pong ? pong.gameover : null,
       poseidonFog: poseidonFog > 0.01 ? { n: poseidonFog, goggles: player.gogglesOn } : null,
       place: hudPlace(),      // the island you are on, by its chart name

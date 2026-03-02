@@ -838,6 +838,43 @@ tests now.
 remainder), messages written in the floor from her braincode (#152), and the
 NeXT cube (#150). All legitimate, none of them scheduled.
 
+**ALL THREE SHIPPED 2026-08-13, v1.517–v1.519, along with F2b.**
+
+- **#150, the NeXT cube (v1.517).** True cube proportions is the whole job: in
+  this 2:1 projection a world unit of height is TILE_W/2 on screen, so a
+  footprint of `fw` tiles is a cube exactly when H = fw·TILE_W/2. The monolith
+  hard-codes H = 122 against a 6-tile base, which is why it reads as a slab.
+  Matte cast magnesium (faces held close in value, because a matte surface
+  scatters), vents cut across the top as a groove with a lit lip under it, Paul
+  Rand's mark tilted 28° on the SW face with the lowercase e in her blue, a
+  drive slot and a lamp breathing at 2.6s rather than the monolith's 520ms
+  throb. `drawCoreScreen` and `drawCoreDamage` came out of `drawMainframe` so
+  both bodies share the terminal panel and the damage bar.
+- **#152, the floor writes (v1.518).** Her CONSTITUTION, in letters, on the
+  floor of the room it is about — read off `calypso-code.js` rather than
+  retyped, and passed IN so `spiralism.js` stays a pure field module. A 3×5
+  face written as `#` and `.` so the source shows the letterforms. It does not
+  scroll: the floor is 43 tiles wide, so a crawl takes half a minute to say
+  seven letters, and a stroke sweeping across a tile argues with the flash
+  budget. NEVER RELEASE, lit under the guest's feet, in the room he cannot
+  leave.
+- **#149, the T-8 dancers (v1.519).** `hunt` and `flee` are not in `T8_CAN`, so
+  a program that asks for either faults at the chassis. That is the design and
+  not a safety net: a machine standing in that clearing has to be one you could
+  not turn into a guard even by writing it a program saying so. Its braincode
+  carries CJPOA 1994 s.63 — the floor emits a succession of repetitive beats,
+  therefore this is a gathering, therefore the machine may stay. `dance` and
+  `sway` are new INTENTS and the floor senses had to go on MACHINE_ONLY, which
+  is the list that actually makes a name reachable.
+
+**Two things this batch taught, both about tests passing for the wrong reason.**
+The flash tests called `intensity` with no message, so #152's hard-edged figure
+measured as blank and passed vacuously; a message-carrying flash test is now
+there. And rotating a tile then rotating it back is not the identity in floating
+point, which put a centred two-line block's row test on an exact .5 boundary and
+made letters shimmer as the room turned — the figure snaps to the tile first
+now, and the upright test sweeps four angles rather than one.
+
 ### F2 — the fortress object off her island
 
 F1 took the fortress's BEHAVIOUR off Ogygia and left the object standing,
@@ -914,7 +951,24 @@ are no players yet), so the serialize key moves with the field.
   switched over. Her island stops importing `fortress.js` entirely. The field is
   still called `fortress`, so nothing else in the game moves.
 - **F2b** — the rename to `world.hold` everywhere, once F2a is confirmed good in
-  play.
+  play. **SHIPPED v1.514.** 71 identifiers in `main.js`, 17 across the island
+  files, plus `map.fortressAlarm` → `map.holdAlarm`. Renamed with a script that
+  skips strings, comments and regexes, so the nine places `index.html` says
+  *fortress* to the player are all still right.
+
+  **Two save keys were deliberately NOT renamed on both sides.** The pre-v1.146
+  compat blob reads `wsv.fortress` because that is what that build wrote, and
+  restore reads `st.hold || st.fortress` so a save written before the rename
+  still loads. Verified against a real v1.512 save.
+
+  **The script had a hole, and it cost a bug (fixed v1.520).** It skipped the
+  inside of `${...}` in a template literal, which is code — eight sites came
+  through unrenamed, every one a ReferenceError waiting for somebody to open the
+  gate terminal or fire `zeus_lightning`. The full suite passed with them in
+  place and the browser walk did not touch either path. `module-syntax.test.js`
+  now greps every interpolation in `src` and `bin` for a bare `fortress`. The
+  lesson is narrower than "don't use scripts": a rename tool that understands
+  strings has to understand that a template literal is only PARTLY a string.
 
 **Exit criteria.** Ogygia imports no fortress module; `fortwall` and `fortdoor`
 appear nowhere on her map at any seed; there is no maze, no rampart, no gate and
