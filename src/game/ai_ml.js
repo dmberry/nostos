@@ -61,7 +61,7 @@ import { RonmlError, RonmlFuelError, RonmlRaise } from '../lang/errors.js';
 // contract, the game's help and survey wording. Nothing here is the language.
 //
 // The re-exports are load-bearing: seven files import these names from this
-// module, and the standing rule in docs/aiml-standalone-plan.md is that the
+// module, and the standing rule in docs/PLAN.md is that the
 // adapter RE-EXPORTS and never copies. Two definitions of the same thing is how
 // the diagnostic list went stale six times.
 import { tokenize } from '../lang/lex.js';
@@ -123,7 +123,7 @@ const COPY_FILE = {
   },
 };
 
-// ---- the control verbs (docs/ob-hacking-plan.md) ---------------------------
+// ---- the control verbs (docs/PLAN.md) ---------------------------
 //
 // `unlock` was the ONLY thing a decrypted AI key was for, which made the most
 // laborious object in the game a single-use one. These reach the island as a
@@ -168,6 +168,13 @@ function makeBuiltins(station) {
     // towers on the wire, this lists the machines that answer to the one you are
     // jacked into, so you can find the right unit to tag, reprogram or repel.
     garrison: {
+      arity: 0,
+      fn: (_args, ctx) => ({ tag: 'str', v: ctx.garrison ? ctx.garrison() : 'garrison: not available from this console.' }),
+    },
+    // `g` is `garrison`. It is the verb typed most often at a node — you check
+    // the muster before and after almost everything else — and nine letters for
+    // a thing you type twenty times a session is a toll (David, 2026-08-15).
+    g: {
       arity: 0,
       fn: (_args, ctx) => ({ tag: 'str', v: ctx.garrison ? ctx.garrison() : 'garrison: not available from this console.' }),
     },
@@ -387,7 +394,7 @@ function makeBuiltins(station) {
       }),
     },
     // A cell whose contents can be replaced. The only mutable thing here.
-    // ---- a machine's own senses (docs/robot-programs-plan.md §2) ----------
+    // ---- a machine's own senses (docs/PLAN.md §2) ----------
     // Nullary builtins reading the unit's state off ctx.sense. Functions, not
     // fields, so the language needs no records and no `.` accessor — and being
     // station-scoped means a unit's program cannot reach the network by mistake.
@@ -431,7 +438,7 @@ function makeBuiltins(station) {
     lit: SENSE('lit', 'bool'),
     brighter: SENSE('brighter', 'bool'),
     trespass: SENSE('trespass', 'bool'),
-    // ---- a TOWER's senses (docs/machine-braincode-plan.md §2) -------------
+    // ---- a TOWER's senses (docs/PLAN.md §2) -------------
     // An obelisk reads the world differently from a unit: it does not move, so
     // it has no range to home and no hull to worry about. It knows whether
     // there is a person at its foot, how sure it is, whether one of its own is
@@ -539,7 +546,7 @@ function makeBuiltins(station) {
     // file through the DOCTOR's reflection and get a new file back. On the
     // factory's id line (`I am W-FACTORY, my keys are mine`) the my->your
     // reflection turns the boast into a grant — root_access.ml. (Calypso escape
-    // chain, docs/calypso-escape-chain.md.)
+    // chain, docs/PLAN.md.)
     eliza: {
       arity: 1,
       fn: ([file], ctx) => {
@@ -616,6 +623,18 @@ function makeBuiltins(station) {
       fn: ([topic], ctx) => {
         // Accept a doc topic (read history) or a file (read readme.md) — file
         // values carry .name, topics come through as .id/node.
+        const name = topic && (topic.name || topic.id || '') || '';
+        ctx.read(String(name).toLowerCase());
+        return { tag: 'unit' };
+      },
+    },
+    // `cat` is the same verb. These terminals answer `ls` and `cd`, so a player
+    // who has typed those types `cat` next and got "unknown verb" — the word
+    // was only ever on the laptop (David, 2026-08-14: "you need to be able to
+    // cat files too"). One implementation, two spellings.
+    cat: {
+      arity: 1,
+      fn: ([topic], ctx) => {
         const name = topic && (topic.name || topic.id || '') || '';
         ctx.read(String(name).toLowerCase());
         return { tag: 'unit' };
@@ -756,7 +775,7 @@ function makeBuiltins(station) {
     sleep: {
       arity: 1,
       fn: ([num], ctx) => {
-        if (!num || num.tag !== 'num') throw new RonmlError('sleep needs a number of minutes — try: sleep 30');
+        if (!num || num.tag !== 'int') throw new RonmlError('sleep needs a number of minutes — try: sleep 30');
         ctx.sleepNearby(num.v);
         return { tag: 'unit' };
       },
@@ -768,7 +787,7 @@ function makeBuiltins(station) {
     rewind: {
       arity: 1,
       fn: ([num], ctx) => {
-        if (!num || num.tag !== 'num') throw new RonmlError('rewind needs a number of hours — try: rewind 3');
+        if (!num || num.tag !== 'int') throw new RonmlError('rewind needs a number of hours — try: rewind 3');
         if (ctx.skylinkActive()) throw new RonmlError('POSEIDON is already live — the deadline clock isn\'t running anymore. Knock towers dark instead.');
         ctx.rewindClock(num.v);
         return { tag: 'unit' };
@@ -821,6 +840,22 @@ function makeBuiltins(station) {
     // Called `net` and not `sight`: `sight` is one of a machine's own senses
     // (MACHINE_ONLY below), and a verb of that name shadowed the sensor —
     // three fire-control tests went red and named it straight away.
+    // #167 — `checkin <unit> <key>`. Files a report the unit never made: it
+    // clears the tower's AWOL standing and resets the silence clock, and it does
+    // NOT stand the unit down, so the clock starts again immediately. The
+    // hacking route's answer to the same problem `fell` answers with an axe, and
+    // it needs the key for the same reason every other estate-level write does.
+    checkin: {
+      arity: 2,
+      fn: ([node, dec], ctx) => {
+        requireClean(dec, 'checkin');
+        if (!node || node.tag !== 'node') throw new RonmlError('checkin needs a unit — try: checkin w4_03 k');
+        if (!ctx.checkInNode) throw new RonmlError('no reporting from this console.');
+        const r = ctx.checkInNode(node.id);
+        if (!r || !r.ok) throw new RonmlError((r && r.text) || `cannot file for ${node.id}`);
+        return { tag: 'str', v: r.text };
+      },
+    },
     net: {
       arity: 2,
       fn: ([state, dec], ctx) => {
@@ -936,14 +971,14 @@ function makeBuiltins(station) {
 // (work at both an obelisk and a HERMES relay). A verb tagged for one station is
 // refused at the other; the file verbs must move files at either terminal, and
 // `save` must write a checkpoint from whichever one you are logged into.
-const OB_VERBS = ['upload', 'play', 'post', 'ls', 'scan', 'garrison', 'soul', 'nearest', 'keys', 'name', 'tag', 'timer', 'echo', 'not', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'sing', 'map', 'print', 'decrypt', 'unlock', 'eliza', 'retire', 'read', 'get', 'sz',
+const OB_VERBS = ['upload', 'play', 'post', 'ls', 'scan', 'garrison', 'g', 'soul', 'nearest', 'keys', 'name', 'tag', 'checkin', 'timer', 'echo', 'not', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'sing', 'map', 'print', 'decrypt', 'unlock', 'eliza', 'retire', 'read', 'cat', 'get', 'sz',
   // The control verbs, all of which want a decrypted AI key.
   'fog', 'poseidon', 'robots', 'net', 'spread', 'explorer'];
 // Note: HERMES's `print` is added as an override in makeBuiltins (it takes a
 // topic), not tagged here — tagging it would steal the obelisk's own arity-0
 // `print`. `print` is already in OB_VERBS, so ALL_VERBS still covers it.
-const HERMES_VERBS = ['read', 'archive', 'records', 'drive', 'backup', 'restore', 'forge'];
-// The LAPTOP is off the network by design (docs/laptop-plan.md), so it carries no
+const HERMES_VERBS = ['read', 'cat', 'archive', 'records', 'drive', 'backup', 'restore', 'forge'];
+// The LAPTOP is off the network by design (docs/PLAN.md), so it carries no
 // station verbs at all — only `echo` and the language core (let / fn / if /
 // arithmetic / `;` / recursion), which is exactly what makes it a place to LEARN
 // the language rather than perform it under fire. A tower verb typed here is not a
@@ -965,16 +1000,16 @@ const LAPTOP_VERBS = ['echo', 'not', 'hd', 'tl', 'length', 'abs', 'sqrt', 'min',
 // not the machine's, so they are listed here but stay neutral elsewhere.
 // What a constitution may forbid. Prohibitions only: they compose, where a
 // positive obligation would be a second decision system competing with the
-// program proper (docs/ml-constitution-plan.md).
+// program proper (docs/PLAN.md).
 // A constitution can forbid a word the machine would otherwise choose. The
-// tower words are here too (docs/machine-braincode-plan.md §2): `never report`
+// tower words are here too (docs/PLAN.md §2): `never report`
 // stops the spying, and `never feed` cuts a garrison off from power, which is
 // the strongest single hack in the game.
 export const NEVER_CLAUSES = ['hunt', 'fire', 'report', 'feed', 'call', 'lure'];
 
 const MACHINE_ONLY = ['charge', 'integrity', 'range', 'home_range',
   'threat', 'hurt', 'linked', 'blight', 'daylight', 'work', 'beep', 'eye', 'flash', 'move', 'never',
-  // Fire control (docs/robot-programs-plan.md P8). A machine that shoots needs
+  // Fire control (docs/PLAN.md P8). A machine that shoots needs
   // to know whether it can see, whether it is loaded, whether the target is
   // covered, whether it is being touched, and how long it has been looking.
   'sight', 'armed', 'shielded', 'contact', 'lost_for',
@@ -1101,6 +1136,7 @@ const USAGE_HINTS = {
   backup: 'backup needs a key — try: backup aikey',
   restore: 'restore needs a key — try: restore aikey',
   read: 'read needs a topic — try: read history (archive lists them)',
+  cat: 'cat needs a file — try: ls (to see what is here), then cat garrison',
   forge: 'forge needs the payload — try: forge zeus_virus.ml (at a relay, Trojan card in hand)',
 };
 
@@ -1117,6 +1153,7 @@ const HELP_VERBS = [
   ['keys', 'unit -> list', 'the keys you hold', '', 'ob'],
   ['name', 'unit -> node', 'the node you are on', '', 'ob'],
   ['tag n "label"', 'node str -> unit', 'label a unit or tower on the wire ("" clears)', 'no key needed', 'ob'],
+  ['checkin n k', 'node key -> str', 'file a report a unit did not send; clears AWOL', 'needs a decrypted AI key', 'ob'],
   ['get "file"', 'str -> str', 'pull a readable file down to the NostBook /home', 'over telnet only', 'ob'],
   ['sz "file"', 'str -> str', 'send a file to /home — get by its zmodem name', 'over telnet only', 'ob'],
   ['timer', 'unit -> node', 'time left before POSEIDON', '', 'ob'],
@@ -1221,8 +1258,8 @@ function helpText(topic, station, hasManual) {
   // they nest in `let`/pipes/functions. Both forms still run; this just teaches the
   // split by how the reference presents them.
   const IMPERATIVE = new Set([
-    'scan', 'garrison', 'soul', 'keys', 'name', 'timer', 'map', 'print', 'sleep', 'rewind', 'repel', 'sing', 'loop', 'retire',
-    'read', 'get', 'sz', 'make', 'archive', 'records', 'drive', 'backup', 'restore',
+    'scan', 'garrison', 'g', 'soul', 'keys', 'name', 'timer', 'map', 'print', 'sleep', 'rewind', 'repel', 'sing', 'loop', 'retire',
+    'read', 'cat', 'get', 'sz', 'make', 'archive', 'records', 'drive', 'backup', 'restore',
     // Arity-0 and nothing comes back: `explorer` opens a window, `save` writes a
     // checkpoint, `drives` prints what is attached. They belong with `map` and
     // `print` rather than with the verbs you nest in a `let`.
@@ -1244,7 +1281,7 @@ function helpText(topic, station, hasManual) {
   const GROUPS = [
     ['LOOK', ['scan', 'garrison', 'soul', 'nearest', 'name', 'keys', 'tag', 'timer', 'map', 'explorer']],
     ['ONE NODE', ['hack', 'crash', 'loop']],
-    ['THE ISLAND — needs a decrypted AI key', ['fog', 'poseidon', 'robots', 'net', 'spread']],
+    ['THE ISLAND — needs a decrypted AI key', ['fog', 'poseidon', 'robots', 'net', 'spread', 'checkin']],
     ['THE KEY', ['copy', 'decrypt', 'unlock', 'print']],
   ];
   const nameOf = (sig) => sig.split(' ')[0];
@@ -1347,7 +1384,7 @@ function runStar(rest, ctx) {
 // returns is a fault — a machine that asks for something it cannot do is broken,
 // not creative.
 export const INTENTS = ['patrol', 'hunt', 'flee', 'home', 'tend', 'wait', 'route', 'follow', 'defend'];
-// A tower does not patrol or hunt (docs/machine-braincode-plan.md §2). It has
+// A tower does not patrol or hunt (docs/PLAN.md §2). It has
 // its own repertoire, and `hold` is its `wait`. These live in the same list as
 // the unit intents so `decide` needs no second code path: what a given machine
 // may CHOOSE is the chassis's CAN list, which is where a tower is stopped from
@@ -1698,6 +1735,24 @@ export function runRonml(source, ctx) {
   if (trimmed === 'help' || trimmed.startsWith('help ')) {
     return { ok: true, text: helpText(trimmed.slice(4).trim(), ctx && ctx.station, ctx && ctx.hasManual) };
   }
+  // `tag w4_* "escort"` — TAG A WHOLE CLASS AT ONCE (David, 2026-08-15).
+  //
+  // Handled HERE, above the evaluator, and deliberately not in the lexer. `*`
+  // is multiplication in this language and `w4_*` lexes as `w4_ * ...`; making
+  // an identifier able to swallow a trailing star would change AI-ML itself,
+  // and AI-ML is held to a real SML conformance harness. A console convenience
+  // does not get to bend the language it sits on top of.
+  //
+  // So the glob never reaches the parser. Anything without a `*` or `?` in the
+  // name goes down the ordinary path and is the same single-node `tag` it was.
+  // The pattern may LEAD with a star (`*.w4_*` — the whole wire rather than
+  // this tower's garrison), so it is not anchored to an identifier character.
+  const glob = /^tag\s+([\w.*?]*[*?][\w.*?]*)\s+"([^"]*)"\s*$/.exec(trimmed);
+  if (glob) {
+    if (!ctx.tagMany) return { ok: false, text: 'ERR: no tagging from this console.' };
+    return ctx.tagMany(glob[1], glob[2]);
+  }
+
   // `*command` — the BBC-Micro command form, run with literal arguments.
   // Anything without a leading `*` is an AI-ML expression.
   if (trimmed.startsWith('*')) return runStar(trimmed.slice(1), ctx);

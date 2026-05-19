@@ -7,7 +7,7 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
-// #125 — constitutional clauses (docs/ml-constitution-plan.md). `never hunt`
+// #125 — constitutional clauses (docs/PLAN.md). `never hunt`
 // and `never fire` are prohibitions that stand ABOVE the program: the machine
 // cannot choose the forbidden word, and cannot fall back into it through its
 // chassis reflexes when the program faults. That last part is the whole point,
@@ -63,7 +63,7 @@ test('never is an effect, not an intent: the clause rides alongside the answer',
 });
 
 test('a constitution can forbid only what a constitution can forbid', () => {
-  // The unit words, then the tower words (docs/machine-braincode-plan.md §2).
+  // The unit words, then the tower words (docs/PLAN.md §2).
   assert.deepEqual(NEVER_CLAUSES, ['hunt', 'fire', 'report', 'feed', 'call', 'lure']);
   const bad = decide('never dance ; patrol', SENSE);
   assert.equal(bad.ok, false);

@@ -16,6 +16,19 @@ export const TILE_H = 32;
 // everything on them raised by this; the camera reads it to keep the player
 // centred when they climb (otherwise a lifted sprite walks off the top of view).
 export const ELEV = 16;
+// TRIED AT 32 AND REVERTED (2026-08-16). A true cube on a 64x32 diamond wants a
+// 32px vertical edge, and at 32 a hand-placed block finally reads as a cube —
+// but every generated hill becomes a sheer mesa with the same change, and the
+// five islands' terrain was authored for gentle single-level rises. Ogygia came
+// out a field of towers with trees balanced on them. If blocks are to be cubes,
+// the way is a PLACED BLOCK BEING TWO LEVELS THICK, not a taller level: one
+// vertical scale for the whole world, and only the build tool's unit changes.
+//
+// Screen pixels a JUMP lifts the sprite per unit of `z`. Terrain height and jump
+// height are two different currencies that both end up as pixels, and the
+// conversion between them lives here rather than as a 0.5 somewhere in the
+// player: `ELEV / Z_PX` is how many z-units one whole level is worth.
+export const Z_PX = 32;
 
 const HW = TILE_W / 2;
 const HH = TILE_H / 2;
@@ -37,4 +50,43 @@ export function screenDirToWorld(dx, dy) {
   const len = Math.hypot(wx, wy);
   if (len === 0) return { x: 0, y: 0 };
   return { x: wx / len, y: wy / len };
+}
+
+/**
+ * Which recorded tile is under a canvas point (docs/terrain-3d-plan.md, stage 3).
+ *
+ * The prism pass records the centre of every top face it paints, in iso space,
+ * along with the matrix it painted them under. This inverts that matrix and
+ * finds the tile — so picking is a lookup on what was drawn rather than a
+ * second implementation of the projection kept in step by hand. The two used to
+ * be separate and stopped agreeing the moment terrain could be six steps tall.
+ *
+ * `scale` carries CSS pixels into the matrix's space: the canvas backing store
+ * is `w * devicePixelRatio` wide, so the transform is in DEVICE pixels while
+ * every pointer the game handles is in CSS pixels. At dpr 2 that is a factor of
+ * two, and it picks a tile seven rows out.
+ *
+ * BACK TO FRONT, first hit wins. Paint order is depth order, so the last prism
+ * painted over a pixel is the one you are looking at; that is what makes a tall
+ * block in front of low ground pick the block and not the ground.
+ *
+ * Lives here rather than in the renderer because it is projection arithmetic
+ * and this module has no DOM in it — which is the only reason it can be tested.
+ */
+export function pickTile(hits, xf, px, py, scale = 1) {
+  if (!hits || !hits.length) return null;
+  let ix = px * scale, iy = py * scale;
+  if (xf) {
+    const det = xf.a * xf.d - xf.b * xf.c;
+    if (!det) return null;
+    const dx = px * scale - xf.e, dy = py * scale - xf.f;
+    ix = (dx * xf.d - dy * xf.c) / det;
+    iy = (dy * xf.a - dx * xf.b) / det;
+  }
+  for (let i = hits.length - 1; i >= 0; i--) {
+    const t = hits[i];
+    // Exact for a 2:1 diamond: the unit ball of the L1 norm on the tile's axes.
+    if (Math.abs(ix - t.x) / HW + Math.abs(iy - t.y) / HH <= 1) return t;
+  }
+  return null;
 }

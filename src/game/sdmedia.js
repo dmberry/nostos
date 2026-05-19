@@ -228,8 +228,51 @@ export const CLIPS = {
   },
 };
 
+// ---- real footage ----------------------------------------------------------
+//
+// A clip may carry DATA instead of a render function, which is how actual video
+// gets in here (David is making some). The wire format is run-length encoded
+// palette indices, because blocky sixteen-colour video is nothing but runs: a
+// frame of a static camera compresses to a few hundred characters and a frame of
+// a garden to not much more.
+//
+// One character per number, from a 64-symbol printable alphabet, so the data is
+// paste-safe in a source file and has no escaping to get wrong. A run is two
+// characters: a count 1..64 and a palette index. `tools/preview/clipmaker.html`
+// produces this from any video or GIF the browser can open.
+const A64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-';
+const A64I = Object.fromEntries([...A64].map((c, i) => [c, i]));
+
+/** RLE one frame's indices into the paste-safe string form. */
+export function packFrame(buf) {
+  let out = '';
+  let i = 0;
+  while (i < buf.length) {
+    const v = buf[i];
+    let n = 1;
+    while (i + n < buf.length && buf[i + n] === v && n < 64) n++;
+    out += A64[n - 1] + A64[v];
+    i += n;
+  }
+  return out;
+}
+
+/** And back. Throws on a malformed string rather than half-painting a frame. */
+export function unpackFrame(str, out = null) {
+  const buf = out || new Uint8Array(CLIP_W * CLIP_H);
+  let at = 0;
+  for (let i = 0; i < str.length; i += 2) {
+    const n = A64I[str[i]], v = A64I[str[i + 1]];
+    if (n == null || v == null) throw new Error('clip data: bad symbol at ' + i);
+    for (let k = 0; k <= n && at < buf.length; k++) buf[at++] = v & 15;
+  }
+  if (at !== buf.length) throw new Error(`clip data: ${at} pixels, expected ${buf.length}`);
+  return buf;
+}
+
 /** How many frames a clip runs to. */
 export function frameCount(clip) {
+  if (clip.frames) return clip.frames.length;
   return Math.max(1, Math.round(clip.fps * clip.secs));
 }
 
@@ -244,6 +287,9 @@ export function frameCount(clip) {
 export function renderFrame(clip, n, out = null) {
   const buf = out || new Uint8Array(CLIP_W * CLIP_H);
   const f = ((n % frameCount(clip)) + frameCount(clip)) % frameCount(clip);
+  // Real footage: unpack the frame and we are done. A clip either has data or
+  // draws itself, never both, so there is no precedence question here.
+  if (clip.frames) return unpackFrame(clip.frames[f], buf);
   const t = f / clip.fps;
   const p = painter(buf, CLIP_W, CLIP_H);
   p.clear(0);

@@ -7,8 +7,10 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
-import { screenDirToWorld } from '../engine/iso.js';
+import { screenDirToWorld, ELEV, Z_PX } from '../engine/iso.js';
 import { sfx } from '../engine/sound.js';
+import { modeOf, DEFAULT_MODE, isMode, lowerMode } from './modes.js';
+import { WOOD_PER_FIRE, FUEL_PER_WOOD, isLit, feedFire, tickCook, roastOf } from './cooking.js';   // #180
 import { ITEMS } from './items.js';
 import { ARMOUR_SLOTS, armourKey, takeHit, slotOf, shouldWear, freshPiece } from './armour.js';
 import { OBJECTS } from './tiles.js';
@@ -18,7 +20,7 @@ import { W5_PROGRAM } from './robots.js';
 import { achieveEvent } from './achieve.js';
 
 // The five credentials of the escape chain. Picking any of them up is a beat
-// worth marking (docs/achievements-plan.md, the cards).
+// worth marking (docs/PLAN.md, the cards).
 const CARD_ITEMS = new Set(['chip', 'ai_key', 'trojan_key', 'hermes_card', 'fsf_card']);
 
 const WALK_SPEED = 4.2;   // tiles per second
@@ -95,6 +97,31 @@ const HUNGRY_AT = 25;         // stamina recovers slowly below this
 // your step: your heading sways and lurches, so walking a straight line out of
 // the grove takes real correcting (the lotus-eaters of Odyssey IX).
 const TORPOR_TIME = 9;        // seconds of daze added per fruit eaten
+// The mode's scale on a loss of health, written as a free function rather than
+// only as a method: the depart-mode tests call `takeDamage` on a plain stand-in
+// object, and `this.harm` is not there. A funnel that throws when it is borrowed
+// is a funnel people route around.
+/**
+ * The mode stamp a certificate carries (#173) — a MODULE function, not a method.
+ *
+ * Same reason as `modeHarm` below: `boardBoat` and the death paths are borrowed
+ * by the tests on plain stand-in objects, and a certificate builder that throws
+ * when borrowed is a builder people route around. A stand-in with no mode gets
+ * the default, which is what it was playing.
+ */
+function modeStamp(self) {
+  return {
+    mode: (self && (self.modeFloor || self.mode)) || DEFAULT_MODE,
+    modeSet: (self && self.mode) || DEFAULT_MODE,
+    modeSwitched: !!(self && self.modeSwitched),
+  };
+}
+
+function modeHarm(self, amount) {
+  if (!self || self.creative) return 0;
+  return amount * modeOf(self.mode).hurt;
+}
+
 const TORPOR_MAX = 22;        // stacking cap, so a fistful doesn't strand you forever
 const TORPOR_SLOW = 0.5;      // movement multiplier while dazed
 const TORPOR_SWAY = 1.0;      // radians of peak heading roll while dazed (scaled by ease)
@@ -134,6 +161,10 @@ const REFLECT_DAMAGE = 8;   // a mirror shield throws this back at the shooter
 // The forcefield is energy, not metal, so it never breaks — but each blow it
 // swallows costs extra charge, so a barrage drains the cell far faster than idle.
 const RIOT_SHIELD_HITS = 12;      // blocked hits before a riot shield is battered apart
+// THE ASPIS WORKS LIKE THE RIOT SHIELD, only better, which is what it is for:
+// it came off something that was using it properly. Same mechanic — carried,
+// covers every direction, wears with each blow — and twice the endurance.
+const ASPIS_HITS = 26;
 const MIRROR_HEAT_PER_HIT = 0.17; // heat gained per bolt reflected (0..1 scale)
 const MIRROR_HEAT_COOL = 0.13;    // heat/sec shed while not being hit
 const MIRROR_HEAT_FADE = 0.6;     // above this it's too hot to reflect — only absorbs
@@ -186,6 +217,14 @@ const BARE_HANDS = {
 
 // Soft ground a shovel can sink into; hard surfaces (road, boards, water)
 // resist digging.
+/**
+ * How tall you are, in blocks — the clearance a surface must have above it
+ * before you can stand there (David, 2026-08-16). Two, like every other
+ * two-legged thing in a block world; one block of clearance is a crawlspace and
+ * you cannot use it.
+ */
+const PLAYER_HEIGHT = 2;
+
 const DIGGABLE = new Set(['grass', 'tallgrass', 'dirt', 'sand']);
 const PIT_DEPTH = -2;    // trap depth: a steep pit a T1 cannot climb out of
 
@@ -198,9 +237,35 @@ export class Player {
     this.z = 0;           // height above ground while jumping
     this.vz = 0;
     this.doubleJumped = false; // a second, mid-air jump: reaches block tops
+    // THE MODE. Creative used to be a lone boolean set from the dev panel; it is
+    // now the first of five modes chosen on the title screen, and `creative` is
+    // derived from it rather than set beside it. The LYRE switch still works and
+    // still flips this same flag — it is the same held breath, reachable two ways.
+    this.mode = DEFAULT_MODE;
+    this.creative = false;     // derived from the mode; LYRE toggles it directly too
+    // #173 — WHAT THE RUN IS GRADED AT. The mode can be changed at any point
+    // from the Settings panel, so the mode you are on when you reach Ithaca is
+    // not the mode you played. `modeFloor` is the lowest this run ever held and
+    // it is what a completion is credited at; `modeSwitched` records that it
+    // moved at all, which is a different (and milder) fact worth printing.
+    // WHICH LEVEL YOUR FEET ARE ON (terrain stage 5). On ordinary ground this is
+    // exactly `effectiveHeightAt` and always has been — the tile has one
+    // surface, so there was nothing to remember. On a column with air in it
+    // there are two, and which one you are on is a fact about YOU, not about the
+    // tile: standing under a deck and standing on it are the same x and y.
+    // Carried across frames because it is the only way the question stays
+    // answerable — you cannot infer it from a position alone.
+    this.footZ = 0;
+    this.modeFloor = DEFAULT_MODE;
+    this.modeSwitched = false;
+    // ADOPTING a mode is not SWITCHING one. The first `setMode` is the title
+    // screen's choice (or a save being restored), and counting that as a switch
+    // would mark every run as switched before it started.
+    this._modeSet = false;
     this.forcefieldCharge = 0; // seconds of forcefield left in the current cell
     this.forcefieldArmed = false; // toggled by clicking the forcefield in any slot
     this.riotShieldHits = 0;   // blows a carried riot shield has soaked; breaks at RIOT_SHIELD_HITS
+    this.aspisHits = 0;        // the same count for the great shield; breaks at ASPIS_HITS
     this.mirrorHeat = 0;       // 0..1 mirror-shield overheat; reflects while cool, melts at 1
     this.compassArmed = false; // toggled by clicking the electro-compass in any slot
     this.gogglesOn = false;    // night-vision goggles worn: they cut POSEIDON's fog
@@ -261,10 +326,10 @@ export class Player {
     // nothing on Aeaea. Names are AI_NAMEs ('CALYPSO', 'POLYPHEMUS', ...).
     this.virusArmed = new Set();
     // #159: the card in hand was cut off a dead carrier rather than forged at a
-    // relay (docs/hermes-warrior-path.md). It opens her door exactly as the
+    // relay (docs/PLAN.md). It opens her door exactly as the
     // forged one does; POSEIDON's net has simply read that it went missing.
     this.hermesTraced = false;
-    // The Nokia 3310 — Calypso's channel (docs/calypso-nokia-plan.md). A worn
+    // The Nokia 3310 — Calypso's channel (docs/PLAN.md). A worn
     // fixture like the walkman: never dropped, never a pocket slot. `calypsoHold`
     // is her hold on you AND her protection of you (0..1); `nokiaSent` records the
     // one-shot texts she has already sent, so a reload does not re-tutorial you.
@@ -273,7 +338,7 @@ export class Player {
     this.nokiaSent = new Set();
     this._nokiaIvIdx = 0;                     // cycles her intervention lines
     this.phone = { item: 'nokia_3310', qty: 1 }; // the PHONE box beside the walkman (swappable in a later build)
-    // The laptop you carry (docs/laptop-plan.md): its own slot beside the phone and
+    // The laptop you carry (docs/PLAN.md): its own slot beside the phone and
     // the walkman, because a laptop is almost nothing but per-instance state and
     // inventory slots hold only {item, qty}. Null until you find one.
     //   { model: 'laptop', os: 'unix', fs: <disk>, heat: 0, damage: null }
@@ -298,7 +363,17 @@ export class Player {
     this.hurtTimer = 0;   // brief red flash after taking damage
     this.message = null;  // {text, ttl} transient HUD line
     this.daemonVoice = null;  // {text, ttl, tier, ai} — the core speaking as you break it
-    this.torpor = 0;          // seconds of lotus daze remaining
+    this.torpor = 0;          // seconds of daze remaining, whatever caused it
+    // THE GOLD WASH IS THE FRUIT, NOT EVERY DAZE. `torpor` is the mechanic —
+    // slow feet and a drunken heading — and two very different things stack it:
+    // the lotus, and one of her guards turning you back. Painting the screen
+    // gold for both meant a single guard tap read as "I have eaten the lotus"
+    // (David, 2026-08-15: "when it attacks it makes the screen go yellow like I
+    // am in lotus fruit mode"). A detain gives 5 seconds and the wash is at full
+    // strength by 3, so one blow was the whole effect.
+    //
+    // So the daze is still the daze, and only the fruit is golden.
+    this.lotusDaze = 0;       // seconds of LOTUS torpor; drives the gold haze alone
     // G1: how hard CALYPSO's grove is holding you, 0..1. Set every frame from
     // your distance to her core (game/grove.js hold()), and zero on the green
     // path. Not a timer like torpor — it is WHERE YOU ARE STANDING, so walking
@@ -561,7 +636,7 @@ export class Player {
     return true;
   }
 
-  // Repairing the broken laptop (docs/laptop-plan.md §3a). There is one machine
+  // Repairing the broken laptop (docs/PLAN.md §3a). There is one machine
   // in this game and this is how you come by it: find a dead one, solder circuit
   // boards into it, and it is yours. The disk always survived — what died was the
   // board — so the files and the manual come back with it.
@@ -600,7 +675,7 @@ export class Player {
     return true;
   }
 
-  // The OB SPOOFER (docs/laptop-plan.md): stand under a tower, transmit, and the
+  // The OB SPOOFER (docs/PLAN.md): stand under a tower, transmit, and the
   // machine's own control wire hears an obelisk that is not there. Every unit
   // HOMED TO THAT TOWER takes its orders from you from then on.
   //
@@ -869,7 +944,7 @@ export class Player {
         name: this.name, gender: this.gender,
         cause: 'you sailed from Ogygia', score: this.score,
         skills: [...this.skills], deaths: this.deaths || 0,
-        victory: true, escaped: true,
+        victory: true, escaped: true, ...modeStamp(this),
       };
       sfx.play('zap');
       this.say('You push off the sand and step aboard. The sea heaves but does not close over you. Calypso has let you go. You have left Ogygia.');
@@ -1288,12 +1363,12 @@ export class Player {
     // trap and the trap should be comfortable. Everywhere else the clock in
     // your stomach runs.
     if (!(map && map.plenty)) {
-      this.food = Math.max(0, this.food - FOOD_DRAIN * (this.sprinting ? FOOD_SPRINT_MULT : 1) * dt);
+      this.food = Math.max(0, this.food - FOOD_DRAIN * (this.sprinting ? FOOD_SPRINT_MULT : 1) * modeOf(this.mode).hunger * dt);
     } else if (this.food < this.maxFood) {
       this.food = Math.min(this.maxFood, this.food + FOOD_DRAIN * dt);
     }
     if (this.food <= 0) {
-      this.health -= STARVE_DRAIN * dt;
+      this.health -= modeHarm(this, STARVE_DRAIN * dt);
       if (this.health <= 0) { this.die(map, 'starvation'); return; }
     }
 
@@ -1311,7 +1386,7 @@ export class Player {
     }
     if (this.venom > 0) {
       this.venom = Math.max(0, this.venom - dt);
-      this.health -= VENOM_DRAIN * dt;
+      this.health -= modeHarm(this, VENOM_DRAIN * dt);
       if (this.health <= 0) this.die(map, 'the venom');
     } else if (this.health < this.maxHealth && (this.food > 50 || this._inTemple)) {
       // The marble temples hold a healing vibe: within an old grove, recovery
@@ -1349,6 +1424,7 @@ export class Player {
     // and rolls the ground under your feet — you walk drunk, not dragged
     // (Odyssey IX by way of the taverna). The sway loosens in the last few
     // seconds so the walk home is recoverable.
+    if (this.lotusDaze > 0) this.lotusDaze = Math.max(0, this.lotusDaze - dt);
     if (this.torpor > 0) {
       this.torpor = Math.max(0, this.torpor - dt);
       this.food = Math.max(0, this.food - TORPOR_FOOD_DRAIN * dt);
@@ -1389,6 +1465,7 @@ export class Player {
     if (this.lying) {
       if (this.moving || input.jumpPressed()) {
         this.lying = false;
+        this._lieDir = undefined;   // on your feet: the sprite follows you again
         this.say('You get up. Sand in everything. But it is land, and it holds.');
       } else {
         this.moving = false;
@@ -1437,7 +1514,15 @@ export class Player {
       // Up on a block top, ease off the pace — the footprint is small and a
       // full walking speed makes edges twitchy to line up. Slower is easier
       // to control up there.
-      const effBefore = map.effectiveHeightAt ? map.effectiveHeightAt(Math.floor(this.x), Math.floor(this.y)) : 0;
+      // ONE SOURCE FOR THE GROUND UNDER YOU. The drop-off seeding and the
+      // climb-on bleed below exist to keep the sprite's total lift continuous —
+      // they are the fix for the original "jumpy on blocks" glitch — and they
+      // only work if they are computed against the SAME height the renderer
+      // lifts by. Lifting by `footZ` while compensating against
+      // `effectiveHeightAt` put those two back out of step and the glitch came
+      // straight back (David, 2026-08-16: "the player is glitchy jumping between
+      // vertical layers"). `groundUnder` is that one source now.
+      const effBefore = this.groundUnder(map, this.x, this.y);
       const hBefore = map.heightAt ? map.heightAt(Math.floor(this.x), Math.floor(this.y)) : 0;
       if (this.z === 0 && effBefore > hBefore) speed *= BLOCK_WALK_MULT;
       this.distanceTraveled += speed * dt;
@@ -1480,15 +1565,19 @@ export class Player {
       }
       this.moveAxis(mdx * speed * dt, 0, map);
       this.moveAxis(0, mdy * speed * dt, map);
-      const effAfter = map.effectiveHeightAt ? map.effectiveHeightAt(Math.floor(this.x), Math.floor(this.y)) : 0;
+      const effAfter = this.groundUnder(map, this.x, this.y);
       const hAfter = map.heightAt ? map.heightAt(Math.floor(this.x), Math.floor(this.y)) : 0;
+      this.footZ = effAfter;    // and the renderer lifts by exactly this
       if (hAfter > hBefore) this.stamina = Math.max(0, this.stamina - CLIMB_COST);
       // Walked off the edge of a block onto lower ground: drop off it and
-      // keep going, rather than snapping down. Seed `z` with the height lost
-      // (z renders at 32px/unit, a level is 16px, so half the level drop) and
-      // let the jump/gravity integrator below carry you down smoothly.
+      // keep going, rather than snapping down. Seed `z` with the height lost —
+      // DERIVED, not a hard 0.5: a level is ELEV pixels and z renders at Z_PX
+      // per unit, so one level is `ELEV / Z_PX` of z. Writing that ratio out as
+      // a number is how a constant goes stale the day somebody changes the
+      // block height, and the symptom would be the sprite snapping down a cliff
+      // instead of falling it.
       if (this.z === 0 && this.vz === 0 && effAfter < effBefore) {
-        this.z = (effBefore - effAfter) * 0.5;
+        this.z = (effBefore - effAfter) * (ELEV / Z_PX);
         this.doubleJumped = false;
       } else if ((this.z > 0 || this.vz !== 0) && effAfter > effBefore) {
         // Inverse of the drop-off above: jumping or climbing ONTO a taller
@@ -1499,7 +1588,7 @@ export class Player {
         // stays continuous instead of popping up a block-height in one frame
         // (the "jumpy on blocks" glitch). Clamp at 0 — if the ledge was grabbed
         // before you rose to its height, you just settle onto it with no dip.
-        this.z = Math.max(0, this.z - (effAfter - effBefore) * 0.5);
+        this.z = Math.max(0, this.z - (effAfter - effBefore) * (ELEV / Z_PX));
       }
       this.walkPhase += dt * (this.sprinting ? 13 : 9);
       // Footstep on each stride, voiced by the surface underfoot.
@@ -1518,7 +1607,7 @@ export class Player {
     this.swimming = swimFloor === 'water' || swimFloor === 'sea';
     if (this.swimming) {
       this.stamina = Math.max(0, this.stamina - SWIM_STAMINA_DRAIN * dt);
-      this.health = Math.max(0, this.health - SWIM_HEALTH_DRAIN * dt);
+      this.health = Math.max(0, this.health - modeHarm(this, SWIM_HEALTH_DRAIN * dt));
       if (this.health <= 0) { this.die(map, swimFloor === 'sea' ? 'the cold sea' : 'the cold river'); return; }
     }
 
@@ -1573,7 +1662,21 @@ export class Player {
     // whole existing plumbing (distTo → Infinity, detection → false, guard
     // line-of-sight → false) already follows this one flag.
     this._wifiOn = this.ownsWifiBlock() && this.wifiPower > 0;
-    this.invisibleToRobots = this._wifiOn || this.terminalSafe || this.isSwine();
+    // CREATIVE MEANS THE MACHINES DO NOT COME FOR YOU, which is a better answer
+    // than absorbing blows nobody should have thrown (David, 2026-08-15: "rather
+    // than check damage — maybe make everything passive — non-attacking. in
+    // creative mode obviously").
+    //
+    // It reuses the mechanism the game already has and already trusts: the same
+    // flag the Wi-Fi block sets, and a jacked-in operator, and a person Circe
+    // has turned into a pig. Every sensing site in robots.js reads it — `distTo`
+    // answers Infinity, `saw` and `canSee` answer false — so a Creative player
+    // is not a target rather than being an invulnerable one, and the guards
+    // never start the detain that stacks torpor and fogs the screen.
+    //
+    // `modeHarm` still returns 0, deliberately. Two independent guarantees, so
+    // one new damage source cannot quietly undo the mode.
+    this.invisibleToRobots = this.unseenByMachines();
 
     // A JAM IS NOT A SHIELD, AND A TERMINAL IS. The flag above hides you from
     // every machine's SENSORS, and the swarm classes deliberately look past it
@@ -1622,6 +1725,7 @@ export class Player {
       this.mirrorHeat = 0;
     }
     if (!this.hasItem('shield')) this.riotShieldHits = 0;
+    if (!this.hasItem('aspis')) this.aspisHits = 0;
 
     // Electro-compass: armed the same way — click it in whatever slot it's
     // carried in. Stays armed (chevrons on) until you drop the item entirely.
@@ -1635,6 +1739,10 @@ export class Player {
       this.electroCharge = Math.min(eg.internalMax, this.electroCharge + eg.chargeRate * dt);
     }
 
+    // `footZ` is NOT followed here. It is set where the movement resolves, in
+    // one place, beside the lift compensation that has to agree with it — a
+    // second follow further down the frame stepped it again and the two fought.
+    this.updateCooking(map, dt);        // #180: a roast counts down while you stand there
     if (input.usePressed()) this.useHands(map, animals, robots);
     if (input.eatPressed()) this.eat();
     if (input.readPressed()) this.read(robots);
@@ -1924,9 +2032,16 @@ export class Player {
       // The trap. No warning until it is already in you: a dreamy line, and
       // the torpor takes hold in update (slow + the drunken heading sway).
       this.torpor = Math.min(TORPOR_MAX, this.torpor + TORPOR_TIME);
+      this.lotusDaze = Math.min(TORPOR_MAX, this.lotusDaze + TORPOR_TIME);
       this.say('The fruit is sweeter than anything you remember. You forget, for a moment, why you were in such a hurry.');
     } else {
-      this.say(`You eat the ${def.name.toLowerCase()}.`);
+      // #180 — a hot meal puts strength back as well as filling you. Only
+      // cooked food carries `stamina`, so this is the fire paying for itself a
+      // second time and there is nothing to check beyond the item's own record.
+      if (def.stamina) this.stamina = Math.min(this.maxStamina, this.stamina + def.stamina);
+      this.say(def.stamina
+        ? `You eat the ${def.name.toLowerCase()}. Hot food, and you feel it.`
+        : `You eat the ${def.name.toLowerCase()}.`);
     }
   }
 
@@ -1960,6 +2075,114 @@ export class Player {
   // mid-jump. A gun (or an empty hand) can't melee or chop, but a cache
   // ahead is always searched with the free hand regardless of what's in
   // the primary hand.
+  // ---- #180: cooking -------------------------------------------------------
+
+  /**
+   * Lay a fire on the tile ahead. Three wood, no tool needed.
+   *
+   * NO TOOL, deliberately, unlike the boat: gathering the wood already took a
+   * blade, and asking for one twice would mean a player who has put the axe
+   * down cannot light a fire with the logs in their pack.
+   */
+  canBuildFire(map) {
+    if (this.countItem('wood') < WOOD_PER_FIRE) return false;
+    const tx = Math.floor(this.x + this.facing.x * REACH);
+    const ty = Math.floor(this.y + this.facing.y * REACH);
+    return map.inBounds(tx, ty) && !map.objectAt(tx, ty) && !map.buildingAt(tx, ty);
+  }
+
+  buildFire(map) {
+    if (this.countItem('wood') < WOOD_PER_FIRE) {
+      this.say(`A fire wants ${WOOD_PER_FIRE} wood; you have ${this.countItem('wood')}.`);
+      return false;
+    }
+    const tx = Math.floor(this.x + this.facing.x * REACH);
+    const ty = Math.floor(this.y + this.facing.y * REACH);
+    const fire = map.addObject('campfire', tx, ty, { fuel: WOOD_PER_FIRE * FUEL_PER_WOOD, cook: 0, flick: 0 });
+    if (!fire) { this.say('No clear ground in front of you to lay a fire.'); return false; }
+    for (let n = 0; n < WOOD_PER_FIRE; n++) this.removeItem('wood');
+    sfx.play('chop');
+    this.say('You lay the wood and get a flame going. Hold meat over it to roast; more wood keeps it alive.');
+    return true;
+  }
+
+  /**
+   * Use the fire in front of you: start a roast, or put wood on.
+   *
+   * The roast itself is counted in `update` while you stand there — this only
+   * begins it. Walking away stops it, which is the whole reason it takes time
+   * rather than happening on the press.
+   */
+  useFire(fire) {
+    if (!isLit(fire)) { this.say('The fire is out. Lay another.'); return; }
+    if (this.findRaw()) {
+      this._cooking = true;
+      this.say('You hold it over the flame.');
+      return;
+    }
+    if (this.hasItem('wood')) {
+      const r = feedFire(fire);
+      if (!r.ok) { this.say(`The fire ${r.why}.`); return; }
+      this.removeItem('wood');
+      sfx.play('chop');
+      this.say('You feed the fire. It takes hold again.');
+      return;
+    }
+    this.say('Nothing to cook and no wood to spare. It burns down.');
+  }
+
+  /** The first raw thing on your person that a fire would change, as a slot. */
+  findRaw() {
+    const scan = (slots) => {
+      for (let i = 0; i < slots.length; i++) {
+        if (slots[i] && roastOf(slots[i].item)) return { slots, i };
+      }
+      return null;
+    };
+    return scan(this.pockets) || (this.backpack ? scan(this.backpack.slots) : null);
+  }
+
+  /**
+   * Count down a roast, one piece at a time, while you stand by the fire.
+   *
+   * Called every tick from `update`. Standing there is the whole cost: step
+   * away, or let the fire go out, and the count resets — `tickCook` clears it
+   * on a dead fire, and the check below clears it when you leave.
+   */
+  updateCooking(map, dt) {
+    if (!this._cooking) return;
+    const fire = this.fireBeside(map);
+    const raw = this.findRaw();
+    if (!fire || !raw) {
+      if (this._cooking) this.say(fire ? 'Nothing left to roast.' : 'You step away from the fire.');
+      this._cooking = false;
+      return;
+    }
+    const r = tickCook(fire, dt);
+    if (!r.done) return;
+    const slot = raw.slots[raw.i];
+    const roast = roastOf(slot.item);
+    slot.qty -= 1;
+    if (slot.qty <= 0) raw.slots[raw.i] = null;
+    if (this.stow(roast, 1) === 0) {
+      // Nowhere to put it: it goes on the ground rather than out of existence.
+      if (map.groundItems) map.groundItems.push(this.giDrop(roast, 1, this.x, this.y));
+    }
+    sfx.play('eat');
+    this.say(`${ITEMS[roast].name} — done. It smells like something you had a life ago.`);
+  }
+
+  /** The lit fire on an adjacent tile, if you are standing next to one. */
+  fireBeside(map) {
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        const o = map.objectAt(Math.floor(this.x) + dx, Math.floor(this.y) + dy);
+        if (isLit(o)) return o;
+      }
+    }
+    return null;
+  }
+
   useHands(map, animals = [], robots = []) {
     // Reclassified by CIRCE: a beast has no hands to swing with. (Boarding a ship
     // still works — you can flee Aeaea as a swine; you just can't fight on it.)
@@ -1982,6 +2205,12 @@ export class Player {
     // Board a beached boat -> the departure (Stage 1b / decision #8): with
     // Calypso's leave you sail off; without it, Poseidon storms you back.
     if (obj && (obj.type === 'boat' || obj.type === 'greek_ship')) { this.boardBoat(map, obj); return; }
+    // #180 — THE FIRE. Using a lit fire either starts a roast or feeds it, and
+    // which one is decided by what you are carrying rather than by a menu: raw
+    // meat first, because that is what you walked over here for, then wood.
+    // Handled before the tool branches below so that swinging an axe at your own
+    // campfire tends it instead of scattering it.
+    if (obj && obj.type === 'campfire') { this.useFire(obj); return; }
 
     // Defensive gear is passive — a shield blocks by being held and facing the
     // shot, a forcefield by simply being up. Using it just searches a cache
@@ -2175,7 +2404,7 @@ export class Player {
     if (this.hands === 'penknife') {
       this.swingTimer = tool.swingCooldown;
       this.stamina = Math.max(0, this.stamina - 8);
-      this.health = Math.max(1, this.health - 0.6);
+      this.health = Math.max(1, this.health - modeHarm(this, 0.6));
       sfx.play('swing');
       this.say('The penknife is useless against a tree — you only tire yourself out.');
       return;
@@ -2389,10 +2618,157 @@ export class Player {
   // pace, so a genuinely slow/careful player doesn't get a permanently
   // trivial game. Returns a multiplier in [EASE_MIN, 1] to scale detection
   // range and damage down by.
+  /**
+   * Scale a loss of health by the game mode. THE ONE PLACE that decides what a
+   * point of damage is worth, whatever caused it.
+   *
+   * `takeDamage` is the combat funnel, and for a long time it was the only
+   * thing that consulted `creative` — so Creative stopped a laser and did not
+   * stop the sea. Four other sites wrote `this.health` directly: starvation,
+   * venom, swimming, and the penknife. A player in a mode whose one promise is
+   * "nothing can hurt you" drowned on the beach (David, 2026-08-15: "creative
+   * mode doesn't work. I got killed almost immediately").
+   *
+   * So every one of them goes through here now. Creative returns 0, which is
+   * the promise kept; the rest scale like a blow does, because starving on
+   * Insane should cost what being shot on Insane costs.
+   */
+  /**
+   * Can the estate's machines find you at all?
+   *
+   * The four ways to be nobody: a charged Wi-Fi block in hand, jacked into a
+   * terminal, wearing the shape Circe gave you, and Creative.
+   *
+   * CREATIVE BELONGS HERE rather than in the damage path (David, 2026-08-15:
+   * "rather than check damage — maybe make everything passive — non-attacking").
+   * Absorbing blows leaves a world that still hunts you, still swarms, still
+   * starts the detain that stacks torpor and fogs the screen; not being a target
+   * is the quiet island the mode is for. Every sensing site in robots.js already
+   * reads this flag, so it costs nothing and cannot be forgotten at one of them.
+   */
+  unseenByMachines() {
+    return !!(this._wifiOn || this.terminalSafe || this.isSwine() || this.creative);
+  }
+
+  /**
+   * The level of the ground under you — the ONE answer, used by the movement
+   * compensation, the collider and the renderer alike.
+   *
+   * On ordinary ground this is `effectiveHeightAt` exactly, as it has always
+   * been. It differs only on a column somebody built air into, where which
+   * surface you are on is a fact about you rather than about the tile, and
+   * `footZ` is what carries that across frames.
+   */
+  groundUnder(map, x, y) {
+    const fx = Math.floor(x), fy = Math.floor(y);
+    if (map.standingHeightAt) {
+      // CONTINUITY IS THE RULE (David, 2026-08-16: "if the player is walking it
+      // is unlikely to suddenly jump vertically... ditto walking on an arch").
+      //
+      // The reach is ONE step, plus however high you have actually jumped —
+      // `z` is the real lift off the ground, and a level is half a z unit. So a
+      // layer is gained by being high enough to gain it, and never by anything
+      // else. Reading the airborne flag instead widened the reach to two or
+      // three levels the moment `z` was non-zero, which a DROP also does: a
+      // walker stepping off a kerb under a bridge suddenly "reached" the deck
+      // and the sprite snapped a storey upward.
+      //
+      // Descending needs no allowance: `standOn` takes the highest lid at or
+      // below the ceiling, so falling finds the floor beneath you by itself.
+      const reach = 1 + Math.max(0, this.z || 0) * 2;
+      return map.standingHeightAt(fx, fy, this.footZ ?? 0, reach, PLAYER_HEIGHT);
+    }
+    return map.effectiveHeightAt ? map.effectiveHeightAt(fx, fy)
+      : (map.heightAt ? map.heightAt(fx, fy) : 0);
+  }
+
+  harm(amount) { return modeHarm(this, amount); }
+
+  // ---- #179: stealth, for the pacifist route --------------------------------
+  //
+  // The only stealth the game had was a Wi-Fi block: a found object with a
+  // battery that makes you FLAT INVISIBLE while it lasts. That is a good item
+  // and a bad system — it runs out, it cannot be planned around, and the run
+  // that most needs to get past a machine without killing it is the run least
+  // likely to be carrying one.
+  //
+  // SO STEALTH IS HOW YOU MOVE, and it costs no item and no key. There is
+  // nothing new to press: the tall grass has been in the world since the first
+  // map and has never done anything, and standing still has never been worth
+  // doing. Both are now worth something, and sprinting is worth less.
+  //
+  // IT SCALES DISTANCE, not sight. `distTo` in robots.js is the one place every
+  // hostile asks how far away you are, so a multiplier there reaches every
+  // acquisition range, every give-up range and every reacquire in the file
+  // without touching one of them — and it degrades the right way, because a
+  // machine that has already closed on you is unaffected (see the contact
+  // radius in distTo: grass hides nothing from something standing over you).
+
+  /** True when the tile under you is cover. Only tall grass, so far. */
+  inCover() {
+    const f = this.map && this.map.floorAt ? this.map.floorAt(this.x, this.y) : null;
+    return f === 'tallgrass';
+  }
+
+  /**
+   * How much further away you read than you are. 1 is plainly visible.
+   *
+   * Deliberately a small table rather than a formula: a player has to be able
+   * to learn this in one fight, and "crouch in the grass and hold still" is a
+   * sentence. Sprinting reads as CLOSER than you are, which is the only way the
+   * game says out loud that running is loud.
+   */
+  stealthFactor() {
+    if (this.sprinting) return 0.8;
+    if (this.inCover()) return this.moving ? 2.2 : 4;
+    return this.moving ? 1 : 1.15;
+  }
+
+  /** A word for the HUD: what your stealth is doing right now, or null. */
+  stealthState() {
+    if (this.invisibleToRobots) return null;   // the Wi-Fi block has its own readout
+    if (this.sprinting) return { text: 'LOUD', good: false };
+    if (this.inCover()) return this.moving ? { text: 'IN COVER', good: true } : { text: 'HIDDEN', good: true };
+    return null;
+  }
+
+  /** Adopt a mode. Anything unrecognised falls back to Medium rather than break. */
+  setMode(key) {
+    const was = this.mode;
+    const adopted = this._modeSet;
+    this.mode = isMode(key) ? String(key).toLowerCase() : DEFAULT_MODE;
+    this.creative = !!modeOf(this.mode).creative;
+    // The floor only ever goes DOWN, which is what makes it a grade rather than
+    // a reading: putting Hard back on after a Creative afternoon does not undo
+    // the afternoon. The first call SETS the floor rather than lowering it, so
+    // starting on Insane is an Insane run and not a Medium one.
+    this.modeFloor = adopted ? lowerMode(this.modeFloor, this.mode) : this.mode;
+    if (adopted && was !== this.mode) this.modeSwitched = true;
+    this._modeSet = true;
+    return this.mode;
+  }
+
+  /**
+   * The mode stamp every certificate carries (#173).
+   *
+   * A run is credited at its FLOOR, not at whatever was set when it ended. The
+   * stamp goes on death certificates too, not only victories: dying on Insane
+   * is worth saying, and a certificate that only mentions the mode when you win
+   * is a certificate that mentions it when it flatters you.
+   */
+  modeStamp() { return modeStamp(this); }
+
+  /** The mode's record: hurt, hunger, pressure, clock. */
+  modeRules() { return modeOf(this.mode); }
+
   threatEase() {
     const EASE_WINDOW = 180;   // seconds; easing only applies in the opening minutes
     const EASE_MIN = 0.55;     // floor multiplier while clearly still learning
     const PACE_FLOOR = 0.55;   // tiles/sec below which movement reads as aimless
+    // Insane does not ease. Softening the first three minutes would be the mode
+    // quietly not being the mode for its opening, which is the part that decides
+    // whether somebody keeps playing it.
+    if (modeOf(this.mode).noEase) return 1;
     if (this.playSeconds >= EASE_WINDOW) return 1;
     const pace = this.distanceTraveled / Math.max(1, this.playSeconds);
     if (pace >= PACE_FLOOR) return 1;
@@ -2990,6 +3366,14 @@ export class Player {
       if (this.mirrorHeat >= 1) { this._meltMirrorShield(); return 'absorb'; }
       return cool ? 'reflect' : 'absorb';
     }
+    if (this.hasItem('aspis')) {
+      this.aspisHits += 1;
+      if (this.aspisHits >= ASPIS_HITS) { this._breakAspis(); return 'absorb'; }
+      if (this.aspisHits === ASPIS_HITS - 5) {
+        this.say('The great shield is scarred across the face — the rim is starting to go.');
+      }
+      return 'absorb';
+    }
     if (this.hasItem('shield')) {
       this.riotShieldHits += 1;
       if (this.riotShieldHits >= RIOT_SHIELD_HITS) { this._breakRiotShield(); return 'absorb'; }
@@ -3022,6 +3406,18 @@ export class Player {
     sfx.play('hurt');
   }
 
+  // The rim finally gives, a second time — it gave once on the B-1's arm and
+  // now it gives on yours. More scrap than the riot shield: it is a bigger
+  // thing, and bronze.
+  _breakAspis() {
+    this.removeItem('aspis');
+    this.aspisHits = 0;
+    const got = this.stow('scrap', 4);
+    if (got < 4 && this.map) this.map.groundItems.push({ item: 'scrap', qty: 4 - got, x: this.x, y: this.y });
+    this.say('The great shield splits along the rim and comes apart in your hand.');
+    sfx.play('hurt');
+  }
+
   // A carried riot/mirror shield also turns a machine's physical BLOW (T1/T2
   // and the rest), not only its lasers, and wears the same way — a hit counts
   // against the riot shield, heats the mirror. No reflect on a melee blow (you
@@ -3031,6 +3427,12 @@ export class Player {
     if (this.hasItem('mirror_shield')) {
       this.mirrorHeat = Math.min(1, this.mirrorHeat + MIRROR_HEAT_PER_HIT);
       if (this.mirrorHeat >= 1) this._meltMirrorShield();
+      return true;
+    }
+    if (this.hasItem('aspis')) {
+      this.aspisHits += 1;
+      if (this.aspisHits === ASPIS_HITS - 5) this.say('The great shield is scarred across the face — the rim is starting to go.');
+      if (this.aspisHits >= ASPIS_HITS) this._breakAspis();
       return true;
     }
     if (this.hasItem('shield')) {
@@ -3045,7 +3447,7 @@ export class Player {
   // True if a carried shield/forcefield is currently shielding you — used to
   // draw the protective glow even when the item isn't in hand.
   shielded() {
-    return this.forcefieldActive() || this.hasItem('mirror_shield') || this.hasItem('shield');
+    return this.forcefieldActive() || this.hasItem('mirror_shield') || this.hasItem('aspis') || this.hasItem('shield');
   }
 
   // A read on the carried plain/mirror shield's condition, for the HUD. Returns
@@ -3113,6 +3515,19 @@ export class Player {
   }
 
   takeDamage(amount, source) {
+    // CREATIVE MODE (Hedda's, via LYRE). Nothing can hurt you, so the island can
+    // be walked, read and tested without the fight interrupting — but the world
+    // is otherwise untouched: the machines still hunt, the swarm still comes,
+    // and you can still kill every one of them if you are so inclined. It is
+    // not god mode, it is a held breath.
+    //
+    // The hit still REGISTERS (the flash, the sound at the call site), because a
+    // tester needs to see that a thing connected — silence would make a broken
+    // hitbox and a working one look identical.
+    if (this.creative) { this.hurtTimer = 0.12; return; }
+    // The same scale the attrition sites use (see `harm`), so a blow and the sea
+    // cannot disagree about what a mode means.
+    amount = modeHarm(this, amount);
     // The forcefield stops everything — shot or blow — while it's up, but each
     // blow it eats costs charge, so being swarmed drains the cell fast.
     if (this.forcefieldActive()) {
@@ -3170,6 +3585,7 @@ export class Player {
     this.deathCert = {
       name: this.name, gender: this.gender, cause: 'POSEIDON coming online',
       score: this.score, skills: [...this.skills], deaths: this.deaths, skylink: true,
+      ...modeStamp(this),
     };
     if (this.onDeath) this.onDeath();
     sfx.play('die');
@@ -3184,7 +3600,7 @@ export class Player {
     this.deaths = (this.deaths || 0) + 1;
     this.deathCert = {
       name: this.name, gender: this.gender, cause, score: this.score,
-      skills: [...this.skills], deaths: this.deaths,
+      skills: [...this.skills], deaths: this.deaths, ...modeStamp(this),
     };
     if (this.onDeath) this.onDeath();
 
@@ -3319,12 +3735,20 @@ export class Player {
   // natural instead of being fenced into the middle of the block.
   collides(x, y, map) {
     const cfx = Math.floor(this.x), cfy = Math.floor(this.y);
-    const h = map.effectiveHeightAt ? map.effectiveHeightAt(cfx, cfy)
-      : (map.heightAt ? map.heightAt(cfx, cfy) : 0);
+    // Your feet, not the tile's lid. Under a deck those differ, and reading the
+    // lid made stepping off the far end of a bridge look like a three-level
+    // drop off something you were never standing on.
+    const h = this.groundUnder(map, this.x, this.y);
     const curObj = map.objectAt ? map.objectAt(cfx, cfy) : null;
     const onLedge = !!(curObj && OBJECTS[curObj.type] && OBJECTS[curObj.type].climbable);
     const airborne = this.z > 0 || this.vz !== 0;
     const maxStep = !airborne ? 1 : (this.doubleJumped ? 3 : 2);
+    // WHERE YOUR FEET ARE, for a column that has air in it (terrain stage 5).
+    // `standingHeightAt` answers exactly what `effectiveHeightAt` always did on
+    // an ordinary tile — it is only a different question on a tile somebody
+    // built a gap into, where the surface you move onto depends on whether you
+    // are above the deck or under it.
+    const feetZ = h;
 
     // A flatly-solid, NON-climbable object (obelisk, box, car, factory)
     // blocks whenever any corner of the footprint overlaps it — that keeps
@@ -3357,8 +3781,10 @@ export class Player {
     // its centre is a +2.5 step (out of reach on foot), and you only overlap
     // its base by the footprint radius, which reads as standing against it.
     if (!map.heightAt) return false;
-    const targetH = map.effectiveHeightAt ? map.effectiveHeightAt(Math.floor(x), Math.floor(y))
-      : map.heightAt(Math.floor(x), Math.floor(y));
+    const targetH = map.standingHeightAt
+      ? map.standingHeightAt(Math.floor(x), Math.floor(y), feetZ, maxStep)
+      : (map.effectiveHeightAt ? map.effectiveHeightAt(Math.floor(x), Math.floor(y))
+        : map.heightAt(Math.floor(x), Math.floor(y)));
     const dh = targetH - h;
     if (dh > maxStep) return true;              // too high to step up
     if (dh < -maxStep && !onLedge) return true; // too far to drop, unless walking off a ledge

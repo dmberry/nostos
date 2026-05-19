@@ -7,7 +7,7 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
-// S1 substrate (docs/robot-ml-rollout-plan.md). The rules every later chassis
+// S1 substrate (docs/PLAN.md). The rules every later chassis
 // leans on: the T1/T2 sense refactor is invisible; a fire pair on a chassis
 // with no weapon faults rather than being half-obeyed; and the network
 // speaking over a unit silences its program WITHOUT lighting the fault lamp.

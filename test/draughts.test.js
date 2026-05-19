@@ -7,7 +7,7 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
-// K1 (docs/calypso-build-plan.md) — the draughts rules and the search.
+// K1 (docs/PLAN.md) — the draughts rules and the search.
 //
 // The rules matter more here than in most games we have built, because the
 // player is going to LOSE to this repeatedly and then go and read the file that

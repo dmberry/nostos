@@ -7,7 +7,7 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
-// S3 — the T-3 ambusher (docs/robot-ml-rollout-plan.md). An emplacement: its
+// S3 — the T-3 ambusher (docs/PLAN.md). An emplacement: its
 // stock program returns `[wait, fire]` — feet still, weapon firing — which is
 // the case the pair model exists for. It must never choose a moving intent
 // with the player in sight.

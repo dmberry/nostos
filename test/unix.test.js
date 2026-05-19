@@ -7,7 +7,7 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
-// The laptop's UNIX (docs/laptop-plan.md): path filesystem, the shell commands,
+// The laptop's UNIX (docs/PLAN.md): path filesystem, the shell commands,
 // real pipes and `>` redirect. Pure module — no world, no DOM, no canvas.
 
 import { test } from 'node:test';
@@ -902,4 +902,46 @@ test('watermark reports to KLEOS so the explainability track can count it', () =
   sh.onAchieve = (n) => seen.push(n);
   runUnix('watermark ' + firstShippedFile(sh), sh, {});
   assert.deepEqual(seen, ['watermarkRead']);
+});
+
+test('ARP FILES THE SWEEP UNDER ITS TOWERS, units indented', () => {
+  // A flat list of thirty names tells you what is near; it does not tell you
+  // whose it is, which is the question you ask before posting a program to one
+  // of four identical machines.
+  const env = withCard(true);
+  env.net.local = () => [
+    { host: 'ob_5d33.calypso.com', ip: '10.1.5.1', mac: '8:0:2b:00:00:01', range: 4, bearing: 'N', kind: 'obelisk', code: 'OB_5D33' },
+    { host: 't1_03.calypso.com', ip: '10.1.4.3', mac: '8:0:2b:11:22:33', range: 6, bearing: 'NE', kind: 'robot', home: 'OB_5D33' },
+    { host: 'w4_01.calypso.com', ip: '10.1.4.9', mac: '8:0:2b:11:22:44', range: 9, bearing: 'E', kind: 'robot', home: 'OB_5D33' },
+    { host: 'ob_6b05.calypso.com', ip: '10.1.5.2', mac: '8:0:2b:00:00:02', range: 20, bearing: 'S', kind: 'obelisk', code: 'OB_6B05' },
+  ];
+  const lines = run('arp -a', env).text.split('\n');
+  assert.match(lines[0], /ob_5d33/, 'the node first');
+  assert.match(lines[1], /^ {2}t1_03/, 'then its units, indented');
+  assert.match(lines[2], /^ {2}w4_01/);
+  assert.match(lines[3], /ob_6b05/, 'then the next node');
+  assert.ok(!/^ /.test(lines[3]), 'a node is never indented');
+  assert.match(lines[4], /no units of this node in range/, 'an empty node says so');
+});
+
+test('a unit whose tower is out of range is still listed, under its code', () => {
+  // The sweep must never silently drop a machine it heard.
+  const env = withCard(true);
+  env.net.local = () => [
+    { host: 'ob_5d33.calypso.com', ip: '10.1.5.1', mac: '8:0:2b:00:00:01', range: 4, bearing: 'N', kind: 'obelisk', code: 'OB_5D33' },
+    { host: 't3_02.calypso.com', ip: '10.1.4.5', mac: '8:0:2b:11:22:55', range: 21, bearing: 'W', kind: 'robot', home: 'OB_AAAA' },
+  ];
+  const out = run('arp -a', env).text;
+  assert.match(out, /OB_AAAA {2}— out of range/);
+  assert.match(out, /^ {2}t3_02/m);
+});
+
+test('with no tower in range the sweep is flat, as it was', () => {
+  const env = withCard(true);
+  env.net.local = () => [
+    { host: 't1_03.calypso.com', ip: '10.1.4.3', mac: '8:0:2b:11:22:33', range: 6, bearing: 'NE', kind: 'robot' },
+  ];
+  const lines = run('arp -a', env).text.split('\n');
+  assert.equal(lines.length, 1);
+  assert.ok(!/^ /.test(lines[0]), 'nothing to indent under');
 });

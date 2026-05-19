@@ -8,7 +8,7 @@
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
 // CALYPSO, island one: the current overworld, built as a World (islands Stage 0c,
-// docs/islands-plan.md §3). createIsland(seed) runs the whole overworld construction
+// docs/PLAN.md §3). createIsland(seed) runs the whole overworld construction
 // that used to sit inline in main.js's boot, and returns a World carrying the entity
 // arrays plus the calypso-specific controllers (hold, wfactory, mainframe, torObjs)
 // as named fields for main.js to alias. Moved VERBATIM (same RNG call order) so the
@@ -17,7 +17,7 @@
 // (worldStir, onCoreDefeated), stay in main.js.
 //
 // ---------------------------------------------------------------------------
-// HOW YOU LEAVE OGYGIA, as of R0 (docs/calypso-build-plan.md). Written down
+// HOW YOU LEAVE OGYGIA, as of R0 (docs/PLAN.md). Written down
 // before the Calypso work starts, because everything in that plan has to keep
 // this working and nobody should have to re-derive it from six files.
 //
@@ -31,7 +31,7 @@
 //                                                  -> trojan_key
 //   3. forge zeus_lightning.ml at a HERMES relay, copied on
 //                                                  -> hermes_card
-//      (docs/calypso-escape-chain.md has the file-level detail)
+//      (docs/PLAN.md has the file-level detail)
 //   4. player.hasVirusFor('CALYPSO')  ==  hasTrojanCard() && virusArmed has her
 //   5. refunctionCalypso() in main.js, from the OB `retire` verb or her own
 //      terminal. It sets player.calypsoLeave, retires her guards into W5
@@ -64,7 +64,7 @@
 
 import { buildWorld } from '../game/worldgen.js';
 import { spawnAnimals } from '../game/animals.js';
-import { spawnRobots, spawnW5, spawnGardeners, spawnCouriers, spawnM4, spawnM6, spawnCarrier, spawnT8s } from '../game/robots.js';
+import { spawnRobots, spawnW5, spawnGardeners, spawnCouriers, spawnVGardeners, spawnM4, spawnM6, spawnCarrier, spawnT8s } from '../game/robots.js';
 import { spawnWaterDroids } from '../game/waterdroids.js';
 import { spawnBirds } from '../game/birds.js';
 import { placeTors } from '../game/hermes.js';
@@ -413,9 +413,15 @@ export function createIsland(seed) {
   robots.push(...spawnGardeners(map, seed, obelisks, 2));
   // One V-class courier per island (#127): the network's answer to its own
   // flat machines. Cut it and the fallen stay down.
-  robots.push(...spawnCouriers(map, seed, obelisks, 1));
+  const couriers = spawnCouriers(map, seed, obelisks, 1);
+  robots.push(...couriers);
+  // #165 — the V-5 gardeners. The V-class had exactly one member on the island
+  // and it did its work out of sight, so nobody ever met the thing the whole
+  // neural-net idea rests on. These are out in the open planting, which is a job
+  // you can watch and therefore a net you can score.
+  robots.push(...spawnVGardeners(map, seed, obelisks, 3, couriers));
   // #159 — the B-1 CARRIER, and the warrior's road off the island
-  // (docs/hermes-warrior-path.md). It is seated at the W-factory rather than in
+  // (docs/PLAN.md). It is seated at the W-factory rather than in
   // her grove for two reasons: the grove's guard is the light and putting a boss
   // in it would undo G1, and the factory is what builds and dispatches, so a
   // shard in transit is a thing the factory is moving. It is also where a player
@@ -470,7 +476,7 @@ export function createIsland(seed) {
     obeliskObjs.forEach((ob, i) => { ob.circuitNum = nums[i]; });
   }
 
-  // F2a (#147, docs/calypso-build-plan.md): HER GROUND IS NOT A FORTRESS AND NO
+  // F2a (#147, docs/PLAN.md): HER GROUND IS NOT A FORTRESS AND NO
   // LONGER PRETENDS TO BE ONE. F1 took the behaviour off and left the object;
   // this takes the object. `game/grove.js` builds into the same southern annex
   // createFortress uses — a good mechanism, and it costs the overworld no ground

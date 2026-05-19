@@ -9,7 +9,7 @@
 
 // Screen-space UI drawing (HUD overlays, modals), split out of renderer.js to
 // keep that file navigable — part of the systems-registry refactor's file-size
-// split; see docs/refactor-registry.md. This is NOT registry work: the HUD is
+// split; see docs/PLAN.md. This is NOT registry work: the HUD is
 // drawn inside the renderer's draw pass, not as a per-frame system.
 //
 // These are Renderer methods, moved verbatim and mixed onto Renderer.prototype
@@ -23,6 +23,7 @@
 // imports nothing from renderer.js, so there is no import cycle.
 
 import { ITEMS, WEAPON_ORDER } from '../game/items.js'; // weapon-chart data
+import { grabFrame, grabReady } from '../game/grab-art.js'; // Grab's camera frames
 import { ARMOUR_SLOTS, armourPoints, armourReduction, durFraction } from '../game/armour.js';
 import { PAPER_TEXTURE, NOKIA_SPRITE } from './textures.js'; // death-cert paper; the 3310 in the PHONE box
 import {
@@ -31,6 +32,15 @@ import {
 } from '../game/narrows.js'; // the Scylla/Charybdis arcade run
 import { PADDLE_H, calypsoVoice } from '../game/calypso-pong.js'; // Calypso's un-winnable pong
 import * as CB from '../game/console-buffer.js'; // #145 V1b: the canvas console model
+// #165 Grove.app — the emulated floor. Aliased on import so the draw code reads
+// as what it is rather than as three more bare names in a 4000-line file.
+import { corePos as GROVE_CORE, population as GROVE_POP, SIM_NOTE as GROVE_SIM_NOTE }
+  from '../game/grove-life.js';
+// WorldWideWeb — the 1990 browser's type and document model.
+import { WWW_INFO } from '../game/worldwideweb.js';
+import { modeOf } from '../game/modes.js';   // the certificate prints what a run was played at (#173)
+import { parseDoc as WWW_PARSE, layout as WWW_LAYOUT, fontFor as WWW_FONT }
+  from '../game/worldwideweb.js';
 
 // What an empty armour slot says it is for, so the column teaches itself.
 const ARMOUR_SLOT_LABEL = { head: 'HEAD', chest: 'BODY', legs: 'LEGS', feet: 'FEET' };
@@ -109,6 +119,25 @@ export const uiMethods = {
     const g = ctx.createRadialGradient(this.w / 2, playH / 2, playH * 0.25, this.w / 2, playH / 2, playH * 0.72);
     g.addColorStop(0, 'rgba(0,0,0,0)');
     g.addColorStop(1, `rgba(20,14,6,${(0.5 * amt).toFixed(3)})`);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, this.w, playH);
+  },
+
+  // HURT, AT THE EDGES. A red vignette that closes in from the sides of the play
+  // area — no wash over the middle, because the middle is where you are trying
+  // to see what is hitting you. Drawn only below half health, so it is a warning
+  // rather than a decoration: a veil on every scratch is wallpaper by the second
+  // fight, and wallpaper cannot warn anybody.
+  drawHurtVeil(amt) {
+    if (!(amt > 0)) return;
+    const ctx = this.ctx;
+    const playH = this.h - DASH_H;
+    const g = ctx.createRadialGradient(
+      this.w / 2, playH / 2, Math.min(this.w, playH) * 0.30,
+      this.w / 2, playH / 2, Math.max(this.w, playH) * 0.62,
+    );
+    g.addColorStop(0, 'rgba(150,20,16,0)');
+    g.addColorStop(1, `rgba(150,20,16,${(0.55 * Math.min(1, amt)).toFixed(3)})`);
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, this.w, playH);
   },
@@ -596,7 +625,7 @@ export const uiMethods = {
     ctx.textAlign = 'left';
   },
 
-  // The Nokia 3310 SMS toast — Calypso's texts (docs/calypso-nokia-plan.md). An
+  // The Nokia 3310 SMS toast — Calypso's texts (docs/PLAN.md). An
   // 84x48-feel pea-green backlit LCD in a dark plastic bezel, lower-right where a
   // phone sits (clear of the say() narration, lower-left), above the help hint.
   // On touch screens it slides left so it never covers the RUN/JUMP buttons,
@@ -732,27 +761,59 @@ export const uiMethods = {
     // sized to what this run actually earned: no badges and it stays short.
     const K = cert.kleos || null;
     const earned = K ? K.badges.filter((b) => b.earned) : [];
-    const climbed = K ? K.tracks.filter((t) => t.tier > 0 || t.summited) : [];
     const lifetime = K ? K.milestones.filter((m) => m.earned) : [];
-    const perRow = 12;
-    const badgeRows = Math.ceil(earned.length / perRow);
-    const pw = Math.min(520, this.w - 48);
+    // #161 — the sheet carries the WHOLE board now (every track, every device),
+    // so it is a little wider and the grid is sized from the set rather than
+    // from what happened to be earned. David: "you can make the certificate
+    // slightly bigger to fit."
+    // THE SHEET'S NATURAL WIDTH, not the viewport's. Clamping this to the window
+    // is what truncated the track names into CARTOGRAPH… and EXPLAINABILI…: the
+    // label column is measured off `pw`, so a narrow window did not scale the
+    // certificate, it squeezed the words out of it. The width is fixed and the
+    // fit below scales the whole sheet, so a small window gets a small
+    // certificate with every name on it.
+    const pw = 560;
+    const bs = 20, bgap = 4;
+    const perRow = Math.max(8, Math.floor((pw - 76 + bgap) / (bs + bgap)));
+    const badgeRows = K ? Math.ceil(K.badges.length / perRow) : 0;
+    const trackRow = 20;
     // The rank is set from the BOTTOM of the sheet and the song flows down from
     // the ledger, so the height has to be the real sum of what gets drawn or
     // the two collide. Measured, not estimated.
-    const songH = (withBadges) => (K
-      ? 34 + climbed.length * 19
-        + (earned.length && withBadges ? 34 + badgeRows * 26 : earned.length ? 18 : 0)
-        + (lifetime.length ? 18 : 0)
+    // Measured against what the board actually draws: heading, a row per track,
+    // the devices heading and grid, and the ledger lines.
+    const songH = () => (K
+      ? 30 + 15 + K.tracks.length * trackRow
+        + 6 + 14 + badgeRows * (bs + bgap) + 8
+        + 15 + ((K.laurels && K.laurels.length) ? 15 : 0)
       : 0);
     const BASE = 458;                       // title, epitaph, four ledger rows, footer
-    const room = this.h - 24;
-    // On a short window the badge grid is the first thing to go: the count line
-    // says the same in one line, and a crushed sheet says nothing.
-    const showBadges = BASE + songH(true) <= room;
-    const ph = Math.min(room, BASE + songH(showBadges));
-    const px = Math.round((this.w - pw) / 2), py = Math.round((this.h - ph) / 2);
-    this._certBounds = { x: px, y: py, w: pw, h: ph }; // for the S-to-share capture
+    // THE SHEET IS SCALED TO FIT, NOT CLAMPED TO FIT.
+    //
+    // The height used to be `min(room, BASE + songH())`. The rank is set from
+    // the BOTTOM of the sheet and the song flows DOWN from the ledger, so on any
+    // viewport shorter than the certificate wanted, the clamp did not shorten
+    // the content — it just moved the two ends into each other, and LIFETIME
+    // printed through FLOTSAM (David, 2026-08-15). The same clamp on the width
+    // squeezed the track column until CARTOGRAPHER became CARTOGRAPH….
+    //
+    // So the sheet is drawn at the size it wants and the whole thing is scaled
+    // down to whatever room there is. Nothing collides, nothing truncates, and
+    // on a small window you get a small certificate rather than a broken one.
+    const phWant = BASE + songH();
+    const fit = Math.min(1, (this.w - 24) / pw, (this.h - 24) / phWant);
+    const ph = phWant;
+    // Laid out in the sheet's OWN coordinates and centred in the viewport as the
+    // transform will see it, which is the screen divided by the scale.
+    const px = Math.round((this.w / fit - pw) / 2);
+    const py = Math.round((this.h / fit - ph) / 2);
+    ctx.save();
+    ctx.scale(fit, fit);
+    // The capture rectangle is in SCREEN pixels, so it carries the scale.
+    this._certBounds = {
+      x: Math.round(px * fit), y: Math.round(py * fit),
+      w: Math.round(pw * fit), h: Math.round(ph * fit),
+    };
     const cx = px + pw / 2;
     const isVictory = !!cert.victory;
 
@@ -824,14 +885,25 @@ export const uiMethods = {
       y += 10;
     };
     row('Final score', cert.score);
+    // #173 — WHAT IT WAS PLAYED AT. On every certificate, not only the winning
+    // ones: dying on Insane is worth printing, and a stamp that only appears
+    // when it flatters you is not a record. `cert.mode` is the run's FLOOR, so
+    // a run that spent an hour in Creative says Creative here however it ended;
+    // when the mode moved at all, the row says that too, since a run held at
+    // one setting throughout is a different claim from one that was adjusted.
+    if (cert.mode) {
+      const m = modeOf(cert.mode);
+      row('Played on', cert.modeSwitched && cert.modeSet && cert.modeSet !== cert.mode
+        ? `${m.name} (lowest setting held; ended on ${modeOf(cert.modeSet).name})`
+        : m.name);
+    }
     row('Skills mastered', cert.skills.length ? cert.skills.join(', ') : 'none');
     row('Deaths so far', cert.deaths);
     if (cert.killLog && cert.killLog.length) row('Obelisks downed', cert.killLog.join(', '));
 
-    // THE SONG (#134). The certificate is the run's KLEOS set on paper: the
-    // tracks it climbed, the badges it earned drawn as their own shapes, and
-    // what carries over into the next life. A run that earned nothing still
-    // gets the heading and the line saying so.
+    // THE SONG (#134/#161). The certificate is the run's KLEOS set on paper —
+    // and since #161 it is the BOARD, not a summary of it: every track with its
+    // rungs, every device in the set, and the ledger underneath.
     if (K) {
       y += 4;
       ctx.strokeStyle = 'rgba(150,120,74,0.55)'; ctx.lineWidth = 1;
@@ -842,51 +914,73 @@ export const uiMethods = {
       ctx.textAlign = 'left';
       y += 30;
 
-      ctx.font = '15px Georgia, serif';
-      if (climbed.length) {
-        for (const t of climbed) {
-          ctx.fillStyle = t.summited ? '#7a5a12' : VAL;
-          ctx.fillText(`${t.name} ${t.tierLabel}`, lx, y);
+      // THE BOARD ITSELF, not a paraphrase of it (#161). This used to be three
+      // hand-written sentences — "No track was climbed, and no device earned.",
+      // "5 of 56 devices", "carried over: First Watch" — which said less than
+      // the panel and said it worse (David, 2026-08-14: "the wording on this is
+      // terrible; just copy over the achievement board completely"). So the
+      // certificate prints the same board the KLEOS panel draws: every track
+      // with its rungs, every device in the set, and the ledger. Inked for
+      // paper rather than lit for a screen — same content, different surface.
+      const pal = { ink: '#6b4f1c', dim: 'rgba(58,46,31,0.16)', fill: 'rgba(150,120,42,0.14)' };
+      const boardW = pw - 76;
+
+      // TRACKS — all of them, including the ones at nothing. A track standing at
+      // zero is information: it is the thing this run never went near.
+      ctx.font = 'bold 11px Georgia, serif';
+      ctx.fillStyle = FAINT;
+      ctx.fillText('TRACKS', lx, y);
+      y += 15;
+      const cName = lx, cPips = lx + Math.round(boardW * 0.34), cDetail = lx + Math.round(boardW * 0.63);
+      for (const t of K.tracks) {
+        const broken = t.purity && !t.purity.intact;
+        ctx.font = 'bold 13px Georgia, serif';
+        ctx.fillStyle = t.summited ? '#7a5a12' : broken ? 'rgba(58,46,31,0.42)' : INK;
+        ctx.fillText(this._clampText(ctx, t.name, cPips - cName - 6), cName, y);
+        this._kleosPips(cPips, y - 4, t.tier, t.rungs,
+          Math.max(7, Math.min(13, (cDetail - cPips - 8) / Math.max(1, t.rungs))), pal);
+        ctx.font = 'italic 12px Georgia, serif';
+        const room = lx + boardW - cDetail;
+        if (broken) {
+          ctx.fillStyle = '#8d3b28';
+          ctx.fillText(this._clampText(ctx, `${t.purity.why} (day ${t.purity.day})`, room), cDetail, y);
+        } else if (t.summited) {
+          ctx.fillStyle = '#7a5a12';
+          ctx.fillText(this._clampText(ctx, `${t.tierLabel} — all of it`, room), cDetail, y);
+        } else {
           ctx.fillStyle = FAINT;
-          ctx.font = 'italic 14px Georgia, serif';
-          ctx.fillText(t.summited ? `${t.summitName} — all of it` : `${t.have} ${t.unit || ''}`.trim(),
-            lx + 168, y);
-          ctx.font = '15px Georgia, serif';
-          y += 19;
+          ctx.fillText(this._clampText(ctx, `${t.have}/${t.next} ${t.unit || ''}`.trim(), room), cDetail, y);
         }
-      } else {
-        ctx.fillStyle = FAINT;
-        ctx.font = 'italic 15px Georgia, serif';
-        ctx.fillText('No track was climbed, and no device earned.', lx, y);
-        y += 19;
+        y += trackRow;
       }
 
-      if (earned.length && !showBadges) {
-        ctx.fillStyle = FAINT;
-        ctx.font = 'italic 14px Georgia, serif';
-        ctx.fillText(`${earned.length} of ${K.badges.length} devices earned`, lx, y + 4);
-        y += 18;
-      } else if (earned.length) {
-        y += 14;
-        const bs = 22, gap = 4;
-        const pal = { ink: '#6b4f1c', dim: 'rgba(58,46,31,0.18)', fill: 'rgba(150,120,42,0.14)' };
-        earned.forEach((b, i) => {
-          this._kleosBadge(lx + (i % perRow) * (bs + gap),
-            y + Math.floor(i / perRow) * (bs + gap), bs, b, pal);
-        });
-        y += badgeRows * (bs + gap) + 2;
-        ctx.fillStyle = FAINT;
-        ctx.font = 'italic 13px Georgia, serif';
-        ctx.fillText(`${earned.length} of ${K.badges.length} devices`, lx, y + 11);
-        y += 20;
-      }
+      // DEVICES — the whole set, earned inked and unearned ghosted, so the sheet
+      // shows what was missed as well as what was won. That is the difference
+      // between a board and a score.
+      y += 6;
+      ctx.font = 'bold 11px Georgia, serif';
+      ctx.fillStyle = FAINT;
+      ctx.fillText(`DEVICES  ${earned.length}/${K.badges.length}`, lx, y);
+      y += 14;
+      K.badges.forEach((b, i) => {
+        this._kleosBadge(lx + (i % perRow) * (bs + bgap),
+          y + Math.floor(i / perRow) * (bs + bgap), bs, b, pal);
+      });
+      y += badgeRows * (bs + bgap) + 8;
 
-      if (lifetime.length) {
-        ctx.fillStyle = FAINT;
-        ctx.font = 'italic 13px Georgia, serif';
-        const line = this._clampText(ctx, `carried over: ${lifetime.map((m) => m.name).join(' · ')}`,
-          pw - 116);
-        ctx.fillText(line, lx, y + 8);
+      // The ledger: what outlives this run, and where the laurels were taken.
+      ctx.font = 'italic 12px Georgia, serif';
+      ctx.fillStyle = FAINT;
+      ctx.fillText(this._clampText(ctx, lifetime.length
+        ? `LIFETIME  ${lifetime.map((m) => m.name).join(' · ')}`
+        : 'LIFETIME  nothing yet — it accrues across every run', boardW), lx, y);
+      y += 15;
+      if (K.laurels && K.laurels.length) {
+        ctx.fillStyle = '#7a5a12';
+        ctx.fillText(this._clampText(ctx,
+          `LAURELS  ${K.laurels.map((l) => `${l.name}·${String(l.island).toUpperCase()}`).join('  ')}`,
+          boardW), lx, y);
+        y += 15;
       }
     }
 
@@ -920,7 +1014,14 @@ export const uiMethods = {
     // it is never captured into the copied image.
     const btnW = 74, btnH = 24;
     const btnX = px + pw - btnW, btnY = py - btnH - 8;
-    this._certCopyBtn = { x: btnX, y: btnY, w: btnW, h: btnH };
+    // IN SCREEN PIXELS, like _certBounds: main.js hit-tests this against the raw
+    // click position, which knows nothing about the sheet's scale. Storing the
+    // unscaled rectangle would leave the button drawn in one place and clickable
+    // in another the moment the certificate did not fit at 1:1.
+    this._certCopyBtn = {
+      x: Math.round(btnX * fit), y: Math.round(btnY * fit),
+      w: Math.round(btnW * fit), h: Math.round(btnH * fit),
+    };
     ctx.fillStyle = 'rgba(226,220,204,0.92)';
     ctx.fillRect(btnX, btnY, btnW, btnH);
     ctx.strokeStyle = 'rgba(30,26,18,0.6)'; ctx.lineWidth = 1;
@@ -930,6 +1031,7 @@ export const uiMethods = {
     ctx.textAlign = 'center';
     ctx.fillText('Copy', btnX + btnW / 2, btnY + 16);
     ctx.textAlign = 'left';
+    ctx.restore();   // undo the fit-to-viewport scale
   },
   // Where you are and who holds it — two plain labelled lines, no panel around
   // them. (`rx, ry` is the block's top-RIGHT corner; `w` sets its left edge.)
@@ -2393,6 +2495,15 @@ export const uiMethods = {
     if (player.isSwine()) { ctx.fillStyle = '#e0a0b0'; ctx.fillText('SWINE', cx, top + 39); }
     else if (player.swine >= 0.3) { ctx.fillStyle = '#e0a0b0'; ctx.fillText('TURNING', cx, top + 39); }
     else if (player.invisibleToRobots) { ctx.fillStyle = '#4fd8c3'; ctx.fillText(`HID ${Math.ceil((player.wifiPower || 0) / 60)}m`, cx, top + 39); }
+    // #179 — the stealth word. The mechanic is free and has no key, so this
+    // line is the only way a player finds out that the grass does anything;
+    // LOUD is here for the same reason, since a system that only ever praises
+    // you cannot teach you what the wrong move is.
+    else if (player.stealthState && player.stealthState()) {
+      const st = player.stealthState();
+      ctx.fillStyle = st.good ? '#7fd88a' : '#d8a04f';
+      ctx.fillText(st.text, cx, top + 39);
+    }
     if (player.food <= 0) { ctx.fillStyle = '#e05548'; ctx.fillText('STARVING', cx, top + 57); }
     else if (player.food < 25) { ctx.fillStyle = '#d8a04f'; ctx.fillText('HUNGRY', cx, top + 57); }
     // The status card: where you are, who holds it, and how you are doing —
@@ -2450,7 +2561,7 @@ export const uiMethods = {
     this.drawLabel('PHONE', sx, sy - 5);
     this.drawSignalBars(sx + 34, sy - 5, hud && hud.nokiaSignal || 0);
     this.drawPhoneBox(sx, sy, P, player);
-    // The LAPTOP box, next along: the machine you carry (docs/laptop-plan.md).
+    // The LAPTOP box, next along: the machine you carry (docs/PLAN.md).
     // Empty until you find one. Click it to open the shell (slot kind 'laptop').
     sx += P + 10;
     this.drawLabel('LAPTOP', sx, sy - 5);
@@ -2810,7 +2921,7 @@ export const uiMethods = {
     }
   },
 
-  // ---- KLEOS (docs/achievements-plan.md) ------------------------------------
+  // ---- KLEOS (docs/PLAN.md) ------------------------------------
   // The song of the run: tracks down the left, badges and the lifetime ledger
   // down the right. Everything here renders from achieveModel() — the panel
   // holds no state of its own, so it can never disagree with the engine.
@@ -2902,7 +3013,10 @@ export const uiMethods = {
   // collection has five rungs and drawing ten pips for it would be inventing
   // four. `step` shrinks with the count so ten still fit the column that four
   // used to, and the pips scale with it.
-  _kleosPips(x, y, tier, total = 10, step = 11) {
+  // `pal` inks the strip for a surface that is not the dark panel — the death
+  // certificate draws the same rungs on paper (#161), and a gold-on-nothing pip
+  // is invisible there.
+  _kleosPips(x, y, tier, total = 10, step = 11, pal = null) {
     const ctx = this.ctx;
     // The pip grows with its spacing rather than being pinned at the size it
     // needed when there were four of them in a narrow column.
@@ -2911,7 +3025,8 @@ export const uiMethods = {
     for (let i = 0; i < total; i++) {
       const cx = x + i * step, cy = y;
       const on = i < tier;
-      ctx.fillStyle = on ? '#e8c96a' : 'rgba(207,216,195,0.18)';
+      ctx.fillStyle = on ? (pal ? pal.ink : '#e8c96a')
+        : (pal ? pal.dim : 'rgba(207,216,195,0.18)');
       ctx.beginPath();
       if (i === total - 1) {
         for (let k = 0; k < 10; k++) {
@@ -2939,7 +3054,7 @@ export const uiMethods = {
 
   // ---- CALYPSO's cabinet: draughts, in NeXTSTEP chrome ---------------------
   //
-  // Her machine is a NeXT running Mach (docs/ai-codebase-plan.md §3b), and it
+  // Her machine is a NeXT running Mach (docs/PLAN.md §3b), and it
   // must look NOTHING like the estate's green obelisk consoles. Warm greys, a
   // ribbed title bar, bevelled buttons, black Helvetica: the friendly face over
   // the microkernel, which is the island's argument told in chrome rather than
@@ -3449,6 +3564,92 @@ export const uiMethods = {
   },
 
   /**
+   * The Grab camera: a body, a lens, and an eye where the flash should be.
+   * `aim` is a small offset for the pupil, so the eye tracks the pointer.
+   *
+   * TWO-BIT GREYSCALE, four levels and no others. The MegaPixel display on the
+   * original cube had exactly these: white, light grey, dark grey, black. The
+   * colour version of this icon is the later NeXTSTEP 3.x redraw that Apple
+   * carried into Mac OS X, and it is the wrong machine for her desk.
+   */
+  _wsGrabIcon(x, y, s, aim = { x: 0, y: 0 }, flash = false) {
+    const ctx = this.ctx;
+    const W = '#ffffff', L = '#aaaaaa', D = '#555555', K = '#000000';
+    ctx.save();
+    // The real drawing, if the files are there. Smoothing off: it is a 64px
+    // four-level bitmap and a bilinear resample turns it to mud.
+    const art = grabFrame(aim, flash);
+    if (grabReady(art)) {
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(art, Math.round(x), Math.round(y), Math.round(s), Math.round(s));
+      ctx.restore();
+      return;
+    }
+    const bodyY = y + s * 0.34, bodyH = s * 0.52, bodyX = x + s * 0.04, bodyW = s * 0.80;
+    // body: dark, with a light top plate and a black edge
+    ctx.fillStyle = D; ctx.fillRect(bodyX, bodyY, bodyW, bodyH);
+    ctx.fillStyle = L; ctx.fillRect(bodyX, bodyY, bodyW, Math.max(1, s * 0.06));
+    ctx.fillStyle = K; ctx.fillRect(bodyX, bodyY + bodyH - Math.max(1, s * 0.05), bodyW, Math.max(1, s * 0.05));
+    ctx.strokeStyle = K; ctx.strokeRect(bodyX + 0.5, bodyY + 0.5, bodyW - 1, bodyH - 1);
+    // lens: black barrel, light rim, white catch-light
+    const lx = x + s * 0.42, ly = bodyY + bodyH * 0.52, lr = s * 0.20;
+    ctx.fillStyle = K; ctx.beginPath(); ctx.arc(lx, ly, lr, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = L; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(lx, ly, lr, 0, Math.PI * 2); ctx.stroke();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = D;
+    ctx.beginPath(); ctx.arc(lx, ly, lr * 0.58, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = W;
+    ctx.beginPath(); ctx.arc(lx - lr * 0.30, ly - lr * 0.32, lr * 0.16, 0, Math.PI * 2); ctx.fill();
+    // THE FLASH BULB, top left. A reflector dish on a short stem, the way the
+    // original has it: bulb on the left, eye on the right, both above the body.
+    const fx = x + s * 0.30, fy = y + s * 0.17, fr = s * 0.15;
+    ctx.fillStyle = D;
+    ctx.fillRect(fx - s * 0.03, fy, s * 0.06, s * 0.19);          // the stem
+    ctx.strokeStyle = K;
+    ctx.strokeRect(fx - s * 0.03 + 0.5, fy + 0.5, s * 0.06 - 1, s * 0.19 - 1);
+    ctx.fillStyle = L;                                             // the reflector
+    ctx.beginPath(); ctx.ellipse(fx, fy, fr, fr * 1.05, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = K;
+    ctx.beginPath(); ctx.ellipse(fx, fy, fr, fr * 1.05, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = flash ? W : D;                                 // the bulb itself
+    ctx.beginPath(); ctx.arc(fx, fy, fr * 0.42, 0, Math.PI * 2); ctx.fill();
+    if (flash) {
+      ctx.strokeStyle = W; ctx.lineWidth = 1.5;
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(fx + Math.cos(a) * fr * 1.3, fy + Math.sin(a) * fr * 1.3);
+        ctx.lineTo(fx + Math.cos(a) * fr * 2.1, fy + Math.sin(a) * fr * 2.1);
+        ctx.stroke();
+      }
+      ctx.lineWidth = 1;
+    }
+
+    // the shoe, and the eye standing in it
+    const ex = x + s * 0.66, ey = y + s * 0.24, er = s * 0.20;
+    ctx.fillStyle = K;
+    ctx.fillRect(x + s * 0.52, y + s * 0.27, s * 0.13, s * 0.11);
+    // Narrower than tall: an eye, not a ball (David, 2026-08-14).
+    const rx = er * 0.74, ry = er * 0.92;
+    ctx.fillStyle = W;
+    ctx.beginPath(); ctx.ellipse(ex, ey, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = K;
+    ctx.beginPath(); ctx.ellipse(ex, ey, rx, ry, 0, 0, Math.PI * 2); ctx.stroke();
+    // iris and pupil, carried toward the pointer
+    const px = ex + aim.x * rx * 0.40, py = ey + aim.y * ry * 0.38;
+    ctx.fillStyle = L;
+    ctx.beginPath(); ctx.arc(px, py, rx * 0.56, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = D;
+    ctx.beginPath(); ctx.arc(px, py, rx * 0.56, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = K;
+    ctx.beginPath(); ctx.arc(px, py, rx * 0.30, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = W;
+    ctx.beginPath(); ctx.arc(px - rx * 0.20, py - ry * 0.20, rx * 0.13, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  },
+
+  /**
    * A NeXTSTEP scroller: a knob in a sunken track, with the two arrow buttons
    * PAIRED AT THE BOTTOM rather than one at each end. That pairing is the thing
    * a NeXT user would notice; Windows and the Mac split them.
@@ -3484,6 +3685,101 @@ export const uiMethods = {
       ctx.fillText(glyph, bx + w / 4, ay + 11);
       ctx.textAlign = 'left';
       this._wsHit(bx, ay, w / 2, AR, { ...act, dir });
+    });
+  },
+
+  // Grab, on her machine. The real one photographed your screen; this one has
+  // only ever had one subject. The roll is hourly and unbroken across seven
+  // years, so the run's own frames are the last few lines of a very long file.
+  _wsGrab(w, ws, api) {
+    const ctx = this.ctx;
+    const x = w.x + 3, W = w.w - 6;
+    const bar = w.y + this._WS_BAR_H + 2;
+    const roll = api.grabRoll(ws);
+
+    // ---- the head: the camera, watching, and what it can see right now
+    const HEAD = 66;
+    ctx.fillStyle = '#a4a4a4'; ctx.fillRect(x, bar, W, HEAD);
+    this._nextBevel(x, bar, W, HEAD);
+    const ic = 52;
+    this._wsGrabIcon(x + 6, bar + 6, ic, api.grabAim(ws, x + 6 + ic * 0.66, bar + 6 + ic * 0.24), api.grabFlashing(ws));
+    // Clicking the app's own icon opens its Info panel, which is also on the
+    // menu; the menu alone would leave the credit somewhere nobody looks.
+    this._wsHit(x + 6, bar + 6, ic, ic, { act: 'grabinfo', id: w.id, pri: 3 });
+    ctx.font = 'bold 11px Helvetica, system-ui, sans-serif';
+    ctx.fillStyle = '#141414';
+    ctx.fillText('CAPTURE IN PROGRESS', x + 68, bar + 18);
+    ctx.font = '11px "Courier New", ui-monospace, monospace';
+    (api.grabLive(ws) || []).forEach((line, i) => {
+      ctx.fillText(line, x + 68, bar + 34 + i * 13);
+    });
+
+    // ---- the buttons. Two of them work.
+    const by = bar + HEAD + 4;
+    const BTN = [['Capture', 'grabshot'], ['Timed', 'grabtimed'], ['Choose Window', 'grabwindow']];
+    let bx = x + 4;
+    for (const [label, act] of BTN) {
+      const bw = label === 'Choose Window' ? 104 : 66;
+      this._nextButton(bx, by, bw, 20, label);
+      this._wsHit(bx, by, bw, 20, { act, id: w.id, pri: 3 });
+      bx += bw + 5;
+    }
+    ctx.font = '10px Helvetica, system-ui, sans-serif';
+    ctx.fillStyle = '#3a3a3a';
+    ctx.textAlign = 'right';
+    ctx.fillText(`${roll.length ? roll[roll.length - 1].n.toLocaleString() : 0} frames held`, x + W - 6, by + 14);
+    ctx.textAlign = 'left';
+
+    // ---- the roll
+    const top = by + 26;
+    const listH = w.h - (top - w.y) - 10;
+    const SBW = 16;
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(x, top, W, listH);
+    this._nextBevel(x, top, W, listH, false);
+    ctx.save(); ctx.beginPath(); ctx.rect(x + 1, top + 1, W - SBW - 2, listH - 2); ctx.clip();
+    ctx.font = '11px "Courier New", ui-monospace, monospace';
+    const rowH = 14;
+    const rows = Math.floor((listH - 6) / rowH);
+    const maxTop = Math.max(0, roll.length - rows);
+    if (w.top == null) w.top = maxTop;          // opens on the newest frame
+    w.top = Math.max(0, Math.min(w.top, maxTop));
+    if (!roll.length) {
+      ctx.fillStyle = '#666';
+      ctx.fillText('No frames on this roll.', x + 8, top + 20);
+    }
+    roll.slice(w.top, w.top + rows).forEach((f, i) => {
+      const idx = w.top + i;
+      const ry = top + 4 + i * rowH;
+      if (idx === w.sel) { ctx.fillStyle = '#c8c8c8'; ctx.fillRect(x + 2, ry, W - SBW - 4, rowH); }
+      ctx.fillStyle = '#141414';
+      // No colour to spare at two bits, so your own frames carry a mark.
+      ctx.fillText(f.mine ? '*' : ' ', x + 6, ry + 11);
+      ctx.fillText(String(f.n).padStart(6), x + 14, ry + 11);
+      ctx.fillText(`d${String(f.day).padStart(2)}`, x + 70, ry + 11);
+      ctx.fillText(f.at.padEnd(6), x + 100, ry + 11);
+      ctx.fillText(f.subject, x + 150, ry + 11);
+      this._wsHit(x + 2, ry, W - SBW - 4, rowH, { act: 'grabsel', id: w.id, i: idx, pri: 2 });
+    });
+    ctx.restore();
+    this._wsScroller(x + W - SBW, top, SBW, listH, w.top, rows, roll.length,
+      { act: 'grabscroll', id: w.id, pri: 3 });
+  },
+
+  // Grab's Info panel: a credit, not a piece of the fiction.
+  _wsGrabInfo(w, ws, api) {
+    const ctx = this.ctx;
+    const x = w.x + 3, W = w.w - 6;
+    const top = w.y + this._WS_BAR_H + 2;
+    const H = w.h - this._WS_BAR_H - 10;
+    ctx.fillStyle = '#aaaaaa'; ctx.fillRect(x, top, W, H);
+    this._nextBevel(x, top, W, H);
+    // The eye still follows you while you read who drew it.
+    this._wsGrabIcon(x + 10, top + 10, 48, api.grabAim(ws, x + 10 + 48 * 0.66, top + 10 + 48 * 0.24));
+    // Short enough now to sit beside the icon rather than under it.
+    ctx.fillStyle = '#141414';
+    api.grabInfo().forEach((line, i) => {
+      ctx.font = i === 0 ? 'bold 14px Helvetica, system-ui, sans-serif' : '11px Helvetica, system-ui, sans-serif';
+      ctx.fillText(line, x + 68, top + 26 + i * 15);
     });
   },
 
@@ -3601,6 +3897,204 @@ export const uiMethods = {
   },
 
   // The bin, which now holds things.
+  // WorldWideWeb, 1990. Black on white, Helvetica off the bitmap ladder, links
+  // underlined rather than coloured — the NeXT megapixel display was greyscale,
+  // so a blue link was not available and would be an anachronism here.
+  _wsWWW(w, ws, api) {
+    const ctx = this.ctx;
+    const pad = 12;
+    const x = w.x + 3, W = w.w - 6;
+    const top = w.y + this._WS_BAR_H + 2;
+    const H = w.h - this._WS_BAR_H - 10;
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(x, top, W, H);
+    this._nextBevel(x, top, W, H, false);
+
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x, top, W, H); ctx.clip();
+    // Bitmap fonts had no antialiasing. Turning smoothing off where the canvas
+    // allows it is most of what makes this read as 1990 rather than as a page.
+    const smooth = ctx.imageSmoothingEnabled;
+    ctx.imageSmoothingEnabled = false;
+
+    const innerW = W - pad * 2;
+    const measure = (t, style) => { ctx.font = WWW_FONT(style); return ctx.measureText(t).width; };
+    // Laid out once per size change rather than per frame: the text does not
+    // move, and measuring every word every frame is the expensive way to find
+    // that out.
+    if (!w.laid || w._laidW !== innerW || w._laidDoc !== w.doc) {
+      w.laid = WWW_LAYOUT(WWW_PARSE(w.doc), innerW, measure);
+      w._laidW = innerW;
+      w._laidDoc = w.doc;
+    }
+    const scroll = w.top || 0;
+    ctx.textBaseline = 'alphabetic';
+    for (const line of w.laid.lines) {
+      const ly = top + pad + line.y - scroll;
+      if (ly < top - 30 || ly > top + H + 30) continue;
+      if (line.style === 'rule') {
+        ctx.fillStyle = '#000';
+        ctx.fillRect(x + pad, Math.round(ly), innerW, 1);
+        continue;
+      }
+      ctx.font = WWW_FONT(line.style);
+      for (const r of line.runs) {
+        ctx.fillStyle = '#000';
+        ctx.fillText(r.text, x + pad + r.x, ly);
+        // A link is underlined. That was the only affordance available, the
+        // display being greyscale. The rule runs under the WHOLE anchor
+        // including the spaces inside it: skipping whitespace runs broke
+        // "The cache" into two separately underlined words.
+        if (r.href) {
+          ctx.fillRect(x + pad + r.x, Math.round(ly) + 2, r.w, 1);
+        }
+      }
+    }
+    ctx.imageSmoothingEnabled = smooth;
+    ctx.restore();
+
+    // The page body is one hit region. Which word was hit is worked out from
+    // the layout on the click, not stored per run: the runs are rebuilt on
+    // resize and a stale rectangle would follow a link that had moved.
+    this._wsHit(x + pad, top, innerW, H, {
+      act: 'wwwbody', id: w.id, ox: x + pad, oy: top + pad, pri: 2,
+    });
+  },
+
+  // THE OPEN PANEL. There is no address bar, so this is the only way to reach a
+  // document nobody has linked you to: Document → Open from full document
+  // reference, type the whole thing, Open. Four steps and no autocomplete, which
+  // is what using this was.
+  _wsWWWOpen(w, ws, api) {
+    const ctx = this.ctx;
+    const x = w.x + 3, W = w.w - 6;
+    const top = w.y + this._WS_BAR_H + 2;
+    const H = w.h - this._WS_BAR_H - 10;
+    ctx.fillStyle = '#a4a4a4';
+    ctx.fillRect(x, top, W, H);
+
+    ctx.fillStyle = '#000';
+    ctx.font = '12px Helvetica, Arial, sans-serif';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText('Full document reference:', x + 12, top + 22);
+
+    // The field. Sunken, white, one line, and it holds whatever you typed —
+    // there is no history and no completion, because there was none.
+    const fx = x + 12, fy = top + 32, fw = W - 24, fh = 22;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(fx, fy, fw, fh);
+    this._nextBevel(fx, fy, fw, fh, false);
+    ctx.save();
+    ctx.beginPath(); ctx.rect(fx + 2, fy, fw - 4, fh); ctx.clip();
+    ctx.fillStyle = '#000';
+    ctx.font = '12px Ohlfs, Courier, "Courier New", monospace';
+    const shown = String(w.ref || '');
+    const tw = ctx.measureText(shown).width;
+    // Scroll the text left when it outgrows the field, so the caret stays put.
+    const off = Math.max(0, tw - (fw - 14));
+    ctx.fillText(shown, fx + 6 - off, fy + 15);
+    if (w.caret && Math.floor(performance.now() / 500) % 2 === 0) {
+      ctx.fillRect(fx + 6 - off + tw + 1, fy + 4, 7, 13);
+    }
+    ctx.restore();
+
+    if (w.err) {
+      ctx.fillStyle = '#000';
+      ctx.font = '10px Helvetica, Arial, sans-serif';
+      ctx.fillText(w.err, x + 12, fy + fh + 15);
+    }
+
+    const by = top + H - 32;
+    const open = this._nextButton(x + W - 176, by, 78, 24, 'Open');
+    const cancel = this._nextButton(x + W - 92, by, 78, 24, 'Cancel');
+    this._wsHit(open.x, open.y, open.w, open.h, { act: 'wwwopengo', id: w.id, pri: 4 });
+    this._wsHit(cancel.x, cancel.y, cancel.w, cancel.h, { act: 'wwwopencancel', id: w.id, pri: 4 });
+    this._wsHit(fx, fy, fw, fh, { act: 'wwwopenfield', id: w.id, pri: 4 });
+  },
+
+  // THE INFO PANEL. Every NeXT application had one, and this one is where the
+  // program says what hypertext is — the definition, in the application's own
+  // words, on the machine it was written on.
+  _wsWWWInfo(w, ws, api) {
+    const ctx = this.ctx;
+    const x = w.x + 3, W = w.w - 6;
+    const top = w.y + this._WS_BAR_H + 2;
+    const H = w.h - this._WS_BAR_H - 10;
+    ctx.fillStyle = '#a4a4a4';
+    ctx.fillRect(x, top, W, H);
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x, top, W, H); ctx.clip();
+    ctx.textBaseline = 'alphabetic';
+    let y = top + 22;
+    WWW_INFO.forEach((line, i) => {
+      // The first three lines are the application's own title block; the rest is
+      // the definition, and it was set in the monospace face.
+      ctx.font = i === 0 ? 'bold 14px Helvetica, Arial, sans-serif'
+        : i < 3 ? '12px Helvetica, Arial, sans-serif'
+          : '11px Ohlfs, Courier, "Courier New", monospace';
+      ctx.fillStyle = '#000';
+      ctx.fillText(line, x + 14, y);
+      y += i < 3 ? 17 : 14;
+    });
+    ctx.restore();
+  },
+
+  // #165 — Grove.app. Her floor as it WOULD be, on a grid the shape of the
+  // clearing. Drawn dark with lumen-coloured cells, because that is what the
+  // real floor looks like at night and this is a picture of the real floor —
+  // just not a live one.
+  _wsGrove(w, ws, api) {
+    const ctx = this.ctx;
+    const g = w.life;
+    if (!g) return;
+    const x = w.x + 3, W = w.w - 6;
+    const top = w.y + this._WS_BAR_H + 2;
+    const H = w.h - this._WS_BAR_H - 10;
+    const barH = 16;                       // the status strip along the foot
+    const gridH = H - barH;
+
+    // The clearing at night: near-black, so a lit cell reads as light rather
+    // than as ink.
+    ctx.fillStyle = '#0b0f0c';
+    ctx.fillRect(x, top, W, H);
+    this._nextBevel(x, top, W, H, false);
+
+    const cw = W / g.w, ch = gridH / g.h;
+    // The floor itself, barely there — the unlit lumen of the real clearing.
+    ctx.fillStyle = '#16241a';
+    for (let gy = 0; gy < g.h; gy++) {
+      for (let gx = 0; gx < g.w; gx++) {
+        if (!g.mask[gy * g.w + gx]) continue;
+        ctx.fillRect(x + gx * cw, top + gy * ch, Math.ceil(cw), Math.ceil(ch));
+      }
+    }
+    // Live cells.
+    ctx.fillStyle = '#7fe3a2';
+    for (let gy = 0; gy < g.h; gy++) {
+      for (let gx = 0; gx < g.w; gx++) {
+        if (!g.cells[gy * g.w + gx]) continue;
+        ctx.fillRect(x + gx * cw, top + gy * ch, Math.max(1, cw - 0.4), Math.max(1, ch - 0.4));
+      }
+    }
+    // Her core, at the back of the floor, where it stands in the grove. Drawn
+    // over the cells: Life runs across the clearing, not through the machine.
+    const core = GROVE_CORE(g.w, g.h);
+    ctx.fillStyle = '#cfd6ff';
+    ctx.fillRect(x + core.x * cw - 1, top + core.y * ch - 1, Math.max(2, cw + 2), Math.max(2, ch + 2));
+
+    // The status strip. It says MODEL, because a window like this one is only
+    // a lie if it lets you think it is a camera.
+    ctx.fillStyle = '#d9d9d9';
+    ctx.fillRect(x, top + gridH, W, barH);
+    ctx.font = '10px Helvetica, system-ui, sans-serif';
+    ctx.fillStyle = '#333';
+    ctx.fillText(GROVE_SIM_NOTE, x + 6, top + gridH + 11);
+    const pop = GROVE_POP(g);
+    const right = `gen ${g.gen}   pop ${pop}${g.restamps ? `   rewritten ${g.restamps}` : ''}`;
+    ctx.fillText(right, x + W - 6 - ctx.measureText(right).width, top + gridH + 11);
+  },
+
   _wsRecycler(w, ws, api) {
     const ctx = this.ctx;
     const x = w.x + 3, W = w.w - 6;
@@ -3846,8 +4340,14 @@ export const uiMethods = {
       else if (w.kind === 'prefs') this._wsPrefs(w, ws, api);
       else if (w.kind === 'terminal') this._wsTerminal(w, ws, api);
       else if (w.kind === 'mail') this._wsMail(w, ws, api);
+      else if (w.kind === 'grab') this._wsGrab(w, ws, api);
+      else if (w.kind === 'grabinfo') this._wsGrabInfo(w, ws, api);
       else if (w.kind === 'about') this._wsAbout(w, ws, api);
       else if (w.kind === 'recycler') this._wsRecycler(w, ws, api);
+      else if (w.kind === 'grove') this._wsGrove(w, ws, api);
+      else if (w.kind === 'www') this._wsWWW(w, ws, api);
+      else if (w.kind === 'wwwopen') this._wsWWWOpen(w, ws, api);
+      else if (w.kind === 'wwwinfo') this._wsWWWInfo(w, ws, api);
       else this._wsViewer(w, ws, api);
       // The resize bar at the foot, which every NeXT window wore.
       ctx.fillStyle = '#9a9a9a';
@@ -3859,7 +4359,10 @@ export const uiMethods = {
       this._wsHit(w.x, w.y, w.w, this._WS_BAR_H, { act: 'drag', id: w.id, pri: 2 });
       // The foot resize bar drags the size — for the file/text windows, not the
       // fixed-size board or panels.
-      if (w.kind === 'viewer' || w.kind === 'edit' || w.kind === 'terminal' || w.kind === 'mail') {
+      // www and grove resize too: a browser you cannot widen is a browser you
+      // cannot read (David, 2026-08-14).
+      if (w.kind === 'viewer' || w.kind === 'edit' || w.kind === 'terminal'
+          || w.kind === 'mail' || w.kind === 'grab' || w.kind === 'www' || w.kind === 'grove') {
         this._wsHit(w.x + 2, w.y + w.h - 11, w.w - 4, 11, { act: 'resize', id: w.id, pri: 3 });
       }
     }
@@ -3883,17 +4386,53 @@ export const uiMethods = {
       mx += 52;
     }
 
+    // GRAB SITS ON THE FLOOR, bottom centre, in the tile a miniaturised window
+    // wears. It is not on the dock and it carries no name: an application she
+    // has left running and put down, rather than one she keeps to hand. From
+    // there it has the whole desktop in front of it, and the eye follows the
+    // pointer across all of it. Drawn after the miniaturised row and given a
+    // higher priority so an eleventh miniaturised window cannot take its click.
+    {
+      const gs = 48;
+      const gx = Math.round(this.w / 2 - gs / 2), gy = this.h - 56;
+      ctx.fillStyle = '#9d9d9d';
+      ctx.fillRect(gx, gy, gs, gs);
+      this._nextBevel(gx, gy, gs, gs);
+      const ic = gs - 6;
+      this._wsGrabIcon(gx + 3, gy + 3, ic,
+        api.grabAim(ws, gx + 3 + ic * 0.66, gy + 3 + ic * 0.24), api.grabFlashing(ws));
+      this._wsHit(gx, gy, gs, gs, { act: 'dock', id: 'grab', pri: 2 });
+    }
+
     // The dock: the cube fixed at the top, the recycler fixed at the foot.
     const dx = this.w - this._WS_DOCK_W;
     ctx.fillStyle = '#8b8b8b';
     ctx.fillRect(dx, 0, this._WS_DOCK_W, this.h);
     this._nextBevel(dx, 0, this._WS_DOCK_W, this.h);
-    (api.dockTiles(ws) || []).forEach((t, i) => {
-      const ty = 4 + i * 62;
-      if (ty + 56 > this.h - 62) return;
+    // EVERY APP GETS A TILE. This used to be `if (it does not fit) return`,
+    // which silently dropped the tail of the dock off the bottom of the screen
+    // — so adding Grove and WorldWideWeb made both of them unclickable and
+    // Grove looked unwired when it was only invisible (David, 2026-08-14).
+    //
+    // The spacing shrinks to fit instead. A cramped dock is a dock; a truncated
+    // one is a missing feature.
+    const tiles = api.dockTiles(ws) || [];
+    const footN = tiles.filter((t) => t.fixed === 'foot').length;
+    const room = this.h - 8 - footN * 62;
+    // No floor on the pitch: a floor is what put a tile past the bottom edge
+    // again on a short window. The TILE SHRINKS instead, down to a size that
+    // still carries an icon, so a cramped dock stays a complete one.
+    const pitch = Math.min(62, room / Math.max(1, tiles.length - footN));
+    const TILE = Math.max(30, Math.min(56, Math.round(pitch - 2)));
+    const sc = TILE / 56;              // everything inside a tile scales with it
+    tiles.forEach((t, i) => {
+      // The recycler is pinned to the foot, as it was on a real dock.
+      const ty = t.fixed === 'foot'
+        ? this.h - 4 - TILE
+        : Math.round(4 + i * pitch);
       ctx.fillStyle = '#a4a4a4';
-      ctx.fillRect(dx + 3, ty, 54, 56);
-      this._nextBevel(dx + 3, ty, 54, 56);
+      ctx.fillRect(dx + 3, ty, 54, TILE);
+      this._nextBevel(dx + 3, ty, 54, TILE);
       ctx.textAlign = 'center';
       if (t.kind === 'clock') {
         ctx.fillStyle = '#1d2b1d';
@@ -3901,7 +4440,7 @@ export const uiMethods = {
         ctx.fillStyle = '#7fe07f';
         ctx.font = 'bold 15px "Courier New", ui-monospace, monospace';
         ctx.fillText(t.label, dx + 30, ty + 26);
-      } else if (t.kind === 'calendar') {
+            } else if (t.kind === 'calendar') {
         ctx.fillStyle = '#efefe6';
         ctx.fillRect(dx + 7, ty + 4, 46, 34);
         ctx.fillStyle = '#b03030';
@@ -3910,18 +4449,21 @@ export const uiMethods = {
         ctx.font = 'bold 15px Helvetica, system-ui, sans-serif';
         ctx.fillText(t.label, dx + 30, ty + 34);
       } else {
-        this._wsIcon(dx + 17, ty + 6, 26, t.kind === 'recycler' ? 'dir' : 'file', '');
+        this._wsIcon(dx + 17, ty + Math.round(6 * sc), Math.round(26 * sc),
+          t.kind === 'recycler' ? 'dir' : 'file', '');
         ctx.fillStyle = '#141414';
         ctx.font = '9px Helvetica, system-ui, sans-serif';
-        ctx.fillText(t.label, dx + 30, ty + 46);
+        // The label is the first thing to go when the dock is tight: an icon
+        // without a name is still findable, a name with no tile is not.
+        if (TILE >= 42) ctx.fillText(t.label, dx + 30, ty + TILE - 10);
         // Three dots: the app is not running.
         if (!t.running) {
           ctx.fillStyle = '#2b2b2b';
-          for (let d = 0; d < 3; d++) ctx.fillRect(dx + 24 + d * 5, ty + 51, 2, 2);
+          for (let d = 0; d < 3; d++) ctx.fillRect(dx + 24 + d * 5, ty + TILE - 5, 2, 2);
         }
       }
       ctx.textAlign = 'left';
-      this._wsHit(dx + 3, ty, 54, 56, { act: 'dock', id: t.id });
+      this._wsHit(dx + 3, ty, 54, TILE, { act: 'dock', id: t.id });
     });
 
     // The menu last, because it opens over everything. Dropped below the game's

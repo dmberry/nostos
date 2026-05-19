@@ -7,7 +7,7 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
-// S8 — the unit API (docs/robot-ml-rollout-plan.md). get/fetch are the read
+// S8 — the unit API (docs/PLAN.md). get/fetch are the read
 // half over the same wire post writes on. These cover the shell command's
 // plumbing (card/up gate, argument passing, redirect) and the ML builtin's
 // reachability contract; the getResource resolver itself is DOM-bound (webHosts

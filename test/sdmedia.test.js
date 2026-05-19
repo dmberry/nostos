@@ -17,7 +17,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   CLIPS, PALETTE, CLIP_W, CLIP_H, renderFrame, frameCount,
-  MEDIA_CARDS, makeMediaCard, clipForFile,
+  MEDIA_CARDS, makeMediaCard, clipForFile, packFrame, unpackFrame,
 } from '../src/game/sdmedia.js';
 
 test('every clip paints a full buffer of real palette indices', () => {
@@ -96,4 +96,46 @@ test('a filename resolves to its clip, case-insensitively', () => {
   assert.equal(clipForFile('nope.avi'), null);
   assert.equal(clipForFile(''), null);
   assert.equal(clipForFile(null), null);
+});
+
+// Real footage arrives as DATA rather than a render function (David is making
+// some). These pin the wire format: a frame must survive the round trip exactly,
+// the encoding must be paste-safe in a source file, and a clip carrying frames
+// must play from them without ever calling a renderer.
+
+test('a frame survives the round trip through the packed form', () => {
+  for (const clip of Object.values(CLIPS)) {
+    for (const f of [0, 5, frameCount(clip) - 1]) {
+      const buf = renderFrame(clip, f);
+      assert.deepEqual(unpackFrame(packFrame(buf)), buf, `${clip.id} frame ${f}`);
+    }
+  }
+});
+
+test('the packed form is paste-safe and worth packing', () => {
+  const buf = renderFrame(CLIPS.yard, 3);
+  const packed = packFrame(buf);
+  assert.match(packed, /^[A-Za-z0-9+-]+$/, 'no quotes, no backslashes, no escaping to get wrong');
+  assert.ok(packed.length < buf.length, `packed ${packed.length} vs raw ${buf.length}`);
+});
+
+test('a clip carrying frames plays from them and never renders', () => {
+  const frames = [
+    packFrame(renderFrame(CLIPS.promo, 0)),
+    packFrame(renderFrame(CLIPS.promo, 8)),
+  ];
+  const shot = {
+    id: 'shot', title: 'real.avi', caption: 'footage', fps: 12, frames,
+    render() { throw new Error('a clip with frames must not call its renderer'); },
+  };
+  assert.equal(frameCount(shot), 2, 'its length is its frame count, not fps x secs');
+  assert.deepEqual(renderFrame(shot, 0), renderFrame(CLIPS.promo, 0));
+  assert.deepEqual(renderFrame(shot, 1), renderFrame(CLIPS.promo, 8));
+  assert.deepEqual(renderFrame(shot, 2), renderFrame(shot, 0), 'and it still loops');
+});
+
+test('malformed clip data is refused rather than half-painted', () => {
+  assert.throws(() => unpackFrame('A'), /bad symbol|expected/);
+  assert.throws(() => unpackFrame('!!'), /bad symbol/);
+  assert.throws(() => unpackFrame('AA'), /expected/, 'a short frame is not a frame');
 });

@@ -13,7 +13,7 @@
 //   node tools/structure.mjs
 //
 // Read-only. Run it rather than reading a number out of a dated audit; the
-// figures in docs/structure-audit-2026-08-14.md were true on the day.
+// figures in docs/PLAN.md were true on the day.
 //
 // This tool reports when it cannot measure. tools/sweep.mjs stripped comments
 // and strings with a chain of regexes, one of which swallowed the file, and it

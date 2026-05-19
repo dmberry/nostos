@@ -10,7 +10,7 @@
 // A tiny systems registry: features attach as { update, drawWorld, drawScreen }
 // modules and the main loop iterates them, instead of the hub hardcoding a
 // bespoke call (and argument list) for every feature. See
-// docs/refactor-registry.md for the contract, the boundary (this does NOT own
+// docs/PLAN.md for the contract, the boundary (this does NOT own
 // the renderer's depth-sorted actor draw), and the migration plan.
 //
 // A system:

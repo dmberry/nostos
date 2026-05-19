@@ -32,15 +32,21 @@ export class DayNight {
   constructor(dayLengthSeconds = 480, startHour = 9) {
     this.dayLength = dayLengthSeconds; // real seconds per 24 game hours
     this.startHour = startHour;
-    this.elapsed = 0; // real seconds since start
-    // Self-register as a system (docs/refactor-registry.md), order 20 = the
+    this.elapsed = 0;     // real seconds since start
+    this.rate = 1;        // game-mode clock multiplier; 1 is Medium
+    // Self-register as a system (docs/PLAN.md), order 20 = the
     // "world clocks" band. Normal-play tick only; the resting fast-forward stays
     // an explicit hub call (the hub keeps the mode gates).
     register({ name: 'daynight', order: 20, update: (w) => this.update(w.dt) });
   }
 
   update(dt) {
-    this.elapsed += dt;
+    // `rate` is the game mode's clock multiplier, set once from main.js. It
+    // lives here rather than at the call site because the clock is advanced
+    // through the systems registry and by the workspace and the rest-loop at
+    // their own rates; one field on the clock is the only place all of them
+    // pass through.
+    this.elapsed += dt * (this.rate || 1);
   }
 
   // Skips the clock forward by a number of *game* minutes (e.g. sleeping)

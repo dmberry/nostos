@@ -7,7 +7,7 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
-// W1 (docs/web-history-plan.md) — the history, cached, and it is the hint system.
+// W1 (docs/PLAN.md) — the history, cached, and it is the hint system.
 //
 // A page on Samuel's checkers program says the program learned by playing
 // itself. Nothing on it mentions CALYPSO, or a streak of five, or a way off her

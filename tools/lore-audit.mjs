@@ -1,6 +1,6 @@
 // #139 — the lore audit the web-history plan asks for before the migration.
 //
-// The test, from docs/web-history-plan.md: "would a person have written this in
+// The test, from docs/PLAN.md: "would a person have written this in
 // pen and left it where you found it? If not, it belongs on a server."
 //
 // The classification is by explicit rule plus a named exception list, rather
@@ -67,7 +67,7 @@ for (const r of rows) {
 const out = [];
 out.push('# #139 — the lore audit');
 out.push('');
-out.push('Run before the migration, as `docs/web-history-plan.md` asks. The test is');
+out.push('Run before the migration, as `docs/PLAN.md` asks. The test is');
 out.push('that document\'s: **would a person have written this in pen and left it where');
 out.push('you found it? If not, it belongs on a server.**');
 out.push('');

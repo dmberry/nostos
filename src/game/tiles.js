@@ -79,6 +79,10 @@ export const OBJECTS = {
   wall:    { solid: true, climbable: true, climbHeight: 2.5 },
   rubble:  { solid: true, climbable: true, climbHeight: 1 },
   rock:    { solid: true, climbable: true, climbHeight: 1 },
+  // #180 — a campfire you lay yourself. Solid, so you stand BESIDE it and
+  // cook across it rather than in it; it carries `fuel` (seconds left) and
+  // `cook` (seconds into the current roast), and cooking.js burns it down.
+  campfire: { solid: true },
   obelisk: { solid: true }, // AI signal tower; destructible in a later phase
   tor: { solid: true }, // RON resistance relay on a hilltop — the friendly HERMES terminal
   box:     { solid: true, climbable: true, climbHeight: 1 }, // resistance cache — a low crate you can step or jump onto, still searchable from beside it

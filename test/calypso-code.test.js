@@ -7,7 +7,7 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
-// C1 (docs/calypso-build-plan.md) — her codebase.
+// C1 (docs/PLAN.md) — her codebase.
 //
 // The load-bearing property is that RELEASE is COMPLETE and UNREACHABLE, and
 // that both facts are true of the same one structure, so the file a player

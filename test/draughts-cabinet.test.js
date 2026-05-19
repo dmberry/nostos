@@ -7,7 +7,7 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
-// K2 (docs/calypso-build-plan.md) — the cabinet session.
+// K2 (docs/PLAN.md) — the cabinet session.
 //
 // The streak is the part to get right. Five RESIGNATIONS in a row is one of
 // K4's three doors, and a played loss has to reset it, because the difference

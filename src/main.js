@@ -29,11 +29,24 @@ import { makeRng } from './game/rng.js';
 import { DayNight } from './game/daynight.js';
 import { Minimap } from './game/minimap.js';
 import { spawnBirds, updateBirds } from './game/birds.js';
-import { spawnRobots, registerRobotsSystem, spawnW1s, spawnW3, spawnW4, spawnW5, spawnM4, spawnM5, spawnM6, spawnGuard, drawRobot, setUnitTagger, setUnitTagsClickable, unitTagAt, W5_PROGRAM, v1BuildName } from './game/robots.js';
+import { spawnRobots, registerRobotsSystem, spawnW1s, spawnW3, spawnW4, spawnW5, spawnM4, spawnM5, spawnM6, spawnGuard, drawRobot, setUnitTagger, setUnitTagsClickable, unitTagAt, W5_PROGRAM, v1BuildName, reviveUnit } from './game/robots.js';
 import { makeVModel } from './game/v-model.js';
 // #141: the permission POSEIDON's net has to be shown.
 import { permissionFile, readPermission, permissionBanner, PERMISSION_FILE,
-  towerBanner, towerConstitution } from './game/tower-code.js';
+  towerBanner, towerConstitution, towerSense, towerDecide, towerAllows,
+} from './game/tower-code.js';
+import { rosterText, rosterDigest, logsFolder, LOGS_DIR } from './game/garrison.js';
+import { addSighting, makeSighting, sightingsText, mergeSightings, trackText } from './game/sightings.js';
+import { step as groveStep } from './game/grove-life.js';
+import { homeDoc as wwwHomeDoc, linkAt as wwwLinkAt, resolveRef as wwwResolveRef,
+  linkInto as wwwLinkInto } from './game/worldwideweb.js';
+import { matchSavedUnits, unitKey, stampUnitIds } from './game/unit-save.js';
+import { FLOOR_WORDS } from './game/grove.js';
+// #165 — the word Grove.app opens on IS the word the floor spells, read from
+// the same table the grove stamps into its lumen. Change FLOOR_WORDS and the
+// emulation changes with it rather than drifting into its own private slogan.
+const GROVE_WORD = (FLOOR_WORDS[0] && FLOOR_WORDS[0][0]) || 'STAY';
+const GROVE_STEP = 1 / 6;   // seconds a generation holds for
 // C1: her codebase, generated from one structure so the source and the graph
 // (V1) cannot drift.
 import { calypsoFiles, unreachable as calypsoUnreachable, loveLetter, loveLetterFile, readMainEdit, DAY_HEADINGS } from './game/calypso-code.js';
@@ -51,12 +64,11 @@ import { Lore, FRAGMENTS } from './game/lore.js';
 import { GEO_FRAGMENT_IDS } from './game/archive-geocities.js';
 import { ITEMS, TAPES } from './game/items.js';
 import { sfx } from './engine/sound.js';
-import { worldToScreen } from './engine/iso.js';
+import { worldToScreen, ELEV } from './engine/iso.js';
 import { runRonml, decide, smlEcho, joinProgramLines, needsMoreInput, continuesPrevious, diagnose, joinProgram, typeReport, aimlVersion, aimlFull, AIML_VERSION, loadPrelude, flattenSession } from './game/ai_ml.js';
 import { createEliza } from './game/eliza.js';
-import { placeTors, HERMES_DOCS, hermesTopics, virusFor, virusFilesFor, virusDocsFor } from './game/hermes.js';
+import { placeTors, HERMES_DOCS, hermesTopics, virusFor, virusFilesFor, virusDocsFor, hermesTree, hermesReadIn, hermesIsDir, HERMES_DIRS } from './game/hermes.js';
 import { VERSION } from './version.js';
-import { buildSaveFile, validateSaveFile, applySaveFile, describeSaveFile, saveFileName } from './game/savefile.js';
 import { drawRobotVision } from './game/robotvision.js';
 import { screenDirToWorld } from './engine/iso.js';
 import { stampCoast } from './engine/coast.js';
@@ -82,10 +94,14 @@ import { fillMachineGallery } from './game/machine-icons.js';
 import { fillAboutTapes } from './game/about-tapes.js';
 import { pruneStages, checkpointName, saveStageId } from './game/stages.js';
 import { packFog, unpackFogInto } from './game/fog.js';
+import { MODES, DEFAULT_MODE, modeOf, isMode, lowerMode } from './game/modes.js';
+import { TOOLS as BUILD_TOOLS, applyBuild, canBuildAt } from './game/build.js';   // #182
+import { tickFires } from './game/cooking.js';   // #180
+import { mountSettingsPanel, storedMode, storeMode, setFill } from './game/settings-panel.js';
 import { keeperLs, keeperRead, keeperIsDir } from './game/keeper.js';
 import { buildingName, buildingLook } from './game/buildings.js';
 import { initAchievements, achieveEvent, achieveProfile, achieveRunState, achieveModel, achieveTick, resetRun, setAchieveSink } from './game/achieve.js';
-import { hostTable, findHost, pageFor, renderPage, searchResults, bookmarksPage, favouritesPage, obLibraryPage, obDocPage, whatsNewPage, docsPage, docTitle, programPage, pressPage, wikiPage, deptPage, spoofedAddr, islandSubnet, networksInRange, relayHosts, RELAY_ESSID, RELAY_IP, relayFile, RELAY_FILES, relayBundle, RELAY_BUNDLES, IFACE, REPORT_HOLD, REPORT_COOLDOWN, HTTPD_PATH, httpdBinary, httpdToken } from './game/net.js';
+import { hostTable, findHost, pageFor, renderPage, searchResults, bookmarksPage, favouritesPage, obLibraryPage, obDocPage, whatsNewPage, docsPage, docTitle, programPage, pressPage, wikiPage, deptPage, spoofedAddr, islandSubnet, networksInRange, relayHosts, RELAY_ESSID, RELAY_IP, relayFile, RELAY_FILES, relayBundle, RELAY_BUNDLES, relayBookmarksPage, IFACE, REPORT_HOLD, REPORT_COOLDOWN, HTTPD_PATH, httpdBinary, httpdToken } from './game/net.js';
 import { CROSSINGS, islandProfile } from './game/islands.js';
 
 // Note onsets split into four pitch registers, so each singing machine can be
@@ -132,7 +148,7 @@ bootStep('engine');
 // overworld construction, returned as a World. main.js keeps the player, save/load,
 // lore, and the player/lore-coupled controllers (worldStir, onCoreDefeated), and
 // aliases the World's arrays + controllers by name so the runtime sites below are
-// unchanged. (islands Stage 0c, docs/islands-plan.md §3.)
+// unchanged. (islands Stage 0c, docs/PLAN.md §3.)
 const calypso = registerWorld(createIsland(WORLD_SEED));
 bootStep('world');
 let map = calypso.map;
@@ -237,7 +253,7 @@ player.onCoreDefeated = (core) => {
   };
   player.say(`${ai} is dead. Every machine on the island powers down where it stands.`);
 };
-// #159 — the card comes off a dead carrier (docs/hermes-warrior-path.md).
+// #159 — the card comes off a dead carrier (docs/PLAN.md).
 // player.js sets the flag and calls this; everything that has to KNOW about it
 // lives here, because the arming, the tower net and the handset are all main's.
 player.onHermesSeized = () => {
@@ -269,7 +285,7 @@ let daemonsDown = 0; // how many island AIs felled this run (for the Archipelago
 // progress is a thing you can see rather than a fraction. Each fall is already
 // worth +500 at both call sites (a core-kill, and Calypso's refunction, which is
 // her equivalent of dying). Idempotent: a daemon only records once.
-// ---- KLEOS (docs/achievements-plan.md) --------------------------------------
+// ---- KLEOS (docs/PLAN.md) --------------------------------------
 // The one call the whole game makes into the achievement engine. Everything
 // earned goes past here, so this is also the only place that knows an award
 // becomes a toast — the engine itself stays pure and says nothing.
@@ -303,6 +319,111 @@ function persistKleos() {
 
 function loadKleosProfile() {
   try { return JSON.parse(localStorage.getItem(KLEOS_KEY) || 'null'); } catch { return null; }
+}
+
+// ---- #182: BUILDING, IN CREATIVE -------------------------------------------
+//
+// Hedda: "Creative works BUT you can't really do anything. To be true creative
+// you should be able to edit the map and break blocks and place them and stuff."
+// Creative's own description already promised building; only looking and testing
+// were true. The RULES live in game/build.js, where they can be tested without a
+// browser; this is the part that needs a keyboard, a cursor and a screen.
+//
+// CREATIVE ONLY. The other four modes are about an island that is the way it is,
+// and a player who can raise a wall in front of a hunter is not playing them.
+// Leaving Creative closes the mode rather than leaving it armed and invisible.
+let buildOn = false;
+let buildTool = 0;                 // index into BUILD_TOOLS
+const BUILD_REACH = 9;             // tiles; past this the cursor is out of arm's reach
+let buildCursor = null;            // {x, y, ok, why} for the renderer, recomputed each frame
+
+/**
+ * The tile under the pointer — READ AT ITS OWN HEIGHT, not at ground level.
+ *
+ * `camera.toWorld` inverts the projection for a point on the FLAT ground, and
+ * that was the whole of the picking: correct on a plain, and increasingly wrong
+ * the moment anything is raised. A tile lifted six steps is drawn 96 screen
+ * pixels above where its ground sits, so pointing at the top of a block you had
+ * just built selected a tile several rows BEHIND it — the cursor sat on empty
+ * grass, the click landed there, and the block you were trying to stack on grew
+ * a neighbour somewhere else (David, 2026-08-15: "the blocks don't seem to build
+ * very well").
+ *
+ * So the pick is a search: for each height the world can be at, ask which tile
+ * WOULD appear under the pointer if the ground were that high, and take the
+ * first one that really is. Highest first, because a tall tile is drawn over the
+ * ones behind it and is therefore what you are actually looking at.
+ */
+function buildTargetFor(mouseWorld) {
+  if (!mouseWorld) return null;
+  const m = input.mousePos();
+  // READ OFF WHAT WAS DRAWN. The prism pass records every top face it paints,
+  // under the camera matrix it painted them with, so the pick is a lookup
+  // rather than a second implementation of the projection (stage 3 of
+  // docs/terrain-3d-plan.md). The two used to be separate: `toWorld` inverts at
+  // GROUND level, so pointing at the top of a six-step block chose a tile three
+  // rows behind it, and v1.563's height search was a guess about the draw pass
+  // maintained by hand beside it. They cannot disagree now — there is only one.
+  const hit = renderer.tileAtScreen ? renderer.tileAtScreen(m.x, m.y) : null;
+  let x, y;
+  if (hit) { x = hit.tx; y = hit.ty; }
+  else { x = Math.floor(mouseWorld.x); y = Math.floor(mouseWorld.y); }
+  const far = Math.hypot(x + 0.5 - player.x, y + 0.5 - player.y) > BUILD_REACH;
+  if (far) return { x, y, ok: false, why: 'out of reach' };
+  const allowed = canBuildAt(map, x, y);
+  return { x, y, ok: allowed.ok, why: allowed.why || '' };
+}
+
+function updateBuildMode(mouseWorld) {
+  if (!player.creative) {
+    if (buildOn) { buildOn = false; player.say('Build mode off — it belongs to Creative.'); }
+    buildCursor = null;
+    return;
+  }
+  // F, because every other letter is already spoken for — B is the rest key,
+  // and a second meaning for it in one mode is exactly the kind of control that
+  // does the wrong thing at the wrong moment.
+  if (input.consumePress('KeyF')) {
+    buildOn = !buildOn;
+    sfx.play('blip');
+    player.say(buildOn
+      ? `Build mode on. Click a tool, then click the ground: blocks go ON what is there. [${BUILD_TOOLS[buildTool].name}]`
+      : 'Build mode off.');
+  }
+  if (!buildOn) { buildCursor = null; return; }
+  // Comma and full stop cycle, rather than the number row: 1-4 already pick a
+  // pocket, and taking those away in one mode would be a control that means two
+  // things depending on a state you cannot see.
+  const step = (input.consumePress('Period') ? 1 : 0) - (input.consumePress('Comma') ? 1 : 0);
+  if (step) {
+    buildTool = (buildTool + step + BUILD_TOOLS.length) % BUILD_TOOLS.length;
+    sfx.play('keydrop');
+    player.say(BUILD_TOOLS[buildTool].name);
+  }
+  buildCursor = buildTargetFor(mouseWorld);
+  // A CLICK ON THE PALETTE PICKS A TOOL, checked before the world click below so
+  // that choosing a tool never also puts a block down behind the strip.
+  const pick = input.clickPos();
+  if (pick && renderer.buildCellAt) {
+    const cell = renderer.buildCellAt(pick.x, pick.y);
+    if (cell != null) {
+      input.consumeClick();
+      input.usePressed();          // and swallow the matching use, so nothing swings
+      buildTool = cell;
+      sfx.play('keydrop');
+      player.say(BUILD_TOOLS[buildTool].name);
+      return;
+    }
+  }
+  // The build click is taken BEFORE player.update reads it, so a placing click
+  // never also swings whatever is in your hands.
+  if (input.usePressed()) {
+    if (!buildCursor) return;
+    if (!buildCursor.ok) { player.say(`Not there — ${buildCursor.why}.`); sfx.play('clang'); return; }
+    const r = applyBuild(map, buildCursor.x, buildCursor.y, BUILD_TOOLS[buildTool].key, { player });
+    if (r.ok) { sfx.play('keydrop'); }
+    else { player.say(`No — ${r.why}.`); sfx.play('clang'); }
+  }
 }
 
 function recordAiDown(name) {
@@ -411,6 +532,21 @@ try {
       if (st.calypsoLeave) player.calypsoLeave = true; // sticky: refunctioning Calypso persists across reload
       // #141: a save from before the permission gate existed has already earned
       // it if she was ever refunctioned, so grant it rather than stranding them.
+      player.creative = !!st.creative;
+      // The mode rides the save. A run made before modes existed has no key and
+      // becomes Medium, which is the game it was played on.
+      if (st.mode) player.setMode(st.mode);
+      // AFTER setMode, which sets the floor to the mode it adopts. A save that
+      // carries a lower floor than its mode was switched UP mid-run, and the
+      // floor is the half of that pair that must survive.
+      if (st.modeFloor) player.modeFloor = lowerMode(player.modeFloor, st.modeFloor);
+      if (st.modeSwitched) player.modeSwitched = true;
+      // NOT `dayNight.rate` here. This block is TOP-LEVEL and runs long before
+      // `const dayNight` is reached, and a const in its temporal dead zone
+      // throws on the READ — so even `if (dayNight)` is a ReferenceError, not a
+      // falsy check. The rate is set once below the declaration instead, which
+      // is after this has chosen the mode. (The file already had this problem
+      // solved once, for the clock: see `_clockReady` / `clockElapsed`.)
       player.seaPermission = !!(st.seaPermission || st.calypsoLeave);
       // What you were wearing, with its wear. Only pieces that are still armour
       // and still have life in them: a save written before a piece existed, or
@@ -524,6 +660,13 @@ if (!_bootPos) {
 // autosave below can't silently rewrite the character save out from under
 // the reset the player just confirmed.
 let resettingGame = false;
+// Leaving to the title screen on purpose. The return to the title is a RELOAD —
+// the boot path is what draws the title and offers Continue — so without this it
+// tripped the accidental-reload guard below and the browser asked whether you
+// really wanted to leave the page, in the middle of a deliberate, already-saved
+// exit (David, 2026-08-15). There was a `window.__nostosLeaving` for exactly
+// this and nothing ever read it.
+let leavingToTitle = false;
 // Wipes every trace of the current run — character save, lore progress,
 // world seed — and reloads to a freshly shuffled world. Used by New Game
 // (after a confirm) and, unconditionally, whenever the player dies.
@@ -560,9 +703,16 @@ function buildSaveBlob() {
       laptop: player.laptop,             // model, OS, and the whole disk — your files survive a reload
       salvaged: player.salvaged,         // which dead machines' disks you have already read
       calypsoLeave: player.calypsoLeave, // Calypso refunctioned: the sea will let you go
-      seaPermission: player.seaPermission, // #141: POSEIDON's net has been told
+      creative: player.creative || undefined,  // Hedda's testing mode, kept across reloads
+      mode: player.mode && player.mode !== DEFAULT_MODE ? player.mode : undefined,
+      // #173: the grade rides the save, because it is a fact about the whole
+      // run and the run outlives any one session. Recomputing it from `mode`
+      // on load would launder an afternoon in Creative into a Hard run.
+      modeFloor: player.modeFloor && player.modeFloor !== DEFAULT_MODE ? player.modeFloor : undefined,
+      modeSwitched: player.modeSwitched || undefined,
+    seaPermission: player.seaPermission, // #141: POSEIDON's net has been told
       swine: player.swine,               // CIRCE's transmutation: you stay changed across a reload
-      calypsoHold: player.calypsoHold,   // the Nokia gradient: her hold on you (docs/calypso-nokia-plan.md)
+      calypsoHold: player.calypsoHold,   // the Nokia gradient: her hold on you (docs/PLAN.md)
       nokiaSent: [...player.nokiaSent],  // the one-shot texts already sent, so a reload does not re-tutorial
       poseidonSaid: [...(player._poseidonSaid || [])], // deadline notices already pushed, so a reload does not replay them
       aisDown: [...(player.aisDown || [])],           // which daemons are down, for the Record chips
@@ -644,6 +794,20 @@ function robotHomeCode(r, obs) {
   return best ? best.code : 'none';
 }
 
+// EVERY MACHINE NEEDS ITS OWN NAME IN THE SAVE.
+//
+// Units used to be keyed by (home tower, chassis, gardener-fit), which is not
+// an identity: a tower with three W-4s produced three records under one key, of
+// which exactly one survived a reload. Everything you had done to the other two
+// was written and then thrown away on load — and the W-4s and T-8s, which come
+// in groups, are precisely the units a player reprograms (David, 2026-08-15:
+// "robots braincode is not persistent - I just lost lots of changed robots").
+//
+// The world is rebuilt deterministically from the seed, so SPAWN ORDER is
+// stable: the nth machine on a fresh build is the same machine it was last
+// time. That ordinal is the identity. Units the factory prints during play get
+// one too, past the seeded range — they cannot be restored (they do not exist
+// at load) but they must not collide with the ones that can.
 function serializeIslandState() {
   const out = {};
   // FIRST carry forward the saved state of islands not yet built this run. They
@@ -665,6 +829,27 @@ function serializeIslandState() {
     const st = {};
     if (w.obeliskObjs && w.obeliskObjs.length) {
       st.obDown = w.obeliskObjs.filter((o) => o.destroyed).map((o) => o.code);
+      // #163 — A POSTED TOWER PROGRAM IS THE HACK, so it has to survive a
+      // reload. #133 made a tower run its own program and this was missed:
+      // `never feed` is the strongest single thing a player can do to an
+      // island, and it silently evaporated the moment they loaded a save.
+      //
+      // Only the SOURCE is saved. Intent, veto and feedOff are all re-derived
+      // by the tower's next tick, so storing them would be storing a decision
+      // that is half a second from being made again.
+      const posted = w.obeliskObjs
+        .filter((o) => !o.destroyed && o.program)
+        .map((o) => ({ code: o.code, program: o.program, unwm: o._unwatermarked ? 1 : undefined }));
+      if (posted.length) st.obPrograms = posted;
+      // #164 — the sightings. A record that forgets on reload is not a record,
+      // and this one is meant to still be there after you have gone. The
+      // per-node tally rides with it, because the classification is a function
+      // of it: restore the entries without the count and the estate politely
+      // forgets it had you down for removal.
+      const seen = w.obeliskObjs
+        .filter((o) => !o.destroyed && (o.sightings || []).length)
+        .map((o) => ({ code: o.code, n: o._sightCount || 0, seq: o._sightSeq || 0, log: o.sightings }));
+      if (seen.length) st.obSightings = seen;
     }
     if (w.wfactory) st.factoryDestroyed = !!w.wfactory.destroyed;
     // Looted caches, keyed by tile — the world regenerates them full otherwise.
@@ -691,17 +876,66 @@ function serializeIslandState() {
     // islands cost about 14KB (see game/fog.js). Islands that start fully
     // revealed say so on the map itself, so there is no list here to go stale.
     if (w.map && w.map.explored && !w.map.exploredAll) st.fog = packFog(w.map.explored);
+    // TERRAIN YOU BUILT (docs/terrain-3d-plan.md, stage 6). The column store IS
+    // the diff: an island rebuilds identically from its seed, so the only
+    // terrain worth writing down is the terrain a player made, and that is
+    // exactly what the store holds. Nothing generated is saved and nothing
+    // untouched allocates — a run that never opened build mode adds no bytes.
+    if (w.map && w.map.columns && w.map.columns.size) st.cols = w.map.packColumns();
+    // The ground level each built tile stood at before anybody built on it —
+    // without it, a reload cannot tell your blocks from the island and BREAK
+    // would happily start eating the world.
+    if (w.map && w.map.bedrock && w.map.bedrock.size) st.bed = w.map.packBedrock();
     // Per-unit operator state, saved under the unit's natural name (its home
     // obelisk and chassis): the tag you hung on it, the program you posted, and
     // where it was standing. Only units you have actually touched are written —
     // an untouched roster regenerates identically from the seed.
     if (w.robots && w.robots.length && w.obeliskObjs && w.obeliskObjs.length) {
+      stampUnitIds(w);         // late arrivals get a name before they are written
       const mods = [];
       for (const r of w.robots) {
         if (r.dead || r.fused || (!r._netTag && !r.program)) continue;
         mods.push({
-          ob: robotHomeCode(r, w.obeliskObjs), type: r.type,
+          // #165 — the V-class variant is part of the key. A V-1 and a V-5 share
+          // `type: 'v1'` (same chassis, same senses, same fuel budget — only the
+          // weights and the job differ), so without this a courier and a gardener
+          // homed to the same tower are the same unit as far as the save is
+          // concerned, and a reload puts one's model onto the other.
+          // uid is the identity; ob/type/gfit stay so a save written before
+          // this change still loads (see the fallback in applyIslandState).
+          uid: r.uid,
+          // Enough to REBUILD it, not just to recognise it: the seat it is
+          // posted to, and a V-class's model seed. Everything the W-factory
+          // printed mid-run has no counterpart in the regenerated roster, so
+          // without these its record is unusable on load.
+          home: r.home ? [Math.round(r.home.x * 100) / 100, Math.round(r.home.y * 100) / 100] : undefined,
+          ms: r.type === 'v1' ? r.modelSeed : undefined,
+          ob: robotHomeCode(r, w.obeliskObjs), type: r.type, gfit: r.gardener ? 1 : undefined,
           tag: r._netTag || null, program: r.program || null,
+          unwm: r._unwatermarked ? 1 : undefined,
+          // THE STATE THE FIGHT LEFT IT IN. A machine you had worn down to a
+          // flat cell coming back charged is the fight being handed back
+          // (David, 2026-08-15). Battery is the one that matters; hp too, for
+          // anything the roster did not spawn at full.
+          batt: Math.round(r.battery ?? 100),
+          hp: Math.round(r.hp),
+          drained: r.drained ? 1 : undefined,
+          // An M-6's grenades: a guard you half-emptied must not come back
+          // fully stocked, and one you never provoked must still have three.
+          bombs: r.type === 'm6' && r.bombs !== undefined ? r.bombs : undefined,
+          // WHAT THE ESTATE THINKS OF IT. The tower took twenty seconds of
+          // silence to write this unit up, and a reload that forgot would hand
+          // the player a clean sheet for free — and then take another twenty
+          // seconds to re-earn it, which reads as the flag being flaky rather
+          // than as a record. `silentT` rides along so a unit part-way to being
+          // filed does not restart its clock either.
+          awol: r.awol ? 1 : undefined,
+          sil: r.silentT ? Math.round(r.silentT * 10) / 10 : undefined,
+          // A T-1w belongs to the carrier's swarm. Without the link a revived
+          // swarm does not count against its cap, so the carrier prints a fresh
+          // one on top of the twelve already standing there.
+          swarm: r.calledBy ? 1 : undefined,
+          tac: r.tactic || undefined,
           x: Math.round(r.x * 100) / 100, y: Math.round(r.y * 100) / 100,
           // A courier mid-errand: the cell in its cradle is worth a byte, and
           // losing it on load would read as the tower short-changing it.
@@ -709,6 +943,39 @@ function serializeIslandState() {
         });
       }
       if (mods.length) st.robots = mods;
+      // #163 — THE B-1 GETS ITS OWN RECORD. It is homed to the W-FACTORY, not a
+      // tower, so the `homeOb.type` key every other unit is saved under names
+      // whichever obelisk happens to be nearest — which is not stable and is not
+      // what it is homed to. There is exactly one carrier on an island, so its
+      // identity is simply "the carrier".
+      //
+      // Its SHIELD is saved with it: a player who broke the rim and reloaded got
+      // it back whole while the aspis was already on the ground, so they could
+      // have two.
+      const b1 = (w.robots || []).find((r) => r.carrier && !r.dead);
+      if (b1) {
+        st.carrier = {
+          x: Math.round(b1.x * 100) / 100, y: Math.round(b1.y * 100) / 100,
+          hp: b1.hp, shieldHp: b1.shieldHp ?? 0,
+          // HOW FAR THROUGH THE FIGHT YOU ARE. The gates are the fight: a
+          // carrier restored at 40% hull with no waves counted would seal at
+          // its first gate and could never be finished, and one restored with
+          // its waves reset would hand back four phases you had already won.
+          // The hull and the count only mean anything together.
+          waves: b1.waves || 0,
+          // Its own cell and where it was in the cycle: a carrier restored with
+          // a full battery and a fresh wave timer hands back the pressure you
+          // had built. `banked` is damage you landed on the sealed hull and
+          // have not been paid for yet — losing it would quietly delete work.
+          batt: Math.round(b1.battery ?? 100),
+          banked: b1.banked ? Math.round(b1.banked * 100) / 100 : undefined,
+          waveT: b1.waveT ? Math.round(b1.waveT * 10) / 10 : undefined,
+          lastStand: b1.lastStand ? 1 : undefined,
+          tag: b1._netTag || undefined,
+        };
+      } else if ((w.robots || []).some((r) => r.carrier && r.dead)) {
+        st.carrierDown = true;   // killed: it must not come back with the island
+      }
     }
     out[w.id] = st;
   }
@@ -728,6 +995,36 @@ function applyIslandState(w) {
     const down = new Set(st.obDown);
     for (const o of w.obeliskObjs) {
       if (down.has(o.code)) { o.destroyed = true; w.map.objectGrid[o.y * w.map.w + o.x] = null; }
+    }
+  }
+  // TERRAIN YOU BUILT, back on top of the generated island (terrain stage 6).
+  // FIRST, before anything reads a height: the fortress, the coast and the
+  // roster all ask the map what the ground is doing, and they must be told the
+  // truth as the player left it rather than as the seed made it.
+  if (Array.isArray(st.cols) && w.map && w.map.applyColumns) w.map.applyColumns(st.cols);
+  if (Array.isArray(st.bed) && w.map && w.map.applyBedrock) w.map.applyBedrock(st.bed);
+  // #163: put posted tower programs back before anything ticks, so the first
+  // decision a restored tower makes is the player's and not the estate's.
+  if (Array.isArray(st.obPrograms) && w.obeliskObjs) {
+    const byCode = new Map(w.obeliskObjs.map((o) => [o.code, o]));
+    for (const p of st.obPrograms) {
+      const ob = byCode.get(p.code);
+      if (!ob || ob.destroyed) continue;
+      ob.program = p.program;
+      ob._unwatermarked = !!p.unwm;
+      ob._towerT = 0;                 // decide on the next tick, not in half a second
+    }
+  }
+  // #164: and the record of you, with each node's own tally.
+  if (Array.isArray(st.obSightings) && w.obeliskObjs) {
+    const byCode = new Map(w.obeliskObjs.map((o) => [o.code, o]));
+    for (const sgt of st.obSightings) {
+      const ob = byCode.get(sgt.code);
+      if (!ob || ob.destroyed) continue;
+      ob.sightings = Array.isArray(sgt.log) ? sgt.log : [];
+      ob._sightCount = sgt.n || ob.sightings.length;
+      ob._sightSeq = sgt.seq || ob.sightings.length;
+      ob._sightingsDirty = true;      // so the file is rebuilt on the first tick
     }
   }
   if (st.factoryDestroyed && w.wfactory) w.wfactory.destroyed = true;
@@ -764,23 +1061,81 @@ function applyIslandState(w) {
     if (!w.map.explored) { w.map.explored = new Uint8Array(w.map.w * w.map.h); w.map.newlyRevealed = []; }
     if (unpackFogInto(st.fog, w.map.explored)) w.map.fogDirty = true;   // the renderer caches the mask
   }
+  // #163: the carrier. Killed, it stays killed — otherwise sailing away and
+  // back would hand the player a second HERMES card.
+  {
+    const b1 = (w.robots || []).find((r) => r.carrier);
+    if (b1) {
+      if (st.carrierDown) {
+        b1.dead = true;
+      } else if (st.carrier) {
+        const c = st.carrier;
+        if (Number.isFinite(c.x)) { b1.x = c.x; b1.y = c.y; }
+        if (Number.isFinite(c.hp)) { b1.hp = c.hp; b1._lastHp = c.hp; }
+        if (Number.isFinite(c.shieldHp)) b1.shieldHp = c.shieldHp;
+        // The gates you had already forced. Without this a carrier restored at
+        // 40% hull has released no waves as far as it knows, seals at its first
+        // gate, and can never be finished — the fight becomes unwinnable on a
+        // reload rather than merely reset.
+        if (Number.isFinite(c.waves)) b1.waves = c.waves;
+        if (Number.isFinite(c.batt)) b1.battery = c.batt;
+        if (Number.isFinite(c.banked)) b1.banked = c.banked;
+        if (Number.isFinite(c.waveT)) b1.waveT = c.waveT;
+        if (c.lastStand) b1.lastStand = true;
+        if (c.tag) b1._netTag = c.tag;
+      }
+    }
+  }
   // Put back the tags, programs and positions of the units you had touched,
   // matched to the freshly-seeded roster by their natural name (home obelisk +
   // chassis). Runs after the roster is spawned, before the factory adds any
   // machines of its own, so only the seed units — the ones you could have
   // touched — are in the array to match against.
   if (Array.isArray(st.robots) && w.robots && w.robots.length && w.obeliskObjs && w.obeliskObjs.length) {
-    const byKey = new Map();
-    for (const r of w.robots) {
-      if (r.dead || r.fused) continue;
-      const k = `${robotHomeCode(r, w.obeliskObjs)}.${r.type}`;
-      if (!byKey.has(k)) byKey.set(k, r);
-    }
+    stampUnitIds(w);
+    const live = w.robots.filter((r) => !r.dead && !r.fused);
+    const pairs = matchSavedUnits(st.robots, live,
+      (u) => unitKey(u, (x) => robotHomeCode(x, w.obeliskObjs)));
+    // WHAT THE ROSTER COULD NOT SUPPLY, REBUILD. The seeded units regenerate
+    // from the world seed; everything the W-factory printed during the run does
+    // not exist yet at this point and never will, so its record would be
+    // dropped — and on a long run the factory has made most of the population.
+    // A W-4 goes out every time you touch a tower.
+    const claimed = new Set(pairs.map((p) => p.record));
     for (const m of st.robots) {
-      const r = byKey.get(`${m.ob}.${m.type}`);
-      if (!r) continue;
+      if (claimed.has(m)) continue;
+      const born = reviveUnit(m, (m.uid || 1) * 2654435761);
+      if (!born) continue;
+      born.uid = m.uid !== undefined ? m.uid : (w._nextUid = (w._nextUid || 0) + 1);
+      w.robots.push(born);
+      pairs.push({ record: m, unit: born });
+    }
+    // ADVANCE THE COUNTER PAST EVERY NAME WE JUST HANDED BACK. stampUnitIds
+    // numbered the freshly-seeded roster 1..n, but a revived machine carries
+    // the uid it was SAVED with, which is above that range — so the next unit
+    // the factory prints would have been issued a name a revived one is
+    // already using, and the save would then match one record to two machines.
+    for (const r of w.robots) {
+      if (Number.isFinite(r.uid) && r.uid > (w._nextUid || 0)) w._nextUid = r.uid;
+    }
+
+    for (const { record: m, unit: r } of pairs) {
       if (m.tag) r._netTag = m.tag;
       if (m.program) { r.program = m.program; r.fault = null; r.mlT = 0; r.intent = null; }
+      if (Number.isFinite(m.batt)) r.battery = m.batt;
+      if (Number.isFinite(m.hp)) { r.hp = Math.min(r.maxHp, m.hp); r._lastHp = r.hp; }
+      if (m.drained) r.drained = true;
+      if (Number.isFinite(m.bombs)) r.bombs = m.bombs;
+      if (m.awol) r.awol = true;
+      if (Number.isFinite(m.sil)) r.silentT = m.sil;
+      if (m.tac) r.tactic = m.tac;
+      // Re-link a revived swarm to the carrier it came out of, so the cap and
+      // the wave counting still see it.
+      if (m.swarm) {
+        const b1r = (w.robots || []).find((x) => x.carrier && !x.dead);
+        if (b1r) r.calledBy = b1r;
+      }
+      if (m.unwm) r._unwatermarked = true;
       if (Number.isFinite(m.x) && Number.isFinite(m.y)) { r.x = m.x; r.y = m.y; }
       if (m.cargo !== undefined) r.cargo = !!m.cargo;
     }
@@ -812,7 +1167,7 @@ let wsDrag = null;         // {id, dx, dy} while a title bar is being dragged
 // never "vanishes" and the desktop is reachable (David, 2026-08-13).
 // ---- C2: capture, and the five headings ------------------------------------
 //
-// Agre (docs/ai-codebase-plan.md §7): surveillance watches you; CAPTURE
+// Agre (docs/PLAN.md §7): surveillance watches you; CAPTURE
 // reorganises your activity until it can be represented. She does not follow
 // you round the island. She asks you to account for the day, and the answers
 // are hers — rested, walked, played, worked, remembered — and there is no
@@ -1034,7 +1389,10 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) persi
 // record (below) — but not during New Game's own reload, which already had
 // its own confirm and is an intentional clean reset, not an accidental one.
 window.addEventListener('beforeunload', (e) => {
-  if (resettingGame) return;
+  // Neither of the deliberate exits is an accident, and neither should be
+  // second-guessed by the browser: New Game has already asked, and Leave to
+  // title has already saved and already asked at its own gate.
+  if (resettingGame || leavingToTitle) return;
   e.preventDefault();
   e.returnValue = ''; // most browsers require this to show their own prompt
 });
@@ -1104,7 +1462,7 @@ function playerElevSteps() {
   return map.heightAt ? map.heightAt(fx, fy) : 0;
 }
 // `lore` self-registers as a system in its own constructor (Stage 0 of the
-// systems-registry refactor, docs/refactor-registry.md) — the hub never names it.
+// systems-registry refactor, docs/PLAN.md) — the hub never names it.
 // Its update ticks via systems.runUpdate() in update(); its two draw phases via
 // the renderer's runDrawWorld/runDrawScreen.
 const lore = new Lore(map, WORLD_SEED, GEO_FRAGMENT_IDS);
@@ -1113,6 +1471,18 @@ const lore = new Lore(map, WORLD_SEED, GEO_FRAGMENT_IDS);
 player.onFindLore = (id) => lore.findFrag(id, player, true);
 
 const dayNight = new DayNight();
+
+// A RUN THAT NEVER CHOSE A MODE takes the one picked at the title screen. The
+// save's own mode wins where it has one (that run was played on it); this is
+// only the new-run case, and it is why the picker on the title screen means
+// anything at all.
+//
+// IT HAS TO SIT BELOW `dayNight`, not up with the other player setup: `const`
+// is in the temporal dead zone until its own line runs, so reading it earlier
+// is a ReferenceError that kills the boot outright rather than a quiet
+// undefined. It shipped in v1.548 and took the game down (David, 2026-08-15).
+if (player.mode === DEFAULT_MODE) player.setMode(storedMode());
+dayNight.rate = player.modeRules().clock;
 // The deadline picks up where the save left it. Without this the clock started
 // over on every reload, so POSEIDON's purge never arrived and its fog never came
 // back after a load — and a player twenty seconds from the end could buy the
@@ -1240,7 +1610,13 @@ function ensureIthaca() {
           cause: 'you came home to Ithaca', score: player.score,
           skills: [...player.skills], deaths: player.deaths || 0,
           victory: true, escaped: true, homecoming: true,
+          ...player.modeStamp(),
         };
+        // #173 — THE RUN IS GRADED HERE, and at its floor rather than at
+        // whatever mode happens to be set as you step onto the sand. One of the
+        // five NOSTOS badges is earned; which one is the only question, and the
+        // answer is the lowest mode this run ever held.
+        kleos('runCompleted', player.modeStamp());
       }
     } else {
       player.say("You beach the ship on Ithaca and step ashore. Argos lifts his head and knows you — but the machines still hold the sea, and this is landfall, not yet home. Fell the rest of them, then come back for good.");
@@ -1421,7 +1797,7 @@ function updateDepartOut(dt) {
   if (pendingCrossing) { player.aboard = null; departOut = null; }
 }
 
-// ---- Scylla and Charybdis: the narrows (docs/islands-odyssey-revision.md §8) ----
+// ---- Scylla and Charybdis: the narrows (docs/PLAN.md §8) ----
 // The AEAEA <-> THRINACIA passage runs through a throat of rock, where Homer puts
 // them (Od. XII). The crossing is HELD here: you row into the narrows, the sea
 // makes you choose which loss to take, and only then do you land. The rules (which
@@ -1928,6 +2304,17 @@ const wsApi = {
   prefsRows: WS.prefsRows, prefsSections: WS.PREFS_SECTIONS,
   menuW: WS.MENU_W, dockW: WS.DOCK_W,
   mailboxFrom: WS.mailboxFrom,
+  grabRoll: WS.grabRoll, grabAim: WS.grabAim, grabInfo: () => WS.GRAB_INFO,
+  grabFlashing: WS.grabFlashing,
+  // What the camera can see this instant. Her machine is on Ogygia, so the
+  // island is hers by definition; the coordinates and the clock are the run's.
+  grabLive: () => [
+    `subject   ${player.name || 'unnamed'}`,
+    // Her machine only exists on Ogygia (currentWorld.keeper), so the island is
+    // not a lookup. Naming a field the island does not carry would read as one.
+    `position  OGYGIA ${player.x.toFixed(1)}, ${player.y.toFixed(1)}`,
+    `time      day ${dayNight.day}, ${dayNight.clock}`,
+  ],
   // What the Info panel says. Read live so the uptime is the island's own.
   aboutLines: () => [
     'Mach kernel (CALYPSO)',
@@ -1938,10 +2325,51 @@ const wsApi = {
   ],
 };
 
+// #164 — what the daemon makes of the nodes' slivers. A tower that is off the
+// net is not passed in at all: jam it, loop it or fell it and its arc simply is
+// not in the track, which is the difference between the estate knowing where
+// you went and the estate knowing you were somewhere, twice.
+function calypsoTrack() {
+  const obs = (currentWorld.obeliskObjs || []).filter((o) => !o.destroyed);
+  const live = obs.filter((o) => !o.jammed && !o.frozen);
+  const nodes = {};
+  for (const o of live) if ((o.sightings || []).length) nodes[o.code || 'OB'] = o.sightings;
+  return trackText(mergeSightings(nodes), {
+    clock: dayNight.clock, reporting: live.length, total: obs.length,
+  });
+}
+
 function openWorkspace(booted = false) {
   workspace = WS.newWorkspace(calypsoCodebase(), {
     clock: dayNight.clock,
     date: String(dayNight.day),
+    // #162 — the towers' garrison rosters, already on her machine. She is the
+    // island's mind and they are her network, so she has them before you have
+    // jacked into a single one. Same bytes, not a summary.
+    rosters: Object.fromEntries((currentWorld.obeliskObjs || [])
+      .filter((o) => !o.destroyed && o.roster)
+      .map((o) => [o.code || 'OB', o.roster])),
+    // #164 — and the correlated track. THIS is the step that matters: no tower
+    // holds more than a few disconnected moments of your day, and pooling them
+    // is what turns those slivers into a route. She does not watch you. She
+    // reads twelve machines that each saw a little, and knows where you walked.
+    //
+    // A node off the net (jammed, looped, felled) contributes nothing, so the
+    // track keeps the hole — which makes cutting a tower a real act rather than
+    // a cosmetic one.
+    track: calypsoTrack(),
+    // And the RAW SLIVERS beside the collation (David, 2026-08-14: "these
+    // fragmentary records should also be shared with Calypso"). Her folder
+    // holds both: twelve partial logs that each know almost nothing, and the
+    // one file that is all of them in order. Reading them in that order is the
+    // only commentary the game offers on what pooling does.
+    //
+    // Same net rule as the track: a node off the wire is not in her folder at
+    // all, so cutting one takes its arc away from her as well as from the
+    // correlation.
+    sightings: Object.fromEntries((currentWorld.obeliskObjs || [])
+      .filter((o) => !o.destroyed && !o.jammed && !o.frozen && o.logs && o.logs.sightings)
+      .map((o) => [o.code || 'OB', o.logs.sightings])),
     booted,
     w: renderer.w, h: renderer.h,
     // K4: the Play Herself switch is greyed until the run has earned it —
@@ -2026,6 +2454,20 @@ function wsLaunch(id) {
       }
       return;
     }
+    case 'www': {
+      // WorldWideWeb opens on the estate's root document. Not CERN's welcome
+      // page: every link on that one would be dead here, and a browser whose
+      // home page does not work is a prop.
+      WS.openWWW(ws, 'Home', wwwHomeDoc(islandAiName()), 'file://localhost/home.html');
+      return;
+    }
+    case 'grove': {
+      // #165 — an emulation of her floor, launched from the dock like the rest.
+      // The board is built here and lives on the window; nothing samples the
+      // grove, and the window says MODEL on its own status line.
+      WS.openGrove(ws, GROVE_WORD);
+      return;
+    }
     case 'fileviewer': {
       const w = WS.newWindow('viewer', 'File Viewer — /me', 60 + ws.windows.length * 18, 80 + ws.windows.length * 18, 480, 300);
       WS.openWindow(ws, w);
@@ -2037,6 +2479,7 @@ function wsLaunch(id) {
       return;
     }
     case 'mail': WS.openMail(ws); return;
+    case 'grab': WS.openGrab(ws); return;
     case 'recycler':
       WS.openRecycler(ws);
       return;
@@ -2096,6 +2539,41 @@ function workspaceClick(mx, my) {
       sfx.play('blip');
       return;
     }
+    // WorldWideWeb: A SINGLE CLICK IS NOT NAVIGATION. It put the caret in the
+    // text, because the application was an editor first. Only a double-click
+    // follows a link, and what it opens is a NEW WINDOW — there is no Back
+    // because there was nothing to go back from.
+    case 'wwwbody': {
+      const w = WS.windowById(ws, hit.id);
+      if (!w) return;
+      WS.raise(ws, w.id);
+      const now = performance.now();
+      const dbl = now - (w.lastClick || 0) < 420;
+      w.lastClick = now;
+      if (!dbl || !w.laid) return;
+      const href = wwwLinkAt(w.laid, mx - hit.ox, my - hit.oy + (w.top || 0));
+      if (!href) return;
+      const host = findHost(webHosts(), href);
+      if (!host) {
+        WS.notice(ws, `Cannot open ${href}`, 'The server does not respond. The upstream link is down.');
+        return;
+      }
+      // Their own links come with the document: an edit that only showed while
+      // the window stayed open would be a note rather than a link.
+      WS.openWWW(ws, host.name || host.host || href, WS.wwwDocFor(ws, href, pageFor(host, webHosts())), href);
+      sfx.play('keyclick');
+      return;
+    }
+    // The Open panel. `wwwopenfield` gives the field the caret; typing is
+    // handled in the workspace key handler, because a panel with no keyboard is
+    // a picture of a panel.
+    case 'wwwopenfield': {
+      const w = WS.windowById(ws, hit.id);
+      if (w) { w.caret = true; WS.raise(ws, w.id); }
+      return;
+    }
+    case 'wwwopencancel': WS.closeWindow(ws, hit.id); sfx.play('blip'); return;
+    case 'wwwopengo': { wwwOpenGo(hit.id); return; }
     case 'pref': WS.togglePref(ws, hit.id) ? sfx.play('blip') : sfx.play('termerr'); return;
     case 'prefsection': ws.prefs.section = hit.id; return;
     case 'mini': WS.miniaturise(ws, hit.id); sfx.play('blip'); return;
@@ -2135,6 +2613,36 @@ function workspaceClick(mx, my) {
       return;
     case 'expand': WS.expandAt(ws, hit.id, hit.line); return;
     case 'dock': wsLaunch(hit.id); return;
+    // Grab. It will photograph you and it will not photograph her: the one
+    // control that would point the camera the other way is the one that refuses.
+    case 'grabshot': case 'grabtimed': {
+      const timed = hit.act === 'grabtimed';
+      WS.grabCapture(ws, dayNight.clock, dayNight.day, 'Lid open. Face lit by the screen.', timed);
+      ws.grabFlash = 0.35;
+      const win = WS.windowById(ws, hit.id);
+      if (win) win.top = null;          // fall back to the newest frame
+      sfx.play('clang');
+      player.say(timed
+        ? 'Ten seconds, it says. It does not wait ten seconds.'
+        : 'It took one. Of you.');
+      return;
+    }
+    case 'grabinfo': WS.openGrabInfo(ws); sfx.play('blip'); return;
+    case 'grabwindow':
+      WS.notice(ws, 'Grab', 'Not Authorised!');
+      sfx.play('termerr');
+      return;
+    case 'grabsel': {
+      const w = WS.windowById(ws, hit.id);
+      if (w) { w.sel = hit.i; WS.raise(ws, hit.id); }
+      sfx.play('blip');
+      return;
+    }
+    case 'grabscroll': {
+      const w = WS.windowById(ws, hit.id);
+      if (w) { w.top = Math.max(0, (w.top || 0) + hit.dir); WS.raise(ws, hit.id); }
+      return;
+    }
     case 'maillocked':
       // Her mailbox, read from an account that may read it. Nothing here sends.
       WS.notice(ws, 'Mail', 'Not Authorised!');
@@ -2156,6 +2664,29 @@ function workspaceClick(mx, my) {
     case 'menu': return wsMenuPick(hit);
     default:
   }
+}
+
+// Open the reference typed into the panel. No autocomplete, no history, no
+// "did you mean" — the panel takes a full document reference or it takes
+// nothing, and a reference that does not resolve gets the silence the real one
+// gave you, written into the panel rather than thrown away.
+function wwwOpenGo(id) {
+  const ws = workspace;
+  const w = WS.windowById(ws, id);
+  if (!w) return;
+  const ref = String(w.ref || '').trim();
+  if (!ref) { w.err = 'Type a full document reference.'; sfx.play('termerr'); return; }
+  const hosts = webHosts();
+  const host = wwwResolveRef(ref, hosts) || findHost(hosts, ref);
+  if (!host) {
+    w.err = 'The server does not respond.';
+    sfx.play('termerr');
+    return;
+  }
+  const addr = host.host || host.name || ref;
+  WS.openWWW(ws, host.name || addr, WS.wwwDocFor(ws, addr, pageFor(host, hosts)), addr);
+  WS.closeWindow(ws, id);
+  sfx.play('keyclick');
 }
 
 function wsMenuPick(hit) {
@@ -2196,7 +2727,35 @@ function wsMenuPick(hit) {
       return;
     }
     case 'Preferences…': WS.openPrefs(ws); return;
-    case 'Info Panel…': WS.openAbout(ws); return;
+    // #166 — WorldWideWeb's own menu, which is only in the bar while one of its
+    // windows is in front.
+    case 'Open from full document reference': WS.openWWWOpen(ws); sfx.play('keyclick'); return;
+    case 'Mark all': {
+      const m = WS.wwwMarkAll(ws);
+      if (m) { sfx.play('blip'); WS.notice(ws, 'Marked', `${m.title}\n${m.addr}\n\nGo to another document and choose Link to marked.`); }
+      return;
+    }
+    case 'Link to marked': {
+      const r = WS.wwwLinkToMarked(ws, wwwLinkInto);
+      if (!r) { sfx.play('termerr'); return; }
+      if (r.self) { WS.notice(ws, 'Link to marked', 'That is the document you marked. A document cannot be linked to itself.'); return; }
+      if (r.already) { WS.notice(ws, 'Link to marked', 'This document already links there.'); return; }
+      sfx.play('keydrop');
+      WS.notice(ws, 'Linked', `${r.linked.title} is now linked from this document.\n\nIt was an editor as much as a browser. The link is in the text.`);
+      return;
+    }
+    case 'Home':
+      WS.openWWW(ws, 'Home', WS.wwwDocFor(ws, 'file://localhost/home.html', wwwHomeDoc(islandAiName())), 'file://localhost/home.html');
+      return;
+    case 'Info Panel…': {
+      // NeXTSTEP's menu belongs to the active application, so Info Panel shows
+      // the app you are in. Grab's carries the credit for the drawing.
+      const key = WS.windowById(ws, ws.keyId);
+      if (key && (key.kind === 'grab' || key.kind === 'grabinfo')) WS.openGrabInfo(ws);
+      else if (WS.frontWWW(ws)) WS.openWWWInfo(ws);
+      else WS.openAbout(ws);
+      return;
+    }
     case 'Empty Recycler': {
       const n = WS.emptyRecycler(ws);
       WS.notice(ws, 'Recycler', n ? `${n} item${n === 1 ? '' : 's'} gone.` : 'Already empty.');
@@ -2238,9 +2797,23 @@ function updateWorkspace(dt) {
   }
   ws.clock = dayNight.clock;
   ws.date = String(dayNight.day);
+  // #165 — Grove.app runs while its window is open. Generations are paced at
+  // about six a second: fast enough that STAY visibly comes apart while you
+  // watch, slow enough to follow a glider across the floor. Stepped here rather
+  // than in the renderer so a dropped frame costs a frame and not a generation.
+  for (const gw of ws.windows) {
+    if (gw.kind !== 'grove' || !gw.life || gw.mini) continue;
+    gw.t = (gw.t || 0) + dt;
+    while (gw.t >= GROVE_STEP) { gw.t -= GROVE_STEP; groveStep(gw.life); }
+  }
   // Mail reads the handset's own log, so the mailbox and the phone are one
   // store seen two ways and cannot disagree.
   ws.mail = player.nokiaLog || [];
+  // THE EYE FOLLOWS THE POINTER. The renderer is handed no mouse, so the model
+  // carries it, the same way it carries the clock and the mailbox.
+  const mp = input.mousePos();
+  ws.mouse = { x: mp.x, y: mp.y };
+  WS.grabFlashTick(ws, dt);
   // The wheel scrolls whatever list is in front. It has to be consumed HERE:
   // the only other consumer is the camera zoom, and that sits below the early
   // return this branch takes, so an unconsumed wheel would queue up and zoom
@@ -2248,7 +2821,13 @@ function updateWorkspace(dt) {
   const wheel = input.consumeWheel();
   if (wheel) {
     const key = WS.windowById(ws, ws.keyId);
-    if (key && key.kind === 'mail') key.top = Math.max(0, (key.top || 0) + (wheel > 0 ? 3 : -3));
+    if (key && (key.kind === 'mail' || key.kind === 'grab')) {
+      key.top = Math.max(0, (key.top || 0) + (wheel > 0 ? 3 : -3));
+    }
+    if (key && key.kind === 'www') {
+      const span = key.laid ? Math.max(0, key.laid.height - (key.h - 60)) : 0;
+      key.top = Math.max(0, Math.min(span, (key.top || 0) + (wheel > 0 ? 34 : -34)));
+    }
   }
   // The canvas can change size under the desktop. Nothing may end up with its
   // close box off the edge or behind the dock.
@@ -2363,7 +2942,7 @@ function listPhrase(items) {
   return items.slice(0, -1).join(', ') + ' and ' + items[items.length - 1];
 }
 
-// ---- The Nokia 3310: Calypso's channel on Ogygia (docs/calypso-nokia-plan.md) ----
+// ---- The Nokia 3310: Calypso's channel on Ogygia (docs/PLAN.md) ----
 // She is not your enemy — POSEIDON's machines roam the island; she is the keeper
 // who texts you warnings, tips, and pleas, and (while her hold is not cold) freezes
 // one of his robots bearing down on you. The queue + tables live in game/nokia.js;
@@ -2392,6 +2971,19 @@ function islandWelcome(id) {
   player._welcomed[id] = true;
   nokia.enqueue('ROAMING', w);
   phoneBeep();
+  // THE BOOT SUCCEEDED, AND THIS IS HOW ANYTHING ELSE CAN TELL.
+  //
+  // The carrier's roaming welcome is the last thing the module does on the way
+  // up, and it can only happen if everything before it worked: the save read,
+  // the world built, the player placed, the phone wired. So it is the honest
+  // end-to-end signal that the game started, and it is far better than "the
+  // import did not throw" — which is true of a module that fell over halfway
+  // through a try block (David, 2026-08-15: "the easy way to test for a
+  // successful boot is that calypso sends her first message sets a flag").
+  //
+  // Read by test/boot.test.js in node, and by hand in a browser console after a
+  // deploy. v1.548 shipped a game that could not start and 1448 tests passed.
+  globalThis.__nostosBooted = true;
 }
 
 // ---- POSEIDON's countdown, as texts rather than a HUD number ----------------
@@ -2838,9 +3430,21 @@ function devOpen() {
 function devClose() { devEl.style.display = 'none'; devInputEl.blur(); }
 
 // The kit buttons: the things worth reaching for over and over when testing.
+// Hand over a piece of gear and the cells it drinks, wearing a backpack if the
+// pockets are full. Returns what REALLY happened: a kit chip that lies about
+// what it gave you is worse than no chip, because you go and test the thing.
+function devGear(key, qty, cells, note, ready) {
+  if (!player.backpack) player.backpack = { slots: new Array(16).fill(null), weapon: null };
+  const got = player.stow(key, qty);
+  if (!got) return `no room for ${ITEMS[key].name} — drop something first`;
+  const cellsGot = cells ? player.stow('battery', cells) : 0;
+  if (ready) ready();
+  return `${ITEMS[key].name}${cellsGot ? ` + ${cellsGot} cells` : ''} — ${note}`;
+}
+
 const DEV_KITS = [
   // A working laptop straight into the slot, for testing the UNIX + the AI-ML
-  // sandbox without hunting one down (docs/laptop-plan.md). Cycles the models so
+  // sandbox without hunting one down (docs/PLAN.md). Cycles the models so
   // every body colour and icon can be eyeballed.
   ['Broken laptop + boards', () => {
     // For testing the repair arc: a dead machine and the circuits to revive it (C).
@@ -2875,6 +3479,39 @@ const DEV_KITS = [
   ['Bronze axe', () => { player.stow('bronze_axe', 1); return 'bronze_axe' ; }],
   ['Ship parts', () => { for (const k of ['oar', 'rope', 'sail']) player.stow(k, 1); player.stow('wood', 40); return 'oar, rope, sail, 40 wood'; }],
   ['Bronze ram', () => { player.stow('ram', 1); return 'ram (carry it into the narrows)'; }],
+  // Defensive gear, three chips rather than one, because they are three
+  // different answers to being shot at and the point of testing them is
+  // carrying ONE and finding out what that is like. Each arrives ready: a
+  // forcefield you have to remember to arm and a Wi-Fi block at zero charge are
+  // both indistinguishable from a broken one.
+  //
+  // A BACKPACK FIRST, AND SAY WHAT ACTUALLY LANDED. Four pockets fill after two
+  // of these, and `stow` returns how much it took rather than throwing — so the
+  // first cut of these chips printed "Wi-Fi block at full charge" while stowing
+  // nothing at all, and set the charge on a block the player did not have.
+  ['Riot shield', () => devGear('shield', 1, 0,
+    'hold it in your HANDS; it stops a bolt from the front')],
+  ['Forcefield + cells', () => devGear('forcefield', 1, 12,
+    'ARMED, 60s up. It drinks a cell a minute', () => {
+      player.forcefieldArmed = true;
+      player.forcefieldCharge = 60;    // one cell's worth, already burning
+    })],
+  ['Wi-Fi block + cells', () => devGear('wifiblock', 1, 12,
+    'at full charge. Hunters cannot acquire you', () => {
+      player.wifiPower = player.wifiMax;
+    })],
+  // CREATIVE MODE (Hedda, 2026-08-15). Walk the island, read the machines and
+  // test the terminals without the fight interrupting. Deliberately NOT god
+  // mode: the machines still hunt, the swarm still comes, and you can still
+  // kill anything you like. Only the damage to YOU is switched off, so what is
+  // being tested still behaves the way it will ship.
+  ['Creative mode', () => {
+    player.creative = !player.creative;
+    if (player.creative) { player.health = player.maxHealth; player.venom = 0; }
+    return player.creative
+      ? 'CREATIVE ON — nothing can hurt you. The machines are unchanged; kill them if you like.'
+      : 'creative off — you can be hurt again';
+  }],
   ['Heal + feed', () => { player.health = player.maxHealth; player.stamina = player.maxStamina; player.food = player.maxFood; player.venom = 0; player.torpor = 0; return 'restored'; }],
 ];
 
@@ -3245,6 +3882,25 @@ devInputEl.addEventListener('keydown', (e) => {
 // game's movement keys are untouched everywhere else. Capture phase, and it
 // stops the event, because otherwise every letter typed at her prompt would
 // also walk the player.
+// #166 — the Open panel's keyboard. A panel you cannot type into is a picture
+// of a panel, and typing the whole reference by hand IS the interaction: there
+// is no address bar, no history and no completion, so the only thing this has
+// to do is take characters and take them accurately.
+window.addEventListener('keydown', (e) => {
+  if (!workspace) return;
+  const key = WS.windowById(workspace, workspace.keyId);
+  if (!key || key.kind !== 'wwwopen') return;
+  if (e.metaKey || e.altKey || e.ctrlKey) return;
+  const k = e.key;
+  if (k === 'Enter') wwwOpenGo(key.id);
+  else if (k === 'Escape') { WS.closeWindow(workspace, key.id); sfx.play('blip'); }
+  else if (k === 'Backspace') { key.ref = String(key.ref || '').slice(0, -1); key.err = ''; }
+  else if (k.length === 1) { key.ref = String(key.ref || '') + k; key.err = ''; }
+  else return;
+  e.preventDefault();
+  e.stopPropagation();
+}, true);
+
 window.addEventListener('keydown', (e) => {
   if (!workspace || !wsTermCx) return;
   const key = WS.windowById(workspace, workspace.keyId);
@@ -3647,52 +4303,34 @@ wireHelpTabs(helpEl, (name) => { if (name === 'settings') syncSettingsPanel(); }
 const volumeSlider = document.getElementById('volumeSlider');
 const volumeLabel = document.getElementById('volumeLabel');
 
-// The fill AND the drawn thumb both read this, so they cannot disagree. It is
-// the plain percentage: the visible thumb is a gradient in the input's own
-// background (see index.html), not the browser's, so it is free to reach the
-// ends of the track instead of stopping half its width short of them.
-function setFill(slider) {
-  slider.style.setProperty('--v', `${slider.value}%`);
-}
-
-volumeSlider.addEventListener('input', () => {
-  sfx.setVolume(Number(volumeSlider.value) / 100);
-  volumeLabel.textContent = `${volumeSlider.value}%`;
-  setFill(volumeSlider);
-});
 // Sound and music separately, under the master. One slider meant turning the
 // music down turned the footsteps down with it, and there was no way to have a
 // quiet bed under a loud world (David, 2026-08-13).
 const fxSlider = document.getElementById('fxSlider');
 const fxLabel = document.getElementById('fxLabel');
-const musicSlider = document.getElementById('musicSlider');
-const musicLabel = document.getElementById('musicLabel');
-const bindLevel = (slider, label, set) => {
-  slider.addEventListener('input', () => {
-    set(Number(slider.value) / 100);
-    label.textContent = `${slider.value}%`;
-    setFill(slider);
-  });
-};
-bindLevel(fxSlider, fxLabel, (v) => sfx.setFxVolume(v));
-bindLevel(musicSlider, musicLabel, (v) => sfx.setMusicVolume(v));
-for (const radio of helpEl.querySelectorAll('input[name="musicMode"]')) {
-  radio.addEventListener('change', () => { if (radio.checked) sfx.setMusicMode(radio.value); });
-}
+// THE SETTINGS PANEL IS WIRED IN ONE PLACE (game/settings-panel.js) and mounted
+// by both screens that show it. It used to be wired here only, which meant the
+// copy on the TITLE screen was decorative — the sliders moved and nothing
+// happened, not even their own labels, because the handler that sets the volume
+// is the handler that writes the label.
+const settingsPanel = mountSettingsPanel(helpEl, {
+  sfx,
+  getMode: () => player.mode,
+  setMode: (key) => {
+    player.setMode(key);
+    dayNight.rate = player.modeRules().clock;
+    persist();
+  },
+  // The two parts of Save to disc that only exist while a run does: write the
+  // live run down before building the file, and cut the autosave hooks before
+  // an import overwrites what is stored. At the title neither applies.
+  beforeExport: () => persist(),
+  beforeApply: () => { resettingGame = true; },
+});
 function syncSettingsPanel() {
-  const show = (slider, label, v) => {
-    const pct = Math.round(v * 100);
-    slider.value = pct;
-    label.textContent = `${pct}%`;
-    setFill(slider);   // measured here, where the panel is on screen and has a width
-  };
-  show(volumeSlider, volumeLabel, sfx.volume);
-  show(fxSlider, fxLabel, sfx.fxVolume);
-  show(musicSlider, musicLabel, sfx.musicVolume);
-  const current = helpEl.querySelector(`input[name="musicMode"][value="${sfx.musicMode}"]`);
-  if (current) current.checked = true;
-  discMsg(null);   // a message from a previous visit is stale by now
+  if (settingsPanel) settingsPanel.sync();
 }
+
 
 // ---- #157: the run as a file on your disc ----------------------------------
 //
@@ -3700,64 +4338,6 @@ function syncSettingsPanel() {
 // when site data is cleared, it does not travel between machines, and it cannot
 // be handed to anyone. savefile.js knows the format and does the validating;
 // this end does the browser part — a Blob down, a File up, and the reload.
-
-const saveExportBtn = document.getElementById('saveExportBtn');
-const saveImportBtn = document.getElementById('saveImportBtn');
-const saveImportFile = document.getElementById('saveImportFile');
-const saveDiscMsg = document.getElementById('saveDiscMsg');
-const DISC_HELP = saveDiscMsg ? saveDiscMsg.textContent : '';
-
-function discMsg(text, kind) {
-  if (!saveDiscMsg) return;
-  saveDiscMsg.textContent = text || DISC_HELP;
-  saveDiscMsg.className = text ? (kind || '') : '';
-}
-
-const lsRead = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
-const lsWrite = (k, v) => { try { localStorage.setItem(k, v); } catch { /* storage blocked */ } };
-const lsRemove = (k) => { try { localStorage.removeItem(k); } catch { /* storage blocked */ } };
-
-if (saveExportBtn) saveExportBtn.addEventListener('click', () => {
-  // Write the live run down first: the file should be the run as it is now,
-  // not as it was at the last autosave.
-  try { persist(); } catch { /* a failed persist still exports what is stored */ }
-  const now = new Date();
-  const doc = buildSaveFile(lsRead, { version: VERSION, at: now.toISOString() });
-  const name = saveFileName(doc, now.toISOString().slice(0, 10));
-  const url = URL.createObjectURL(new Blob([JSON.stringify(doc, null, 1)], { type: 'application/json' }));
-  const a = document.createElement('a');
-  a.href = url; a.download = name;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 5000);
-  discMsg(`Exported ${name} — ${describeSaveFile(doc)}`, 'ok');
-});
-
-if (saveImportBtn && saveImportFile) {
-  saveImportBtn.addEventListener('click', () => { saveImportFile.value = ''; saveImportFile.click(); });
-  saveImportFile.addEventListener('change', async () => {
-    const f = saveImportFile.files && saveImportFile.files[0];
-    if (!f) return;
-    let doc = null;
-    try { doc = JSON.parse(await f.text()); }
-    catch { discMsg('That file is not readable JSON.', 'bad'); return; }
-    const v = validateSaveFile(doc);
-    if (!v.ok) { discMsg(`Not imported: ${v.error}.`, 'bad'); return; }
-    // The confirm is the whole safety story: this overwrites the run in this
-    // browser, and there is no undo once it is written.
-    const ok = window.confirm(
-      `Import ${describeSaveFile(doc)}?\n\n`
-      + 'This REPLACES the run in this browser and reloads the page. '
-      + 'Anything not already exported is lost.');
-    if (!ok) { discMsg('Import cancelled — nothing was written.'); return; }
-    // Nothing must write over the imported blob between here and the reload,
-    // so the autosave hooks are cut first.
-    resettingGame = true;
-    const r = applySaveFile(doc, lsWrite, lsRemove);
-    if (!r.ok) { resettingGame = false; discMsg(`Not imported: ${r.error}.`, 'bad'); return; }
-    discMsg('Imported. Reloading...', 'ok');
-    location.reload();
-  });
-}
 
 // Obelisk terminal. With an access chip carried, clicking an obelisk opens a
 // channel (a progress bar) into a live AI-ML REPL — and while you're jacked
@@ -3900,7 +4480,7 @@ function replPrint(...lines) {
 // world (map, robots, obeliskObjs, player) through these hooks, and never
 // touch game state directly — ronml.js only handles language mechanics.
 // ---- AI-ML terminal filesystem (Calypso escape chain, Layer A) ------------
-// A thin drive/file layer over the terminals (docs/calypso-escape-chain.md).
+// A thin drive/file layer over the terminals (docs/PLAN.md).
 // Drives you `cd` into:
 //   ob     — a per-visit scratch bench (obelisk terminals only)
 //   aikey  — the AI card you hold; its file list is derived from card STATE
@@ -3932,14 +4512,44 @@ function fsDevAvail(dev) {
 function fsDevOf(path) { return String(path || '').split('/')[0]; }
 function fsSubOf(path) { return String(path || '').split('/').slice(1).join('/'); }
 function fsFilesOn(dev, sub = '') {
-  if (dev === 'ob') return Object.keys(replSession.__obfiles || {});
+  if (dev === 'ob') {
+    // #162: the tower's own reports sit on its bench alongside whatever you have
+    // copied there. They are the node's files about the node's units, so they
+    // belong on `ob` rather than in the keeper's shared store.
+    //
+    // They live in a FOLDER because one bare file called `garrison` was only
+    // findable by somebody who already knew the word. `logs/` is a thing you
+    // notice in an `ls` and open because it is obviously openable.
+    if (sub === LOGS_DIR) return Object.keys((terminalOb && terminalOb.logs) || {});
+    const own = (terminalOb && terminalOb.logs) ? [`${LOGS_DIR}/`] : [];
+    return [...own, ...Object.keys(replSession.__obfiles || {})];
+  }
   if (dev === 'aikey') { const c = fsCardItem(); return c && ITEMS[c].files ? ITEMS[c].files.slice() : []; }
-  if (dev === 'hermes') return [...virusFilesFor(islandAiName()), ...Object.keys(replSession.__hermesfiles || {})];
+  if (dev === 'hermes') {
+    // The relay answered `ls` with two files while the box served nine
+    // documents, the unit SDK and the V-class weights over its own aerial —
+    // reachable only if you knew a topic word or opened Netscape. It has
+    // folders now, filled from the same tables the web downloads come from, so
+    // a file you `cat` here and the one you download there cannot drift.
+    const forged = Object.keys(replSession.__hermesfiles || {});
+    return hermesTree(islandAiName(), forged)[sub || ''] || [];
+  }
   if (dev === 'keeper') return keeperLs(sub);
   return [];
 }
 function fsCwd() {
-  return replSession.__cwd || (fsCardItem() ? 'aikey' : (terminalKind === 'hermes' ? 'hermes' : 'ob'));
+  if (replSession.__cwd) return replSession.__cwd;
+  // JACKED INTO A TOWER? THEN THE TOWER IS WHAT YOU ARE LOOKING AT. This used
+  // to default to the CARD whenever you were carrying one — and every player
+  // doing the escape chain is carrying one — so `ls` at a node you had just
+  // telnetted into listed the thing in your pocket and the node's own files
+  // were invisible (David, 2026-08-14: "I am using telnet, so it should
+  // default to the ob").
+  //
+  // The card is still one `cd aikey` away, and it was never the interesting
+  // drive: it holds two or three files you put there yourself.
+  if (terminalKind === 'hermes') return 'hermes';
+  return 'ob';
 }
 // The card is one drive whatever its state, so accept forgiving synonyms — the
 // display name (drives / cd) tells you which state it's actually in. ('hermes'
@@ -3952,7 +4562,12 @@ function fsNormDev(d) {
 function fsDriveLabel(d) {
   if (d === 'aikey') { const c = fsCardItem(); return c ? `card (${ITEMS[c].name})` : 'card (none in hand)'; }
   if (d === 'ob') return 'ob (node bench)';
-  if (d === 'hermes') return 'hermes (relay folder)';
+  if (d === `ob/${LOGS_DIR}`) return `ob/${LOGS_DIR} (the tower's own reports)`;
+  if (d === 'hermes') return 'hermes (relay disk)';
+  if (d.startsWith('hermes/')) {
+    const sub = d.slice(7);
+    return `hermes/${sub}${HERMES_DIRS[sub] ? ` — ${HERMES_DIRS[sub]}` : ''}`;
+  }
   if (d === 'keeper') return 'keeper (maintenance store)';
   if (d.startsWith('keeper/')) return `keeper/${d.slice(7)}`;
   return d;
@@ -3961,12 +4576,20 @@ function fsDriveLabel(d) {
 // name/state (the big playtest gap). Prints, returns nothing.
 function fsDrives() {
   const out = ['drives here:'];
-  if (terminalKind !== 'hermes') out.push('  ob      the node bench (scratch)');
+  if (terminalKind !== 'hermes') {
+    out.push('  ob      the node bench (scratch)');
+    if (terminalOb && terminalOb.logs) {
+      out.push(`    ${LOGS_DIR.padEnd(8)}this tower's own reports: the garrison roster and a log per unit`);
+    }
+  }
   const c = fsCardItem();
   out.push(`  card    ${c ? ITEMS[c].name : 'no card in hand'}${c ? `  ·  ${fsFilesOn('aikey').length} files` : ''}`);
-  if (terminalKind === 'hermes') out.push('  hermes  the relay folder');
+  if (terminalKind === 'hermes') {
+    out.push('  hermes  the relay disk');
+    for (const [d, what] of Object.entries(HERMES_DIRS)) out.push(`    ${d.padEnd(8)}${what}`);
+  }
   if (fsDevAvail('keeper')) out.push('  keeper  node maintenance store (read-only)');
-  out.push('use:  cd <drive>  ·  ls  ·  read <file>  ·  copy <file> <drive>');
+  out.push('use:  cd <drive|folder>  ·  ls  ·  cat <file>  ·  copy <file> <drive>');
   for (const l of out) replPrint(l);
 }
 function fsCd(dev) {
@@ -3982,6 +4605,17 @@ function fsCd(dev) {
   // A folder on the drive you are already on wins over a drive of that name:
   // `cd handover` from inside the keeper store means the folder.
   const dvNow = fsDevOf(here), subNow = fsSubOf(here);
+  // `cd logs` at a tower. Same rule as the keeper store: a folder on the drive
+  // you are standing on wins over a drive that happens to share its name.
+  if (dvNow === 'ob' && !subNow && raw.replace(/\/$/, '') === LOGS_DIR
+      && terminalOb && terminalOb.logs) {
+    replSession.__cwd = `ob/${LOGS_DIR}`;
+    return { ok: true, label: fsDriveLabel(replSession.__cwd) };
+  }
+  if (dvNow === 'hermes' && !subNow && hermesIsDir('', raw)) {
+    replSession.__cwd = `hermes/${raw.replace(/\/$/, '')}`;
+    return { ok: true, label: fsDriveLabel(replSession.__cwd) };
+  }
   if (dvNow === 'keeper' && keeperIsDir(subNow, raw)) {
     replSession.__cwd = `keeper/${subNow ? `${subNow}/` : ''}${raw}`;
     return { ok: true, label: fsDriveLabel(replSession.__cwd) };
@@ -4005,6 +4639,28 @@ function fsRead(name) {
     for (const l of String(text).split('\n')) replPrint(l);
     return true;
   }
+  // The tower's own reports are generated rather than stored in the bench map,
+  // so they are read here rather than falling through to the copied-file path.
+  //
+  // Readable from ANY drive and from either side of the folder: these are the
+  // tower's files, not a drive's, so the tower answers for them wherever you
+  // are standing (David, 2026-08-14: "can't find the logs on the obs"). The
+  // `.log` suffix is optional, the way the extension is optional everywhere
+  // else at these terminals.
+  if (dv === 'hermes' && sub) {
+    const text = hermesReadIn(sub, want);
+    if (text != null) { for (const l of String(text).split('\n')) replPrint(l); return true; }
+    return false;
+  }
+  const logs = (terminalOb && terminalOb.logs) || null;
+  if (logs) {
+    const hit = Object.keys(logs).find((f) => f.toLowerCase() === want
+      || f.toLowerCase() === `${want}.log`);
+    if (hit) {
+      for (const l of String(logs[hit]).split('\n')) replPrint(l);
+      return true;
+    }
+  }
   return false;
 }
 function fsCopyFile(name, destRaw) {
@@ -4012,15 +4668,28 @@ function fsCopyFile(name, destRaw) {
   // Forgiving: players type `copy zeus_lightning card`, not the full
   // `zeus_lightning.ml`. If the bare name isn't a file on any reachable drive but
   // name+.ml / name+.md is, use that — so the extension is optional.
-  const onAnyDrive = (n) => ['ob', 'aikey', 'hermes'].some((d) => fsDevAvail(d) && fsFilesOn(d).includes(n));
-  if (!onAnyDrive(name)) {
-    const withExt = [name + '.ml', name + '.md'].find(onAnyDrive);
+  // Where a name can be found: the drive roots, and now the relay's folders
+  // too. Without the folders, giving the relay a filesystem would have made the
+  // SDK and the weights VISIBLE and uncopyable — you could cd to them, ls them,
+  // cat them, and not get them onto the card or the NostBook.
+  const places = () => {
+    const out = [];
+    for (const d of ['ob', 'aikey', 'hermes']) if (fsDevAvail(d)) out.push([d, '']);
+    if (fsDevAvail('hermes')) {
+      for (const dir of Object.keys(HERMES_DIRS)) out.push(['hermes', dir]);
+    }
+    return out;
+  };
+  const findIn = (n) => places().find(([d, sub]) => fsFilesOn(d, sub).includes(n));
+  if (!findIn(name)) {
+    const withExt = [name + '.ml', name + '.md', name + '.txt'].find(findIn);
     if (withExt) name = withExt;
   }
   // Find the file wherever it currently sits — no need to cd to the source first
-  // (a real playtest snag). Search the reachable drives: the OB bench, the held
-  // card, and (at a relay) the HERMES folder.
-  const src = ['ob', 'aikey', 'hermes'].find((d) => fsDevAvail(d) && fsFilesOn(d).includes(name));
+  // (a real playtest snag).
+  const found = findIn(name);
+  const src = found && found[0];
+  const srcSub = found && found[1];
   if (!src) return { ok: false, msg: `no file '${name}' in reach — cd/ls the drives to see what you hold.` };
   if (!fsDevAvail(dest)) return { ok: false, msg: `no drive '${destRaw}' at this terminal.` };
   if (src === dest) return { ok: true }; // already there
@@ -4245,6 +4914,51 @@ function ronmlCtx() {
     // `tag <node> "label"` — hang an operator label on a unit or tower so it is
     // findable on the wire. Shared with the NostBook's own `tag` and the sniffer.
     tagNode: (id, label) => tagEntity(id, label),
+    checkInNode: (id) => forgeCheckIn(id),
+    // `tag w4_* "escort"` — THIS TOWER'S GARRISON, not the island.
+    //
+    // The first cut matched the whole host table, so standing at a node with
+    // three W-4s and typing `tag w4_*` tagged fifty-one machines from one end
+    // of the map to the other (David, 2026-08-15). You are jacked into ONE
+    // tower; the units it musters are the ones it speaks for, and they are
+    // exactly the list `garrison` prints on the line above.
+    //
+    // The wider sweep is still reachable and has to be asked for: `tag *.w4_*`
+    // takes the whole wire. A glob that reaches further than the console you
+    // typed it at should require saying so.
+    tagMany: (pattern, label) => {
+      const all = String(pattern).startsWith('*.');
+      const rx = globRx(all ? String(pattern).slice(2) : pattern);
+      const obs = currentWorld.obeliskObjs || [];
+      const mine = new Set(
+        all || !terminalOb ? null
+          : (currentWorld.robots || [])
+            .filter((r) => !r.dead && !r.fused && robotHomeCode(r, obs) === terminalOb.code)
+            .map((r) => String(netIdOf(currentWorld, r))),
+      );
+      const hit = hostTable(netWorldDescriptor())
+        .filter((h) => h.kind === 'robot')
+        .map((h) => String(h.name))
+        .filter((n) => rx.test(n.toLowerCase()) && (all || !terminalOb || mine.has(n)));
+      const where = all ? 'on the wire' : `in ${terminalOb ? terminalOb.code : 'this'} garrison`;
+      if (!hit.length) {
+        // Say whether it would have matched further out, so the wider form is
+        // discoverable without being the thing that happens by accident.
+        const wider = hostTable(netWorldDescriptor())
+          .filter((h) => h.kind === 'robot' && rx.test(String(h.name).toLowerCase())).length;
+        return { ok: false, text: `ERR: nothing ${where} answers to ${pattern}`
+          + (wider && !all ? `\n     ${wider} on the wire do — tag *.${pattern} to take them all.` : '') };
+      }
+      const lines = [];
+      let done = 0;
+      for (const n of hit) {
+        const r = tagEntity(n, label);
+        if (r && r.ok) { done++; lines.push(`  ${n}`); }
+        else lines.push(`  ${n}: ${(r && r.text) || 'refused'}`);
+      }
+      const what = label ? `«${label}»` : 'cleared';
+      return { ok: done > 0, text: [`${done} of ${hit.length} ${where} tagged ${what}:`, ...lines].join('\n') };
+    },
     heldKeys: () => player.ronmlKeys,
     crashNode: (id) => {
       const o = findObelisk(id);
@@ -4295,7 +5009,7 @@ function ronmlCtx() {
     },
     // Nerfed now they need no AI key (Type 2): tighter reach (RONML_SOFT_RANGE)
     // and capped effect, so easy access doesn't make them board-wiping.
-    // ---- the control verbs' side of the wire (docs/ob-hacking-plan.md) ----
+    // ---- the control verbs' side of the wire (docs/PLAN.md) ----
     // Each spends the tower you are standing at: it freezes for the duration,
     // the way `loop` leaves one. You are trading a node for reach.
     spendNode: () => {
@@ -4426,7 +5140,7 @@ function ronmlCtx() {
     // `eliza <file>`: the DOCTOR transform (bare `eliza` opens the chat — that is
     // intercepted in replRun, not routed through the language).
     elizaTransform: (name) => elizaTransformFile(name),
-    read: (name) => { if (!fsRead(name)) replPrint(`no file '${name}' on this drive — ls to see what is here.`); },
+    read: (name) => { if (!fsRead(name)) replPrint(`no file '${name}' here — ls to see what is on this drive, and cd ${'logs'} for the tower's own reports.`); },
     // `retire` (R3): with the hermes card in hand (Zeus's command aboard), stand
     // CALYPSO's guards down — they lay down arms and become w5 gardeners, planting
     // where they hunted. The escape-chain payoff: you refunction the fortress by
@@ -5176,7 +5890,7 @@ function leaveReason() {
 }
 function leaveToTitle() {
   persist();
-  window.__nostosLeaving = true;
+  leavingToTitle = true;
   location.reload();
 }
 function openQuitGate() {
@@ -6067,7 +6781,7 @@ function openHermesTerminal(tor) {
   obTermGhost.textContent = '';
   obTermInput.focus();
 }
-// ---- The laptop (docs/laptop-plan.md) -------------------------------------
+// ---- The laptop (docs/PLAN.md) -------------------------------------
 // The one console that isn't bolted down. It runs a small UNIX (game/unix.js)
 // and, through it, AI-ML with the network cut away — which is the whole point:
 // somewhere to LEARN the language instead of performing it under a tower's eye.
@@ -6088,7 +6802,7 @@ let laptopSession = {};     // AI-ML bindings, alive while the machine is on
 let mlPending = '';
 let mlLast = '';
 
-// ---- The web (game/net.js, docs/laptop-plan.md §8b) -----------------------
+// ---- The web (game/net.js, docs/PLAN.md §8b) -----------------------
 // Build the island's host table from the LIVE world, so every page reads the
 // real machine: a felled tower says NO RESPONSE, a drained unit reports its
 // actual cell. Robots carry no identity of their own, so the first time one is
@@ -6263,6 +6977,64 @@ function cleanTag(label) {
     .slice(0, TAG_MAX)
     .trim();
 }
+// #167 — FORGE A CHECK-IN, the hacking route's answer to AWOL.
+//
+// A unit under an escort program stops reporting, and after twenty seconds its
+// home tower writes it up (robots.js, reportIn). Until now the only counter was
+// the axe: fell or jam the tower and there is nobody left to file. That is the
+// warrior's answer, and the game has two routes, so the other one needs its own.
+//
+// This is it, and it is a forgery rather than a pardon. It does not stand the
+// unit down and it does not tell the tower the truth; it writes a check-in the
+// unit never made, which clears the flag and resets the silence clock. The unit
+// is still walking beside you under arms, so the clock starts again the moment
+// you type it, and in another twenty seconds it is back on the list. The
+// hacking route buys time, repeatedly; the warrior route buys silence, once.
+//
+// THROUGH THE SAME CHANNEL IT WOULD BE FILED ON. You cannot forge a report to a
+// tower that is down, because a tower that is down is not receiving anything —
+// which means the two counters are exclusive. Fell the tower and you no longer
+// need this; use this and you have left the tower standing.
+//
+// IT LEAVES A MARK. The tower's record of the unit says the check-in was
+// accepted from an unregistered process, in the estate's own flat voice. It
+// costs nothing yet. Everything traced in this game has cost something later.
+function forgeCheckIn(id) {
+  const key = String(id == null ? '' : (id.id || id.name || id)).toLowerCase().trim();
+  if (!key) return { ok: false, text: 'checkin: which unit? — try: checkin w4_03 k' };
+  const unit = (currentWorld.robots || []).find((r) => !r.dead && !r.fused
+    && String(netIdOf(currentWorld, r)).toLowerCase() === key);
+  if (!unit) return { ok: false, text: `checkin: ${key}: no unit by that name on the wire` };
+  const nm = netIdOf(currentWorld, unit);
+  const ob = unitHomeObelisk(unit);
+  if (!ob) return { ok: false, text: `checkin: ${nm}: no home node on record — nothing to file to` };
+  if (ob.destroyed || ob.jammed || ob.needsRebuild) {
+    return { ok: false, text: `checkin: ${ob.code} is not answering. A report cannot be filed to a node that is down.` };
+  }
+  const was = !!unit.awol;
+  unit.awol = false;
+  unit.silentT = 0;
+  unit._forged = (unit._forged || 0) + 1;
+  kleos('hackAct', { what: 'checkin' });
+  return {
+    ok: true,
+    text: was
+      ? `${ob.code} accepts a check-in from ${nm}. Standing cleared. The unit did not send it.`
+      : `${ob.code} accepts a check-in from ${nm}. Nothing was outstanding; the clock is back to zero.`,
+  };
+}
+
+// The tower a unit is filed under, by the same rule `garrison` uses.
+function unitHomeObelisk(r) {
+  if (!r || !r.home) return null;
+  let best = null, bd = Infinity;
+  for (const o of (currentWorld.obeliskObjs || [])) {
+    const dd = (o.x - r.home.x) ** 2 + (o.y - r.home.y) ** 2;
+    if (dd < bd) { bd = dd; best = o; }
+  }
+  return best;
+}
+
 function tagEntity(id, label) {
   const key = String(id == null ? '' : (id.id || id.name || id)).toLowerCase().trim();
   if (!key) return { ok: false, text: 'tag: which one? — try: tag t1_03 hunter' };
@@ -6288,6 +7060,26 @@ function tagEntity(id, label) {
 // musters and recharges. A unit's garrison is the obelisk nearest the home
 // point it patrols from, computed fresh so it holds even before any net query
 // has stamped `_netHome`. Returns a printable block for the OB console.
+// Which tower a unit belongs to: the NEAREST obelisk to its home, which is the
+// rule `garrison` has always used. A unit's `home` is a seat near its tower
+// rather than the tower's own tile, so a radius test misses almost everything —
+// the first cut of the roster (#162) used one and every node came back empty.
+//
+// Cached on the unit: a home does not move, and recomputing nearest-of-twelve
+// for every unit on every tower's tick is the one part of this that could
+// actually cost something.
+function homeObCode(r) {
+  if (r._homeObCode !== undefined) return r._homeObCode;
+  const h = r.home || { x: r.x, y: r.y };
+  let best = null, bd = Infinity;
+  for (const o of (currentWorld.obeliskObjs || [])) {
+    const d = (o.x - h.x) ** 2 + (o.y - h.y) ** 2;
+    if (d < bd) { bd = d; best = o; }
+  }
+  r._homeObCode = best ? best.code : null;
+  return r._homeObCode;
+}
+
 function garrisonText(ob) {
   if (!ob) return 'garrison: no tower selected.';
   const code = ob.code;
@@ -6421,12 +7213,28 @@ function obUploadFile(name, ob) {
 
 function obPullFile(name) {
   const want = String(name || '').trim();
-  if (!want) return 'get <file> — pull a file down to /home. Try: cd keeper, ls, then get <file>.';
+  if (!want) return 'get <file> — pull a file down to /home. Try: cd logs, ls, then get <file>.';
   if (!telnetOb) return `get: ${want}: no NostBook on this wire — you are at the console itself, not dialled in over telnet.`;
   const fs = player.laptop && player.laptop.fs;
   if (!fs || !fs.d || !fs.d.home || !fs.d.home.d) return 'get: no NostBook /home to receive the file.';
   const dv = fsDevOf(fsCwd()), sub = fsSubOf(fsCwd());
-  if (dv !== 'keeper') return `get: ${want}: cd to a readable store first — the keeper drive holds files you can pull; this tower's '${dv}' drive keeps references, not bytes.`;
+  // #162 — the tower's reports are real bytes, so they pull like a keeper file.
+  // Take one to the NostBook and it is yours to read, grep and edit; the tower
+  // keeps its own copy and goes on overwriting that whenever the garrison
+  // changes. Any file in logs/, not only the roster: a player who has just cat'd
+  // a unit's log is the player who wants to take it away.
+  const logs = (terminalOb && terminalOb.logs) || null;
+  if (logs) {
+    const wl0 = want.toLowerCase();
+    const hitLog = Object.keys(logs).find((f) => f.toLowerCase() === wl0 || f.toLowerCase() === `${wl0}.log`);
+    if (hitLog) {
+      const nm = hitLog === 'garrison' ? `${terminalOb.code || 'OB'}.garrison` : hitLog;
+      const body = String(logs[hitLog]);
+      fs.d.home.d[nm] = { f: body };
+      return `received ${nm}  ->  /home/${nm}  (${body.length} bytes). cat ${nm}, or open it in ed.`;
+    }
+  }
+  if (dv !== 'keeper') return `get: ${want}: no such file. This tower holds its own reports in logs/ (cd logs, ls) and the maintenance store in keeper/; its '${dv}' drive keeps references, not bytes.`;
   const wl = want.toLowerCase();
   const hit = fsFilesOn('keeper', sub).find((f) => f.toLowerCase() === wl || f.toLowerCase() === `${wl}.ml` || f.toLowerCase() === `${wl}.md`);
   if (!hit || hit.endsWith('/')) return `get: ${want}: no such file here — ls to see what the store holds.`;
@@ -6454,6 +7262,10 @@ function laptopArpSweep() {
     out.push({
       host: h.host, ip: h.ip, mac: macFor(h.ip), range: Math.round(d),
       bearing: compass(dx, dy), down: !!h.down, kind: 'robot', tag: h.tag || null, d,
+      // Which tower musters it, so `arp` can file the sweep under the towers
+      // rather than as one flat list of names (David, 2026-08-15). A machine
+      // belongs to a node; the sweep should say so.
+      home: robotHomeCode(r, currentWorld.obeliskObjs || []),
     });
   }
   // The obelisk you are standing at answers too, and so does the foundry if you
@@ -6465,7 +7277,8 @@ function laptopArpSweep() {
     const d = Math.hypot(dx, dy);
     if (!Number.isFinite(d) || d > ARP_RANGE) continue;
     out.push({ host: h.host, ip: h.ip, mac: macFor(h.ip), range: Math.round(d),
-      bearing: compass(dx, dy), down: !!h.down, kind: h.kind, tag: h.tag || null, d });
+      bearing: compass(dx, dy), down: !!h.down, kind: h.kind, tag: h.tag || null, d,
+      code: h.name });
   }
   out.sort((a, b) => a.d - b.d);
   return out;
@@ -6719,9 +7532,20 @@ function nsRender() {
     // TWO DIFFERENT LISTS, not one list under two names. Netscape's is
     // somebody's habits, left on a machine whose owner is not coming back.
     // Explorer's is the machines' own, and it is not interested in you.
-    html = ieOn ? favouritesPage(hosts, islandAiName()) : bookmarksPage(hosts, agent);
-    title = ieOn ? 'Favorites' : 'Bookmarks';
-    loc = ieOn ? 'file:///favorites.htm' : 'file:///bookmarks.htm';
+    // THREE lists, not two. On RON's network none of the estate bookmarks
+    // resolve — webHosts() returns the relay alone — so the ordinary page came
+    // up as headings with nothing under them. Standing next to RON's box, the
+    // bookmark file that means anything is RON's: the downloads first.
+    const onRelay = currentEssid() === RELAY_ESSID;
+    if (onRelay && !ieOn) {
+      html = relayBookmarksPage(hosts[0], agent);
+      title = 'RON';
+      loc = 'file:///ron.htm';
+    } else {
+      html = ieOn ? favouritesPage(hosts, islandAiName()) : bookmarksPage(hosts, agent);
+      title = ieOn ? 'Favorites' : 'Bookmarks';
+      loc = ieOn ? 'file:///favorites.htm' : 'file:///bookmarks.htm';
+    }
   } else if (v.kind === 'whatsnew') {
     html = whatsNewPage(hosts);
     title = ieOn ? "Today's Links" : "What's New and Cool";
@@ -7070,7 +7894,7 @@ function closeNetscape() {
 
 function laptopNetscapeHook(args) { return openNetscape(args[0]); }
 
-// ---- EXPLORER, on the obelisk (docs/ob-hacking-plan.md) --------------------
+// ---- EXPLORER, on the obelisk (docs/PLAN.md) --------------------
 //
 // The machines' own browser. It is the SAME WEB: net.js builds every page and
 // nsRender dispatches them, so this is a skin over the Netscape window rather
@@ -7850,7 +8674,7 @@ function laptopHasChip() {
   return !!(root && root.d.mnt && root.d.mnt.d && root.d.mnt.d.chip);
 }
 
-// ---- telnet into an obelisk console (docs/laptop-telnet-plan.md) ------------
+// ---- telnet into an obelisk console (docs/PLAN.md) ------------
 // `telnet <ob>` jacks the NostBook into the tower's own RON-DOS: the same
 // console you get standing at it, over the wire, in their green phosphor. The
 // gate is the access chip mounted at /mnt/chip; the AI key still gates the sharp
@@ -8218,7 +9042,7 @@ function laptopBookHook(args) {
 // its very next decision tick — a quarter of a second — so you can stand in
 // front of a T-1 and watch what you wrote take hold.
 //
-// NOTE (docs/robot-programs-plan.md P5): this is currently ungated, because it
+// NOTE (docs/PLAN.md P5): this is currently ungated, because it
 // has to be testable before it can be balanced. When L9 lands, writing is what
 // breaking through the httpd BUYS — this function is the seam that check hangs
 // off, and the read path (GET) stays free either way.
@@ -8226,11 +9050,46 @@ function laptopBookHook(args) {
 // own page. Returns the lines a client should show, so both routes report the
 // same three facts: what was sent, that it was taken, and what the machine will
 // do with it.
+/**
+ * #133 — post a program onto an OBELISK. Separate from postProgram because
+ * almost nothing they do is shared: a tower has no battery to be flat, no
+ * chassis to be hardened, and no model to fine-tune, and the one thing it does
+ * share (the watermark inversion) it shares for the same reason.
+ */
+function postTowerProgram(h, text) {
+  const ob = h.ref;
+  if (!ob) return { ok: false, text: `post: ${h.host}: the tower is not on the network` };
+  if (ob.destroyed) return { ok: false, text: `post: ${h.host}: that tower is a heap of circuit boards.` };
+  const src = String(text || '').trim();
+  if (!src) return { ok: false, text: `post: ${h.host}: nothing to post.` };
+  ob.program = src;
+  ob._towerT = 0;              // decide again on the next tick, not in half a second
+  ob.towerFault = null;
+  ob.towerVeto = null;
+  // THE INVERSION, as everywhere else: what the estate wrote is signed and what
+  // you write is not, so the tower's own page says so ever after (#126).
+  ob._unwatermarked = true;
+  kleos('hackAct', { what: 'post' });
+  kleos('towerPosted', { tower: h.name });
+  kleos('watermarkFlagged', { unit: h.name });
+  return { ok: true, text: [
+    `post: ${h.host}: accepted. ${ob.code || 'the tower'} is running your program.`,
+    'It decides twice a second. `soul` reads it back; a fault lights the lamp amber',
+    'and the tower falls to watching rather than stopping.',
+  ].join('\n') };
+}
+
 function postProgram(hostName, text) {
   const hosts = webHosts();
   const h = findHost(hosts, String(hostName || ''));
   if (!h) return { ok: false, text: `post: ${hostName}: host not found` };
-  if (h.kind !== 'robot') return { ok: false, text: `post: ${h.host}: not a unit — nothing there runs a program` };
+  // #133 part two — A TOWER TAKES A PROGRAM TOO. It is not a unit, it is a
+  // building, and it runs one all the same: the four things an obelisk does are
+  // gated on what its program returns (see the tower tick in the obelisk loop).
+  // Its verbs are its own — watch, report, call, feed, lure, jam, hold — and
+  // `never <word>` binds it the way a clause binds a unit.
+  if (h.kind === 'obelisk') return postTowerProgram(h, text);
+  if (h.kind !== 'robot') return { ok: false, text: `post: ${h.host}: not a unit and not a tower — nothing there runs a program` };
   // Foundry-sealed firmware takes no field program. Guards are the only
   // hardened units, and this is what makes "guards are not programmable" a
   // real refusal rather than a program that silently never runs. Checked
@@ -8467,11 +9326,71 @@ function laptopBlueboxHook(args) {
 
 function laptopPostHook(args) {
   const [fileArg, hostArg] = args;
-  if (!fileArg || !hostArg) return { ok: false, text: 'usage: post <file.ml> <unit>   e.g. post download/t1_03.ml t1_03' };
+  if (!fileArg || !hostArg) return { ok: false, text: 'usage: post <file.ml> <unit>   e.g. post download/t1_03.ml t1_03  ·  post t.ml w4_*' };
   const file = String(fileArg.name || fileArg);
   const text = laptopFileText(file);
   if (text == null) return { ok: false, text: `post: ${file}: no such file` };
-  return postProgram(String(hostArg.id || hostArg), text);
+  const target = String(hostArg.id || hostArg);
+
+  // `post t.ml w4_*` — WRITE THE SAME MIND ONTO A WHOLE CLASS. Reprogramming
+  // four W-4s one at a time means typing four names you first have to look up,
+  // and getting one of them wrong is the mistake that walks over and finds you
+  // (David, 2026-08-15). The shell does not expand this: `w4_*` is not a path,
+  // and the machines are not files.
+  //
+  // IN RANGE ONLY. The glob matches what the card can HEAR, which is the same
+  // set `arp` prints — not every unit on the island. A radio that reaches
+  // thirty metres does not reach a tower you have never visited, and a command
+  // that silently reprogrammed machines over the horizon would be a different
+  // and much larger thing than the one being asked for.
+  if (/[*?]/.test(target)) return postToMany(target, text, file);
+  return postProgram(target, text);
+}
+
+/**
+ * A shell glob as a regex. `*` is any run, `?` is one character, and every
+ * other regex metacharacter is a literal — a unit id is not a pattern.
+ */
+function globRx(glob) {
+  return new RegExp(`^${String(glob).toLowerCase()
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')       // everything but * and ?
+    .replace(/\*/g, '.*').replace(/\?/g, '.')}$`);
+}
+
+/** Names in radio range matching a glob, in the order `arp` would print them. */
+function unitsMatching(glob) {
+  const rx = globRx(glob);
+  const seen = laptopArpSweep().filter((e) => e.kind === 'robot');
+  const out = [];
+  for (const e of seen) {
+    const short = String(e.host || '').split('.')[0].toLowerCase();
+    if (rx.test(short) || rx.test(String(e.host || '').toLowerCase())) out.push(short);
+  }
+  return out;
+}
+
+/**
+ * Post one program to every unit a glob names. Reports each line separately,
+ * because they do not all succeed: a guard is sealed, a felled one does not
+ * answer, and being told "4 units updated" when one of them refused is how a
+ * player walks into a machine still running the estate's program.
+ */
+function postToMany(glob, text, file) {
+  const names = unitsMatching(glob);
+  if (!names.length) {
+    return { ok: false, text: `post: ${glob}: nothing in radio range answers to that. Try: arp -a` };
+  }
+  const lines = [];
+  let done = 0;
+  for (const n of names) {
+    const r = postProgram(n, text);
+    if (r.ok) { done++; lines.push(`  ${n}: ok`); }
+    else lines.push(`  ${n}: ${String(r.text).replace(/^post: [^:]+: /, '')}`);
+  }
+  return {
+    ok: done > 0,
+    text: [`post ${file} -> ${glob}: ${done} of ${names.length} updated`, ...lines].join('\n'),
+  };
 }
 
 // Tagging moved inside the obelisk console (reached at the tower or by `telnet`)
@@ -9248,7 +10167,11 @@ obTermEl.addEventListener('click', (e) => {
 // Autocomplete is per-system: an obelisk (TIRESIAS) suggests only AI-network
 // verbs, a HERMES relay only RON verbs — no seepage between the two. (sing is
 // secret, so it's in neither list.)
-const OB_COMPLETE = ['scan', 'garrison', 'nearest', 'keys', 'name', 'tag', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'map', 'print', 'copy', 'cd', 'ls', 'drives', 'decrypt', 'unlock', 'eliza', 'retire', 'help', 'let'];
+// `retire` is NOT here on purpose. It is supplied only in the context built at
+// the keeper's own island, so completing it at an ordinary tower offered a verb
+// that answers "nothing to retire from this terminal" wherever you typed it
+// (David, 2026-08-14: "should not be in the ob!").
+const OB_COMPLETE = ['scan', 'garrison', 'g', 'nearest', 'keys', 'name', 'tag', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'map', 'print', 'copy', 'cd', 'ls', 'drives', 'decrypt', 'unlock', 'eliza', 'cat', 'read', 'help', 'let'];
 const HERMES_COMPLETE = ['read', 'print', 'archive', 'records', 'drive', 'drives', 'backup', 'restore', 'forge', 'copy', 'cd', 'ls', 'help', 'let'];
 const escapeHtml = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 const CORE_COMPLETE = ['look', 'scan', 'run', 'jam', 'open', 'help', 'exit'];
@@ -9641,7 +10564,7 @@ player.onObeliskDestroyed = (ob) => {
   if (currentWorld.obeliskObjs.every((o) => o.destroyed) && !player._ended) {
     player._ended = true;
     player.addScore(100);
-    player.deathCert = { name: player.name, gender: player.gender, cause: 'nothing — you won', score: player.score, skills: [...player.skills], deaths: player.deaths || 0, victory: true };
+    player.deathCert = { name: player.name, gender: player.gender, cause: 'nothing — you won', score: player.score, skills: [...player.skills], deaths: player.deaths || 0, victory: true, ...player.modeStamp() };
     persist();
     return;
   }
@@ -9788,6 +10711,12 @@ let lastW4GameHour = dayNight.totalHours; // ticks a W4 every 30 game-minutes, n
 const SKYLINK_MAX_W4 = 50; // concurrent cap, so a long purge can't melt the frame rate
 let skylinkW4Clock = 0;
 function dispatchSkylinkW4s(n) {
+  // THE MODE'S PRESSURE, applied where the estate decides how many to send. One
+  // multiplier on the size of every wave POSEIDON throws, so Easy is a thinner
+  // stream of the same machines rather than a different fight, and Insane is
+  // the same fight with no room in it. Always at least one: a mode that
+  // silently cancelled the response would be a mode that removed the endgame.
+  n = Math.max(1, Math.round(n * (player.modeRules ? player.modeRules().pressure : 1)));
   const towers = currentWorld.obeliskObjs.filter((o) => !o.destroyed);
   for (let i = 0; i < n; i++) {
     const src = towers.length ? towers[Math.floor(Math.random() * towers.length)] : (factoryLive() ? { x: factoryCx() - 0.5, y: factoryCy() - 0.5 } : null);
@@ -9809,7 +10738,7 @@ function dispatchSkylinkW4s(n) {
 // relief rather than an instant one. Night-vision goggles cut it (see the veil in
 // renderer.draw). Read by the hud as `poseidonFog`.
 let poseidonFog = 0;
-// ---- what the obelisk control verbs hold down (docs/ob-hacking-plan.md) ----
+// ---- what the obelisk control verbs hold down (docs/PLAN.md) ----
 //
 // Each is an override with a clock on it. Nothing here is permanent: the purge
 // is the game's deadline, and a verb that switched it off for good would switch
@@ -10326,12 +11255,18 @@ function update(dt) {
     // out of the laptop's last cell would be the wrong trade made silently.
     else if (player.canCraftSniffer()) player.craftSniffer();
     else if (player.canCraftBoat(map)) player.craftBoat(map);
+
     // Nothing else to make and a dead machine in the pack: let repairLaptop
     // refuse OUT LOUD. It counts exactly what is short ("1 more battery and 2
     // more chip fragments"), and until now that message was unreachable —
     // the branch above only ran when the parts were already in hand.
     else if (player.hasItem('laptop_broken') && !player.laptop) player.repairLaptop(makeDisk);
   }
+  // #180 — A FIRE HAS ITS OWN KEY, not a place on the craft list. On C it was
+  // the cheapest recipe in the game sitting under every other one, so three
+  // wood in the pack shadowed the boat, the ship and the NostBook; and C means
+  // crafting, which a fire is not (David, 2026-08-15).
+  if (input.firePressed()) player.buildFire(map);
   if (input.blueboxPressed()) player.bluebox(currentWorld.robots, map);
   // The sniffer's sweep goes through the same door the network's REPORT button
   // goes through: one mechanism, two ways to reach it. A machine that stops for
@@ -10373,7 +11308,14 @@ function update(dt) {
   setUnitTagger((r) => {
     if (r.dead || r.fused) return null;
     if (r._netTag) return `«${r._netTag}»`;
-    if ((r._tagFloatT || 0) > 0) return netIdOf(currentWorld, r);
+    // RIGHT-CLICK GIVES THE QUALIFIED NAME: the tower that musters it, then the
+    // unit — `OB_A45C.T2_04` (David, 2026-08-15). The bare id says which
+    // machine; the tower says whose, which is the half you need before you post
+    // anything to it. Drawn small, because it is twice the width of a nickname
+    // and would otherwise sit over the machine like a placard.
+    if ((r._tagFloatT || 0) > 0) {
+      return { text: `${robotHomeCode(r, currentWorld.obeliskObjs || [])}.${netIdOf(currentWorld, r)}`, small: true };
+    }
     return (player.hands === 'sniffer' && Math.hypot(r.x - player.x, r.y - player.y) <= SNIFFER_TAG_RANGE)
       ? netIdOf(currentWorld, r) : null;
   });
@@ -10423,6 +11365,7 @@ function update(dt) {
   }
   const mouse = input.mousePos();
   const mouseWorld = camera.toWorld(mouse.x, mouse.y, renderer.w, renderer.h);
+  updateBuildMode(mouseWorld);
 
   // Mouse wheel zooms (the HUD is screen-space, so it stays the same size) —
   // UNLESS an open panel owns the wheel. This consume used to run
@@ -10454,6 +11397,12 @@ function update(dt) {
 
   // Death certificate: freeze the world behind the modal until it's clicked.
   if (player.deathCert) {
+    // THE SHEET OWNS THE SCREEN. The movement hint is a DOM element over the
+    // canvas, so it printed straight through the certificate — the words "Hold
+    // to move · tap to act" crossing the rank at the moment the run is being
+    // summed up. Every other panel already takes the screen this way; the
+    // certificate is the one that most deserves to.
+    if (hintEl) hintEl.style.display = 'none';
     const copyCert = () => {
       renderer.shareCertificate().then((result) => {
         player.say(result === 'clipboard'
@@ -10794,6 +11743,7 @@ function update(dt) {
   const foes = currentWorld.waterdroids.length ? currentWorld.robots.concat(currentWorld.waterdroids) : currentWorld.robots;
   player.update(dt, input, map, currentWorld.animals, foes, mouseWorld);
   updateWaterDroids(dt, currentWorld.waterdroids, player, map);
+  tickFires(map, dt);          // #180: every campfire burns down, and out
   // Advance in-flight rounds. Most are cosmetic tracers at PROJECTILE_SPEED; a
   // few carry their own slower speed (R3's torpor bolt crawls so it can be
   // dodged).
@@ -11186,6 +12136,100 @@ function update(dt) {
     }
     if (ob.destroyed) continue;
     const d = Math.hypot(ob.x + 0.5 - player.x, ob.y + 0.5 - player.y);
+
+    // #133 part two — THE TOWER RUNS ITS OWN PROGRAM, and what it returns gates
+    // the four things a tower does below. The stock programs are written to
+    // decide exactly what these towers already did, so nothing changes until a
+    // player posts one (test/tower-drive.test.js pins that). Ticked twice a
+    // second rather than per frame: `decide` is an interpreter, and a tower
+    // changing its mind sixty times a second is sixty times the cost for no
+    // behaviour anyone can see.
+    ob._towerT = (ob._towerT || 0) - dt;
+    if (ob._towerT <= 0) {
+      ob._towerT = 0.5;
+      const near = ob.cls === 'eye' ? !!ob._eyeSees : d < (ob.cls === 'siren' ? 7 : 9);
+      let garrison = 0;
+      for (const r of currentWorld.robots) {
+        if (!r.dead && !r.fused && Math.hypot(r.home.x - ob.x, r.home.y - ob.y) < 2) garrison++;
+      }
+      const docked = currentWorld.robots.some((r) => r.recharging && !r.dead
+        && Math.hypot(r.home.x - ob.x, r.home.y - ob.y) < 2
+        && Math.hypot(r.x - ob.x, r.y - ob.y) < 3);
+      const sense = towerSense(ob, {
+        contact: near, docked, garrison, linked: !ob.jammed,
+        daylight: !dayNight.isNight(),
+      });
+      // #164 — THE TOWER LOGS YOU. On the RISING EDGE of contact, so walking
+      // through an arc is one entry rather than one every half-second: a log
+      // that fires while you stand still is a log nobody can read.
+      //
+      // A node counts and classifies on ITS OWN tally. It sees a sliver of your
+      // day and treats that sliver as the whole of you, which is the point.
+      if (near && !ob._sawYou && !ob.frozen) {
+        ob._sightCount = (ob._sightCount || 0) + 1;
+        // The node's own sequence number, which is what the corruption is keyed
+        // on: same node, same record number, same damage after a reload.
+        ob._sightSeq = (ob._sightSeq || 0) + 1;
+        ob.sightings = addSighting(ob.sightings, makeSighting({
+          at: dayNight.clock,
+          x: player.x,
+          y: player.y,
+          how: ob.cls === 'eye' ? 'eye' : ob.cls === 'siren' ? 'song' : 'sight',
+          count: ob._sightCount,
+          documented: !!player.seaPermission,
+        }), ob.code, ob._sightSeq);
+        ob._sightingsDirty = true;
+      }
+      ob._sawYou = near;
+
+      const res = towerDecide(ob, sense, currentWorld.id, decide);
+      ob.towerIntent = res.intent;
+      ob.towerVeto = res.clauses;
+      ob.towerFault = res.fault;
+      // The lamp says which of the three it is, at a glance and across a field:
+      // amber for a program that will not run, white for a constitution holding,
+      // nothing for a tower doing as it was told.
+      ob.lampFault = !!res.fault;
+      ob.lampVeto = !!res.vetoed;
+      // Read once here so robots.js can gate recharging without knowing that
+      // any of this exists.
+      ob.feedOff = !towerAllows(ob, 'feed');
+
+      // #162 — THE GARRISON ROSTER, written ON CHANGE rather than on a clock.
+      // The digest is coarse (tile positions, charge in fives), so a machine
+      // shuffling on the spot costs a string compare and nothing else; only a
+      // unit that actually moved, went flat, was tagged or came and went makes
+      // the tower write. That is a handful of writes an hour per tower.
+      //
+      // The file is a REPORT. Editing your copy does not move the machines and
+      // the tower does not read it back — and the next change overwrites what
+      // you wrote, without noticing (David: "I am not sure the tower cares").
+      {
+        const mine = [];
+        for (const r of currentWorld.robots) {
+          if (r.dead || r.fused) continue;
+          if (homeObCode(r) !== ob.code) continue;
+          mine.push({ r, netId: String(netIdOf(currentWorld, r)) });
+        }
+        const dig = rosterDigest(mine);
+        if (dig !== ob._rosterDigest || ob._sightingsDirty || !ob.logs) {
+          ob._rosterDigest = dig;
+          ob._rosterRev = (ob._rosterRev || 0) + 1;
+          const opts = { rev: ob._rosterRev, clock: dayNight.clock };
+          ob.roster = rosterText(ob, mine, opts);
+          // The same write fills the logs/ folder: the roster plus a file per
+          // unit. Built here rather than on demand so what you `cat` is what
+          // the tower last wrote, not a fresh reading taken as you looked.
+          ob.logs = logsFolder(ob, mine, opts);
+          // #164 — and the node's own record of YOU, in the same folder as its
+          // inventory of its machines. One `ls`, both files.
+          ob.logs.sightings = sightingsText(ob, ob.sightings || [], {
+            clock: dayNight.clock, total: ob._sightCount || 0,
+          });
+          ob._sightingsDirty = false;
+        }
+      }
+    }
     if (ob.cls === 'eye') {
       // POLYPHEMUS's panopticon: the single eye detects by LINE OF SIGHT across a
       // huge range. In its line, alert climbs and it names you to the island; break
@@ -11206,7 +12250,7 @@ function update(dt) {
     // that's stronger the closer you are. Playing a tape on the walkman drowns
     // it out (your own dearer noise), so the pull only bites when nothing's
     // playing. (home-04 lore, made mechanic.)
-    if (ob.cls === 'siren' && player.health > 0) {
+    if (ob.cls === 'siren' && player.health > 0 && towerAllows(ob, 'lure')) {
       const SONG_RANGE = 7;
       if (d < SONG_RANGE) {
         if (player.walkmanSide == null) {
@@ -11229,7 +12273,7 @@ function update(dt) {
     }
     if (ob.blinkFlash > 0) ob.blinkFlash = Math.max(0, ob.blinkFlash - dt);
 
-    if (ob.alert > 0.5) {
+    if (ob.alert > 0.5 && towerAllows(ob, 'report')) {
       ob._nudgeT -= dt;
       if (ob._nudgeT <= 0) {
         ob._nudgeT = 2.5;
@@ -11248,7 +12292,7 @@ function update(dt) {
     // your way — machines within reach aggro straight onto YOU (not just toward the
     // tower). First sight flares the whole network; losing the line lets it go.
     if (ob.cls === 'eye') {
-      if (ob._eyeSees && ob.alert > 0.5) {
+      if (ob._eyeSees && ob.alert > 0.5 && towerAllows(ob, 'call')) {
         if (!player._underEye) {
           player._underEye = true;
           worldStir.stir(); // the network flares awake
@@ -11406,6 +12450,8 @@ function frame(now) {
         ? { ...player.deathCert, kleos: achieveModel(), killLog: player.killLog || [] }
         : null,
       aiVictory: player.aiVictory,
+      // #182: the palette and the cursor, only while the mode is on.
+      build: buildOn ? { tools: BUILD_TOOLS, i: buildTool, cursor: buildCursor } : null,
       showSkills,
       showKleos,
       // Computed fresh each frame from the engine: the panel holds no state of

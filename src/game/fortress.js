@@ -671,7 +671,7 @@ export function createFortress(map, seed, spawn, opts = {}) {
       };
     },
   };
-  // Self-register as a system (docs/refactor-registry.md), order 35 = the "world
+  // Self-register as a system (docs/PLAN.md), order 35 = the "world
   // events" band, so it ticks after dayNight (20) and before lore (80). The hub
   // no longer calls fortress.update directly; it runs via systems.runUpdate.
   register({

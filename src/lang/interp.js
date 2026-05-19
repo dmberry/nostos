@@ -10,7 +10,7 @@
 // THE INTERPRETER. The one entry point, and the thing a host holds.
 //
 // Part of src/lang/. Written at v1.288 (M3) out of what was `runRonml` in
-// src/game/ai_ml.js. See docs/aiml-standalone-plan.md §4.
+// src/game/ai_ml.js. See docs/PLAN.md §4.
 //
 // WHAT THIS FILE IS FOR. Before it, the entry point mixed two jobs: reading and
 // running a line of ML, and being NostOS's console (intercepting `help`, picking

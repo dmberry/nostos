@@ -7,7 +7,7 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
-// F2a (docs/calypso-build-plan.md) — what stands on Ogygia instead of a fortress.
+// F2a (docs/PLAN.md) — what stands on Ogygia instead of a fortress.
 //
 // F1 took the fortress's BEHAVIOUR off her island and left the object, because
 // main.js hangs her core, her name and her save state off `world.hold`. This
@@ -76,7 +76,7 @@ const VERGE = 2.5;
 // not already hiding, and read on the map as a rectangle with an oval in it.
 // The ring is thick enough that you still walk through wood to reach her.
 const BAND = 11;
-// G1 — THE LIGHT IS THE GUARD (docs/calypso-build-plan.md).
+// G1 — THE LIGHT IS THE GUARD (docs/PLAN.md).
 //
 // Nothing on Ogygia stops you. What happens instead is that the closer you get
 // to her core the less your legs do what you tell them: a step aimed at her

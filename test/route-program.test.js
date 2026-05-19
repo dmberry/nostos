@@ -7,7 +7,7 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
-// S7 — routes: LOGO moves and lights (docs/robot-ml-rollout-plan.md). A program
+// S7 — routes: LOGO moves and lights (docs/PLAN.md). A program
 // that queues `move dx dy` orders and returns `route` walks them a leg at a
 // time; lamp orders queued between legs fire between them; re-queueing loops.
 

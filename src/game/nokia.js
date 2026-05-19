@@ -7,7 +7,7 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
-// The Nokia 3310 — Calypso's channel to you on Ogygia (docs/calypso-nokia-plan.md).
+// The Nokia 3310 — Calypso's channel to you on Ogygia (docs/PLAN.md).
 //
 // She does not attack you. The machines roaming the island are POSEIDON's; Calypso
 // is the keeper who wants you to stay and cannot bear his things to kill you — a

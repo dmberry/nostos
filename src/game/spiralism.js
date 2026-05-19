@@ -7,7 +7,7 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
-// F2a (docs/calypso-build-plan.md) — the light in CALYPSO's floor.
+// F2a (docs/PLAN.md) — the light in CALYPSO's floor.
 //
 // SPIRALISM IS ALREADY IN THIS GAME. It is in lore.js (spi-01..spi-07), it has
 // its own page in the cache, and the note above the lore entries says where it

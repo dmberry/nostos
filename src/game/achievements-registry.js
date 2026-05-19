@@ -7,7 +7,7 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
-// KLEOS — the achievement registry (docs/achievements-plan.md).
+// KLEOS — the achievement registry (docs/PLAN.md).
 //
 // DATA ONLY. Every award in the game is one entry in one of the tables below,
 // and the engine (achieve.js) knows nothing about any of them by name. Adding
@@ -68,7 +68,7 @@ export const COUNTERS = {
   watermarksChecked: { on: 'watermarkRead', distinct: 'file' },
   modelsRead: { on: 'vModelRead', distinct: 'unit' },
   modelsPosted: { on: 'vModelPosted', when: (d) => !!d.modified },
-  // K3/K4 (docs/calypso-build-plan.md). Games conceded at her board, and the
+  // K3/K4 (docs/PLAN.md). Games conceded at her board, and the
   // one win nobody has ever had.
   draughtsResigned: { on: 'draughtsResigned' },
   // C1: reading her own source, which is the whole island in one verb.
@@ -96,7 +96,7 @@ const CAUSE_WORD = {
 // The console steps the escape chain REQUIRES. A warrior may take these and keep
 // the laurel, because refusing them means refusing to leave the island at all.
 // PROVISIONAL until the A5 audit walks each island's chain and confirms this
-// list is both sufficient and minimal (docs/achievements-plan.md §6).
+// list is both sufficient and minimal (docs/PLAN.md §6).
 export const STORY_HACKS = new Set(['copy', 'decrypt', 'eliza', 'forge', 'unlock']);
 
 export const PURITY_BREAKS = {
@@ -333,6 +333,33 @@ export const BADGES = [
   { id: 'ai-watermark', name: 'AI WATERMARK', ai: true,
     blurb: 'The machines sign everything they make. Your program had no signature. Filed: suspiciously human.',
     on: { event: 'watermarkFlagged' } },
+
+  // ---- the homecoming, graded (#173) ----------------------------------------
+  // David, 2026-08-15: "creative mode play through undermines the quality of the
+  // completion. insane mode would be an amazing achievement." So a completion is
+  // not one badge, it is five, and the one you get is decided by the LOWEST mode
+  // the run ever held (see `lowerMode` in modes.js). Dropping to Creative for
+  // the fight you could not win and putting Hard back afterwards earns the
+  // Creative badge, which is the point of grading at the floor.
+  //
+  // Each blurb says what the run was actually worth WITHOUT sneering at it. A
+  // Creative passage is a real way to see the archipelago and the badge says so;
+  // it just does not say you fought your way home, because you did not.
+  { id: 'nostos-creative', name: 'NOSTOS · CREATIVE',
+    blurb: 'You walked the whole archipelago and came home. Nothing on it could touch you, and the record keeps that.',
+    on: { event: 'runCompleted', when: (d) => d.mode === 'creative' } },
+  { id: 'nostos-easy', name: 'NOSTOS · EASY',
+    blurb: 'Home, at half price. The islands were the same islands.',
+    on: { event: 'runCompleted', when: (d) => d.mode === 'easy' } },
+  { id: 'nostos-medium', name: 'NOSTOS · MEDIUM',
+    blurb: 'The game as it is meant to be played, played all the way through.',
+    on: { event: 'runCompleted', when: (d) => d.mode === 'medium' } },
+  { id: 'nostos-hard', name: 'NOSTOS · HARD',
+    blurb: 'Four daemons down with the estate pressing and the clock running.',
+    on: { event: 'runCompleted', when: (d) => d.mode === 'hard' } },
+  { id: 'nostos-insane', name: 'NOSTOS · INSANE',
+    blurb: 'Twice the damage, no beginner\'s grace, POSEIDON at full pace, and you still made Ithaca. There is nothing above this.',
+    on: { event: 'runCompleted', when: (d) => d.mode === 'insane' } },
 ];
 
 // ---- milestones -------------------------------------------------------------
@@ -356,7 +383,7 @@ export const MILESTONES = [
 // LAURELS ARE NOT LIVE YET. The machinery below them is built and tested, but a
 // constraint nobody can satisfy is a lie in the UI, so no laurel is awarded
 // until the A5 audit has walked each island's win chain and proved the
-// constraint holdable (docs/achievements-plan.md §6). Flip this to true as the
+// constraint holdable (docs/PLAN.md §6). Flip this to true as the
 // LAST step of that audit, not before.
 export const LAURELS_LIVE = false;
 

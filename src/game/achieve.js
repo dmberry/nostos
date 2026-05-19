@@ -7,7 +7,7 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
-// KLEOS — the achievement engine (docs/achievements-plan.md).
+// KLEOS — the achievement engine (docs/PLAN.md).
 //
 // Pure, like strait.js: no DOM, no timers, no world. Events in, awards out; the
 // hub decides what a toast looks like. That is what makes the whole thing

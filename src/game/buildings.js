@@ -20,7 +20,7 @@
 // It answers questions about TYPES; worldgen assigns them and the renderer will
 // read the palette. Nothing here mutates anything.
 //
-// Scope today (docs/ROADMAP.md): the type is assigned, stored and readable. The
+// Scope today (docs/PLAN.md): the type is assigned, stored and readable. The
 // loot tables and palettes below are DATA THAT NOTHING CONSUMES YET, written now
 // so that when the loot grouping and the per-type colouring land, they read from
 // this file rather than growing a second source of truth somewhere else.

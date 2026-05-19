@@ -8,7 +8,7 @@
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
 // Unit tests for the RON-ML terminal filesystem — Stage S1 of the Calypso
-// escape chain (docs/calypso-escape-chain.md, §8). Exercises the LANGUAGE layer
+// escape chain (docs/PLAN.md, §8). Exercises the LANGUAGE layer
 // in ronml.js: filenames lexing to `file` values, the cd/ls verbs, and the
 // polymorphic `copy` (a file to a device vs the classic `copy aikey` key-bind).
 // The main.js device wiring (which card state maps to which files) is verified

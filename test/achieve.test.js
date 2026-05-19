@@ -7,7 +7,7 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
-// KLEOS engine tests (docs/achievements-plan.md §10, stage A1). The engine is
+// KLEOS engine tests (docs/PLAN.md §10, stage A1). The engine is
 // pure, so every one of these is a synthetic event stream in and an assertion
 // out — no world, no DOM, no clock.
 

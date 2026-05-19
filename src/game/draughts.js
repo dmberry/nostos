@@ -7,14 +7,14 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
-// K1 (docs/calypso-build-plan.md) — English draughts, pure rules and a search.
+// K1 (docs/PLAN.md) — English draughts, pure rules and a search.
 //
 // Draughts is not an arbitrary choice of game. Strachey wrote a draughts
 // programme for the Ferranti Mark I in 1951-52, and Samuel spent the fifties on
 // a checkers player that improved by PLAYING ITSELF, which is where machine
 // learning starts as a working practice rather than a hope. So the game at
 // CALYPSO's terminal is the first game a machine ever played, and the way she
-// practises is Samuel's way. See docs/ai-codebase-plan.md §4.4.
+// practises is Samuel's way. See docs/PLAN.md §4.4.
 //
 // No canvas, no world, no clock, in the shape of narrows.js: rules and a search
 // that a test can drive. The cabinet (K2) draws it and the ML file (K3) sets
