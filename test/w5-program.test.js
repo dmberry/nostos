@@ -7,7 +7,7 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
-// S6 — the W-5 gardener (docs/robot-ml-rollout-plan.md). Its stock is the
+// S6 — the W-5 gardener (docs/PLAN.md). Its stock is the
 // fitter's works build, g-fit; it reads blight, work and daylight, and never
 // fights. A converted guard and a blueboxed hunter both carry this program so
 // their pages read true.

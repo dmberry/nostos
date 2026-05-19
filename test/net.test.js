@@ -7,7 +7,7 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
-// The web (docs/laptop-plan.md §8b): addresses, the host table, the org-chart of
+// The web (docs/PLAN.md §8b): addresses, the host table, the org-chart of
 // links the machines serve, and the text render Netscape draws. Pure module.
 
 import { test } from 'node:test';

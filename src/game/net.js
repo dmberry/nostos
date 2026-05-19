@@ -7,7 +7,7 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
-// The web — what is left of it (docs/laptop-plan.md §8b).
+// The web — what is left of it (docs/PLAN.md §8b).
 //
 // Every machine POSEIDON runs still serves an HTTP page, because nobody ever
 // turned it off. You reach it from the laptop with a Wi-Fi spoofer, and what you
@@ -856,6 +856,73 @@ const BM_GLOBE = '<svg class="bm-globe" viewBox="0 0 20 20"><circle cx="10" cy="
 // were planning — grouped and coloured the way a page of 1995 would, with a
 // little icon on every line. Everything here is a real address in the cache, so
 // each one goes somewhere; the melancholy is that the person does not.
+// RON'S OWN BOOKMARK FILE — what the relay is FOR.
+//
+// The estate bookmarks are all unreachable from ron-relay: `webHosts()` returns
+// only the relay on this ESSID, and `row()` renders '' for a host that is not
+// there, so the ordinary Bookmarks page came up as bare coloured headings with
+// nothing under any of them (David, 2026-08-14: "this is the RON-RELAY on
+// netscape. none of this links to anything or works at all").
+//
+// A page of dead links is the wrong answer anyway. Joining RON's network should
+// show you RON's shelf: the downloads first, because that is the point of
+// standing next to the box, and then what he kept. Everything here resolves on
+// this network, which is the property the estate list could not hold.
+export function relayBookmarksPage(host, agent = 'Netscape Navigator 1.1') {
+  const ip = (host && host.ip) || RELAY_IP;
+  const sec = (cls, title) => `<h2 class="bm-h ${cls}">${title}</h2>`;
+  const row = (ico, addr, label, note) =>
+    `<div class="bm-row">${BM_ICONS[ico] || ''}<a href="${addr}">${label}</a><span class="bm-note">${note}</span></div>`;
+
+  // The two packages carry the things a player actually hunts for — the worked
+  // examples and the V-class weights — so they are named here rather than left
+  // for somebody to find inside a folder after unpacking.
+  const pkgNote = {
+    'unit-sdk': 'read, rewrite and drive the machines &mdash; with worked examples: '
+      + 'braincode.ml, reprogram.ml, escort.ml, logo.ml &rarr; <code>/home/sdk</code>',
+    checkpoints: 'the V-class weights, pretrained: courier, scared, partisan, '
+      + 'helpful_harmless &rarr; <code>/home/weights</code>',
+  };
+
+  return [
+    `<div class="bm-band">${BM_GLOBE}<span class="bm-t">RON &mdash; the relay</span></div>`,
+    `<p class="bm-sub"><small>${agent} &mdash; file:///ron.htm &mdash; hermes.local · ${ip}</small></p>`,
+    '<div class="bm">',
+
+    sec('bm-orange', 'Software &mdash; packages'),
+    ...RELAY_BUNDLES.map((b) => row('disk', `ronpkg:${b.name}`, b.name,
+      pkgNote[b.name] || `${b.blurb} (${b.files.length} files)`)),
+
+    sec('bm-blue', 'Software &mdash; single files'),
+    // The scope is an application, the .ml files are programs, the readme is
+    // prose. A music note for any of them was just the leftover default.
+    ...RELAY_FILES.map((f) => row(
+      f.name === 'sniffer' ? 'find' : /\.ml$/.test(f.name) ? 'gear' : 'book',
+      `ronfile:${f.name}`, f.name, `${f.blurb} <small>(${f.body.length} bytes)</small>`)),
+
+    sec('bm-steel', 'This box'),
+    row('globe', ip, 'hermes.local', 'the index, the log and the air'),
+
+    // The cached web — the archive, GeoCities, all of it — lives on THEIR
+    // aerial, not RON's. Naming those pages here would put dead links on the
+    // page, which is the fault this whole file exists to fix. Say where they
+    // are and how to get back to them instead.
+    sec('bm-green', 'The rest of the Net'),
+    '<div class="bm-row">' + (BM_ICONS.map || '')
+      + '<span><b>not on this network.</b></span>'
+      + '<span class="bm-note">the cache, GeoCities and the archive are on the estate’s '
+      + 'aerial. Rejoin it from the aerial button at the foot of the window, then '
+      + 'come back here with <code>iwconfig wifi0 essid ' + RELAY_ESSID + '</code>.</span></div>',
+
+    '</div>',
+    '<div class="bm-rainbow"></div>',
+    '<p>A file lands in <code>/home/download</code>; a package unpacks into its own',
+    'folder under <code>/home</code>. Type an address to go there, or a link number',
+    'to follow it.</p>',
+    '<p><small>Nothing here needs an AI key, and nothing here is on their wire.</small></p>',
+  ].filter(Boolean).join('\n');
+}
+
 export function bookmarksPage(hosts, agent = 'Netscape Navigator 1.1') {
   const byKind = (k) => hosts.find((h) => h.kind === k);
   const byName = (d) => hosts.find((h) => h.host === d || h.cached === d);
@@ -1740,29 +1807,77 @@ export function pageFor(host, hosts) {
 // so you follow one by typing its number. That is how a text-mode browser
 // worked, and it suits a monochrome screen.
 
+// A LINK COUNTS WHEREVER IT SITS ON THE LINE.
+//
+// This used to match only a line that was ENTIRELY one anchor
+// (/^<a href="…">…<\/a>$/). Any anchor with text around it — the overwhelmingly
+// common `<p><a href="…">name</a> — what it is</p>` — fell through to the plain
+// strip() path, so its label printed as ordinary prose and it never entered
+// `links`: visible, unnumbered, unclickable. That silently killed 401 links
+// across 79 pages, including every download on RON's relay (David, 2026-08-14:
+// "the web app store and downloads have gone and is broken").
+//
+// A page author should not have to know that a link must be alone on its line
+// for the browser to see it, so the renderer now scans each line for anchors.
+const ANCHOR = /<a href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+
 export function renderPage(html) {
   const links = [];
   const out = [];
   for (const raw of String(html || '').split('\n')) {
     const line = raw.trim();
     if (!line) continue;
-    const a = line.match(/^<a href="([^"]+)">(.*)<\/a>$/i);
-    if (a) {
-      links.push({ n: links.length + 1, addr: a[1], label: strip(a[2]) });
-      out.push(`  [${links.length}] ${strip(a[2])}`);
+
+    // An anchor alone on its line keeps its own indented row, which is what the
+    // index and menu pages are written against.
+    const solo = line.match(/^<a href="([^"]+)"[^>]*>([\s\S]*)<\/a>$/i);
+    if (solo) {
+      links.push({ n: links.length + 1, addr: solo[1], label: strip(solo[2]) });
+      out.push(`  [${links.length}] ${strip(solo[2])}`);
       continue;
     }
-    if (/^<hr>$/i.test(line)) { out.push('-'.repeat(52)); continue; }
-    if (/^<h1>/i.test(line)) { const t = strip(line).toUpperCase(); out.push(t, '='.repeat(Math.min(52, t.length))); continue; }
-    if (/^<h2>/i.test(line)) { out.push('', strip(line)); continue; }
-    out.push(strip(line));
+
+    // Otherwise pull every anchor out in place, leaving its number beside the
+    // label so the surrounding sentence still reads.
+    let body = line;
+    if (ANCHOR.test(line)) {
+      ANCHOR.lastIndex = 0;
+      body = line.replace(ANCHOR, (_m, addr, label) => {
+        const text = strip(label);
+        links.push({ n: links.length + 1, addr, label: text });
+        return `${text} [${links.length}] `;
+      });
+    }
+
+    if (/^<hr>$/i.test(body)) { out.push('-'.repeat(52)); continue; }
+    if (/^<h1>/i.test(body)) { const t = strip(body).toUpperCase(); out.push(t, '='.repeat(Math.min(52, t.length))); continue; }
+    if (/^<h2>/i.test(body)) { out.push('', strip(body)); continue; }
+    out.push(strip(body));
   }
   return { text: out.join('\n'), links };
 }
 
+// The named entities the pages actually use. Only three were decoded before, so
+// an &mdash; or a &rarr; reached the text browser as its own source.
+const ENTITIES = {
+  amp: '&', lt: '<', gt: '>', quot: '"', nbsp: ' ',
+  mdash: '\u2014', ndash: '\u2013', rarr: '\u2192', larr: '\u2190',
+  hellip: '\u2026', times: '\u00d7', middot: '\u00b7', deg: '\u00b0',
+  lsquo: '\u2018', rsquo: '\u2019', ldquo: '\u201c', rdquo: '\u201d',
+  copy: '\u00a9', pound: '\u00a3', frac12: '\u00bd',
+};
+
 function strip(s) {
   return String(s).replace(/<[^>]+>/g, '')
-    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim();
+    .replace(/&(#?\w+);/g, (m, name) => {
+      if (name[0] === '#') {
+        const code = name[1] === 'x' || name[1] === 'X'
+          ? parseInt(name.slice(2), 16) : parseInt(name.slice(1), 10);
+        return Number.isFinite(code) ? String.fromCodePoint(code) : m;
+      }
+      return Object.prototype.hasOwnProperty.call(ENTITIES, name) ? ENTITIES[name] : m;
+    })
+    .trim();
 }
 
 // GET a single edition out of the store. The browser addresses these as

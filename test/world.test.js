@@ -8,7 +8,7 @@
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
 // Unit tests for the World contract (src/game/world.js), Stage 0a of the islands
-// refactor (docs/islands-plan.md §3). The correctness lynchpin is reference identity:
+// refactor (docs/PLAN.md §3). The correctness lynchpin is reference identity:
 // createWorld must store the passed entity arrays, not copies, or the construction
 // block's pushes stop showing up at runtime.
 //

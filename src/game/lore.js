@@ -1706,7 +1706,7 @@ export class Lore {
     this._seed = seed;
     this._place(map, seed);
     this._restore();
-    // Self-register as a system (docs/refactor-registry.md). Lore owns its own
+    // Self-register as a system (docs/PLAN.md). Lore owns its own
     // wiring into the loop — the hub never mentions it, so two people adding
     // features touch no shared file. New Game reloads the page (fullReset ->
     // location.reload), so the registry rebuilds and this can't duplicate.

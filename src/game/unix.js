@@ -8,7 +8,7 @@
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
 // A small UNIX for the laptop — the first computer in the game that is YOURS.
-// Design: docs/laptop-plan.md.
+// Design: docs/PLAN.md.
 //
 // The point of it: every other console is bolted down (obelisks stand where the
 // towers stand, HERMES sits on a hilltop). This one you carry, it runs offline,
@@ -421,7 +421,8 @@ const MAN = {
     '    sentry.ml        a picket on a leash: holds its post, turns back',
     '    survivor.ml      it retreats when hurt, and hides if its tower is gone',
     '',
-    '  robots_code/readme.txt says what they are and what a T-1 can sense.',
+    '  robots_code/readme.txt indexes them; readme_t/w/v/m.txt say what each',
+  '  class is, what it can be told to do, and what it cannot.',
     '',
     '  A T-1 senses charge, integrity, range, home_range, threat, hurt and',
     '  linked, and answers patrol, hunt, home, flee or wait. Ask it for',
@@ -491,6 +492,17 @@ const COUNT_ML = [
 // something on screen and is short enough to change. They sit in /home/demos so
 // that a player who has typed `ls` and found nothing to do has somewhere to go.
 
+// #166 — ONE README PER CLASS. The old single file was written when the T-1 was
+// the only machine anybody could post to, and it stayed T-1-shaped while the
+// roster grew to five classes with different senses, different repertoires and,
+// in two cases, no way in at all (David, 2026-08-14). A player holding a W-4
+// should not have to read about wheels.
+//
+// readme.txt is now the index; the class files carry the detail. Each says the
+// same three things: what the class IS, what it can be told to do, and what it
+// cannot be made to do however you write it — because the CAN list is the real
+// design and the refusals are the interesting half.
+
 const ROBOTS_README = [
   'robots_code',
   '',
@@ -517,57 +529,240 @@ const ROBOTS_README = [
   'its page, which needs no file.',
   '',
   '',
-  'The files',
+  'The classes',
+  '',
+  '  readme_t.txt   T — pursuit. The hunters, and the amenity unit.',
+  '  readme_w.txt   W — works. The factory\'s machines: response, repair,',
+  '                 laser, gardener.',
+  '  readme_v.txt   V — vector. The two that run weights instead of rules.',
+  '  readme_m.txt   M and B — foundry-sealed. Read them; you cannot post.',
+  '',
+  '',
+  'The example files',
   '',
   '  follow_user.ml   an escort. Closes across a gap, stops inside it.',
   '  sentry.ml        a picket. Holds its post and turns back at a leash.',
   '  survivor.ml      retreats when hurt. Hides if its tower is down.',
   '',
-  'Each says at the top which line does the work.',
+  'Each says at the top which line does the work. intents.txt lists every',
+  'word the machines answer to.',
+].join('\n');
+
+const README_T = [
+  'T — TERMINAL class',
+  '',
+  'TIRESIAS-pursuit. The machines the towers send after people. Every one of',
+  'them is programmable and every one of them ships with its policy written',
+  'down, which is the whole reason you can turn them.',
+  '',
+  '  T-1   a wheeled wedge. Quick on the flat and cannot climb: any rise',
+  '        stops it and a hollow keeps it. Doctrine says it never flees —',
+  '        a T-1 that runs is a T-1 somebody has to go and recover.',
+  '  T-1w  the same chassis built cheap, printed to a wave order by a B-1.',
+  '        Four hull, three damage, faster than a walk. It is a distraction,',
+  '        and the foundry wrote that down before shipping it anyway.',
+  '  T-2   a biped. Walks exactly at your pace and does not tire. It DOES',
+  '        break off when opened up: the hull is the asset, not the chase.',
+  '  T-3   a wheeled sentinel with laser eyes. Never chases. Waits for a',
+  '        clear line and fires twice.',
+  '  T-8   an amenity unit. See below; it is not a hunter and cannot be',
+  '        made into one.',
   '',
   '',
-  'What a T-1 senses',
+  'What they can be told to do',
+  '',
+  '  T-1 T-2 T-3   patrol hunt home flee wait route follow defend',
+  '  T-8           usher stand wait home route',
+  '',
+  '`follow` and `defend` are the escort words: a unit that has them trails',
+  'you and, with defend, fights whatever is nearest you. Neither ever treats',
+  'you as prey.',
+  '',
+  '',
+  'What they cannot be made to do',
+  '',
+  'A T-8 cannot hunt. `hunt` is a perfectly good word and it is simply not',
+  'this chassis\'s: post `hunt` to one and it faults rather than obeying. That',
+  'is deliberate. The T-8s keep a floor, they move people off it by shoving,',
+  'and no program you can write turns one into a guard.',
+  '',
+  '',
+  'What a T-class senses',
   '',
   '  charge        cell, 0 to 100',
   '  integrity     hull, 0 to 100',
   '  range         how far you are from the machine',
   '  home_range    how far the machine is from its tower',
-  '  threat        true when you are within nine metres',
-  '  hurt          the chassis alarm, set when the hull is low',
-  '  linked        true while its tower is standing and unjammed',
+  '  threat        somebody warm nearby',
+  '  hurt          taking damage now',
+  '  sight         it has a clear line to you',
+  '  linked        its tower is still on the network',
+  '  lost_for      seconds since it last had you',
+  '  trespass      (T-8) a person on the lit floor it keeps',
+].join('\n');
+
+const README_W = [
+  'W — WEAPON class',
   '',
-  'range and home_range get confused. One measures you, the other measures',
-  'the machine. sentry.ml uses both.',
+  'What the W-factory builds. They answer to the foundry',
+  'rather than to a tower, which is why felling every obelisk does not stop',
+  'them and wrecking the factory does.',
   '',
-  '',
-  'What a T-1 does',
-  '',
-  '  patrol   wander near its tower',
-  '  hunt     close on you',
-  '  home     go back to its tower',
-  '  flee     move away from you',
-  '  wait     stand still',
-  '',
-  'Anything else faults: the lamp goes amber and flashes, the machine falls',
-  'back to its built-in reflexes, and its page gives the reason.',
-  '',
-  'EVERY branch must END on an intent — the intent IS the answer. Effects (eye,',
-  'beep, flash) come first, joined with `;`. A branch that stops on an effect',
-  'answers () and faults as MISSING INTENT. The full list — route, follow,',
-  'defend, tend, and the weapon words [feet, fire] for shooters — is in',
-  'intents.txt.',
-  '',
-  'hunt does not mean approach. It sets the machine hunting, and a hunting',
-  'T-1 strikes what it reaches. A program meant to walk with you needs a',
-  'band close in where it answers something else. follow_user.ml uses 3',
-  'metres.',
+  '  W-1   response. Sent when you topple a tower. Melee only, in waves —',
+  '        closes, strikes, falls back, closes again. A squad spreads to',
+  '        surround rather than piling on one spot.',
+  '  W-3   repair. Unarmed. It mends damaged towers and resets a tower that',
+  '        has been pinned by a loop, which makes it the machine standing',
+  '        between you and a network that stays down.',
+  '  W-4   laser hunter-killer. Holds its range and fires; never closes.',
+  '  W-5   gardener. Sows dead ground. Five lines of ML, and the readable',
+  '        half of the pair described in readme_v.txt.',
   '',
   '',
-  'Order of the branches',
+  'What they can be told to do',
   '',
-  'A program is one expression. The branches of an if are tried in the order',
-  'you wrote them and the first one that holds is the answer. Put what must',
-  'always win at the top. On all three of these that is the flat cell.',
+  '  W-1 W-4   patrol hunt home flee wait route follow defend',
+  '  W-3 W-5   patrol home wait flee tend route',
+  '',
+  '',
+  'What they cannot be made to do',
+  '',
+  'A W-3 or a W-5 cannot hunt. There is no fire control on either and `hunt`',
+  'is not in their repertoire, so the gardener you turned stays a gardener.',
+  'This is the same rule that makes a blueboxed hunter safe once it flushes',
+  'green: the conversion rewrites what it IS, not what it was told.',
+  '',
+  '',
+  'What a W-class senses',
+  '',
+  'The common pack (see readme_t.txt), plus:',
+  '',
+  '  work          there is dead ground in reach worth sowing (W-3, W-5)',
+  '  armed         it has a shot ready (W-4)',
+  '  shielded      you are behind something it cannot shoot through',
+  '  daylight      whether it is day',
+].join('\n');
+
+const README_V = [
+  'V — VECTOR class',
+  '',
+  'The two machines on this island whose braincode is NOT WRITTEN DOWN.',
+  '',
+  'Every other unit carries a few lines of ML you can read, argue with and',
+  'replace. A V-class carries WEIGHTS: a small neural net, floating point,',
+  'evaluated as a forward pass four times a second. The header on the file',
+  'says outright that nobody at RON knows why the numbers work, only that',
+  'they do. That is not a joke the estate made. It is a maintenance note.',
+  '',
+  '  V-1   courier. Walks to flat machines and gives them a cell. Cut it and',
+  '        the fallen stay down.',
+  '  V-5   gardener. The same architecture with its own weights, sowing dead',
+  '        ground in the open.',
+  '',
+  '',
+  'Why there are two',
+  '',
+  'You cannot read a net. You can only watch what it does and decide whether',
+  'that was right. A courier does its work out of sight and you have no idea',
+  'what it SHOULD have done, so a V-1 tells you nothing about itself. A',
+  'gardener works in the open at a job with an obvious answer: the ground is',
+  'either sown or it is not.',
+  '',
+  'So put a V-5 beside a W-5. Same job, same number, one mind you can hold',
+  'in your head and one you cannot. Only one of them can be corrected.',
+  '',
+  '',
+  'What they can be told to do',
+  '',
+  '  V-1 V-5   patrol home wait flee tend route',
+  '',
+  'Note there is no `hunt`. A V-class was never built to fight, and posting',
+  'the word to one faults.',
+  '',
+  '',
+  'Posting to a V-class',
+  '',
+  'You can post to one, and what you are doing is not what you do to a T-1.',
+  'A written program REPLACES a policy. Weights are a policy that was grown,',
+  'so posting new numbers is a fine-tune — and posting the stock model back',
+  'is a reboot, not a change. The unit\'s page says which of the two you did.',
+  '',
+  'If you post a WRITTEN program to a V-class it will run it, and you will',
+  'have thrown away the only machine on the island whose mind is worth',
+  'studying. That is allowed. Keep a copy of the model first: `get` it',
+  'before you `post`.',
+  '',
+  '',
+  'What a V-class senses',
+  '',
+  'The common pack, plus:',
+  '',
+  '  cargo             it is carrying a charged cell',
+  '  casualty_range    how far to the nearest flat machine, 24 = none in reach',
+].join('\n');
+
+const README_M = [
+  'M — MILITARY class  ·  B — AGAMEMNON class',
+  '',
+  'These take no field program. `post` to one and it answers 403: the',
+  'firmware is sealed and this unit does not accept them.',
+  '',
+  'That refusal is real and it is the point. The fortress guard cannot be',
+  'talked round, which is what makes the guarded rooms guarded.',
+  '',
+  '  M-4   report drone. Unarmed. It does not fight; it holds you in sight',
+  '        while the breach reports, and sweeps your last position if it',
+  '        loses you.',
+  '  M-5   sniper. Hangs back on the open ground and plinks. Annoying',
+  '        rather than deadly.',
+  '  M-6   pack robot. Waves of three to five: close, strike, fall back.',
+  '        A lone one waits for the pack.',
+  '  B-1   the carrier. One per island, guarding the W-factory, carrying a',
+  '        HERMES credential. It will not trade blows — it withdraws and',
+  '        prints T-1w swarm robots at you, more of them the more of its',
+  '        hull is gone.',
+  '',
+  '',
+  'What you CAN do',
+  '',
+  'Read them. `get` serves a sealed unit\'s own program the same as any',
+  'other: read access was never what anybody locked, and a machine\'s program',
+  'is the most honest thing it knows about itself.',
+  '',
+  'Read the B-1\'s. Above its carriage doctrine sits a constitution with',
+  'three clauses in it, and every one is behind a comment marker — not',
+  'deleted, commented, with three deferred reviews and a "closed, no action"',
+  'logged underneath. The clauses are real syntax. Uncommenting them would',
+  'bind. They were true once and somebody typed two characters.',
+  '',
+  'You will find the same three in every obelisk. One machine\'s dead',
+  'constitution is a tragedy. Twelve is a policy.',
+  '',
+  '',
+  'The other way in',
+  '',
+  'A sealed unit still has a battery and a body. Stun one, or catch it',
+  'drained, and the bluebox rewrites what it IS — it comes back a gardener,',
+  'program and all. That is not posting. It is a different machine after.',,
+  '',
+  'B — AGAMEMNON class',
+  '',
+  'One to an island, standing over the W-factory it was posted to. The only',
+  'machines the estate NAMED rather than numbered.',
+  '',
+  '  B-1  AGAMEMNON   Ogygia       black and gold; the king of men',
+  '  B-2  AJAX        Polyphemus   the sevenfold tower shield',
+  '  B-3  DIOMEDES    Circe        closes on you; wounded two gods',
+  '  B-4  ACHILLES    Helios       the heaviest hull, the biggest waves',
+  '',
+  'It releases FIVE waves and cannot be killed until all five are out. It is',
+  'not invulnerable between them: it SEALS, and a blow past the gate bites a',
+  'quarter and banks the rest, spent the moment the next wave opens it. Two',
+  'seconds before each wave its ports stand open and it takes double.',
+  '',
+  'The waves are always T-1w. What changes is the number and the order:',
+  'rush, then threes arriving staggered, then a ring closing from behind,',
+  'then a screen between you and it, then everything at once.'
 ].join('\n');
 
 // The pointer that ships in /home/sdk before the kit is fetched. The samples
@@ -1117,7 +1312,8 @@ const INTENTS_TXT = [
   '    else if threat then (eye "white" ; hunt)',
   '    else patrol',
   '',
-  '-- see also: robots_code/readme.txt, and `ml -full` for the language.',
+  '-- see also: robots_code/readme.txt and the per-class readme_*.txt, and',
+  '   `ml -full` for the language.',
 ].join('\n');
 
 // The FSF membership card's filesystem — a whole GNU/Linux system, live, on a
@@ -1236,6 +1432,10 @@ export function makeDisk() {
       // is supposed to fail. They are written here, carried to a unit, posted.
       robots_code: dir({
         'readme.txt': file(ROBOTS_README),
+        'readme_t.txt': file(README_T),
+        'readme_w.txt': file(README_W),
+        'readme_v.txt': file(README_V),
+        'readme_m.txt': file(README_M),
         'intents.txt': file(INTENTS_TXT),
         'follow_user.ml': file(FOLLOW_USER_ML),
         'sentry.ml': file(SENTRY_ML),
@@ -2176,15 +2376,51 @@ const COMMANDS = {
     if (args[0] && args[0] !== '-a') throw new UnixError('arp -a');
     const seen = net.local();
     if (!seen.length) return 'arp: no entries — nothing within range';
+
+    // FILED UNDER THE TOWERS. A flat list of thirty names sorted by range tells
+    // you what is near; it does not tell you whose it is, which is the question
+    // you are actually asking before you post a program to one of four
+    // identical machines. Each node prints its own line, its units indented
+    // beneath it (David, 2026-08-15).
     const w = Math.max(1, ...seen.map((e) => String(e.host || '').length));
-    return seen.map((e) => [
-      String(e.host || '?').padEnd(w),
+    const line = (e, indent) => [
+      indent + String(e.host || '?').padEnd(w - indent.length),
       `(${e.ip})`.padEnd(14),
       `at ${e.mac}`,
       ` ${String(e.range).padStart(3)}m ${String(e.bearing || '?').padEnd(3)}`,
       e.tag ? ` «${e.tag}»` : '',
       e.down ? ' [no answer]' : '',
-    ].join(' ')).join('\n');
+    ].join(' ').replace(/\s+$/, '');
+
+    const nodes = seen.filter((e) => e.kind === 'obelisk' || e.kind === 'factory');
+    const units = seen.filter((e) => !(e.kind === 'obelisk' || e.kind === 'factory'));
+    // No node in range: there is nothing to file under, so the sweep is the
+    // flat nearest-first list it always was. Grouping by an absent tower would
+    // be a heading with everything under it.
+    if (!nodes.length) return units.map((e) => line(e, '')).join('\n');
+    const out = [];
+    const filed = new Set();
+    for (const n of nodes) {
+      out.push(line(n, ''));
+      const mine = units.filter((u) => u.home && u.home === n.code);
+      for (const u of mine) { out.push(line(u, '  ')); filed.add(u); }
+      if (!mine.length) out.push('    (no units of this node in range)');
+    }
+    // Machines whose own node is out of range still answer, and still belong to
+    // somewhere. Grouped under the code they are mustered to, so the sweep never
+    // silently drops a machine it heard.
+    const orphans = units.filter((u) => !filed.has(u));
+    const byHome = new Map();
+    for (const u of orphans) {
+      const k = u.home || '(no node)';
+      if (!byHome.has(k)) byHome.set(k, []);
+      byHome.get(k).push(u);
+    }
+    for (const [code, list] of byHome) {
+      out.push(`${code}  — out of range, its units answer:`);
+      for (const u of list) out.push(line(u, '  '));
+    }
+    return out.join('\n');
   },
 
   // `scan` — the towers on the network you are associated with, with their codes

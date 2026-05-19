@@ -1,0 +1,42 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Death certificate</title>
+<style>
+  body { margin:0; background:#171a1f; color:#d7dbe2; font:13px -apple-system,sans-serif; }
+  .wrap { padding:20px; }
+  canvas { display:block; border:1px solid #000; }
+</style>
+<div class="wrap"><canvas id="c" width="900" height="1400" style="width:520px;height:809px"></canvas></div>
+<script type="module">
+import { uiMethods } from '../../src/engine/ui.js';
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+const ui = Object.create(uiMethods);
+ui.ctx = ctx; ui.w = 900; ui.h = 1400;
+ui._wrapText = (c, text, maxW) => {
+  const out = []; let line = '';
+  for (const w of String(text).split(/\s+/)) {
+    const t = line ? line + ' ' + w : w;
+    if (c.measureText(t).width > maxW && line) { out.push(line); line = w; } else line = t;
+  }
+  if (line) out.push(line);
+  return out;
+};
+const TR = ['CASSANDRA','DAEDALUS','ODYSSEUS','ORPHEUS','PENELOPE','TIRESIAS'];
+const tracks = TR.map((name,i)=>({
+  name, tier: [0,3,10,1,0,6][i], rungs: 10,
+  tierLabel: ['—','THIRD','SUMMIT','FIRST','—','SIXTH'][i],
+  summited: i===2, have: [0,3,58,1,0,6][i], next: [1,4,58,2,1,7][i],
+  unit: ['towers','hacks','miles','songs','days','kills'][i],
+  summitName: 'THE LONG WAY HOME',
+  purity: i===4 ? { intact:false, why:'a machine was struck', day:3 } : { intact:true },
+}));
+const badges = Array.from({length:56},(_,i)=>({ id:'b'+i, name:'Device '+i, earned: i%7===0, ai: i%13===0 }));
+ui.drawDeathCert({
+  name:'A wanderer', score: 1240, skills:['tracking','herbs'], deaths: 3,
+  killLog:['5D33','A17C','0E92'],
+  kleos: { tracks, badges, milestones:[{name:'First Watch',earned:true},{name:'Long Walk',earned:true}],
+           laurels:[{name:'CALYPSO',island:'ogygia'}] },
+  rank: 'WANDERER',
+});
+</script>

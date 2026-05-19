@@ -130,7 +130,7 @@ export function hermesTopics() {
 //
 // `cd hermes / ls` lists these; `read readme.md` is the recipe; `forge
 // <name>-virus.ml` (Trojan card in hand) arms the card FOR THIS ISLAND.
-// See docs/calypso-escape-chain.md.
+// See docs/PLAN.md.
 //
 //   CALYPSO    — zeus_virus     the sky-father's command; she yields to Zeus, never to you (Od. 5.28-148)
 //   POLYPHEMUS — nobody_virus   Outis: the name that unmakes the eye's alarm (Od. 9.366-414)
@@ -177,3 +177,100 @@ export function virusDocsFor(aiName) {
     [v.file]: { title: `${v.file} (sealed)`, text: v.sealed },
   };
 }
+
+// ---- The relay's disk ---------------------------------------------------
+// A HERMES terminal answered `ls` with two files, while the box it stands in
+// serves nine documents, the unit SDK and the V-class checkpoints over its own
+// aerial. All of that was reachable only if you knew a topic word or opened
+// Netscape (David, 2026-08-14: "we should have a filesystem on the hermes
+// terminal... I need to be able to find the sample robot code and the V class
+// robot weights files more easily").
+//
+// So the drive gets folders, and they are filled from the SAME tables the web
+// downloads are served from. One source of truth: a file you `cat` at the
+// terminal and the same file you download in Netscape cannot drift apart.
+import { RELAY_FILES, RELAY_BUNDLES } from './net.js';
+
+/** Where each bundle lands on the relay's own disk, by its package name. */
+const BUNDLE_DIR = { 'unit-sdk': 'sdk', checkpoints: 'weights' };
+
+/** A doc topic as a filename. The topics are single words, so this is a suffix. */
+const docFile = (topic) => `${topic}.txt`;
+
+// Word wrap. console-buffer's `wrap` cuts at the column whatever is there,
+// which is right for a live console feed and wrong for a file somebody reads:
+// it broke "picture" across two lines.
+function wrapWords(text, cols = 64) {
+  const out = [];
+  let line = '';
+  for (const word of String(text).split(/\s+/)) {
+    if (!word) continue;
+    if (!line) { line = word; continue; }
+    if (line.length + 1 + word.length <= cols) { line += ` ${word}`; continue; }
+    out.push(line);
+    line = word;
+  }
+  if (line) out.push(line);
+  return out;
+}
+
+/**
+ * The relay's filesystem: a path -> entries map, folders marked with a trailing
+ * slash the way the keeper store marks them. `forged` is the set of files the
+ * player has made at the bench, which sit at the top with the payload.
+ */
+export function hermesTree(aiName, forged = []) {
+  const top = [
+    ...virusFilesFor(aiName),
+    ...forged,
+    'doc/',
+    ...Object.values(BUNDLE_DIR).map((d) => `${d}/`),
+    'bin/',
+  ];
+  const tree = {
+    '': top,
+    doc: hermesTopics().map(docFile),
+    bin: RELAY_FILES.map((f) => f.name),
+  };
+  for (const b of RELAY_BUNDLES) {
+    const dir = BUNDLE_DIR[b.name] || b.dir || b.name;
+    tree[dir] = b.files.map((f) => f.name);
+  }
+  return tree;
+}
+
+/** The text of a file inside one of the relay's folders, or null. */
+export function hermesReadIn(sub, name) {
+  const want = String(name || '').toLowerCase();
+  if (sub === 'doc') {
+    const topic = hermesTopics().find((t) => docFile(t).toLowerCase() === want || t.toLowerCase() === want);
+    if (!topic) return null;
+    // A doc is {title, text}. As a FILE it wants a heading and hard-wrapped
+    // body, because a terminal is 64 columns and `cat` does not reflow.
+    const d = HERMES_DOCS[topic];
+    return [d.title, '='.repeat(Math.min(64, d.title.length)), '', ...wrapWords(d.text, 64), ''].join('\n');
+  }
+  if (sub === 'bin') {
+    const f = RELAY_FILES.find((x) => x.name.toLowerCase() === want);
+    return f ? f.body : null;
+  }
+  const bundle = RELAY_BUNDLES.find((b) => (BUNDLE_DIR[b.name] || b.dir || b.name) === sub);
+  if (bundle) {
+    const f = bundle.files.find((x) => x.name.toLowerCase() === want);
+    return f ? f.body : null;
+  }
+  return null;
+}
+
+/** Is `name` a folder at this path on the relay? */
+export function hermesIsDir(sub, name) {
+  return (hermesTree('', [])[sub || ''] || []).includes(`${String(name).replace(/\/$/, '')}/`);
+}
+
+/** What each folder is for, for the `drives`/`ls` header. One line each. */
+export const HERMES_DIRS = {
+  doc: "RON's documentation — the same nine the archive reads",
+  sdk: 'the unit kit: worked examples you can post to a machine',
+  weights: 'V-class checkpoints — pretrained, no training needed',
+  bin: 'the tools that run on a NostBook',
+};

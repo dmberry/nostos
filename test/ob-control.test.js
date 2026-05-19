@@ -7,7 +7,7 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
-// THE OBELISK CONTROL VERBS (docs/ob-hacking-plan.md).
+// THE OBELISK CONTROL VERBS (docs/PLAN.md).
 //
 // `unlock` was the only thing a decrypted AI key was for, which made the most
 // laborious object in the game single-use. These five reach the island as a

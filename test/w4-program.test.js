@@ -7,7 +7,7 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
-// S2 — the W-4, the first shooter (docs/robot-ml-rollout-plan.md). The stock
+// S2 — the W-4, the first shooter (docs/PLAN.md). The stock
 // hunter-killer's doctrine, and that its decisions carry a weapon word the
 // update function reads. The fire GATE itself (hold suppresses the shot) is a
 // one-liner in updateW4 and is verified in the browser; here we prove the

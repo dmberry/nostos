@@ -8,7 +8,7 @@
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
 // Unit tests for the robots system registration (Stage 3 of the systems-registry
-// refactor; see docs/refactor-registry.md). robots.js's updateRobots is now a
+// refactor; see docs/PLAN.md). robots.js's updateRobots is now a
 // registered system rather than a hardcoded hub call. These tests pin the one
 // thing that stage's ordering has to guarantee — robots tick BEFORE fortress,
 // so fortress reads this-frame aggro — and that the world-bag adapter runs.

@@ -12,7 +12,7 @@
 //
 // These live in their own file rather than in lex.js because all three layers
 // throw them and none of the three should have to import another just to say
-// what went wrong. (The plan's file list in docs/aiml-standalone-plan.md does
+// what went wrong. (The plan's file list in docs/PLAN.md does
 // not name this file; it is the one addition M1 makes to that list.)
 
 // Anything the language refuses, at any stage. The message is the one a player

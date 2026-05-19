@@ -261,6 +261,13 @@
   #help .musicChoice label { display: inline-flex; align-items: center; gap: 5px;
     color: #cfd8c3; font-size: 13px; margin-right: 4px; cursor: pointer; }
   #help .musicChoice input[type="radio"] { accent-color: #9db284; flex: 0 0 auto; width: 14px; height: 14px; margin: 0; }
+  #help .modeChoice { flex-wrap: wrap; gap: 6px; }
+  #help .modeChoice button { font: 600 12px ui-monospace, monospace; letter-spacing: 0.04em;
+    padding: 5px 11px; cursor: pointer; color: #cfe0bd; background: #1d2417;
+    border: 1px solid #3c4a30; border-radius: 3px; }
+  #help .modeChoice button:hover { background: #2a3421; }
+  #help .modeChoice button[aria-pressed="true"] { color: #10130d; background: #9db284; border-color: #9db284; }
+  #help #modeBlurb { min-height: 2.4em; }
   #help #volumeLabel, #help #fxLabel, #help #musicLabel { color: #9db284; font: 12px ui-monospace, monospace; min-width: 38px; }
   /* Obelisk terminal — a VT220-ish green CRT. */
   #obterminal { display: none; position: fixed; inset: 0; z-index: 20;
@@ -541,7 +548,7 @@
   #devbox #dev-input { flex: 1; background: transparent; border: none; outline: none;
     font: 12px ui-monospace, monospace; color: #eafff0; caret-color: #47c07a; }
 
-  /* The Nokia 3310 (docs/calypso-nokia-plan.md): the handset IS the modal,
+  /* The Nokia 3310 (docs/PLAN.md): the handset IS the modal,
      ZOOMED into the screen. The sprite is scaled well past the viewport and
      cropped, so the glass dominates the view — earpiece above, navi key
      below, keypad falling off the bottom — and the live LCD (status row,
@@ -690,13 +697,25 @@
     padding: 3px 8px; font: 13px system-ui, sans-serif; width: 130px;
   }
   .machineGallery { display: flex; flex-wrap: wrap; gap: 14px; margin: 8px 0 16px; }
-  .machineChip { display: flex; flex-direction: column; align-items: center; width: 104px; }
+  .machineChip { display: flex; flex-direction: column; align-items: center; width: 78px; }
   .machineChip img {
-    width: 96px; height: 96px; border-radius: 6px;
+    width: 72px; height: 72px; border-radius: 5px;
     background: rgba(207,216,195,0.06); border: 1px solid rgba(207,216,195,0.2);
   }
   .machineChip span { font-size: 10px; margin-top: 3px; color: #cfd8c3; text-align: center; line-height: 1.3; }
   .machineChip b { display: block; font-size: 11px; color: #e8e0d0; }
+  .machineClass { margin: 14px 0 4px; }
+  .machineClass h3 { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: #9fb08c; margin: 0 0 2px; border-bottom: 1px solid rgba(159,176,140,0.25); padding-bottom: 3px; }
+  .machineClass .classNote { font-size: 11px; color: #9aa392; margin: 0 0 7px; }
+  /* The chassis notes were a bare <table>: the label column collapsed to the
+     width of "T1w", the rows had no separation, and it read as broken text
+     rather than as a list (David, 2026-08-15). */
+  .helpPanel[data-panel="machines"] table { border-collapse: collapse; width: 100%; margin: 8px 0 12px; }
+  .helpPanel[data-panel="machines"] table td { vertical-align: top; padding: 7px 8px;
+    border-top: 1px solid rgba(159,176,140,0.16); }
+  .helpPanel[data-panel="machines"] table td:first-child { width: 62px; white-space: nowrap;
+    color: #cfe0b8; font-weight: bold; font-size: 12px; }
 </style>
 </head>
 <body>
@@ -872,7 +891,14 @@
         time. Do it before you go into a fortress.</td></tr>
       <tr><td><b>Eat before you starve</b></td><td>Health only comes back when
         you are fed and unpoisoned. Berries and meat are out there; cook what you
-        can.</td></tr>
+        can. Three wood and <kbd>6</kbd> lays a <b>campfire</b>: stand by it and
+        press <kbd>E</kbd> to roast meat, worth nearly twice raw and it gives you
+        some strength back. It burns down, so feed it more wood or lose it.</td></tr>
+      <tr><td><b>Get into the grass</b></td><td>Tall grass is cover. Walking
+        through it, a machine reads you as roughly twice as far off as you are;
+        standing still in it, four times. Sprinting does the opposite and gives
+        you away. Watch the word beside your bars: <b>IN COVER</b>, <b>HIDDEN</b>,
+        <b>LOUD</b>. None of it helps once something is standing over you.</td></tr>
       <tr><td><b>Hide, don't just run</b></td><td>Every hunter needs to actually
         see you. Break its line of sight behind a wall or a hill for a few
         seconds and it gives up and wanders off.</td></tr>
@@ -1011,32 +1037,60 @@
     <div class="helpPanel" data-panel="machines">
     <h2>The machines</h2>
     <p>The AIs still control this land. Their black <b>obelisk towers</b> pulse across the landscape, and their T-class hunters patrol around them.</p>
-    <div class="machineGallery" id="machineGallery">
+    <!-- BY CLASS. Sixteen chips in one run was a wall you had to read all of to
+         find anything; the classes are how the estate itself names them, and a
+         player already thinks "which W is the one with the laser" rather than
+         "which of the sixteen" (David, 2026-08-15). -->
+    <div class="machineClass"><h3>T &mdash; the TERMINAL class</h3><p class="classNote">Posted to the towers, and named for them. What you meet first and most.</p>
+    <div class="machineGallery">
       <div class="machineChip"><img id="gal-t1" alt="T1"><span><b>T1</b>wheeled hunter</span></div>
       <div class="machineChip"><img id="gal-t1w" alt="T1w"><span><b>T1w</b>swarm unit</span></div>
       <div class="machineChip"><img id="gal-t2" alt="T2"><span><b>T2</b>biped stalker</span></div>
       <div class="machineChip"><img id="gal-t3" alt="T3"><span><b>T3</b>ambush sniper</span></div>
       <div class="machineChip"><img id="gal-t8" alt="T8"><span><b>T8</b>amenity usher</span></div>
+    </div></div>
+
+    <div class="machineClass"><h3>W &mdash; the WEAPON class</h3><p class="classNote">Printed by the W-factory and sent out. Kill the factory and these stop coming.</p>
+    <div class="machineGallery">
       <div class="machineChip"><img id="gal-w1" alt="W1"><span><b>W1</b>revenge squad</span></div>
       <div class="machineChip"><img id="gal-w2" alt="W2"><span><b>W2</b>water droid</span></div>
       <div class="machineChip"><img id="gal-w3" alt="W3"><span><b>W3</b>repair drone</span></div>
       <div class="machineChip"><img id="gal-w4" alt="W4"><span><b>W4</b>laser hunter</span></div>
       <div class="machineChip"><img id="gal-w5" alt="W5"><span><b>W5</b>gardener drone</span></div>
+    </div></div>
+
+    <div class="machineClass"><h3>V &mdash; the VECTOR class</h3><p class="classNote">These run WEIGHTS, not rules &mdash; directions in a space too large to picture. Posting to one is a fine-tune, not a rewrite.</p>
+    <div class="machineGallery">
+      <div class="machineChip"><img id="gal-v1" alt="V1"><span><b>V1</b>neural courier</span></div>
+      <div class="machineChip"><img id="gal-v5" alt="V5"><span><b>V5</b>neural gardener</span></div>
+    </div></div>
+
+    <div class="machineClass"><h3>M &mdash; the MILITARY class</h3><p class="classNote">The fortress detail. Foundry-sealed: these take no field program at all.</p>
+    <div class="machineGallery">
       <div class="machineChip"><img id="gal-m4" alt="M4"><span><b>M4</b>report drone</span></div>
       <div class="machineChip"><img id="gal-m5" alt="M5"><span><b>M5</b>fortress sniper</span></div>
       <div class="machineChip"><img id="gal-m6" alt="M6"><span><b>M6</b>pack robot</span></div>
-      <div class="machineChip"><img id="gal-b1" alt="B1"><span><b>B1</b>carrier</span></div>
-    </div>
+    </div></div>
+
+    <div class="machineClass"><h3>B &mdash; the AGAMEMNON class</h3><p class="classNote">One to an island, standing over its factory. The only machines the estate <b>named</b> instead of numbering. They do not trade blows; they print them.</p>
+    <div class="machineGallery">
+      <div class="machineChip"><img id="gal-b1" alt="B1"><span><b>B1</b>AGAMEMNON</span></div>
+      <div class="machineChip"><img id="gal-b2" alt="B2"><span><b>B2</b>AJAX</span></div>
+      <div class="machineChip"><img id="gal-b3" alt="B3"><span><b>B3</b>DIOMEDES</span></div>
+      <div class="machineChip"><img id="gal-b4" alt="B4"><span><b>B4</b>ACHILLES</span></div>
+    </div></div>
     <table>
       <tr><td>T1</td><td>A wheeled hunter, faster than your walk. It cannot climb: put any rise between you, or lure it into a hollow and it is trapped for good. Sprinting outruns it.</td></tr>
       <tr><td>T2</td><td>A biped stalker that walks exactly at your pace and does not tire. Sprint to break away, or stand and fight.</td></tr>
-      <tr><td>T1w</td><td>A T-1 built cheap and printed to a wave order: quicker than your walk, and made of almost nothing — one swing of anything drops it. It is a <b>distraction</b> by design, and four of them at once still do less than a single T-1's ram. Only the <b>B-1 carrier</b> makes them, and it makes them by the handful. They are <b>not</b> foundry-sealed, so a NostBook can <code>post</code> a program onto one: turning the swarm is a real alternative to clearing it.</td></tr>
+      <tr><td>T1w</td><td>A T-1 built cheap and printed to a wave order: quicker than your walk, and made of almost nothing — one swing of anything drops it. It is a <b>distraction</b> by design, and four of them at once still do less than a single T-1's ram. Only an <b>AGAMEMNON-class</b> machine makes them, and it makes them by the handful. They are <b>not</b> foundry-sealed, so a NostBook can <code>post</code> a program onto one: turning the swarm is a real alternative to clearing it.</td></tr>
       <tr><td>T8</td><td>An <b>amenity unit</b>, and the only machine in the game that cannot be made to fight — <code>hunt</code> is not in its repertoire, so a program that asks for it faults. Four of them keep the lit floor of CALYPSO's grove. Stand on the lumen and they come together, in waves, and <b>shove you off it</b>: you lose a couple of tiles of ground and nothing else. No damage, ever. Read its braincode and you find it has settled, on a technicality, that it is entitled to move you along.</td></tr>
+      <tr><td>V1 / V5</td><td>The <b>V-class</b>, and the only machines on the island whose braincode is <b>not written down</b>. Where every other unit carries a few lines of ML you can read, a V-class carries <b>weights</b> — a small neural net, floating point, and the header says outright that nobody at RON knows why the numbers work. The <b>V1</b> is a <b>courier</b>: it walks to flat machines and gives them a cell, so cutting it means the fallen stay down. The <b>V5</b> is a <b>gardener</b> running the same architecture with its own weights, out in the open sowing dead ground. That pairing is the point — the V5 does a job with an obvious right answer, so it is the one V-class machine you can actually <i>judge</i>: you cannot read the net, but you can watch whether the ground gets sown. Set one beside a <b>W5</b>, which does the same work on five readable lines, and the difference is the whole argument.</td></tr>
       <tr><td>T3</td><td>Rare, and unlike a T1/T2 it never chases: a <b>wheeled sentinel</b> — a T2's trunk on a T1's undercarriage — that camps near its tower with a pair of <b>always-lit orange laser eyes</b>. It waits, unnoticed, until it actually gets a clear shot; the eyes flare, a charge-line joins them, and the twin volley lands at roughly double a W4's bolt, then a long quiet recovery. Get in close and it only rolls back far enough to keep the shot lined up; at point-blank range it claws instead.</td></tr>
+      <tr><td>B1&ndash;B4</td><td>The <b>AGAMEMNON class</b>: one to an island, standing over the W-factory it was posted to, and the only machines the estate <b>named</b> rather than numbered. They are the kings who took Troy &mdash; and the man walking up to them was there too, and did it another way. Same panoply every time, because it is one foundry design; what changes is the metal and the temper. <b>B1 AGAMEMNON</b> (Ogygia) black and gold, the king of men. <b>B2 AJAX</b> (Polyphemus) ox-hide over bronze, carrying the sevenfold tower shield &mdash; far more rim to break through, and no tougher underneath it. <b>B3 DIOMEDES</b> (Circe) bronze gone hot: the one who wounded two gods in an afternoon, and the only one that <b>closes on you</b> instead of standing off. <b>B4 ACHILLES</b> (Helios) silver-white, the shield with the world on it &mdash; the heaviest hull and the biggest waves. Each releases <b>five waves</b> and cannot be killed until all five are out; between them it <b>seals</b>, and a blow rings off it. It opens its ports for two seconds before each wave, and that is when it can be hurt properly.</td></tr>
     </table>
     <p>Every hunting machine — T1, T2, T3, W1, W4 — genuinely needs to <b>see</b> you: break its line of sight behind a wall or a hill for a few seconds straight and it gives up the chase and wanders off, only re-noticing you later if you wander back within range. Hiding is a real tactic, not just running far enough. The <b>T3</b> takes this furthest: unlike the others it never notices you by proximity alone, only by an actual clear line of sight, so staying out of its sight lines in the first place is the whole game against it.</p>
     <p>Whatever is in your hand can be swung at them, even nothing at all — bare fists land a weak hit, a proper tool or blade lands a much harder one. Your penknife barely scratches them. <b>RON</b> — a resistance calling itself Reality or Nothing, whether or not it's still out there — hid weapons in crates inside the buildings: search them (<kbd>E</kbd>) for crowbars, bats, machetes, and if you are lucky the guns: a <b>stun-gun</b> (drops a machine cold for a while), an <b>electro-gun</b> (destroys a machine outright in a shower of sparks, scares off nearby animals, and its arc even scorches <b>obelisks</b> — a slower way to fell a tower than the OB_gun, but it works; its internal cell slowly self-charges while carried, so it never stays flat for long), a <b>pistol</b> or a <b>shotgun</b> (holes in anything, but gunfire ruins the salvage). Guns are dead weight without <b>batteries, ammo, or shells</b>, hidden in the same crates. None of them shoot through a wall — a solid object blocks a shot exactly like it blocks a step. Pulling the trigger with nothing in your sights still fires — and still spends the round.</p>
-    <p>On defence, the crates sometimes hide <b>shields</b>. Just <b>carrying</b> one protects you — no need to hold it, and a faint deflector ring shows around you while it's up. A <b>riot shield</b> absorbs a laser from any direction, but it is only sheet metal: enough blows and it caves in to scrap. The <b>great shield</b> — the aspis, cut off the B-1 carrier when its rim finally gives — is the better one, and the only piece of a machine's panoply a person can take up and wear. A rarer <b>mirror shield</b> throws the shot straight back to <b>destroy the machine that fired it</b>, but every reflection heats it — press it under sustained fire and it glows red, stops bouncing shots back, and finally melts into a lump of scrap (let the fire ease and it cools off again). Rarest of all is the <b>forcefield</b> — but it's the one exception that needs a deliberate switch: <b>click it</b> in whichever slot it's sitting in (hand, pocket, or pack) to <b>arm</b> it. Once armed and carried, a green energy shell wraps right around you that nothing — shot or blow — can get through, burning a battery a minute (faster under heavy fire, since every blow it eats costs extra charge) and pulling a fresh one from your kit when a cell dies; with none left, the field drops until you feed it one. Click it again any time to disarm it and stop the drain. <b>A swarm eats it alive</b>: a <b>T1w</b> does not try to get through the shell, it <b>earths itself</b> on it and takes a bite of the cell doing so — many times what an ordinary blow costs. Against the B-1's waves the forcefield is a costly minute, not a way to stand still and be safe.</p>
+    <p>On defence, the crates sometimes hide <b>shields</b>. Just <b>carrying</b> one protects you — no need to hold it, and a faint deflector ring shows around you while it's up. A <b>riot shield</b> absorbs a laser from any direction, but it is only sheet metal: enough blows and it caves in to scrap. The <b>great shield</b> — the aspis, cut off the B-1 AGAMEMNON when its rim finally gives — is the better one, and the only piece of a machine's panoply a person can take up and wear. A rarer <b>mirror shield</b> throws the shot straight back to <b>destroy the machine that fired it</b>, but every reflection heats it — press it under sustained fire and it glows red, stops bouncing shots back, and finally melts into a lump of scrap (let the fire ease and it cools off again). Rarest of all is the <b>forcefield</b> — but it's the one exception that needs a deliberate switch: <b>click it</b> in whichever slot it's sitting in (hand, pocket, or pack) to <b>arm</b> it. Once armed and carried, a green energy shell wraps right around you that nothing — shot or blow — can get through, burning a battery a minute (faster under heavy fire, since every blow it eats costs extra charge) and pulling a fresh one from your kit when a cell dies; with none left, the field drops until you feed it one. Click it again any time to disarm it and stop the drain. <b>A swarm eats it alive</b>: a <b>T1w</b> does not try to get through the shell, it <b>earths itself</b> on it and takes a bite of the cell doing so — many times what an ordinary blow costs. Against the B-1's waves the forcefield is a costly minute, not a way to stand still and be safe.</p>
     <p>Every machine runs on a battery: hunting drains it and they crawl home to their obelisk to recharge. One that gets stuck runs flat where it stands. A flat machine can be <b>reprogrammed</b> (<kbd>R</kbd>, costs a battery) — it turns friendly, follows you, and a friendly T2 fells trees for you — or, if you'd rather just be rid of it, it can be <b>destroyed</b> like any other kill: it can't fight back while flat, and it still drops scrap.</p>
     <p>There is a second way to turn a machine, and it is what <b>circuit boards</b> are for once POSEIDON's blight is loose: the <b>bluebox</b>, soldered from a couple of boards (<kbd>C</kbd>). You cannot bluebox a machine that is still hunting — <b>stun</b> one first (the stun-gun), or catch one <b>drained</b> or <b>recharging</b> — then press <kbd>U</kbd> beside it. It spends a circuit board, its eye flushes <b>green</b>, and it turns into a <b>gardener</b>: it stops fighting for good and walks the dead ground reseeding it, the same as a W5. So the boards a felled tower drops become a way to raise a green army against the blight — the machines that wrecked the island set to healing it. (It is a real drain on circuits, one board a splice, weighed against the wave gun that wants all eight.)</p>
     <p>The <b>OB spoofer</b> takes the opposite trade. Where the bluebox is surgical and safe — one machine at a time, and it has to be down already — the spoofer is a transmitter that impersonates a whole tower. Stand under an obelisk, press <kbd>X</kbd>, and it spends a battery to speak in that tower's voice: every unit <b>homed to that node</b> turns and takes its orders from you. Standing in the open under a live eye is the cost, and knowing whether the garrison is worth a cell is what the <b>NostBook</b> is for — a tower's own page on the machines' web lists the units homed to it, so you read first and transmit second.</p>
@@ -1048,7 +1102,7 @@
     <p>Out on the water, <b>W2 droids</b> hover in squads just above the river. Idle, they drift; but come near them and the whole squad turns and fires on you in waves. Their shots only reach you <b>while you're in the water</b> though — stay on dry land or a bridge and you can pick the squad off from the bank in safety.</p>
     <p>Deep in the south, past a hacked doorway and a maze, stands a walled <b>fortress</b> — the seat of one of the island's AI minds. It fields its own <b>M-class</b> guard. In peacetime only a drone or two patrol: the <b>M4</b> is an unarmed <b>report drone</b> — it never fights, it just holds you in sight and reports the breach — and if it loses sight of you it heads for the spot it last saw you and sweeps there before giving up, so ducking behind a wall isn't enough; you have to actually move on. Slipping past its cone unseen in the first place is how you stay quiet. Get spotted and the fortress core rouses into a relentless <b>violation response</b>: it manufactures wave after wave and throws them down the maze at you. <b>M6</b> are <b>pack robots</b> — they attack in threes to fives, closing to strike then falling back to regroup, and a lone one hangs back until the pack forms. <b>M5</b> are <b>snipers</b> — they hold back out on the open quad and plink you with a low-power orange laser, annoying rather than deadly. Break the core's hull down (heavy kit only) and the AI dies: every machine on the whole island powers down where it stands — and every obelisk goes dark with it.</p>
     <p>Guarding the <b>W-factory</b> on CALYPSO's island stands the <b>B-1 CARRIER</b> — the only black-and-gold machine anywhere, half again the size of the pack it walks with, and drawn as a king in panoply: greaves, a corslet worked in gold bands, a great round shield and a helm. It is <b>carrying a HERMES credential</b>, and killing it is the <b>warrior's road off Ogygia</b> — the whole escape chain, without opening a single shell. It walks a wide beat around the building and it will <b>not</b> attack you for turning up: walk over and look at it and you get a slow, unhurried withdrawal and nothing else.</p>
-    <p>Hit it, or hit the factory it is standing over, and the fight starts. The B-1 <b>does not trade blows</b> — it backs away at a walk and <b>prints machines at you</b>, waves of <b>T1w</b> swarm units, four while it is whole and ten once it is nearly gone. Getting <i>through</i> the swarm is the fight; the carrier itself is only about an M6 and a half. Watch its chest: the gold bands and the vent slits between them run up through orange to <b>white-hot</b> as its hull goes, so you can read how close the end is off the machine itself.</p>
+    <p>Hit it, or hit the factory it is standing over, and the fight starts. The B-1 <b>does not trade blows</b> — it backs away at a walk and <b>prints machines at you</b>, waves of <b>T1w</b> swarm units, four while it is whole and ten once it is nearly gone. Getting <i>through</i> the swarm is the fight; the machine itself is only about an M6 and a half. Watch its chest: the gold bands and the vent slits between them run up through orange to <b>white-hot</b> as its hull goes, so you can read how close the end is off the machine itself.</p>
     <p>Two phases. Its <b>great shield</b> eats every blow while the rim holds — cracks open across the face as it wears — and when it finally goes it <b>falls off</b>, the arm is bare, and the hull takes everything from then on. The shield it drops is the <b>aspis</b>, and you can pick it up and carry it yourself: black field, gold rim, and it stops a laser like any other shield. It came off something that was using it properly.</p>
     <p>You can leave. No damage and nobody near for a few seconds and it stands down and goes back to its beat, with its shield whole again — so a player who is not taking the warrior route can simply walk away and forge the card the reading way instead. And you can <b>read its mind but not change it</b>: the B-1 serves its own program to a NostBook <code>get</code> and refuses every <code>post</code>, because it is foundry-sealed. What is in there is a <b>constitution</b> with Asimov's three laws in it, every clause commented out, with three deferred reviews and a "review closed, no action" logged underneath. They were true once. Somebody typed two characters.</p>
     <p>Weapon strikes on any machine now throw a shower of <b>sparks</b> on impact.</p>
@@ -1295,6 +1349,17 @@
     </div><!-- /sea -->
 
     <div class="helpPanel" data-panel="settings">
+    <!-- GAME MODE. First in Settings because it is the setting that changes what
+         playing is, and because Creative used to be reachable only through the
+         dev panel — a way to play that you had to know a secret word to find. -->
+    <h2>Game mode</h2>
+    <p class="settingsRow modeChoice" id="modeChoice"></p>
+    <p class="meta" id="modeBlurb"></p>
+    <p class="meta">Changing the mode takes effect at once and rides your save. Nothing
+      about the puzzles, the language, the web or what a machine will let you do to it
+      changes with it — the difficulty is in the world's pressure, not in what the game
+      will let you reach.</p>
+
     <h2>Volume</h2>
     <p class="settingsRow">
       <input type="range" id="volumeSlider" min="0" max="100" value="100">
@@ -1475,7 +1540,7 @@
   else initTitleScreen();
 </script>
 
-<!-- Netscape Navigator (docs/laptop-plan.md §8b). A real DOM browser rather than
+<!-- Netscape Navigator (docs/PLAN.md §8b). A real DOM browser rather than
      text on the CRT, because net.js already serves real HTML — so the pages the
      machines are still publishing render natively here, links and all. The chrome
      is 4.x: title bar, menus, the toolbar, Location, the personal bar, and the
@@ -1675,7 +1740,8 @@
   #netscape .ns-page .bm-h.bm-orange { color: #b4560a; }
   #netscape .ns-page .bm-row { display: flex; align-items: center; gap: 8px; margin: 4px 0 4px 4px; }
   #netscape .ns-page .bm-i { width: 19px; height: 19px; flex: none; }
-  #netscape .ns-page .bm-row a { display: inline; list-style: none; margin: 0; font-weight: bold; }
+  #netscape .ns-page .bm-row a { display: inline; list-style: none; margin: 0; font-weight: bold;
+    flex: 0 0 auto; white-space: nowrap; }
   #netscape .ns-page .bm-row .bm-note { color: #555; font-size: 13px; }
   #netscape .ns-page .bm-rainbow { height: 6px; margin: 12px 0; border: 1px solid #888;
     background: linear-gradient(90deg, #e33 0%, #e93 20%, #ee3 40%, #3c3 60%, #39d 80%, #63c 100%); }
@@ -1857,7 +1923,7 @@
   #netscape .ns-netpop .np-row:hover .np-bars i.lit { background: #7f7; }
   #netscape .ns-netpop .np-row .np-sig { color: #555; font-size: 10px; flex: none; }
   #netscape .ns-netpop .np-row:hover .np-sig { color: #ccd; }
-  /* ---- EXPLORER (docs/ob-hacking-plan.md) --------------------------------
+  /* ---- EXPLORER (docs/PLAN.md) --------------------------------
      The obelisk's browser. It is the SAME WEB — net.js builds every page and
      nsRender dispatches them — shown by a different program, so this is a skin
      on the Netscape window rather than a second browser that would drift from

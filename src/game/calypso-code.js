@@ -7,15 +7,15 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
-// C1 (docs/calypso-build-plan.md) — CALYPSO's codebase, as she serves it.
+// C1 (docs/PLAN.md) — CALYPSO's codebase, as she serves it.
 //
 // ONE STRUCTURE, TWO RENDERINGS. `MACHINE` below is the finite state machine.
 // The ML source and Interface Builder's graph (V1) are both generated FROM it,
 // so the file a player reads and the picture they open cannot disagree. That is
-// the rule the tower work set (docs/machine-braincode-plan.md) and it matters
+// the rule the tower work set (docs/PLAN.md) and it matters
 // more here, because the whole puzzle is that the code says something true.
 //
-// She runs NeXTSTEP on Mach (docs/ai-codebase-plan.md §3b-3c): a warm Display
+// She runs NeXTSTEP on Mach (docs/PLAN.md §3b-3c): a warm Display
 // PostScript face over a microkernel where everything is message passing
 // between PORTS, and a port carries RIGHTS. That is not decoration either —
 // RELEASE is reachable in the graph and unreachable in fact, because the port
@@ -79,7 +79,7 @@ export const unreachable = () => MACHINE.states
 // derivation step from `always protect`, and that step is where it turns. She is
 // not malfunctioning; she is correctly executing a document somebody wrote.
 //
-// `always watch` is the tell (docs/ai-codebase-plan.md §7): watching is the
+// `always watch` is the tell (docs/PLAN.md §7): watching is the
 // SURVEILLANCE model, and what she actually does is capture. The estate's
 // compliance people wrote a surveillance clause for a capture machine because in
 // 1994 that was the vocabulary. The document does not describe the system.

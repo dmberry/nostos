@@ -103,7 +103,7 @@ const OVERRIDE = {
 // Items that are consumed BY A RECIPE — the "allow other objects to be crafted"
 // question. Only the inputs are listed, never the amounts: the amounts belong
 // with the recipes (today they are constants in player.js; when crafting.js
-// lands, docs/refactor-plan.md §3.3, they move there and this list is what it
+// lands, docs/PLAN.md §3.3, they move there and this list is what it
 // will be checked against). Two sources of truth for a number is how numbers
 // drift; a source of truth for a FACT is fine.
 export const CRAFT_INPUTS = new Set([

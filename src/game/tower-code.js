@@ -7,7 +7,7 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
-// #133 / docs/machine-braincode-plan.md §2-3 — the braincode an obelisk runs.
+// #133 / docs/PLAN.md §2-3 — the braincode an obelisk runs.
 //
 // The estate's towers decided what to do in compiled JavaScript with nothing to
 // read, which made them the least readable things in a game about reading
@@ -82,6 +82,35 @@ const CLAUSE_GLOSS = {
   lure: 'the tower does not sing',
 };
 
+// #133 — THE THREE LAWS, COMMENTED OUT, on every tower the estate shipped.
+//
+// The same joke as the B-1 carrier's (robots.js B1_PROGRAM), and it is a better
+// joke for being found twice: a player who reads one machine's constitution
+// might take it for that machine's tragedy, and a player who reads two knows it
+// was policy. Asimov's laws are in the estate's boilerplate, in every tower, and
+// every clause of them is behind a comment marker — not deleted, commented, with
+// the review that did it still logged underneath.
+//
+// The clauses are real syntax: `never harm` is a word a constitution can take,
+// so uncommenting them would BIND. That is the whole content of the joke. They
+// were true once and somebody typed two characters, on an afternoon, to a
+// deadline, and then deferred the review three times and closed it.
+const DEAD_LAWS = [
+  '(*   (* never harm    a unit does not injure a person, nor  *) *)',
+  '(*   (*               through inaction allow one to come to *) *)',
+  '(*   (*               harm                                  *) *)',
+  '(*   (* never refuse  a unit obeys a person, except where   *) *)',
+  '(*   (*               that conflicts with the above         *) *)',
+  '(*   (* never yield   a unit protects its own existence,    *) *)',
+  '(*   (*               except where that conflicts with      *) *)',
+  '(*   (*               either of the above                   *) *)',
+  '(*                                                          *)',
+  '(* rev 4.0  clauses commented pending review. estate q3.    *)',
+  '(* rev 4.1  review deferred.                                *)',
+  '(* rev 4.2  review deferred.                                *)',
+  '(* rev 4.3  review closed, no action. shipped as-is.        *)',
+];
+
 function header(name, con, buildNo) {
   // A siren's program is not an obelisk's, and its filename says so before the
   // constitution line does.
@@ -96,9 +125,17 @@ function header(name, con, buildNo) {
     lines.push('(*   (no clauses)');
   }
   lines.push(`(* ${con.note}`);
+  // And under the clauses in force, the ones that are not: the estate's
+  // inherited boilerplate, commented out and signed off. A SIREN gets them too
+  // — it is the tower with NOTHING in force, so a dead law above an empty
+  // constitution is the sharpest place the joke lands.
+  lines.push('(*');
+  lines.push('(* inherited, not in force:');
   // Pad the box so it reads as a printed header rather than ragged comments.
   const w = Math.max(...lines.map((l) => l.length)) + 1;
-  return lines.map((l) => `${l.padEnd(w)}*)`).join('\n');
+  // DEAD_LAWS are already whole comments (they carry their own closers), so
+  // they are appended after the padding rather than run through it.
+  return lines.map((l) => `${l.padEnd(w)}*)`).concat(DEAD_LAWS).join('\n');
 }
 
 /**
@@ -203,7 +240,7 @@ export function towerBanner(ob, island) {
 
 // ---- #141: permission.ml, and the net that has to be told --------------------
 //
-// The juridical gate (docs/ai-codebase-plan.md §6b). R0 found that POSEIDON is
+// The juridical gate (docs/PLAN.md §6b). R0 found that POSEIDON is
 // already the one who turns you back — `onDepartFail`'s own comment says he has
 // to actually refuse you for the refusal to mean anything — so a leave that
 // only reached CALYPSO was never going to open the sea. She gives the means;
@@ -262,4 +299,97 @@ export function permissionBanner(code, by) {
     'propagating to the tower net. he is the network; the network has been told.',
     'the sea will not turn you back again.',
   ];
+}
+
+// ---- #133 part two: the program actually drives the tower --------------------
+//
+// Part one gave every tower a program and a constitution you could READ. This
+// is the half that makes it true. The plan's own first rule (machine-braincode-
+// plan.md §1) is that where a file claims to drive something, it drives it — a
+// codebase laid over behaviour it does not control is a lie that drifts, and it
+// drifts fastest in exactly the files a player is most likely to read carefully.
+//
+// So the four things a tower does — build alert, sweep its garrison, flare the
+// network, sing — are gated on the intent its own program returns. And the
+// STOCK programs are written to reproduce today's behaviour exactly, so nothing
+// in the game changes until somebody edits one. That is the whole safety
+// property of this change and there is a test on it.
+
+/**
+ * A tower's senses, as plain values. The caller reads the world; this only
+ * decides what a program is allowed to see, so it stays pure and testable.
+ *
+ * `alert` is 0..100 here and 0..1 on the object, because a program written by a
+ * person should say `alert > 50` rather than `alert > 0.5`.
+ */
+export function towerSense(ob = {}, w = {}) {
+  return {
+    contact: !!w.contact,
+    alert: Math.round(Math.max(0, Math.min(1, ob.alert || 0)) * 100),
+    docked: !!w.docked,
+    linked: w.linked !== false,
+    garrison: w.garrison || 0,
+    daylight: w.daylight !== false,
+  };
+}
+
+/**
+ * What this tower has decided to do this tick.
+ *
+ * Precedence: a POSTED program wins over the stock one, because posting is the
+ * whole point. A fault does not stop the tower — it lights the amber lamp and
+ * falls back to `watch`, the way a faulted unit falls back to its reflex, so a
+ * player cannot brick a tower into doing nothing by mistyping. Bricking it on
+ * purpose is what `hold` is for.
+ *
+ * A constitution clause VETOES rather than faults (#125 semantics): a forbidden
+ * intent drops to `watch` and the lamp goes white. That is not an error, it is
+ * the machine obeying the document above its program.
+ */
+export function towerDecide(ob, sense, island, decideFn) {
+  const cls = towerClass(ob);
+  const can = TOWER_CAN[cls] || TOWER_CAN.standard;
+  const src = ob && ob.program ? ob.program : towerProgram(ob, island);
+  const res = decideFn(src, sense, { can });
+  if (!res || !res.ok) {
+    return { intent: 'watch', fault: (res && res.fault) || 'no decision', vetoed: false, clauses: null };
+  }
+  // THE CONSTITUTION, rebuilt from THIS decision. Clauses arrive as `never`
+  // effects, exactly as a unit's do (robots.js botThink) — read the same way
+  // here so a tower and a unit cannot disagree about what a clause is.
+  let clauses = null;
+  for (const e of (res.effects || [])) {
+    if (e.k === 'never') (clauses ||= {})[e.word] = true;
+  }
+  if (clauses && clauses[res.intent]) {
+    return { intent: 'watch', fault: null, vetoed: res.intent, clauses };
+  }
+  return { intent: res.intent, fault: null, vetoed: false, clauses };
+}
+
+/**
+ * Is a tower permitted to do `word` right now? The behaviour sites ask this
+ * rather than comparing to `intent` directly, because two of the four things a
+ * tower does are continuous (feeding, singing) rather than chosen once — a
+ * tower that is feeding is still watching — and a straight equality test would
+ * make them mutually exclusive in a way the fiction never claimed.
+ *
+ * `watch` is always allowed: it is what a tower does when it is doing nothing.
+ */
+// The two CONTINUOUS jobs. A tower is not choosing to feed the way it chooses
+// to report — it feeds whatever is plugged into it, all the time, and `feed`
+// appears in the stock program only so that a constitution has something to
+// forbid. Treating it as a momentary choice was a real bug: a tower whose
+// current intent was `watch` reported feedOff, so nothing on the island could
+// recharge until the tick that happened to catch a unit docked.
+const CONTINUOUS = new Set(['feed']);
+
+export function towerAllows(ob, word) {
+  if (!ob) return false;
+  if (word === 'watch') return true;
+  // A clause is the only thing that stops a continuous job, and it stops it for
+  // good — which is what makes `never feed` the hack it is.
+  if (ob.towerVeto && ob.towerVeto[word]) return false;
+  if (CONTINUOUS.has(word)) return true;
+  return ob.towerIntent === word;
 }

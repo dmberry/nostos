@@ -7,7 +7,7 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
-// #127 — the V-class model (docs/v-class-plan.md §1, V1a).
+// #127 — the V-class model (docs/PLAN.md §1, V1a).
 //
 // A V-class unit's braincode is a small feed-forward network written as
 // ordinary ML source. The player reads it with `get`, edits a number, and
@@ -175,7 +175,7 @@ export function vForward(sense, seed = 0) {
   return { intent: V_OUTPUTS[bi], scores: o, hidden: h };
 }
 
-// ---- checkpoints as loot (docs/v-class-plan.md §3) ---------------------------
+// ---- checkpoints as loot (docs/PLAN.md §3) ---------------------------
 //
 // Pretrained weight files found in the world and posted like any program: the
 // fine-tune economy without the training. The `vector_` prefix in lower-case

@@ -7,7 +7,7 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
-// S4 — the W-1 revenge squad (docs/robot-ml-rollout-plan.md). Melee, no fire
+// S4 — the W-1 revenge squad (docs/PLAN.md). Melee, no fire
 // control: a [feet, weapon] pair must fault. The stock only chooses to keep
 // hunting or break off; the wave rhythm is the chassis.
 

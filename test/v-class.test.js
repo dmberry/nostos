@@ -7,7 +7,7 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
-// #127 V1a — the V-class model (docs/v-class-plan.md).
+// #127 V1a — the V-class model (docs/PLAN.md).
 //
 // The model is a neural net written as braincode source. The player can read
 // every number in it and still not know what it will do, which is the design

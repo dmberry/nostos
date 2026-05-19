@@ -25,6 +25,12 @@ import { Renderer } from '../engine/renderer.js';
 import { drawRobot } from './robots.js';
 import { worldToScreen } from '../engine/iso.js';
 import { showBootLoader } from './boot-loader.js';
+import { mountSettingsPanel } from './settings-panel.js';
+// The game's own sound singleton, imported for the SETTINGS PANEL only. The
+// title screen's walkman has its own little AudioContext (it plays before the
+// game exists); this is the object whose levels the sliders set, and it keeps
+// them in localStorage, so a level chosen here is the level the run starts at.
+import { sfx } from '../engine/sound.js';
 
 export function isMobile() {
   const ua = /Mobi|Android|iPhone|iPod|iPad|Silk|Kindle|BlackBerry|Opera Mini|IEMobile/i.test(navigator.userAgent || '');
@@ -145,12 +151,18 @@ export function initMobileGate(mode = 'gate') {
        <div class="mg-actions">
          ${hasSave ? '<button id="mg-continue" class="mg-btn primary">Continue</button>' : ''}
          <button id="mg-start" class="mg-btn ${hasSave ? '' : 'primary'}">${hasSave ? 'New game' : 'Start'}</button>
+       </div>
+       <div class="mg-actions mg-actions-aux">
+         <button id="mg-settings-open" class="mg-btn quiet">Settings</button>
          <button id="mg-help-open" class="mg-btn quiet">Help</button>
        </div>`
     : `<p class="mg-sub">It's the end of the world.<span class="mg-sub2">This is a beta — playable end to end, and still growing. You can play it right here with touch controls (hold to move, tap to act), or grab a laptop for the full keyboard-and-mouse game. Either way, here's the soundtrack.</span></p>
        <div class="mg-actions">
          ${hasSave ? '<button id="mg-continue" class="mg-btn primary">Continue</button>' : ''}
          <button id="mg-start" class="mg-btn ${hasSave ? '' : 'primary'}">${hasSave ? 'New game' : '▶ Play (beta)'}</button>
+       </div>
+       <div class="mg-actions mg-actions-aux">
+         <button id="mg-settings-open" class="mg-btn quiet">Settings</button>
          <button id="mg-help-open" class="mg-btn quiet">Help</button>
        </div>`;
   // The checkpoint list is not a desktop feature. A phone player who has died
@@ -223,6 +235,13 @@ export function initMobileGate(mode = 'gate') {
       .mg-tryanyway:active { opacity: 1; }
       /* title-mode Start / Continue actions */
       .mg-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin: 8px 0 2px; flex: 0 0 auto; }
+      /* The second row is about the game rather than a way into it: tucked up
+         under the first, smaller, and separated by a hairline so the two read
+         as two groups without needing a label to say so. */
+      .mg-actions-aux { gap: 8px; margin: 2px 0 0; padding-top: 10px; position: relative; }
+      .mg-actions-aux::before { content: ''; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+        width: 54px; height: 1px; background: currentColor; opacity: 0.18; }
+      .mg-actions-aux .mg-btn { font-size: 13px; padding: 6px 13px; }
       .mg-btn { font: 700 15px system-ui, sans-serif; letter-spacing: 0.03em; cursor: pointer; font-family: inherit;
         color: var(--accent); background: rgba(255,255,255,0.07); border: 1.5px solid var(--accent);
         border-radius: 8px; padding: 10px 24px; transition: transform 0.1s; }
@@ -376,6 +395,7 @@ export function initMobileGate(mode = 'gate') {
         #mobile-gate[data-mode="title"] .mg-hero { grid-area: hero; align-items: flex-start; align-self: center; }
         #mobile-gate[data-mode="title"] .mg-hero .mg-sub, #mobile-gate[data-mode="title"] .mg-hero .mg-sub2 { text-align: left; }
         #mobile-gate[data-mode="title"] .mg-hero .mg-actions { justify-content: flex-start; }
+        #mobile-gate[data-mode="title"] .mg-hero .mg-actions-aux::before { left: 0; transform: none; }
         #mobile-gate[data-mode="title"] h1 { font-size: 52px; }
         #mobile-gate[data-mode="title"] .mg-player { grid-area: player; align-self: center; justify-self: center; max-width: 480px; }
         /* The Walkman was loud enough to be the whole title screen. Bring it
@@ -485,6 +505,31 @@ export function initMobileGate(mode = 'gate') {
   for (const b of el.querySelectorAll('#mg-help-open, #mg-help-foot, #mg-menu-help')) {
     b.addEventListener('click', askHelp);
   }
+  // SETTINGS FROM THE TITLE SCREEN. The panel is the same one; it just opens on
+  // its Settings tab rather than on Start here. The mode is chosen before a run
+  // begins, so it has to be reachable from the screen you begin a run on — it
+  // was buried behind Help and a tab, which is not where anybody looks for it
+  // (David, 2026-08-15: "break the panel out of help and show it in the title
+  // page as an option").
+  el.querySelector('#mg-settings-open')?.addEventListener('click', (e) => {
+    askHelp(e);
+    const panel = helpPanel;
+    if (!panel) return;
+    for (const t of panel.querySelectorAll('.helpTab')) {
+      t.classList.toggle('active', t.dataset.panel === 'settings');
+    }
+    for (const pn of panel.querySelectorAll('.helpPanel')) {
+      pn.classList.toggle('active', pn.dataset.panel === 'settings');
+    }
+    // THE CONTROLS ARE WIRED HERE TOO. main.js does not exist yet at the title,
+    // so without this the panel is a picture of a settings panel: the sliders
+    // move and nothing happens, not even their own labels. The mode falls back
+    // to localStorage, since there is no player to hang it on until a run starts.
+    // No `beforeExport`/`beforeApply`: there is no live run to write down and
+    // no autosave to cut. Import is the one that matters here — it is how a run
+    // reaches a new machine, which you do before starting anything.
+    mountSettingsPanel(panel, { sfx });
+  });
   // Backdrop, the ✕, and Escape all close it. These listeners outlive the gate
   // (the panel does), so each one no-ops unless the panel is actually gated.
   helpPanel?.addEventListener('click', (e) => { if (e.target === helpPanel) helpHome(); });

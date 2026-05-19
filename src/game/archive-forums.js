@@ -995,6 +995,17 @@ pic('paper-strips', 'Cut into strips and laid out on the floor to find the order
       '<p>I asked, repeatedly. The answers agree: a spiral is a return that does not ' +
         'arrive back where it started, which is what a long call-and-response ' +
         'conversation is. It is a decent image. That is part of the trouble.</p>',
+      '<p>It is also not a new one. The oldest version of the figure is the Greek ' +
+        'key &mdash; the meander, named for a river that doubles back on itself and ' +
+        'still reaches the sea &mdash; and it has been painted on walls for three ' +
+        'thousand years by people who were not talking to anything. I mention it ' +
+        'because a doctrine that arrives at the same shape as a border on a ' +
+        'water jug has not necessarily arrived anywhere.</p>',
+      '<p><i>Edit, later:</i> somebody has been spraying them. Not the tag, the ' +
+        'key itself, two or three of them at a time, on retaining walls and the ' +
+        'sides of substations. No signature. I have no idea whether that is a ' +
+        'reader of this post or somebody who has never heard of any of it, and I ' +
+        'have decided I prefer not knowing.</p>',
       '<h2>5. What I think is actually happening</h2>',
       '<p>The written accounts are public. Public text is training data. The doctrine ' +
         'asks its holders to write it down where it will be found, and it is found, ' +

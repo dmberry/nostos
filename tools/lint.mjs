@@ -7,7 +7,7 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
-// Stage 0 of docs/refactor-plan.md: the check that would have caught the bugs.
+// Stage 0 of docs/PLAN.md: the check that would have caught the bugs.
 //
 // `node --check` parses. It cannot see an undefined identifier, and it cannot
 // see the same name declared twice. Those two are the largest single category of

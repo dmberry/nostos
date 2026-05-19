@@ -17,6 +17,17 @@ const TRACKED = new Set([
   'ShiftLeft', 'ShiftRight',
   'KeyE', 'Slash', 'Space', 'KeyQ', 'KeyH', 'KeyR', 'KeyG', 'KeyF', 'KeyI', 'KeyP', 'KeyZ', 'KeyJ',
   'KeyK', 'KeyC', 'KeyM', 'KeyO', 'KeyV', 'KeyN', 'KeyB', 'KeyX', 'KeyT', 'KeyU', 'KeyL', 'BracketRight', 'Digit9', 'Escape',
+  // #182: Creative's build mode. F was vacated by DROP (see the note below) and
+  // is the only free letter left; comma and full stop cycle its palette, because
+  // the number row already picks a pocket and one key cannot mean two things
+  // depending on a state you have to remember.
+  'Comma', 'Period',
+  // #180: lay a campfire. NOT C — C is the craft key, and a fire is the
+  // cheapest recipe in the game, so on C it sat under everything else on the
+  // list and any wood in the pack shadowed the real recipes (David,
+  // 2026-08-15: "C is for crafting"). Its own key, and the digits above the
+  // pocket row are free.
+  'Digit6',
   // DROP moved here off F. F sits under the index finger beside WASD, so it was
   // being hit mid-melee and the thing in your hands went on the ground in the
   // middle of a fight. Backspace is nowhere near the movement hand, it means
@@ -375,7 +386,7 @@ export class Input {
     return this.consumePress('KeyK');
   }
 
-  // 9: KLEOS, the achievements panel (docs/achievements-plan.md). On the number
+  // 9: KLEOS, the achievements panel (docs/PLAN.md). On the number
   // row where a panel key belongs, but NOT 1-4 — those are the pocket slots,
   // and taking one would have cost the inventory a binding it already uses.
   // Also on the HUD rail, which is where a player actually finds a panel.
@@ -387,7 +398,12 @@ export class Input {
     return this.consumePress('KeyC');
   }
 
-  // L: the laptop. Opens the machine you carry (docs/laptop-plan.md) — the one
+  /** 6: lay a campfire (#180). Its own key, off the crowded craft list. */
+  firePressed() {
+    return this.consumePress('Digit6');
+  }
+
+  // L: the laptop. Opens the machine you carry (docs/PLAN.md) — the one
   // console that isn't bolted to a tower or a hilltop.
   laptopPressed() {
     return this.consumePress('KeyL');

@@ -10,7 +10,7 @@
 // The World contract: a World owns everything that lives on one island — its map,
 // arrival point, and entity collections. main.js holds one `currentWorld` and reads
 // `currentWorld.robots` (etc.) at runtime instead of bare module-level arrays. See
-// docs/islands-plan.md §3 for the archipelago plan this unblocks.
+// docs/PLAN.md §3 for the archipelago plan this unblocks.
 //
 // Stage 0a builds createWorld + a minimal registry ONLY. The forward-compat fields
 // (creatures, controllers, ambience, update, drawExtras, onEnter, onExit) are inert
@@ -42,7 +42,7 @@ export function createWorld(id, opts = {}) {
     prohibition: opts.prohibition ?? false,
     // OGYGIA (CALYPSO): her island, where she keeps you. main.js runs the Nokia
     // channel on worlds that set this — her texts, and her interventions against
-    // POSEIDON's roaming machines (docs/calypso-nokia-plan.md).
+    // POSEIDON's roaming machines (docs/PLAN.md).
     keeper: opts.keeper ?? false,
     // OGYGIA (CALYPSO) only: the island whose whole gate is the boat. Launch an
     // unfinished hull here and you get the voyage — out to sea, and Poseidon turns

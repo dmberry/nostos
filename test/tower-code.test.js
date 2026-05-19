@@ -7,7 +7,7 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
-// #133 M1/M2 — the braincode a tower runs (docs/machine-braincode-plan.md).
+// #133 M1/M2 — the braincode a tower runs (docs/PLAN.md).
 // The programs are what the towers already DO, written down. If these tests
 // and the behaviour in main.js ever disagree, the document has become a
 // fiction laid over the code, which is the thing the feature exists to stop.

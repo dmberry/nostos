@@ -7,7 +7,7 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
-// S5 — the `work` sensor and the W-3 fitter (docs/robot-ml-rollout-plan.md).
+// S5 — the `work` sensor and the W-3 fitter (docs/PLAN.md).
 // A fitter mends when there is work and it has charge; parked on `wait` it
 // stops mending, which is the sabotage the class exists for.
 

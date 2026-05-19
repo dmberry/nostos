@@ -20,6 +20,8 @@ import {
   BOOT_LINES, BOOT_STEP_MS, bootTick, dockTiles, DOCK_APPS, DOCK_TOP, DOCK_FOOT,
   PREFS_SECTIONS, prefsRows, togglePref, openPrefs, fitWindows, MENU_EDGE, DOCK_W,
   mailboxFrom, openMail, openAbout, openRecycler, recycle, emptyRecycler,
+  grabRoll, grabCapture, grabAim, openGrab, openGrabInfo, GRAB_INFO,
+  grabFlashTick, grabFlashing,
 } from '../src/game/workspace.js';
 import { calypsoFiles } from '../src/game/calypso-code.js';
 
@@ -504,4 +506,115 @@ test('no bookshelf or app bundle opens onto an empty window', () => {
       assert.ok(node.f.split('\n').length >= 5, `${n} has more than a stub in it`);
     }
   }
+});
+
+// ---- Grab, which only ever points one way ----------------------------------
+
+test('Grab is not on the dock: it sits on the desktop floor', () => {
+  // It was a dock tile under the calendar first. Moved to the bottom centre of
+  // the screen, in the tile a miniaturised window wears and with no name on it,
+  // so it reads as something left running and put down (David, 2026-08-14).
+  const ws = newWorkspace(files());
+  const ids = dockTiles(ws).map((t) => t.id);
+  assert.ok(!ids.includes('grab'), 'a dock tile would give it a name and a home');
+  assert.ok(ids.includes('calendar') && ids.includes('clock'));
+});
+
+test('the roll is one frame behind every message the handset carried', () => {
+  const ws = newWorkspace(files());
+  ws.mail = LOG;
+  ws.date = '2';
+  const roll = grabRoll(ws);
+  assert.equal(roll.length, LOG.length);
+  assert.ok(roll.every((f) => f.mine === false), 'hers, until you take one');
+  assert.ok(roll.every((f) => f.subject.startsWith('SUBJECT')));
+  // Hourly across the seven years the Ogygia shelf claims for the weather.
+  assert.equal(roll[0].n, 2556 * 24 + 1);
+  assert.ok(roll.every((f, i) => i === 0 || f.n === roll[i - 1].n + 1), 'no gaps');
+});
+
+test('the roll does not churn between draws', () => {
+  const ws = newWorkspace(files());
+  ws.mail = LOG;
+  assert.deepEqual(grabRoll(ws), grabRoll(ws),
+    'it is drawn every frame; a wandering subject line would be a flicker');
+});
+
+test('a capture you take is marked as yours and lands on the end', () => {
+  const ws = newWorkspace(files());
+  ws.mail = LOG;
+  const before = grabRoll(ws);
+  grabCapture(ws, '14:31', 3, 'Lid open.');
+  const after = grabRoll(ws);
+  assert.equal(after.length, before.length + 1);
+  const last = after[after.length - 1];
+  assert.equal(last.mine, true);
+  assert.equal(last.n, before[before.length - 1].n + 1);
+  assert.match(last.subject, /at the machine/);
+});
+
+test('the eye aims at the pointer, and rests when there is none', () => {
+  const ws = newWorkspace(files());
+  assert.deepEqual(grabAim(ws, 100, 100), { x: 0, y: 0 }, 'no pointer, no lean');
+  ws.mouse = { x: 300, y: 100 };
+  const right = grabAim(ws, 100, 100);
+  assert.ok(right.x > 0.9 && Math.abs(right.y) < 0.001, 'pointer right, eye right');
+  ws.mouse = { x: 100, y: 300 };
+  const down = grabAim(ws, 100, 100);
+  assert.ok(down.y > 0.9 && Math.abs(down.x) < 0.001, 'pointer below, eye down');
+  ws.mouse = { x: 101, y: 100 };
+  assert.ok(grabAim(ws, 100, 100).x < 0.1, 'a pointer almost on the eye barely moves it');
+  ws.mouse = { x: 100, y: 100 };
+  assert.deepEqual(grabAim(ws, 100, 100), { x: 0, y: 0 }, 'dead centre does not divide by zero');
+});
+
+test('Grab and its Info panel open once each', () => {
+  const ws = newWorkspace(files());
+  assert.equal(openGrab(ws).id, openGrab(ws).id);
+  assert.equal(openGrabInfo(ws).id, openGrabInfo(ws).id);
+  assert.equal(ws.windows.filter((w) => w.kind === 'grab').length, 1);
+  assert.equal(ws.windows.filter((w) => w.kind === 'grabinfo').length, 1);
+});
+
+test('the Info panel credits both Keiths and the two systems it ran on', () => {
+  const all = GRAB_INFO.join(' ');
+  assert.match(all, /Keith Ohlfs/, 'the icon is his and the credit is the point');
+  assert.match(all, /Keith Bernstein/);
+  assert.match(all, /NeXTSTEP/);
+  assert.match(all, /OPENSTEP/);
+  // Her machine is a cube. Apple's twenty years of carrying the same drawing
+  // are true and belong in the source comment, not on her Info panel.
+  assert.doesNotMatch(all, /Mac OS X/);
+});
+
+test('the flash runs down to zero and stops there', () => {
+  // It used to overshoot to a small negative and stick, and a negative is
+  // truthy, so one capture left the icon on the flash frame for good. The
+  // flash frame is the centre-pupil drawing, so the eye stopped following.
+  const ws = newWorkspace(files());
+  assert.equal(grabFlashing(ws), false, 'nothing has fired yet');
+  ws.grabFlash = 0.35;
+  assert.equal(grabFlashing(ws), true);
+  for (let i = 0; i < 60; i++) grabFlashTick(ws, 1 / 60);
+  assert.equal(ws.grabFlash, 0, 'exactly zero, not a small negative');
+  assert.equal(grabFlashing(ws), false, 'and the bulb is out');
+  // Ticking on past the end must not push it below zero either.
+  grabFlashTick(ws, 5);
+  assert.equal(ws.grabFlash, 0);
+  assert.equal(grabFlashing(ws), false);
+});
+
+test('a single long frame does not leave the flash stuck on', () => {
+  const ws = newWorkspace(files());
+  ws.grabFlash = 0.35;
+  grabFlashTick(ws, 2.0);            // one very late frame, longer than the flash
+  assert.equal(ws.grabFlash, 0);
+  assert.equal(grabFlashing(ws), false);
+});
+
+test('the flash never reaches the icon as a bare truthiness test', () => {
+  // The bug was `!!ws.grabFlash` at the draw site. Nothing may read it that way.
+  const ws = newWorkspace(files());
+  ws.grabFlash = -0.004;             // the state the old decay left behind
+  assert.equal(grabFlashing(ws), false, 'a negative is not a lit bulb');
 });

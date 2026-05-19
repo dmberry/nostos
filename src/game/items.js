@@ -279,7 +279,7 @@ export const ITEMS = {
     ammoType: 'battery',
     color: '#4fd8c3',
   },
-  // The Nokia 3310 — Calypso's channel (docs/calypso-nokia-plan.md). Lives in the
+  // The Nokia 3310 — Calypso's channel (docs/PLAN.md). Lives in the
   // dashboard's PHONE box (its own slot beside the walkman, never a pocket); click
   // it to open the SMS screen and text the RONs — or her. Defined as an item so a
   // later build can swap other handsets into the box.
@@ -288,7 +288,7 @@ export const ITEMS = {
     kind: 'phone',
     color: '#2b3350',
   },
-  // ---- Laptops (docs/laptop-plan.md) --------------------------------------
+  // ---- Laptops (docs/PLAN.md) --------------------------------------
   // The first computer in the game that is YOURS: every other console is bolted
   // down (obelisks stand where the towers stand, HERMES sits on a hilltop). This
   // one you carry, and it runs off the network — which is what makes it the place
@@ -327,7 +327,7 @@ export const ITEMS = {
     name: 'Dead laptop', kind: 'laptop', color: '#8a8272', dead: true, damage: 'cracked',
     blurb: "Not yours. The board is gone, but a disk is a disk — it will still read.",
   },
-  // ONE machine (docs/laptop-plan.md §3a). The roster of alternative OSes was cut:
+  // ONE machine (docs/PLAN.md §3a). The roster of alternative OSes was cut:
   // this one grew into a complete computer, and an acquisition arc beats variety.
   laptop: {
     name: 'NostBook', kind: 'laptop', color: '#c9bda1', cpu: 1, ram: 1,
@@ -563,7 +563,7 @@ export const ITEMS = {
     color: '#e6d24a',
     // RON-DOS files the card carries (cd aikey / ls at a terminal). Refunctioning
     // the card adds files and renames it: trojan_key (+root_access.ml), then
-    // hermes_card (+zeus_lightning.ml). See docs/calypso-escape-chain.md.
+    // hermes_card (+zeus_lightning.ml). See docs/PLAN.md.
     files: ['access_ai_code.ml', 'factory_id.ml'],
   },
   // The AI key refunctioned (Benjamin) once root_access.ml is written onto it:
@@ -681,10 +681,24 @@ export const ITEMS = {
   },
   meat: {
     name: 'Meat',
+    use: 'Eat it as it is, or hold it over a campfire and roast it for nearly twice as much.',
     kind: 'resource',
     stack: 5,
     color: '#a34545',
-    food: 25, // raw; cooking comes later
+    food: 25,   // raw. #180: a fire turns it into cooked_meat below
+  },
+  // #180 — what a fire is FOR. Raw meat is 25 and roast is 45, so a fire pays
+  // for the three wood it cost inside two pieces. It also gives back stamina,
+  // which raw meat does not: sitting down to a hot meal is the only thing in
+  // the game that does both.
+  cooked_meat: {
+    name: 'Roast meat',
+    use: 'A hot meal. Worth nearly twice raw meat, and it puts some strength back.',
+    kind: 'resource',
+    stack: 5,
+    color: '#c07a3c',
+    food: 45,
+    stamina: 25,
   },
   tin: {
     name: 'Tinned food',

@@ -73,10 +73,26 @@ const T1_TUNE = {
   t1: {
     chase: T1_CHASE_SPEED, patrol: T1_PATROL_SPEED, detect: T1_DETECT_RANGE,
     deaggro: T1_DEAGGRO_RANGE, hitR: T1_HIT_RANGE, dmg: T1_HIT_DAMAGE, cool: T1_HIT_COOLDOWN,
+    // A PATROLLER HAS TO SEE YOU. The two machines were tuned differently and
+    // behaved identically: both acquired through walls at their full range,
+    // which is a hunter's sense on a machine that is only walking its beat.
+    // Since a T-1 also chases at 5.0 against a 4.2 walk, it could pick you up
+    // from nine tiles away through a building and then out-walk you to it
+    // (David, 2026-08-15: "T1 seems to be too aggressive now", "T1 and T1w
+    // should be different"). It needs a line to you now. Once it HAS you it
+    // keeps coming to `deaggro` as before, so cover breaks the acquisition, not
+    // the chase.
+    needsSight: true,
   },
   t1w: {
     chase: T1W_CHASE_SPEED, patrol: T1W_PATROL_SPEED, detect: T1W_DETECT_RANGE,
     deaggro: T1W_DEAGGRO_RANGE, hitR: T1W_HIT_RANGE, dmg: T1W_HIT_DAMAGE, cool: T1W_HIT_COOLDOWN,
+    // AND THE SWARM DOES NOT. It was printed knowing where you were — the
+    // detect range comment beside T1W_DETECT_RANGE has said so since it was
+    // written — so walls are no answer to it. That is the difference between
+    // the two machines, and now it is a difference in behaviour rather than in
+    // four numbers nobody can feel.
+    needsSight: false,
   },
 };
 const tuneFor = (r) => T1_TUNE[r.type] || T1_TUNE.t1;
@@ -85,7 +101,7 @@ const tuneFor = (r) => T1_TUNE[r.type] || T1_TUNE.t1;
 // half-added (a t1w that drew as a T-2 was exactly that bug).
 const isWheeled = (r) => r && (r.type === 't1' || r.type === 't1w');
 
-// ---- The T1's program (docs/robot-programs-plan.md) ------------------------
+// ---- The T1's program (docs/PLAN.md) ------------------------
 // A T1 does not have its policy written into this file in JavaScript. It
 // carries it as AI-ML, and updateT1 evaluates THIS TEXT four times a second to
 // find out what it wants to do. Change the string and the machine changes; the
@@ -220,6 +236,29 @@ export const T2_PROGRAM = [
 // there is work, wander otherwise, home on a flat cell. A converted guard and
 // a blueboxed hunter both carry this, so their pages read as the gardeners they
 // have become.
+// #165 — THE V-5, AND WHY IT EXISTS.
+//
+// A V-1 runs a NEURAL NET, and that is the point of the V-class: its braincode
+// is weights, and weights are honest about being unreadable. You can `get` one
+// and what comes back is floating point. Nobody at RON knows why the numbers
+// work; the header says so.
+//
+// The trouble with that is you cannot TEST it. There is one V-1 on an island,
+// it does a job that happens out of sight (walking to flat machines and giving
+// them a cell), and nothing about watching it tells you whether the net is any
+// good — you have no idea what it should have done.
+//
+// So the same architecture gets a second unit doing a job with an OBVIOUS RIGHT
+// ANSWER (David, 2026-08-14: "a gardener version of the V1 so I can see and
+// test its braincode... the V5 should be floating point as well"). A V-5 is a
+// V-class gardener: still weights, still a forward pass, still unreadable — but
+// planting is visible, and dead ground either gets sown or it does not. You test
+// a net you cannot read by giving it a task you can score.
+//
+// AND IT PAIRS AGAINST THE W-5. Same job, same number, two kinds of mind: the
+// W-5 ships five lines of ML a person can hold in their head, the V-5 ships a
+// matrix nobody can. Put them in the same field and the difference is the whole
+// argument — one of them you can correct.
 export const W5_PROGRAM = [
   '(* W-5 gardener. TIRESIAS-works 1.7g.               *)',
   '(* The same works build as the W-3, g-fit.          *)',
@@ -231,7 +270,7 @@ export const W5_PROGRAM = [
 // ---- #149: the T-8, and what it is legally doing ---------------------------
 //
 // The grove holds you with LIGHT rather than with guards
-// (docs/calypso-build-plan.md), so what stands in it is not a garrison. It is
+// (docs/PLAN.md), so what stands in it is not a garrison. It is
 // four amenity units keeping her floor. They do not hunt, they do not report,
 // and they cannot be made to: `hunt` is not in T8_CAN, so a program that asks
 // for it faults rather than being obeyed.
@@ -366,7 +405,7 @@ const T8_LOOK = 3;                 // tiles it compares its own light against
 const T8_HP = 30;                  // it is an amenity, not a chassis with armour
 const W5_SCAN_RANGE = 8;    // how far it looks for blight or open ground to plant
 
-// A V-1 courier (#127, docs/v-class-plan.md). The gardener's repertoire: it
+// A V-1 courier (#127, docs/PLAN.md). The gardener's repertoire: it
 // carries no weapon and `tend` IS its trade — a gardener tends blight, a
 // V-class tends the fallen. No INTENTS change; the job lives in updateV1.
 const V1_CAN = ['patrol', 'home', 'wait', 'flee', 'tend', 'route'];
@@ -462,6 +501,12 @@ const ARMOUR_TIER_OF = {
   m4: 'm', m5: 'm', m6: 'm', b1: 'm',
 };
 // Weighted toward the pieces you want and away from the boots, a little.
+// The classes whose wrecks are worth cutting optics out of: the hunter-killer
+// and the M-class guards. Named as a set rather than tested inline so adding a
+// military chassis does not quietly leave it out of the one drop that answers
+// the fog.
+const GOGGLE_CLASSES = new Set(['m4', 'm5', 'm6']);
+
 const ARMOUR_DROP_SLOTS = ['chest', 'legs', 'head', 'legs'];
 
 const T3_BODY = '#123d8a';        // deep, darker blue — still reads at a glance, less garish
@@ -513,7 +558,7 @@ const W4_HURT_AT = 0.35;
 const W4_BODY = '#4a1408';      // dull furnace red-black
 const W4_HEAD = '#2c0c05';
 
-// The fortress (ZEUS) guard classes — see docs/fortress-guards-plan.md. Three
+// The fortress (ZEUS) guard classes — see docs/PLAN.md. Three
 // M-classes. Unlike every overworld hunter they acquire by GENUINE SIGHT ONLY
 // (line of sight, within range, inside the sensor's forward cone) — never by
 // blind proximity, so a careful player can ghost past behind cover. Hardened:
@@ -552,6 +597,47 @@ const M6_ATTACK_TIME = 5;       // seconds in the "attack" phase closing + strik
 const M6_WITHDRAW_TIME = 3.2;   // ...then this long falling back before the next wave
 const M6_ATTACK_STANDOFF = 0.5; // how close it presses during an attack wave
 const M6_WITHDRAW_RANGE = 6;    // how far it falls back between waves (also a lone one's holding distance)
+const M6_LONE_PATIENCE = 6;     // seconds a lone guard waits for a pack before pressing anyway
+const M6_ORBIT_SPIN = 0.55;     // rad/s: fast enough to read as circling, not as following
+// IT IS MILITARY, SO IT IS ARMED (David, 2026-08-15: "M6 should shoot. It is
+// military"). The M-6 was written as a melee pack animal — one blow at 0.65
+// tiles — which made it the only class in the estate's police that could not
+// answer you at range, and a lone one could never answer you at all. Its rifle
+// is deliberately WEAKER than the M-5 sniper's and slower than a W-4's: the M-6
+// is a guard closing on you, and the gun is what it does on the way in, not
+// instead of coming.
+const M6_FIRE_RANGE = 7.5;
+const M6_FIRE_DAMAGE = 6;
+const M6_FIRE_COOLDOWN = 2.2;
+// AND IT THROWS. A grenade the M-6 lobs to where it last saw you, which lands
+// and then TICKS — the same map.bombs the player's own bombs use, so it is
+// dodged the same way, hurts the same things, and can be walked away from. That
+// is the point of giving the guard one: it is the first weapon in the game that
+// makes you move rather than shoot back (David, 2026-08-15: "can it also toss
+// small bombs?").
+//
+// It carries them, so it drops them. The W-4's drop comment already reasons
+// this way — a laser platform "never threw a bomb in its life, so it doesn't
+// drop one in death" — and the M-6 is the machine that did.
+const M6_BOMB_RANGE = 6.5;
+const M6_BOMB_EVERY = 9;        // seconds; rare enough to be an event
+const M6_BOMB_FUSE = 2.6;       // long enough to read the arc and get off the tile
+const M6_BOMB_RADIUS = 2.2;
+const M6_BOMB_DAMAGE = 18;
+// IT CARRIES A FINITE NUMBER (David, 2026-08-15: "it will need a bomb count
+// internally"). Without one it is an infinite mortar that happens to drop three
+// — and the count is the whole reason the weapon is fair: a guard that has spent
+// its grenades is a guard you have already got something out of, and the pile on
+// the wreck is exactly what it did not throw at you.
+const M6_BOMBS = 3;
+// AND IT GOES BACK FOR MORE (David, 2026-08-15: "M6 can return to factory to
+// replenish its weapons supply"). An empty guard breaking off to the foundry is
+// the fight telling you something true: you have made it spend everything, and
+// you have a window while it walks. It is also the reason to fell the factory —
+// the building is where the estate's ordnance comes from, and a machine that has
+// to walk back to a ruin does not come back at all.
+const M6_RESTOCK_SPEED = 2.6;   // an unhurried walk; it is not fleeing, it is out
+const M6_RESTOCK_AT = 2.2;      // how near the foundry it has to get
 const M5_HP = 22;               // the sniper is lightly built
 // #159: the carrier. It is CAUTIOUS, and that is the whole design of the fight
 // (David, 2026-08-14): it will not trade blows with you. It withdraws, slowly,
@@ -563,7 +649,7 @@ const CARRIER_HP = 60;
 // How far it hangs back. It orbits the player at this radius rather than
 // closing. Kept short deliberately: at the 7 this started on, a melee player
 // chased it round the factory and never landed a blow.
-const CARRIER_STANDOFF = 5;
+const CARRIER_STANDOFF = 5;   // scaled per king by `pressScale` (Diomedes closes)
 // SLOW AND MEASURED. It withdraws at well under half an M6's chase speed — an
 // unhurried walk, because nothing about its job is urgent and it is not the
 // thing you should be worrying about. You can always catch it. Getting to it
@@ -588,7 +674,14 @@ const CARRIER_WAVE_MAX = 10;
 // that happened to come round.
 const CARRIER_WAVE_EVERY = 5;    // seconds between waves
 const CARRIER_WAVE_GRACE = 0.6;  // struck, then this pause before the wave prints
-const CARRIER_SWARM_CAP = 14;    // living w-units it will keep out at once
+const CARRIER_SWARM_CAP = 14;
+// The cap RISES WITH THE PHASE. A flat one meant the middle waves — the big
+// formations — filled it, and the last stand then had no room left to be an
+// escalation: measured, it printed TEN against the steady phase's FOURTEEN, so
+// the fight got quieter exactly where it should get worse. Each gate forced
+// widens the field it is allowed to hold.
+const CARRIER_SWARM_CAP_BASE = 6;
+const CARRIER_SWARM_CAP_STEP = 3;    // living w-units it will keep out at once
 
 // THE LAST STAND (Henrik: below a certain health it should go all out). Under a
 // third of its hull the carrier stops rationing: it prints on a two-second
@@ -599,6 +692,119 @@ const CARRIER_SWARM_CAP = 14;    // living w-units it will keep out at once
 // triggers the fight is nearly over, so the last twenty seconds are the loudest
 // rather than the fight being uniformly harder.
 const CARRIER_LAST_STAND = 0.34;      // hull fraction that tips it over
+
+// ---- THE FIGHT HAS FIVE GATES -------------------------------------------
+// David's design: it releases five waves, and it cannot be killed until it has
+// released them all. Damage between waves still counts — the gate is a FLOOR,
+// not a lock, so fighting well while the swarm is out is rewarded; you simply
+// cannot skip a phase by out-damaging it.
+//
+// The gate is PHYSICAL, not a number. It does not become invulnerable at 80%:
+// it SEALS — shield grounded, bands going cold — and a hit rings off it. The
+// tell is the gate, so a health bar that stops moving reads as armour rather
+// than as a bug.
+//
+// And the seal has a mouth. It has to open its ports to print a wave, and for
+// those two seconds it takes DOUBLE. That turns waiting into timing: the fight
+// becomes seal, launch, opening, open ground, seal, and a player learns to hold
+// the heavy weapon for the launch instead of chipping at a sealed hull.
+// ---- FIVE WAVES, ONE CHASSIS, FIVE STRATEGIES ---------------------------
+// David: "they should always be the T-1w - henrik really likes them - but they
+// differ in number and tactic." Which is the better design: swapping in a new
+// chassis each wave would make it five fights, where varying the TACTIC makes
+// it one fight that keeps changing its mind. You learn the machine once and
+// then have to read what it is being told to do.
+//
+// Each wave is a different order given to the same little machines:
+//
+//   rush     straight at you, and few of them. The baseline, so the later
+//            waves have something to be a departure FROM.
+//   packs    in threes, arriving staggered — you cannot clear them in one
+//            sweep because the next three are always still coming.
+//   circle   they run WIDE first and do not close, which reads as retreat,
+//            then converge from every side at once when the ring is set.
+//   screen   they interpose between you and the carrier rather than attacking:
+//            a wall of them to cut through while it sits behind and mends.
+//   storm    the last stand. No formation, no cleverness, everything at once.
+const CARRIER_TACTICS = ['rush', 'packs', 'circle', 'screen', 'storm'];
+// How many go out, per wave. The count is part of the tactic: `circle` needs
+// bodies to close a ring, `packs` wants a multiple of three, `rush` is small
+// because it is the introduction.
+const CARRIER_TACTIC_N = { rush: 4, packs: 9, circle: 8, screen: 7, storm: 12 };
+const CIRCLE_RADIUS = 7.5;         // how wide the ring runs before it closes
+const CIRCLE_SET = 0.85;           // fraction in position before it converges
+const SCREEN_STANDOFF = 3.2;       // how far off the carrier the wall forms
+
+// What the player is told as a wave prints. The tell has to arrive BEFORE the
+// tactic reads as one, or the first time they run wide it looks like a bug.
+const WAVE_SAID = {
+  rush: 'Ports open along the carrier\'s flank. Four of them come straight at you.',
+  packs: 'They come out in threes, and the threes do not arrive together.',
+  circle: 'The swarm breaks away wide. It is not running: it is getting behind you.',
+  screen: 'They put themselves between you and the carrier and stand there.',
+  storm: 'Every port opens at once.',
+};
+
+/** The order this wave is given. Wave 1 is `rush`, wave 5 is `storm`. */
+export function carrierTactic(wave) {
+  return CARRIER_TACTICS[Math.max(0, Math.min(CARRIER_TACTICS.length - 1, (wave || 1) - 1))];
+}
+
+/** How many machines that order needs. */
+export function carrierTacticSize(tactic) {
+  return CARRIER_TACTIC_N[tactic] || CARRIER_TACTIC_N.rush;
+}
+
+export const CARRIER_GATES = 5;
+// #181 — A KING DOES NOT POP.
+//
+// Five gates of work ended in the same frame of scrap-and-smoke a T-1 gets, and
+// the fight is good but the kill landed flat (David, 2026-08-15: "he just kind
+// of pops"). So the last blow starts a death rather than being one: for
+// CARRIER_DEATH seconds it stops printing, stops moving, and comes apart —
+// the rim lets go, the solid at the centre of the shield goes dark, and the
+// ports it printed from vent. Then it falls, and the card and the aspis are
+// part of the fall rather than things that appear underneath it.
+//
+// EVERY KING GETS IT. Read off the same `carrier` flag the rest of the fight
+// uses, so AJAX, DIOMEDES and ACHILLES die the same way AGAMEMNON does without
+// anybody having to remember them.
+const CARRIER_DEATH = 2.4;      // seconds of coming apart
+const CARRIER_DEATH_VENTS = 5;  // gouts of light out of the print ports, spread over it
+const CARRIER_SPOOL = 2.0;         // seconds of opening up BEFORE a wave prints
+const CARRIER_SPOOL_MULT = 2;      // damage multiplier while the ports are open
+const CARRIER_SEAL_FLASH = 0.3;    // renderer tell when a blow rings off it
+// A BLOW ON A SEALED HULL IS NOT A WASTED BLOW (David, 2026-08-15: "shot should
+// be registered tho - so handle this nicely").
+//
+// A hard wall is the lazy version: the bar stops, the player keeps swinging,
+// and the game says nothing back. Instead a sealed carrier BITES less — a
+// quarter of the damage lands on the hull it still has — and everything past
+// the gate is BANKED. When the next wave opens the gate, the bank is spent all
+// at once and the bar drops for it.
+//
+// So working on it between waves is real work, visibly kept and visibly paid.
+// What it cannot do is skip a phase, which was the point of the gates.
+const CARRIER_SEALED_BITE = 0.25;
+
+/** The hull floor for a carrier that has released `n` of its waves. */
+export function carrierFloor(maxHp, waves) {
+  const left = Math.max(0, CARRIER_GATES - Math.min(CARRIER_GATES, waves || 0));
+  return Math.ceil((maxHp * left) / CARRIER_GATES);
+}
+
+/** Is it sealed — at its floor with waves still to come? */
+export function carrierSealed(r) {
+  if (!r || !r.carrier) return false;
+  // SEALED AT FULL HULL IS NOT A DEADLOCK. That was the fear this guard was
+  // written against, and it was unfounded: provocation runs off `_struck`,
+  // which is set from the ATTEMPTED damage before the gate restores the hull,
+  // so a carrier at its first gate still registers every blow, still spools,
+  // and still prints. What the guard actually did was leave phase one with no
+  // floor at all — see the clamp in updateRobots.
+  if (r.waves >= CARRIER_GATES) return false;   // all five out: it can be finished
+  return r.hp <= carrierFloor(r.maxHp, r.waves);
+}
 const CARRIER_LAST_WAVE_EVERY = 2;    // seconds between waves once it does
 const CARRIER_LAST_SWARM_CAP = 20;
 // Break contact and it stops being a boss fight: no damage and nobody near for
@@ -619,11 +825,26 @@ const CARRIER_SHIELD_HP = 34;
 const CARRIER_BEAT = 8;
 const CARRIER_DISENGAGE = 8;
 const CARRIER_NEAR = 14;         // the "you are still in this" radius
+// THE KING'S OWN SHOT. It had none: the B-1 orbited and printed and never once
+// fired, so at range with its swarm cleared it was harmless scenery you plinked
+// at (David, 2026-08-15: "the boss does fire lasers yes? they should be
+// occasional"). Occasional is the whole specification — this is not a hunter's
+// rate of fire, it is a heavy weapon on a machine whose real answer to you is
+// the foundry. Slow enough to be an event, hard enough that standing in the
+// open through one is a decision.
+const CARRIER_FIRE_EVERY = 4.2;  // seconds; a shot you notice, not a stream
+const CARRIER_FIRE_RANGE = 11;
+const CARRIER_DAMAGE = 9;
 const M5_VISION = 13;
 const M5_RANGE = 12;            // fires from way back
 const M5_MIN_RANGE = 6.5;       // holds this far off; backs away (hides) if you close
 const M5_FIRE_COOLDOWN = 1.5;   // a steady, nagging plink
 const M5_DAMAGE = 5;            // low power — annoying, not lethal
+// What the M-class brings to a turncoat. Shorter reach than its hunt of the
+// player and a slower swing: it is policing the ground, not duelling you.
+const M6_TURNCOAT_RANGE = 8;
+const M6_TURNCOAT_DAMAGE = 14;
+const M6_TURNCOAT_COOLDOWN = 0.9;
 const TORPOR_BOLT_SPEED = 5.5;  // depart mode (R3): her soporific bolt crawls (vs the 16-t/s war-laser) so you can dodge it
 const M4_HP = 16;               // fragile; a couple of hits drops it before it can report far
 const M4_VISION = 11;
@@ -765,6 +986,70 @@ const B1_EDGE = '#1c1f26';      // the one lighter line, so black-on-black still
 // palette is the herald's, and the fact that they are the same gold is the
 // point — the armour and the credential were issued by the same estate.
 const B1_GOLD = '#c9922e';      // corslet bands, greave clasps, shield rim
+
+// ---- THE AGAMEMNON CLASS ------------------------------------------------
+// One to an island, and the only machines the estate NAMED rather than
+// numbered (David, 2026-08-15). They are the kings who took Troy by siege and
+// by force — which is the joke underneath the whole encounter, because the man
+// walking up to them was there too, and did it another way.
+//
+// The chassis is the same panoply every time: it is one foundry design, and
+// what changes is the METAL and the temper. Each is drawn from that king's own
+// gear in the poem, not from the island's palette, so you read which king you
+// are facing before you read where you are standing.
+export const KINGS = {
+  b1: {
+    name: 'AGAMEMNON', island: 'calypso',
+    // Iliad XI: the corslet of Kinyras, the shield with ten bronze circles.
+    metal: '#c9922e', hi: '#f2c65e', lo: '#6d4f16',
+    blurb: 'the king of men',
+    boss: 3,      // tetrahedron: fire, and the first of them
+  },
+  b2: {
+    name: 'AJAX', island: 'polyphemus',
+    // Iliad VII: the sevenfold ox-hide shield "like a tower".
+    //
+    // NOT ANOTHER GOLD (David, 2026-08-15: "B2 looks too similar to B1"). Ajax
+    // is the one king whose famous gear is HIDE rather than metal — seven
+    // layers of it behind a bronze face — so he is dull, cold and unpolished
+    // where Agamemnon is bright. The tower shield does the rest: it is drawn at
+    // `shield` scale, which is the thing he is actually known for.
+    metal: '#8a8574', hi: '#b6b09a', lo: '#403d33',
+    blurb: 'the tower shield',
+    shield: 1.6,          // sevenfold: layers, not a wider disc
+    rim: 1,
+    boss: 4,      // cube: earth, and a tower shield is a tower          // the sevenfold: far more rim to break through
+    hull: 0.9,            // but the body under it is no tougher
+  },
+  b3: {
+    name: 'DIOMEDES', island: 'circe',
+    // Iliad V: the aristeia, the mortal who wounded two gods in an afternoon.
+    // Bronze gone hot; it does not back away from anyone.
+    metal: '#b6532c', hi: '#e58a52', lo: '#5e2410',
+    blurb: 'the one who wounded gods',
+    rim: 1.18,
+    boss: 8,      // octahedron: air, drawn as its eight-point star
+    press: 0.7,           // it comes at you rather than standing off
+    hull: 1.15,
+  },
+  b4: {
+    name: 'ACHILLES', island: 'helios',
+    // Iliad XVIII: the shield Hephaistos made, with the sun and moon and the
+    // whole earth on it. Silver-white, and the last of them.
+    metal: '#cfd4dc', hi: '#ffffff', lo: '#6a707a',
+    blurb: 'the shield of the world',
+    rim: 1.38,   // Hephaistos made it with the whole earth on it
+    boss: 5,      // dodecahedron: the one Plato gave to the COSMOS, and the
+                  // shield of Iliad XVIII has the cosmos on it
+    hull: 1.3,
+    waveScale: 1.25,      // and it prints more of them
+  },
+};
+
+/** The king a chassis is, or AGAMEMNON for anything that has not said. */
+export function kingOf(r) {
+  return KINGS[(r && r.designation && r.designation.toLowerCase()) || 'b1'] || KINGS.b1;
+}
 const B1_GOLD_HI = '#f2c65e';   // the lit edge of all of it
 const B1_GOLD_LO = '#6d4f16';   // and its shadow
 const B1_CREST = '#f2c65e';     // the helm crest, which nodded terribly
@@ -777,8 +1062,17 @@ const B1_SCALE = 1.34;          // half again the size of the pack it walks with
 // has moved them, so a swarm spreads out around its target instead of
 // stacking on the same tile.
 const ROBOT_MIN_SEP = 0.62;
-const BUMP_DAMAGE = 2;     // a collision between two machines chips both of them
-const BUMP_COOLDOWN = 1.5; // seconds before the same machine can be bump-hurt again
+// A collision between two machines chips both of them. LIGHTLY: at 2 a swarm
+// crowding one doorway ground itself down without the player doing anything,
+// and a garrison could arrive at a fight already half dead from the walk
+// (David, 2026-08-15: "make the damage slightly less painful for them"). It
+// still costs something, because machines shouldering each other aside should
+// not be free — a jam in a corridor is meant to be bad for them.
+const BUMP_DAMAGE = 1;
+// And a longer breath between chips, which halves the rate again for a crowd
+// that stays crowded. Two machines genuinely stuck together still wear down;
+// two that brush past each other in a corridor now cost nothing much.
+const BUMP_COOLDOWN = 2.5; // seconds before the same machine can be bump-hurt again
 // CPU budget: robots this far (in tiles) from the player skip their AI and the
 // pairwise separation entirely — they're well off-screen, can't affect the
 // player, and simply freeze until the player comes near again. This is what
@@ -850,6 +1144,13 @@ const V1_HEAD = '#96681a';
 const T8_BODY = '#2b3466';
 const T8_HEAD = '#3c4a8c';
 const V1_CELL = '#7fe0b0';       // the charged cell it carries, lit
+// #165 — the V-5 wears the GARDENER'S GREEN on the V-class frame. Colour is the
+// job on this island (a blueboxed hunter's eye flushes green the moment it stops
+// hunting and starts planting), and shape is the class. So a V-5 reads green at
+// a glance and V-class on a second look, which is exactly the two facts about
+// it: it does the W-5's work, with the V-1's mind.
+const V5_BODY = '#1f4a2a';
+const V5_HEAD = '#143520';
 const W5_HEAD = '#16240f';
 
 // Line-of-sight give-up: any hunting machine that can't see the player for
@@ -906,6 +1207,18 @@ const WORK_SCAN_EVERY = 0.5;    // seconds between searches for a fresh tree
 // Palette: dark machinery with a single red light.
 const T1_BODY = '#41464d';      // gunmetal wedge
 const T1_BODY_EDGE = '#2c3036';
+// THE SWARM IS NOT THE GARRISON. A T-1w is a T-1 built cheap and printed by the
+// handful, and at a glance in a fight of twelve it read as a garrison T-1 —
+// the one distinction a player needs instantly, because one is a real machine
+// and the other is a distraction.
+//
+// OXIDE RED, not a darker grey. The first cut went darker and the little
+// machines vanished into their own shadows on grass (David, 2026-08-15) — a
+// swarm you cannot pick out is worse than one that looks like a T-1. Red reads
+// at a glance, holds against both the grass and the shadow, and sets the swarm
+// off from the carrier's black and gold instead of blending into it.
+const T1W_BODY = '#7a2b22';
+const T1W_BODY_EDGE = '#48160f';
 const T1_WHEEL = '#1b1d20';
 const T2_BODY = '#2e3138';
 const T2_LIMB = '#23262b';
@@ -1109,6 +1422,60 @@ export function spawnW1s(map, seed, ox, oy, count = 3) {
   return squad;
 }
 
+// HP by chassis, so a unit can be rebuilt from a save record without the caller
+// having to know the table. Anything absent falls back to a T-1's.
+const HP_BY_TYPE = {
+  t1: T1_HP, t1w: T1W_HP, t2: T2_HP, t3: T3_HP, t8: T8_HP, v1: V1_HP,
+  w1: W1_HP, w3: W3_HP, w4: W4_HP, m4: M4_HP, m5: M5_HP, m6: M6_HP, b1: CARRIER_HP,
+};
+
+/**
+ * REBUILD A UNIT FROM ITS SAVE RECORD.
+ *
+ * The seeded roster regenerates itself from the world seed, but everything the
+ * W-FACTORY printed during play does not: those machines were pushed onto the
+ * robot list mid-run, so at load time there is nothing for their record to
+ * match and the save quietly dropped them (David, 2026-08-15: "I reload a save
+ * and the robots I had programmed have vanished"). On a long run the factory
+ * makes most of the population — a W-4 goes out every time you touch a tower —
+ * so this was the majority of what a player had reprogrammed.
+ *
+ * Everything here comes off the record: where it stood, which tower it is
+ * posted to, and what it was running. It is not a fresh machine wearing an old
+ * name; it is the machine, put back.
+ */
+export function reviveUnit(rec, seed = 1) {
+  const type = String(rec && rec.type || '');
+  if (!type || !CHASSIS[type]) return null;
+  const rng = makeRng((seed ^ 0x9e37) >>> 0);
+  const hp = HP_BY_TYPE[type] || T1_HP;
+  // baseRobot centres on the tile, so hand it the corner and let it do that.
+  const r = baseRobot(type, (rec.x ?? 0) - 0.5, (rec.y ?? 0) - 0.5, hp, rng);
+  if (Array.isArray(rec.home) && rec.home.length === 2) {
+    r.home = { x: rec.home[0], y: rec.home[1] };
+  }
+  // A V-class runs weights, and a revived one must not come back as a blank
+  // chassis: give it a model unless the record carries a posted one.
+  if (type === 'v1') {
+    r.modelSeed = rec.ms ?? (seed >>> 3);
+    r.gardener = !!rec.gfit;
+    r.designation = r.gardener ? 'V5' : 'V1';
+    r.program = makeVModel(r.modelSeed, r.gardener ? v5BuildName(r.modelSeed) : v1BuildName(r.modelSeed));
+  } else {
+    // Thunks, because several of these constants are declared further down the
+    // file — the lookup has to happen at revive time, not at module load.
+    r.program = STOCK_PROGRAM[type] ? STOCK_PROGRAM[type]() : null;
+  }
+  return r;
+}
+
+/** The program a chassis ships with, for a unit rebuilt from a save. */
+const STOCK_PROGRAM = {
+  t1: () => T1_PROGRAM, t1w: () => T1W_PROGRAM, t2: () => T2_PROGRAM,
+  t3: () => T3_PROGRAM, w4: () => W4_PROGRAM, w1: () => W1_PROGRAM,
+  w3: () => W3_PROGRAM, w5: () => W5_PROGRAM, t8: () => T8_PROGRAM,
+};
+
 // A fresh T1 or T2 the factory builds to re-garrison an obelisk that's lost its
 // guards. Spawns at the factory (fx,fy), flickers in, and takes the tower's
 // seat as `home` — so it walks over there and patrols around it (patrol/updateT1
@@ -1205,6 +1572,28 @@ export function spawnV1(map, seed, fx, fy) {
   return r;
 }
 
+/**
+ * A V-5: the V-class frame carrying a gardener's model. Same net, same forward
+ * pass, its own weights — floating point all the way down, like its sibling.
+ *
+ * The seed is offset from the V-1's so the two never grow the same numbers: a
+ * player who diffs one model against the other should find two different
+ * machines, not one machine twice.
+ */
+export function spawnV5(map, seed, fx, fy) {
+  const r = spawnV1(map, seed ^ 0x5eed5, fx, fy);
+  if (!r) return null;
+  r.gardener = true;
+  r.designation = 'V5';
+  r.program = makeVModel(r.modelSeed, v5BuildName(r.modelSeed));
+  return r;
+}
+
+// V5_04, V5_37 — the same stamp as a V-1's, wearing the other number.
+export function v5BuildName(seed) {
+  return `V5_${String((seed | 0) % 100).padStart(2, '0')}`;
+}
+
 // V1_04, V1_37 — the foundry's build stamp, from the unit's own seed.
 export function v1BuildName(seed) {
   return `V1_${String((seed | 0) % 100).padStart(2, '0')}`;
@@ -1245,6 +1634,37 @@ export function spawnCouriers(map, seed, obelisks, count = 1) {
     if (out.length >= count) break;
     const ob = obelisks[idx];
     const v = spawnV1(map, (seed ^ (0xc0de + out.length * 149)) >>> 0, ob.x, ob.y);
+    if (v) out.push(v);
+  }
+  return out;
+}
+
+/**
+ * #165 — the island's V-5 gardeners, garrisoned to towers like the W-5s so each
+ * has a home, a natural name and a place in its tower's roster.
+ *
+ * There are MORE of these than there are V-1s, and deliberately: the V-1 is one
+ * courier doing invisible work, which is why nobody has ever seen the V-class
+ * (David, 2026-08-14: "we must get the V1 in the game"). A gardener is out in
+ * the open doing something you can watch, so the V-class finally has a member
+ * you meet.
+ */
+export function spawnVGardeners(map, seed, obelisks, count = 2, taken = null) {
+  const out = [];
+  if (!obelisks || !obelisks.length) return out;
+  const rng = makeRng((seed ^ 0x5a4d) >>> 0);
+  const order = obelisks.map((_, i) => i);
+  for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+  // ONE V-CLASS PER TOWER. A courier and a gardener sharing a home would share
+  // a save key too (same chassis, same tower), and the roster would list two
+  // machines whose natural names are indistinguishable. `taken` is the towers
+  // the couriers already hold.
+  const used = new Set((taken || []).map((r) => `${Math.round(r.home.x)},${Math.round(r.home.y)}`));
+  for (const idx of order) {
+    if (out.length >= count) break;
+    const ob = obelisks[idx];
+    if (used.has(`${Math.round(ob.x)},${Math.round(ob.y)}`)) continue;
+    const v = spawnV5(map, (seed ^ (0x5e5e + out.length * 167)) >>> 0, ob.x, ob.y);
     if (v) out.push(v);
   }
   return out;
@@ -1302,16 +1722,33 @@ export function spawnT1w(map, seed, mx, my) {
   return r;
 }
 // #159 — THE CARRIER. One per island, and the warrior's road to the HERMES card
-// (docs/hermes-warrior-path.md). A fortress that can forge the credential has to
+// (docs/PLAN.md). A fortress that can forge the credential has to
 // move the credential, so one M-class captain is carrying the shard itself.
 //
 // It is an M6 chassis underneath, with the differences that make it read as the
 // boss it is rather than as a tough one of the pack: it is named, it withdraws
 // instead of charging (updateCarrier), and it answers damage with a wave of
 // T-1w swarm robots. What it carries matters more to the fortress than you do.
-export function spawnCarrier(map, seed, mx, my, fromFactory = false, post = null) {
-  const r = spawnGuardType(map, seed, mx, my, 'b1', CARRIER_HP, fromFactory);
+/**
+ * A king of the AGAMEMNON class. `mark` picks which one ('b1'..'b4'); each
+ * island has exactly one, and the mark decides its metal, its hull and how it
+ * fights. The chassis and the whole gate/wave machinery are shared — a king is
+ * the same panoply with a different temper, not a different machine.
+ */
+export function spawnCarrier(map, seed, mx, my, fromFactory = false, post = null, mark = 'b1') {
+  const K = KINGS[mark] || KINGS.b1;
+  const hp = Math.round(CARRIER_HP * (K.hull || 1));
+  const r = spawnGuardType(map, seed, mx, my, 'b1', hp, fromFactory);
   if (!r) return null;
+  // Its own name and colours ride on the machine, so the renderer, the roster
+  // and the save all read the same king off one place.
+  r.designation = mark.toUpperCase();
+  r.metal = K.metal; r.metalHi = K.hi; r.metalLo = K.lo;
+  r.kingName = K.name;
+  if (K.shield) r.shieldScale = K.shield;
+  r.rimScale = K.rim || 1;
+  if (K.press) r.pressScale = K.press;
+  if (K.waveScale) r.waveScale = K.waveScale;
   // WHAT IT IS GUARDING. `postObj` is the structure itself, watched for damage
   // the same way it watches its own hull, so no damage site had to learn that
   // the factory has a sentry. `home` is the centre of the beat it walks.
@@ -1329,7 +1766,14 @@ export function spawnCarrier(map, seed, mx, my, fromFactory = false, post = null
   // and its home tower; this one has a designation, so a player who scans it or
   // clicks its tag learns there is something singular here before they find out
   // the hard way what it is holding.
-  r.unitName = 'B-1 CARRIER';
+  // AGAMEMNON class. The machine was drawn from the arming scene in Iliad XI at
+  // David's direction, and every comment in this file already said so — only
+  // the NAME was mine, and "carrier" was both wrong (it does not carry the
+  // swarm anywhere, it prints it where it stands) and taken: the phone help
+  // uses `carrier` in the telecoms sense, for a network with no customers left,
+  // only subjects. The B-class are the only machines the estate named rather
+  // than numbered, which is the point of them (David, 2026-08-15).
+  r.unitName = `${mark.toUpperCase().replace('B', 'B-')} ${K.name}`;
   // IT SERVES ITS SOURCE. `hardened` (set by spawnGuardType) makes `post` refuse
   // it, but the host table serves `r.program` to a GET regardless — so a player
   // with a NostBook can read the carriage doctrine and the commented-out three
@@ -1338,9 +1782,12 @@ export function spawnCarrier(map, seed, mx, my, fromFactory = false, post = null
   // The first wave is not free: it has to be provoked, and then it still waits
   // out the grace before anything prints.
   r.waveT = 0;
+  r.waves = 0;            // gates released; the fight's whole progress
+  r.spoolT = 0;           // counts down the telegraph before a wave
+  r.banked = 0;           // damage held on a sealed hull, spent at the next gate
   r.struckT = 0;
-  r.shieldHp = CARRIER_SHIELD_HP;
-  r.shieldMax = CARRIER_SHIELD_HP;
+  r.shieldHp = Math.round(CARRIER_SHIELD_HP * (K.shield || 1));
+  r.shieldMax = Math.round(CARRIER_SHIELD_HP * (K.shield || 1));
   // Seed the hull watermark at spawn rather than lazily on first tick. Lazily
   // meant that if the very first update a carrier ever got was the one where it
   // had already been shot, the baseline was read AFTER the damage and the blow
@@ -1591,12 +2038,25 @@ function patrol(r, speed, range, dt, map) {
   }
 }
 
+// #179 — inside this, a machine is not fooled by anything. Grass hides you from
+// something across the field, not from something standing over you, and a
+// hunter that has already closed must still be able to land its blow.
+const STEALTH_CONTACT = 1.6;
+
 function distTo(r, player) {
   // A held, charged Wi-Fi block jams hostile sensors: the player reads as
   // out of range everywhere, so hunters never acquire (and instantly lose)
   // the trail. Friendly robots don't use this path, so they still follow.
   if (player.invisibleToRobots) return Infinity;
-  return Math.hypot(player.x - r.x, player.y - r.y);
+  const d = Math.hypot(player.x - r.x, player.y - r.y);
+  if (d < STEALTH_CONTACT) return d;
+  // #179 — STEALTH, ALL OF IT, IN ONE LINE. This is the only place a hostile
+  // asks how far away the player is, so scaling here reaches every acquisition
+  // range, every give-up distance and every reacquire in the file at once. The
+  // Wi-Fi block above is the same idea taken to its limit (Infinity); this is
+  // the version you get for free, by moving carefully.
+  const k = player.stealthFactor ? player.stealthFactor() : 1;
+  return d * (k || 1);
 }
 
 // Scrap variation without Math.random: a cheap integer hash of the wreck's
@@ -1659,6 +2119,18 @@ function drainBattery(r, rate, dt) {
 function updateRecharge(r, dt, map) {
   const dHome = Math.hypot(r.home.x - r.x, r.home.y - r.y);
   if (dHome <= RECHARGE_RANGE) {
+    // #133 — A TOWER THAT WILL NOT FEED. `never feed` in an obelisk's posted
+    // constitution cuts its garrison off from power, which is the strongest
+    // single hack in the game: an island whose towers will not feed runs itself
+    // down. main.js stamps the flag on the tower object each tower tick, so this
+    // stays a boolean read and robots.js never learns what a constitution is.
+    const post = map.objectAt ? map.objectAt(Math.floor(r.home.x), Math.floor(r.home.y)) : null;
+    if (post && post.feedOff) {
+      // It still limps home and still waits there. The tower simply has nothing
+      // for it, which is a machine sitting at a dead socket rather than an error.
+      r.battery = Math.max(0, r.battery);
+      return;
+    }
     r.battery = Math.min(BATTERY_MAX, r.battery + RECHARGE_RATE * dt);
     r.hp = Math.min(r.maxHp, r.hp + REPAIR_RATE * dt);
     if (r.battery >= BATTERY_MAX && r.hp >= r.maxHp) {
@@ -1700,6 +2172,19 @@ export function updateRobots(dt, robots, player, map, dayNight) {
       continue;
     }
 
+    // Printed by a king that has just fallen: it stands, for a moment, with
+    // nothing telling it what to do.
+    if (r.leaderless > 0) {
+      r.leaderless -= dt;
+      r.animT += dt;
+      r.aggro = false;
+      continue;
+    }
+
+    // The check-in. Before anything else this machine does, because whether it
+    // is on the books is a fact about the last tick, not this one.
+    if (r.home) reportIn(r, dt, map);
+
     // #159 — THE CARRIER'S SHIELD, resolved HERE and not in updateCarrier,
     // because the death check below runs before any per-type update: the shield
     // was booking the damage a tick too late and the machine was already dead
@@ -1722,12 +2207,76 @@ export function updateRobots(dt, robots, player, map, dayNight) {
           r.shieldBroke = 0.9;
           (map.groundItems ??= []).push({ item: 'aspis', qty: 1, x: r.x - 0.4, y: r.y + 0.3, keep: true });
         }
+      } else if (took > 0) {
+        // WHILE IT IS PRINTING IT IS OPEN. The two seconds before a wave comes
+        // out are the window the whole fight is built around: the ports crack,
+        // the bands come up, and anything landed then counts double. It is a
+        // telegraph, not a reaction test — you can see it winding up.
+        const spooling = (r.spoolT ?? 0) > 0;
+        if (spooling) r.hp -= took * (CARRIER_SPOOL_MULT - 1);
+
+        // THE GATE HOLDS, BUT THE BLOW IS NOT WASTED. Past the floor it bites a
+        // quarter and BANKS the rest, which is spent the moment the next wave
+        // opens the gate. So working on a sealed hull is real work, visibly
+        // kept and visibly paid; what it cannot do is skip a phase.
+        // THE GATE HOLDS FROM THE FIRST BLOW, NOT THE SECOND PHASE.
+        // This used to read `r.waves > 0`, which left the whole of phase one
+        // with NO FLOOR AT ALL: carrierFloor(maxHp, 0) is maxHp, so the guard
+        // that was meant to stop the hull sealing at full health instead
+        // removed the hull's protection entirely until the first wave was out.
+        // Anything with a fast enough rate of fire — an escort W-4 you posted
+        // `follow` to, at 18 a bolt against a 60-point hull — took the boss
+        // from full to dead through five unopened gates in about four seconds
+        // (David, 2026-08-15: "B1 died instantly again when my follower a W4
+        // shot it"). Nothing is wasted by the gate holding: the blow is banked
+        // and paid the moment the next wave opens the gate.
+        const floor = carrierFloor(r.maxHp, r.waves);
+        if (r.waves < CARRIER_GATES && r.hp < floor) {
+          const blocked = floor - r.hp;              // what the gate refused
+          r.hp = floor;
+          // THE BANK IS CAPPED AT ONE GATE. Uncapped it is a way to buy the
+          // whole fight in advance: a machine firing steadily into a sealed
+          // hull banked 150 against a 60-point hull inside four seconds, and
+          // every gate from then on would have fallen the instant it opened.
+          // A gate's worth is the most that can usefully be paid at one
+          // opening anyway — past that the surplus was only ever going to be
+          // re-banked by the next clamp.
+          r.banked = Math.min((r.banked || 0) + blocked * (1 - CARRIER_SEALED_BITE),
+                              r.maxHp / CARRIER_GATES);
+          r.sealFlash = CARRIER_SEAL_FLASH;          // the blow rings off it
+        }
       }
       r._lastHp = r.hp;
     }
 
     // Destruction via damage: mark dead and drop scrap exactly once. A
     // penalised kill (external gun code) yields a single scrap.
+    // THE KING'S LAST BLOW STARTS ITS DEATH; it does not finish it. Everything
+    // below (the scrap, the card, the achievement) waits for the fall.
+    if (r.hp <= 0 && r.carrier && r.dying === undefined) {
+      r.dying = CARRIER_DEATH;
+      r.hp = 0;
+      r.aggro = false;
+      r.waveT = 999;            // it prints nothing more
+      r.spoolT = 0;
+      r._spooled = false;
+      sfx.play('charge');
+      if (player.say) player.say(`${r.unitName || 'The carrier'} stops. Something inside it lets go, and it begins to come apart.`);
+      // ITS SWARM LOSES ITS CALLER. The machines it printed were an extension
+      // of it; with the thing that was calling them gone they have no tactic
+      // and nowhere to be, and they stand there. It is the clearest way the
+      // fight can say it is over.
+      for (const o of robots) {
+        if (o.calledBy === r && !o.dead) { o.calledBy = null; o.leaderless = 1.8; o.tactic = null; o.aggro = false; }
+      }
+      continue;
+    }
+    if (r.dying !== undefined) {
+      r.dying -= dt;
+      r.animT += dt;
+      if (r.dying > 0) continue;   // still coming apart
+      r.hp = 0;                    // the fall
+    }
     if (r.hp <= 0) {
       r.dead = true;
       r.stuck = false;
@@ -1782,6 +2331,35 @@ export function updateRobots(dt, robots, player, map, dayNight) {
         if (Math.floor(r.x * 53 + r.y * 29) % 5 === 0) {
           map.groundItems.push({ item: 'chip_fragment', qty: 2, x: r.x, y: r.y + 0.3 });
         }
+      }
+      // OPTICS, CUT OUT OF THE MACHINES THAT HAVE THEM. Goggles were craft-only
+      // — five torch-heads and a circuit board — which is a fine recipe and a
+      // bad supply, because the one time you need them is POSEIDON's fog, and
+      // that is exactly when you are not standing at a bench stripping torches
+      // (David, 2026-08-15: "would be useful in the fog").
+      //
+      // ONLY THE W-4 AND THE MILITARY CLASS. His call, and it is the right
+      // fiction: these are the machines that hunt by looking. A T-1 has a lamp,
+      // a W-3 has a soil probe; the hunter-killer and the guard carry the real
+      // optics, and what you take off them is what they were using to find you.
+      //
+      // Deterministic from the wreck's position, like the plate and the OB_gun
+      // above, so a player cannot reload until a pair falls out. About one in
+      // four: often enough to be an answer to the fog, rare enough that the
+      // recipe is still worth knowing when the ground is quiet.
+      if ((r.type === 'w4' || GOGGLE_CLASSES.has(r.type))
+        && Math.floor(r.x * 37 + r.y * 61) % 4 === 0) {
+        map.groundItems.push({ item: 'goggles', qty: 1, x: r.x + 0.15, y: r.y + 0.4 });
+      }
+      // A WRECK SHEDS WHAT THE MACHINE ACTUALLY CARRIED. The M-6 throws
+      // grenades, so its wreck has the rest of them on it — the same rule the
+      // W-4's spoil is written against, applied to the class that earns it.
+      // WHAT IT DID NOT THROW. A guard you rushed still has its three; one that
+      // has been lobbing at you for a minute has nothing left to give, which is
+      // the honest reward for having made it spend them.
+      const left = r.type === 'm6' ? (r.bombs === undefined ? M6_BOMBS : r.bombs) : 0;
+      if (left > 0) {
+        map.groundItems.push({ item: 'bomb_small', qty: left, x: r.x - 0.2, y: r.y + 0.35 });
       }
       // #159 — the carrier sheds what it was carrying. `keep` because this is
       // the warrior's whole route off the island and it must not rot on the
@@ -1986,13 +2564,13 @@ export function updateRobots(dt, robots, player, map, dayNight) {
     else if (r.type === 'w5') updateW5(r, dt, map, player);
     else if (r.type === 'v1') updateV1(r, dt, map, player);
     else if (r.type === 't8') updateT8(r, dt, map, player);
-    else if (r.type === 'm6' || r.type === 'b1' || r.type === 'm5' || r.type === 'm4') updateGuard(r, dt, player, map, robots);
+    else if (r.type === 'm6' || r.type === 'b1' || r.type === 'm5' || r.type === 'm4') updateGuard(r, dt, player, map, robots, facX, facY);
     else updateT2(r, dt, player, map);
   }
   separateRobots(robots, map, dt, player);
 }
 
-// Robots update as a registered system (docs/refactor-registry.md): the hub no
+// Robots update as a registered system (docs/PLAN.md): the hub no
 // longer calls updateRobots() directly, it ticks via systems.runUpdate(). order
 // 30 puts robots just before fortress (35), NOT in the nominal actors band
 // (40-59), because fortress reads this-frame robot `aggro` to drive its breach-
@@ -2045,7 +2623,12 @@ function separateRobots(robots, map, dt, player) {
         // passes within the same frame) chips away rather than melting
         // instantly. Only checked on the first pass — later passes this same
         // frame are just finishing the push-apart, not a fresh collision.
-        if (pass === 0 && a.bumpCooldown <= 0 && b.bumpCooldown <= 0) {
+        // YOUR OWN MACHINES DO NOT CHIP EACH OTHER. They still get pushed
+        // apart — nothing overlaps — but two units both under your command
+        // killing each other by walking is a squad destroying itself for
+        // obeying you, which is not a difficulty anybody chose.
+        const bothYours = isEscorting(a) && isEscorting(b);
+        if (pass === 0 && !bothYours && a.bumpCooldown <= 0 && b.bumpCooldown <= 0) {
           a.hp -= BUMP_DAMAGE; a.hurt = true; a._lastHitBy = 'machine';
           b.hp -= BUMP_DAMAGE; b.hurt = true; b._lastHitBy = 'machine';
           a.bumpCooldown = BUMP_COOLDOWN;
@@ -2400,7 +2983,7 @@ export function botThink(r, d, dt, map, player) {
   r.mlT -= dt;
   if (r.mlT > 0) return;
   r.mlT = ML_TICK;
-  // Per-chassis fuel (docs/v-class-plan.md §1). Every hand-written program
+  // Per-chassis fuel (docs/PLAN.md §1). Every hand-written program
   // costs single-digit steps, so the default budget is what makes a runaway
   // recursion read as a fault in that machine. A V-class runs a forward pass
   // instead, which is thousands of reductions of honest arithmetic, so its
@@ -2500,6 +3083,12 @@ function botFault(r, why) {
 // (they carry no aggro, and only aggroed enemies are engaged).
 const ESCORT_SPEED = 3.0;          // brisk: keeps pace with the player and closes on threats
 const ESCORT_STANDOFF = 2.0;       // trails at arm's length rather than shoving the player
+// How far out the formation ring sits beyond the standoff, and how loose a
+// station is before a machine bothers to correct. The slack matters: a tight
+// station has every escort twitching to hold a millimetre, which is its own
+// kind of grinding.
+const ESCORT_RING = 0.9;
+const ESCORT_SLOT_SLACK = 0.7;
 const ESCORT_THREAT_RANGE = 9;     // peels off for an enemy this near the player
 const ESCORT_MELEE_RANGE = 1.0;    // ram contact
 const ESCORT_MELEE_DAMAGE = 16;
@@ -2516,6 +3105,119 @@ let _liveRobots = null;
 // the player (aggro), not dead/fused/friendly/converted/relay-driven, and
 // within ESCORT_THREAT_RANGE of the player. Escorts carry no aggro, so this
 // never returns one — protectors do not fight each other.
+/** Is this machine running one of your escort intents right now? */
+function isEscorting(r) {
+  return !!r && !r.fault && (r.intent === 'follow' || r.intent === 'defend');
+}
+
+// HOW THE ESTATE FINDS OUT, which is not by looking at a machine and seeing
+// that it has changed its mind (David, 2026-08-15: "how can it tell they are
+// turned?"). A unit on the estate's business checks in with its home tower.
+// One walking beside a person under arms does not — the escort program has
+// replaced the loop that did the checking in — and after AWOL_AFTER seconds of
+// silence the tower writes it up. `awol` is the ESTATE'S BELIEF about a
+// machine, held on the machine for convenience but owned by the net, and it is
+// the only thing the M-class acts on. Nothing anywhere reads a unit's actual
+// allegiance.
+//
+// Three things follow from routing it through the net rather than through
+// omniscience, and all three are playable:
+//
+//   - A TOWER THAT IS DOWN CANNOT FILE. Jam or fell the home tower and your
+//     escorts are never written up, because there is nobody to write them up.
+//     The felling verb was already the way to blind a tower's sight (#37); it
+//     is now also the way to keep a machine off the books.
+//   - IT TAKES TIME. Twenty seconds of silence, so a quick errand under arms
+//     does not put a unit on a list, and a long campaign does.
+//   - IT IS REVERSIBLE. Stand the unit down — take the escort program off it —
+//     and it starts checking in again, and the tower clears the flag. A
+//     machine can come back from being suspected.
+//
+// GARDENERS NEVER GO AWOL, and now there is a reason rather than an exception:
+// a bluebox'd W-5 is still working the tower's ground and still reporting. It
+// changed its trade, not its address. (David: "not gardener-aligned".)
+const AWOL_AFTER = 20;      // seconds of silence before a tower writes a unit up
+
+/** One unit's check-in, run every tick from updateRobots. */
+function reportIn(r, dt, map) {
+  const ob = homeObelisk(r, map);
+  const linked = ob ? !(ob.destroyed || ob.jammed || ob.needsRebuild) : false;
+  // Off the net there is no reporting and no filing: the clock stops where it
+  // is, so cutting the tower freezes a unit's standing rather than clearing it.
+  if (!linked) return;
+  if (!isEscorting(r)) {
+    r.silentT = 0;
+    if (r.awol) r.awol = false;      // stood down, and the tower takes it back
+    return;
+  }
+  r.silentT = (r.silentT || 0) + dt;
+  if (r.silentT >= AWOL_AFTER) r.awol = true;
+}
+
+// What the M-class acts on: a machine its own network has written up. Not what
+// the machine is — what the estate has decided about it.
+function isTurned(o) {
+  return !!o && !o.dead && !o.fused && !o.driven && !o.gardener && !!o.awol;
+}
+
+// The nearest written-up machine in sight, within `range`.
+function nearestTurned(r, robots, map, range) {
+  let best = null, bestD = range;
+  for (const o of robots || []) {
+    if (o === r || !isTurned(o)) continue;
+    const d = Math.hypot(o.x - r.x, o.y - r.y);
+    if (d >= bestD) continue;
+    if (!map.hasLineOfSight(r.x, r.y, o.x, o.y)) continue;
+    bestD = d; best = o;
+  }
+  return best;
+}
+
+// The nearest machine running one of the player's escort programs, within
+// `range` of this one and in line of sight. The mirror of nearestPlayerThreat:
+// that one finds what to protect the player FROM, this one finds what is doing
+// the protecting.
+function nearestEscort(r, robots, map, range) {
+  let best = null, bestD = range;
+  for (const o of robots || []) {
+    if (o === r || o.dead || o.fused || o.drained) continue;
+    if (!isEscorting(o)) continue;
+    const d = Math.hypot(o.x - r.x, o.y - r.y);
+    if (d >= bestD) continue;
+    if (!map.hasLineOfSight(r.x, r.y, o.x, o.y)) continue;
+    bestD = d; best = o;
+  }
+  return best;
+}
+
+// AN ESCORT STANDING IN THE WAY TAKES THE BLOW.
+//
+// Every hostile's strike aimed at the PLAYER and nothing else. A machine could
+// only ever chip a follower by BUMPING into it — one point, on a two-and-a-half
+// second cooldown — which never visibly moves the bar, so a follower under
+// attack looked invulnerable (David, 2026-08-15: "my follower seems to not take
+// damage properly", then "it was attacked and didn't seem to take damage"). It
+// was not a display bug; `creatureHealthBar` was reading the truth. Nothing in
+// the game could hurt it.
+//
+// Which also made an escort screen FREE: four W-4s on `follow` were armour that
+// could not be worn down, and the point of posting a machine to walk in front of
+// you should be that it costs you the machine.
+//
+// The rule is deliberately dumb, so a player can predict it: if one of yours is
+// inside the reach of the blow meant for you, it wears it instead. Not a
+// target-priority system — a thing in the way.
+function escortInTheWay(r, range) {
+  if (!_liveRobots) return null;
+  let best = null, bestD = range;
+  for (const o of _liveRobots) {
+    if (o === r || o.dead || o.fused || o.drained || !isEscorting(o)) continue;
+    const d = Math.hypot(o.x - r.x, o.y - r.y);
+    if (d < bestD) { bestD = d; best = o; }
+  }
+  return best;
+}
+
 function nearestPlayerThreat(player) {
   if (!_liveRobots) return null;
   let best = null, bestD = ESCORT_THREAT_RANGE;
@@ -2593,16 +3295,50 @@ function updateEscort(r, dt, map, player, mode) {
     return;
   }
 
-  // No enemy to see to (or plain `follow`): trail the player at a standoff. Raw
-  // distance, NOT distTo — a held Wi-Fi block makes distTo read Infinity to jam
-  // hunters, and an escort has to keep following through exactly that.
+  // No enemy to see to (or plain `follow`): keep STATION on the player, not the
+  // player's exact tile.
+  //
+  // Every escort used to steer at the same point, so a squad of five converged
+  // on one spot, shouldered each other for as long as they were following, and
+  // wore itself out doing it (David, 2026-08-15: "my followers all destroy
+  // themselves very quickly as they bump each other"). Each one now holds its
+  // own bearing on a ring around you, so a squad spreads into a screen instead
+  // of a scrum — which is both what stops the grinding and what an escort is
+  // supposed to look like.
+  const slot = escortSlot(r);
+  const ring = ESCORT_STANDOFF + ESCORT_RING;
+  const sx = player.x + Math.cos(slot) * ring;
+  const sy = player.y + Math.sin(slot) * ring;
+  const ds = Math.hypot(sx - r.x, sy - r.y);
   const dp = Math.hypot(player.x - r.x, player.y - r.y);
-  if (dp > ESCORT_STANDOFF) {
-    const tgt = chaseTarget(r, player.x, player.y, map);
+  if (ds > ESCORT_SLOT_SLACK) {
+    const tgt = chaseTarget(r, sx, sy, map);
     moveToward(r, tgt.x, tgt.y, ESCORT_SPEED, dt, map);
   } else if (dp > 1e-4) {
+    // On station: face the way you face, which is what a guard does.
     r.facing = { x: (player.x - r.x) / dp, y: (player.y - r.y) / dp };
   }
+}
+
+// Which bearing on the ring this machine holds. Taken from its save identity
+// (uid), so it is the same station across a reload and two escorts do not swap
+// places every time the world is rebuilt. The golden angle spreads any number
+// of them evenly without having to count them or renumber when one dies.
+const GOLDEN = Math.PI * (3 - Math.sqrt(5));
+function escortSlot(r) {
+  if (r._escortSlot == null) {
+    const n = Number.isFinite(r.uid) ? r.uid : (r._netSerialSeed ??= Math.abs(hashName(r._netId || r.type)));
+    r._escortSlot = (n * GOLDEN) % (Math.PI * 2);
+  }
+  return r._escortSlot;
+}
+
+/** A stable number from a name, for machines with no uid yet. */
+function hashName(s) {
+  let h = 2166136261;
+  const t = String(s);
+  for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
 }
 
 function updateT1(r, dt, player, map) {
@@ -2626,7 +3362,13 @@ function updateT1(r, dt, player, map) {
     r.aggro = intent === 'hunt';
     if (!r.aggro) { r.noProgressT = 0; r.stuck = false; }
   } else {
-    if (!r.aggro && d < T.detect * ease && !(r.loseInterestT > 0) && constitutionAllows(r, 'hunt')) r.aggro = true; // no line of sight needed to notice
+    // A T-1 must SEE you to take an interest; a T-1w already knows. `distTo`
+    // has already answered Infinity for a player the machines cannot sense at
+    // all (jacked in, wearing the block, Creative), so this only decides who
+    // notices somebody who IS there to be noticed.
+    const canAcquire = !T.needsSight || (map.hasLineOfSight && map.hasLineOfSight(r.x, r.y, player.x, player.y));
+    if (!r.aggro && d < T.detect * ease && canAcquire
+      && !(r.loseInterestT > 0) && constitutionAllows(r, 'hunt')) r.aggro = true;
     if (r.aggro && d > T.deaggro) r.aggro = false;
   }
 
@@ -2652,6 +3394,14 @@ function updateT1(r, dt, player, map) {
       r.loseInterestT = STUCK_SULK;
     }
 
+    // Your machine, if it is inside the swing, wears it instead of you.
+    const inTheWay = escortInTheWay(r, T.hitR + reachBonus(player, map));
+    if (inTheWay && r.attackTimer <= 0) {
+      r.attackTimer = T.cool;
+      damageRobot(inTheWay, T.dmg, map);
+      inTheWay._lastHitBy = 'machine';
+      return;
+    }
     if (d < T.hitR + reachBonus(player, map) && r.attackTimer <= 0) {
       r.attackTimer = T.cool;
       // A T-1w against a forcefield is a DRAIN, not a threat: it earths itself
@@ -3414,7 +4164,8 @@ function pursueMaze(r, dt, tx, ty, map, speed) {
   else moveToward(r, tx, ty, speed, dt, map);
 }
 
-function updateGuard(r, dt, player, map, robots) {
+// `facX`/`facY` are the foundry, threaded through for the M-6's resupply run.
+function updateGuard(r, dt, player, map, robots, facX = null, facY = null) {
   r.attackTimer = Math.max(0, r.attackTimer - dt);
   const ease = player.threatEase ? player.threatEase() : 1;
   drainBattery(r, r.aggro ? DRAIN_CHASE : DRAIN_PATROL, dt);
@@ -3452,9 +4203,48 @@ function updateGuard(r, dt, player, map, robots) {
 
   const d = distTo(r, player);
   if (d > 1e-4) r.facing = { x: (player.x - r.x) / d, y: (player.y - r.y) / d }; // face you while engaged
+
+  // A REFUNCTIONED UNIT IS A TARGET (David, 2026-08-15: "the M class can detect
+  // a refunctioned W class and will attack it"). The M-class is the estate's
+  // own police, and a machine that has stopped answering the net and started
+  // walking beside a person is the exact thing it is posted against — so it
+  // deals with the turncoat before it deals with you. It also means an escort
+  // screen costs something to maintain in guarded ground, rather than being a
+  // free set of extra guns.
+  //
+  // The M-4 is deliberately NOT armed here. It is the alarm, not the answer;
+  // giving it a weapon because a new target appeared would quietly change what
+  // that class is. It marks the turncoat and keeps it in sight, which is what
+  // it does with you.
+  // The carrier is an m6 by chassis and a king by behaviour: it has its own
+  // targeting in updateCarrier, which already puts the escorts first.
+  const turncoat = r.carrier ? null
+    : nearestTurned(r, robots, map, r.type === 'm5' ? M5_RANGE : M6_TURNCOAT_RANGE);
+  if (turncoat && r.type !== 'm4') {
+    const dq = Math.hypot(turncoat.x - r.x, turncoat.y - r.y);
+    if (dq > 1e-4) r.facing = { x: (turncoat.x - r.x) / dq, y: (turncoat.y - r.y) / dq };
+    r.attackTimer = Math.max(0, r.attackTimer - dt);
+    if (r.type === 'm5') {
+      if (dq > M5_MIN_RANGE && r.attackTimer <= 0) {
+        r.attackTimer = M5_FIRE_COOLDOWN;
+        (map.projectiles ??= []).push({ x0: r.x, y0: r.y, x1: turncoat.x, y1: turncoat.y, prog: 0, kind: 'laser_m5' });
+        sfx.play('laser');
+        damageRobot(turncoat, M5_DAMAGE * 2, map);
+        turncoat._lastHitBy = 'machine';
+      }
+    } else {
+      moveToward(r, turncoat.x, turncoat.y, M6_CHASE_SPEED, dt, map);
+      if (dq < 1.6 && r.attackTimer <= 0) {
+        r.attackTimer = M6_TURNCOAT_COOLDOWN;
+        damageRobot(turncoat, M6_TURNCOAT_DAMAGE, map);
+        turncoat._lastHitBy = 'machine';
+      }
+    }
+    return;
+  }
   if (r.type === 'm4') updateM4(r, dt, player, map, d, robots);
   else if (r.type === 'm5') updateM5(r, dt, player, map, ease, d);
-  else updateM6Pack(r, dt, player, map, robots, ease);
+  else updateM6Pack(r, dt, player, map, robots, ease, facX, facY);
 }
 
 // M4: unarmed. It just holds you in sight at a wary distance while the breach
@@ -3640,9 +4430,55 @@ function updateCarrier(r, dt, player, map, robots, ease) {
   // a machine keeping a professional distance from a problem.
   r.swarmAngle = (r.swarmAngle ?? 0) + (r.swarmSpin ?? 0.12) * dt;
   moveToward(r,
-    player.x + Math.cos(r.swarmAngle) * CARRIER_STANDOFF,
-    player.y + Math.sin(r.swarmAngle) * CARRIER_STANDOFF,
+    // DIOMEDES ORBITS CLOSER. `pressScale` is the one number that makes a king
+    // feel different at range: Agamemnon keeps his distance and prints, the man
+    // who wounded two gods in an afternoon does not.
+    player.x + Math.cos(r.swarmAngle) * CARRIER_STANDOFF * (r.pressScale || 1),
+    player.y + Math.sin(r.swarmAngle) * CARRIER_STANDOFF * (r.pressScale || 1),
     CARRIER_SPEED, dt, map);
+
+  // THE OCCASIONAL SHOT. It fires while it orbits, on its own long cooldown,
+  // and never while it is spooling: the two seconds it spends opening its ports
+  // are the window the fight is built around, and a machine that shot at you
+  // through its own telegraph would be taking that window back. Line of sight
+  // is required, so breaking line is a real answer to it.
+  r.fireT = Math.max(0, (r.fireT ?? 0) - dt);
+  if (r.fireT <= 0 && (r.spoolT ?? 0) <= 0) {
+    // THE ESCORTS GO FIRST. A king that shoots past the bodyguards at the man
+    // behind them is not a king, it is a target dummy — and a player who posts
+    // `follow` to four W-4s and walks in behind them has solved the fight
+    // (David, 2026-08-15: "the B1 should be smart enough to also aim at the
+    // followers first"). It clears the screen, then it deals with you. Nearest
+    // escort first, because that is the one about to reach it.
+    const guard = nearestEscort(r, robots, map, CARRIER_FIRE_RANGE);
+    const tx = guard ? guard.x : player.x, ty = guard ? guard.y : player.y;
+    const dt2 = Math.hypot(tx - r.x, ty - r.y);
+    if (dt2 <= CARRIER_FIRE_RANGE && dt2 > 1e-4 && map.hasLineOfSight(r.x, r.y, tx, ty)) {
+      r.fireT = CARRIER_FIRE_EVERY;
+      r.facing = { x: (tx - r.x) / dt2, y: (ty - r.y) / dt2 };
+      (map.projectiles ??= []).push({ x0: r.x, y0: r.y, x1: tx, y1: ty, prog: 0, kind: 'laser_m5' });
+      sfx.play('laser', { pitch: 0.8 });
+      if (guard) {
+        // A machine takes it as a machine does. It hits harder than an escort's
+        // own bolt: this is the weapon a king carries, and the screen is meant
+        // to cost you something to keep up.
+        damageRobot(guard, CARRIER_DAMAGE * 2, map);
+        guard._lastHitBy = 'machine';
+      } else {
+        const block = player.blockRangedShot ? player.blockRangedShot(r.x, r.y) : null;
+        if (block === 'reflect') {
+          // A mirror shield kills anything else that fires into it. Not a king:
+          // it takes the bolt back as damage like any other blow, which means
+          // the GATE takes it and you still have to work the fight. A one-click
+          // boss kill sitting behind an item would undo the whole five gates.
+          r.hp -= CARRIER_DAMAGE * 3; r.hurt = true; r._lastHitBy = 'reflect';
+          map.projectiles.push({ x0: player.x, y0: player.y, x1: r.x, y1: r.y, prog: 0, kind: 'laser_m5' });
+        } else if (!block) {
+          guardHit(player, CARRIER_DAMAGE * ease, 'machine');
+        }
+      }
+    }
+  }
 
   // THE WAVE. Struck, it starts a short fuse; when the fuse burns down and the
   // wave cooldown is clear, it prints. Once it has been opened at all it keeps
@@ -3667,23 +4503,70 @@ function updateCarrier(r, dt, player, map, robots, ease) {
   // only answer it has.
   if (postHit) r.struckT = CARRIER_WAVE_GRACE;
   const provoked = (r.struckT > 0) || (r.hp < r.maxHp) || postHit;
-  if (provoked && r.waveT <= 0) {
+  // SPOOLING UP. Provoked and off cooldown, it does not print at once: it
+  // spends two seconds opening its ports, and those two seconds are when it can
+  // be hurt properly. The tell has to come first so a player can act on it.
+  if (provoked && r.waveT <= 0 && (r.spoolT ?? 0) <= 0 && !r._spooled) {
+    r.spoolT = CARRIER_SPOOL;
+    r._spooled = true;
+    sfx.play('charge');
+  }
+  if ((r.spoolT ?? 0) > 0) {
+    r.spoolT = Math.max(0, r.spoolT - dt);
+    if (r.spoolT > 0) return;          // still opening; the wave is not out yet
+  }
+  // ONCE IT HAS COMMITTED, IT PRINTS. Deliberately not re-checking `provoked`:
+  // the grace on a blow is 0.6s and the spool is 2s, so a carrier whose shield
+  // ate the hit would wind its ports open and then fizzle — the telegraph would
+  // be a lie about half the time. Starting to open is the commitment.
+  if (r.waveT <= 0 && r._spooled) {
+    r._spooled = false;
     r.waveT = lastStand ? CARRIER_LAST_WAVE_EVERY : CARRIER_WAVE_EVERY;
+    // The wave counts toward the gates, and the gate dropping SPENDS the bank:
+    // everything landed on the sealed hull arrives at once, and the bar moves
+    // for it. That is the payoff for having worked on it between waves.
+    r.waves = (r.waves || 0) + 1;
+    if (r.banked > 0) {
+      r.hp -= r.banked;
+      r.banked = 0;
+      const f2 = carrierFloor(r.maxHp, r.waves);
+      if (r.waves < CARRIER_GATES && r.hp < f2) {   // overflowed the next gate too
+        r.banked = (f2 - r.hp) * (1 - CARRIER_SEALED_BITE);
+        r.hp = f2;
+      }
+    }
     let alive = 0;
     for (const o of robots) if (o.calledBy === r && !o.dead && !o.fused) alive++;
-    const room = (lastStand ? CARRIER_LAST_SWARM_CAP : CARRIER_SWARM_CAP) - alive;
+    const cap = lastStand
+      ? CARRIER_LAST_SWARM_CAP
+      : Math.min(CARRIER_SWARM_CAP, CARRIER_SWARM_CAP_BASE + (r.waves || 0) * CARRIER_SWARM_CAP_STEP);
+    const room = cap - alive;
     if (room > 0) {
-      const n = Math.min(room, carrierWaveSize(r, player));
+      // The wave's ORDER, and the number that order needs. The old size curve
+      // still caps it (a hurt carrier prints more, a threatening player draws
+      // more), but the tactic sets the shape.
+      const tactic = lastStand ? 'storm' : carrierTactic(r.waves);
+      const want = Math.round(Math.max(carrierTacticSize(tactic), carrierWaveSize(r, player)) * (r.waveScale || 1));
+      const n = Math.min(room, want);
       for (let i = 0; i < n; i++) {
         const w = spawnT1w(map, Math.floor(r.rng() * 0x7fffffff), Math.floor(r.x), Math.floor(r.y));
         if (!w) break;
         w.calledBy = r;   // the cap counts ITS swarm, not every machine on the island
+        w.tactic = tactic;
+        w.squad = r.waves;                 // which wave it came out with
+        w.pack = Math.floor(i / 3);        // `packs` sends its threes in turn
+        // `circle` gives each machine its own bearing on the ring, so they run
+        // wide to different points rather than following one another out.
+        w.ring = (i / Math.max(1, n)) * Math.PI * 2;
+        w.tacticT = 0;
         robots.push(w);
       }
+      if (player.say && !lastStand) player.say(WAVE_SAID[tactic] || '');
       r.calling = 1.2;    // render/audio tell: a wave just came out of it
     }
   }
   if (r.calling > 0) r.calling = Math.max(0, r.calling - dt);
+  if (r.sealFlash > 0) r.sealFlash = Math.max(0, r.sealFlash - dt);
 
   if (d < M6_HIT_RANGE + reachBonus(player, map) && r.attackTimer <= 0) {
     r.attackTimer = M6_HIT_COOLDOWN;
@@ -3701,7 +4584,10 @@ function hpFracOf(r) {
 
 export function carrierWaveSize(r, player = null) {
   const frac = hpFracOf(r);
-  const base = CARRIER_WAVE_MIN + (CARRIER_WAVE_MAX - CARRIER_WAVE_MIN) * (1 - frac);
+  // The game mode scales the king's waves the same way it scales POSEIDON's:
+  // the fight is the swarm, so the swarm is where the difficulty lives.
+  const mode = player && player.modeRules ? player.modeRules().pressure : 1;
+  const base = (CARRIER_WAVE_MIN + (CARRIER_WAVE_MAX - CARRIER_WAVE_MIN) * (1 - frac)) * mode;
   // #159 — THE FACTORY SIZES THE RESPONSE TO WHAT YOU ARE CARRYING (Henrik,
   // 2026-08-14: "perhaps the boss is more difficult if you have better items?").
   // Diegetic rather than rubber-banded: the thing dispatching machines can see
@@ -3712,7 +4598,27 @@ export function carrierWaveSize(r, player = null) {
   return Math.round(base) + bonus;
 }
 
-function updateM6Pack(r, dt, player, map, robots, ease) {
+function updateM6Pack(r, dt, player, map, robots, ease, facX = null, facY = null) {
+  // OUT OF GRENADES: break off and walk to the foundry. It stops fighting while
+  // it does — a machine that shoots at you all the way to the armoury and back
+  // has not really run out of anything.
+  if (r.bombs === 0 && facX != null && !r.carrier) {
+    r.m6Resupply = true;
+    r.aggro = false;
+  }
+  if (r.m6Resupply) {
+    if (facX == null) { r.m6Resupply = false; r.bombs = M6_BOMBS; }   // no foundry left to visit
+    else if (Math.hypot(facX - r.x, facY - r.y) <= M6_RESTOCK_AT) {
+      r.bombs = M6_BOMBS;
+      r.m6Resupply = false;
+      r.m6BombT = M6_BOMB_EVERY;
+    } else {
+      const t = chaseTarget(r, facX, facY, map);
+      moveToward(r, t.x, t.y, M6_RESTOCK_SPEED, dt, map);
+      return;
+    }
+  }
+
   // No clear line to you (walls between): thread the maze at a run to close in.
   if (!map.hasLineOfSight(r.x, r.y, player.x, player.y)) {
     pursueMaze(r, dt, player.x, player.y, map, M6_CHASE_SPEED);
@@ -3737,12 +4643,54 @@ function updateM6Pack(r, dt, player, map, robots, ease) {
       else { r.m6Phase = 'attack'; r.m6PhaseT = M6_ATTACK_TIME + r.rng() * 2; }
     }
   } else {
-    r.m6Phase = 'withdraw'; // hang back at the edge until the pack forms
+    // A LONE M6 USED TO WAIT FOREVER. `withdraw` holds it at M6_WITHDRAW_RANGE
+    // (6 tiles) and its only weapon is a blow at 0.65, so a guard with no pack
+    // orbited at a distance it could never attack from, for as long as you
+    // stayed on the island — which read as a machine copying your movements
+    // rather than hunting you (Hedda, 2026-08-15). It waits, and then it comes
+    // anyway: alone it is cautious, not inert.
+    r.m6LoneT = (r.m6LoneT ?? 0) + dt;
+    if (r.m6LoneT > M6_LONE_PATIENCE) {
+      r.m6PhaseT = (r.m6PhaseT ?? 0) - dt;
+      if (r.m6PhaseT <= 0) {
+        if (r.m6Phase === 'attack') { r.m6Phase = 'withdraw'; r.m6PhaseT = M6_WITHDRAW_TIME * 1.6 + r.rng() * 2; }
+        else { r.m6Phase = 'attack'; r.m6PhaseT = M6_ATTACK_TIME * 0.7 + r.rng() * 1.5; }
+      }
+    } else {
+      r.m6Phase = 'withdraw'; // hang back at the edge while it hopes for a pack
+    }
   }
+  if (pack >= M6_PACK_MIN) r.m6LoneT = 0;
 
-  r.swarmAngle = (r.swarmAngle ?? 0) + (r.swarmSpin ?? 0.12) * dt;
+  // IT CLOSES ON A PLACE, NOT ON A PERSON. The standoff point used to be an
+  // offset from the player's LIVE position recomputed every frame, with the
+  // orbit crawling at 0.12 rad/s — so the machine held a fixed vector off you
+  // and traced your exact path, step for step. It steers at where it last SAW
+  // you (`seenX`/`seenY`, which the dispatch above already keeps), so breaking
+  // line of sight leaves it going to a place you have left, and the orbit is
+  // quick enough to read as circling rather than as following.
+  r.swarmAngle = (r.swarmAngle ?? 0) + (r.swarmSpin ?? M6_ORBIT_SPIN) * dt;
   const standoff = r.m6Phase === 'attack' ? M6_ATTACK_STANDOFF : M6_WITHDRAW_RANGE;
-  moveToward(r, player.x + Math.cos(r.swarmAngle) * standoff, player.y + Math.sin(r.swarmAngle) * standoff, M6_CHASE_SPEED, dt, map);
+  const aimX = r.seenX ?? player.x, aimY = r.seenY ?? player.y;
+  const wantX = aimX + Math.cos(r.swarmAngle) * standoff;
+  const wantY = aimY + Math.sin(r.swarmAngle) * standoff;
+  // AND IT ROUTES. This branch was a bare moveToward with no progress
+  // bookkeeping, so a guard pressed into the grove's ring of trees stayed there
+  // (Hedda: "keeps trying to escape through calypso's wall of trees but it
+  // cant"). The T-1 has had the give-up clause for months; the M-class never
+  // got it. Same rule, same constants.
+  const expect = Math.min(M6_CHASE_SPEED * dt, Math.hypot(wantX - r.x, wantY - r.y));
+  const tgt = chaseTarget(r, wantX, wantY, map);
+  const went = moveToward(r, tgt.x, tgt.y, M6_CHASE_SPEED, dt, map);
+  if (went < expect * PROGRESS_FRACTION) r.noProgressT += dt;
+  else r.noProgressT = 0;
+  r.stuck = r.noProgressT > STUCK_AFTER;
+  if (r.noProgressT > STUCK_GIVE_UP) {
+    // Pinned on terrain: take a fresh bearing rather than keep pushing at it.
+    r.swarmAngle += Math.PI * (0.5 + r.rng() * 0.5);
+    r.noProgressT = 0;
+    r.stuck = false;
+  }
 
   // No `jackedIn` check here, unlike the W1 swarm above, and deliberately: the
   // daemon's household guard is not fooled by a credential on POSEIDON's
@@ -3750,7 +4698,54 @@ function updateM6Pack(r, dt, player, map, robots, ease) {
   const realD = Math.hypot(player.x - r.x, player.y - r.y);
   if (r.m6Phase === 'attack' && realD < M6_HIT_RANGE + reachBonus(player, map) && r.attackTimer <= 0) {
     r.attackTimer = M6_HIT_COOLDOWN;
-    guardHit(player, M6_HIT_DAMAGE * ease, 'machine');
+    // One of yours in the way wears it, as with every other blow.
+    const inTheWay = escortInTheWay(r, M6_HIT_RANGE + reachBonus(player, map));
+    if (inTheWay) { damageRobot(inTheWay, M6_HIT_DAMAGE, map); inTheWay._lastHitBy = 'machine'; }
+    else guardHit(player, M6_HIT_DAMAGE * ease, 'machine');
+    return;
+  }
+  // THE RIFLE. Out of reach but in sight, it shoots — which is what the class
+  // is. Held to the ATTACK phase so it is still a pack animal with a rhythm
+  // rather than a turret, and it needs a line, so cover works against it.
+  // THE GRENADE, before the rifle: it is the rarer move and the one that should
+  // win the tick when both are ready. Thrown to where it last saw you, so
+  // stepping off that ground is the answer to it.
+  // Lazily stocked rather than set at spawn, so a machine restored from a save
+  // written before the M-6 was armed still has its magazine.
+  if (r.bombs === undefined) r.bombs = M6_BOMBS;
+  r.m6BombT = Math.max(0, (r.m6BombT ?? M6_BOMB_EVERY) - dt);
+  if (r.m6Phase === 'attack' && r.bombs > 0 && r.m6BombT <= 0 && r.attackTimer <= 0
+    && realD < M6_BOMB_RANGE && realD > M6_HIT_RANGE * 2
+    && map.hasLineOfSight(r.x, r.y, player.x, player.y)) {
+    r.m6BombT = M6_BOMB_EVERY;
+    r.attackTimer = M6_FIRE_COOLDOWN;
+    r.bombs -= 1;
+    (map.bombs ??= []).push({
+      x: r.seenX ?? player.x, y: r.seenY ?? player.y,
+      fuse: M6_BOMB_FUSE, radius: M6_BOMB_RADIUS, damage: M6_BOMB_DAMAGE, thrown: true,
+    });
+    sfx.play('keydrop');
+    if (player.say) player.say('The guard lobs something underarm. It lands and starts ticking.');
+    return;
+  }
+  if (r.m6Phase === 'attack' && r.attackTimer <= 0
+    && realD < M6_FIRE_RANGE && realD > M6_HIT_RANGE
+    && map.hasLineOfSight(r.x, r.y, player.x, player.y)) {
+    r.attackTimer = M6_FIRE_COOLDOWN;
+    const guard = escortInTheWay(r, M6_FIRE_RANGE);
+    const tx = guard ? guard.x : player.x, ty = guard ? guard.y : player.y;
+    (map.projectiles ??= []).push({ x0: r.x, y0: r.y, x1: tx, y1: ty, prog: 0, kind: 'laser_m5' });
+    sfx.play('laser');
+    if (guard) { damageRobot(guard, M6_FIRE_DAMAGE, map); guard._lastHitBy = 'machine'; }
+    else {
+      const block = player.blockRangedShot ? player.blockRangedShot(r.x, r.y) : null;
+      if (block === 'reflect') {
+        r.hp -= 999; r.hurt = true; r._lastHitBy = 'reflect';
+        map.projectiles.push({ x0: player.x, y0: player.y, x1: r.x, y1: r.y, prog: 0, kind: 'laser_m5' });
+      } else if (!block) {
+        guardHit(player, M6_FIRE_DAMAGE * ease, 'machine');
+      }
+    }
   }
 }
 
@@ -3883,12 +4878,22 @@ function sensorStyle(r) {
     const g = Math.round(18 + 62 * f), b = Math.round(14 + 46 * f);
     return { fill: `rgb(255,${g},${b})`, halo: f > 0.25 ? `rgba(255,70,50,${(0.18 + 0.42 * f).toFixed(3)})` : null };
   }
-  if (r.friendly) return { fill: EYE_FRIEND, halo: EYE_FRIEND_HALO };
-  // A lamp the machine's own program set (`eye` / `flash`). It sits UNDER the
-  // special cases above on purpose: a flat or stunned unit shows what has been
-  // done to it, not what it was told to display. Flashing gates the lamp off
-  // for part of each cycle rather than dimming it, because that is what a relay
-  // driving an LED actually does.
+  // A lamp the machine's own program set (`eye` / `flash`).
+  //
+  // THIS NOW BEATS `friendly`. It used to sit below it, so the moment you
+  // reprogrammed a unit to follow or defend you it turned green and whatever
+  // `eye "white"` you had written was silently ignored — the verb worked, the
+  // colour never appeared (David, 2026-08-15: "I used to be able to change the
+  // colour of the eye... can we put it back as an option").
+  //
+  // The cases still ABOVE it are the ones that belong there: drained, stunned
+  // and singing are things done TO a machine, and a flat unit must not be able
+  // to claim it is fine. Being yours is a status, not a physical override, so a
+  // machine you own shows the colour you told it to show. Say nothing and it
+  // still goes green, which is the old default.
+  //
+  // Flashing gates the lamp off for part of each cycle rather than dimming it,
+  // because that is what a relay driving an LED actually does.
   if (r.lamp) {
     const hex = LAMP_HEX[r.lamp];
     const hz = r.lampFlash || 0;
@@ -3896,6 +4901,7 @@ function sensorStyle(r) {
     if (!hex || !on) return { fill: EYE_SOCKET, halo: null };
     return { fill: hex, halo: `${hex}55` };
   }
+  if (r.friendly) return { fill: EYE_FRIEND, halo: EYE_FRIEND_HALO };
   return { fill: r.aggro ? EYE_HOT : EYE_DIM, halo: r.aggro ? 'rgba(255,59,42,0.3)' : null };
 }
 
@@ -3935,27 +4941,34 @@ export function unitTagAt(sx, sy) {
 
 function drawUnitTag(ctx, r, c) {
   if (!unitTagger) return;
-  const tag = unitTagger(r);
+  // A tagger may answer a plain string, or {text, small} when the label is a
+  // full net name rather than a nickname — `OB_A45C.T2_04` is twice the width
+  // of «scout» and would sit over the machine like a placard at the same size.
+  const got = unitTagger(r);
+  if (!got) return;
+  const tag = typeof got === 'string' ? got : got.text;
+  const small = typeof got === 'object' && !!got.small;
   if (!tag) return;
   ctx.save();
-  ctx.font = 'bold 7px ui-monospace, monospace';
+  ctx.font = `bold ${small ? 5 : 7}px ui-monospace, monospace`;
   ctx.textAlign = 'center';
-  const w = ctx.measureText(tag).width + 6;
+  const w = ctx.measureText(tag).width + (small ? 4 : 6);
   // Ride just over the head. The T1 is a low tank, so its head sits well below a
   // standing chassis' — a shorter lift keeps its label close instead of floating.
   const lift = isWheeled(r) ? 31 : 48;
+  const bh = small ? 9 : 12;
   const x = c.x - w / 2, y = c.y - lift;   // under the health bar band, over the head
   ctx.fillStyle = 'rgba(10,24,32,0.78)';
-  ctx.fillRect(x, y, w, 12);
+  ctx.fillRect(x, y, w, bh);
   ctx.strokeStyle = 'rgba(90,190,235,0.7)'; ctx.lineWidth = 1;
-  ctx.strokeRect(x, y, w, 12);
+  ctx.strokeRect(x, y, w, bh);
   ctx.fillStyle = tagClickable ? '#7fd0ff' : '#9fe4ff';
-  ctx.fillText(tag, c.x, y + 9);
+  ctx.fillText(tag, c.x, y + (small ? 6.5 : 9));
   // Underlined when it will actually go somewhere, which is the 1995 way of
   // saying so and needs no explaining to anyone who used a browser then.
   if (tagClickable) {
     ctx.strokeStyle = '#7fd0ff';
-    ctx.beginPath(); ctx.moveTo(x + 4, y + 10.5); ctx.lineTo(x + w - 4, y + 10.5); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + 4, y + bh - 1.5); ctx.lineTo(x + w - 4, y + bh - 1.5); ctx.stroke();
   }
   ctx.textAlign = 'left';
   // Record where the box ACTUALLY landed on screen, not where it was asked to
@@ -4093,7 +5106,8 @@ function drawT1(ctx, r, c, worldToScreen) {
   ctx.arc(6, -3, 4, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.fillStyle = bodyTone(T1_BODY, r); // low gunmetal wedge, nose down
+  const swarm = r.designation === 'T1w';
+  ctx.fillStyle = bodyTone(swarm ? T1W_BODY : T1_BODY, r); // low gunmetal wedge, nose down
   ctx.beginPath();
   ctx.moveTo(-10, -5);
   ctx.lineTo(10, -5);
@@ -4101,7 +5115,7 @@ function drawT1(ctx, r, c, worldToScreen) {
   ctx.lineTo(-10, -11);
   ctx.closePath();
   ctx.fill();
-  ctx.strokeStyle = r.fused ? FUSED_EDGE : T1_BODY_EDGE;
+  ctx.strokeStyle = r.fused ? FUSED_EDGE : (swarm ? T1W_BODY_EDGE : T1_BODY_EDGE);
   ctx.lineWidth = 1;
   ctx.stroke();
 
@@ -4160,8 +5174,8 @@ function drawT2(ctx, r, c) {
   ctx.fillRect(-4 + swing, -10, 3, 10);
   ctx.fillRect(1 - swing, -10, 3, 10);
 
-  const bodyBase = r.type === 'w1' ? W1_BODY : r.type === 'w3' ? W3_BODY : r.type === 'w4' ? W4_BODY : r.type === 'w5' ? W5_BODY : r.type === 't8' ? T8_BODY : r.type === 'v1' ? V1_BODY : r.type === 'm6' ? M6_BODY : r.type === 'm5' ? M5_BODY : r.type === 'm4' ? M4_BODY : T2_BODY;
-  const headBase = r.type === 'w1' ? W1_HEAD : r.type === 'w3' ? W3_HEAD : r.type === 'w4' ? W4_HEAD : r.type === 'w5' ? W5_HEAD : r.type === 't8' ? T8_HEAD : r.type === 'v1' ? V1_HEAD : r.type === 'm6' ? M6_HEAD : r.type === 'm5' ? M5_HEAD : r.type === 'm4' ? M4_HEAD : T2_HEAD;
+  const bodyBase = r.type === 'w1' ? W1_BODY : r.type === 'w3' ? W3_BODY : r.type === 'w4' ? W4_BODY : r.type === 'w5' ? W5_BODY : r.type === 't8' ? T8_BODY : r.type === 'v1' ? (r.gardener ? V5_BODY : V1_BODY) : r.type === 'm6' ? M6_BODY : r.type === 'm5' ? M5_BODY : r.type === 'm4' ? M4_BODY : T2_BODY;
+  const headBase = r.type === 'w1' ? W1_HEAD : r.type === 'w3' ? W3_HEAD : r.type === 'w4' ? W4_HEAD : r.type === 'w5' ? W5_HEAD : r.type === 't8' ? T8_HEAD : r.type === 'v1' ? (r.gardener ? V5_HEAD : V1_HEAD) : r.type === 'm6' ? M6_HEAD : r.type === 'm5' ? M5_HEAD : r.type === 'm4' ? M4_HEAD : T2_HEAD;
   ctx.fillStyle = bodyTone(bodyBase, r); // blocky torso, roughly player height overall
   ctx.fillRect(-6, -25, 12, 16);
   if (!r.fused) {
@@ -4212,11 +5226,55 @@ function drawT2(ctx, r, c) {
 // Everything that moves on it is state a player can act on: the crest lifts when
 // it is about to print a wave, the shard on its back burns brighter the more of
 // its hull is gone, and the shield comes across the body when you are close.
+/**
+ * The device at the centre of a king's shield: a regular polygon standing for
+ * one of the Platonic solids. `n` of 0 falls back to the old round stud, so a
+ * machine with no king still draws something.
+ */
+function bossShape(ctx, n, rad) {
+  if (!n) { ctx.beginPath(); ctx.arc(0, 0, rad * 0.8, 0, Math.PI * 2); ctx.fill(); return; }
+  ctx.beginPath();
+  for (let i = 0; i < n; i++) {
+    // Point-up, which is how a device is stamped and how a triangle reads.
+    const a = -Math.PI / 2 + (i / n) * Math.PI * 2;
+    // The octahedron is drawn as a star rather than an octagon: eight points
+    // read as a solid seen corner-on, where an octagon just reads as a circle.
+    const rr = (n === 8 && i % 2) ? rad * 0.45 : rad;
+    const x = Math.cos(a) * rr, y = Math.sin(a) * rr;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+
 function drawB1(ctx, r, c) {
   const t = r.animT || 0;
   const hpFrac = r.maxHp ? Math.max(0, Math.min(1, r.hp / r.maxHp)) : 1;
   const calling = (r.calling || 0) > 0;
+  // #181 — COMING APART. `dying` counts down from CARRIER_DEATH; `gone` runs
+  // 0 (the last blow) to 1 (the fall). Everything below reads it: the machine
+  // shudders harder as it goes, the device at the centre of the shield loses
+  // its light, and the ports it printed from vent in a ragged sequence rather
+  // than all at once. Drawn here rather than as a particle burst because the
+  // thing coming apart should be the MACHINE, not a puff over the top of it.
+  const gone = r.dying !== undefined
+    ? Math.max(0, Math.min(1, 1 - r.dying / CARRIER_DEATH)) : 0;
+  if (gone > 0) {
+    ctx.save();
+    // The shudder, on the WHOLE sprite: fast, small, and worse as it goes. It
+    // is a translate on the outer context rather than an offset added to every
+    // coordinate below, so the shield, the shard and the swarm-ring shake with
+    // the machine instead of sliding about on top of it.
+    const q = gone * gone;
+    ctx.translate(Math.sin(t * 47) * 2.2 * q, Math.sin(t * 39 + 1.1) * 1.6 * q);
+  }
   const guard = r.engageT > 0;
+  // SPOOLING: the two seconds before a wave comes out, and the only time the
+  // hull is properly worth hitting. It has to be unmistakable from across the
+  // clearing — a player who cannot see it is being asked to guess.
+  const spool = Math.max(0, Math.min(1, 1 - (r.spoolT || 0) / 2));   // 0 -> 1 as it opens
+  const spooling = (r.spoolT || 0) > 0;
+  const sealRing = (r.sealFlash || 0) > 0;
 
   // A wide planted shadow — the first tell that this one is heavier.
   ctx.fillStyle = 'rgba(0,0,0,0.45)';
@@ -4236,13 +5294,51 @@ function drawB1(ctx, r, c) {
     ctx.lineWidth = 1;
   }
 
+  // THE PRINT TELL. A ring closing IN on it (the opposite of the wave flare
+  // going out), the ports along its flank coming up white-hot, and the whole
+  // machine held in a rising glow. Closing rather than expanding, because this
+  // is it gathering to print rather than the wave leaving.
+  if (spooling) {
+    const k = spool;                     // 0 at the start of the spool, 1 at the print
+    ctx.strokeStyle = `rgba(255,244,214,${0.25 + 0.55 * k})`;
+    ctx.lineWidth = 1 + 2 * k;
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y - 4, 52 - k * 34, 23 - k * 15, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.lineWidth = 1;
+    // Heat under the body: it is about to push four machines out of itself.
+    const g = ctx.createRadialGradient(c.x, c.y - 6, 2, c.x, c.y - 6, 26 + k * 10);
+    g.addColorStop(0, `rgba(255,226,150,${0.30 + 0.35 * k})`);
+    g.addColorStop(1, 'rgba(255,200,90,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.ellipse(c.x, c.y - 6, 26 + k * 10, 15 + k * 6, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  // A SEALED HULL RINGS. The blow landed and did almost nothing, and the
+  // machine says so with a hard pale flash rather than the bar simply refusing
+  // to move.
+  if (sealRing) {
+    const k = (r.sealFlash || 0) / 0.3;
+    ctx.strokeStyle = `rgba(200,215,235,${0.75 * k})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y - 8, 20 + (1 - k) * 10, 22 + (1 - k) * 10, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.lineWidth = 1;
+  }
+
   ctx.save();
   ctx.translate(c.x, c.y);
   ctx.scale(B1_SCALE, B1_SCALE);
   if (r.fused) ctx.rotate(0.16);
+  // THE STAGGER, then the fall. Cubed, so almost all of it happens in the last
+  // half-second: for most of the death the machine is still standing and only
+  // shaking, and then the legs go. A linear lean would have it toppling slowly
+  // from the first frame, which reads as a hinge rather than a collapse.
+  if (gone > 0) ctx.rotate(0.62 * gone * gone * gone);
 
   const dead = r.fused || r.drained;
-  const gold = r.fused ? FUSED_EDGE : B1_GOLD;
+  const K = kingOf(r);
+  const gold = r.fused ? FUSED_EDGE : (r.metal || K.metal);
   const body = r.fused ? FUSED_DARK : bodyTone(B1_BODY, r);
   // A heavy machine rolls rather than scissors: a slow, wide gait.
   const swing = dead ? 0 : Math.sin(r.walkPhase * 0.7) * 2.4;
@@ -4256,7 +5352,7 @@ function drawB1(ctx, r, c) {
   ctx.fillStyle = gold;
   ctx.fillRect(-8 + swing, -3.4, 6, 1.8);
   ctx.fillRect(2 - swing, -3.4, 6, 1.8);
-  ctx.fillStyle = B1_GOLD_LO;
+  ctx.fillStyle = r.metalLo || K.lo;
   ctx.fillRect(-8 + swing, -1.6, 6, 0.8);
   ctx.fillRect(2 - swing, -1.6, 6, 0.8);
 
@@ -4272,7 +5368,7 @@ function drawB1(ctx, r, c) {
     ctx.rotate(0.22);
     ctx.fillStyle = `rgba(255,228,154,${0.26 * heat * pulse})`;
     ctx.beginPath(); ctx.ellipse(0, 2, 8, 11, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = B1_GOLD_LO;                       // the housing it rides in
+    ctx.fillStyle = r.metalLo || K.lo;                // the housing it rides in
     ctx.fillRect(-3, -5, 6, 15);
     ctx.fillStyle = '#050505';
     ctx.fillRect(-2.2, -4.2, 4.4, 13.4);
@@ -4319,12 +5415,12 @@ function drawB1(ctx, r, c) {
       ctx.fillStyle = `rgba(255,236,190,${k * 0.5})`;   // the white core of each
       for (let i = 0; i < 3; i++) ctx.fillRect(-5, -31.2 + i * 5, 10, 0.4 + k * 0.7);
     }
-    const bandCold = r.fused ? FUSED_EDGE : B1_GOLD;
+    const bandCold = r.fused ? FUSED_EDGE : (r.metal || K.metal);
     ctx.fillStyle = k > 0.06 ? hot(1) : bandCold;      // the worked bands, heating
     ctx.fillRect(-9.2, -29, 18.4, 1.5);
     ctx.fillRect(-8.8, -24, 17.6, 1.5);
     ctx.fillRect(-8.3, -19, 16.6, 1.5);
-    ctx.fillStyle = B1_GOLD_LO;
+    ctx.fillStyle = r.metalLo || K.lo;
     ctx.fillRect(-9.2, -27.5, 18.4, 0.7);
     ctx.fillRect(-8.8, -22.5, 17.6, 0.7);
     ctx.fillRect(-8.3, -17.5, 16.6, 0.7);
@@ -4365,20 +5461,51 @@ function drawB1(ctx, r, c) {
     const sy = guard ? -24 : -22;
     ctx.save();
     ctx.translate(sx, sy);
+    // TWO DIFFERENT THINGS. `shield` is how much rim there is to break through;
+    // `rim` is how big the disc is DRAWN. They are deliberately separate:
+    // Ajax's sevenfold is layers rather than size, so he carries far more
+    // shield on the same disc as Agamemnon (David, 2026-08-15) and the extra
+    // rings below say so. The later kings do grow — Diomedes a little,
+    // Achilles the most — so the class escalates visibly down the archipelago.
+    const sr = 6.6 * (r.rimScale || 1);
     ctx.fillStyle = r.fused ? FUSED_DARK : '#070809';
-    ctx.beginPath(); ctx.arc(0, 0, 6.6, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(0, 0, sr, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = gold; ctx.lineWidth = 1.5;                 // the rim
-    ctx.beginPath(); ctx.arc(0, 0, 6.6, 0, Math.PI * 2); ctx.stroke();
-    ctx.strokeStyle = B1_GOLD_LO; ctx.lineWidth = 0.8;           // an inner ring
-    ctx.beginPath(); ctx.arc(0, 0, 4.1, 0, Math.PI * 2); ctx.stroke();
-    ctx.fillStyle = gold;                                        // the boss
-    ctx.beginPath(); ctx.arc(0, 0, 1.9, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(0, 0, sr, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = r.metalLo || K.lo; ctx.lineWidth = 0.8;    // an inner ring
+    ctx.beginPath(); ctx.arc(0, 0, sr * 0.62, 0, Math.PI * 2); ctx.stroke();
+    // The sevenfold gets its extra hides, one ring each — same disc, more of it.
+    if ((r.shieldScale || 1) > 1.2) {          // the sevenfold, whatever its size
+      ctx.beginPath(); ctx.arc(0, 0, sr * 0.82, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, 0, sr * 0.42, 0, Math.PI * 2); ctx.stroke();
+    }
+    // THE BOSS IS A PLATONIC SOLID, one per king (David, 2026-08-15). A round
+    // stud says nothing; a shape at the centre of the shield is a device, and
+    // these are the estate's own — the foundry stamping a solid on a machine
+    // the way a house stamps a crest. Achilles gets the dodecahedron because
+    // Plato gave that one to the cosmos, and the shield in Iliad XVIII has the
+    // cosmos on it.
+    // The device at the centre goes dark. It flares once, early, and then dims
+    // through to nothing — the solid stays SHAPED, so what you see is the light
+    // leaving it rather than the shield losing a part.
+    if (gone > 0) {
+      const flare = Math.max(0, 1 - gone / 0.3);
+      if (flare > 0) {
+        ctx.fillStyle = `rgba(255,246,224,${0.5 * flare})`;
+        ctx.beginPath(); ctx.arc(0, 0, sr * 0.9, 0, Math.PI * 2); ctx.fill();
+      }
+      const d = Math.max(0, 1 - gone * 1.6);
+      ctx.fillStyle = `rgb(${Math.round(28 + 173 * d)},${Math.round(26 + 120 * d)},${Math.round(24 + 22 * d)})`;
+    } else {
+      ctx.fillStyle = gold;
+    }
+    bossShape(ctx, K.boss || 0, 2.4 * (r.rimScale || 1));
     // A blow it just turned lights the whole face; and as the rim goes, cracks
     // open across it, so a player can SEE the first phase running out rather
     // than guessing at an invisible bar.
     if (r.shieldFlash > 0) {
       ctx.fillStyle = `rgba(255,255,255,${0.5 * (r.shieldFlash / 0.25)})`;
-      ctx.beginPath(); ctx.arc(0, 0, 6.6, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(0, 0, sr, 0, Math.PI * 2); ctx.fill();
     }
     const wear = 1 - Math.max(0, Math.min(1, (r.shieldHp || 0) / (r.shieldMax || 1)));
     if (wear > 0.25) {
@@ -4397,7 +5524,7 @@ function drawB1(ctx, r, c) {
     // machine that never had one.
     ctx.fillStyle = B1_PLATE;
     ctx.fillRect(-13, -27, 4, 9);
-    ctx.fillStyle = B1_GOLD_LO;
+    ctx.fillStyle = r.metalLo || K.lo;
     ctx.fillRect(-13.5, -23.5, 5, 1.4);
     if (r.shieldBroke > 0) {                     // the moment it came off
       ctx.fillStyle = `rgba(242,198,94,${0.55 * (r.shieldBroke / 0.9)})`;
@@ -4436,6 +5563,43 @@ function drawB1(ctx, r, c) {
 
   if (r.fused) drawSmoke(ctx, c.x, c.y - 50, r.animT || 0);
   if (r.drained && !r.fused) drawBatteryIcon(ctx, c.x, c.y - 58);
+
+  // THE PORTS IT PRINTED FROM, venting. Five of them, each opening at its own
+  // point in the fall so they go raggedly rather than together, and each one a
+  // short white gout that widens as it thins. Drawn AFTER the body, not before
+  // it: a vent behind the sprite is a vent you cannot see, and these come out
+  // of the machine towards you. The last of them is still going when it lands.
+  if (gone > 0) {
+    for (let i = 0; i < CARRIER_DEATH_VENTS; i++) {
+      const at = 0.08 + i * 0.16;
+      const k = (gone - at) / 0.30;
+      if (k <= 0 || k >= 1) continue;
+      const a = (i / CARRIER_DEATH_VENTS) * Math.PI * 2 + 0.6;
+      // Ports set around the hull and up its height, so they do not all fire
+      // out of the same band of the sprite.
+      const vx = c.x + Math.cos(a) * (9 + k * 12);
+      const vy = c.y - 12 - (i % 3) * 9 + Math.sin(a) * 4 - k * 6;
+      ctx.globalAlpha = (1 - k) * 0.9;
+      ctx.fillStyle = '#fff6e0';
+      ctx.beginPath();
+      ctx.ellipse(vx, vy, 3.5 + 9 * k, 2.5 + 7 * k, a, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // THE LANDING. In the last third the ground under it goes pale and wide —
+    // the dust a machine this heavy puts up as it comes down.
+    if (gone > 0.66) {
+      const f = (gone - 0.66) / 0.34;
+      ctx.globalAlpha = (1 - f) * 0.5;
+      ctx.strokeStyle = '#e8dcc0';
+      ctx.lineWidth = 1 + 2 * f;
+      ctx.beginPath();
+      ctx.ellipse(c.x, c.y, 18 + f * 34, 7 + f * 15, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.lineWidth = 1;
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
 }
 
 // The T3 ambusher: a wheeled T2 with laser eyes — same family silhouette
@@ -4525,30 +5689,17 @@ function drawT3(ctx, r, c) {
     ctx.restore();
   }
 
+  // NO ARMS. It had two clawed struts waving off its shoulders — a tell for the
+  // point-blank claw — and at this size they read as a bug rather than as a
+  // machine, all elbow and no body (David, 2026-08-15: "it looks odd"). The
+  // T-3 is a gun on a wheeled trunk; the claw is what it does when you are on
+  // top of it, and it does not need to be advertised by waving.
+  //
+  // Short shoulder blocks stay, so the trunk still has a top rather than
+  // stopping flat.
   if (!r.fused) {
-    // Short claw arms off the shoulders — the point-blank tell survives the
-    // redesign: two angled struts, each ending in a two-talon pinch, with a
-    // slow reach riding the tremor clock.
-    const reach = Math.sin((r.animT || 0) * 1.6) * 1.2;
-    for (const side of [-1, 1]) {
-      const sx = side * 7, sy = -26;
-      const tipX = side * (11.5 + reach), tipY = -20;
-      ctx.strokeStyle = T3_LIMB;
-      ctx.lineWidth = 2.4;
-      ctx.beginPath();
-      ctx.moveTo(sx, sy);
-      ctx.lineTo(tipX, tipY);
-      ctx.stroke();
-      ctx.strokeStyle = T3_EDGE;
-      ctx.lineWidth = 1.3;
-      for (const off of [-0.45, 0.45]) {
-        const a = Math.atan2(tipY - sy, tipX - sx) + off;
-        ctx.beginPath();
-        ctx.moveTo(tipX, tipY);
-        ctx.lineTo(tipX + Math.cos(a) * 3.6, tipY + Math.sin(a) * 3.6);
-        ctx.stroke();
-      }
-    }
+    ctx.fillStyle = T3_LIMB;
+    for (const side of [-1, 1]) ctx.fillRect(side === -1 ? -9.5 : 6.5, -27, 3, 5);
   }
 
   // Head: the T2's sensor block, one size up.

@@ -7,7 +7,7 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
-// R0 (docs/calypso-build-plan.md) — the regression net for every stage after
+// R0 (docs/PLAN.md) — the regression net for every stage after
 // this one. These tests pin how you leave Ogygia TODAY, before any Calypso work
 // starts, so that a later stage which breaks the departure fails here rather
 // than in play.

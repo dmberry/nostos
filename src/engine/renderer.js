@@ -7,11 +7,13 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
-import { worldToScreen, screenToWorld, TILE_W, ELEV } from './iso.js';
+import { worldToScreen, screenToWorld, pickTile, TILE_W, TILE_H, ELEV, Z_PX } from './iso.js';
 import { tileHash, fogNoise, FOG_BANK, FOG_WIND_X, FOG_WIND_Y, FOG_STEP } from './noise.js';
 import { runDrawWorld, runDrawScreen } from './systems.js';
 import { uiMethods, DASH_H } from './ui.js';
-import { FLOORS } from '../game/tiles.js';
+import { FLOORS, OBJECTS } from '../game/tiles.js';
+import { slabs as columnSlabs } from '../game/terrain.js';   // the prism pass reads columns, not heights
+import { fireStrength, COOK_TIME } from '../game/cooking.js';   // #180: the flame rides the fuel
 import { fieldAt, lumenOf } from '../game/spiralism.js';
 // Below this the light is off and the tile is bare deck — see drawFloor's lumen.
 const OFF = 0.07;
@@ -107,7 +109,6 @@ function tintScratch(w, h) {
 const WALL_H = 40;
 const EDGE_ROCK_H = 52;   // height of the impassable rock blocks ringing the map edge
 const EDGE_ROCK_ALPHA = 0.38; // semi-transparent so the player shows through a block in front
-const SIGHT_CONE = false; // directional peripheral-fog vision cone (off pending tuning)
 // ELEV (pixels of lift per height level) now lives in iso.js, so the camera can
 // read the same constant to follow the player's elevation. Imported below.
 const MINIMAP_SIZE = 160;
@@ -234,7 +235,15 @@ export class Renderer {
     this._holdAlarm = map.holdAlarm; // maze sconces pulse red while the breach alarm holds
     this.hudMap = map; // referenced by drawPlayer for the Ubik-patch reality-hiccup check
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    ctx.fillStyle = '#0b0e0a';
+    // THE GROUND UNDER THE GROUND. Every pixel the world does not paint shows
+    // this, and it used to be near-black, which is why a gap in the terrain
+    // geometry read as a hole in reality rather than as a bit of missing
+    // drawing ("the black abyss under the tiles makes it impossible", David
+    // 2026-08-16). Deep soil instead: a band of it is still a BUG, and this is a
+    // net rather than a fix — but a net that degrades to earth is a great deal
+    // kinder than one that degrades to the void, and raw canvas should never be
+    // something a player can see.
+    ctx.fillStyle = '#1b1610';
     ctx.fillRect(0, 0, this.w, this.h);
 
     // #145: her Workspace fills the canvas edge to edge and is opaque, so the
@@ -270,12 +279,26 @@ export class Renderer {
       }
     }
 
-    // Pass 1: floors, row-major so lifted (hill) tiles paint over the
-    // tiles behind them correctly.
+    // Pass 1: floors — FLAT ones only. Ground at height 0 (or below) can never
+    // stand in front of anything, so it is painted first, row-major, as it
+    // always was. RAISED tiles are not drawn here any more: a prism painted in
+    // pass 1 sits under every sprite painted in pass 2, so a machine standing
+    // BEHIND a six-step block still drew on top of its face (David, 2026-08-15:
+    // "a real problem with managing depth and what is front of what"). One
+    // hill step never showed it because nothing tall enough stood behind one;
+    // hand-built terrain made it the first thing you saw. Raised tiles are
+    // queued instead and drawn in the depth sort below, exactly like walls.
+    const raisedTiles = [];
+    this.beginTileHits(ctx);
     for (let y = range.minY; y <= range.maxY; y++) {
       for (let x = range.minX; x <= range.maxX; x++) {
         const type = map.floorAt(x, y);
-        if (type) this.drawFloor(map, x, y, type, map.shadeAt(x, y));
+        if (!type) continue;
+        if (map.heightAt && map.heightAt(x, y) > 0 && type !== 'sea') {
+          raisedTiles.push([x, y, type]);
+          continue;
+        }
+        this.drawPrism(map, x, y, type, map.shadeAt(x, y));
       }
     }
 
@@ -291,6 +314,24 @@ export class Renderer {
     // Pass 2: depth-sorted drawables. Objects use their tile centre for
     // depth; the player uses its continuous position.
     const drawables = [];
+    // TERRAIN SORTS AT ITS TILE, NOT A STEP IN FRONT OF IT.
+    //
+    // This was `tx + ty + 1` — the convention OBJECTS use, because a wall has to
+    // occlude what stands behind it. Terrain is not an object: it is the ground
+    // a sprite stands ON, and a sprite's depth is its own continuous position,
+    // somewhere between `tx + ty` and `tx + ty + 2`. So a player standing on the
+    // FAR half of their own tile sorted before their own block, and the block
+    // they were standing on painted over their legs (David, 2026-08-16: "there
+    // are still occlusion errors").
+    //
+    // At the tile's own depth, everything standing on that tile draws after it,
+    // and the tile in FRONT still draws after the sprite — which is right, and
+    // is not the same claim: a front tile at the sprite's own height reaches
+    // exactly their feet on screen and covers nothing, while one that is taller
+    // covers them, which is what being behind a wall looks like.
+    for (const [tx, ty, type] of raisedTiles) {
+      drawables.push({ depth: tx + ty, terrain: [tx, ty, type] });
+    }
     for (const obj of map.objects) {
       if (obj.x < range.minX || obj.x > range.maxX || obj.y < range.minY || obj.y > range.maxY) continue;
       // The big 8x8 factory must sort by its centre, not its origin corner —
@@ -299,39 +340,60 @@ export class Renderer {
       // genuinely in front (south/east of it) still draw on top.
       const depth = (obj.type === 'wfactory' || obj.type === 'mainframe')
         ? obj.x + (obj.fw || 1) / 2 + obj.y + (obj.fh || 1) / 2
-        : obj.x + obj.y + 1;
+        // An object sits on its tile like anything else, but LAST within it, so
+        // a wall still occludes the creature standing behind it on the same tile.
+        // AN OBJECT DOES NOT BEAT A SPRITE ON ITS OWN DIAGONAL. This was +0.75,
+        // above the +0.5 every sprite sorts at, which meant a wall on the tile
+        // DIAGONALLY beside you — neither in front of you nor behind you — got
+        // painted over your shoulder. The two references agree on the rule and
+        // it is about the tile, not the object: a thing occludes you when its
+        // diagonal is GREATER than yours, and a tie is not greater.
+        //
+        // +0.4 keeps every case that mattered. A wall one tile in front still
+        // wins, because its diagonal is a whole step higher. A wall on your own
+        // tile now loses, which is right: you are standing at its foot or on top
+        // of it, and either way you are the thing to look at.
+        : obj.x + obj.y + 0.4;
       drawables.push({ depth, obj });
     }
+    // EVERYTHING ELSE SORTS BY THE TILE IT STANDS ON, plus a half-step to put it
+    // over that tile's own prism. Continuous positions used to be the depth
+    // directly, which meant two things on the same tile could sort either side
+    // of the tile in front of them depending on where in the tile they happened
+    // to be standing — a boundary flicker that only became visible once terrain
+    // was tall enough to occlude anything. `onTile` is the one rule now, and the
+    // small offsets below still order things WITHIN a tile as they always did.
+    const onTile = (x, y) => Math.floor(x) + Math.floor(y) + 0.5;
     for (const gi of map.groundItems) {
       if (gi.x < range.minX || gi.x > range.maxX + 1 || gi.y < range.minY || gi.y > range.maxY + 1) continue;
-      drawables.push({ depth: gi.x + gi.y - 0.01, groundItem: gi });
+      drawables.push({ depth: onTile(gi.x, gi.y) - 0.01, groundItem: gi });
     }
     for (const a of animals) {
       if (a.dead) continue;
       if (a.x < range.minX || a.x > range.maxX + 1 || a.y < range.minY || a.y > range.maxY + 1) continue;
-      drawables.push({ depth: a.x + a.y, animal: a });
+      drawables.push({ depth: onTile(a.x, a.y), animal: a });
     }
     for (const b of hud.birds || []) {
       if (b.x < range.minX || b.x > range.maxX + 1 || b.y < range.minY || b.y > range.maxY + 1) continue;
-      drawables.push({ depth: b.x + b.y, bird: b });
+      drawables.push({ depth: onTile(b.x, b.y), bird: b });
     }
     for (const r of hud.robots || []) {
       if (r.dead) continue;
       if (r.x < range.minX || r.x > range.maxX + 1 || r.y < range.minY || r.y > range.maxY + 1) continue;
-      drawables.push({ depth: r.x + r.y, robot: r });
+      drawables.push({ depth: onTile(r.x, r.y), robot: r });
     }
     for (const wd of hud.waterdroids || []) {
       if (wd.dead) continue;
       if (wd.x < range.minX || wd.x > range.maxX + 1 || wd.y < range.minY || wd.y > range.maxY + 1) continue;
-      drawables.push({ depth: wd.x + wd.y, droid: wd });
+      drawables.push({ depth: onTile(wd.x, wd.y), droid: wd });
     }
     for (const b of map.bombs || []) {
       if (b.x < range.minX || b.x > range.maxX + 1 || b.y < range.minY || b.y > range.maxY + 1) continue;
-      drawables.push({ depth: b.x + b.y - 0.02, bomb: b });
+      drawables.push({ depth: onTile(b.x, b.y) - 0.02, bomb: b });
     }
     for (const uc of hud.uwCreatures || []) {
       if (uc.x < range.minX || uc.x > range.maxX + 1 || uc.y < range.minY || uc.y > range.maxY + 1) continue;
-      drawables.push({ depth: uc.x + uc.y, uwCreature: uc });
+      drawables.push({ depth: onTile(uc.x, uc.y), uwCreature: uc });
     }
     // Objects draw at depth x+y+1 so a wall occludes what's behind it. That
     // wrongly hides the player standing ON TOP of a wall (the block they're
@@ -351,7 +413,7 @@ export class Renderer {
     // become visible" bug). Landing ONTO a block reads correctly the instant the
     // tile flips (climbRaise engages), and Player.update keeps the vertical lift
     // continuous across that frame, so no jump-height term is needed here.
-    drawables.push({ depth: player.x + player.y + climbRaise, player });
+    drawables.push({ depth: onTile(player.x, player.y) + climbRaise, player });
     // Edge rocks sort by their tile depth like anything else, so a south/east
     // block in front of the player draws after (and, being semi-transparent,
     // lets the player show through it) while a north/west block behind draws
@@ -365,11 +427,54 @@ export class Renderer {
     // climbing a hill already does.
     const elevOf = (x, y) => (map.effectiveHeightAt ? map.effectiveHeightAt(Math.floor(x), Math.floor(y))
       : map.heightAt ? map.heightAt(Math.floor(x), Math.floor(y)) : 0) * ELEV;
+    // The player is drawn at the level their FEET are on, which differs from the
+    // tile's lid only where somebody has built air into a column — under a deck
+    // the tile reports the deck, and drawing them there would put them on top of
+    // a bridge they are walking beneath.
+    const playerElev = (player.footZ != null ? player.footZ : 0) * ELEV;
+    // ---- OCCLUSION TESTING: never lose sight of the player -------------------
+    //
+    // Sprite-based isometric sorting cannot be made perfect. Parallel Realities
+    // says so plainly in its isometric tutorial, and names Knight Lore, Head
+    // over Heels and Hades as games that all live with it: you have no control
+    // over the ordering of individual pixels, only of whole sprites. Chasing a
+    // sort key that never hides the player is chasing something that does not
+    // exist.
+    //
+    // So the answer is the one that tutorial's part 6 reaches for: when a thing
+    // WOULD hide the player, make it see-through. A wall that is genuinely in
+    // front of you stays in front of you, drawn in its proper order, and you can
+    // see yourself through it.
+    //
+    // Two conditions, both cheap. It must be drawn AFTER the player, which is
+    // the sort key already deciding what is in front; and its screen box must
+    // actually overlap the player's, so nothing fades because it happens to be
+    // nearby. The boxes are in iso space, which is where everything in this pass
+    // is computed, so no second projection is involved.
+    const pIso = worldToScreen(player.x, player.y);
+    const pFeetY = pIso.y - (player.footZ != null ? player.footZ : 0) * ELEV
+      - (player.z || 0) * Z_PX;
+    // A little narrower and shorter than the sprite: a few pixels of overlap at
+    // the shoulder is not losing sight of anybody, and fading on it would make
+    // walls flicker as you walk past them.
+    const pBox = { x0: pIso.x - 9, x1: pIso.x + 9, y0: pFeetY - 40, y1: pFeetY - 6 };
+    const playerDepth = onTile(player.x, player.y) + climbRaise;
+    const FADE = 0.32;
+    // The screen box of a thing standing on a tile, given how many levels tall
+    // it is. Generous sideways, because a tile is 64 wide and the art overhangs.
+    const hides = (depth, tx, ty, levels) => {
+      if (depth <= playerDepth) return false;      // behind you: it cannot hide you
+      const c = worldToScreen(tx + 0.5, ty + 0.5);
+      const base = c.y - (map.heightAt ? map.heightAt(tx, ty) : 0) * ELEV;
+      const y0 = base - levels * ELEV - 26, y1 = base + 10;
+      return !(c.x + 34 < pBox.x0 || c.x - 34 > pBox.x1 || y1 < pBox.y0 || y0 > pBox.y1);
+    };
+
     // The sniffer's name tags are collected as they are drawn, so the click
     // handler can hit-test them next frame. Cleared here, once per pass.
     beginUnitTags();
     for (const d of drawables) {
-      const lift = d.player ? elevOf(player.x, player.y)
+      const lift = d.player ? playerElev
         : d.animal ? elevOf(d.animal.x, d.animal.y)
         : d.bird ? elevOf(d.bird.x, d.bird.y)
         : d.robot ? elevOf(d.robot.x, d.robot.y)
@@ -378,6 +483,7 @@ export class Renderer {
         : d.uwCreature ? elevOf(d.uwCreature.x, d.uwCreature.y)
         : d.groundItem ? elevOf(d.groundItem.x, d.groundItem.y)
         : d.edgeRock ? 0 // draws its own height from the tile base
+        : d.terrain ? 0  // drawFloor applies its own lift via tileCorners
         // Objects sit on the terrain height only — NOT effectiveHeightAt.
         // A climbable object (a wall) draws its own extrusion upward from
         // this base; effectiveHeightAt adds its climbHeight so an entity can
@@ -394,7 +500,25 @@ export class Renderer {
       if (lift) { ctx.save(); ctx.translate(0, -lift); }
       // In the underworld there's no map edge to face — it's boundless yellow,
       // so the grey edge-rock cliffs are suppressed (nothing drawn out there).
+      // FADE IF IT WOULD HIDE YOU. Only the two kinds of thing big enough to:
+      // an object standing on a tile (a wall, a tree, a wreck) and a raised
+      // terrain column. Creatures are never faded — a machine you cannot see is
+      // the game cheating, and you are meant to lose sight of it if it is behind
+      // something.
+      let faded = false;
+      if (d.obj) {
+        const def = OBJECTS[d.obj.type];
+        const tall = def && (def.climbHeight || (def.solid ? 2 : 0));
+        if (tall && hides(d.depth, d.obj.x, d.obj.y, tall)) faded = true;
+      } else if (d.terrain) {
+        const th = map.heightAt(d.terrain[0], d.terrain[1]);
+        const overFeet = th - (player.footZ != null ? player.footZ : 0);
+        if (overFeet >= 1 && hides(d.depth, d.terrain[0], d.terrain[1], 0)) faded = true;
+      }
+      if (faded) { ctx.save(); ctx.globalAlpha = FADE; }
+
       if (d.edgeRock) { if (!hud.underworld) this.drawSeaTile(d.edgeRock[0], d.edgeRock[1]); }
+      else if (d.terrain) this.drawPrism(map, d.terrain[0], d.terrain[1], d.terrain[2], map.shadeAt(d.terrain[0], d.terrain[1]));
       else if (d.player) this.drawPlayer(d.player);
       else if (d.animal) { drawAnimal(this.ctx, d.animal, worldToScreen); this.creatureHealthBar(d.animal, player, 44); }
       else if (d.bird) drawBird(this.ctx, d.bird, worldToScreen);
@@ -404,6 +528,7 @@ export class Renderer {
       else if (d.uwCreature) drawUnderworldCreature(this.ctx, d.uwCreature, worldToScreen);
       else if (d.groundItem) this.drawGroundItem(d.groundItem);
       else this.drawObject(d.obj);
+      if (faded) ctx.restore();
       if (lift) ctx.restore();
     }
 
@@ -428,11 +553,14 @@ export class Renderer {
 
     // World-space registered systems draw here, under the camera transform,
     // BEFORE restore (Stage 0: lore's floating fragments). Depth-sorted actors
-    // are NOT here — they stay in the sort above. See docs/refactor-registry.md.
+    // are NOT here — they stay in the sort above. See docs/PLAN.md.
     runDrawWorld(ctx, { w: this.w, h: this.h, map, player });
     // POSEIDON's final purge: every surviving tower lights up and links to
     // its nearest neighbours in a web of bright blue laser light.
     if (hud.skylinkActive) this.drawSkylinkNetwork(hud.obeliskObjs);
+    // #182 — where the next block goes. LAST in the world pass, so the diamond
+    // lies over the sprites: a cursor you lose behind a tree is not a cursor.
+    if (hud.build) this.drawBuildCursor(hud.build.cursor);
 
     ctx.restore();
 
@@ -697,10 +825,6 @@ export class Renderer {
       ctx.restore();
     }
 
-    // Sight cone: you see clearly in the direction you face (and in a small
-    // bubble around yourself); the periphery greys to "indistinct". Turned OFF
-    // for now (SIGHT_CONE) — the effect works but wants careful tuning before
-    // it goes live; the drawSightCone method is kept ready to switch back on.
     // A panel owns the screen while it is up, so nothing floats over it: not the
     // toasts, not the touch buttons, not the hover tooltip, and not the panel
     // rail — which is the thing that opened the panel in the first place.
@@ -708,15 +832,6 @@ export class Renderer {
     const modalOpen = !!(hud.showBackpack || hud.showSkills || hud.showWeapons || hud.showKleos
       || hud.narrows || hud.pong || hud.draughts  // an arcade cabinet owns the screen
       || (hud.lore && hud.lore.archiveOpen));
-    if (SIGHT_CONE && !hud.rest && !hud.deathCert && !hud.paused) {
-      const z = camera.zoom || 1;
-      const pw = worldToScreen(player.x, player.y);
-      const fw = worldToScreen(player.x + player.facing.x, player.y + player.facing.y);
-      const p = this.playerScreen(map, player, camera);
-      const ang = Math.atan2(fw.y - pw.y, fw.x - pw.x);
-      this.drawSightCone(p.x, p.y, ang, z);
-    }
-
     // The underworld: a sickly, jaundiced wash over the whole play area with
     // a slow, uneven fluorescent flicker — the tell that reality here is
     // thin, distinct from the ordinary day/night veil.
@@ -814,8 +929,26 @@ export class Renderer {
     if (hud.drag) this.drawDragGhost(hud.drag, player);
     // The soft sight. Torpor is seconds, G1's grip is 0..1 and is where you are
     // standing, so the grip is scaled into the same units the haze expects.
-    const haze = Math.max(player.torpor || 0, (player.grip || 0) * 8);
+    // The gold wash is the LOTUS (and G1's grip, which is the same dreamy
+    // register). A guard's detain also dazes you, and used to paint this too,
+    // which read as having eaten the fruit when you had only been turned back.
+    const haze = Math.max(player.lotusDaze || 0, (player.grip || 0) * 8);
     if (haze > 0) this.drawTorporHaze(haze);
+    // BEING HURT IS RED, AT THE EDGES, AND ONLY WHEN IT MATTERS. Below half
+    // health a blow closes the frame in from the sides; above it, nothing —
+    // a veil on every scratch is wallpaper by the second fight, and then it
+    // cannot tell you the thing it exists to tell you (David, 2026-08-15).
+    if (player.hurtTimer > 0 && player.health < player.maxHealth * 0.5) {
+      const low = 1 - (player.health / (player.maxHealth * 0.5));   // 0 at half, 1 at empty
+      this.drawHurtVeil(Math.min(1, player.hurtTimer / 0.4) * (0.35 + 0.65 * low));
+    }
+    // #182 — the palette is screen furniture, so it belongs here with the rest
+    // of the HUD. THE CURSOR IS NOT: it is a diamond on a tile, and it is drawn
+    // up in the world pass under the camera transform. Drawing it here put it at
+    // raw iso coordinates with no camera offset, which for a tile a hundred
+    // steps in is several thousand pixels off the side of the screen — visible
+    // to the instrumentation, invisible to the player.
+    if (hud.build) this.drawBuildPalette(hud.build);
     if (hud.rest) this.drawRestOverlay(hud.rest.dim);
     if (hud.deathCert) this.drawDeathCert(hud.deathCert);
     if (hud.aiVictory) this.drawAiVictory(hud.aiVictory);
@@ -841,57 +974,6 @@ export class Renderer {
     if (hud.paused) this.drawPausedOverlay();
   }
 
-  // Peripheral indistinctness: a gentle dim over the play area, cleared in a
-  // broad region centred AHEAD of the player so you read what you're facing
-  // and everything to the sides and behind fades softly to indistinct. No
-  // hard wedge edges and no tight pool (which read as a torch) — the clear
-  // zone is a big soft radial offset forward, so the falloff is gradual all
-  // the way round. Composited on an offscreen layer first: `destination-out`
-  // erases the DESTINATION, so doing it on the main canvas would eat the world.
-  drawSightCone(px, py, ang, z) {
-    const ctx = this.ctx;
-    const playH = this.h - DASH_H;
-    const dpr = this.dpr;
-    if (!this._sightCanvas) this._sightCanvas = document.createElement('canvas');
-    const off = this._sightCanvas;
-    const dw = Math.max(1, Math.round(this.w * dpr)), dh = Math.max(1, Math.round(this.h * dpr));
-    if (off.width !== dw || off.height !== dh) { off.width = dw; off.height = dh; }
-    const octx = off.getContext('2d');
-    octx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    octx.clearRect(0, 0, this.w, this.h);
-    // A greyish fog veil — "indistinct", washed-out rather than dark, so what
-    // it covers reads as out of clear sight rather than merely unlit.
-    octx.fillStyle = 'rgba(116,122,138,0.58)';
-    octx.fillRect(0, 0, this.w, playH);
-    octx.globalCompositeOperation = 'destination-out';
-    // Directional clear: a LINEAR gradient along the facing axis, centred on
-    // the player — fully clear ahead, transitioning through you, to fully
-    // fogged behind. This is what makes "behind is grey" actually happen (a
-    // forward-offset radial still cleared the area behind you).
-    const A = 560 * z;
-    const ax = px + Math.cos(ang) * A, ay = py + Math.sin(ang) * A;
-    const bx = px - Math.cos(ang) * A, by = py - Math.sin(ang) * A;
-    const lg = octx.createLinearGradient(ax, ay, bx, by);
-    lg.addColorStop(0, 'rgba(0,0,0,1)');      // ahead: fully clear
-    lg.addColorStop(0.42, 'rgba(0,0,0,0.82)');
-    lg.addColorStop(0.62, 'rgba(0,0,0,0.28)');
-    lg.addColorStop(1, 'rgba(0,0,0,0)');      // behind: stays fully fogged grey
-    octx.fillStyle = lg;
-    octx.fillRect(0, 0, this.w, playH);
-    // Keep your immediate surroundings clear too, so turning never fogs the
-    // ground right at your feet.
-    const near = octx.createRadialGradient(px, py, 16 * z, px, py, 165 * z);
-    near.addColorStop(0, 'rgba(0,0,0,1)');
-    near.addColorStop(1, 'rgba(0,0,0,0)');
-    octx.fillStyle = near;
-    octx.fillRect(0, 0, this.w, playH);
-    octx.globalCompositeOperation = 'source-over';
-    // Blit device-for-device onto the main canvas.
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.drawImage(off, 0, 0);
-    ctx.restore();
-  }
 
 
 
@@ -928,7 +1010,11 @@ export class Renderer {
       const tail = worldToScreen(bx, by);
       const col = p.kind === 'stun' ? '#5fe0ff' : p.kind === 'fuse' ? '#b78bff'
         : p.kind === 'laser' ? '#ff3b2a' : p.kind === 'laser_t3' ? '#ff8a1e'
-        : p.kind === 'laser_m5' ? '#ff9a2e'
+        // THE MILITARY BOLT IS WHITE-HOT. The M-class fired the same orange as
+        // everything else, so the estate's police were indistinguishable from
+        // its hunters at the one moment it matters (David, 2026-08-15: "can
+        // their guns be a different colour? white? or white hot?").
+        : p.kind === 'laser_m5' ? '#f2f6ff'
         : p.kind === 'torpor' ? '#7b6cff' : '#ffe27a'; // torpor: Calypso indigo, soporific
       ctx.strokeStyle = col;
       ctx.lineWidth = 2;
@@ -1045,7 +1131,9 @@ export class Renderer {
   // standing near, so you can read how damaged it is. Hidden for the dead,
   // fused wrecks, and drained/friendly machines.
   creatureHealthBar(e, player, headH) {
-    if (e.dead || e.fused || e.drained || e.singing) return; // no damage bar mid-choir
+    // No bar mid-choir, and none over a machine that is already coming apart:
+    // once the carrier's death is running there is nothing left to read off it.
+    if (e.dead || e.fused || e.drained || e.singing || e.dying !== undefined) return;
     if (Math.hypot(e.x - player.x, e.y - player.y) > 6.5) return;
     const max = e.maxHp || e.hp || 1;
     const frac = Math.max(0, Math.min(1, (e.hp ?? max) / max));
@@ -1219,6 +1307,99 @@ export class Renderer {
     ctx.restore();
   }
 
+  // #182 — WHERE THE NEXT BLOCK GOES. A diamond on the target tile, lifted to
+  // that tile's own height so it lies ON the ground rather than through it, in
+  // green when the tile will take the tool and red when it will not. The refusal
+  // is drawn rather than hidden: a cursor that disappears at the island's works
+  // tells you nothing about why it stopped.
+  /** Which palette cell a screen point is over, or null. Set by the last draw. */
+  buildCellAt(px, py) {
+    for (const c of (this._buildCells || [])) {
+      if (px >= c.x && px <= c.x + c.w && py >= c.y && py <= c.y + c.h) return c.i;
+    }
+    return null;
+  }
+
+  drawBuildCursor(cur) {
+    if (!cur) return;
+    const ctx = this.ctx;
+    const map = this.hudMap;
+    const lift = (map ? map.effectiveHeightAt(cur.x, cur.y) : 0) * ELEV;
+    const corners = this.tileCorners(cur.x, cur.y, lift);
+    ctx.save();
+    this.diamondPath(corners);
+    ctx.fillStyle = cur.ok ? 'rgba(120,220,140,0.16)' : 'rgba(220,90,70,0.16)';
+    ctx.fill();
+    ctx.strokeStyle = cur.ok ? 'rgba(150,255,175,0.85)' : 'rgba(255,120,100,0.85)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // The palette: ten cells down the LEFT EDGE, the chosen one lit.
+  //
+  // A COLUMN, not a hotbar along the bottom. The horizontal strip was tried
+  // first and it fought everything: on a narrow screen ten cells are wider than
+  // the canvas, and the dashboard is taller than DASH_H once the touch controls
+  // are up, so it printed straight through the vitals bars. A column has one
+  // dimension to fit and the left edge is the only part of the screen with
+  // nothing else on it — the logo stops above it, the minimap and the button
+  // rail are on the right, the dashboard is below.
+  //
+  // A floor tool shows the colour it lays, so the strip is a set of samples
+  // rather than a list of words.
+  drawBuildPalette(build) {
+    const ctx = this.ctx;
+    const tools = build.tools || [];
+    if (!tools.length) return;
+    const CW = 78, CH = 22, GAP = 2, X = 10;
+    const y0 = 76;
+    const h = tools.length * (CH + GAP) - GAP;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(12,14,12,0.74)';
+    ctx.fillRect(X - 6, y0 - 20, CW + 12, h + 26);
+    ctx.strokeStyle = 'rgba(150,200,150,0.35)'; ctx.lineWidth = 1;
+    ctx.strokeRect(X - 6.5, y0 - 20.5, CW + 13, h + 27);
+
+    ctx.font = 'bold 10px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(180,220,180,0.9)';
+    ctx.fillText('BUILD', X, y0 - 7);
+    ctx.font = '9px monospace';
+    ctx.fillStyle = 'rgba(150,180,150,0.7)';
+    ctx.fillText(', .  F off', X + 34, y0 - 7);
+
+    // The strip is CLICKABLE, and that is not a convenience — it is the fix for
+    // "you can only raise" (David, 2026-08-15). Tool choice hung entirely on two
+    // keys named in 9px type at the top of a panel, so a player who did not read
+    // that line had one tool. A palette you can click needs nothing explained,
+    // and it is the only way this works on a touch screen at all. The rects are
+    // recorded here, while they are being drawn, so they cannot drift from what
+    // is on the screen.
+    this._buildCells = [];
+    for (let i = 0; i < tools.length; i++) {
+      const t = tools[i];
+      const y = y0 + i * (CH + GAP);
+      const on = i === build.i;
+      this._buildCells.push({ i, x: X, y, w: CW, h: CH });
+      const swatch = t.swatch || (FLOORS[t.floor] && FLOORS[t.floor].color) || '#6b6f63';
+      ctx.fillStyle = on ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.35)';
+      ctx.fillRect(X, y, CW, CH);
+      ctx.fillStyle = swatch;                       // the sample, at the left of the cell
+      ctx.fillRect(X + 3, y + 3, CH - 6, CH - 6);
+      ctx.fillStyle = on ? '#f2fff2' : 'rgba(215,230,215,0.8)';
+      ctx.font = on ? 'bold 11px monospace' : '11px monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText(t.name.toUpperCase(), X + CH + 2, y + CH - 7);
+      if (on) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 1.5;
+        ctx.strokeRect(X + 0.75, y + 0.75, CW - 1.5, CH - 1.5);
+      }
+    }
+    ctx.restore();
+  }
+
   tileCorners(tx, ty, lift = 0) {
     const top = worldToScreen(tx, ty);
     const right = worldToScreen(tx + 1, ty);
@@ -1297,7 +1478,7 @@ export class Renderer {
 
   // The player sprite's actual on-screen pixel, accounting for the camera's
   // elevation lift and the player's own height (the sprite is drawn raised by
-  // effectiveHeightAt * ELEV). Used by the night veil and the sight cone so the
+  // effectiveHeightAt * ELEV). Used by the night veil so the
   // light pool tracks the sprite up the mountain instead of staying on its feet
   // at sea level. Mirrors the drawables lift, minus the camera lift the transform
   // already applied.
@@ -1313,7 +1494,116 @@ export class Renderer {
     return { x, y };
   }
 
-  drawFloor(map, tx, ty, type, shade) {
+  /**
+   * A COLUMN, DRAWN AS ONE PRISM (docs/terrain-3d-plan.md, stage 3).
+   *
+   * The old shape was a lifted diamond plus `skirt()` fills patching the gaps
+   * between neighbouring heights — so a face was not a thing the world had, it
+   * was the space where two tiles disagreed, painted after the fact and
+   * necessarily in the material of whatever was on top. That is why a stone
+   * block under grass could not be drawn: there was nothing to draw it ON.
+   *
+   * Here a column is its slabs, bottom-up, and each slab paints its own two
+   * visible faces in its own material before the top surface goes on last. The
+   * faces stop where the neighbour's ground begins, so nothing is drawn that
+   * could not be seen; a slab with air under it draws down to its own underside
+   * instead, which is what makes a bridge look like a bridge.
+   *
+   * AND IT RECORDS WHAT IT DREW. The top face's centre goes into a per-frame
+   * hit list that the build cursor reads back, so picking is no longer a second
+   * implementation of the projection that has to be kept in step by hand — the
+   * two agreed by luck until v1.560, and stopped agreeing the moment terrain
+   * could be six steps tall.
+   */
+  drawPrism(map, tx, ty, type, shade) {
+    const runs = map.columnAt ? columnSlabs(map.columnAt(tx, ty)) : null;
+    if (!runs || !runs.length) { this.drawFloor(map, tx, ty, type, shade); return; }
+
+    const top = runs[runs.length - 1].to;
+    // What the neighbours' ground stands at: a face is only worth painting
+    // down to the point where the tile in front of it takes over.
+    const hs = map.heightAt(tx, ty + 1);
+    const he = map.heightAt(tx + 1, ty);
+    const pal = map.palette || null;
+
+    for (let si = 0; si < runs.length; si++) {
+      const slab = runs[si];
+      const col = (pal && pal[slab.mat]) || (FLOORS[slab.mat] && FLOORS[slab.mat].color) || '#6b6f63';
+      const faceTex = (slab.mat === 'blight' || slab.mat === 'blight_sick') ? 'grass' : slab.mat;
+      const lid = this.tileCorners(tx, ty, slab.to * ELEV);
+      // South face, then east: the two an isometric camera can see.
+      //
+      // THE BOTTOM SLAB IS THE GROUND, AND GROUND HAS NO UNDERSIDE. Its face
+      // runs all the way down to the neighbour's, however far that is. Only an
+      // INTERIOR slab stops at its own underside, because that is where the air
+      // beneath a deck genuinely begins.
+      //
+      // Clamping the bottom slab to its own underside is what opened "the black
+      // abyss under the tiles" (David, 2026-08-16): a tile that lives in the two
+      // arrays rather than the column store synthesises as ONE level thick, so a
+      // natural three-step drop drew one level of hillside and two of raw canvas.
+      const floorS = si === 0 ? hs : Math.max(slab.from, hs);
+      if (floorS < slab.to) {
+        this.skirt(lid[3], lid[2], (slab.to - floorS) * ELEV, shadeHex(col, shade - 0.3), faceTex, tx, ty);
+      }
+      const floorE = si === 0 ? he : Math.max(slab.from, he);
+      if (floorE < slab.to) {
+        this.skirt(lid[1], lid[2], (slab.to - floorE) * ELEV, shadeHex(col, shade - 0.45), faceTex, tx, ty);
+      }
+    }
+
+    // EVERY LID THE CAMERA CAN SEE, not just the column's top.
+    //
+    // A slab's lid is visible if nothing sits directly on it — the top one
+    // always, and any lower one with air above it, which is the floor you see
+    // through the gap under a deck. Drawing only the top left that floor
+    // unpainted, and unpainted canvas is black: "the black abyss under the
+    // tiles makes it impossible" (David, 2026-08-16).
+    for (let si = 0; si < runs.length; si++) {
+      const slab = runs[si];
+      const next = runs[si + 1];
+      const openAbove = !next || next.from > slab.to;
+      if (!openAbove) continue;
+      const isTop = si === runs.length - 1;
+      // The top lid draws as the tile proper — its own floor type, with the
+      // blades and the wear and anything written on it. A lid down in a gap is
+      // ground seen from underneath a structure, so it draws as its own
+      // material and nothing more.
+      this.drawFloor(map, tx, ty, isTop ? type : slab.mat, shade, isTop ? null : slab.to);
+    }
+    // The centre of the top face, in the same iso space the draw used. The
+    // camera matrix is stamped once per pass (see `beginTileHits`), so the
+    // picker transforms these by exactly what painted them.
+    const c = worldToScreen(tx + 0.5, ty + 0.5);
+    this._tileHits.push({ tx, ty, z: top, x: c.x, y: c.y - top * ELEV });
+  }
+
+  /** Start a frame's hit list, and stamp the transform the prisms are drawn under. */
+  beginTileHits(ctx) {
+    this._tileHits = [];
+    this._tileHitXf = ctx.getTransform ? ctx.getTransform() : null;
+  }
+
+  /**
+   * Which tile is under a canvas point — read off what was actually drawn.
+   *
+   * Back to front, first hit wins: the list is in paint order, so the last
+   * prism painted over a pixel is the one you are looking at. The diamond test
+   * is exact for a 2:1 iso tile, and it is done in iso space, so the camera's
+   * zoom and lift come from the stamped matrix rather than from a second copy
+   * of the projection maths.
+   */
+  tileAtScreen(px, py) {
+    // CSS pixels in, device pixels in the matrix: the backing store is `w * dpr`
+    // wide (see resize), so the scale is read off the canvas the matrix actually
+    // came from rather than off `devicePixelRatio`, which can change under a
+    // window before the backing store has been rebuilt. The arithmetic itself is
+    // in iso.js, with the rest of the projection, where it can be tested.
+    const sc = (this.canvas && this.w) ? this.canvas.width / this.w : 1;
+    return pickTile(this._tileHits, this._tileHitXf, px, py, sc);
+  }
+
+  drawFloor(map, tx, ty, type, shade, atLevel = null) {
     const ctx = this.ctx;
     const def = FLOORS[type];
     // Water the blight has run into (main.js map.blightWater): drawn as its
@@ -1363,16 +1653,19 @@ export class Renderer {
       }
       return;
     }
-    const h = map.heightAt ? map.heightAt(tx, ty) : 0;
+    // `atLevel` is how a prism asks for a slab's OWN lid rather than the column's
+    // top: the ground under a bridge is a surface the camera can see through the
+    // gap, and it is not the surface `heightAt` reports.
+    const h = atLevel != null ? atLevel : (map.heightAt ? map.heightAt(tx, ty) : 0);
     const corners = this.tileCorners(tx, ty, h * ELEV);
     // Skirts: visible hillside faces wherever the south/east neighbour sits
     // lower, including level ground dropping into a hollow.
-    if (map.heightAt) {
-      const hs = map.heightAt(tx, ty + 1);
-      if (hs < h) this.skirt(corners[3], corners[2], (h - hs) * ELEV, shadeHex(baseColor, shade - 0.3));
-      const he = map.heightAt(tx + 1, ty);
-      if (he < h) this.skirt(corners[1], corners[2], (h - he) * ELEV, shadeHex(baseColor, shade - 0.45));
-    }
+    // NO FACES HERE. `drawFloor` draws a TOP SURFACE and nothing else; the
+    // vertical faces of a column belong to `drawPrism`, which is the one place
+    // that knows what the column is made of all the way down. Splitting them
+    // is the point of the rewrite (docs/terrain-3d-plan.md): a face used to be
+    // the ABSENCE between two heights, painted afterwards, which is why it
+    // could only ever be the same material as the lid above it.
     // The underworld floor is its own thing: the open sea is flat yellow +
     // procedural wear, rooms carry one of the seven photo floors, corridors
     // are road, and the odd room is baby-blue. Drawn here and returned early.
@@ -1754,17 +2047,91 @@ export class Renderer {
     }
   }
 
-  skirt(a, b, depth, color) {
+  /**
+   * A hillside face: the vertical wall between a tile and a lower neighbour.
+   *
+   * It used to be one flat fill, which was fine for the ONE step a generated
+   * hill ever rises. Hand-built terrain goes six steps in a click, and at that
+   * height a flat fill is a plain green slab with no surface to it — the blocks
+   * "don't seem to build very well" (David, 2026-08-15) because they did not
+   * read as earth, or as separate blocks, at all. So the face now carries the
+   * ground's own texture, a top-to-bottom darkening (light falls on the top of
+   * a cliff, not the bottom of it), and a lip along its top edge, which is what
+   * actually separates one block from the next.
+   */
+  skirt(a, b, depth, color, texType = null, tx = 0, ty = 0) {
     const ctx = this.ctx;
-    ctx.beginPath();
-    ctx.moveTo(a.x, a.y);
-    ctx.lineTo(b.x, b.y);
-    ctx.lineTo(b.x, b.y + depth);
-    ctx.lineTo(a.x, a.y + depth);
-    ctx.closePath();
+    const path = () => {
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.lineTo(b.x, b.y + depth);
+      ctx.lineTo(a.x, a.y + depth);
+      ctx.closePath();
+    };
+    path();
     ctx.fillStyle = color;
     ctx.fill();
+
+    const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x);
+    const yTop = Math.min(a.y, b.y), yBot = Math.max(a.y, b.y) + depth;
+    ctx.save();
+    path(); ctx.clip();
+
+    // NO FLOOR PHOTO ON A WALL. The face used to carry the ground's own texture,
+    // and for anything with a pattern in it — boards, brick, road — that put the
+    // SAME pattern at the SAME scale on the top and on the side, so the block
+    // read as a folded sheet of the floor rather than as a solid thing with a
+    // top and a side (David, 2026-08-16: "something is wrong with the way the 3D
+    // effect is being presented"). A cut face is not a photograph of the lid.
+    //
+    // What a face gets instead is what actually says "solid": courses. A line at
+    // every LEVEL boundary, so a stack four blocks tall reads as four blocks —
+    // and, because each tile strokes its own left and right edges, a seam
+    // wherever one tile meets the next, which is the other half of the same
+    // report ("these are literally standing on two blocks next to each other",
+    // and they were rendering as one unbroken slab).
+    const g = ctx.createLinearGradient(0, yTop, 0, yBot);
+    g.addColorStop(0, 'rgba(255,255,255,0.05)');
+    g.addColorStop(1, 'rgba(0,0,0,0.38)');
+    ctx.fillStyle = g;
+    ctx.fillRect(x0 - 2, yTop - 2, (x1 - x0) + 4, (yBot - yTop) + 4);
+
+    // A little grain, so the face is not a flat wash — hashed per tile, and
+    // horizontal, which reads as strata rather than as noise.
+    const grain = tileHash(tx * 11 + 3, ty * 7 + 5);
+    ctx.fillStyle = `rgba(0,0,0,${0.05 + grain * 0.05})`;
+    for (let yy = yTop + 3; yy < yBot; yy += 5) ctx.fillRect(x0, yy, x1 - x0, 1);
+
+    // THE COURSES. One line per level of depth: the join between the block above
+    // and the block below it. The top of the face is the lip and gets its own
+    // brighter line below, so this starts one level down.
+    ctx.strokeStyle = 'rgba(0,0,0,0.30)';
+    ctx.lineWidth = 1;
+    for (let d = ELEV; d < depth - 0.5; d += ELEV) {
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y + d + 0.5);
+      ctx.lineTo(b.x, b.y + d + 0.5);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // THE LIP along the top edge, and the two SIDE EDGES that make the seam
+    // between neighbouring blocks. Drawn outside the clip so they land on the
+    // boundary itself rather than half inside it.
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y + 0.5);
+    ctx.lineTo(b.x, b.y + 0.5);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(0,0,0,0.22)';
+    ctx.beginPath();
+    ctx.moveTo(a.x + 0.5, a.y); ctx.lineTo(a.x + 0.5, a.y + depth);
+    ctx.moveTo(b.x - 0.5, b.y); ctx.lineTo(b.x - 0.5, b.y + depth);
+    ctx.stroke();
   }
+
 
   // Ruined marble columns — Odyssey set-dressing scattered across the island
   // (see game/ruins.js). Three looks: a tall standing column with a capital, a
@@ -1919,6 +2286,7 @@ export class Renderer {
       case 'colfall': this.drawColumn(obj); break;
       case 'marbleblock': this.drawMarbleBlock(obj); break;
       case 'rock': this.drawRock(obj.x, obj.y); break;
+      case 'campfire': this.drawCampfire(obj); break;   // #180
       case 'rubble': this.drawRubble(obj.x, obj.y); break;
       case 'obelisk': this.drawObelisk(obj); break;
       case 'tor': this.drawTor(obj); break;
@@ -2781,7 +3149,7 @@ export class Renderer {
   // light up it, which is what a machine looks like when it is meant to be
   // frightening. Hers is not meant to be frightening. Her island is the one
   // that keeps you by being pleasant, and her machine is a NeXT running Mach
-  // (docs/ai-codebase-plan.md §3b, and her draughts cabinet already wears
+  // (docs/PLAN.md §3b, and her draughts cabinet already wears
   // NeXTSTEP chrome in ui.js) — a desktop workstation, a matte black magnesium
   // cube that sat on somebody's desk and was admired.
   //
@@ -2999,6 +3367,93 @@ export class Renderer {
   // unwarped text at a fixed screen offset, so as the camera panned the
   // wall's face perspective shifted under it while the text didn't,
   // reading as floating in front of the block rather than on it.
+  /**
+   * A Greek key band along a wall face. The oldest ornament there is, put back
+   * on the machines' world by hand — and the same figure as the spiral the
+   * daemons talk themselves into: a return that does not arrive back where it
+   * started (see the LessWrong page in the cache). Nobody signs it and nothing
+   * in the fiction explains it, which is what makes it graffiti.
+   *
+   * Deterministic per wall, roughly one in nine, cached like the text.
+   */
+  drawMeander(obj, face, side = 'se') {
+    if (obj._meanderSkip) return;
+    if (obj._meanderCanvas === undefined) {
+      // RARE, AND SPREAD OUT. Two gates rather than one: a coarse 6x6 CELL has
+      // to be chosen at all, and then a single wall inside it. Walls come in
+      // runs, so a flat per-wall roll put three of these on one building —
+      // graffiti reads as somebody's mark only when it is not wallpaper
+      // (David, 2026-08-15). Net is about one wall in twenty-five, and two are
+      // never adjacent unless the cell boundary falls between them.
+      const cell = tileHash(Math.floor(obj.x / 6) * 31 + 3, Math.floor(obj.y / 6) * 17 + 9);
+      const pick = tileHash(obj.x * 13 + 5, obj.y * 7 + 11);
+      if (cell > 0.34 || pick > 0.12) { obj._meanderSkip = true; obj._meanderCanvas = null; return; }
+      // THE FRET IS ONE LINE. Three attempts at this drew separate keys sitting
+      // in a row, which is not a meander — it is a row of keys. David settled it
+      // with a reference implementation (github.com/bingqiao/greek_meander); the
+      // unit below is that project's `draw_horizontal_unit`, ported move for
+      // move. It is stated as relative steps on a grid of U pixels because that
+      // is the only way the arithmetic stays checkable: ten moves, net advance
+      // +5U across and zero down, so the path leaves each key at exactly the
+      // height it entered and the next one continues it without a join.
+      //
+      // Which is also why the figure belongs on these walls. It goes in, turns,
+      // comes back out and carries on at the same level, having got somewhere
+      // without having arrived anywhere — the spiralism page in the cache is
+      // about that, and so is the game.
+      // NO RULES ABOVE OR BELOW. A framed band closes a rectangle of dark stone
+      // inside itself and the whole thing then reads as a plaque bolted to the
+      // wall rather than as something drawn on it (David, 2026-08-15: "can you
+      // remove top and bottom bar" / "hide the black background"). The keys go
+      // straight onto the masonry, on a transparent ground.
+      const U = 8;              // the key unit; every move is a multiple of it
+      const MODULES = 2;        // large and few, per David — two big keys, not a strip
+      const SW = U * 0.55;      // stroke; lighter than the reference's 7-on-10
+      const c = document.createElement('canvas');
+      c.width = MODULES * 5 * U + 2 * U;
+      c.height = 4 * U + 2 * SW;
+      const g = c.getContext('2d');
+      // ANCIENT, NOT PAINTED THIS MORNING. A bright stroke reads as fresh white
+      // paint. Worn ochre, well down the luminance from the masonry, and only
+      // ochre — the slate-blue alternate was tried alongside it and lost
+      // (David, 2026-08-15: "ochre looks best"). The hash now varies the warmth
+      // a little from wall to wall rather than choosing between two pigments.
+      const warm = tileHash(obj.x * 3 + 1, obj.y * 9 + 4);
+      g.strokeStyle = `rgba(${Math.round(118 + warm * 14)},${Math.round(104 + warm * 10)},${Math.round(74 + warm * 12)},0.78)`;
+      g.lineWidth = SW;
+      g.lineJoin = 'miter'; g.lineCap = 'butt';
+      const yBase = SW + 4 * U;               // the fret's baseline
+
+      // The unit, as relative moves. v is vertical, h is horizontal, both in U.
+      const UNIT = [[0, -4], [4, 0], [0, 3], [-2, 0], [0, -1], [1, 0], [0, -1], [-2, 0], [0, 3], [4, 0]];
+      let px = U, py = yBase;
+      g.beginPath();
+      g.moveTo(px, py);
+      for (let m = 0; m < MODULES; m++) {
+        for (const [dx, dy] of UNIT) { px += dx * U; py += dy * U; g.lineTo(px, py); }
+      }
+      g.stroke();
+      obj._meanderCanvas = c;
+    }
+    if (!obj._meanderCanvas) return;
+    // KEEP IT SQUARE ON THE WALL. The face is a parallelogram in projection, so
+    // a fixed fraction of its height is not the same shape as the same fraction
+    // of its width. Measure both edges and pick the vertical span that gives the
+    // canvas back its own aspect — otherwise the square key lands as a lozenge.
+    const wLen = Math.hypot(face[1].x - face[0].x, face[1].y - face[0].y);
+    const hLen = Math.hypot(face[3].x - face[0].x, face[3].y - face[0].y);
+    const cv = obj._meanderCanvas;
+    const u0 = 0.07, u1 = 0.93;
+    const vSpan = hLen > 0 ? Math.min(0.8, ((u1 - u0) * wLen) * (cv.height / cv.width) / hLen) : 0.5;
+    const v0 = Math.max(0.08, 0.5 - vSpan / 2);
+    const quad = this.subQuad(face[0], face[1], face[3], u0, u1, v0, v0 + vSpan);
+    this.ctx.save();
+    // Faded. It is old paint on old stone, not signage.
+    this.ctx.globalAlpha = 0.42;
+    this.drawTexturedQuad(quad, cv, null, null, null, 1);
+    this.ctx.restore();
+  }
+
   drawGraffiti(obj, face, side = 'se') {
     const ctx = this.ctx;
     // Rendered once per object onto a small offscreen canvas and cached —
@@ -3212,6 +3667,12 @@ export class Renderer {
     const gFace = gSide === 'sw' ? swFace : seFace;
     if (obj.graffitiImage != null) this.drawGraffitiPoster(obj, gFace, gSide);
     else if (obj.graffiti) this.drawGraffiti(obj, gFace, gSide);
+    // THE MEANDER. A Greek key sprayed along the odd BUILT wall — never on
+    // grass or a hillside, which is where the first cut of this put it and it
+    // looked like trim on the landscape rather than a mark somebody made
+    // (David, 2026-08-15). Only walls, and only walls with no tag already on
+    // them, so the two kinds of graffiti do not fight for the same face.
+    else this.drawMeander(obj, gFace, gSide);
   }
 
   // A copy of the tree sheet multiplied through an island's foliage colour,
@@ -3607,7 +4068,7 @@ export class Renderer {
     ctx.fill();
     // #142: the maker's plate, low on the SW face where a plate goes. The
     // towers are one machine — POSEIDON has no island and no core because he
-    // runs distributed across this net (docs/ai-codebase-plan.md), which is
+    // runs distributed across this net (docs/PLAN.md), which is
     // Sun's 1984 slogan taken literally. The console has said RON-DOS 4.11 all
     // along, which is SunOS 4.1.1 with the badge filed off; this puts the badge
     // back on the object itself, so the joke is available to somebody who never
@@ -4056,6 +4517,75 @@ export class Renderer {
         ctx.strokeStyle = '#c9762b'; ctx.lineWidth = 0.8;
         ctx.beginPath(); ctx.arc(c.x, by, 1.2, 0, Math.PI * 2); ctx.stroke();
       }
+    }
+  }
+
+  // #180 — A CAMPFIRE. A ring of stones, three logs leaning in, and a flame that
+  // rides the fire's remaining fuel: tall and yellow on a fresh one, a low red
+  // flicker on embers. The glow on the ground is drawn under everything so the
+  // fire lights the grass around it rather than sitting on top of it like a
+  // sticker, which is most of why it reads as a fire at all at night.
+  drawCampfire(obj) {
+    const ctx = this.ctx;
+    const c = worldToScreen(obj.x + 0.5, obj.y + 0.5);
+    const k = fireStrength(obj);                 // 0 out, 1 well fed
+    const t = obj.flick || 0;
+    const flick = 0.82 + Math.sin(t * 11) * 0.1 + Math.sin(t * 27 + 1.3) * 0.08;
+
+    // The pool of light on the ground.
+    if (k > 0) {
+      const rr = 22 + 26 * k;
+      const g = ctx.createRadialGradient(c.x, c.y, 2, c.x, c.y, rr);
+      g.addColorStop(0, `rgba(255,190,90,${0.30 * k * flick})`);
+      g.addColorStop(1, 'rgba(255,150,50,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.ellipse(c.x, c.y, rr, rr * 0.5, 0, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // The stone ring.
+    ctx.fillStyle = '#6f6c66';
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.ellipse(c.x + Math.cos(a) * 11, c.y + Math.sin(a) * 5.5, 3.2, 2.4, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Three logs leaning into the middle, charred at the tips.
+    ctx.strokeStyle = '#5a4227'; ctx.lineWidth = 3;
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2 + 0.4;
+      ctx.beginPath();
+      ctx.moveTo(c.x + Math.cos(a) * 9, c.y + Math.sin(a) * 4.5);
+      ctx.lineTo(c.x - Math.cos(a) * 2, c.y - 8);
+      ctx.stroke();
+    }
+    ctx.lineWidth = 1;
+
+    if (k <= 0) return;
+    // The flame: two lobes, the outer orange and the inner white-yellow, both
+    // scaled by fuel so a fire nearly out is visibly nearly out.
+    const h = (9 + 16 * k) * flick;
+    ctx.fillStyle = `rgba(230,110,40,${0.75 + 0.2 * k})`;
+    ctx.beginPath();
+    ctx.moveTo(c.x - 6 * k - 2, c.y - 4);
+    ctx.quadraticCurveTo(c.x - 3, c.y - h * 0.7, c.x, c.y - h);
+    ctx.quadraticCurveTo(c.x + 3, c.y - h * 0.7, c.x + 6 * k + 2, c.y - 4);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = `rgba(255,226,150,${0.7 + 0.3 * k})`;
+    ctx.beginPath();
+    ctx.moveTo(c.x - 3 * k - 1, c.y - 4);
+    ctx.quadraticCurveTo(c.x - 1, c.y - h * 0.5, c.x, c.y - h * 0.62);
+    ctx.quadraticCurveTo(c.x + 1, c.y - h * 0.5, c.x + 3 * k + 1, c.y - 4);
+    ctx.closePath(); ctx.fill();
+
+    // A roast in progress: a bar over the fire, because six seconds of standing
+    // still with no sign of it is six seconds of wondering whether it is working.
+    if ((obj.cook || 0) > 0) {
+      const f = Math.max(0, Math.min(1, obj.cook / COOK_TIME));
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(c.x - 12, c.y - h - 12, 24, 4);
+      ctx.fillStyle = '#e8a24a';
+      ctx.fillRect(c.x - 12, c.y - h - 12, 24 * f, 4);
     }
   }
 
@@ -4673,7 +5203,7 @@ export class Renderer {
       return;
     }
     if (itemDef.kind === 'laptop') {
-      // ONE routine draws every laptop (docs/laptop-plan.md): an open clamshell
+      // ONE routine draws every laptop (docs/PLAN.md): an open clamshell
       // seen three-quarters on, the body taking the model's colour and the SCREEN
       // taking the OS — grey-white phosphor for UNIX, amber for RON-DOS, the
       // machines' green for a salvaged node, near-black for a sealed one. Damage
@@ -5522,7 +6052,14 @@ export class Renderer {
         ctx.stroke();
       }
       const set = CHARACTER_SPRITE_SETS[player.gender || 'm'];
-      const sprite = set && set.idle[facingToCompassDir(player.facing)];
+      // A BODY ON THE SAND DOES NOT TURN TO WATCH THE CURSOR. The sprite was
+      // picked from `facing`, which the mouse drives every frame, so a castaway
+      // who is supposed to be out cold swivelled through the compass as the
+      // pointer moved — the "moving animation" on a character who has not got up
+      // (David, 2026-08-15). The direction is taken once, when they go down, and
+      // held until they are on their feet.
+      if (player._lieDir === undefined) player._lieDir = facingToCompassDir(player.facing);
+      const sprite = set && set.idle[player._lieDir];
       if (sprite && sprite.complete && sprite.naturalWidth) {
         const scale = 0.6;
         const dw = sprite.naturalWidth * scale;
@@ -5871,5 +6408,5 @@ export class Renderer {
 
 // Screen-space UI methods (overlays, modals) live in ui.js for file size; mix
 // them onto the prototype so they are ordinary Renderer methods at call time
-// (this === the renderer). See docs/refactor-registry.md.
+// (this === the renderer). See docs/PLAN.md.
 Object.assign(Renderer.prototype, uiMethods);

@@ -7,7 +7,7 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
-// #145 V1a — the Workspace Manager. Design in docs/workspace-plan.md.
+// #145 V1a — the Workspace Manager. Design in docs/PLAN.md.
 //
 // Her machine is a NeXT running Mach, and until now the only way into it has
 // been a typed console, which is the estate's idiom rather than hers. This
@@ -62,6 +62,8 @@ export const DOCK_APPS = [
   { id: 'terminal', label: 'Terminal', kind: 'app' },
   { id: 'mail', label: 'Mail', kind: 'app' },
   { id: 'draughts', label: 'Draughts', kind: 'app' },
+  { id: 'grove', label: 'Grove', kind: 'app' },
+  { id: 'www', label: 'WorldWideWeb', kind: 'app' },
   { id: 'recycler', label: 'Recycler', kind: 'recycler', fixed: 'foot' },
 ];
 
@@ -82,11 +84,14 @@ export function appRunning(ws, id) {
   if (id === 'workspace' || id === 'recycler') return true;
   if (id === 'terminal') return !!ws.terminalUp;
   if (id === 'draughts') return !!ws.draughtsUp;
+  if (id === 'grove') return ws.windows.some((w) => w.kind === 'grove');
+  if (id === 'www') return ws.windows.some((w) => w.kind === 'www');
   const kind = id === 'fileviewer' ? 'viewer' : id;
   return ws.windows.some((w) => w.kind === kind);
 }
 
 import { BOOKSHELVES, APPS } from './workspace-library.js';
+import { makeLife } from './grove-life.js';
 
 // ---- the filesystem ---------------------------------------------------------
 //
@@ -102,7 +107,7 @@ const file = (f) => ({ f });
  * Build the tree her Workspace browses.
  * `files` is the flat {name: text} map from calypsoFiles().
  */
-export function buildTree(files = {}) {
+export function buildTree(files = {}, rosters = null, track = null, sightings = null) {
   // Her SOURCE lives in a braincode/ folder — it is her braincode, the same
   // name the towers and the factory wear for theirs (David, 2026-08-13). The
   // memos and the guest log are not code and stay at home.
@@ -112,8 +117,30 @@ export function buildTree(files = {}) {
     (/\.ml$/i.test(name) ? brain : home)[name] = file(String(text));
   }
   if (Object.keys(brain).length) home.braincode = dir(brain);
+  // #162 — HER COPY OF THE NETWORK'S BOOKKEEPING. Every tower writes a garrison
+  // roster; she is the island's mind and the towers are her network, so the
+  // rosters are already on her machine before you ever jack into one (David,
+  // 2026-08-14: "after all she is monitoring everything").
+  //
+  // It is the same bytes the tower serves, so a player who reads a roster at an
+  // obelisk and then finds the identical file sitting in a folder on her desktop
+  // learns something the game never says out loud. Nothing here is a summary or
+  // a redaction: she has it exactly as written.
+  const net = {};
+  for (const [code, text] of Object.entries(rosters || {})) {
+    if (text) net[`${code}.garrison`] = file(String(text));
+  }
+  // #164 — and the correlated track of YOU, filed beside her inventory of the
+  // machines, in the same folder and the same format. She did not watch you: a
+  // dozen towers each saw a sliver and she put the slivers in order. The file
+  // is the collation, which is the only place the route exists.
+  for (const [code, text] of Object.entries(sightings || {})) {
+    if (text) net[`${code}.sightings`] = file(String(text));
+  }
+  if (track) net['sightings.track'] = file(String(track));
   return dir({
     me: dir(home),
+    ...(Object.keys(net).length ? { net: dir(net) } : {}),
     // Both of these were `file('')` and opened onto white. The contents are in
     // workspace-library.js, which keeps the writing out of the model.
     Apps: dir(Object.fromEntries(Object.entries(APPS).map(([n, f]) => [n, file(f)]))),
@@ -223,7 +250,7 @@ export function bootTick(ws, dt) {
 }
 
 export function newWorkspace(files = {}, opts = {}) {
-  const tree = buildTree(files);
+  const tree = buildTree(files, opts.rosters, opts.track, opts.sightings);
   const ws = {
     tree,
     windows: [],
@@ -260,6 +287,15 @@ export function newWorkspace(files = {}, opts = {}) {
 }
 
 export function openWindow(ws, win) {
+  // NOTHING OPENS UNDER THE MENU. The menu is a vertical strip down the left,
+  // so a window placed at x=120 comes up beneath it and the player has to drag
+  // it out before they can read it (David, 2026-08-14). Preferences and Mail
+  // had this too, so the clamp lives here rather than at each call site — the
+  // constraint belongs to the desktop, not to whoever is opening a window.
+  //
+  // A window may still be DRAGGED under the menu afterwards; that is the
+  // player's business. This only governs where one arrives.
+  if (win.x < MENU_EDGE) win.x = MENU_EDGE;
   ws.windows.push(win);
   ws.order.push(win.id);
   ws.keyId = win.id;
@@ -441,6 +477,9 @@ export function rowEnabled(ws, row) {
     case 'icons': return ws.view === 'icon';
     case 'disk': return false;            // she has no removable media
     case 'window': return ws.order.some((id) => !!windowById(ws, id));
+    // Nothing marked, nothing to link: the row is there and greyed, so the pair
+    // reads as a pair before you have used either half.
+    case 'mark': return !!ws.wwwMark;
     default: return true;
   }
 }
@@ -449,8 +488,21 @@ export function rowEnabled(ws, row) {
  * The rows of a submenu, with `Windows` filled in from the live window list.
  * `path` is the chain of labels already open; `[]` gives the top menu.
  */
+// WorldWideWeb's own menus, with the names they had. On NeXTSTEP the main menu
+// belonged to the ACTIVE APPLICATION, so this is not an extra menu bolted to the
+// workspace — it is the workspace menu doing what it did when another app came
+// to the front. It appears only while a WorldWideWeb window is frontmost.
+export const WWW_MENU = { label: 'WorldWideWeb', sub: [
+  { label: 'Info Panel…' },
+  { label: 'Open from full document reference', key: 'o' },
+  { label: 'Mark all', key: 'A' },
+  { label: 'Link to marked', key: 'l', need: 'mark' },
+  { label: 'Home' },
+  { label: 'Close', key: 'w' },
+] };
+
 export function menuRows(ws, path = []) {
-  let rows = WORKSPACE_MENU;
+  let rows = frontWWW(ws) ? [WWW_MENU, ...WORKSPACE_MENU] : WORKSPACE_MENU;
   for (const label of path) {
     const row = rows.find((r) => r.label === label);
     if (!row) return [];
@@ -600,6 +652,135 @@ export function mailboxFrom(log = []) {
   });
 }
 
+// ---- Grab ------------------------------------------------------------------
+//
+// The real NeXTSTEP Grab (Keith Bernstein, art by Keith Ohlfs) put a camera on
+// the dock with an eye where the flash should be, and the eye moved. On her
+// machine it is not a screenshot tool. The UNIX Manual bookshelf already says
+// what it is, in her own annotation: "Note the absence of a page for anything
+// that reports. There was no daemon in this system that told anyone where you
+// were. That had to be added later, by somebody, on purpose." This is that.
+//
+// The roll is hourly and unbroken across the seven years, which is the same
+// span the Ogygia shelf claims for the weather records. The run's own frames
+// are the tail of it.
+
+const GRAB_BASE = 2556 * 24;   // seven years, one frame an hour, no gaps
+
+// Stable per-frame variation without Math.random (banned in this tree anyway).
+function grabHash(s) {
+  let h = 11;
+  for (let i = 0; i < s.length; i++) h = (Math.imul(h, 31) + s.charCodeAt(i)) >>> 0;
+  return h;
+}
+
+// What the camera wrote down, as against what she then said about it. Mail is
+// her words; this is the frame behind them.
+const GRAB_SUBJECTS = [
+  'SUBJECT standing. Facing the water.',
+  'SUBJECT walking, east to west. Unhurried.',
+  'SUBJECT seated. Head down.',
+  'SUBJECT asleep. Breathing regular.',
+  'SUBJECT at the treeline. Stopped.',
+  'SUBJECT looking up. Toward this window.',
+  'SUBJECT still. Four minutes, same posture.',
+  'SUBJECT out of frame. Recaptured 40s later.',
+];
+
+/**
+ * The roll: her frames, one behind every message the handset carried, plus the
+ * ones taken from this machine during the run. `log` is player.nokiaLog.
+ */
+export function grabRoll(ws) {
+  const log = ws.mail || [];
+  const hers = log.map((m, i) => ({
+    n: GRAB_BASE + i + 1,
+    at: m.at || '',
+    day: ws.date || '?',
+    by: m.th || 'CALYPSO',
+    mine: false,
+    subject: GRAB_SUBJECTS[grabHash(String(m.text || '') + i) % GRAB_SUBJECTS.length],
+  }));
+  return hers.concat(ws.grabMine || []);
+}
+
+export function openGrab(ws) {
+  const had = ws.windows.find((w) => w.kind === 'grab');
+  if (had) { restore(ws, had.id); raise(ws, had.id); return had; }
+  return openWindow(ws, newWindow('grab', 'Grab', 150, 120, 470, 340, { sel: -1, top: 0 }));
+}
+
+/**
+ * A capture taken from this machine, by you. It only ever points one way: the
+ * subject of every frame this app has ever held is the person reading it.
+ */
+export function grabCapture(ws, at, day, where, timed = false) {
+  ws.grabMine = ws.grabMine || [];
+  const roll = grabRoll(ws);
+  ws.grabMine.push({
+    n: (roll.length ? roll[roll.length - 1].n : GRAB_BASE) + 1,
+    at: at || '', day: String(day || '?'), by: 'this console', mine: true, timed,
+    subject: where ? `SUBJECT at the machine. ${where}` : 'SUBJECT at the machine.',
+  });
+  return ws.grabMine[ws.grabMine.length - 1];
+}
+
+/**
+ * Grab's Info panel, which is a real credit rather than a piece of the fiction.
+ * The camera with an eye where the flash should be is Keith Ohlfs' drawing, and
+ * the application under it was Keith Bernstein's. The same art was still being
+ * shipped by Apple two decades later, in Grab.app on Mac OS X, which is how most
+ * people who have seen it have seen it. Ohlfs died in 2016.
+ *
+ * Precedent for a real credit inside her machine: Project Gutenberg is credited
+ * in the game's own About panel already. Kept to a name, an author and the
+ * systems it ran on, which is what a NeXT Info panel held (David, 2026-08-14).
+ */
+export const GRAB_INFO = [
+  'Grab 0.8',
+  '',
+  'Keith Bernstein',
+  'Icon by Keith Ohlfs',
+  '',
+  'NeXTSTEP \u00b7 OPENSTEP',
+];
+
+export function openGrabInfo(ws) {
+  const had = ws.windows.find((w) => w.kind === 'grabinfo');
+  if (had) { restore(ws, had.id); raise(ws, had.id); return had; }
+  return openWindow(ws, newWindow('grabinfo', 'Grab Info', 250, 150, 330, 160));
+}
+
+/**
+ * Run the flash down. It lives here rather than in the hub so a test can reach
+ * it: `if (ws.grabFlash > 0) ws.grabFlash -= dt` overshot to a small negative
+ * on the frame it crossed zero, the guard then stopped decrementing it, and
+ * `!!ws.grabFlash` is true for a negative. One capture and the icon was stuck
+ * on the flash frame for the rest of the run, which is the centre-pupil
+ * drawing, so the eye stopped following the pointer (David, 2026-08-14).
+ */
+export function grabFlashTick(ws, dt) {
+  ws.grabFlash = Math.max(0, (ws.grabFlash || 0) - dt);
+  return ws.grabFlash;
+}
+
+/** Is the bulb lit this frame? A predicate, not a truthiness test. */
+export function grabFlashing(ws) {
+  return (ws.grabFlash || 0) > 0;
+}
+
+/** Where the pupil looks: a unit-ish offset from an eye centre toward the pointer. */
+export function grabAim(ws, cx, cy, reach = 1) {
+  const m = ws.mouse;
+  if (!m) return { x: 0, y: 0 };
+  const dx = m.x - cx, dy = m.y - cy;
+  const d = Math.hypot(dx, dy);
+  if (d < 0.001) return { x: 0, y: 0 };
+  // Saturates: past a short distance the eye is simply looking that way.
+  const k = Math.min(1, d / 60) * reach;
+  return { x: (dx / d) * k, y: (dy / d) * k };
+}
+
 export function openMail(ws) {
   const had = ws.windows.find((w) => w.kind === 'mail');
   if (had) { restore(ws, had.id); raise(ws, had.id); return had; }
@@ -618,6 +799,111 @@ export function openAbout(ws) {
  * Empty Recycler takes them out again. It was a notice saying it was empty,
  * which was true and also all it could ever be.
  */
+/**
+ * #165 — Grove.app. An emulation of her floor, not a view of it: nothing here
+ * samples the grove, and the window says so on its own status line.
+ *
+ * The board is built on open and lives on the window, so closing it and opening
+ * it again starts the model over from the word — which is right, because it was
+ * never a recording of anything.
+ */
+export function openGrove(ws, word = 'STAY') {
+  const had = ws.windows.find((w) => w.kind === 'grove');
+  if (had) { restore(ws, had.id); raise(ws, had.id); return had; }
+  const win = newWindow('grove', 'Grove', MENU_EDGE + 30, 120, 400, 250, {
+    life: makeLife(word), t: 0,
+  });
+  return openWindow(ws, win);
+}
+
+/**
+ * WorldWideWeb. EVERY DOCUMENT GETS ITS OWN WINDOW — that is not a flourish,
+ * it is how the application worked, and it is why it has no Back button: you
+ * close a window rather than going back through one.
+ *
+ * So this does NOT reuse an existing window the way the other apps do. Opening
+ * a link opens a window; opening ten links leaves ten windows on her desktop,
+ * cascaded so the titles stay readable.
+ */
+export function openWWW(ws, title, html, addr) {
+  const n = ws.windows.filter((w) => w.kind === 'www').length;
+  const off = Math.min(n, 8) * 18;      // cascade, then stop walking off the screen
+  // MENU_EDGE, not an arbitrary margin: the menu is a vertical strip down the
+  // left, and a window opened at x=90 came up underneath it (David, 2026-08-14
+  // — "don't open windows UNDER the menubar").
+  return openWindow(ws, newWindow('www', title || 'WorldWideWeb', MENU_EDGE + off, 40 + off, 560, 400, {
+    doc: html, addr: addr || '', laid: null, top: 0, lastClick: 0,
+  }));
+}
+
+/**
+ * The Open panel. A window rather than a modal, because on NeXTSTEP it was one:
+ * you could leave it open beside the document while you typed the next
+ * reference, and it did not stop the rest of the machine.
+ */
+export function openWWWOpen(ws) {
+  const had = ws.windows.find((w) => w.kind === 'wwwopen');
+  if (had) { restore(ws, had.id); raise(ws, had.id); return had; }
+  return openWindow(ws, newWindow('wwwopen', 'Open Document', MENU_EDGE + 40, 150, 380, 120, {
+    ref: '', caret: true, err: '',
+  }));
+}
+
+/** The Info panel — where the application says what it is. */
+export function openWWWInfo(ws) {
+  const had = ws.windows.find((w) => w.kind === 'wwwinfo');
+  if (had) { restore(ws, had.id); raise(ws, had.id); return had; }
+  return openWindow(ws, newWindow('wwwinfo', 'Info', MENU_EDGE + 60, 90, 430, 300));
+}
+
+/** The frontmost WorldWideWeb document window, or null. */
+export function frontWWW(ws) {
+  for (let i = ws.order.length - 1; i >= 0; i--) {
+    const w = windowById(ws, ws.order[i]);
+    if (w && w.kind === 'www' && !w.mini) return w;
+  }
+  return null;
+}
+
+/**
+ * Mark all — the editor's clipboard for HYPERTEXT rather than for text. It
+ * holds one document, and it holds it until you make a link out of it or mark
+ * something else.
+ */
+export function wwwMarkAll(ws) {
+  const w = frontWWW(ws);
+  if (!w) return null;
+  ws.wwwMark = { title: w.title, addr: w.addr };
+  return ws.wwwMark;
+}
+
+/**
+ * Link to marked — writes the marked document into the one in front of you.
+ *
+ * The edit is kept on the workspace under the document's own address, so the
+ * link is still there when the window is closed and the document opened again.
+ * A link you made that vanished when you closed the window would be a note, not
+ * a link.
+ */
+export function wwwLinkToMarked(ws, linkInto) {
+  const w = frontWWW(ws);
+  if (!w || !ws.wwwMark) return null;
+  if (ws.wwwMark.addr && w.addr && ws.wwwMark.addr === w.addr) return { self: true };
+  const next = linkInto(w.doc, ws.wwwMark);
+  if (next === w.doc) return { already: true };
+  w.doc = next;
+  w.laid = null;                       // the layout is stale; _wsWWW rebuilds it
+  ws.wwwEdits = ws.wwwEdits || {};
+  if (w.addr) ws.wwwEdits[w.addr] = next;
+  return { linked: ws.wwwMark, into: w.addr };
+}
+
+/** A document with the player's own links in it, if they have made any here. */
+export function wwwDocFor(ws, addr, fresh) {
+  const kept = ws.wwwEdits && addr ? ws.wwwEdits[addr] : null;
+  return kept || fresh;
+}
+
 export function openRecycler(ws) {
   const had = ws.windows.find((w) => w.kind === 'recycler');
   if (had) { restore(ws, had.id); raise(ws, had.id); return had; }

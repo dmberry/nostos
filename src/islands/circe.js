@@ -20,7 +20,7 @@
 
 import { buildWorld } from '../game/worldgen.js';
 import { spawnAnimals } from '../game/animals.js';
-import { spawnRobots, spawnW5, spawnGardeners, spawnCouriers, spawnM4, spawnM5, spawnM6 } from '../game/robots.js';
+import { spawnRobots, spawnW5, spawnGardeners, spawnCouriers, spawnM4, spawnM5, spawnM6, spawnCarrier } from '../game/robots.js';
 import { spawnWaterDroids } from '../game/waterdroids.js';
 import { spawnBirds } from '../game/birds.js';
 import { placeTors } from '../game/hermes.js';
@@ -159,6 +159,25 @@ export function createCirce(seed) {
   // One V-class courier per island (#127): the network's answer to its own
   // flat machines. Cut it and the fallen stay down.
   robots.push(...spawnCouriers(map, IS, obelisks, 1));
+
+  // THE KING OF THIS ISLAND. One AGAMEMNON-class machine stands over the
+  // factory it was posted to — DIOMEDES here, and the mark decides its metal,
+  // its hull and how it fights. Same panoply, different temper.
+  if (wfactory) {
+    const fw = wfactory.fw || 8, fh = wfactory.fh || 8;
+    const king = spawnCarrier(
+      map, IS ^ 0x3c11,
+      wfactory.x + fw + 2, wfactory.y + Math.floor(fh / 2),
+      false, wfactory, 'b3',
+    );
+    if (king) robots.push(king);
+    // A standing escort, as on Ogygia: two pack M6s, so it reads as a formation
+    // with something worth guarding in the middle of it.
+    for (let i = 0; i < 2; i++) {
+      const g = spawnM6(map, (IS ^ (0x3c11 + i * 613)) >>> 0, wfactory.x, wfactory.y, false);
+      if (g) robots.push(g);
+    }
+  }
   const waterdroids = spawnWaterDroids(map, IS);
 
   const obeliskObjs = obelisks.map((o) => map.objectAt(o.x, o.y)).filter(Boolean);

@@ -7,7 +7,7 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
-// Scylla and Charybdis — the forced-choice strait (docs/islands-odyssey-revision.md §8).
+// Scylla and Charybdis — the forced-choice strait (docs/PLAN.md §8).
 //
 // The narrows lie on the AEAEA -> THRINACIA crossing, where Homer puts them: Circe
 // sends Odysseus through the strait, and he makes landfall on Helios's island after

@@ -9,7 +9,7 @@
 
 // Ranged weapon fire, factored out of player.js to keep that file navigable
 // (part of the systems-registry refactor's file-size split; see
-// docs/refactor-registry.md). These are the player's gun actions: they read and
+// docs/PLAN.md). These are the player's gun actions: they read and
 // mutate the player, the map, and the enemy lists, so `player` is passed in as
 // the first argument rather than being `this`. Everything they call back into
 // (say, sparkAt, addScore, gainXp, xpLevel, beamRange, obeliskInFront,

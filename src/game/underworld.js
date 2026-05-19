@@ -13,7 +13,7 @@
 // joined only by doorways, its own faded-yellow palette, and one wrong,
 // lurking thing wandering it. Generated once (lazily, on first entry) and
 // kept for the rest of the session rather than regenerated per visit — a
-// deliberate v1 scope cut (see VERSION-PLAN.md). Self-contained: main.js
+// deliberate v1 scope cut (see docs/PLAN.md). Self-contained: main.js
 // calls createUnderworldPocket() once, then updateUnderworldCreatures() and
 // drawUnderworldCreature() every frame while the player is down there, same
 // shape as every other creature/AI module in this codebase.

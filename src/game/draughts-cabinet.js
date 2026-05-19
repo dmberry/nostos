@@ -7,7 +7,7 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
-// K2 (docs/calypso-build-plan.md) — the draughts cabinet at CALYPSO's terminal.
+// K2 (docs/PLAN.md) — the draughts cabinet at CALYPSO's terminal.
 //
 // Pure session state around the engine in draughts.js: no canvas, no clock, no
 // globals, the shape of narrows.js and calypso-pong.js. The hub owns the frame
@@ -353,7 +353,7 @@ export function checkersModified(text) {
 // playing herself is a true fact about the game rather than a scripted beat.
 // K1 confirmed it by accident on its first full self-play run.
 //
-// THREE DOORS, one scene (docs/calypso-build-plan.md K4):
+// THREE DOORS, one scene (docs/PLAN.md K4):
 //   concede five times   she starts it herself, for the player who read nothing
 //   `auto`               you tell her to, as Falken does, for the player who
 //                        read the Samuel and film pages on the cached web

@@ -288,7 +288,7 @@ test('a stored function still prints when called later with a FRESH ctx', () => 
 });
 
 // ---- the laptop sandbox: the language without the world -------------------
-// docs/laptop-plan.md — the laptop is off the network by design, so it carries
+// docs/PLAN.md — the laptop is off the network by design, so it carries
 // the language core and `echo` and nothing that needs a wire. That IS the lesson.
 
 const lap = () => ({ station: 'laptop', session: {} });

@@ -7,7 +7,7 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
-// P1/P2 of docs/robot-programs-plan.md: machines that carry their reasoning as
+// P1/P2 of docs/PLAN.md: machines that carry their reasoning as
 // an AI-ML program you can read. Proves the shape works before any of it is
 // wired to the world — the program is a PURE function from what a machine
 // senses to what it intends, and the engine does the intending.

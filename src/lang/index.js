@@ -11,7 +11,7 @@
 //
 // This is the file a host imports. Everything reachable from here is the
 // language; nothing here knows about NostOS. When src/lang/ is split out to
-// its own repository (docs/aiml-standalone-plan.md §5) this becomes that
+// its own repository (docs/PLAN.md §5) this becomes that
 // repository's entry point unchanged.
 //
 // The in-fiction name inside NostOS stays AI-ML, and the adapter keeps its own

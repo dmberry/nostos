@@ -10,7 +10,7 @@
 // THE EVALUATOR. An abstract syntax tree to a value.
 //
 // Part of src/lang/, the language proper. Moved out of src/game/ai_ml.js at
-// v1.287 (M2). See docs/aiml-standalone-plan.md.
+// v1.287 (M2). See docs/PLAN.md.
 //
 // WHY THE STATE IS MODULE-LEVEL, and why it moved here rather than being
 // re-plumbed. FUEL and STEPS are module-level for the same reason the print
@@ -26,7 +26,7 @@ import { nameKey } from './names.js';
 import { parse } from './parse.js';
 import { defaultFixity } from './parse.js';
 
-// FUEL (docs/robot-programs-plan.md §3). A program carried by a machine must not
+// FUEL (docs/PLAN.md §3). A program carried by a machine must not
 // be able to hang the game: `let f x = f x` has to stop somewhere. Evaluation
 // counts reductions and aborts past a budget. At a console the budget is huge
 // (a human is waiting, and a wrong line should still finish); for a machine's
