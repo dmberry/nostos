@@ -12,6 +12,7 @@ export class GameMap {
     this.floor = new Array(w * h).fill(fillFloor);
     this.objects = [];
     this.objectGrid = new Array(w * h).fill(null);
+    this.shaking = new Set(); // objects currently animating a hit wobble
     // Subtle per-tile brightness variation so large floors read as texture.
     const rng = makeRng(1234);
     this.shade = Float32Array.from({ length: w * h }, () => (rng() - 0.5) * 0.12);
@@ -43,6 +44,26 @@ export class GameMap {
     this.objects.push(obj);
     this.objectGrid[y * this.w + x] = obj;
     return obj;
+  }
+
+  removeObject(obj) {
+    const i = this.objects.indexOf(obj);
+    if (i >= 0) this.objects.splice(i, 1);
+    if (this.objectGrid[obj.y * this.w + obj.x] === obj) {
+      this.objectGrid[obj.y * this.w + obj.x] = null;
+    }
+    this.shaking.delete(obj);
+  }
+
+  // Tick down hit-wobble timers; called once per update step.
+  updateShakes(dt) {
+    for (const obj of this.shaking) {
+      obj.shake -= dt;
+      if (obj.shake <= 0) {
+        obj.shake = 0;
+        this.shaking.delete(obj);
+      }
+    }
   }
 
   // Out-of-bounds counts as solid so the map edge is a wall.

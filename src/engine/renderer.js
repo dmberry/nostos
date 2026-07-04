@@ -1,5 +1,6 @@
 import { worldToScreen, screenToWorld } from './iso.js';
 import { FLOORS } from '../game/tiles.js';
+import { ITEMS } from '../game/items.js';
 
 // Canvas renderer. Two passes per frame: floor diamonds first, then all
 // "drawables" (objects + player) painter-sorted by world depth (x + y).
@@ -7,6 +8,7 @@ import { FLOORS } from '../game/tiles.js';
 // means replacing the draw* methods only.
 
 const WALL_H = 40;
+const DASH_H = 78; // dashboard panel height
 
 const WALL_BASE = [122, 113, 102];
 const TREE_TRUNK = '#5d4630';
@@ -77,7 +79,7 @@ export class Renderer {
     }
 
     ctx.restore();
-    this.drawHud(player, hud);
+    this.drawDashboard(player, hud);
   }
 
   // Inverse-project the screen corners to get the visible tile bounding box.
@@ -136,7 +138,7 @@ export class Renderer {
   drawObject(obj) {
     switch (obj.type) {
       case 'wall': this.drawWall(obj.x, obj.y); break;
-      case 'tree': this.drawTree(obj.x, obj.y); break;
+      case 'tree': this.drawTree(obj); break;
       case 'rock': this.drawRock(obj.x, obj.y); break;
       case 'rubble': this.drawRubble(obj.x, obj.y); break;
     }
@@ -170,22 +172,30 @@ export class Renderer {
     ctx.stroke();
   }
 
-  drawTree(tx, ty) {
+  drawTree(obj) {
     const ctx = this.ctx;
-    const c = worldToScreen(tx + 0.5, ty + 0.5);
+    const c = worldToScreen(obj.x + 0.5, obj.y + 0.5);
+    // Hit wobble: canopy and trunk-top sway while obj.shake ticks down.
+    const wob = obj.shake ? Math.sin(obj.shake * 45) * obj.shake * 14 : 0;
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
     ctx.beginPath();
     ctx.ellipse(c.x, c.y, 12, 6, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = TREE_TRUNK;
-    ctx.fillRect(c.x - 3, c.y - 26, 6, 26);
+    ctx.beginPath();
+    ctx.moveTo(c.x - 3, c.y);
+    ctx.lineTo(c.x + 3, c.y);
+    ctx.lineTo(c.x + 3 + wob * 0.4, c.y - 26);
+    ctx.lineTo(c.x - 3 + wob * 0.4, c.y - 26);
+    ctx.closePath();
+    ctx.fill();
     ctx.fillStyle = TREE_CANOPY;
     ctx.beginPath();
-    ctx.arc(c.x, c.y - 38, 17, 0, Math.PI * 2);
+    ctx.arc(c.x + wob, c.y - 38, 17, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = 'rgba(255,255,255,0.08)';
     ctx.beginPath();
-    ctx.arc(c.x - 5, c.y - 43, 9, 0, Math.PI * 2);
+    ctx.arc(c.x + wob - 5, c.y - 43, 9, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -237,6 +247,16 @@ export class Renderer {
     ctx.beginPath();
     ctx.arc(c.x, c.y - 29, 6, 0, Math.PI * 2);
     ctx.fill();
+    // Swing feedback: the held tool flashes out ahead while swinging.
+    if (player.swingTimer > 0) {
+      const t = worldToScreen(player.x + player.facing.x * 0.6, player.y + player.facing.y * 0.6);
+      ctx.strokeStyle = '#e8e0d0';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(c.x, c.y - 14);
+      ctx.lineTo(t.x, t.y - 16);
+      ctx.stroke();
+    }
     // Facing indicator: a small dot ahead of the feet.
     const f = worldToScreen(player.x + player.facing.x * 0.45, player.y + player.facing.y * 0.45);
     ctx.fillStyle = 'rgba(255,255,255,0.5)';
@@ -245,11 +265,111 @@ export class Renderer {
     ctx.fill();
   }
 
-  drawHud(player, hud) {
+  // ---- Dashboard ----------------------------------------------------------
+
+  drawDashboard(player, hud) {
     const ctx = this.ctx;
+    const top = this.h - DASH_H;
+
+    ctx.fillStyle = 'rgba(12,15,10,0.88)';
+    ctx.fillRect(0, top, this.w, DASH_H);
+    ctx.fillStyle = 'rgba(207,216,195,0.25)';
+    ctx.fillRect(0, top, this.w, 1);
+
+    // Vitals
+    this.drawBar(16, top + 18, 150, 9, player.health / player.maxHealth, '#b0392f', 'HEALTH');
+    this.drawBar(16, top + 48, 150, 9, player.stamina / player.maxStamina, '#5f8f3e', 'STAMINA');
+
+    // Hands slot
+    const handsX = 210;
+    this.drawLabel('HANDS', handsX, top + 14);
+    this.drawSlot(handsX, top + 20, 44, ITEMS[player.hands], 0);
+    if (player.hands) {
+      ctx.fillStyle = 'rgba(207,216,195,0.7)';
+      ctx.font = '10px system-ui, sans-serif';
+      ctx.fillText(ITEMS[player.hands].name, handsX, top + 74);
+    }
+
+    // Pockets
+    const pocketsX = 286;
+    this.drawLabel('POCKETS', pocketsX, top + 14);
+    for (let i = 0; i < player.pockets.length; i++) {
+      const slot = player.pockets[i];
+      this.drawSlot(pocketsX + i * 42, top + 20, 36, slot ? ITEMS[slot.item] : null, slot ? slot.qty : 0);
+    }
+
+    // Stats block, right-aligned
+    ctx.font = '11px system-ui, sans-serif';
+    ctx.textAlign = 'right';
     ctx.fillStyle = 'rgba(207,216,195,0.85)';
+    const state = player.sprinting ? 'Sprinting' : player.moving ? 'Walking' : 'Idle';
+    ctx.fillText(state, this.w - 16, top + 22);
+    ctx.fillText(`tile ${player.x.toFixed(1)}, ${player.y.toFixed(1)}`, this.w - 16, top + 40);
+    ctx.fillText(`${hud.fps ?? 0} fps`, this.w - 16, top + 58);
+    ctx.textAlign = 'left';
+
+    // Transient message line above the panel
+    if (player.message) {
+      ctx.font = '13px system-ui, sans-serif';
+      ctx.fillStyle = `rgba(232,224,208,${Math.min(1, player.message.ttl)})`;
+      ctx.fillText(player.message.text, 16, top - 12);
+    }
+
+    // Title chip, top-left of screen
     ctx.font = '12px system-ui, sans-serif';
-    const fps = hud.fps != null ? `${hud.fps} fps` : '';
-    ctx.fillText(`postAI · phase 1 · tile ${player.x.toFixed(1)}, ${player.y.toFixed(1)} · ${fps}`, 12, 20);
+    ctx.fillStyle = 'rgba(207,216,195,0.6)';
+    ctx.fillText('postAI', 12, 20);
+  }
+
+  drawLabel(text, x, y) {
+    const ctx = this.ctx;
+    ctx.font = '9px system-ui, sans-serif';
+    ctx.fillStyle = 'rgba(207,216,195,0.55)';
+    ctx.fillText(text, x, y);
+  }
+
+  drawBar(x, y, w, h, frac, color, label) {
+    const ctx = this.ctx;
+    this.drawLabel(label, x, y - 5);
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, Math.max(0, Math.min(1, frac)) * w, h);
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  }
+
+  drawSlot(x, y, size, itemDef, qty) {
+    const ctx = this.ctx;
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.fillRect(x, y, size, size);
+    ctx.strokeStyle = 'rgba(207,216,195,0.35)';
+    ctx.strokeRect(x + 0.5, y + 0.5, size - 1, size - 1);
+    if (!itemDef) return;
+
+    if (itemDef.name === 'Penknife') {
+      // Tiny penknife icon: red handle, steel blade.
+      const cx = x + size / 2, cy = y + size / 2;
+      ctx.fillStyle = itemDef.color;
+      ctx.fillRect(cx - 9, cy + 1, 12, 5);
+      ctx.fillStyle = '#c9cdd1';
+      ctx.beginPath();
+      ctx.moveTo(cx + 3, cy + 1);
+      ctx.lineTo(cx + 11, cy - 5);
+      ctx.lineTo(cx + 3, cy + 4);
+      ctx.closePath();
+      ctx.fill();
+    } else {
+      // Generic resource: coloured square.
+      ctx.fillStyle = itemDef.color;
+      ctx.fillRect(x + 8, y + 8, size - 16, size - 16);
+    }
+    if (qty > 1) {
+      ctx.font = '10px system-ui, sans-serif';
+      ctx.fillStyle = '#e8e0d0';
+      ctx.textAlign = 'right';
+      ctx.fillText(String(qty), x + size - 3, y + size - 4);
+      ctx.textAlign = 'left';
+    }
   }
 }

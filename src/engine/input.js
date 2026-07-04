@@ -1,16 +1,21 @@
-// Keyboard state tracker. Reads are by physical key code.
+// Keyboard state tracker. Reads are by physical key code. Held keys are
+// queried with isDown(); one-shot actions use consumePress() so a single
+// keypress triggers a single action regardless of key-repeat.
 
 const TRACKED = new Set([
   'KeyW', 'KeyA', 'KeyS', 'KeyD',
   'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
   'ShiftLeft', 'ShiftRight',
+  'KeyE', 'Space',
 ]);
 
 export class Input {
   constructor(target = window) {
     this.down = new Set();
+    this.pressed = new Set();
     target.addEventListener('keydown', (e) => {
       if (TRACKED.has(e.code)) {
+        if (!e.repeat && !this.down.has(e.code)) this.pressed.add(e.code);
         this.down.add(e.code);
         e.preventDefault();
       }
@@ -18,11 +23,23 @@ export class Input {
     target.addEventListener('keyup', (e) => {
       this.down.delete(e.code);
     });
-    target.addEventListener('blur', () => this.down.clear());
+    target.addEventListener('blur', () => {
+      this.down.clear();
+      this.pressed.clear();
+    });
   }
 
   isDown(code) {
     return this.down.has(code);
+  }
+
+  // True once per physical keypress, then cleared.
+  consumePress(code) {
+    if (this.pressed.has(code)) {
+      this.pressed.delete(code);
+      return true;
+    }
+    return false;
   }
 
   // Screen-space movement intent from WASD/arrows: each axis in [-1, 1].
@@ -37,5 +54,9 @@ export class Input {
 
   sprinting() {
     return this.isDown('ShiftLeft') || this.isDown('ShiftRight');
+  }
+
+  usePressed() {
+    return this.consumePress('KeyE') || this.consumePress('Space');
   }
 }

@@ -4,6 +4,8 @@ An isometric 2D survival game set in a world devastated by the collapse that fol
 
 Inspired by Project Zomboid: knowledge is the real progression, scarcity drives movement, every fight is optional and risky, and the world tells the story.
 
+Created by David M. Berry and Henrik.
+
 ## Running
 
 No build tools, no dependencies. Serve the folder and open it:
@@ -19,6 +21,9 @@ python3 -m http.server 8000
 
 - **WASD / arrow keys**: move
 - **Shift**: sprint
+- **E / Space**: use the held tool (start with a penknife; face a tree and swing to cut it down for wood)
+
+The dashboard along the bottom of the screen shows health, stamina, the hands slot (current tool), four pocket slots, and current stats.
 
 ## Tech
 

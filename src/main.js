@@ -11,6 +11,9 @@ const map = buildTestMap();
 const player = new Player(23.5, 27.5); // on the road, south of the crossroads
 const camera = new Camera(player.x, player.y);
 
+// Debug handle for inspecting live state from the console.
+window.__game = { player, map, camera };
+
 function resize() {
   renderer.resize(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1);
 }
@@ -24,6 +27,7 @@ let fps = 0, frameCount = 0, fpsClock = 0;
 
 function update(dt) {
   player.update(dt, input, map);
+  map.updateShakes(dt);
   camera.follow(player.x, player.y, dt);
 }
 
