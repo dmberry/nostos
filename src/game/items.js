@@ -5,6 +5,7 @@ export const ITEMS = {
     name: 'Penknife',
     kind: 'tool',
     treeDamage: 1,     // hits per swing against a tree
+    animalDamage: 3,
     swingCooldown: 0.5,
     staminaCost: 4,
     color: '#b8412f',
@@ -14,5 +15,11 @@ export const ITEMS = {
     kind: 'resource',
     stack: 10,
     color: '#8a6437',
+  },
+  meat: {
+    name: 'Meat',
+    kind: 'resource',
+    stack: 5,
+    color: '#a34545',
   },
 };

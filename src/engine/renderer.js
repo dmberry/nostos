@@ -1,6 +1,7 @@
 import { worldToScreen, screenToWorld } from './iso.js';
 import { FLOORS } from '../game/tiles.js';
 import { ITEMS } from '../game/items.js';
+import { drawAnimal } from '../game/animals.js';
 
 // Canvas renderer. Two passes per frame: floor diamonds first, then all
 // "drawables" (objects + player) painter-sorted by world depth (x + y).
@@ -44,7 +45,7 @@ export class Renderer {
     this.canvas.height = Math.round(h * dpr);
   }
 
-  draw(camera, map, player, hud = {}) {
+  draw(camera, map, player, animals = [], hud = {}) {
     const ctx = this.ctx;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.fillStyle = '#0b0e0a';
@@ -70,11 +71,22 @@ export class Renderer {
       if (obj.x < range.minX || obj.x > range.maxX || obj.y < range.minY || obj.y > range.maxY) continue;
       drawables.push({ depth: obj.x + obj.y + 1, obj });
     }
+    for (const gi of map.groundItems) {
+      if (gi.x < range.minX || gi.x > range.maxX + 1 || gi.y < range.minY || gi.y > range.maxY + 1) continue;
+      drawables.push({ depth: gi.x + gi.y - 0.01, groundItem: gi });
+    }
+    for (const a of animals) {
+      if (a.dead) continue;
+      if (a.x < range.minX || a.x > range.maxX + 1 || a.y < range.minY || a.y > range.maxY + 1) continue;
+      drawables.push({ depth: a.x + a.y, animal: a });
+    }
     drawables.push({ depth: player.x + player.y, player });
     drawables.sort((a, b) => a.depth - b.depth);
 
     for (const d of drawables) {
       if (d.player) this.drawPlayer(d.player);
+      else if (d.animal) drawAnimal(this.ctx, d.animal, worldToScreen);
+      else if (d.groundItem) this.drawGroundItem(d.groundItem);
       else this.drawObject(d.obj);
     }
 
@@ -230,31 +242,92 @@ export class Renderer {
     }
   }
 
+  drawGroundItem(gi) {
+    const ctx = this.ctx;
+    const def = ITEMS[gi.item];
+    const c = worldToScreen(gi.x, gi.y);
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y + 1, 8, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = def.color;
+    ctx.fillRect(c.x - 5, c.y - 8, 10, 7);
+    ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+    ctx.strokeRect(c.x - 4.5, c.y - 7.5, 9, 6);
+    if (gi.qty > 1) {
+      ctx.font = '9px system-ui, sans-serif';
+      ctx.fillStyle = '#e8e0d0';
+      ctx.fillText(String(gi.qty), c.x + 6, c.y - 2);
+    }
+  }
+
   drawPlayer(player) {
     const ctx = this.ctx;
     const c = worldToScreen(player.x, player.y);
+    const lift = (player.z || 0) * 32; // jump height in pixels
+    // Shadow stays grounded and shrinks as the player rises.
+    const sh = Math.max(0.45, 1 - (player.z || 0) * 0.9);
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.beginPath();
-    ctx.ellipse(c.x, c.y, 10, 5, 0, 0, Math.PI * 2);
+    ctx.ellipse(c.x, c.y, 10 * sh, 5 * sh, 0, 0, Math.PI * 2);
     ctx.fill();
-    // Torso
-    ctx.fillStyle = player.sprinting ? '#c97f3e' : '#b0703c';
+    const by = c.y - lift;
+    // Gait: legs scissor and the body bobs while walking.
+    const swing = Math.sin(player.walkPhase) * 3;
+    const bob = Math.abs(Math.sin(player.walkPhase)) * 1.8;
+    ctx.fillStyle = '#4a3a2a';
+    ctx.fillRect(c.x - 4 + swing, by - 9 - Math.max(0, Math.sin(player.walkPhase)) * 2.5, 3, 9);
+    ctx.fillRect(c.x + 1 - swing, by - 9 - Math.max(0, -Math.sin(player.walkPhase)) * 2.5, 3, 9);
+    // Torso, flashing red briefly when hurt.
+    ctx.fillStyle = player.hurtTimer > 0 ? '#c94a3a' : player.sprinting ? '#c97f3e' : '#b0703c';
     ctx.beginPath();
-    ctx.ellipse(c.x, c.y - 14, 7, 11, 0, 0, Math.PI * 2);
+    ctx.ellipse(c.x, by - 16 - bob, 7, 9.5, 0, 0, Math.PI * 2);
     ctx.fill();
-    // Head
+    // Head. The face follows the direction of travel: eyes and mouth when
+    // facing the camera, back-of-the-head hair when walking away, eyes
+    // slid to the side in profile.
+    const horiz = (player.facing.x - player.facing.y) * 0.7071;  // screen-right component
+    const toward = (player.facing.x + player.facing.y) * 0.7071; // toward-camera component
+    const hb = by - bob; // head bobs with the torso
     ctx.fillStyle = '#d9b48c';
     ctx.beginPath();
-    ctx.arc(c.x, c.y - 29, 6, 0, Math.PI * 2);
+    ctx.arc(c.x, hb - 29, 6, 0, Math.PI * 2);
     ctx.fill();
+    ctx.fillStyle = '#5a3d22';
+    if (toward < -0.15) {
+      // Back to us: hair wraps the whole back of the head, a sliver of neck.
+      ctx.beginPath();
+      ctx.arc(c.x, hb - 29.5, 6, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // Hair mop with a fringe, pushed slightly opposite the gaze.
+      ctx.beginPath();
+      ctx.arc(c.x - horiz * 0.8, hb - 30.5, 6, Math.PI, Math.PI * 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillRect(c.x - 6 - horiz * 0.8, hb - 31.5, 12, 2.5);
+      // Eyes and mouth track the horizontal component of travel.
+      const ex = horiz * 2.4;
+      ctx.fillStyle = '#2c2119';
+      ctx.beginPath();
+      ctx.arc(c.x - 2.2 + ex, hb - 28, 1.1, 0, Math.PI * 2);
+      ctx.arc(c.x + 2.2 + ex, hb - 28, 1.1, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(44,33,25,0.7)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(c.x - 1.5 + ex, hb - 25.2);
+      ctx.lineTo(c.x + 1.5 + ex, hb - 25.2);
+      ctx.stroke();
+    }
     // Swing feedback: the held tool flashes out ahead while swinging.
     if (player.swingTimer > 0) {
       const t = worldToScreen(player.x + player.facing.x * 0.6, player.y + player.facing.y * 0.6);
       ctx.strokeStyle = '#e8e0d0';
       ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.moveTo(c.x, c.y - 14);
-      ctx.lineTo(t.x, t.y - 16);
+      ctx.moveTo(c.x, by - 14);
+      ctx.lineTo(t.x, t.y - lift - 16);
       ctx.stroke();
     }
     // Facing indicator: a small dot ahead of the feet.
@@ -279,6 +352,11 @@ export class Renderer {
     // Vitals
     this.drawBar(16, top + 18, 150, 9, player.health / player.maxHealth, '#b0392f', 'HEALTH');
     this.drawBar(16, top + 48, 150, 9, player.stamina / player.maxStamina, '#5f8f3e', 'STAMINA');
+    if (player.venom > 0) {
+      ctx.font = 'bold 9px system-ui, sans-serif';
+      ctx.fillStyle = '#b07fd8';
+      ctx.fillText('POISONED', 90, top + 13);
+    }
 
     // Hands slot
     const handsX = 210;

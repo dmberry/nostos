@@ -9,6 +9,8 @@ export const FLOORS = {
   boards: { color: '#9c8055', solid: false },
   sand:   { color: '#c2b280', solid: false },
   water:  { color: '#3a6ea5', solid: true },
+  bridge: { color: '#8a7048', solid: false },
+  tallgrass: { color: '#6f8f3f', solid: false },
 };
 
 export const OBJECTS = {

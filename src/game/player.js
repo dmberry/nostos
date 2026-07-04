@@ -7,35 +7,59 @@ const RADIUS = 0.28;      // collision radius in tiles
 const REACH = 0.9;        // how far ahead the player can use a tool
 const TREE_HP = 4;        // penknife swings to fell a tree
 const WOOD_PER_TREE = 2;
+const PICKUP_RANGE = 0.55;
 
 const STAMINA_MAX = 100;
 const SPRINT_DRAIN = 9;   // stamina per second while sprinting
 const STAMINA_REGEN = 12; // per second when not sprinting
+const HEALTH_REGEN = 0.5; // per second while unpoisoned
+const VENOM_DRAIN = 2;    // health per second while poisoned
+
+const JUMP_VZ = 3.8;      // initial jump velocity (world units/s)
+const GRAVITY = 12;
+const JUMP_COST = 3;      // stamina
 
 export class Player {
   constructor(x, y) {
     this.x = x;
     this.y = y;
+    this.spawnX = x;
+    this.spawnY = y;
+    this.z = 0;           // height above ground while jumping
+    this.vz = 0;
     this.facing = { x: 0, y: 1 };
     this.moving = false;
     this.sprinting = false;
+    this.walkPhase = 0; // drives the gait animation
 
     this.health = 100;
     this.maxHealth = 100;
     this.stamina = STAMINA_MAX;
     this.maxStamina = STAMINA_MAX;
+    this.venom = 0;       // seconds of poison remaining
 
     this.hands = 'penknife';                 // starting tool
     this.pockets = [null, null, null, null]; // {item, qty} or null
     this.swingTimer = 0;
-    this.message = null;                     // {text, ttl} transient HUD line
+    this.hurtTimer = 0;   // brief red flash after taking damage
+    this.message = null;  // {text, ttl} transient HUD line
   }
 
-  update(dt, input, map) {
+  update(dt, input, map, animals = []) {
     this.swingTimer = Math.max(0, this.swingTimer - dt);
+    this.hurtTimer = Math.max(0, this.hurtTimer - dt);
     if (this.message) {
       this.message.ttl -= dt;
       if (this.message.ttl <= 0) this.message = null;
+    }
+
+    // Venom drains health over time; otherwise health slowly recovers.
+    if (this.venom > 0) {
+      this.venom = Math.max(0, this.venom - dt);
+      this.health -= VENOM_DRAIN * dt;
+      if (this.health <= 0) this.die(map, 'the venom');
+    } else if (this.health < this.maxHealth) {
+      this.health = Math.min(this.maxHealth, this.health + HEALTH_REGEN * dt);
     }
 
     const intent = input.moveIntent();
@@ -55,24 +79,68 @@ export class Player {
       const speed = this.sprinting ? SPRINT_SPEED : WALK_SPEED;
       this.moveAxis(dir.x * speed * dt, 0, map);
       this.moveAxis(0, dir.y * speed * dt, map);
+      this.walkPhase += dt * (this.sprinting ? 13 : 9);
+    } else {
+      this.walkPhase = 0;
     }
 
-    if (input.usePressed()) this.useHands(map);
+    // Jump: purely vertical hop; collision footprint is unchanged.
+    if (input.jumpPressed() && this.z === 0 && this.stamina >= JUMP_COST) {
+      this.vz = JUMP_VZ;
+      this.stamina -= JUMP_COST;
+    }
+    if (this.z > 0 || this.vz !== 0) {
+      this.vz -= GRAVITY * dt;
+      this.z += this.vz * dt;
+      if (this.z <= 0) {
+        this.z = 0;
+        this.vz = 0;
+      }
+    }
+
+    if (input.usePressed()) this.useHands(map, animals);
+    this.pickupNearby(map);
   }
 
-  // Swing the held tool at whatever is on the tile the player faces.
-  useHands(map) {
+  // Swing the held tool: hits an animal in reach first, otherwise the
+  // object on the faced tile. No swinging mid-jump.
+  useHands(map, animals = []) {
     const tool = ITEMS[this.hands];
-    if (!tool || tool.kind !== 'tool' || this.swingTimer > 0) return;
+    if (!tool || tool.kind !== 'tool' || this.swingTimer > 0 || this.z > 0) return;
+    if (this.stamina < tool.staminaCost) {
+      this.say('Too exhausted to swing.');
+      return;
+    }
+
+    // Nearest living animal within reach and roughly in front.
+    let target = null, best = Infinity;
+    for (const a of animals) {
+      if (a.dead) continue;
+      const dx = a.x - this.x, dy = a.y - this.y;
+      const d = Math.hypot(dx, dy);
+      if (d > 1.1 || d === 0) continue;
+      if (dx * this.facing.x + dy * this.facing.y < 0) continue; // behind us
+      if (d < best) { best = d; target = a; }
+    }
+    if (target) {
+      this.swingTimer = tool.swingCooldown;
+      this.stamina -= tool.staminaCost;
+      target.hp -= tool.animalDamage ?? 3;
+      target.hurt = true; // animals module reads this for pack flee/enrage
+      if (target.hp <= 0) {
+        target.dead = true;
+        map.groundItems.push({ item: 'meat', qty: 1, x: target.x, y: target.y });
+        this.say(`The ${target.type} goes down.`);
+      } else {
+        this.say(`You catch the ${target.type} with the blade.`);
+      }
+      return;
+    }
 
     const tx = Math.floor(this.x + this.facing.x * REACH);
     const ty = Math.floor(this.y + this.facing.y * REACH);
     const obj = map.objectAt(tx, ty);
     if (!obj || obj.type !== 'tree') return;
-    if (this.stamina < tool.staminaCost) {
-      this.say('Too exhausted to swing.');
-      return;
-    }
 
     this.swingTimer = tool.swingCooldown;
     this.stamina -= tool.staminaCost;
@@ -82,13 +150,48 @@ export class Player {
 
     if (obj.hp <= 0) {
       map.removeObject(obj);
-      const stored = this.stow('wood', WOOD_PER_TREE);
-      this.say(stored > 0
-        ? `The tree comes down. +${stored} wood`
-        : 'The tree comes down, but your pockets are full.');
+      map.groundItems.push({ item: 'wood', qty: WOOD_PER_TREE, x: obj.x + 0.5, y: obj.y + 0.5 });
+      this.say('The tree comes down.');
     } else {
       this.say('You hack at the tree with the penknife.');
     }
+  }
+
+  // Walk over dropped loot to collect it (if there is pocket room).
+  pickupNearby(map) {
+    for (const gi of map.groundItems) {
+      if (Math.hypot(gi.x - this.x, gi.y - this.y) > PICKUP_RANGE) continue;
+      const stored = this.stow(gi.item, gi.qty);
+      if (stored <= 0) continue;
+      gi.qty -= stored;
+      this.say(`+${stored} ${ITEMS[gi.item].name.toLowerCase()}`);
+    }
+    map.groundItems = map.groundItems.filter((gi) => gi.qty > 0);
+  }
+
+  takeDamage(amount, source) {
+    this.health -= amount;
+    this.hurtTimer = 0.35;
+    if (this.health <= 0) this.die(this.map, `the ${source}`);
+  }
+
+  // Death: drop everything where you fell, wake back at the spawn point.
+  die(map, cause) {
+    map = map || this.map;
+    if (map) {
+      for (const slot of this.pockets) {
+        if (slot) map.groundItems.push({ item: slot.item, qty: slot.qty, x: this.x, y: this.y });
+      }
+    }
+    this.pockets = [null, null, null, null];
+    this.health = this.maxHealth;
+    this.stamina = this.maxStamina;
+    this.venom = 0;
+    this.x = this.spawnX;
+    this.y = this.spawnY;
+    this.z = 0;
+    this.vz = 0;
+    this.say(`You were killed by ${cause}. You wake back at the road.`);
   }
 
   // Add qty of an item to pockets, stacking first. Returns how many fitted.

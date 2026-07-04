@@ -7,6 +7,7 @@ const TRACKED = new Set([
   'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
   'ShiftLeft', 'ShiftRight',
   'KeyE', 'Space',
+  'ControlLeft', 'ControlRight', 'MetaLeft', 'MetaRight',
 ]);
 
 export class Input {
@@ -57,6 +58,12 @@ export class Input {
   }
 
   usePressed() {
-    return this.consumePress('KeyE') || this.consumePress('Space');
+    return this.consumePress('KeyE')
+      || this.consumePress('ControlLeft') || this.consumePress('ControlRight')
+      || this.consumePress('MetaLeft') || this.consumePress('MetaRight');
+  }
+
+  jumpPressed() {
+    return this.consumePress('Space');
   }
 }

@@ -13,6 +13,7 @@ export class GameMap {
     this.objects = [];
     this.objectGrid = new Array(w * h).fill(null);
     this.shaking = new Set(); // objects currently animating a hit wobble
+    this.groundItems = [];    // dropped loot: {item, qty, x, y}
     // Subtle per-tile brightness variation so large floors read as texture.
     const rng = makeRng(1234);
     this.shade = Float32Array.from({ length: w * h }, () => (rng() - 0.5) * 0.12);

@@ -21,9 +21,20 @@ python3 -m http.server 8000
 
 - **WASD / arrow keys**: move
 - **Shift**: sprint
-- **E / Space**: use the held tool (start with a penknife; face a tree and swing to cut it down for wood)
+- **Space**: jump
+- **E / Ctrl / Cmd**: use the held tool (start with a penknife; face a tree and swing to cut it down — felled trees drop wood you pick up by walking over it; the blade also fends off animals)
 
 The dashboard along the bottom of the screen shows health, stamina, the hands slot (current tool), four pocket slots, and current stats.
+
+## The world (v0.2)
+
+A seeded 128x128 world: a meandering river with two bridges, a ten-building town of broken-down buildings, a ruined hamlet across the water, forests, tall-grass meadows, and roads connecting it all. Wild animals roam it, each with a signature move, a readable tell, and a counter to learn:
+
+- **Feral dogs** hunt in packs: they bark ("!") when they spot you, fan out, and bite. Hurt one and the pack breaks off.
+- **Boars** paw the ground, then charge in a straight line. Sidestep: a boar that hits a wall stuns itself.
+- **Vipers** lurk in tall grass and strike your ankles with venom that drains health over time. Watch for the raised coil.
+
+Killed animals drop meat. If you die, you drop everything where you fell and wake back at the spawn point.
 
 ## Tech
 
