@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>postAI</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #0b0e0a; overflow: hidden; }
+  #game { display: block; width: 100vw; height: 100vh; }
+  #hint {
+    position: fixed; left: 12px; bottom: 10px;
+    color: #cfd8c3; font: 13px/1.4 system-ui, sans-serif;
+    opacity: 0.75; pointer-events: none; text-shadow: 0 1px 2px #000;
+  }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="hint">WASD / arrows to move &middot; Shift to sprint</div>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
