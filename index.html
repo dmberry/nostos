@@ -12,11 +12,98 @@
     color: #cfd8c3; font: 13px/1.4 system-ui, sans-serif;
     opacity: 0.75; pointer-events: none; text-shadow: 0 1px 2px #000;
   }
+  #helpBtn {
+    position: fixed; top: 10px; left: 70px;
+    width: 24px; height: 24px; border-radius: 12px;
+    background: rgba(207,216,195,0.15); color: #cfd8c3;
+    border: 1px solid rgba(207,216,195,0.4);
+    font: bold 14px/22px system-ui, sans-serif; text-align: center;
+    cursor: pointer; user-select: none;
+  }
+  #help {
+    display: none; position: fixed; inset: 0;
+    background: rgba(5,7,4,0.75); z-index: 10;
+  }
+  #help .panel {
+    max-width: 620px; max-height: 82vh; overflow-y: auto;
+    margin: 6vh auto 0; padding: 22px 28px;
+    background: #141a10; border: 1px solid rgba(207,216,195,0.35);
+    border-radius: 6px; color: #cfd8c3;
+    font: 14px/1.55 system-ui, sans-serif;
+  }
+  #help h1 { font-size: 18px; margin: 0 0 4px; }
+  #help h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: #9db284; margin: 18px 0 6px; }
+  #help .meta { color: #8a9878; font-size: 12px; }
+  #help table { border-collapse: collapse; width: 100%; }
+  #help td { padding: 3px 10px 3px 0; vertical-align: top; }
+  #help td:first-child { color: #e8e0d0; white-space: nowrap; font-weight: 600; }
+  #help kbd {
+    background: rgba(207,216,195,0.12); border: 1px solid rgba(207,216,195,0.35);
+    border-radius: 3px; padding: 0 6px; font: 12px/1.6 ui-monospace, monospace;
+  }
+  #help button.persona {
+    background: rgba(207,216,195,0.12); color: #e8e0d0;
+    border: 1px solid rgba(207,216,195,0.4); border-radius: 4px;
+    padding: 3px 14px; margin-right: 6px; font: 13px system-ui, sans-serif;
+    cursor: pointer;
+  }
+  #help button.persona:hover { background: rgba(207,216,195,0.25); }
+  #help input {
+    background: rgba(0,0,0,0.4); color: #e8e0d0;
+    border: 1px solid rgba(207,216,195,0.4); border-radius: 4px;
+    padding: 3px 8px; font: 13px system-ui, sans-serif; width: 130px;
+  }
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
-<div id="hint">WASD / arrows to move &middot; Shift to sprint &middot; Space to jump &middot; E / Ctrl / Cmd to use held tool</div>
+<div id="hint">WASD / arrows to move &middot; Shift to sprint &middot; Space to jump &middot; E / Ctrl / Cmd to use held tool &middot; Q to eat &middot; H for help</div>
+<div id="helpBtn" title="Help (H)">?</div>
+<div id="help">
+  <div class="panel">
+    <h1>postAI</h1>
+    <p class="meta">An isometric survival game &middot; by David M. Berry and Henrik</p>
+
+    <h2>Character</h2>
+    <p>
+      <button class="persona" data-gender="m">Adam</button>
+      <button class="persona" data-gender="f">Eve</button>
+      <button class="persona" data-gender="u">Neve</button>
+      &nbsp; or name them: <input id="charName" maxlength="16" placeholder="Name">
+    </p>
+
+    <h2>Keys</h2>
+    <table>
+      <tr><td><kbd>W A S D</kbd> / arrows</td><td>Move</td></tr>
+      <tr><td><kbd>Shift</kbd></td><td>Sprint (drains stamina, burns food faster)</td></tr>
+      <tr><td><kbd>Space</kbd></td><td>Jump</td></tr>
+      <tr><td><kbd>E</kbd> / <kbd>Ctrl</kbd> / <kbd>Cmd</kbd></td><td>Use the held tool: chop trees, fend off animals</td></tr>
+      <tr><td><kbd>Q</kbd></td><td>Eat the first edible thing in your pockets</td></tr>
+      <tr><td><kbd>R</kbd></td><td>Read the first book in your pockets</td></tr>
+      <tr><td><kbd>H</kbd></td><td>Toggle this help</td></tr>
+    </table>
+
+    <h2>Books</h2>
+    <p>Some buildings still hold <b>books</b>. Read one (<kbd>R</kbd>) and the knowledge is yours for good; not even death takes it from you. Woodcraft, herb lore, tracking, endurance: each book teaches a skill that changes how you survive.</p>
+
+    <h2>Staying alive</h2>
+    <p>Food drains all the time and faster when you sprint. Find <b>tinned food</b> in the broken buildings and <b>berries</b> in the tall grass, and walk over loot to pocket it. Health only recovers when you are well fed; starve and it drains away. Trees felled with your penknife drop <b>wood</b>. Nights are dark and dangerous: find <b>torches</b> in the buildings to carry a pool of light with you.</p>
+
+    <h2>The animals</h2>
+    <table>
+      <tr><td>Feral dogs</td><td>Hunt in packs; barking (<b>!</b>) means they have seen you. Hurt one and the pack backs off. Don't let them surround you.</td></tr>
+      <tr><td>Boars</td><td>Paw the ground, then charge dead straight. Step aside: a boar that hits a wall stuns itself.</td></tr>
+      <tr><td>Vipers</td><td>Near-invisible in tall grass; their venom drains health long after the bite. Where there are berries, there are snakes.</td></tr>
+      <tr><td>Ravens</td><td>They don't bite; they <i>tell everything else where you are</i>, and they steal food. Keep to the trees.</td></tr>
+    </table>
+
+    <h2>The world</h2>
+    <p>A river divides the map; the bridges are the only crossings. Streams can be waded, slowly. High ground costs stamina to climb. Somewhere in the ruins, the story of what happened here is waiting to be found.</p>
+
+    <p class="meta">Press <kbd>H</kbd> or click anywhere outside this panel to close.</p>
+  </div>
+</div>
 <script type="module" src="src/main.js"></script>
 </body>
 </html>

@@ -12,12 +12,19 @@ const PICKUP_RANGE = 0.55;
 const STAMINA_MAX = 100;
 const SPRINT_DRAIN = 9;   // stamina per second while sprinting
 const STAMINA_REGEN = 12; // per second when not sprinting
-const HEALTH_REGEN = 0.5; // per second while unpoisoned
+const HEALTH_REGEN = 0.5; // per second while fed and unpoisoned
 const VENOM_DRAIN = 2;    // health per second while poisoned
+
+const FOOD_MAX = 100;
+const FOOD_DRAIN = 0.14;      // per second; empties over ~1.5 game days
+const FOOD_SPRINT_MULT = 1.5; // sprinting burns food faster
+const STARVE_DRAIN = 0.8;     // health per second at zero food
+const HUNGRY_AT = 25;         // stamina recovers slowly below this
 
 const JUMP_VZ = 3.8;      // initial jump velocity (world units/s)
 const GRAVITY = 12;
 const JUMP_COST = 3;      // stamina
+const CLIMB_COST = 2;     // stamina per height level climbed
 
 export class Player {
   constructor(x, y) {
@@ -36,6 +43,8 @@ export class Player {
     this.maxHealth = 100;
     this.stamina = STAMINA_MAX;
     this.maxStamina = STAMINA_MAX;
+    this.food = FOOD_MAX;
+    this.maxFood = FOOD_MAX;
     this.venom = 0;       // seconds of poison remaining
 
     this.hands = 'penknife';                 // starting tool
@@ -43,6 +52,15 @@ export class Player {
     this.swingTimer = 0;
     this.hurtTimer = 0;   // brief red flash after taking damage
     this.message = null;  // {text, ttl} transient HUD line
+
+    this.name = 'Adam';
+    this.gender = 'm';    // 'm' | 'f' | 'u'
+    this.skills = new Set(); // knowledge from books; survives death
+  }
+
+  setPersona(name, gender) {
+    this.name = name;
+    this.gender = gender;
   }
 
   update(dt, input, map, animals = []) {
@@ -53,12 +71,21 @@ export class Player {
       if (this.message.ttl <= 0) this.message = null;
     }
 
-    // Venom drains health over time; otherwise health slowly recovers.
+    // Hunger: food drains steadily, faster while sprinting. At zero you
+    // starve; health only recovers when you are properly fed.
+    this.food = Math.max(0, this.food - FOOD_DRAIN * (this.sprinting ? FOOD_SPRINT_MULT : 1) * dt);
+    if (this.food <= 0) {
+      this.health -= STARVE_DRAIN * dt;
+      if (this.health <= 0) { this.die(map, 'starvation'); return; }
+    }
+
+    // Venom drains health over time; otherwise health slowly recovers
+    // while well fed.
     if (this.venom > 0) {
       this.venom = Math.max(0, this.venom - dt);
       this.health -= VENOM_DRAIN * dt;
       if (this.health <= 0) this.die(map, 'the venom');
-    } else if (this.health < this.maxHealth) {
+    } else if (this.health < this.maxHealth && this.food > 50) {
       this.health = Math.min(this.maxHealth, this.health + HEALTH_REGEN * dt);
     }
 
@@ -68,17 +95,24 @@ export class Player {
     this.sprinting = wantSprint && this.stamina > 0;
 
     if (this.sprinting) {
-      this.stamina = Math.max(0, this.stamina - SPRINT_DRAIN * dt);
+      const drain = this.skills.has('fleetfoot') ? SPRINT_DRAIN * 0.45 : SPRINT_DRAIN;
+      this.stamina = Math.max(0, this.stamina - drain * dt);
     } else {
-      this.stamina = Math.min(this.maxStamina, this.stamina + STAMINA_REGEN * dt);
+      const regen = this.food < HUNGRY_AT ? STAMINA_REGEN * 0.5 : STAMINA_REGEN;
+      this.stamina = Math.min(this.maxStamina, this.stamina + regen * dt);
     }
 
     if (this.moving) {
       const dir = screenDirToWorld(intent.dx, intent.dy);
       this.facing = dir;
-      const speed = this.sprinting ? SPRINT_SPEED : WALK_SPEED;
+      let speed = this.sprinting ? SPRINT_SPEED : WALK_SPEED;
+      // Wading a stream is slow; climbing costs stamina (handled below).
+      if (map.floorAt(Math.floor(this.x), Math.floor(this.y)) === 'stream') speed *= 0.55;
+      const hBefore = map.heightAt ? map.heightAt(Math.floor(this.x), Math.floor(this.y)) : 0;
       this.moveAxis(dir.x * speed * dt, 0, map);
       this.moveAxis(0, dir.y * speed * dt, map);
+      const hAfter = map.heightAt ? map.heightAt(Math.floor(this.x), Math.floor(this.y)) : 0;
+      if (hAfter > hBefore) this.stamina = Math.max(0, this.stamina - CLIMB_COST);
       this.walkPhase += dt * (this.sprinting ? 13 : 9);
     } else {
       this.walkPhase = 0;
@@ -99,7 +133,55 @@ export class Player {
     }
 
     if (input.usePressed()) this.useHands(map, animals);
+    if (input.eatPressed()) this.eat();
+    if (input.readPressed()) this.read();
     this.pickupNearby(map);
+  }
+
+  // Read the first book in the pockets and learn its skill for good.
+  read() {
+    for (let i = 0; i < this.pockets.length; i++) {
+      const slot = this.pockets[i];
+      if (!slot) continue;
+      const def = ITEMS[slot.item];
+      if (def.kind !== 'book') continue;
+      this.pockets[i] = null;
+      if (this.skills.has(def.skill)) {
+        this.say(`You have already read ${def.name}.`);
+      } else {
+        this.skills.add(def.skill);
+        this.say(`You read "${def.name}". ${def.skillText}`);
+        if (this.onSkillLearned) this.onSkillLearned(def.skill);
+      }
+      return;
+    }
+    this.say('Nothing to read.');
+  }
+
+  // Eat the first edible thing in the pockets.
+  eat() {
+    for (let i = 0; i < this.pockets.length; i++) {
+      const slot = this.pockets[i];
+      if (!slot) continue;
+      const def = ITEMS[slot.item];
+      if (def.food == null) continue;
+      if (this.food >= this.maxFood - 2) {
+        this.say('You are not hungry.');
+        return;
+      }
+      slot.qty -= 1;
+      if (slot.qty <= 0) this.pockets[i] = null;
+      this.food = Math.min(this.maxFood, this.food + def.food);
+      if (slot.item === 'berries' && this.skills.has('herbalism')) {
+        this.venom = 0;
+        this.health = Math.min(this.maxHealth, this.health + 5);
+        this.say('You eat the berries. The right ones: the venom fades.');
+      } else {
+        this.say(`You eat the ${def.name.toLowerCase()}.`);
+      }
+      return;
+    }
+    this.say('Nothing to eat.');
   }
 
   // Swing the held tool: hits an animal in reach first, otherwise the
@@ -144,7 +226,8 @@ export class Player {
 
     this.swingTimer = tool.swingCooldown;
     this.stamina -= tool.staminaCost;
-    obj.hp = (obj.hp ?? TREE_HP) - tool.treeDamage;
+    const treeDmg = this.skills.has('woodcraft') ? tool.treeDamage * 2 : tool.treeDamage;
+    obj.hp = (obj.hp ?? TREE_HP) - treeDmg;
     obj.shake = 0.3;
     map.shaking.add(obj);
 
@@ -186,6 +269,7 @@ export class Player {
     this.pockets = [null, null, null, null];
     this.health = this.maxHealth;
     this.stamina = this.maxStamina;
+    this.food = this.maxFood;
     this.venom = 0;
     this.x = this.spawnX;
     this.y = this.spawnY;
@@ -229,13 +313,20 @@ export class Player {
     }
   }
 
-  // Sample the four corners of the player's bounding square.
+  // Sample the four corners of the player's bounding square. A corner
+  // blocks if its tile is solid or more than one height level away.
   collides(x, y, map) {
+    const h = map.heightAt ? map.heightAt(Math.floor(this.x), Math.floor(this.y)) : 0;
+    const blocked = (tx, ty) => {
+      if (map.isSolid(tx, ty)) return true;
+      if (!map.heightAt) return false;
+      return Math.abs(map.heightAt(tx, ty) - h) > 1;
+    };
     return (
-      map.isSolid(Math.floor(x - RADIUS), Math.floor(y - RADIUS)) ||
-      map.isSolid(Math.floor(x + RADIUS), Math.floor(y - RADIUS)) ||
-      map.isSolid(Math.floor(x - RADIUS), Math.floor(y + RADIUS)) ||
-      map.isSolid(Math.floor(x + RADIUS), Math.floor(y + RADIUS))
+      blocked(Math.floor(x - RADIUS), Math.floor(y - RADIUS)) ||
+      blocked(Math.floor(x + RADIUS), Math.floor(y - RADIUS)) ||
+      blocked(Math.floor(x - RADIUS), Math.floor(y + RADIUS)) ||
+      blocked(Math.floor(x + RADIUS), Math.floor(y + RADIUS))
     );
   }
 }

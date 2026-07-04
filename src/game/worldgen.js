@@ -36,6 +36,14 @@ export function buildWorld(seed) {
     });
   }
 
+  // Elevation and streams. Hills are raised as raw blob fields first, then
+  // streams are carved from the hill feet down to the river, and finally the
+  // height field is zeroed on all locked ground and relaxed so no two
+  // adjacent tiles ever differ by more than one step.
+  const hills = raiseHills(map, rng);
+  carveStreams(map, rng, hills);
+  finalizeHeights(map, keepClear);
+
   plantForests(map, rng, keepClear);
   layMeadows(map, rng, keepClear);
   scatterLoners(map, rng, keepClear);
@@ -202,6 +210,171 @@ function placeBuilding(map, rng, lot) {
     for (let s = 1; s <= 2; s++) {
       const px = dx + out[0] * s, py = dy + out[1] * s;
       if (map.floorAt(px, py) === 'grass') map.setFloor(px, py, 'dirt');
+    }
+  }
+}
+
+// Hills: 4-6 smooth rises in the wilds, heights 1-3. Each hill is a main
+// blob plus one or two offset sub-blobs (max-combined, then rounded), raised
+// as a raw field here; finalizeHeights() later flattens locked ground and
+// relaxes the field so no adjacent step ever exceeds one. The first three
+// zones are always used (they seed the streams); the rest are optional.
+// All zones sit well clear of roads, buildings, and the river channel.
+function raiseHills(map, rng) {
+  const mandatory = [
+    { x: 16, y: 13 },   // north-west, in the hamlet-side forest
+    { x: 66, y: 13 },   // north-east, between river and town road
+    { x: 14, y: 86 },   // south-west wilds
+  ];
+  const optional = [
+    { x: 110, y: 14 },  // far north-east corner
+    { x: 10, y: 118 },  // south-west corner
+    { x: 108, y: 102 }, // south-east forest
+    { x: 66, y: 92 },   // south mid, east of the river
+  ];
+  for (let i = optional.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [optional[i], optional[j]] = [optional[j], optional[i]];
+  }
+  const extra = 1 + Math.floor(rng() * 3); // 4-6 hills in total
+  const chosen = [...mandatory, ...optional.slice(0, extra)];
+
+  const hills = [];
+  for (const z of chosen) {
+    const cx = z.x + Math.round((rng() - 0.5) * 2);
+    const cy = z.y + Math.round((rng() - 0.5) * 2);
+    const peak = rng() < 0.6 ? 3 : 2;
+    const r = 5 + rng() * 2;
+    const blobs = [{ x: cx, y: cy, p: peak, r }];
+    const nSub = 1 + (rng() < 0.5 ? 1 : 0);
+    for (let i = 0; i < nSub; i++) {
+      blobs.push({
+        x: cx + Math.round((rng() - 0.5) * 4),
+        y: cy + Math.round((rng() - 0.5) * 4),
+        p: Math.max(1, peak - 1),
+        r: r * 0.55,
+      });
+    }
+    for (const b of blobs) {
+      const R = Math.ceil(b.r);
+      for (let y = b.y - R; y <= b.y + R; y++) {
+        for (let x = b.x - R; x <= b.x + R; x++) {
+          if (!map.inBounds(x, y)) continue;
+          const v = Math.round(b.p * (1 - Math.hypot(x - b.x, y - b.y) / b.r));
+          if (v > map.heightAt(x, y)) map.setHeight(x, y, Math.min(3, v));
+        }
+      }
+    }
+    hills.push({ cx, cy, r, peak });
+  }
+  return hills;
+}
+
+// Streams: 2-3 shallow, wadeable channels, 1-2 tiles wide, each rising at
+// the foot of one of the mandatory hills and meandering into the river.
+// Their corridors are chosen so they never meet a road, a building, or each
+// other, so no road conversion is needed.
+function carveStreams(map, rng, hills) {
+  const [a, b, d] = hills; // mandatory hills: NW, NE, SW
+  const n = 2 + (rng() < 0.6 ? 1 : 0);
+  const specs = [
+    { // rises east of the north-west hill, runs east into the river
+      sx: Math.round(a.cx + a.r + 2),
+      sy: Math.max(6, Math.min(20, a.cy + Math.round((rng() - 0.5) * 4))),
+      startY: null, dir: 1, yMin: 4, yMax: 21,
+    },
+    { // rises east of the south-west hill, drops south then runs east
+      sx: Math.round(d.cx + d.r + 2),
+      sy: 104 + Math.floor(rng() * 8),
+      startY: d.cy, dir: 1, yMin: 100, yMax: 118,
+    },
+    { // rises west of the north-east hill, runs west into the river
+      sx: Math.round(b.cx - b.r - 2),
+      sy: Math.max(6, Math.min(20, b.cy + Math.round((rng() - 0.5) * 4))),
+      startY: null, dir: -1, yMin: 4, yMax: 21,
+    },
+  ];
+  for (const s of specs.slice(0, n)) carveStream(map, rng, s);
+}
+
+// Walk one stream from its source to the river: one tile per step (so the
+// run stays 4-connected), steering towards a sinusoidal meander target and
+// stopping the moment the walker reaches open water. Only open ground and
+// river bank is converted, so roads, bridges, and buildings are never cut.
+function carveStream(map, rng, s) {
+  const wide = rng() < 0.5; // some streams are two tiles wide
+  const amp = 2 + rng() * 2;
+  const freq = 0.14 + rng() * 0.12;
+  const phase = rng() * Math.PI * 2;
+  const carvable = (f) => f === 'grass' || f === 'tallgrass' || f === 'sand';
+  let x = s.sx;
+  let y = s.startY == null ? s.sy : s.startY;
+  for (let guard = 0; guard < 600; guard++) {
+    if (map.floorAt(x, y) === 'water') break;
+    if (carvable(map.floorAt(x, y))) map.setFloor(x, y, 'stream');
+    if (wide && carvable(map.floorAt(x, y + 1))) map.setFloor(x, y + 1, 'stream');
+    const target = Math.round(s.sy + amp * Math.sin(x * freq + phase));
+    const desired = Math.max(s.yMin, Math.min(s.yMax, target));
+    if (y !== desired && rng() < 0.7) y += Math.sign(desired - y);
+    else x += s.dir;
+  }
+}
+
+// Flatten every locked tile to height 0 and relax the field so that no two
+// adjacent tiles (8-neighbour) differ by more than one step. Locked ground:
+// any floor that is not open grass/tallgrass (roads, bridges, boards, dirt
+// thresholds, sand, water, streams), a 2-tile apron around every road and
+// bridge tile, and the building keep-clear margins (lot + 2 tiles). The
+// relaxation is an exact two-pass Chebyshev distance clamp, which can only
+// lower tiles, so locked ground stays at 0 and hills gain 1-step banks.
+function finalizeHeights(map, keepClear) {
+  const w = map.w, h = map.h;
+  const H = map.height;
+
+  const nearRoad = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const f = map.floorAt(x, y);
+      if (f !== 'road' && f !== 'bridge') continue;
+      for (let dy = -2; dy <= 2; dy++) {
+        for (let dx = -2; dx <= 2; dx++) {
+          if (map.inBounds(x + dx, y + dy)) nearRoad[(y + dy) * w + x + dx] = 1;
+        }
+      }
+    }
+  }
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const f = map.floorAt(x, y);
+      const open = f === 'grass' || f === 'tallgrass';
+      if (!open || nearRoad[y * w + x] || inKeepClear(x, y, keepClear)) H[y * w + x] = 0;
+    }
+  }
+
+  // Forward pass (map edge imposes no constraint).
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let v = H[y * w + x];
+      if (x > 0) v = Math.min(v, H[y * w + x - 1] + 1);
+      if (y > 0) {
+        v = Math.min(v, H[(y - 1) * w + x] + 1);
+        if (x > 0) v = Math.min(v, H[(y - 1) * w + x - 1] + 1);
+        if (x < w - 1) v = Math.min(v, H[(y - 1) * w + x + 1] + 1);
+      }
+      H[y * w + x] = v;
+    }
+  }
+  // Backward pass.
+  for (let y = h - 1; y >= 0; y--) {
+    for (let x = w - 1; x >= 0; x--) {
+      let v = H[y * w + x];
+      if (x < w - 1) v = Math.min(v, H[y * w + x + 1] + 1);
+      if (y < h - 1) {
+        v = Math.min(v, H[(y + 1) * w + x] + 1);
+        if (x < w - 1) v = Math.min(v, H[(y + 1) * w + x + 1] + 1);
+        if (x > 0) v = Math.min(v, H[(y + 1) * w + x - 1] + 1);
+      }
+      H[y * w + x] = v;
     }
   }
 }

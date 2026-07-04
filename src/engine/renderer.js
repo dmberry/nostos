@@ -10,6 +10,8 @@ import { drawAnimal } from '../game/animals.js';
 
 const WALL_H = 40;
 const DASH_H = 78; // dashboard panel height
+const ELEV = 10;   // pixels of lift per height level
+const MINIMAP_SIZE = 160;
 
 const WALL_BASE = [122, 113, 102];
 const TREE_TRUNK = '#5d4630';
@@ -56,11 +58,12 @@ export class Renderer {
 
     const range = this.visibleRange(camera, map);
 
-    // Pass 1: floors. Non-overlapping, so order within the pass is free.
+    // Pass 1: floors, row-major so lifted (hill) tiles paint over the
+    // tiles behind them correctly.
     for (let y = range.minY; y <= range.maxY; y++) {
       for (let x = range.minX; x <= range.maxX; x++) {
         const type = map.floorAt(x, y);
-        if (type) this.drawFloor(x, y, type, map.shadeAt(x, y));
+        if (type) this.drawFloor(map, x, y, type, map.shadeAt(x, y));
       }
     }
 
@@ -83,14 +86,50 @@ export class Renderer {
     drawables.push({ depth: player.x + player.y, player });
     drawables.sort((a, b) => a.depth - b.depth);
 
+    // Everything on a hill tile is lifted by its elevation.
+    const elevOf = (x, y) => (map.heightAt ? map.heightAt(Math.floor(x), Math.floor(y)) : 0) * ELEV;
     for (const d of drawables) {
+      const lift = d.player ? elevOf(player.x, player.y)
+        : d.animal ? elevOf(d.animal.x, d.animal.y)
+        : d.groundItem ? elevOf(d.groundItem.x, d.groundItem.y)
+        : elevOf(d.obj.x + 0.5, d.obj.y + 0.5);
+      if (lift) { ctx.save(); ctx.translate(0, -lift); }
       if (d.player) this.drawPlayer(d.player);
       else if (d.animal) drawAnimal(this.ctx, d.animal, worldToScreen);
       else if (d.groundItem) this.drawGroundItem(d.groundItem);
       else this.drawObject(d.obj);
+      if (lift) ctx.restore();
     }
 
     ctx.restore();
+
+    // Night: a dark veil over the world, never over the HUD. A carried
+    // torch opens a pool of light around the player; without one you get
+    // only a faint arm's-length glimmer.
+    if (hud.light != null && hud.light < 1) {
+      const dark = (1 - hud.light) * 0.78;
+      const pw = worldToScreen(player.x, player.y);
+      const cw = worldToScreen(camera.x, camera.y);
+      const px = pw.x - cw.x + this.w / 2;
+      const py = pw.y - cw.y + this.h / 2 - 16;
+      const radius = hud.torch ? 200 : 70;
+      const veil = ctx.createRadialGradient(px, py, radius * 0.25, px, py, radius);
+      veil.addColorStop(0, `rgba(8,12,28,${Math.max(0, dark - (hud.torch ? 0.72 : 0.3))})`);
+      veil.addColorStop(1, `rgba(8,12,28,${dark})`);
+      ctx.fillStyle = veil;
+      ctx.fillRect(0, 0, this.w, this.h - DASH_H);
+      if (hud.torch && dark > 0.2) {
+        // Warm flicker-free glow on top of the opened pool.
+        const glow = ctx.createRadialGradient(px, py, 0, px, py, radius * 0.8);
+        glow.addColorStop(0, 'rgba(255,170,70,0.14)');
+        glow.addColorStop(1, 'rgba(255,170,70,0)');
+        ctx.fillStyle = glow;
+        ctx.fillRect(0, 0, this.w, this.h - DASH_H);
+      }
+    }
+    if (hud.minimap) {
+      hud.minimap.draw(ctx, map, player, this.w - MINIMAP_SIZE - 12, 12, MINIMAP_SIZE);
+    }
     this.drawDashboard(player, hud);
   }
 
@@ -136,15 +175,36 @@ export class Renderer {
     ctx.closePath();
   }
 
-  drawFloor(tx, ty, type, shade) {
+  drawFloor(map, tx, ty, type, shade) {
     const ctx = this.ctx;
     const def = FLOORS[type];
-    this.diamondPath(this.tileCorners(tx, ty));
+    const h = map.heightAt ? map.heightAt(tx, ty) : 0;
+    const corners = this.tileCorners(tx, ty, h * ELEV);
+    // Skirts: visible hillside faces where the south/east neighbour is lower.
+    if (h > 0) {
+      const hs = map.heightAt(tx, ty + 1);
+      if (hs < h) this.skirt(corners[3], corners[2], (h - hs) * ELEV, shadeHex(def.color, shade - 0.3));
+      const he = map.heightAt(tx + 1, ty);
+      if (he < h) this.skirt(corners[1], corners[2], (h - he) * ELEV, shadeHex(def.color, shade - 0.45));
+    }
+    this.diamondPath(corners);
     ctx.fillStyle = shadeHex(def.color, shade);
     ctx.fill();
     ctx.strokeStyle = 'rgba(0,0,0,0.07)';
     ctx.lineWidth = 1;
     ctx.stroke();
+  }
+
+  skirt(a, b, depth, color) {
+    const ctx = this.ctx;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.lineTo(b.x, b.y + depth);
+    ctx.lineTo(a.x, a.y + depth);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
   }
 
   drawObject(obj) {
@@ -350,12 +410,20 @@ export class Renderer {
     ctx.fillRect(0, top, this.w, 1);
 
     // Vitals
-    this.drawBar(16, top + 18, 150, 9, player.health / player.maxHealth, '#b0392f', 'HEALTH');
-    this.drawBar(16, top + 48, 150, 9, player.stamina / player.maxStamina, '#5f8f3e', 'STAMINA');
+    this.drawBar(16, top + 14, 150, 8, player.health / player.maxHealth, '#b0392f', 'HEALTH');
+    this.drawBar(16, top + 37, 150, 8, player.stamina / player.maxStamina, '#5f8f3e', 'STAMINA');
+    this.drawBar(16, top + 60, 150, 8, (player.food ?? 100) / (player.maxFood ?? 100), '#c99a3e', 'FOOD');
+    ctx.font = 'bold 9px system-ui, sans-serif';
     if (player.venom > 0) {
-      ctx.font = 'bold 9px system-ui, sans-serif';
       ctx.fillStyle = '#b07fd8';
-      ctx.fillText('POISONED', 90, top + 13);
+      ctx.fillText('POISONED', 92, top + 9);
+    }
+    if (player.food <= 0) {
+      ctx.fillStyle = '#e05548';
+      ctx.fillText('STARVING', 92, top + 55);
+    } else if (player.food < 25) {
+      ctx.fillStyle = '#d8a04f';
+      ctx.fillText('HUNGRY', 92, top + 55);
     }
 
     // Hands slot
@@ -381,9 +449,11 @@ export class Renderer {
     ctx.textAlign = 'right';
     ctx.fillStyle = 'rgba(207,216,195,0.85)';
     const state = player.sprinting ? 'Sprinting' : player.moving ? 'Walking' : 'Idle';
-    ctx.fillText(state, this.w - 16, top + 22);
-    ctx.fillText(`tile ${player.x.toFixed(1)}, ${player.y.toFixed(1)}`, this.w - 16, top + 40);
-    ctx.fillText(`${hud.fps ?? 0} fps`, this.w - 16, top + 58);
+    let line = top + 16;
+    if (hud.timeLabel) { ctx.fillText(hud.timeLabel, this.w - 16, line); line += 16; }
+    ctx.fillText(state, this.w - 16, line); line += 16;
+    ctx.fillText(`tile ${player.x.toFixed(1)}, ${player.y.toFixed(1)}`, this.w - 16, line); line += 16;
+    ctx.fillText(`${hud.fps ?? 0} fps`, this.w - 16, line);
     ctx.textAlign = 'left';
 
     // Transient message line above the panel

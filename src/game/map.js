@@ -14,6 +14,8 @@ export class GameMap {
     this.objectGrid = new Array(w * h).fill(null);
     this.shaking = new Set(); // objects currently animating a hit wobble
     this.groundItems = [];    // dropped loot: {item, qty, x, y}
+    // Per-tile terrain elevation in whole steps (hills). Default flat.
+    this.height = new Int8Array(w * h);
     // Subtle per-tile brightness variation so large floors read as texture.
     const rng = makeRng(1234);
     this.shade = Float32Array.from({ length: w * h }, () => (rng() - 0.5) * 0.12);
@@ -33,6 +35,14 @@ export class GameMap {
 
   shadeAt(x, y) {
     return this.inBounds(x, y) ? this.shade[y * this.w + x] : 0;
+  }
+
+  heightAt(x, y) {
+    return this.inBounds(x, y) ? this.height[y * this.w + x] : 0;
+  }
+
+  setHeight(x, y, h) {
+    if (this.inBounds(x, y)) this.height[y * this.w + x] = h;
   }
 
   objectAt(x, y) {
