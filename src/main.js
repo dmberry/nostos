@@ -30,7 +30,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '0.53';
+const VERSION = '0.54';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -469,6 +469,21 @@ let ronResupplyClock = 0, ronResupplyNext = 90 + Math.random() * 60;
 let wFactoryClock = 0, wFactoryNext = 60 + Math.random() * 60;
 let wFactoryW1Clock = 0, wFactoryW1Next = 100 + Math.random() * 80;
 let lastW4GameHour = dayNight.totalHours; // ticks a W4 every 30 game-minutes, not real time
+
+// SKYLINK's final purge: once the clock runs out, every obelisk lights up
+// and the AI throws everything it has left at you for 30 real seconds
+// before the ending plays regardless of whether you're still standing.
+let skylinkTimer = 0;
+let skylinkW4Clock = 0;
+function dispatchSkylinkW4s(n) {
+  const towers = obeliskObjs.filter((o) => !o.destroyed);
+  for (let i = 0; i < n; i++) {
+    const src = towers.length ? towers[Math.floor(Math.random() * towers.length)] : wfactory;
+    const ox = src ? src.x + 0.5 : player.x, oy = src ? src.y + 0.5 : player.y;
+    const w4 = spawnW4(map, Math.floor(Math.random() * 0x7fffffff), ox, oy);
+    if (w4) robots.push(w4);
+  }
+}
 function update(dt) {
   if (input.consumePress('KeyH')) toggleHelp();
   if (input.inventoryPressed()) showBackpack = !showBackpack;
@@ -672,12 +687,29 @@ function update(dt) {
   resolveBodyOverlaps(player, animals, robots);
   map.updateShakes(dt);
   dayNight.update(dt);
-  // Time's up: SKYLINK-9000 comes online and the AI wins.
-  if (dayNight.hoursLeft() <= 0 && !player.deathCert && !player._ended) {
-    player._ended = true;
-    player.deaths = (player.deaths || 0) + 1;
-    player.deathCert = { name: player.name, cause: 'SKYLINK-9000 coming online', score: player.score, skills: [...player.skills], deaths: player.deaths, skylink: true };
-    persist();
+  // Time's up: SKYLINK-9000 comes online. Every obelisk lights up and links
+  // to every other in a web of lasers, and the factory throws wave after
+  // wave of W4s at you for 30 seconds before the ending plays regardless.
+  if (dayNight.hoursLeft() <= 0 && !player.skylinkActive && !player.deathCert && !player._ended) {
+    player.skylinkActive = true;
+    skylinkTimer = 30;
+    skylinkW4Clock = 0;
+    player.say('SKYLINK-9000 comes online. Every obelisk blazes and turns on you at once.');
+    dispatchSkylinkW4s(6); // the opening salvo
+  }
+  if (player.skylinkActive && !player._ended) {
+    skylinkTimer -= dt;
+    skylinkW4Clock += dt;
+    if (skylinkW4Clock > 1.2) {
+      skylinkW4Clock = 0;
+      dispatchSkylinkW4s(2 + Math.floor(Math.random() * 3));
+    }
+    if (skylinkTimer <= 0) {
+      player._ended = true;
+      player.deaths = (player.deaths || 0) + 1;
+      player.deathCert = { name: player.name, cause: 'SKYLINK-9000 coming online', score: player.score, skills: [...player.skills], deaths: player.deaths, skylink: true };
+      persist();
+    }
   }
   camera.follow(player.x, player.y, dt);
   if (map.objects.length !== lastObjectCount) {
@@ -822,6 +854,9 @@ function frame(now) {
     showWeapons,
     craftPrompt: (player.canCraftObGun() && player.hands !== 'obgun') || (player.canCraftWaveGun() && player.hands !== 'wavegun'),
     craftWaveGun: player.canCraftWaveGun() && player.hands !== 'wavegun',
+    skylinkActive: player.skylinkActive && !player._ended,
+    skylinkTimer,
+    obeliskObjs,
   });
 
   frameCount += 1;

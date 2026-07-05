@@ -94,6 +94,7 @@ export class Player {
     this.wifiMax = WIFI_MAX;
     this.invisibleToRobots = false; // true while a charged block is in hand
     this.score = 0;       // survival score; persists across deaths
+    this.skylinkActive = false; // true during the final 30s purge once SKYLINK comes online
 
     // Practice makes better: melee/guns sharpen with use, knowledge with
     // reading. Levels rise on a square-root curve (25, 100, 225... xp per
@@ -1218,7 +1219,25 @@ export class Player {
     this.hurtTimer = 0.35;
     if (source === 'viper') sfx.play('hiss');
     sfx.play('hurt');
-    if (this.health <= 0) this.die(this.map, `the ${source}`);
+    if (this.health <= 0) {
+      if (this.skylinkActive) this.dieToSkylink();
+      else this.die(this.map, `the ${source}`);
+    }
+  }
+
+  // Caught in SKYLINK's final 30-second purge: there is no waking back up
+  // at the road this time — the certificate shows straight away, same
+  // ending as simply running out the clock.
+  dieToSkylink() {
+    if (this._ended) return;
+    this._ended = true;
+    this.deaths = (this.deaths || 0) + 1;
+    this.deathCert = {
+      name: this.name, cause: 'SKYLINK-9000 coming online',
+      score: this.score, skills: [...this.skills], deaths: this.deaths, skylink: true,
+    };
+    if (this.onDeath) this.onDeath();
+    sfx.play('die');
   }
 
   // Death: you lose everything you were carrying (it is not dropped — it's

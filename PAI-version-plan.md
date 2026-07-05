@@ -17,7 +17,7 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
-## Where we are (v0.53)
+## Where we are (v0.54)
 
 - Isometric world, seeded 128x128: river, two bridges, ten-building town, hamlet, forests, tall grass, hills and hollows, wadeable streams.
 - Survival: food/hunger, health, stamina, venom, day/night (dark nights), torches, minimap with fog of war (grey, not black), permadeath that drops your loot where you fell.
@@ -69,6 +69,13 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Certificate of Death**: on death a modal shows name, cause, score, skills, deaths, and an amusing rank (COMPOST → NOOB → SCRAPPER → SURVIVOR → VETERAN → L33T). Freezes the world until clicked. `player.deathCert` snapshot; `deathRank()` in renderer.
 - **Lore notes styled**: Archive fragments render as their own note cards — paper colour + typeface per kind (handwritten note, newsprint, diary, poster, green-on-black disk/tape). `NOTE_STYLE` in lore.js.
 - **Autosave**: character + xp + score + deaths + a run-state snapshot (vitals, position, inventory) persist to localStorage; saved every 8s, on tab-hide, and on unload; restored on load. World regenerates from seed (so caches/cars reset — a known limitation; world-object persistence is a follow-up).
+
+### v0.54 — SKYLINK's final purge
+
+- **Running out the clock no longer ends the game instantly.** Once `dayNight.hoursLeft()` hits zero, `player.skylinkActive` flips on: every surviving obelisk lights up and links to its two nearest neighbours in a pulsing bright-blue laser web (`Renderer.drawSkylinkNetwork`, drawn each frame in world space), a countdown banner appears (`Renderer.drawSkylinkBanner`, `SKYLINK-9000 ONLINE — Ns`), and the W-factory throws overwhelming waves of W4 hunter-killers at the player — an opening salvo of 6, then 2-4 more every ~1.2 seconds, dispatched from random surviving towers (`dispatchSkylinkW4s` in `main.js`) — for 30 real seconds before the ending plays regardless of whether the player is still alive.
+- **Dying during the purge is now also terminal**, not a normal respawn: `Player.takeDamage` branches to a new `dieToSkylink()` when `skylinkActive` is set, which shows the same SKYLINK death certificate immediately rather than the usual "wake back at the road" cycle — thematically, there's no coming back once the network goes fully online.
+- Verified live: the banner renders correctly mid-countdown, over 40 W4s can be alive simultaneously by the time the sequence ends, and the certificate shows the correct SKYLINK ending whether the timer expires or the player is killed first.
+- **Docs**: help modal's win/lose paragraph rewritten to describe the purge instead of instant game over.
 
 ### v0.53 — name field fix, W4 spoils, dev-server caching fix
 

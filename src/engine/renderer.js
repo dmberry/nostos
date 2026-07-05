@@ -171,6 +171,9 @@ export class Renderer {
 
     // Lore fragments float in world space, under the camera transform.
     if (hud.lore) hud.lore.drawWorld(ctx);
+    // SKYLINK's final purge: every surviving tower lights up and links to
+    // its nearest neighbours in a web of bright blue laser light.
+    if (hud.skylinkActive) this.drawSkylinkNetwork(hud.obeliskObjs);
 
     ctx.restore();
 
@@ -213,6 +216,7 @@ export class Renderer {
         }
       }
     }
+    if (hud.skylinkActive) this.drawSkylinkBanner(hud.skylinkTimer);
     this.drawDashboard(player, hud);
     if (hud.showBackpack) this.drawBackpackPanel(player);
     if (hud.lore) hud.lore.drawOverlay(ctx, this.w, this.h);
@@ -1037,6 +1041,66 @@ export class Renderer {
     ctx.beginPath();
     ctx.arc(cx - 5 * g, cy - 5 * g, 9 * g, 0, Math.PI * 2);
     ctx.fill();
+  }
+
+  // SKYLINK online: every surviving tower's crown-light position, linked to
+  // its two nearest neighbours with a pulsing bright-blue laser — the AI
+  // network announcing itself before the 30-second purge plays out.
+  drawSkylinkNetwork(obeliskObjs) {
+    const ctx = this.ctx;
+    const live = (obeliskObjs || []).filter((o) => !o.destroyed);
+    if (live.length < 2) return;
+    this._skylinkT = (this._skylinkT || 0) + 0.06;
+    const pulse = 0.55 + 0.45 * Math.sin(this._skylinkT * 3);
+    const towerTop = (o) => {
+      const H = Math.round(96 * (1 - (o.obDamage || 0) * 0.13));
+      const c = worldToScreen(o.x + 0.5, o.y + 0.5);
+      return { x: c.x, y: c.y - H + 8 };
+    };
+    ctx.save();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = `rgba(70,170,255,${pulse.toFixed(2)})`;
+    ctx.shadowColor = 'rgba(70,170,255,0.9)';
+    ctx.shadowBlur = 16;
+    const drawn = new Set();
+    for (const a of live) {
+      const nearest = live.filter((b) => b !== a)
+        .map((b) => ({ b, d: Math.hypot(a.x - b.x, a.y - b.y) }))
+        .sort((p, q) => p.d - q.d)
+        .slice(0, 2);
+      for (const { b } of nearest) {
+        const ka = `${a.x},${a.y}`, kb = `${b.x},${b.y}`;
+        const key = ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
+        if (drawn.has(key)) continue;
+        drawn.add(key);
+        const p1 = towerTop(a), p2 = towerTop(b);
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
+  // The 30-second countdown banner shown once SKYLINK comes online.
+  drawSkylinkBanner(timer) {
+    const ctx = this.ctx;
+    const t = Math.max(0, timer || 0);
+    const msg = `SKYLINK-9000 ONLINE — ${t.toFixed(1)}s`;
+    ctx.font = 'bold 22px Georgia, serif';
+    const w = ctx.measureText(msg).width + 40;
+    const x = (this.w - w) / 2, y = 44;
+    const pulse = 0.6 + 0.4 * Math.sin(performance.now() / 160);
+    ctx.fillStyle = `rgba(70,170,255,${(0.25 + 0.15 * pulse).toFixed(2)})`;
+    ctx.fillRect(x, y, w, 40);
+    ctx.strokeStyle = `rgba(120,200,255,${pulse.toFixed(2)})`;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x + 1, y + 1, w - 2, 38);
+    ctx.fillStyle = '#eaf6ff';
+    ctx.textAlign = 'center';
+    ctx.fillText(msg, this.w / 2, y + 27);
+    ctx.textAlign = 'left';
   }
 
   // AI signal tower: a tall narrow black monolith with a slow-pulsing red

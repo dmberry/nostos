@@ -1,6 +1,6 @@
 # postAI
 
-**Version:** 0.53 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
+**Version:** 0.54 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
 
 *(Versioning policy: 0.01 increments from v0.3 onwards.)*
 
@@ -55,6 +55,8 @@ Inspired by Project Zomboid: knowledge is the real progression, scarcity drives 
 **Reload warning and a countdown fix (v0.52):** reloading or closing the tab now triggers the browser's own "leave site?" warning, since it wipes your score and kill record. Also fixed a real bug: the 24-hour countdown was quietly starting at ~15:00 remaining instead of 24:00 (it was measuring from the day-clock's absolute hour rather than from when the run actually began) — it now genuinely starts at 24 hours.
 
 **Name field fix and better W4 loot (v0.53):** the character name field in the help modal no longer swallows the letter H (or any other game shortcut key) while you're typing — it also has an explicit **Save** button now. Bringing down a **W4** is properly worth it: on top of the usual scrap it now drops three batteries, bonus scrap, and a heavy bomb.
+
+**SKYLINK's final purge (v0.54):** running out the clock no longer ends the game the instant it hits zero. Every surviving obelisk lights up and links to its neighbours in a web of bright blue lasers, a countdown banner appears, and the W-factory throws overwhelming waves of W4 hunter-killers at you for 30 seconds — dozens of them by the end — before the ending plays regardless of whether you're still standing. Dying during the purge is final too, not the usual respawn.
 
 **Still queued (large systems):** walking on top of walls/blocks (a multi-level feature), and a mobile phone + RON text tips. Both want their own focused pass.
 
