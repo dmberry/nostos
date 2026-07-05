@@ -909,17 +909,20 @@ export class Player {
     sfx.play('zap');
     ob.obDamage = (ob.obDamage || 0) + 1;
     ob.burning = 3; // seconds of visible flame, ticked by the renderer/main
+    // Every attack on an obelisk is reported up the network: the W-factory
+    // answers by dispatching a W4 hunter-killer after you (main throttles
+    // this so it can't be spammed by rapid-fire hits).
+    if (this.onObeliskAttacked) this.onObeliskAttacked(ob);
     if (ob.obDamage >= 5) {
       ob.destroyed = true;
       // The heap is walkable now, so the salvage on it can be collected.
       map.objectGrid[ob.y * map.w + ob.x] = null;
       this.addScore(20);
-      // A heap of salvage where the tower stood, including numbered circuit
-      // boards — collect all eight (1-8) to build a wave gun.
-      for (let k = 0; k < 3; k++) {
-        const num = 1 + Math.floor(Math.random() * 8);
-        map.groundItems.push({ item: 'circuit', qty: 1, num, x: ob.x + 0.5 + (Math.random() - 0.5), y: ob.y + 0.5 + (Math.random() - 0.5) });
-      }
+      // A heap of salvage where the tower stood, including the one numbered
+      // circuit board this obelisk was assigned (1-8, guaranteed spread
+      // across the world's towers) — collect all eight to build a wave gun.
+      const num = ob.circuitNum || (1 + Math.floor(Math.random() * 8));
+      map.groundItems.push({ item: 'circuit', qty: 1, num, x: ob.x + 0.5, y: ob.y + 0.5 });
       map.groundItems.push({ item: 'battery', qty: 2, x: ob.x + 0.5, y: ob.y + 0.5 });
       map.groundItems.push({ item: 'scrap', qty: 3, x: ob.x + 0.5, y: ob.y + 0.5 });
       if (ob.code) this.killLog.push(ob.code);
@@ -956,10 +959,8 @@ export class Player {
         ob.destroyed = true;
         map.objectGrid[ob.y * map.w + ob.x] = null;
         this.addScore(20);
-        for (let k = 0; k < 3; k++) {
-          const num = 1 + Math.floor(Math.random() * 8);
-          map.groundItems.push({ item: 'circuit', qty: 1, num, x: ob.x + 0.5 + (Math.random() - 0.5), y: ob.y + 0.5 + (Math.random() - 0.5) });
-        }
+        const num = ob.circuitNum || (1 + Math.floor(Math.random() * 8));
+        map.groundItems.push({ item: 'circuit', qty: 1, num, x: ob.x + 0.5, y: ob.y + 0.5 });
         map.groundItems.push({ item: 'battery', qty: 2, x: ob.x + 0.5, y: ob.y + 0.5 });
         map.groundItems.push({ item: 'scrap', qty: 3, x: ob.x + 0.5, y: ob.y + 0.5 });
         if (ob.code) this.killLog.push(ob.code);

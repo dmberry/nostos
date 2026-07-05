@@ -8,7 +8,7 @@ import { makeRng } from './game/rng.js';
 import { DayNight } from './game/daynight.js';
 import { Minimap } from './game/minimap.js';
 import { spawnBirds, updateBirds } from './game/birds.js';
-import { spawnRobots, updateRobots, spawnW1s, spawnW3 } from './game/robots.js';
+import { spawnRobots, updateRobots, spawnW1s, spawnW3, spawnW4 } from './game/robots.js';
 import { resolveBodyOverlaps } from './game/collision.js';
 import { spawnWaterDroids, updateWaterDroids } from './game/waterdroids.js';
 import { Lore } from './game/lore.js';
@@ -30,7 +30,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '0.48';
+const VERSION = '0.49';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -173,12 +173,26 @@ for (const ob of obeliskObjs) {
   // A hex code name identifying this tower, so the kill record can list it.
   ob.code = 'OB-' + ((ob.x * 4096 + ob.y * 31) & 0xffff).toString(16).toUpperCase().padStart(4, '0');
 }
+// Every obelisk is assigned one of the eight circuit-board numbers, spread
+// round-robin then shuffled, so destroying towers always guarantees full
+// coverage of 1-8 (rather than random drops that could dupe forever).
+{
+  const rng = makeRng(WORLD_SEED ^ 0xc1c0de);
+  const nums = obeliskObjs.map((_, i) => (i % 8) + 1);
+  for (let i = nums.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [nums[i], nums[j]] = [nums[j], nums[i]];
+  }
+  obeliskObjs.forEach((ob, i) => { ob.circuitNum = nums[i]; });
+}
 
 // Character persona and learned skills persist across sessions and deaths.
 const SAVE_KEY = 'postai-character';
+let hadExistingSave = false;
 try {
   const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
   if (saved) {
+    hadExistingSave = true;
     player.setPersona(saved.name || 'Adam', saved.gender || 'm');
     for (const s of saved.skills || []) player.skills.add(s);
     if (Array.isArray(saved.skillLog)) player.skillLog = saved.skillLog;
@@ -228,6 +242,17 @@ player.onWeaponFound = persist;
 let saveClock = 0;
 window.addEventListener('beforeunload', persist);
 document.addEventListener('visibilitychange', () => { if (document.hidden) persist(); });
+
+// Reloading the page (F5, etc.) isn't a clean reset — it just re-loads the
+// same save — so unlike New Game (which wipes everything and shuffles a
+// fresh world) it costs you: a small tax so reload can't be used as a free
+// undo out of a bad fight.
+if (hadExistingSave) {
+  player.score = Math.max(0, player.score - 1000);
+  if (player.killLog.length) player.killLog.pop();
+  persist();
+  player.say('The feed glitches on reconnect: -1000 score, one obelisk kill struck from the record.');
+}
 
 // Character picker in the help modal.
 const nameInput = document.getElementById('charName');
@@ -346,6 +371,20 @@ player.onObeliskDestroyed = (ob) => {
   }
 };
 
+// Attacking an obelisk reports up the network at once: the W-factory answers
+// by dispatching a laser-armed W4 after you. Throttled so a burst of five
+// hits (one obelisk) or rapid OB-gun fire can't spam a whole squadron.
+let wFactoryW4Cooldown = 0;
+player.onObeliskAttacked = () => {
+  if (!wfactory || wFactoryW4Cooldown > 0) return;
+  wFactoryW4Cooldown = 25;
+  const w4 = spawnW4(map, Math.floor(Math.random() * 0x7fffffff), wfactory.x + 0.5, wfactory.y + 0.5);
+  if (w4) {
+    robots.push(w4);
+    player.say('A W4 hunter-killer streaks out of the W-factory, lasers charging.');
+  }
+};
+
 // Right-click inspection: describe whatever occupies a tile. Cars get an
 // invented make and model (deterministic from their hue), stone an age from
 // its decay, and so on — flavour, drawn from the world's own data.
@@ -390,6 +429,7 @@ let wasRobotNear = false;
 let regrowClock = 0;
 let ronResupplyClock = 0, ronResupplyNext = 90 + Math.random() * 60;
 let wFactoryClock = 0, wFactoryNext = 60 + Math.random() * 60;
+let wFactoryW1Clock = 0, wFactoryW1Next = 100 + Math.random() * 80;
 function update(dt) {
   if (input.consumePress('KeyH')) toggleHelp();
   if (input.inventoryPressed()) showBackpack = !showBackpack;
@@ -428,13 +468,22 @@ function update(dt) {
 
   // Death certificate: freeze the world behind the modal until it's clicked.
   if (player.deathCert) {
-    if (input.consumePress('KeyS')) {
+    const copyCert = () => {
       renderer.shareCertificate().then((result) => {
-        if (result === 'clipboard') player.say('Certificate copied to the clipboard — paste it to share.');
-        else if (result === 'download') player.say('Certificate saved as an image.');
+        player.say(result === 'clipboard'
+          ? 'Certificate copied to the clipboard — paste it to share.'
+          : "Your browser won't allow copying images to the clipboard.");
       });
+    };
+    if (input.consumePress('KeyS')) copyCert();
+    const click = input.clickPos();
+    const btn = renderer._certCopyBtn;
+    if (click && btn && click.x >= btn.x && click.x <= btn.x + btn.w && click.y >= btn.y && click.y <= btn.y + btn.h) {
+      input.consumeClick();
+      copyCert();
+      return;
     }
-    if (input.clickPos() || input.consumeUp()) { input.consumeClick(); player.deathCert = null; }
+    if (click || input.consumeUp()) { input.consumeClick(); player.deathCert = null; }
     return;
   }
 
@@ -519,7 +568,9 @@ function update(dt) {
 
   // The W-factory: while any obelisk is damaged but not yet destroyed, it
   // periodically fields a single W3 to go and mend the nearest one. Only
-  // one W3 is ever out at a time.
+  // one W3 is ever out at a time. It also builds W1 hunting waves on its own
+  // clock — not just as a one-off revenge squad when a tower falls — so long
+  // as it isn't already fielding one.
   if (wfactory) {
     wFactoryClock += dt;
     if (wFactoryClock > wFactoryNext) {
@@ -532,6 +583,17 @@ function update(dt) {
         if (drone) { robots.push(drone); player.say('A repair drone whirs out of the W-factory.'); }
       }
     }
+    wFactoryW1Clock += dt;
+    if (wFactoryW1Clock > wFactoryW1Next) {
+      wFactoryW1Clock = 0;
+      wFactoryW1Next = 100 + Math.random() * 80;
+      const liveW1 = robots.filter((r) => r.type === 'w1' && !r.dead).length;
+      if (liveW1 < 3) {
+        const wave = spawnW1s(map, Math.floor(Math.random() * 0x7fffffff), wfactory.x + 0.5, wfactory.y + 0.5, 2 + Math.floor(Math.random() * 2));
+        if (wave.length) { robots.push(...wave); player.say('The W-factory dispatches a hunting wave.'); }
+      }
+    }
+    if (wFactoryW4Cooldown > 0) wFactoryW4Cooldown = Math.max(0, wFactoryW4Cooldown - dt);
   }
 
   // Trees grow: saplings thicken over about a minute, and now and then a new

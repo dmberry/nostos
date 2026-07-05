@@ -17,7 +17,7 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
-## Where we are (v0.48)
+## Where we are (v0.49)
 
 - Isometric world, seeded 128x128: river, two bridges, ten-building town, hamlet, forests, tall grass, hills and hollows, wadeable streams.
 - Survival: food/hunger, health, stamina, venom, day/night (dark nights), torches, minimap with fog of war (grey, not black), permadeath that drops your loot where you fell.
@@ -70,6 +70,20 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Lore notes styled**: Archive fragments render as their own note cards — paper colour + typeface per kind (handwritten note, newsprint, diary, poster, green-on-black disk/tape). `NOTE_STYLE` in lore.js.
 - **Autosave**: character + xp + score + deaths + a run-state snapshot (vitals, position, inventory) persist to localStorage; saved every 8s, on tab-hide, and on unload; restored on load. World regenerates from seed (so caches/cars reset — a known limitation; world-object persistence is a follow-up).
 
+### v0.49 — waves, triangulation, the W4 laser hunter, and a denser world
+
+- **HUD rank**: the death-cert rank title (deathRank, same 15-band table) now also shows live under the score on the dashboard, so you can see where you stand without dying first.
+- **Reload penalty**: reloading the page (F5, closing/reopening the tab) without going through New Game isn't a clean reset — it costs **-1000 score and one obelisk kill struck from the record**. Only fires when there's an existing save to reload (a genuinely fresh load, or one right after New Game, is untouched); stops reload being used as a free undo out of a bad fight.
+- **W1s attack in real waves**: each W1 now cycles attack (close in and strike) and withdraw (fall back) phases independently, so a squad hits, backs off, and hits again rather than charging in a single relentless line.
+- **Obelisk triangulation**: W1s track a position fix relayed from the obelisk network, refreshed every ~2.5-4 seconds rather than live — laggy but real, so they still close in (approximately) even behind a jammed Wi-Fi block that blinds every other machine. A hit still requires the machine to be standing next to you at the real, live distance.
+- **W1s swarm instead of stack**: each hunter holds a angled position around its target (individually rotating), and a new generic post-move separation pass (`robots.js`, 4 relaxation passes/tick) keeps any two live machines of any type from ending up on the same tile — fixes squads visually stacking on one point.
+- **W-factory now also builds W1 waves**, on its own clock (not just the one-off revenge squad when a tower falls), capped at 3 concurrent W1s so it can't snowball.
+- **New W4 laser hunter-killer**: dispatched from the W-factory the instant you attack an obelisk (throttled to about once per 25 seconds so rapid OB-gun fire can't spam a squadron). Unlike a W1 it never closes to melee — it holds firing range and backs off if you close the gap, firing a red laser bolt on a cooldown.
+- **Obelisks guarantee a full circuit set**: each of the 12 towers is now assigned one of the 8 circuit-board numbers at world generation (round-robin, then shuffled) and drops exactly that one circuit when destroyed — replaces the old "3 random numbers per kill" drop, which could dupe forever and never actually guaranteed you'd complete the set.
+- **Certificate of Death fixes**: the "Skills mastered" line could run past the panel's right edge with several skills learned — now wraps properly. Added a clickable **Copy** button on the cert (top-right, under the divider) alongside the **S** key. Per your request, sharing is copy-to-clipboard only now — dropped the silent download fallback; if the browser won't allow clipboard image writes it just says so.
+- **Denser, more varied terrain**: five forest regions instead of three (with a higher fill chance), far more scattered lone trees/rocks, 5-7 hills instead of 4-6, and 3-5 hollow zones instead of 3-4 (plus a new zone) — noticeably more undulating ground and much heavier tree cover.
+- **Docs**: help modal updated to cover the win condition's escalation (waves, triangulation, W4), the reload penalty, and the copy-only certificate.
+
 ### v0.48 — the war escalates: victory, revenge squads, zombies
 
 - **Win condition confirmed and made explicit**: bring down every obelisk before SKYLINK completes and you get the victory certificate ("THE TOWERS ARE DOWN"). This already worked in v0.47; it's now called out plainly in the help.
@@ -121,7 +135,7 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 ## Planned / backlog
 
 **Near term**
-- W1 hunter-killers + the W-factory shipped in v0.48, but scoped down from the original v0.45 backlog note below: W1s spawn as a one-off revenge squad per obelisk destroyed (not released in ongoing waves by the factory), and the factory itself only fields W3 repair drones. A scarier approach drone and wave-released W1s from the factory remain open if we want the fuller original design later.
+- W1 hunter-killers + the W-factory shipped in v0.48; v0.49 closed most of the original v0.45 backlog gap by adding factory-dispatched W1 waves (not just the one-off revenge squad), attack/withdraw wave behaviour, obelisk triangulation, and the W4 laser hunter-killer. Only a dedicated "scary approach drone" telegraph remains open from the original design if we want it.
 - Mobile phone + RON texts (see v0.45 deferred, above).
 - Friendly-robot orders: currently follow + (T2) tree-felling; add "collect wood/loot and bring it back", guard mode, and a way to see your robots on the minimap.
 - Visual pass on the machines art (obelisks, crates, robots) and hollows.

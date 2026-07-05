@@ -244,7 +244,7 @@ function raiseHills(map, rng) {
     const j = Math.floor(rng() * (i + 1));
     [optional[i], optional[j]] = [optional[j], optional[i]];
   }
-  const extra = 1 + Math.floor(rng() * 3); // 4-6 hills in total
+  const extra = 2 + Math.floor(rng() * 3); // 5-7 hills in total: more undulation
   const chosen = [...mandatory, ...optional.slice(0, extra)];
 
   const hills = [];
@@ -402,8 +402,9 @@ function carveHollows(map, rng, keepClear) {
     { x: 20, y: 52 },  // west bank wilds
     { x: 60, y: 112 }, // deep south, east of the river
     { x: 100, y: 122 },// south-east corner
+    { x: 96, y: 60 },  // east of the main road crossing, clear of the town
   ];
-  const n = 3 + (rng() < 0.5 ? 1 : 0);
+  const n = 3 + Math.floor(rng() * 3); // 3-5, more undulation
   const D = new Int8Array(w * h);
 
   for (const z of zones.slice(0, n)) {
@@ -490,9 +491,11 @@ function inKeepClear(x, y, rects) {
 // each side of the river in the north, one in the south-east.
 function plantForests(map, rng, keepClear) {
   const regions = [
-    { x: 2,  y: 2,  w: 25, h: 22, n: 170 }, // north-west, hamlet side
-    { x: 56, y: 4,  w: 26, h: 20, n: 160 }, // north-east
-    { x: 96, y: 90, w: 28, h: 26, n: 190 }, // south-east
+    { x: 2,  y: 2,  w: 25, h: 22, n: 260 }, // north-west, hamlet side
+    { x: 56, y: 4,  w: 26, h: 20, n: 250 }, // north-east
+    { x: 96, y: 90, w: 28, h: 26, n: 280 }, // south-east
+    { x: 8,  y: 92, w: 22, h: 24, n: 220 }, // south-west wilds
+    { x: 40, y: 100, w: 24, h: 20, n: 210 }, // deep south
   ];
   for (const r of regions) {
     for (let i = 0; i < r.n; i++) {
@@ -500,7 +503,7 @@ function plantForests(map, rng, keepClear) {
       const y = r.y + Math.floor(rng() * r.h);
       if (map.floorAt(x, y) !== 'grass' || map.objectAt(x, y)) continue;
       if (inKeepClear(x, y, keepClear)) continue;
-      if (rng() < 0.55) map.addObject('tree', x, y, { variant: Math.floor(rng() * 3) });
+      if (rng() < 0.7) map.addObject('tree', x, y, { variant: Math.floor(rng() * 3) });
     }
   }
 }
@@ -527,7 +530,7 @@ function layMeadows(map, rng, keepClear) {
 
 // Lone trees and rocks scattered across remaining open grass.
 function scatterLoners(map, rng, keepClear) {
-  for (let i = 0; i < 150; i++) {
+  for (let i = 0; i < 260; i++) {
     const x = Math.floor(rng() * map.w);
     const y = Math.floor(rng() * map.h);
     if (map.floorAt(x, y) !== 'grass' || map.objectAt(x, y)) continue;

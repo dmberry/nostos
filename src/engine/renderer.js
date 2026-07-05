@@ -456,8 +456,16 @@ export class Renderer {
     ctx.font = '13px system-ui, sans-serif';
     ctx.fillStyle = 'rgba(207,216,195,0.9)';
     const lx = px + 48;
+    const valX = lx + 150;
+    const valMaxW = px + pw - 40 - valX; // never let a long value run past the panel edge
     let y = py + 148;
-    const row = (label, val) => { ctx.fillStyle = 'rgba(207,216,195,0.65)'; ctx.fillText(label, lx, y); ctx.fillStyle = '#e8e0d0'; ctx.fillText(String(val), lx + 150, y); y += 26; };
+    const row = (label, val) => {
+      ctx.fillStyle = 'rgba(207,216,195,0.65)'; ctx.fillText(label, lx, y);
+      ctx.fillStyle = '#e8e0d0';
+      const lines = this._wrapText(ctx, String(val), valMaxW);
+      for (const l of lines) { ctx.fillText(l, valX, y); y += 18; }
+      y += 8;
+    };
     row('Final score', cert.score);
     row('Skills mastered', cert.skills.length ? cert.skills.join(', ') : 'none');
     row('Deaths so far', cert.deaths);
@@ -471,14 +479,29 @@ export class Renderer {
     ctx.fillText(rank.blurb, px + pw / 2, py + ph - 34);
     ctx.font = '11px system-ui, sans-serif';
     ctx.fillStyle = 'rgba(207,216,195,0.5)';
-    ctx.fillText('S to share as an image · click to carry on', px + pw / 2, py + ph - 14);
+    ctx.fillText('S or Copy to copy as an image · click elsewhere to carry on', px + pw / 2, py + ph - 14);
+    ctx.textAlign = 'left';
+
+    // Copy-to-clipboard button, tucked under the divider so it never
+    // overlaps the title above it or the epitaph text below.
+    const btnW = 70, btnH = 20;
+    const btnX = px + pw - btnW - 16, btnY = py + 62;
+    this._certCopyBtn = { x: btnX, y: btnY, w: btnW, h: btnH };
+    ctx.fillStyle = 'rgba(207,216,195,0.14)';
+    ctx.fillRect(btnX, btnY, btnW, btnH);
+    ctx.strokeStyle = 'rgba(207,216,195,0.5)';
+    ctx.strokeRect(btnX + 0.5, btnY + 0.5, btnW - 1, btnH - 1);
+    ctx.fillStyle = '#e8e0d0';
+    ctx.font = 'bold 11px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Copy', btnX + btnW / 2, btnY + 14);
     ctx.textAlign = 'left';
   }
 
-  // Crops the certificate panel out of the live canvas and either copies it
-  // to the clipboard (if the browser allows) or downloads it as a PNG, so
-  // it can be shared outside the game. Returns 'clipboard', 'download', or
-  // null if there was nothing to capture.
+  // Crops the certificate panel out of the live canvas and copies it to the
+  // clipboard as a PNG, so it can be pasted to share outside the game.
+  // Returns 'clipboard', or null if there was nothing to capture or the
+  // browser won't allow copying images.
   async shareCertificate() {
     const b = this._certBounds;
     if (!b) return null;
@@ -498,16 +521,8 @@ export class Renderer {
         await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
         return 'clipboard';
       }
-    } catch { /* denied or unsupported: fall through to a download */ }
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'postai-death-certificate.png';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 2000);
-    return 'download';
+    } catch { /* denied or unsupported */ }
+    return null;
   }
 
   // Read-only backpack view (I). Read-only because the split between
@@ -586,7 +601,7 @@ export class Renderer {
       const by = p.y0 + (p.y1 - p.y0) * Math.max(0, t - 0.12);
       const head = worldToScreen(cx, cy);
       const tail = worldToScreen(bx, by);
-      const col = p.kind === 'stun' ? '#5fe0ff' : p.kind === 'fuse' ? '#b78bff' : '#ffe27a';
+      const col = p.kind === 'stun' ? '#5fe0ff' : p.kind === 'fuse' ? '#b78bff' : p.kind === 'laser' ? '#ff3b2a' : '#ffe27a';
       ctx.strokeStyle = col;
       ctx.lineWidth = 2;
       ctx.lineCap = 'round';
@@ -1918,6 +1933,10 @@ export class Renderer {
     ctx.font = 'bold 13px system-ui, sans-serif';
     ctx.fillStyle = '#e8d27a';
     ctx.fillText(`Score ${player.score ?? 0}`, this.w - 16, line); line += 18;
+    const rank = deathRank(player.score ?? 0);
+    ctx.font = 'bold 10px system-ui, sans-serif';
+    ctx.fillStyle = rank.color;
+    ctx.fillText(rank.title, this.w - 16, line); line += 16;
     ctx.font = '10px system-ui, sans-serif';
     ctx.fillStyle = 'rgba(207,216,195,0.6)';
     ctx.fillText(`K: skills · ${hud.fps ?? 0} fps`, this.w - 16, line);
