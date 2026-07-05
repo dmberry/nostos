@@ -1,10 +1,16 @@
 import { worldToScreen, screenToWorld } from './iso.js';
 
-// Camera focuses on a world position and eases toward its target.
+// Camera focuses on a world position and eases toward its target. `zoom`
+// scales the world about screen centre: 1 is the wide overview, larger
+// values pull in close. The default is the close, over-the-shoulder view.
+export const ZOOM_CLOSE = 1.6;
+export const ZOOM_FAR = 1.0;
+
 export class Camera {
   constructor(x = 0, y = 0) {
     this.x = x;
     this.y = y;
+    this.zoom = ZOOM_CLOSE;
   }
 
   follow(tx, ty, dt) {
@@ -18,18 +24,27 @@ export class Camera {
     this.y = ty;
   }
 
-  // Translate the canvas so the camera's world position sits at screen centre.
+  // Toggle between the two zoom presets; returns the new zoom.
+  toggleZoom() {
+    this.zoom = this.zoom === ZOOM_CLOSE ? ZOOM_FAR : ZOOM_CLOSE;
+    return this.zoom;
+  }
+
+  // Translate and scale the canvas so the camera's world position sits at
+  // screen centre at the current zoom.
   applyTransform(ctx, viewW, viewH) {
     const c = worldToScreen(this.x, this.y);
-    ctx.translate(Math.round(viewW / 2 - c.x), Math.round(viewH / 2 - c.y));
+    ctx.translate(Math.round(viewW / 2), Math.round(viewH / 2));
+    ctx.scale(this.zoom, this.zoom);
+    ctx.translate(-c.x, -c.y);
   }
 
   // Inverse of applyTransform: a canvas-space point (CSS pixels, viewport
   // top-left origin) back to world coordinates. Used for cursor aiming.
   toWorld(px, py, viewW, viewH) {
     const c = worldToScreen(this.x, this.y);
-    const sx = px - (viewW / 2 - c.x);
-    const sy = py - (viewH / 2 - c.y);
+    const sx = (px - viewW / 2) / this.zoom + c.x;
+    const sy = (py - viewH / 2) / this.zoom + c.y;
     return screenToWorld(sx, sy);
   }
 }

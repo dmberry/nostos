@@ -30,6 +30,11 @@ const GRAVITY = 12;
 const JUMP_COST = 3;      // stamina
 const CLIMB_COST = 2;     // stamina per height level climbed
 
+const WIFI_MAX = 600;    // Wi-Fi block charge in seconds (10 real minutes)
+
+// Item kinds that can occupy the hands slot.
+const HOLDABLE = new Set(['tool', 'gun', 'gadget']);
+
 export class Player {
   constructor(x, y) {
     this.x = x;
@@ -62,6 +67,10 @@ export class Player {
     this.name = 'Adam';
     this.gender = 'm';    // 'm' | 'f' | 'u'
     this.skills = new Set(); // knowledge from books; survives death
+
+    this.wifiPower = 0;   // Wi-Fi block charge (seconds) while one is held
+    this.wifiMax = WIFI_MAX;
+    this.invisibleToRobots = false; // true while a charged block is in hand
 
     // Practice makes better: melee/guns sharpen with use, knowledge with
     // reading. Levels rise on a square-root curve (25, 100, 225... xp per
@@ -176,6 +185,13 @@ export class Player {
       }
     }
 
+    // Wi-Fi block: while held and charged it jams robot sensors, draining
+    // its cell. Flat, or not held, you are visible again.
+    if (this.hands === 'wifiblock') {
+      this.wifiPower = Math.max(0, this.wifiPower - dt);
+    }
+    this.invisibleToRobots = this.hands === 'wifiblock' && this.wifiPower > 0;
+
     if (input.usePressed()) this.useHands(map, animals, robots);
     if (input.eatPressed()) this.eat();
     if (input.readPressed()) this.read(robots);
@@ -249,7 +265,7 @@ export class Player {
     }
     const i = this.selectedPocket;
     const slot = this.pockets[i];
-    if (slot && ITEMS[slot.item].kind !== 'tool' && ITEMS[slot.item].kind !== 'gun') {
+    if (slot && !HOLDABLE.has(ITEMS[slot.item].kind)) {
       this.say(`Can't hold ${ITEMS[slot.item].name.toLowerCase()} in hand.`);
       return;
     }
@@ -361,10 +377,11 @@ export class Player {
     const obj = map.objectAt(tx, ty);
     const facingBox = obj && obj.type === 'box';
 
-    if (!tool || tool.kind === 'gun') {
+    if (!tool || tool.kind === 'gun' || tool.kind === 'gadget') {
       if (facingBox) { this.openBox(obj, map); return; }
-      if (tool) this.fire(tool, map, animals, robots);
-      else this.say('Your hands are empty.');
+      if (tool && tool.kind === 'gun') this.fire(tool, map, animals, robots);
+      else if (tool && tool.kind === 'gadget') this.useGadget(tool);
+      else if (!tool) this.say('Your hands are empty.');
       return;
     }
     if (tool.kind !== 'tool') return;
@@ -447,6 +464,27 @@ export class Player {
     } else {
       this.say(`You hack at the tree with the ${ITEMS[this.hands].name.toLowerCase()}.`);
     }
+  }
+
+  // Use the Wi-Fi block: spend a battery (pockets, then backpack) to top
+  // its charge back to full. Batteries are the only way to keep it running.
+  useGadget(tool) {
+    this.swingTimer = 0.4;
+    let slots = this.pockets;
+    let i = this.pockets.findIndex((s) => s && s.item === 'battery');
+    if (i < 0 && this.backpack) {
+      i = this.backpack.slots.findIndex((s) => s && s.item === 'battery');
+      slots = this.backpack.slots;
+    }
+    if (i < 0) {
+      this.say(`The ${tool.name.toLowerCase()} is dead. It needs a battery.`);
+      return;
+    }
+    slots[i].qty -= 1;
+    if (slots[i].qty <= 0) slots[i] = null;
+    this.wifiPower = this.wifiMax;
+    sfx.play('zap');
+    this.say('You slot a fresh cell into the block. The machines lose your signal.');
   }
 
   // Search a resistance cache with the free hand — usable whatever the
@@ -569,8 +607,13 @@ export class Player {
       const stored = this.stow(gi.item, gi.qty);
       if (stored <= 0) continue;
       gi.qty -= stored;
+      // A found Wi-Fi block comes with a charge — a genuine reward, and
+      // usable at once (hold it, and top it up with batteries later).
+      if (gi.item === 'wifiblock') this.wifiPower = this.wifiMax;
       sfx.play('pickup');
-      this.say(`+${stored} ${ITEMS[gi.item].name.toLowerCase()}`);
+      this.say(gi.item === 'wifiblock'
+        ? 'You find a Wi-Fi block — hold it and the machines cannot see you.'
+        : `+${stored} ${ITEMS[gi.item].name.toLowerCase()}`);
     }
     map.groundItems = map.groundItems.filter((gi) => gi.qty > 0);
   }

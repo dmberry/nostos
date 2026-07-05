@@ -101,6 +101,16 @@ export const ITEMS = {
     staminaCost: 2,
     color: '#5a4632',
   },
+  // A rare gadget: held in hand, it jams robot sensors so they can't find
+  // you. Runs on charge (10 real minutes); feed it a battery (use key) to
+  // top it back up. Held item, so it lives in the hands slot like a weapon.
+  wifiblock: {
+    name: 'Wi-Fi block',
+    kind: 'gadget',
+    tier: 4,
+    ammoType: 'battery',
+    color: '#4fd8c3',
+  },
   battery: {
     name: 'Battery',
     kind: 'resource',

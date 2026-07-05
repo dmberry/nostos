@@ -273,6 +273,10 @@ function patrol(r, speed, range, dt, map) {
 }
 
 function distTo(r, player) {
+  // A held, charged Wi-Fi block jams hostile sensors: the player reads as
+  // out of range everywhere, so hunters never acquire (and instantly lose)
+  // the trail. Friendly robots don't use this path, so they still follow.
+  if (player.invisibleToRobots) return Infinity;
   return Math.hypot(player.x - r.x, player.y - r.y);
 }
 

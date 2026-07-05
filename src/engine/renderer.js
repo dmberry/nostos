@@ -124,6 +124,9 @@ export class Renderer {
       if (lift) ctx.restore();
     }
 
+    // Lore fragments float in world space, under the camera transform.
+    if (hud.lore) hud.lore.drawWorld(ctx);
+
     ctx.restore();
 
     // Night: a dark veil over the world, never over the HUD. A carried
@@ -131,11 +134,12 @@ export class Renderer {
     // only a faint arm's-length glimmer.
     if (hud.light != null && hud.light < 1) {
       const dark = (1 - hud.light) * 0.78;
+      const z = camera.zoom || 1;
       const pw = worldToScreen(player.x, player.y);
       const cw = worldToScreen(camera.x, camera.y);
-      const px = pw.x - cw.x + this.w / 2;
-      const py = pw.y - cw.y + this.h / 2 - 16;
-      const radius = hud.torch ? 200 : 70;
+      const px = (pw.x - cw.x) * z + this.w / 2;
+      const py = (pw.y - cw.y) * z + this.h / 2 - 16 * z;
+      const radius = (hud.torch ? 200 : 70) * z;
       const veil = ctx.createRadialGradient(px, py, radius * 0.25, px, py, radius);
       veil.addColorStop(0, `rgba(8,12,28,${Math.max(0, dark - (hud.torch ? 0.72 : 0.3))})`);
       veil.addColorStop(1, `rgba(8,12,28,${dark})`);
@@ -166,6 +170,7 @@ export class Renderer {
     }
     this.drawDashboard(player, hud);
     if (hud.showBackpack) this.drawBackpackPanel(player);
+    if (hud.lore) hud.lore.drawOverlay(ctx, this.w, this.h);
   }
 
   // Read-only backpack view (I). Read-only because the split between
@@ -237,11 +242,13 @@ export class Renderer {
   // still draw their upper parts.
   visibleRange(camera, map) {
     const c = worldToScreen(camera.x, camera.y);
+    const z = camera.zoom || 1;
+    const hw = this.w / (2 * z), hh = this.h / (2 * z);
     const corners = [
-      screenToWorld(c.x - this.w / 2, c.y - this.h / 2),
-      screenToWorld(c.x + this.w / 2, c.y - this.h / 2),
-      screenToWorld(c.x - this.w / 2, c.y + this.h / 2),
-      screenToWorld(c.x + this.w / 2, c.y + this.h / 2),
+      screenToWorld(c.x - hw, c.y - hh),
+      screenToWorld(c.x + hw, c.y - hh),
+      screenToWorld(c.x - hw, c.y + hh),
+      screenToWorld(c.x + hw, c.y + hh),
     ];
     const xs = corners.map((p) => p.x);
     const ys = corners.map((p) => p.y);
@@ -721,6 +728,23 @@ export class Renderer {
         ctx.closePath();
         ctx.fill();
         break;
+      case 'wifiblock': {
+        // A little handset with rising signal arcs — the jammer.
+        ctx.fillStyle = '#26302f';
+        ctx.fillRect(-5, -2, 10, 11); // body
+        ctx.strokeStyle = itemDef.color;
+        ctx.lineWidth = 1.6;
+        for (let i = 1; i <= 3; i++) { // signal arcs
+          ctx.beginPath();
+          ctx.arc(0, -3, i * 3, Math.PI * 1.15, Math.PI * 1.85);
+          ctx.stroke();
+        }
+        ctx.fillStyle = itemDef.color;
+        ctx.beginPath();
+        ctx.arc(0, -3, 1.4, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      }
       case 'ammo':
         for (let i = -1; i <= 1; i++) {
           ctx.fillStyle = '#b09a55';
@@ -879,19 +903,43 @@ export class Renderer {
       ctx.lineTo(c.x + 1.5 + ex, hb - 25.2);
       ctx.stroke();
     }
-    // The held tool/gun shown in hand, out toward the facing direction; it
-    // kicks further out and slightly wider while swinging or firing.
+    // The held tool/gun/gadget shown in hand, out toward the facing
+    // direction. Using it animates clearly: a tool sweeps through an arc, a
+    // gun or gadget kicks back with recoil — so a swing or a shot always
+    // reads on screen.
     if (player.hands && ITEMS[player.hands]) {
-      const swung = player.swingTimer > 0;
-      const reach = swung ? 0.62 : 0.42;
-      const hx = c.x + player.facing.x * 14 * reach / 0.42;
+      const def = ITEMS[player.hands];
+      const cd = def.swingCooldown || 0.5;
+      // p runs 0 (start of use) -> 1 (finished); -1 means idle.
+      const p = player.swingTimer > 0 ? Math.max(0, 1 - player.swingTimer / cd) : -1;
+      const pulse = p >= 0 ? Math.sin(p * Math.PI) : 0; // 0 -> 1 -> 0 across the action
+      const isRanged = def.kind === 'gun' || def.kind === 'gadget';
+
+      const baseAng = Math.atan2(player.facing.y * 0.5, player.facing.x);
+      let reach = 0.42;
+      let extraAng = 0;
+      if (isRanged) {
+        reach = 0.42 - pulse * 0.14; // recoil: jerk back toward the body
+      } else {
+        reach = 0.42 + pulse * 0.55; // swing: thrust out
+        extraAng = p >= 0 ? (-1.0 + p * 1.7) : 0; // sweep through an arc
+      }
+      const hx = c.x + player.facing.x * 15 * reach / 0.42;
       const hy = by - 12 + player.facing.y * 8 * reach / 0.42;
       ctx.save();
       ctx.translate(hx, hy);
-      const ang = Math.atan2(player.facing.y * 0.5, player.facing.x) + (swung ? 0.35 : 0);
-      ctx.rotate(ang);
-      this.drawItemIcon(ITEMS[player.hands], 0, 0, 0.85);
+      ctx.rotate(baseAng + extraAng);
+      this.drawItemIcon(def, 0, 0, 0.85 + pulse * 0.15);
       ctx.restore();
+
+      // A brief muzzle flash when a gun fires.
+      if (isRanged && def.kind === 'gun' && pulse > 0.3) {
+        const fx = c.x + player.facing.x * 26, fy = by - 12 + player.facing.y * 14;
+        ctx.fillStyle = `rgba(255,220,120,${pulse * 0.8})`;
+        ctx.beginPath();
+        ctx.arc(fx, fy, 3 + pulse * 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
     // Facing indicator: a small dot ahead of the feet.
     const f = worldToScreen(player.x + player.facing.x * 0.45, player.y + player.facing.y * 0.45);
@@ -948,6 +996,22 @@ export class Renderer {
         ctx.textAlign = 'right';
         ctx.fillText(String(ammoCount), handsX + 41, top + 60);
         ctx.textAlign = 'left';
+      } else if (heldDef.kind === 'gadget') {
+        // Wi-Fi block: a small battery gauge showing remaining charge, and
+        // the minutes left. Drains only while held; feed it a battery to refill.
+        const frac = Math.max(0, Math.min(1, (player.wifiPower || 0) / (player.wifiMax || 1)));
+        const bx = handsX + 30, by = top + 24, bw = 8, bh = 16;
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillRect(bx, by, bw, bh);
+        ctx.fillStyle = frac > 0.25 ? '#4fd8c3' : '#e05548';
+        ctx.fillRect(bx, by + bh * (1 - frac), bw, bh * frac);
+        ctx.strokeStyle = 'rgba(207,216,195,0.6)';
+        ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
+        ctx.fillStyle = 'rgba(207,216,195,0.6)';
+        ctx.fillRect(bx + 2.5, by - 2, 3, 2); // battery nub
+        ctx.font = 'bold 9px system-ui, sans-serif';
+        ctx.fillStyle = frac > 0 ? '#cfd8c3' : '#e05548';
+        ctx.fillText(frac > 0 ? `${Math.ceil((player.wifiPower || 0) / 60)}m` : 'dead', handsX, top + 60);
       }
     }
 

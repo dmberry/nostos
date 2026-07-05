@@ -10,10 +10,11 @@ import { Minimap } from './game/minimap.js';
 import { spawnBirds, updateBirds } from './game/birds.js';
 import { spawnRobots, updateRobots } from './game/robots.js';
 import { resolveBodyOverlaps } from './game/collision.js';
+import { Lore } from './game/lore.js';
 import { sfx } from './engine/sound.js';
 
 const WORLD_SEED = 1337;
-const VERSION = '0.40';
+const VERSION = '0.41';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -89,6 +90,8 @@ const obelisks = [];
     [{ item: 'shotgun', qty: 1 }, { item: 'shells', qty: 4 }],
     [{ item: 'crowbar', qty: 1 }],
     [{ item: 'battery', qty: 2 }],
+    // Exactly one Wi-Fi block per world: rare, in a random guaranteed cache.
+    [{ item: 'wifiblock', qty: 1 }, { item: 'battery', qty: 2 }],
   ];
   const rollLoot = () => {
     const r = rng();
@@ -154,6 +157,7 @@ nameInput.addEventListener('change', () => {
   if (v) { player.name = v; persist(); }
 });
 const camera = new Camera(player.x, player.y);
+const lore = new Lore(map, WORLD_SEED);
 
 const dayNight = new DayNight();
 const minimap = new Minimap(map);
@@ -186,7 +190,7 @@ function revealAround(px, py) {
 }
 
 // Debug handle for inspecting live state from the console.
-window.__game = { player, map, camera, animals, birds, robots, obelisks, dayNight, input, renderer };
+window.__game = { player, map, camera, animals, birds, robots, obelisks, dayNight, lore, input, renderer };
 
 function resize() {
   renderer.resize(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1);
@@ -224,6 +228,8 @@ let wasRobotNear = false;
 function update(dt) {
   if (input.consumePress('KeyH')) toggleHelp();
   if (input.inventoryPressed()) showBackpack = !showBackpack;
+  if (input.zoomTogglePressed()) camera.toggleZoom();
+  lore.update(dt, player, input);
   if (input.musicTogglePressed()) {
     const on = sfx.toggleMusic();
     player.say(on ? 'Music on.' : 'Music off.');
@@ -365,6 +371,7 @@ function frame(now) {
     minimap,
     birds,
     robots,
+    lore,
     torch: player.pockets.some((s) => s && s.item === 'torch'),
     showBackpack,
   });

@@ -4,7 +4,20 @@ This file is the shared planning board for the game. **Henrik: add your ideas an
 
 Versioning: 0.01 increments (v0.32, v0.33, ...). The game is pushed after every sizeable change so the latest build is always on `main`.
 
-## Where we are (v0.40)
+## Working together without clashing (David + Henrik)
+
+We're both pushing to `main`, so a few conventions keep merges painless:
+
+1. **`git fetch` and check `origin/main` at the START of a session**, not just before pushing. Most wasted effort comes from building something the other already shipped.
+2. **New self-contained systems get their own file** with a tiny integration surface, rather than growing the shared hub files. Established feature-file owners:
+   - `src/game/lore.js` — **David** (the hidden story: fragments, Archive, corpus). Grow the story by editing the `FRAGMENTS` array; the four integration hooks are already wired and shouldn't need changing.
+   - `src/game/animals.js`, `birds.js`, `robots.js` — creature/machine AI (agent-authored; either of us edits, keep changes surgical).
+   - `src/engine/sound.js` — synthesized audio.
+3. **The genuine friction points are the hub files** everyone appends to: `src/main.js` (wiring), `src/engine/renderer.js` (draw dispatch + item icons), `src/game/player.js` (input handling), `src/game/items.js` (registry), `index.html` (help). Edits here are usually append-only so conflicts stay trivial — but keep them small and localized, and pull first.
+4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
+5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
+
+## Where we are (v0.41)
 
 - Isometric world, seeded 128x128: river, two bridges, ten-building town, hamlet, forests, tall grass, hills and hollows, wadeable streams.
 - Survival: food/hunger, health, stamina, venom, day/night (dark nights), torches, minimap with fog of war (grey, not black), permadeath that drops your loot where you fell.
@@ -29,6 +42,10 @@ Versioning: 0.01 increments (v0.32, v0.33, ...). The game is pushed after every 
 - **Experience**: melee practice hits harder over time, gun practice extends range and hits harder, and reading (even a re-read) builds a knowledge level; all three show in the stats line and survive death and reloads, like skills.
 - **Obelisks are watchful, not just decorative**: the signal light blinks occasionally rather than pulsing continuously, and deepens to a saturated blood-red the longer a human lingers close — the tower has sensed you. While alert, it periodically nudges nearby non-hunting robots to sweep the area around it (closeness reported, never your exact position).
 - **Machines have a presence**: a faint mechanical drone swells as one nears, and the night crickets fall silent around any active robot, not just a hunting one — they're afraid of the machines themselves.
+- **Zoom**: plays at a closer over-the-shoulder view by default; Z toggles out to the old wide view and back.
+- **Wi-Fi block** (rare, one per world in a cache): held in hand it jams robot sensors so hunters can't find you; runs on a 10-minute charge shown as a battery gauge on the hands slot; feed it a battery (use key) to keep it going.
+- **Tool/weapon use animates**: melee sweeps through an arc, guns kick back with a muzzle flash — a swing or shot always reads on screen.
+- **The hidden story has begun** (`src/game/lore.js`, David's module): scattered paper fragments in the ruins; walk over one to recover it, J opens the Archive to read what's found. Six fragments to start, deliberately out of order and ambiguous. Grow the corpus by editing the `FRAGMENTS` array in lore.js — nothing else needs touching.
 
 ## Planned / backlog
 

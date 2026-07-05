@@ -6,7 +6,7 @@ const TRACKED = new Set([
   'KeyW', 'KeyA', 'KeyS', 'KeyD',
   'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
   'ShiftLeft', 'ShiftRight',
-  'KeyE', 'Slash', 'Space', 'KeyQ', 'KeyH', 'KeyR', 'KeyG', 'KeyF', 'KeyI', 'KeyP',
+  'KeyE', 'Slash', 'Space', 'KeyQ', 'KeyH', 'KeyR', 'KeyG', 'KeyF', 'KeyI', 'KeyP', 'KeyZ', 'KeyJ',
   'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5',
 ]);
 
@@ -127,5 +127,14 @@ export class Input {
 
   musicTogglePressed() {
     return this.consumePress('KeyP');
+  }
+
+  zoomTogglePressed() {
+    return this.consumePress('KeyZ');
+  }
+
+  // Lore Archive / journal screen (J). Owned by the lore module.
+  archivePressed() {
+    return this.consumePress('KeyJ');
   }
 }
