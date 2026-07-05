@@ -68,12 +68,21 @@ export class Player {
     this.gender = gender;
   }
 
-  update(dt, input, map, animals = [], robots = []) {
+  update(dt, input, map, animals = [], robots = [], mouseWorld = null) {
     this.swingTimer = Math.max(0, this.swingTimer - dt);
     this.hurtTimer = Math.max(0, this.hurtTimer - dt);
     if (this.message) {
       this.message.ttl -= dt;
       if (this.message.ttl <= 0) this.message = null;
+    }
+    this.unstickIfTrapped(map);
+
+    // Face the cursor at all times, independent of movement direction —
+    // lets the player strafe while keeping a weapon trained on a target.
+    if (mouseWorld) {
+      const fx = mouseWorld.x - this.x, fy = mouseWorld.y - this.y;
+      const flen = Math.hypot(fx, fy);
+      if (flen > 1e-4) this.facing = { x: fx / flen, y: fy / flen };
     }
 
     // Hunger: food drains steadily, faster while sprinting. At zero you
@@ -110,7 +119,6 @@ export class Player {
 
     if (this.moving) {
       const dir = screenDirToWorld(intent.dx, intent.dy);
-      this.facing = dir;
       let speed = this.sprinting ? SPRINT_SPEED : WALK_SPEED;
       // Badly hurt, you hobble — though adrenaline still lets you sprint,
       // just not for long (see the wounded stamina drain above).
@@ -503,6 +511,28 @@ export class Player {
     if (!this.collides(nx, ny, map)) {
       this.x = nx;
       this.y = ny;
+    }
+  }
+
+  // Knockback from a fight (or a bad spawn spot) can leave the player
+  // embedded in solid geometry. Detect it and step out to the nearest open
+  // tile, spiralling outward ring by ring, rather than leaving them stuck.
+  unstickIfTrapped(map) {
+    if (!this.collides(this.x, this.y, map)) return;
+    const cx = Math.floor(this.x), cy = Math.floor(this.y);
+    for (let r = 1; r <= 6; r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue; // ring only
+          const nx = cx + dx + 0.5, ny = cy + dy + 0.5;
+          if (!this.collides(nx, ny, map)) {
+            this.x = nx;
+            this.y = ny;
+            this.say('You wrench yourself free.');
+            return;
+          }
+        }
+      }
     }
   }
 

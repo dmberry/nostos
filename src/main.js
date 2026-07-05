@@ -16,7 +16,7 @@ const WORLD_SEED = 1337;
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
-const input = new Input();
+const input = new Input(window, canvas);
 const { map, spawn } = buildWorld(WORLD_SEED);
 const player = new Player(spawn.x, spawn.y);
 player.map = map; // for death drops when damage comes from animals
@@ -176,7 +176,7 @@ function revealAround(px, py) {
 }
 
 // Debug handle for inspecting live state from the console.
-window.__game = { player, map, camera, animals, birds, robots, obelisks, dayNight };
+window.__game = { player, map, camera, animals, birds, robots, obelisks, dayNight, input, renderer };
 
 function resize() {
   renderer.resize(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1);
@@ -211,7 +211,9 @@ function update(dt) {
     playTime += dt;
     if (playTime >= HINT_LIFETIME) hintEl.style.display = 'none';
   }
-  player.update(dt, input, map, animals, robots);
+  const mouse = input.mousePos();
+  const mouseWorld = camera.toWorld(mouse.x, mouse.y, renderer.w, renderer.h);
+  player.update(dt, input, map, animals, robots, mouseWorld);
   updateAnimals(dt, animals, player, map);
   updateBirds(dt, birds, animals, player, map);
   updateRobots(dt, robots, player, map);

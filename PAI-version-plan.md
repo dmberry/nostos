@@ -4,7 +4,7 @@ This file is the shared planning board for the game. **Henrik: add your ideas an
 
 Versioning: 0.01 increments (v0.32, v0.33, ...). The game is pushed after every sizeable change so the latest build is always on `main`.
 
-## Where we are (v0.34)
+## Where we are (v0.35)
 
 - Isometric world, seeded 128x128: river, two bridges, ten-building town, hamlet, forests, tall grass, hills and hollows, wadeable streams.
 - Survival: food/hunger, health, stamina, venom, day/night (dark nights), torches, minimap with fog of war, permadeath that drops your loot where you fell.
@@ -14,6 +14,8 @@ Versioning: 0.01 increments (v0.32, v0.33, ...). The game is pushed after every 
 - Weapons: penknife → bat/machete/crowbar (resistance caches, E to search) → stun-gun (disables), electro-gun (fuses into a mineable wreck), pistol, shotgun. Batteries/ammo/shells in caches. Gun kills yield less salvage than melee or mining a fused wreck.
 - Loadout: press 1-4 to select a pocket, G to swap it with the hands slot (put a weapon away, pull another out); pocket slots show the item name in tiny writing.
 - Player never overlaps an animal or robot's exact tile — bodies push apart, so a target is always hittable.
+- Player always faces the mouse cursor, independent of movement direction. Using the held tool is **/** or **left click** (Ctrl/Cmd retired).
+- If a fight or a bad respawn leaves the player wedged in solid geometry, they're auto-pushed out to the nearest open tile.
 - The on-screen control hint fades out after two minutes of play.
 - Books teach permanent skills (R): woodcraft, herbalism, tracking, fleet foot. Knowledge survives death.
 - Character: Adam / Eve / Neve or a custom name (help modal, H).
@@ -21,11 +23,10 @@ Versioning: 0.01 increments (v0.32, v0.33, ...). The game is pushed after every 
 
 ## Planned / backlog
 
-**v0.35 (in progress — David's requests, 5 July)**
+**v0.36 (in progress — David's requests, 5 July)**
 - Version number in tiny writing under the postAI logo in the UI.
 - Item icons that look like the thing they are (weapons, guns, food, books, ammo), in the dashboard slots and on the ground.
 - Show the held weapon in the player sprite's hands.
-- Mouse-cursor aiming: facing follows the cursor, for better fighting control.
 - Experience points: melee practice improves fighting, gun practice sharpens aim and effect, books give knowledge points.
 - Crickets fall silent when a machine is near (they are scared of them).
 - Machines carry a quiet drone hum you can hear approaching.

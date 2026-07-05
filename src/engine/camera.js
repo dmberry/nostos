@@ -1,4 +1,4 @@
-import { worldToScreen } from './iso.js';
+import { worldToScreen, screenToWorld } from './iso.js';
 
 // Camera focuses on a world position and eases toward its target.
 export class Camera {
@@ -22,5 +22,14 @@ export class Camera {
   applyTransform(ctx, viewW, viewH) {
     const c = worldToScreen(this.x, this.y);
     ctx.translate(Math.round(viewW / 2 - c.x), Math.round(viewH / 2 - c.y));
+  }
+
+  // Inverse of applyTransform: a canvas-space point (CSS pixels, viewport
+  // top-left origin) back to world coordinates. Used for cursor aiming.
+  toWorld(px, py, viewW, viewH) {
+    const c = worldToScreen(this.x, this.y);
+    const sx = px - (viewW / 2 - c.x);
+    const sy = py - (viewH / 2 - c.y);
+    return screenToWorld(sx, sy);
   }
 }

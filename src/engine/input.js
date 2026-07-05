@@ -6,17 +6,22 @@ const TRACKED = new Set([
   'KeyW', 'KeyA', 'KeyS', 'KeyD',
   'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
   'ShiftLeft', 'ShiftRight',
-  'KeyE', 'Space', 'KeyQ', 'KeyH', 'KeyR', 'KeyG',
+  'KeyE', 'Slash', 'Space', 'KeyQ', 'KeyH', 'KeyR', 'KeyG',
   'Digit1', 'Digit2', 'Digit3', 'Digit4',
-  'ControlLeft', 'ControlRight', 'MetaLeft', 'MetaRight',
 ]);
 
 const POCKET_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4'];
 
 export class Input {
-  constructor(target = window) {
+  // mouseTarget defaults to the same target as the keyboard, but the caller
+  // should pass the canvas specifically so clicks on HTML overlays (the help
+  // modal, its buttons) don't register as an in-game action.
+  constructor(target = window, mouseTarget = target) {
     this.down = new Set();
     this.pressed = new Set();
+    this.mouseX = 0;
+    this.mouseY = 0;
+    this.mousePressed = false;
     target.addEventListener('keydown', (e) => {
       if (TRACKED.has(e.code)) {
         if (!e.repeat && !this.down.has(e.code)) this.pressed.add(e.code);
@@ -30,6 +35,16 @@ export class Input {
     target.addEventListener('blur', () => {
       this.down.clear();
       this.pressed.clear();
+      this.mousePressed = false;
+    });
+    mouseTarget.addEventListener('mousemove', (e) => {
+      this.mouseX = e.clientX;
+      this.mouseY = e.clientY;
+    });
+    mouseTarget.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      this.mousePressed = true;
+      e.preventDefault();
     });
   }
 
@@ -61,9 +76,17 @@ export class Input {
   }
 
   usePressed() {
-    return this.consumePress('KeyE')
-      || this.consumePress('ControlLeft') || this.consumePress('ControlRight')
-      || this.consumePress('MetaLeft') || this.consumePress('MetaRight');
+    if (this.consumePress('KeyE') || this.consumePress('Slash')) return true;
+    if (this.mousePressed) {
+      this.mousePressed = false;
+      return true;
+    }
+    return false;
+  }
+
+  // Raw client-space mouse position, for converting to world space.
+  mousePos() {
+    return { x: this.mouseX, y: this.mouseY };
   }
 
   jumpPressed() {
