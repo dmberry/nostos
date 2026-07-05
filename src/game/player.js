@@ -1,8 +1,10 @@
 import { screenDirToWorld } from '../engine/iso.js';
 import { ITEMS } from './items.js';
 
-const WALK_SPEED = 3.2;   // tiles per second
-const SPRINT_SPEED = 5.4;
+const WALK_SPEED = 4.2;   // tiles per second
+const SPRINT_SPEED = 6.4;
+const WOUNDED_SPEED = 3.2; // hobble pace when health is very low
+const WOUNDED_AT = 20;     // health threshold for the hobble
 const RADIUS = 0.28;      // collision radius in tiles
 const REACH = 0.9;        // how far ahead the player can use a tool
 const TREE_HP = 4;        // penknife swings to fell a tree
@@ -106,6 +108,8 @@ export class Player {
       const dir = screenDirToWorld(intent.dx, intent.dy);
       this.facing = dir;
       let speed = this.sprinting ? SPRINT_SPEED : WALK_SPEED;
+      // Badly hurt, you hobble: no better than the old walking pace.
+      if (this.health < WOUNDED_AT) speed = Math.min(speed, WOUNDED_SPEED);
       // Wading a stream is slow; climbing costs stamina (handled below).
       if (map.floorAt(Math.floor(this.x), Math.floor(this.y)) === 'stream') speed *= 0.55;
       const hBefore = map.heightAt ? map.heightAt(Math.floor(this.x), Math.floor(this.y)) : 0;
