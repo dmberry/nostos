@@ -590,8 +590,16 @@ export class Renderer {
     this.drawLabel('POCKETS', pocketsX, top + 14);
     for (let i = 0; i < player.pockets.length; i++) {
       const slot = player.pockets[i];
-      this.drawSlot(pocketsX + i * 42, top + 20, 36, slot ? ITEMS[slot.item] : null, slot ? slot.qty : 0,
+      const slotX = pocketsX + i * 42;
+      this.drawSlot(slotX, top + 20, 36, slot ? ITEMS[slot.item] : null, slot ? slot.qty : 0,
         player.selectedPocket === i);
+      if (slot) {
+        ctx.font = '7px system-ui, sans-serif';
+        ctx.fillStyle = 'rgba(207,216,195,0.6)';
+        ctx.textAlign = 'center';
+        ctx.fillText(ITEMS[slot.item].name, slotX + 18, top + 66, 40);
+        ctx.textAlign = 'left';
+      }
     }
 
     // Stats block, right-aligned

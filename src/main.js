@@ -198,9 +198,19 @@ const toggleHelp = (force) => {
 document.getElementById('helpBtn').addEventListener('click', () => toggleHelp(true));
 helpEl.addEventListener('click', (e) => { if (e.target === helpEl) toggleHelp(false); });
 
+// The control hint is only for new players: fade it out after two minutes
+// of play so it stops cluttering the screen once the controls have sunk in.
+const hintEl = document.getElementById('hint');
+const HINT_LIFETIME = 120; // seconds of played time
+let playTime = 0;
+
 let wasNight = null;
 function update(dt) {
   if (input.consumePress('KeyH')) toggleHelp();
+  if (hintEl.style.display !== 'none') {
+    playTime += dt;
+    if (playTime >= HINT_LIFETIME) hintEl.style.display = 'none';
+  }
   player.update(dt, input, map, animals, robots);
   updateAnimals(dt, animals, player, map);
   updateBirds(dt, birds, animals, player, map);
