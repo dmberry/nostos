@@ -7,7 +7,7 @@ const TRACKED = new Set([
   'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
   'ShiftLeft', 'ShiftRight',
   'KeyE', 'Slash', 'Space', 'KeyQ', 'KeyH', 'KeyR', 'KeyG', 'KeyF', 'KeyI', 'KeyP', 'KeyZ', 'KeyJ',
-  'KeyK', 'KeyC', 'KeyM',
+  'KeyK', 'KeyC', 'KeyM', 'KeyV', 'KeyN',
   'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5',
 ]);
 
@@ -199,5 +199,13 @@ export class Input {
 
   phonePressed() {
     return this.consumePress('KeyM');
+  }
+
+  weaponChartPressed() {
+    return this.consumePress('KeyV');
+  }
+
+  newGamePressed() {
+    return this.consumePress('KeyN');
   }
 }

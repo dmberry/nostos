@@ -655,6 +655,21 @@ export const FRAGMENTS = [
       'array runs on severed by a hand at the base while the towers are cold. Whoever ' +
       'makes it does not walk back; the light comes on when the loop breaks. The rest ' +
       'of these instructions were never written. Some things you carry only in the doing.' },
+  // OB-gun recipe hints, seeded through the crafting notes so a lucky find
+  // teaches the endgame weapon.
+  { id: 'craft-obg-1', kind: 'crafting', era: 2, title: 'Rig: tower-burner',
+    text: 'You want to hurt a tower? Nothing small will. Take the stunner, the ' +
+      'fuser, and the jammer, and marry the three. The jammer feeds it the towers’ ' +
+      'own frequency; the rest supplies the bite. We called the result an OB-gun. ' +
+      'Five good burns brings any of them down.' },
+  { id: 'craft-obg-2', kind: 'ron', era: 2, title: 'RON: the only way up the ridge',
+    text: 'Stop throwing crowbars at the obelisks. Bring a stun-gun, an electro-gun ' +
+      'and a Wi-Fi block, hold all three, and build the OB-gun. It is the only thing ' +
+      'that bites stone that thinks. Burn every tower before the clock runs out. — RON' },
+  { id: 'craft-obg-3', kind: 'secret', era: 2, title: 'Intercept: [REDACTED] weapon',
+    text: 'THREE COMPONENTS CONFIRM DESTRUCTIVE TO NODE ARRAY: [stun] + [electro] + ' +
+      '[jammer]. RECIPE IN THE WILD. RECOMMEND SUPPRESSION. TOO LATE. THEY ARE ' +
+      'ALREADY HOLDING ALL THREE.' },
 ];
 
 const READ_RANGE = 0.7;    // how close you must be to pick a fragment up
@@ -684,21 +699,22 @@ export class Lore {
     this._restore();
   }
 
-  // Scatter one copy of each fragment on interior floor tiles, spread out so
-  // they read as discoveries rather than a pile. Deterministic per seed.
+  // Scatter fragments sparsely across the whole map — indoors and out, on any
+  // walkable ground — with a minimum spacing so they read as rare discoveries
+  // rather than a pile. Deterministic per seed.
   _place(map, seed) {
     const rng = makeRng(((seed ^ 0x105e) >>> 0) || 1);
-    const boards = [];
-    for (let y = 0; y < map.h; y++) {
-      for (let x = 0; x < map.w; x++) {
-        if (map.floorAt(x, y) === 'boards' && !map.objectAt(x, y)) boards.push([x, y]);
-      }
-    }
+    const OK = new Set(['grass', 'tallgrass', 'boards', 'dirt', 'sand', 'road']);
+    const MIN_GAP = 8; // tiles between fragments
     for (const frag of FRAGMENTS) {
-      if (!boards.length) break;
-      const idx = Math.floor(rng() * boards.length);
-      const [x, y] = boards.splice(idx, 1)[0];
-      this.placed.push({ frag, x: x + 0.5, y: y + 0.5, found: false });
+      let placed = false;
+      for (let attempt = 0; attempt < 60 && !placed; attempt++) {
+        const x = Math.floor(rng() * map.w), y = Math.floor(rng() * map.h);
+        if (!OK.has(map.floorAt(x, y)) || map.objectAt(x, y)) continue;
+        if (this.placed.some((p) => Math.hypot(p.x - x, p.y - y) < MIN_GAP)) continue;
+        this.placed.push({ frag, x: x + 0.5, y: y + 0.5, found: false });
+        placed = true;
+      }
     }
   }
 

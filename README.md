@@ -1,6 +1,6 @@
 # postAI
 
-**Version:** 0.45 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
+**Version:** 0.46 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
 
 *(Versioning policy: 0.01 increments from v0.3 onwards.)*
 
@@ -39,6 +39,10 @@ Inspired by Project Zomboid: knowledge is the real progression, scarcity drives 
 **Urgent fix:** opening a crate bare-handed no longer freezes the game (a null item was being stowed and throwing inside the loop).
 
 **Queued for the next push** (large new systems, not in this build yet): the **W1 hunter-killer robots** and their **AI factory** (released in waves when an obelisk falls), and the **mobile phone** (call to draw every machine to you, or pocket it and receive RON's tips and new weapon designs).
+
+**Higher stakes, an armoury, and a comeback for the forest (v0.46):** the clock is tighter — **48 hours** now, shown as a raw hours-to-SKYLINK countdown. **Death costs you everything** — no more dropping your gear to pick back up; you lose it all and start again with a penknife (so those 48 hours mean something). A new **Armoury** screen (**V**) charts every weapon in the game with a power rating: the ones you've found show named and lit, the rest are faded "???" until you discover them. New weapons to find: a silent, long-range **bow** (and arrows), a piercing **railgun**, a **sledgehammer**, and a **katana** — and the **OB-gun** now doubles as a beam weapon that cuts clean through a whole line of enemies, so the rare one a **T1 might drop** is a real prize. Every obelisk carries a **hex code name** (OB-XXXX) and your kill record keeps them. The lore is spread far more **sparsely across the whole map** now, not piled in the buildings, and a few fragments quietly teach the **OB-gun recipe**. **Trees come in three kinds** and slowly **grow back** — saplings sprout on open ground and thicken over time. And you can now **start a new game** (**N**, with a confirm) or just continue — the game autosaves and reloads your run.
+
+**Still queued (large systems):** the W1 hunter-killer robots + AI factory (and its scary approach drone), and walking on top of walls/blocks (a multi-level feature). Both want their own focused pass.
 
 Created by David and Henrik.
 

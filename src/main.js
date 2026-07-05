@@ -14,7 +14,7 @@ import { Lore } from './game/lore.js';
 import { sfx } from './engine/sound.js';
 
 const WORLD_SEED = 1337;
-const VERSION = '0.45';
+const VERSION = '0.46';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -124,7 +124,11 @@ const robots = spawnRobots(map, WORLD_SEED, obelisks, { x: spawn.x, y: spawn.y, 
 // alert level cannot live on the plain {x,y} obelisks list, since that's
 // shared with spawnRobots as a read-only anchor list.
 const obeliskObjs = obelisks.map((o) => map.objectAt(o.x, o.y)).filter(Boolean);
-for (const ob of obeliskObjs) { ob.alert = 0; ob.blinkFlash = 0; ob._blinkT = 2 + Math.random() * 5; ob._nudgeT = 0; }
+for (const ob of obeliskObjs) {
+  ob.alert = 0; ob.blinkFlash = 0; ob._blinkT = 2 + Math.random() * 5; ob._nudgeT = 0;
+  // A hex code name identifying this tower, so the kill record can list it.
+  ob.code = 'OB-' + ((ob.x * 4096 + ob.y * 31) & 0xffff).toString(16).toUpperCase().padStart(4, '0');
+}
 
 // Character persona and learned skills persist across sessions and deaths.
 const SAVE_KEY = 'postai-character';
@@ -134,6 +138,8 @@ try {
     player.setPersona(saved.name || 'Adam', saved.gender || 'm');
     for (const s of saved.skills || []) player.skills.add(s);
     if (Array.isArray(saved.skillLog)) player.skillLog = saved.skillLog;
+    if (Array.isArray(saved.weaponsFound)) player.weaponsFound = new Set(saved.weaponsFound);
+    if (Array.isArray(saved.killLog)) player.killLog = saved.killLog;
     if (saved.xp) Object.assign(player.xp, saved.xp);
     if (typeof saved.score === 'number') player.score = saved.score;
     if (typeof saved.deaths === 'number') player.deaths = saved.deaths;
@@ -153,6 +159,7 @@ const persist = () => {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
       name: player.name, gender: player.gender, skills: [...player.skills], skillLog: player.skillLog,
+      weaponsFound: [...player.weaponsFound], killLog: player.killLog,
       xp: player.xp, score: player.score, deaths: player.deaths || 0,
       state: {
         health: player.health, stamina: player.stamina, food: player.food, venom: player.venom,
@@ -166,6 +173,7 @@ player.onSkillLearned = persist;
 player.onXpGain = persist;
 player.onScore = persist;
 player.onDeath = persist;
+player.onWeaponFound = persist;
 // Autosave the run periodically and when the tab is hidden or closed.
 let saveClock = 0;
 window.addEventListener('beforeunload', persist);
@@ -254,6 +262,7 @@ let playTime = 0;
 // there's nothing to drag between them.
 let showBackpack = false;
 let showSkills = false;
+let showWeapons = false;
 let detail = null;   // right-click inspection tooltip {text, x, y, ttl}
 let drag = null;     // in-progress pointer drag {from: slotDescriptor}
 const PROJECTILE_SPEED = 16; // tiles/sec for gun tracers
@@ -316,10 +325,20 @@ function describeAt(tx, ty) {
 let wasNight = null;
 let wasDusk = null;
 let wasRobotNear = false;
+let regrowClock = 0;
 function update(dt) {
   if (input.consumePress('KeyH')) toggleHelp();
   if (input.inventoryPressed()) showBackpack = !showBackpack;
   if (input.skillsPressed()) showSkills = !showSkills;
+  if (input.weaponChartPressed()) showWeapons = !showWeapons;
+  if (input.newGamePressed()) {
+    if (window.confirm('Start a new game? This erases your saved progress.')) {
+      localStorage.removeItem('postai-character');
+      localStorage.removeItem('postai-lore');
+      location.reload();
+      return;
+    }
+  }
   if (input.craftPressed() && player.canCraftObGun()) player.craftObGun(map);
   if (input.zoomTogglePressed()) camera.toggleZoom();
   lore.update(dt, player, input);
@@ -384,6 +403,23 @@ function update(dt) {
     p.prog += (PROJECTILE_SPEED * dt) / dist;
   }
   if (map.projectiles.length) map.projectiles = map.projectiles.filter((p) => p.prog < 1);
+
+  // Trees grow: saplings thicken over about a minute, and now and then a new
+  // one sprouts on open grass, so felled forest slowly comes back.
+  for (const o of map.objects) {
+    if (o.type === 'tree' && o.grow != null && o.grow < 1) o.grow = Math.min(1, o.grow + dt / 60);
+  }
+  regrowClock += dt;
+  if (regrowClock > 22) {
+    regrowClock = 0;
+    for (let t = 0; t < 20; t++) {
+      const rx = Math.floor(Math.random() * map.w), ry = Math.floor(Math.random() * map.h);
+      if (map.floorAt(rx, ry) === 'grass' && !map.objectAt(rx, ry) && (!map.heightAt || map.heightAt(rx, ry) === 0)) {
+        map.addObject('tree', rx, ry, { variant: Math.floor(Math.random() * 3), grow: 0.3 });
+        break;
+      }
+    }
+  }
 
   // Autosave the run every few seconds.
   saveClock += dt;
@@ -540,6 +576,7 @@ function frame(now) {
     drag: drag ? { ...drag, mx: input.mouseX, my: input.mouseY } : null,
     deathCert: player.deathCert,
     showSkills,
+    showWeapons,
     craftPrompt: player.canCraftObGun() && player.hands !== 'obgun',
   });
 

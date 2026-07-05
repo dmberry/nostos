@@ -500,7 +500,7 @@ function plantForests(map, rng, keepClear) {
       const y = r.y + Math.floor(rng() * r.h);
       if (map.floorAt(x, y) !== 'grass' || map.objectAt(x, y)) continue;
       if (inKeepClear(x, y, keepClear)) continue;
-      if (rng() < 0.55) map.addObject('tree', x, y);
+      if (rng() < 0.55) map.addObject('tree', x, y, { variant: Math.floor(rng() * 3) });
     }
   }
 }
@@ -532,7 +532,7 @@ function scatterLoners(map, rng, keepClear) {
     const y = Math.floor(rng() * map.h);
     if (map.floorAt(x, y) !== 'grass' || map.objectAt(x, y)) continue;
     if (inKeepClear(x, y, keepClear)) continue;
-    if (rng() < 0.75) map.addObject('tree', x, y);
+    if (rng() < 0.75) map.addObject('tree', x, y, { variant: Math.floor(rng() * 3) });
     else map.addObject('rock', x, y);
   }
 }

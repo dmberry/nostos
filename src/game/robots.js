@@ -344,6 +344,13 @@ export function updateRobots(dt, robots, player, map) {
       r.stuck = false;
       const qty = r.scrapPenalty ? 1 : scrapQty(r.x, r.y);
       (map.groundItems ??= []).push({ item: 'scrap', qty, x: r.x, y: r.y });
+      // A T1 very rarely carries an OB-gun — a prize find (deterministic from
+      // its wreck position so it isn't reload-farmable).
+      if (r.type === 't1' && (scrapQty(r.x * 1.7 + 3, r.y * 2.3 + 1) & 7) === 0
+        && ((Math.floor(r.x * 31 + r.y * 17)) % 20 === 0)) {
+        map.groundItems.push({ item: 'obgun', qty: 1, x: r.x, y: r.y });
+        map.groundItems.push({ item: 'battery', qty: 2, x: r.x + 0.3, y: r.y });
+      }
       continue;
     }
 

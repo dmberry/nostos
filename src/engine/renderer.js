@@ -1,6 +1,6 @@
 import { worldToScreen, screenToWorld } from './iso.js';
 import { FLOORS } from '../game/tiles.js';
-import { ITEMS } from '../game/items.js';
+import { ITEMS, WEAPON_ORDER } from '../game/items.js';
 import { drawAnimal } from '../game/animals.js';
 import { drawBird } from '../game/birds.js';
 import { drawRobot } from '../game/robots.js';
@@ -198,9 +198,59 @@ export class Renderer {
       ctx.textAlign = 'left';
     }
     if (hud.showSkills) this.drawSkillModal(player);
+    if (hud.showWeapons) this.drawWeaponChart(player);
     if (hud.detail) this.drawDetail(hud.detail);
     if (hud.drag) this.drawDragGhost(hud.drag, player);
     if (hud.deathCert) this.drawDeathCert(hud.deathCert);
+  }
+
+  // The weapon chart (V): every weapon in the game, with a power rating.
+  // Found ones show full and named; ones still to find are faded, unnamed,
+  // and marked with a "?".
+  drawWeaponChart(player) {
+    const ctx = this.ctx;
+    ctx.fillStyle = 'rgba(6,8,5,0.82)';
+    ctx.fillRect(0, 0, this.w, this.h);
+    const pw = Math.min(480, this.w - 50), rowH = 30;
+    const ph = Math.min(this.h - 60, 90 + WEAPON_ORDER.length * rowH);
+    const px = Math.round((this.w - pw) / 2), py = Math.round((this.h - ph) / 2);
+    ctx.fillStyle = '#12160e';
+    ctx.fillRect(px, py, pw, ph);
+    ctx.strokeStyle = 'rgba(207,216,195,0.4)';
+    ctx.strokeRect(px + 0.5, py + 0.5, pw - 1, ph - 1);
+
+    ctx.fillStyle = '#cfd8c3';
+    ctx.font = 'bold 16px system-ui, sans-serif';
+    ctx.fillText('Armoury', px + 20, py + 30);
+    ctx.font = '11px system-ui, sans-serif';
+    ctx.fillStyle = 'rgba(207,216,195,0.55)';
+    const found = WEAPON_ORDER.filter((k) => player.weaponsFound && player.weaponsFound.has(k)).length;
+    ctx.fillText(`${found} of ${WEAPON_ORDER.length} found · V to close`, px + 20, py + 48);
+
+    let y = py + 74;
+    for (const key of WEAPON_ORDER) {
+      const def = ITEMS[key];
+      if (!def) continue;
+      const has = player.weaponsFound && player.weaponsFound.has(key);
+      ctx.globalAlpha = has ? 1 : 0.32;
+      // icon
+      this.drawItemIcon(def, px + 34, y + 8, 0.7);
+      // name (hidden until found)
+      ctx.fillStyle = '#e8e0d0';
+      ctx.font = '13px system-ui, sans-serif';
+      ctx.fillText(has ? def.name : '??? undiscovered', px + 58, y + 12);
+      // power bar
+      const barX = px + pw - 130, barW = 100, pwr = def.power || 1;
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.fillRect(barX, y + 4, barW, 8);
+      ctx.fillStyle = has ? '#e8d27a' : 'rgba(207,216,195,0.4)';
+      ctx.fillRect(barX, y + 4, barW * (pwr / 10), 8);
+      ctx.fillStyle = 'rgba(207,216,195,0.7)';
+      ctx.font = '10px system-ui, sans-serif';
+      ctx.fillText(`pwr ${pwr}`, barX + barW + 6, y + 12);
+      ctx.globalAlpha = 1;
+      y += rowH;
+    }
   }
 
   // The skills screen (K): learned book-skills in the order gained, plus the
@@ -265,6 +315,20 @@ export class Renderer {
           ctx.textAlign = 'left';
         }
         y += 22; n += 1;
+      }
+    }
+    // Kill record: the obelisks you've brought down, by their hex code names.
+    if (player.killLog && player.killLog.length) {
+      y += 14;
+      ctx.font = 'bold 12px system-ui, sans-serif';
+      ctx.fillStyle = 'rgba(207,216,195,0.6)';
+      ctx.fillText(`TOWERS DOWNED (${player.killLog.length})`, px + 20, y); y += 18;
+      ctx.font = '12px ui-monospace, monospace';
+      ctx.fillStyle = '#e0503a';
+      const codes = player.killLog.join('  ');
+      for (const line of this._wrapText(ctx, codes, pw - 50)) {
+        if (y > py + ph - 12) break;
+        ctx.fillText(line, px + 30, y); y += 16;
       }
     }
   }
@@ -734,25 +798,46 @@ export class Renderer {
     const c = worldToScreen(obj.x + 0.5, obj.y + 0.5);
     // Hit wobble: canopy and trunk-top sway while obj.shake ticks down.
     const wob = obj.shake ? Math.sin(obj.shake * 45) * obj.shake * 14 : 0;
+    // Three kinds of tree, plus a growth scale for saplings that grow in.
+    const variant = obj.variant || 0;
+    const g = Math.max(0.35, Math.min(1, obj.grow == null ? 1 : obj.grow));
+    const trunkH = 26 * g;
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
     ctx.beginPath();
-    ctx.ellipse(c.x, c.y, 12, 6, 0, 0, Math.PI * 2);
+    ctx.ellipse(c.x, c.y, 12 * g, 6 * g, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = TREE_TRUNK;
     ctx.beginPath();
-    ctx.moveTo(c.x - 3, c.y);
-    ctx.lineTo(c.x + 3, c.y);
-    ctx.lineTo(c.x + 3 + wob * 0.4, c.y - 26);
-    ctx.lineTo(c.x - 3 + wob * 0.4, c.y - 26);
+    ctx.moveTo(c.x - 3 * g, c.y);
+    ctx.lineTo(c.x + 3 * g, c.y);
+    ctx.lineTo(c.x + 3 * g + wob * 0.4, c.y - trunkH);
+    ctx.lineTo(c.x - 3 * g + wob * 0.4, c.y - trunkH);
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = TREE_CANOPY;
-    ctx.beginPath();
-    ctx.arc(c.x + wob, c.y - 38, 17, 0, Math.PI * 2);
-    ctx.fill();
+    const cy = c.y - trunkH - 12 * g, cx = c.x + wob;
+    if (variant === 1) {
+      // Conifer: stacked triangles, darker green.
+      ctx.fillStyle = '#2a5226';
+      for (let k = 0; k < 3; k++) {
+        const ty = cy + 8 - k * 9 * g, wdt = (16 - k * 3) * g;
+        ctx.beginPath();
+        ctx.moveTo(cx, ty - 14 * g); ctx.lineTo(cx - wdt, ty); ctx.lineTo(cx + wdt, ty);
+        ctx.closePath(); ctx.fill();
+      }
+    } else if (variant === 2) {
+      // Twin-lobed broadleaf, lighter olive.
+      ctx.fillStyle = '#4a7a34';
+      ctx.beginPath(); ctx.arc(cx - 7 * g, cy + 2, 12 * g, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx + 7 * g, cy, 12 * g, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx, cy - 6 * g, 12 * g, 0, Math.PI * 2); ctx.fill();
+    } else {
+      // Classic round oak.
+      ctx.fillStyle = TREE_CANOPY;
+      ctx.beginPath(); ctx.arc(cx, cy, 17 * g, 0, Math.PI * 2); ctx.fill();
+    }
     ctx.fillStyle = 'rgba(255,255,255,0.08)';
     ctx.beginPath();
-    ctx.arc(c.x + wob - 5, c.y - 43, 9, 0, Math.PI * 2);
+    ctx.arc(cx - 5 * g, cy - 5 * g, 9 * g, 0, Math.PI * 2);
     ctx.fill();
   }
 

@@ -85,6 +85,64 @@ export const ITEMS = {
     staminaCost: 3,
     color: '#4a4640',
   },
+  // Silent, super-accurate, long range. Fires arrows.
+  bow: {
+    name: 'Bow',
+    kind: 'gun',
+    tier: 3,
+    range: 12,
+    robotDamage: 4,
+    animalDamage: 9,
+    ammoType: 'arrow',
+    swingCooldown: 0.7,
+    staminaCost: 2,
+    color: '#8a6a3c',
+  },
+  arrow: {
+    name: 'Arrows',
+    kind: 'resource',
+    stack: 20,
+    color: '#c9b48a',
+  },
+  // A cool late-game find: an energy lance that punches clean through
+  // anything in a line. Thirsty for batteries.
+  railgun: {
+    name: 'Railgun',
+    kind: 'gun',
+    tier: 6,
+    range: 10,
+    robotDamage: 9,
+    animalDamage: 12,
+    pierce: true,
+    ammoType: 'battery',
+    swingCooldown: 1.1,
+    staminaCost: 2,
+    color: '#7fb0d8',
+  },
+  // Two-handed and brutal on flesh and light machines alike.
+  sledgehammer: {
+    name: 'Sledgehammer',
+    kind: 'tool',
+    tier: 3,
+    treeDamage: 1,
+    animalDamage: 9,
+    robotDamage: 4,
+    swingCooldown: 0.9,
+    staminaCost: 8,
+    color: '#5a5f66',
+  },
+  // A resistance blade — fast and vicious.
+  katana: {
+    name: 'Katana',
+    kind: 'tool',
+    tier: 4,
+    treeDamage: 2,
+    animalDamage: 11,
+    robotDamage: 3,
+    swingCooldown: 0.4,
+    staminaCost: 4,
+    color: '#cdd3d8',
+  },
   scrap: {
     name: 'Scrap',
     kind: 'resource',
@@ -275,4 +333,22 @@ export const ITEMS = {
 for (const k in ITEMS) {
   ITEMS[k].key = k;
   if (ITEMS[k].stack == null) ITEMS[k].stack = 1;
+  // A power rating for the weapon chart: damage + reach + special-effect
+  // bonuses, capped at 10 for a tidy scale.
+  const d = ITEMS[k];
+  if ((d.kind === 'tool' || d.kind === 'gun') && d.power == null) {
+    let p = Math.max(d.robotDamage || 0, d.animalDamage || 0);
+    p += Math.round((d.range || 0) / 3);
+    if (d.effect === 'fuse') p += 6;
+    if (d.effect === 'stun') p += 4;
+    if (d.effect === 'burn') p += 8;
+    if (d.pierce) p += 5;
+    d.power = Math.max(1, Math.min(10, Math.round(p)));
+  }
 }
+
+// The weapons, ordered for the chart (roughly weakest to strongest).
+export const WEAPON_ORDER = [
+  'penknife', 'seatbelt', 'bat', 'shovel', 'saw', 'machete', 'crowbar', 'sledgehammer',
+  'bow', 'katana', 'pistol', 'stungun', 'shotgun', 'electrogun', 'railgun', 'obgun',
+];
