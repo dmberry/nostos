@@ -14,7 +14,7 @@ import { Lore } from './game/lore.js';
 import { sfx } from './engine/sound.js';
 
 const WORLD_SEED = 1337;
-const VERSION = '0.41';
+const VERSION = '0.42';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -92,6 +92,8 @@ const obelisks = [];
     [{ item: 'battery', qty: 2 }],
     // Exactly one Wi-Fi block per world: rare, in a random guaranteed cache.
     [{ item: 'wifiblock', qty: 1 }, { item: 'battery', qty: 2 }],
+    // A shovel for digging robot traps.
+    [{ item: 'shovel', qty: 1 }],
   ];
   const rollLoot = () => {
     const r = rng();

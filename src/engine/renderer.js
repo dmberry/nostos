@@ -310,7 +310,10 @@ export class Renderer {
     const ctx = this.ctx;
     const cx = (corners[0].x + corners[2].x) / 2;
     const cy = (corners[0].y + corners[2].y) / 2;
-    const n = 3;
+    // Sparse: most tiles stay bare, a scattering carry one or two blades, so
+    // the texture reads as flecks of turf rather than a dense lawn.
+    const density = tileHash(tx * 3 + 1, ty * 3 + 2);
+    const n = density < 0.55 ? 0 : density < 0.85 ? 1 : 2;
     for (let i = 0; i < n; i++) {
       const h1 = tileHash(tx * 7 + i * 3, ty * 13 + i * 5);
       const h2 = tileHash(tx * 11 + i * 17 + 1, ty * 5 + i * 23 + 1);
@@ -342,7 +345,7 @@ export class Renderer {
   drawObject(obj) {
     switch (obj.type) {
       case 'wall':
-        this.drawWall(obj.x, obj.y);
+        this.drawWall(obj);
         if (obj.graffiti) this.drawGraffiti(obj);
         break;
       case 'tree': this.drawTree(obj); break;
@@ -374,31 +377,83 @@ export class Renderer {
   }
 
   // A wall is an extruded diamond prism: two visible faces plus a top.
-  drawWall(tx, ty) {
+  // obj.decay (0..5: new / old / older / mossy / breaking / crumbling)
+  // greys and darkens the stone, lowers and roughens the top, and adds
+  // cracks and moss, so a distributed range reads as a decaying ruin.
+  drawWall(obj) {
     const ctx = this.ctx;
+    const tx = obj.x, ty = obj.y;
+    const decay = Math.max(0, Math.min(5, obj.decay || 0));
+    const age = decay / 5;
+    // Older stone loses height; the top gets a per-wall jitter so a run of
+    // crumbling wall reads as an uneven broken edge.
+    const jag = decay >= 4 ? (tileHash(tx * 3 + 1, ty * 3 + 7) - 0.5) * 0.22 : 0;
+    const hf = (decay >= 5 ? 0.6 : decay >= 4 ? 0.82 : 1) + jag;
+    const H = WALL_H * hf;
+    // Weathered stone greys toward a mossy green as it ages.
+    const base = [
+      WALL_BASE[0] * (1 - age * 0.26),
+      WALL_BASE[1] * (1 - age * 0.14),
+      WALL_BASE[2] * (1 - age * 0.30),
+    ];
+
     const [b0, b1, b2, b3] = this.tileCorners(tx, ty);
-    const [t0, t1, t2, t3] = this.tileCorners(tx, ty, WALL_H);
+    const [t0, t1, t2, t3] = this.tileCorners(tx, ty, H);
 
     ctx.beginPath(); // south-west face
     ctx.moveTo(b3.x, b3.y); ctx.lineTo(b2.x, b2.y);
     ctx.lineTo(t2.x, t2.y); ctx.lineTo(t3.x, t3.y);
     ctx.closePath();
-    ctx.fillStyle = rgbScale(WALL_BASE, 0.72);
+    ctx.fillStyle = rgbScale(base, 0.72);
     ctx.fill();
 
     ctx.beginPath(); // south-east face
     ctx.moveTo(b1.x, b1.y); ctx.lineTo(b2.x, b2.y);
     ctx.lineTo(t2.x, t2.y); ctx.lineTo(t1.x, t1.y);
     ctx.closePath();
-    ctx.fillStyle = rgbScale(WALL_BASE, 0.55);
+    ctx.fillStyle = rgbScale(base, 0.55);
     ctx.fill();
 
     this.diamondPath([t0, t1, t2, t3]); // top
-    ctx.fillStyle = rgbScale(WALL_BASE, 1);
+    ctx.fillStyle = rgbScale(base, 1);
     ctx.fill();
     ctx.strokeStyle = 'rgba(0,0,0,0.25)';
     ctx.lineWidth = 1;
     ctx.stroke();
+
+    // Cracks appear from "older" onward: a couple of thin dark seams down
+    // the south-east face.
+    if (decay >= 2) {
+      ctx.strokeStyle = 'rgba(0,0,0,0.28)';
+      ctx.lineWidth = 1;
+      const seams = decay >= 4 ? 2 : 1;
+      for (let i = 0; i < seams; i++) {
+        const t = 0.3 + tileHash(tx + i * 5, ty * 2 + i) * 0.4;
+        const bx = b1.x + (b2.x - b1.x) * t, byy = b1.y + (b2.y - b1.y) * t;
+        const txx = t1.x + (t2.x - t1.x) * t, tyy = t1.y + (t2.y - t1.y) * t;
+        ctx.beginPath();
+        ctx.moveTo(bx, byy);
+        ctx.lineTo(txx + (tileHash(i, tx) - 0.5) * 4, tyy + 4);
+        ctx.stroke();
+      }
+    }
+
+    // Moss from "mossy" onward: a few soft green patches on the top edge
+    // and the shaded face.
+    if (decay >= 3) {
+      const patches = 2 + decay - 3;
+      for (let i = 0; i < patches; i++) {
+        const h1 = tileHash(tx * 9 + i * 13, ty * 7 + i * 3);
+        const h2 = tileHash(tx * 5 + i * 11 + 2, ty * 17 + i);
+        const onTop = h1 < 0.5;
+        const px = (onTop ? (t0.x + t2.x) / 2 : (b3.x + t2.x) / 2) + (h1 - 0.5) * 22;
+        const py = (onTop ? (t0.y + t2.y) / 2 : (b3.y + t3.y) / 2) + (h2 - 0.5) * 14;
+        ctx.fillStyle = `rgba(74, 104, 58, ${0.28 + h2 * 0.22})`;
+        ctx.beginPath();
+        ctx.ellipse(px, py, 2 + h1 * 3, 1.5 + h2 * 2, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
   }
 
   drawTree(obj) {
@@ -689,6 +744,16 @@ export class Renderer {
         ctx.stroke();
         ctx.lineCap = 'butt';
         break;
+      case 'shovel':
+        ctx.strokeStyle = '#6a4c2c'; // handle
+        ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.moveTo(4, -9); ctx.lineTo(-3, 3); ctx.stroke();
+        ctx.fillStyle = '#c3ccd3'; // steel blade
+        ctx.beginPath();
+        ctx.moveTo(-2, 2); ctx.lineTo(-8, 6); ctx.lineTo(-5, 10);
+        ctx.lineTo(1, 8); ctx.closePath();
+        ctx.fill();
+        break;
       case 'stungun':
       case 'electrogun':
         ctx.fillStyle = '#2c3036';
@@ -941,11 +1006,12 @@ export class Renderer {
         ctx.fill();
       }
     }
-    // Facing indicator: a small dot ahead of the feet.
-    const f = worldToScreen(player.x + player.facing.x * 0.45, player.y + player.facing.y * 0.45);
+    // Facing indicator: a small dot set well ahead of the feet, so the aim
+    // direction reads clearly at a glance.
+    const f = worldToScreen(player.x + player.facing.x * 1.2, player.y + player.facing.y * 1.2);
     ctx.fillStyle = 'rgba(255,255,255,0.5)';
     ctx.beginPath();
-    ctx.arc(f.x, f.y, 2.5, 0, Math.PI * 2);
+    ctx.arc(f.x, f.y - 10, 2.5, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -975,6 +1041,12 @@ export class Renderer {
     } else if (player.food < 25) {
       ctx.fillStyle = '#d8a04f';
       ctx.fillText('HUNGRY', 92, top + 55);
+    }
+    // Wi-Fi block active (works whether held or carried): the machines can't
+    // see you. Shows minutes of charge left.
+    if (player.invisibleToRobots) {
+      ctx.fillStyle = '#4fd8c3';
+      ctx.fillText(`HIDDEN ${Math.ceil((player.wifiPower || 0) / 60)}m`, 92, top + 32);
     }
 
     // Hands slot

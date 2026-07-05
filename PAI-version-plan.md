@@ -17,7 +17,7 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
-## Where we are (v0.41)
+## Where we are (v0.42)
 
 - Isometric world, seeded 128x128: river, two bridges, ten-building town, hamlet, forests, tall grass, hills and hollows, wadeable streams.
 - Survival: food/hunger, health, stamina, venom, day/night (dark nights), torches, minimap with fog of war (grey, not black), permadeath that drops your loot where you fell.
@@ -46,6 +46,13 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Wi-Fi block** (rare, one per world in a cache): held in hand it jams robot sensors so hunters can't find you; runs on a 10-minute charge shown as a battery gauge on the hands slot; feed it a battery (use key) to keep it going.
 - **Tool/weapon use animates**: melee sweeps through an arc, guns kick back with a muzzle flash — a swing or shot always reads on screen.
 - **The hidden story has begun** (`src/game/lore.js`, David's module): scattered paper fragments in the ruins; walk over one to recover it, J opens the Archive to read what's found. Six fragments to start, deliberately out of order and ambiguous. Grow the corpus by editing the `FRAGMENTS` array in lore.js — nothing else needs touching.
+- **Decaying walls**: buildings weather through six decay states (new/old/older/mossy/breaking/crumbling) — greyer stone, lower and rougher tops, cracks and moss — distributed by how ruined each building is. Set on the wall object as `decay` (0-5) at generation; drawn in renderer `drawWall`.
+- **More dramatic terrain**: hills up to height 5, trenches down to -3 (still generated as walkable one-step slopes).
+- **Jump-to-climb**: while airborne you can clear a two-level height step, so a jump gets you up onto higher ground (and out of a dug pit); on foot it's still one level.
+- **Shovel + robot traps** (found in a cache): dig the faced tile down into a steep pit (height -2). A wheeled T1 rolls in and can never climb out; the player can only get out by jumping. Reuses the terrain height rule, so no special-case trap code.
+- **Wi-Fi block works while carried**, not only held; it draws a battery only when a machine is actually near, so it never wastes cells while you're safe. A "HIDDEN" tag + minutes shows on the HUD while active.
+- **Books and notes read on pickup**: walk onto a book and it grants its skill on the spot (no pocketing, no R needed); notes go straight to the Archive.
+- **Sparser grass texture** and the **aim dot set further from the sprite** so facing reads clearly.
 
 ## Planned / backlog
 

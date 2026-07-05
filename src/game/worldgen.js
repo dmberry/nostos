@@ -203,7 +203,11 @@ function placeBuilding(map, rng, lot) {
       if (rng() < 0.4) map.addObject('rubble', c.x, c.y);
       continue;
     }
-    map.addObject('wall', c.x, c.y);
+    // Decay level 0..5 (new/old/older/mossy/breaking/crumbling): more ruined
+    // buildings weather harder, with per-wall spread so a single wall shows a
+    // range of ages rather than one uniform state.
+    const decay = Math.max(0, Math.min(5, Math.round(ruin * 6 + (rng() - 0.5) * 2.5)));
+    map.addObject('wall', c.x, c.y, { decay });
   }
 
   // Worn dirt patch outside the door, reaching towards the road.
@@ -246,15 +250,17 @@ function raiseHills(map, rng) {
   for (const z of chosen) {
     const cx = z.x + Math.round((rng() - 0.5) * 2);
     const cy = z.y + Math.round((rng() - 0.5) * 2);
-    const peak = rng() < 0.6 ? 3 : 2;
-    const r = 5 + rng() * 2;
+    // Taller, more dramatic hills: peaks up to 5, with a wide enough base
+    // that the Lipschitz clamp still leaves a climbable one-step slope.
+    const peak = rng() < 0.45 ? 5 : rng() < 0.75 ? 4 : 3;
+    const r = 6 + rng() * 3;
     const blobs = [{ x: cx, y: cy, p: peak, r }];
     const nSub = 1 + (rng() < 0.5 ? 1 : 0);
     for (let i = 0; i < nSub; i++) {
       blobs.push({
-        x: cx + Math.round((rng() - 0.5) * 4),
-        y: cy + Math.round((rng() - 0.5) * 4),
-        p: Math.max(1, peak - 1),
+        x: cx + Math.round((rng() - 0.5) * 5),
+        y: cy + Math.round((rng() - 0.5) * 5),
+        p: Math.max(2, peak - 2),
         r: r * 0.55,
       });
     }
@@ -264,7 +270,7 @@ function raiseHills(map, rng) {
         for (let x = b.x - R; x <= b.x + R; x++) {
           if (!map.inBounds(x, y)) continue;
           const v = Math.round(b.p * (1 - Math.hypot(x - b.x, y - b.y) / b.r));
-          if (v > map.heightAt(x, y)) map.setHeight(x, y, Math.min(3, v));
+          if (v > map.heightAt(x, y)) map.setHeight(x, y, Math.min(5, v));
         }
       }
     }
@@ -402,14 +408,16 @@ function carveHollows(map, rng, keepClear) {
   for (const z of zones.slice(0, n)) {
     const cx = z.x + Math.round((rng() - 0.5) * 4);
     const cy = z.y + Math.round((rng() - 0.5) * 4);
-    const depth = rng() < 0.4 ? 2 : 1;
-    const r = 4 + rng() * 2.5;
+    // Deeper trenches: valley floors down to -3, with a wide enough mouth
+    // that the rim still steps down one tile at a time.
+    const depth = rng() < 0.4 ? 3 : 2;
+    const r = 5 + rng() * 3;
     const R = Math.ceil(r);
     for (let y = cy - R; y <= cy + R; y++) {
       for (let x = cx - R; x <= cx + R; x++) {
         if (!map.inBounds(x, y)) continue;
         const v = Math.round(depth * (1 - Math.hypot(x - cx, y - cy) / r));
-        if (v > D[y * w + x]) D[y * w + x] = Math.min(2, v);
+        if (v > D[y * w + x]) D[y * w + x] = Math.min(3, v);
       }
     }
   }

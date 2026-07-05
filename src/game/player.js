@@ -35,6 +35,11 @@ const WIFI_MAX = 600;    // Wi-Fi block charge in seconds (10 real minutes)
 // Item kinds that can occupy the hands slot.
 const HOLDABLE = new Set(['tool', 'gun', 'gadget']);
 
+// Soft ground a shovel can sink into; hard surfaces (road, boards, water)
+// resist digging.
+const DIGGABLE = new Set(['grass', 'tallgrass', 'dirt', 'sand']);
+const PIT_DEPTH = -2;    // trap depth: a steep pit a T1 cannot climb out of
+
 export class Player {
   constructor(x, y) {
     this.x = x;
@@ -185,12 +190,21 @@ export class Player {
       }
     }
 
-    // Wi-Fi block: while held and charged it jams robot sensors, draining
-    // its cell. Flat, or not held, you are visible again.
-    if (this.hands === 'wifiblock') {
-      this.wifiPower = Math.max(0, this.wifiPower - dt);
+    // Wi-Fi block: works while carried anywhere, no need to hold it. Its
+    // cell drains while active; when flat it pulls a fresh battery — but
+    // only with a machine near, so it never wastes cells while you are safe.
+    if (this.ownsWifiBlock()) {
+      if (this.wifiPower > 0) {
+        this.wifiPower = Math.max(0, this.wifiPower - dt);
+      } else if (this.robotNear(robots) && this.consumeBattery()) {
+        this.wifiPower = this.wifiMax;
+        this.say('Your Wi-Fi block draws a fresh cell. You drop off their sensors.');
+      } else if (this._wifiOn) {
+        this.say('Your Wi-Fi block is flat. It needs a battery.');
+      }
     }
-    this.invisibleToRobots = this.hands === 'wifiblock' && this.wifiPower > 0;
+    this.invisibleToRobots = this.ownsWifiBlock() && this.wifiPower > 0;
+    this._wifiOn = this.invisibleToRobots;
 
     if (input.usePressed()) this.useHands(map, animals, robots);
     if (input.eatPressed()) this.eat();
@@ -316,18 +330,26 @@ export class Player {
       if (def.kind !== 'book') continue;
       if (i < pocketsLen) this.pockets[i] = null;
       else this.backpack.slots[i - pocketsLen] = null;
-      if (this.skills.has(def.skill)) {
-        this.gainXp('knowledge', 2); // re-reading still teaches a little
-        this.say(`You have already read ${def.name}.`);
-      } else {
-        this.skills.add(def.skill);
-        this.gainXp('knowledge', 10);
-        this.say(`You read "${def.name}". ${def.skillText}`);
-        if (this.onSkillLearned) this.onSkillLearned(def.skill);
-      }
+      this.learnFromBook(slot.item);
       return;
     }
     this.say('Nothing to read.');
+  }
+
+  // Learn a book's skill (or re-read it for a little knowledge). Shared by
+  // the R key and by walking onto / clicking a book, which reads it on the
+  // spot rather than pocketing it.
+  learnFromBook(itemKey) {
+    const def = ITEMS[itemKey];
+    if (this.skills.has(def.skill)) {
+      this.gainXp('knowledge', 2); // re-reading still teaches a little
+      this.say(`You have already read ${def.name}.`);
+    } else {
+      this.skills.add(def.skill);
+      this.gainXp('knowledge', 10);
+      this.say(`You read "${def.name}". ${def.skillText}`);
+      if (this.onSkillLearned) this.onSkillLearned(def.skill);
+    }
   }
 
   // Eat the first edible thing in the pockets, then the backpack — a
@@ -443,6 +465,12 @@ export class Player {
 
     // Resistance cache: search it rather than hit it.
     if (facingBox) { this.openBox(obj, map); return; }
+
+    // Shovel: dig a pit in the open ground ahead. A steep pit (height -2)
+    // is a trap — a wheeled T1 rolls in and can't climb out, and you can
+    // only get out yourself by jumping.
+    if (tool.dig && !obj) { this.dig(map, tx, ty); return; }
+
     if (!obj || obj.type !== 'tree') {
       sfx.play('swing');
       return;
@@ -485,6 +513,67 @@ export class Player {
     this.wifiPower = this.wifiMax;
     sfx.play('zap');
     this.say('You slot a fresh cell into the block. The machines lose your signal.');
+  }
+
+  // True if a Wi-Fi block is anywhere on the player: in hand, a pocket, or
+  // the backpack. It works wherever it is carried.
+  ownsWifiBlock() {
+    if (this.hands === 'wifiblock') return true;
+    if (this.pockets.some((s) => s && s.item === 'wifiblock')) return true;
+    if (this.backpack && this.backpack.slots.some((s) => s && s.item === 'wifiblock')) return true;
+    return false;
+  }
+
+  // Spend one battery from the pockets, then the backpack. Returns whether
+  // one was found.
+  consumeBattery() {
+    const take = (slots) => {
+      const i = slots.findIndex((s) => s && s.item === 'battery');
+      if (i < 0) return false;
+      slots[i].qty -= 1;
+      if (slots[i].qty <= 0) slots[i] = null;
+      return true;
+    };
+    if (take(this.pockets)) return true;
+    if (this.backpack && take(this.backpack.slots)) return true;
+    return false;
+  }
+
+  robotNear(robots, range = 22) {
+    for (const r of robots || []) {
+      if (r.dead || r.friendly || r.drained || r.fused) continue;
+      if (Math.hypot(r.x - this.x, r.y - this.y) < range) return true;
+    }
+    return false;
+  }
+
+  // Shovel: sink the faced tile one step, down to a steep pit at PIT_DEPTH.
+  // Only soft, open ground digs. A finished pit traps a wheeled T1 (it can
+  // never move onto a higher tile) while you can still jump out.
+  dig(map, tx, ty) {
+    const tool = ITEMS[this.hands];
+    const f = map.floorAt(tx, ty);
+    if (!DIGGABLE.has(f)) {
+      this.say('The ground here is too hard to dig.');
+      return;
+    }
+    if (this.stamina < tool.staminaCost) {
+      this.say('Too exhausted to dig.');
+      return;
+    }
+    const cur = map.heightAt ? map.heightAt(tx, ty) : 0;
+    if (cur <= PIT_DEPTH) {
+      this.say('The pit is already dug.');
+      return;
+    }
+    this.swingTimer = tool.swingCooldown;
+    this.stamina -= tool.staminaCost;
+    map.setHeight(tx, ty, cur - 1);
+    map.setFloor(tx, ty, 'dirt');
+    sfx.play('chop');
+    this.say(cur - 1 <= PIT_DEPTH
+      ? 'You finish the pit. A machine will not climb out of that.'
+      : 'You dig at the ground.');
   }
 
   // Search a resistance cache with the free hand — usable whatever the
@@ -589,6 +678,13 @@ export class Player {
         gi.qty -= 1;
         sfx.play('pickup');
         this.say('You find a backpack — 16 more slots, and room for a spare weapon.');
+        continue;
+      }
+      // Books are read on the spot for their knowledge, not carried.
+      if (def.kind === 'book') {
+        gi.qty -= 1;
+        sfx.play('pickup');
+        this.learnFromBook(gi.item);
         continue;
       }
       if (def.kind === 'tool' && (def.tier ?? 0) > (ITEMS[this.hands]?.tier ?? 0)) {
@@ -727,13 +823,17 @@ export class Player {
   }
 
   // Sample the four corners of the player's bounding square. A corner
-  // blocks if its tile is solid or more than one height level away.
+  // blocks if its tile is solid or too many height levels away. On foot you
+  // can step one level; while airborne (jumping) you can clear two, so a
+  // jump gets you up onto higher ground and out of a dug pit — where a
+  // wheeled robot, which cannot climb at all, stays stuck.
   collides(x, y, map) {
     const h = map.heightAt ? map.heightAt(Math.floor(this.x), Math.floor(this.y)) : 0;
+    const maxStep = (this.z > 0 || this.vz !== 0) ? 2 : 1;
     const blocked = (tx, ty) => {
       if (map.isSolid(tx, ty)) return true;
       if (!map.heightAt) return false;
-      return Math.abs(map.heightAt(tx, ty) - h) > 1;
+      return Math.abs(map.heightAt(tx, ty) - h) > maxStep;
     };
     return (
       blocked(Math.floor(x - RADIUS), Math.floor(y - RADIUS)) ||

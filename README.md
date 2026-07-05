@@ -1,6 +1,6 @@
 # postAI
 
-**Version:** 0.41 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
+**Version:** 0.42 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
 
 *(Versioning policy: 0.01 increments from v0.3 onwards.)*
 
@@ -27,6 +27,8 @@ Inspired by Project Zomboid: knowledge is the real progression, scarcity drives 
 **Icons, aim, XP, and watchful towers (v0.40):** every item now draws as a little picture of the thing it is — guns, blades, batteries, food, books — in your pockets, in hand, and on the ground; the held weapon shows in your sprite's hand too, kicking out when swung or fired. Fighting now trains you: melee practice hits harder, gun practice steadies your aim and its range, and reading books builds a knowledge level — all three show in the stats line and, like your skills, survive death. The obelisk towers blink only occasionally rather than pulsing constantly, and when you linger close their light deepens to a saturated blood-red — they have sensed you, and quietly steer nearby patrols to sweep the area (never your exact position). Machines now carry a faint drone that swells as one nears, and the crickets fall silent around any active robot — they are scared of them too.
 
 **Zoom, jamming, and the first fragments (v0.41):** the game now plays at a closer over-the-shoulder zoom by default; press **Z** to pull the camera out to the wide view and back. A rare **Wi-Fi block** hides in one of the resistance caches — hold it and the machines simply cannot find you, their sensors jammed. It runs on a ten-minute charge (shown as a battery gauge on the hands slot); feed it a battery (use key) to keep it going. Using a tool or weapon now visibly animates — melee sweeps through an arc, guns kick back with a muzzle flash — so you can always see a swing land. And the hidden story has begun: scattered paper **fragments** wait in the ruins; walk over one to recover it, and press **J** to open the **Archive** and read what you have found. Six to start, deliberately out of order and ambiguous — the truth is never stated, only assembled.
+
+**Ruin, terrain, traps, and knowledge (v0.42):** the world has more character now. Walls weather through a range of decay — new, old, mossy, breaking down, crumbling — so the ruins read as genuinely aged. The land is more dramatic: hills rise higher and trenches cut deeper. You can **jump** to clamber up onto higher ground you couldn't just walk up. A **shovel** (found in a cache) digs pits: sink the ground in front of you into a steep trap that a wheeled T1 rolls into and can never climb out of, while you can still jump clear. The **Wi-Fi block** no longer needs to be held — carry it anywhere and it jams the machines, drawing on a battery only when one is actually near. **Books and notes are read simply by picking them up** — a book grants its skill on the spot, a note goes into the Archive. The grass texture is sparser, and the aim dot sits further from your character so your facing reads at a glance.
 
 Created by David and Henrik.
 

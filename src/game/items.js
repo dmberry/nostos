@@ -45,6 +45,21 @@ export const ITEMS = {
     staminaCost: 5,
     color: '#6a6f7a',
   },
+  // Dig pits to trap the wheeled machines: face open ground and use it to
+  // sink the tile in front into a steep pit a T1 rolls into and can't climb
+  // out of. Also a passable melee weapon.
+  shovel: {
+    name: 'Shovel',
+    kind: 'tool',
+    tier: 2,
+    treeDamage: 1,
+    animalDamage: 4,
+    robotDamage: 2,
+    swingCooldown: 0.7,
+    staminaCost: 6,
+    dig: true,
+    color: '#7c6a4a',
+  },
   scrap: {
     name: 'Scrap',
     kind: 'resource',
