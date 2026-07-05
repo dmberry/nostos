@@ -1,6 +1,6 @@
 # postAI
 
-**Version:** 0.52 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
+**Version:** 0.53 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
 
 *(Versioning policy: 0.01 increments from v0.3 onwards.)*
 
@@ -53,6 +53,8 @@ Inspired by Project Zomboid: knowledge is the real progression, scarcity drives 
 **Every weapon guaranteed (v0.51):** the penknife, seatbelt, baseball bat, and machete previously only turned up if the random loot roll happened to favour them; they're now guaranteed cache finds like everything else. Every weapon and tool in the game is now findable in a single run — except the wave gun and OB-gun, which stay deliberately crafting-only.
 
 **Reload warning and a countdown fix (v0.52):** reloading or closing the tab now triggers the browser's own "leave site?" warning, since it wipes your score and kill record. Also fixed a real bug: the 24-hour countdown was quietly starting at ~15:00 remaining instead of 24:00 (it was measuring from the day-clock's absolute hour rather than from when the run actually began) — it now genuinely starts at 24 hours.
+
+**Name field fix and better W4 loot (v0.53):** the character name field in the help modal no longer swallows the letter H (or any other game shortcut key) while you're typing — it also has an explicit **Save** button now. Bringing down a **W4** is properly worth it: on top of the usual scrap it now drops three batteries, bonus scrap, and a heavy bomb.
 
 **Still queued (large systems):** walking on top of walls/blocks (a multi-level feature), and a mobile phone + RON text tips. Both want their own focused pass.
 

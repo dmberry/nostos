@@ -4,7 +4,7 @@
     {
       "name": "postai",
       "runtimeExecutable": "sh",
-      "runtimeArgs": ["-c", "exec python3 -m http.server \"${PORT:-8123}\" --directory ."],
+      "runtimeArgs": ["-c", "exec python3 dev-server.py \"${PORT:-8123}\""],
       "autoPort": true
     }
   ]

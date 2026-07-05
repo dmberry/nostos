@@ -30,7 +30,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '0.52';
+const VERSION = '0.53';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -288,10 +288,21 @@ for (const btn of document.querySelectorAll('#help button[data-gender]')) {
     persist();
   });
 }
-nameInput.addEventListener('change', () => {
+const saveName = () => {
   const v = nameInput.value.trim();
-  if (v) { player.name = v; persist(); }
-});
+  if (!v) return;
+  player.name = v;
+  persist();
+  const btn = document.getElementById('charNameSave');
+  if (btn) {
+    const original = btn.textContent;
+    btn.textContent = 'Saved!';
+    setTimeout(() => { btn.textContent = original; }, 1200);
+  }
+};
+nameInput.addEventListener('change', saveName);
+nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') saveName(); });
+document.getElementById('charNameSave').addEventListener('click', saveName);
 const camera = new Camera(player.x, player.y);
 const lore = new Lore(map, WORLD_SEED);
 

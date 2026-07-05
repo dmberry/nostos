@@ -28,6 +28,12 @@ export class Input {
     this.rightAt = null;         // one-shot right-click position (inspect)
     this.wheel = 0;              // accumulated wheel delta since last read
     target.addEventListener('keydown', (e) => {
+      // Typing into an HTML control (the help modal's name field, etc.) must
+      // never be swallowed as a game shortcut — this used to block the
+      // letter H outright (preventDefault) while also toggling the help
+      // panel shut mid-type, since H is one of the tracked keys.
+      const tag = e.target && e.target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       if (TRACKED.has(e.code)) {
         if (!e.repeat && !this.down.has(e.code)) this.pressed.add(e.code);
         this.down.add(e.code);

@@ -17,7 +17,7 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
-## Where we are (v0.52)
+## Where we are (v0.53)
 
 - Isometric world, seeded 128x128: river, two bridges, ten-building town, hamlet, forests, tall grass, hills and hollows, wadeable streams.
 - Survival: food/hunger, health, stamina, venom, day/night (dark nights), torches, minimap with fog of war (grey, not black), permadeath that drops your loot where you fell.
@@ -69,6 +69,13 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Certificate of Death**: on death a modal shows name, cause, score, skills, deaths, and an amusing rank (COMPOST → NOOB → SCRAPPER → SURVIVOR → VETERAN → L33T). Freezes the world until clicked. `player.deathCert` snapshot; `deathRank()` in renderer.
 - **Lore notes styled**: Archive fragments render as their own note cards — paper colour + typeface per kind (handwritten note, newsprint, diary, poster, green-on-black disk/tape). `NOTE_STYLE` in lore.js.
 - **Autosave**: character + xp + score + deaths + a run-state snapshot (vitals, position, inventory) persist to localStorage; saved every 8s, on tab-hide, and on unload; restored on load. World regenerates from seed (so caches/cars reset — a known limitation; world-object persistence is a follow-up).
+
+### v0.53 — name field fix, W4 spoils, dev-server caching fix
+
+- **BUG FIX: the help modal's name field swallowed the letter H** (and would have swallowed any other tracked key — N, C, J, Z, P, etc.) because the global keyboard listener ran regardless of what had focus, so typing "H" both blocked the character and toggled the help panel shut mid-type. `Input`'s keydown handler now skips entirely when the event's target is an `INPUT`/`TEXTAREA`/`SELECT` (`src/engine/input.js`).
+- **Added an explicit Save button** next to the name field (also saves on Enter), so naming your character doesn't rely on an invisible blur/change event.
+- **W4 kills drop real spoils of war**: on top of the usual scrap, a downed W4 now drops 3 batteries, 4 bonus scrap, and a heavy bomb (rarely the insane one) — the toughest thing the factory builds is now worth taking down.
+- **Dev tooling**: replaced the plain `python -m http.server` with `dev-server.py`, which disables browser caching (`Cache-Control: no-store`). The plain server was letting browsers skip revalidation on reload entirely, serving genuinely stale JS after an edit — confusing during testing and would eventually confuse a real playtest session too. `.claude/launch.json` updated to match.
 
 ### v0.52 — reload warning, and a genuine bug fix to the 24h countdown
 
