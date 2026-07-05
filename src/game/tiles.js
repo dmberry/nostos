@@ -15,8 +15,10 @@ export const FLOORS = {
 };
 
 export const OBJECTS = {
-  tree:   { solid: true },
-  wall:   { solid: true },
-  rubble: { solid: true },
-  rock:   { solid: true },
+  tree:    { solid: true },
+  wall:    { solid: true },
+  rubble:  { solid: true },
+  rock:    { solid: true },
+  obelisk: { solid: true }, // AI signal tower; destructible in a later phase
+  box:     { solid: true }, // resistance weapons cache, searchable
 };

@@ -1,12 +1,14 @@
 # postAI
 
-**Version:** 0.31 · **Authors:** David M. Berry and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI
+**Version:** 0.32 · **Authors:** David M. Berry and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI
 
 *(Versioning policy: 0.01 increments from v0.3 onwards.)*
 
-An isometric 2D survival game set in a world devastated by the collapse that followed a failed AI takeover. Civilisation burned down its own infrastructure to win, and years later the survivors scavenge the ruins while avoiding wild animals that have gained strange powers. The truth of what happened is never stated: the player pieces it together from newspapers, diaries, floppy disks, VHS tapes, and dead computers scattered through the world.
+An isometric 2D survival game set in a world devastated by an AI takeover. Civilisation collapsed fighting the machines, and the machines are still here: black obelisk towers pulse across the landscape and T-class hunter robots patrol around them, hunting the humans that remain. Survivors scavenge the ruins while avoiding both the machines and wild animals that have gained strange powers; the resistance hides weapons in caches through the broken towns. How it all happened is never stated: the player pieces it together from newspapers, diaries, floppy disks, VHS tapes, and dead computers scattered through the world.
 
 Inspired by Project Zomboid: knowledge is the real progression, scarcity drives movement, every fight is optional and risky, and the world tells the story.
+
+**The machines (v0.32):** T1 is a wheeled hunter, faster than your walk but unable to climb — put a rise between you, or bait it into a hollow and it is trapped for good. T2 is a biped that stalks at exactly your walking pace and never tires; sprint or fight. The penknife barely scratches them: search the resistance's crates in buildings (E) for bats, machetes, and the crowbar, the machine-killer. Wrecked robots drop scrap. The obelisks cannot be destroyed. Yet.
 
 Created by David M. Berry and Henrik.
 

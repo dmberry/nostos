@@ -8,6 +8,7 @@ import { makeRng } from './game/rng.js';
 import { DayNight } from './game/daynight.js';
 import { Minimap } from './game/minimap.js';
 import { spawnBirds, updateBirds } from './game/birds.js';
+import { spawnRobots, updateRobots } from './game/robots.js';
 import { sfx } from './engine/sound.js';
 
 const WORLD_SEED = 1337;
@@ -44,6 +45,47 @@ const animals = spawnAnimals(map, WORLD_SEED, { x: spawn.x, y: spawn.y, r: 12 })
   const books = ['book_wood', 'book_herbs', 'book_track', 'book_run', 'book_herbs', 'book_track'];
   for (const b of books) drop(boards, b, 1);
 }
+
+// The AIs control the landscape: black obelisk towers dot the wilds (their
+// signal network; destructible in a later phase), each garrisoned by
+// T-class hunter robots. The resistance hides weapon caches in buildings.
+const obelisks = [];
+{
+  const rng = makeRng(WORLD_SEED ^ 0x0b31);
+  let guard = 0;
+  while (obelisks.length < 12 && guard++ < 5000) {
+    const x = 4 + Math.floor(rng() * (map.w - 8));
+    const y = 4 + Math.floor(rng() * (map.h - 8));
+    const f = map.floorAt(x, y);
+    if ((f !== 'grass' && f !== 'tallgrass') || map.objectAt(x, y)) continue;
+    if (Math.hypot(x - spawn.x, y - spawn.y) < 16) continue;
+    if (obelisks.some((o) => Math.hypot(o.x - x, o.y - y) < 14)) continue;
+    map.addObject('obelisk', x, y);
+    obelisks.push({ x, y });
+  }
+
+  // Resistance caches: searchable boxes on interior tiles (never doorways:
+  // all four neighbours must be boards too).
+  const inner = [];
+  for (let y = 0; y < map.h; y++) {
+    for (let x = 0; x < map.w; x++) {
+      if (map.floorAt(x, y) !== 'boards' || map.objectAt(x, y)) continue;
+      if (map.floorAt(x + 1, y) === 'boards' && map.floorAt(x - 1, y) === 'boards'
+        && map.floorAt(x, y + 1) === 'boards' && map.floorAt(x, y - 1) === 'boards') {
+        inner.push([x, y]);
+      }
+    }
+  }
+  const WEAPONS = ['crowbar', 'bat', 'machete', 'crowbar'];
+  for (let i = 0; i < 14 && inner.length; i++) {
+    const [x, y] = inner.splice(Math.floor(rng() * inner.length), 1)[0];
+    const loot = rng() < 0.65
+      ? { item: WEAPONS[Math.floor(rng() * WEAPONS.length)], qty: 1 }
+      : rng() < 0.5 ? { item: 'tin', qty: 1 } : { item: 'torch', qty: 1 };
+    map.addObject('box', x, y, { loot, opened: false });
+  }
+}
+const robots = spawnRobots(map, WORLD_SEED, obelisks, { x: spawn.x, y: spawn.y, r: 14 });
 
 // Character persona and learned skills persist across sessions and deaths.
 const SAVE_KEY = 'postai-character';
@@ -110,7 +152,7 @@ function revealAround(px, py) {
 }
 
 // Debug handle for inspecting live state from the console.
-window.__game = { player, map, camera, animals, birds, dayNight };
+window.__game = { player, map, camera, animals, birds, robots, obelisks, dayNight };
 
 function resize() {
   renderer.resize(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1);
@@ -135,9 +177,10 @@ helpEl.addEventListener('click', (e) => { if (e.target === helpEl) toggleHelp(fa
 let wasNight = null;
 function update(dt) {
   if (input.consumePress('KeyH')) toggleHelp();
-  player.update(dt, input, map, animals);
+  player.update(dt, input, map, animals, robots);
   updateAnimals(dt, animals, player, map);
   updateBirds(dt, birds, animals, player, map);
+  updateRobots(dt, robots, player, map);
   map.updateShakes(dt);
   dayNight.update(dt);
   camera.follow(player.x, player.y, dt);
@@ -177,6 +220,15 @@ function update(dt) {
     if (b.shrieking && !b._sShriek) { b._sShriek = true; sfx.play('shriek'); }
     if (!b.shrieking) b._sShriek = false;
   }
+  for (const r of robots) {
+    if (r.dead) continue;
+    const hunting = r.state === 'chase' || r.chasing || r.aggro;
+    if (hunting && !r._sHunt && Math.hypot(r.x - player.x, r.y - player.y) < 16) {
+      r._sHunt = true;
+      sfx.play('charge');
+    }
+    if (!hunting) r._sHunt = false;
+  }
 }
 
 function frame(now) {
@@ -194,6 +246,7 @@ function frame(now) {
     timeLabel: dayNight.label,
     minimap,
     birds,
+    robots,
     torch: player.pockets.some((s) => s && s.item === 'torch'),
   });
 

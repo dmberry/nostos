@@ -4,11 +4,52 @@ export const ITEMS = {
   penknife: {
     name: 'Penknife',
     kind: 'tool',
+    tier: 1,
     treeDamage: 1,     // hits per swing against a tree
     animalDamage: 3,
+    robotDamage: 1,    // barely scratches the machines
     swingCooldown: 0.5,
     staminaCost: 4,
     color: '#b8412f',
+  },
+  bat: {
+    name: 'Baseball bat',
+    kind: 'tool',
+    tier: 2,
+    treeDamage: 1,
+    animalDamage: 5,
+    robotDamage: 3,
+    swingCooldown: 0.55,
+    staminaCost: 5,
+    color: '#9a7b4f',
+  },
+  machete: {
+    name: 'Machete',
+    kind: 'tool',
+    tier: 3,
+    treeDamage: 2,
+    animalDamage: 7,
+    robotDamage: 2,    // blades glance off armour
+    swingCooldown: 0.5,
+    staminaCost: 4,
+    color: '#aab2b8',
+  },
+  crowbar: {
+    name: 'Crowbar',
+    kind: 'tool',
+    tier: 3,
+    treeDamage: 1,
+    animalDamage: 4,
+    robotDamage: 5,    // the resistance's anti-machine weapon of choice
+    swingCooldown: 0.6,
+    staminaCost: 5,
+    color: '#6a6f7a',
+  },
+  scrap: {
+    name: 'Scrap',
+    kind: 'resource',
+    stack: 10,
+    color: '#7a7f88',
   },
   wood: {
     name: 'Wood',

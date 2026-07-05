@@ -3,6 +3,7 @@ import { FLOORS } from '../game/tiles.js';
 import { ITEMS } from '../game/items.js';
 import { drawAnimal } from '../game/animals.js';
 import { drawBird } from '../game/birds.js';
+import { drawRobot } from '../game/robots.js';
 
 // Canvas renderer. Two passes per frame: floor diamonds first, then all
 // "drawables" (objects + player) painter-sorted by world depth (x + y).
@@ -88,6 +89,11 @@ export class Renderer {
       if (b.x < range.minX || b.x > range.maxX + 1 || b.y < range.minY || b.y > range.maxY + 1) continue;
       drawables.push({ depth: b.x + b.y, bird: b });
     }
+    for (const r of hud.robots || []) {
+      if (r.dead) continue;
+      if (r.x < range.minX || r.x > range.maxX + 1 || r.y < range.minY || r.y > range.maxY + 1) continue;
+      drawables.push({ depth: r.x + r.y, robot: r });
+    }
     drawables.push({ depth: player.x + player.y, player });
     drawables.sort((a, b) => a.depth - b.depth);
 
@@ -97,12 +103,14 @@ export class Renderer {
       const lift = d.player ? elevOf(player.x, player.y)
         : d.animal ? elevOf(d.animal.x, d.animal.y)
         : d.bird ? elevOf(d.bird.x, d.bird.y)
+        : d.robot ? elevOf(d.robot.x, d.robot.y)
         : d.groundItem ? elevOf(d.groundItem.x, d.groundItem.y)
         : elevOf(d.obj.x + 0.5, d.obj.y + 0.5);
       if (lift) { ctx.save(); ctx.translate(0, -lift); }
       if (d.player) this.drawPlayer(d.player);
       else if (d.animal) drawAnimal(this.ctx, d.animal, worldToScreen);
       else if (d.bird) drawBird(this.ctx, d.bird, worldToScreen);
+      else if (d.robot) drawRobot(this.ctx, d.robot, worldToScreen);
       else if (d.groundItem) this.drawGroundItem(d.groundItem);
       else this.drawObject(d.obj);
       if (lift) ctx.restore();
@@ -232,6 +240,8 @@ export class Renderer {
       case 'tree': this.drawTree(obj); break;
       case 'rock': this.drawRock(obj.x, obj.y); break;
       case 'rubble': this.drawRubble(obj.x, obj.y); break;
+      case 'obelisk': this.drawObelisk(obj.x, obj.y); break;
+      case 'box': this.drawBox(obj); break;
     }
   }
 
@@ -288,6 +298,80 @@ export class Renderer {
     ctx.beginPath();
     ctx.arc(c.x + wob - 5, c.y - 43, 9, 0, Math.PI * 2);
     ctx.fill();
+  }
+
+  // AI signal tower: a tall narrow black monolith with a slow-pulsing red
+  // light near the crown. Destructible in a later phase.
+  drawObelisk(tx, ty) {
+    const ctx = this.ctx;
+    const c = worldToScreen(tx + 0.5, ty + 0.5);
+    const H = 96, W = 9;
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y, 15, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#101014'; // south-west face
+    ctx.beginPath();
+    ctx.moveTo(c.x - W, c.y - 4); ctx.lineTo(c.x, c.y + 2);
+    ctx.lineTo(c.x, c.y + 2 - H); ctx.lineTo(c.x - W, c.y - 4 - H);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#07070a'; // south-east face
+    ctx.beginPath();
+    ctx.moveTo(c.x + W, c.y - 4); ctx.lineTo(c.x, c.y + 2);
+    ctx.lineTo(c.x, c.y + 2 - H); ctx.lineTo(c.x + W, c.y - 4 - H);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#1a1a22'; // cap
+    ctx.beginPath();
+    ctx.moveTo(c.x - W, c.y - 4 - H); ctx.lineTo(c.x, c.y + 2 - H);
+    ctx.lineTo(c.x + W, c.y - 4 - H); ctx.lineTo(c.x, c.y - 10 - H);
+    ctx.closePath();
+    ctx.fill();
+    // Pulsing signal light.
+    const pulse = 0.45 + 0.55 * Math.abs(Math.sin(performance.now() / 900));
+    ctx.fillStyle = `rgba(224, 60, 50, ${pulse})`;
+    ctx.beginPath();
+    ctx.arc(c.x, c.y - H + 8, 2.6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Resistance cache: a wooden crate; opened ones sit dark and empty.
+  drawBox(obj) {
+    const ctx = this.ctx;
+    const c = worldToScreen(obj.x + 0.5, obj.y + 0.5);
+    const w = 11, h = 10;
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y + 1, 13, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = obj.opened ? '#4a3a24' : '#7a5c38'; // SW face
+    ctx.beginPath();
+    ctx.moveTo(c.x - w, c.y - 3); ctx.lineTo(c.x, c.y + 3);
+    ctx.lineTo(c.x, c.y + 3 - h); ctx.lineTo(c.x - w, c.y - 3 - h);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = obj.opened ? '#3a2d1c' : '#63482c'; // SE face
+    ctx.beginPath();
+    ctx.moveTo(c.x + w, c.y - 3); ctx.lineTo(c.x, c.y + 3);
+    ctx.lineTo(c.x, c.y + 3 - h); ctx.lineTo(c.x + w, c.y - 3 - h);
+    ctx.closePath();
+    ctx.fill();
+    // Lid: closed boxes get a pale top and strap; opened ones a dark hole.
+    ctx.fillStyle = obj.opened ? '#241a10' : '#8f6d42';
+    ctx.beginPath();
+    ctx.moveTo(c.x - w, c.y - 3 - h); ctx.lineTo(c.x, c.y + 3 - h);
+    ctx.lineTo(c.x + w, c.y - 3 - h); ctx.lineTo(c.x, c.y - 9 - h);
+    ctx.closePath();
+    ctx.fill();
+    if (!obj.opened) {
+      ctx.strokeStyle = 'rgba(40,30,18,0.7)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(c.x, c.y + 3);
+      ctx.lineTo(c.x, c.y - 9 - h);
+      ctx.stroke();
+    }
   }
 
   drawRock(tx, ty) {

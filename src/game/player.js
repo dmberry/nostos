@@ -67,7 +67,7 @@ export class Player {
     this.gender = gender;
   }
 
-  update(dt, input, map, animals = []) {
+  update(dt, input, map, animals = [], robots = []) {
     this.swingTimer = Math.max(0, this.swingTimer - dt);
     this.hurtTimer = Math.max(0, this.hurtTimer - dt);
     if (this.message) {
@@ -147,7 +147,7 @@ export class Player {
       }
     }
 
-    if (input.usePressed()) this.useHands(map, animals);
+    if (input.usePressed()) this.useHands(map, animals, robots);
     if (input.eatPressed()) this.eat();
     if (input.readPressed()) this.read();
     this.pickupNearby(map);
@@ -200,9 +200,10 @@ export class Player {
     this.say('Nothing to eat.');
   }
 
-  // Swing the held tool: hits an animal in reach first, otherwise the
-  // object on the faced tile. No swinging mid-jump.
-  useHands(map, animals = []) {
+  // Swing the held tool: hits a robot or animal in reach first, otherwise
+  // searches a cache box or chops the tree on the faced tile. No swinging
+  // mid-jump.
+  useHands(map, animals = [], robots = []) {
     const tool = ITEMS[this.hands];
     if (!tool || tool.kind !== 'tool' || this.swingTimer > 0 || this.z > 0) return;
     if (this.stamina < tool.staminaCost) {
@@ -210,23 +211,30 @@ export class Player {
       return;
     }
 
-    // Nearest living animal within reach and roughly in front.
-    let target = null, best = Infinity;
-    for (const a of animals) {
-      if (a.dead) continue;
-      const dx = a.x - this.x, dy = a.y - this.y;
+    // Nearest living creature or machine within reach and roughly in front.
+    let target = null, best = Infinity, isRobot = false;
+    const consider = (e, robot) => {
+      if (e.dead) return;
+      const dx = e.x - this.x, dy = e.y - this.y;
       const d = Math.hypot(dx, dy);
-      if (d > 1.1 || d === 0) continue;
-      if (dx * this.facing.x + dy * this.facing.y < 0) continue; // behind us
-      if (d < best) { best = d; target = a; }
-    }
+      if (d > 1.1 || d === 0) return;
+      if (dx * this.facing.x + dy * this.facing.y < 0) return; // behind us
+      if (d < best) { best = d; target = e; isRobot = robot; }
+    };
+    for (const a of animals) consider(a, false);
+    for (const r of robots) consider(r, true);
     if (target) {
       this.swingTimer = tool.swingCooldown;
       this.stamina -= tool.staminaCost;
       sfx.play('chop');
-      target.hp -= tool.animalDamage ?? 3;
-      target.hurt = true; // animals module reads this for pack flee/enrage
-      if (target.hp <= 0) {
+      target.hp -= isRobot ? (tool.robotDamage ?? 1) : (tool.animalDamage ?? 3);
+      target.hurt = true; // modules read this (pack flee, boar enrage, robot aggro)
+      if (isRobot) {
+        // The robots module marks it dead and drops scrap on its next tick.
+        this.say(target.hp <= 0
+          ? 'The machine sparks, shudders, and dies.'
+          : `The ${tool.name.toLowerCase()} clangs off the machine.`);
+      } else if (target.hp <= 0) {
         target.dead = true;
         map.groundItems.push({ item: 'meat', qty: 1, x: target.x, y: target.y });
         this.say(`The ${target.type} goes down.`);
@@ -239,6 +247,19 @@ export class Player {
     const tx = Math.floor(this.x + this.facing.x * REACH);
     const ty = Math.floor(this.y + this.facing.y * REACH);
     const obj = map.objectAt(tx, ty);
+    // Resistance cache: search it rather than hit it.
+    if (obj && obj.type === 'box') {
+      this.swingTimer = 0.4;
+      if (obj.opened) {
+        this.say('The box is empty.');
+      } else {
+        obj.opened = true;
+        map.groundItems.push({ ...obj.loot, x: this.x, y: this.y });
+        sfx.play('pickup');
+        this.say(`You prise open the cache: ${ITEMS[obj.loot.item].name.toLowerCase()}.`);
+      }
+      return;
+    }
     if (!obj || obj.type !== 'tree') {
       sfx.play('swing');
       return;
@@ -258,14 +279,28 @@ export class Player {
       sfx.play('treefall');
       this.say('The tree comes down.');
     } else {
-      this.say('You hack at the tree with the penknife.');
+      this.say(`You hack at the tree with the ${ITEMS[this.hands].name.toLowerCase()}.`);
     }
   }
 
-  // Walk over dropped loot to collect it (if there is pocket room).
+  // Walk over dropped loot to collect it (if there is pocket room). A
+  // better weapon than the one in hand is equipped on the spot; the old
+  // tool goes to a pocket, or to the ground if there is no room.
   pickupNearby(map) {
     for (const gi of map.groundItems) {
       if (Math.hypot(gi.x - this.x, gi.y - this.y) > PICKUP_RANGE) continue;
+      const def = ITEMS[gi.item];
+      if (def.kind === 'tool' && (def.tier ?? 0) > (ITEMS[this.hands]?.tier ?? 0)) {
+        const old = this.hands;
+        this.hands = gi.item;
+        gi.qty -= 1;
+        if (this.stow(old, 1) === 0) {
+          map.groundItems.push({ item: old, qty: 1, x: this.x, y: this.y });
+        }
+        sfx.play('pickup');
+        this.say(`You take the ${def.name.toLowerCase()} in hand.`);
+        continue;
+      }
       const stored = this.stow(gi.item, gi.qty);
       if (stored <= 0) continue;
       gi.qty -= stored;
