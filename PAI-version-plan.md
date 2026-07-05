@@ -17,7 +17,7 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
-## Where we are (v0.51)
+## Where we are (v0.52)
 
 - Isometric world, seeded 128x128: river, two bridges, ten-building town, hamlet, forests, tall grass, hills and hollows, wadeable streams.
 - Survival: food/hunger, health, stamina, venom, day/night (dark nights), torches, minimap with fog of war (grey, not black), permadeath that drops your loot where you fell.
@@ -69,6 +69,11 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Certificate of Death**: on death a modal shows name, cause, score, skills, deaths, and an amusing rank (COMPOST → NOOB → SCRAPPER → SURVIVOR → VETERAN → L33T). Freezes the world until clicked. `player.deathCert` snapshot; `deathRank()` in renderer.
 - **Lore notes styled**: Archive fragments render as their own note cards — paper colour + typeface per kind (handwritten note, newsprint, diary, poster, green-on-black disk/tape). `NOTE_STYLE` in lore.js.
 - **Autosave**: character + xp + score + deaths + a run-state snapshot (vitals, position, inventory) persist to localStorage; saved every 8s, on tab-hide, and on unload; restored on load. World regenerates from seed (so caches/cars reset — a known limitation; world-object persistence is a follow-up).
+
+### v0.52 — reload warning, and a genuine bug fix to the 24h countdown
+
+- **BUG FIX: the SKYLINK countdown didn't actually start at 24 hours.** `DayNight.hoursLeft()` subtracted the day-clock's absolute `totalHours` from the deadline, but `totalHours` itself starts at `startHour` (09:00, for a daylight start) rather than 0 — so a fresh run's countdown read ~15:00 remaining instead of 24:00, shortchanging the deadline by the daylight-start offset every single time. Fixed by counting elapsed game-hours since the run actually began (`totalHours - startHour`) rather than the absolute clock hour.
+- **Reload/close now warns first**: a second `beforeunload` listener calls `preventDefault()` to trigger the browser's native "leave site?" confirmation, since reloading now wipes your score and kill record (v0.50). Skipped during New Game's own reload (already confirmed via its own dialog) via the existing `resettingGame` flag.
 
 ### v0.51 — every weapon guaranteed to spawn
 

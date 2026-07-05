@@ -1,6 +1,6 @@
 # postAI
 
-**Version:** 0.51 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
+**Version:** 0.52 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
 
 *(Versioning policy: 0.01 increments from v0.3 onwards.)*
 
@@ -51,6 +51,8 @@ Inspired by Project Zomboid: knowledge is the real progression, scarcity drives 
 **Factory-built hunters, a harsher reload, and a shorter clock (v0.50):** revenge-squad **W1s now spawn at the W-factory itself**, not at the crater of the tower that fell — matching the fiction that the factory is where every W-unit is actually built. They also **can't be corrupted into zombies** by the OB-gun beam anymore (they're already hostile) — it just damages them instead. The **W4 laser hunter-killer now also rolls out on a 30-in-game-minute clock** from the factory, independent of the existing attack-triggered dispatch, capped so it can't snowball. The countdown to SKYLINK is **24 hours now**, down from 48. Five weapons — **bow, arrows, katana, sledgehammer, and railgun** — were fully implemented but never actually placed anywhere in the world; they're now in the resistance caches like everything else. And **reloading the page without a proper New Game now wipes your score and your entire obelisk kill record**, not just a small tax — New Game itself is untouched and still starts you clean.
 
 **Every weapon guaranteed (v0.51):** the penknife, seatbelt, baseball bat, and machete previously only turned up if the random loot roll happened to favour them; they're now guaranteed cache finds like everything else. Every weapon and tool in the game is now findable in a single run — except the wave gun and OB-gun, which stay deliberately crafting-only.
+
+**Reload warning and a countdown fix (v0.52):** reloading or closing the tab now triggers the browser's own "leave site?" warning, since it wipes your score and kill record. Also fixed a real bug: the 24-hour countdown was quietly starting at ~15:00 remaining instead of 24:00 (it was measuring from the day-clock's absolute hour rather than from when the run actually began) — it now genuinely starts at 24 hours.
 
 **Still queued (large systems):** walking on top of walls/blocks (a multi-level feature), and a mobile phone + RON text tips. Both want their own focused pass.
 

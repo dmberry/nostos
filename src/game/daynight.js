@@ -51,10 +51,15 @@ export class DayNight {
     return `Day ${this.day} · ${pad(h)}:${pad(m)}`;
   }
 
-  // A countdown to doom: DEADLINE_DAYS days before SKYLINK-9000 comes online.
-  // Returns whole hours remaining (0 when time is up).
+  // A countdown to doom: DEADLINE_DAYS days before SKYLINK-9000 comes online,
+  // counted from the moment the run actually started (elapsed game-hours),
+  // not from absolute day-clock hour. `totalHours` starts at `startHour`
+  // (09:00 by default, for a daylight start) — using it directly here used
+  // to shortchange the deadline by that offset (a 24h deadline read as only
+  // 15h left at the very start). Returns whole hours remaining (0 at zero).
   hoursLeft() {
-    return Math.max(0, DEADLINE_DAYS * 24 - this.totalHours);
+    const elapsedHours = this.totalHours - this.startHour;
+    return Math.max(0, DEADLINE_DAYS * 24 - elapsedHours);
   }
 
   get countdownLabel() {

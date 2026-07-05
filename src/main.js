@@ -30,7 +30,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '0.51';
+const VERSION = '0.52';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -257,6 +257,15 @@ player.onWeaponFound = persist;
 let saveClock = 0;
 window.addEventListener('beforeunload', persist);
 document.addEventListener('visibilitychange', () => { if (document.hidden) persist(); });
+
+// Warn before a reload/close, since it wipes score and the obelisk kill
+// record (below) — but not during New Game's own reload, which already had
+// its own confirm and is an intentional clean reset, not an accidental one.
+window.addEventListener('beforeunload', (e) => {
+  if (resettingGame) return;
+  e.preventDefault();
+  e.returnValue = ''; // most browsers require this to show their own prompt
+});
 
 // Reloading the page (F5, etc.) isn't a clean reset — it just re-loads the
 // same save — so unlike New Game (which wipes everything and shuffles a
