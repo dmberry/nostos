@@ -991,7 +991,9 @@ export class Player {
       if (perp > 0.8) return;
       // The OB-gun's own beam doesn't kill a machine outright — it corrupts
       // it into a zombie, immune to everything but a bow or the wave gun.
-      if (robot && tool.effect === 'burn' && !e.zombie) {
+      // W1s are already the AI's own revenge squad, dispatched hostile from
+      // the moment they're deployed — they can't be corrupted any further.
+      if (robot && tool.effect === 'burn' && !e.zombie && e.type !== 'w1') {
         e.zombie = true; e.hurt = true; zombified = true;
         this.sparkAt(map, e.x, e.y);
         return;

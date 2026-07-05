@@ -17,7 +17,7 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
-## Where we are (v0.49)
+## Where we are (v0.50)
 
 - Isometric world, seeded 128x128: river, two bridges, ten-building town, hamlet, forests, tall grass, hills and hollows, wadeable streams.
 - Survival: food/hunger, health, stamina, venom, day/night (dark nights), torches, minimap with fog of war (grey, not black), permadeath that drops your loot where you fell.
@@ -69,6 +69,16 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Certificate of Death**: on death a modal shows name, cause, score, skills, deaths, and an amusing rank (COMPOST → NOOB → SCRAPPER → SURVIVOR → VETERAN → L33T). Freezes the world until clicked. `player.deathCert` snapshot; `deathRank()` in renderer.
 - **Lore notes styled**: Archive fragments render as their own note cards — paper colour + typeface per kind (handwritten note, newsprint, diary, poster, green-on-black disk/tape). `NOTE_STYLE` in lore.js.
 - **Autosave**: character + xp + score + deaths + a run-state snapshot (vitals, position, inventory) persist to localStorage; saved every 8s, on tab-hide, and on unload; restored on load. World regenerates from seed (so caches/cars reset — a known limitation; world-object persistence is a follow-up).
+
+### v0.50 — factory-built W1s, harsher reload, 24h deadline, missing weapons found
+
+- **W1s are built at the factory, not the obelisks**: the revenge squad an obelisk's destruction triggers now spawns at the W-factory's location instead of the crater — matches the fiction ("W1s are created AT THE FACTORY") and reads better against the periodic factory-dispatched waves added in v0.49.
+- **W1s can no longer be zombified**: the OB-gun beam's corrupt-into-a-zombie effect (`pierceShot`) now excludes `type === 'w1'` — they're already the AI's own hostile hunters, so the beam just damages them like any other pierce hit instead of pointlessly "corrupting" an already-hostile machine.
+- **W4 now also spawns on a game-time clock**: one per 30 minutes of in-game time (not real time — scales with the day/night clock), from the W-factory, independent of the existing attack-triggered dispatch. Capped at 3 concurrent W4s so it can't snowball.
+- **24-hour deadline** (was 48): `DEADLINE_DAYS` in `daynight.js` dropped from 2 to 1.
+- **Bow, arrows, katana, sledgehammer, and railgun are now actually findable**: all five were fully defined in `ITEMS` but never referenced anywhere in `main.js`'s loot generation, making them unobtainable in a real playthrough. Added guaranteed cache drops for all five.
+- **Reload penalty hardened**: previously -1000 score and one kill off the record; now a plain page reload (without New Game) wipes the score and the *entire* obelisk kill record. New Game itself is unaffected — it still clears everything and shuffles a fresh world, penalty-free.
+- **Docs**: help modal updated (machines section, reload-penalty line) to match.
 
 ### v0.49 — waves, triangulation, the W4 laser hunter, and a denser world
 

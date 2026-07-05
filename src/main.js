@@ -30,7 +30,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '0.49';
+const VERSION = '0.50';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -115,6 +115,12 @@ const obelisks = [];
     // Demolition caches: a couple of bombs to get you started.
     [{ item: 'bomb_small', qty: 1 }, { item: 'bomb_small', qty: 1 }],
     [{ item: 'bomb_medium', qty: 1 }],
+    // Late-game weapons: previously defined in ITEMS but never actually
+    // placed anywhere in the world, so they were unobtainable in play.
+    [{ item: 'bow', qty: 1 }, { item: 'arrow', qty: 12 }],
+    [{ item: 'katana', qty: 1 }],
+    [{ item: 'sledgehammer', qty: 1 }],
+    [{ item: 'railgun', qty: 1 }, { item: 'battery', qty: 2 }],
   ];
   const rollLoot = () => {
     const r = rng();
@@ -245,13 +251,13 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) persi
 
 // Reloading the page (F5, etc.) isn't a clean reset — it just re-loads the
 // same save — so unlike New Game (which wipes everything and shuffles a
-// fresh world) it costs you: a small tax so reload can't be used as a free
-// undo out of a bad fight.
+// fresh world too) it costs you: your score and obelisk kill record are wiped
+// clean, so reload can't be used as a free undo out of a bad fight.
 if (hadExistingSave) {
-  player.score = Math.max(0, player.score - 1000);
-  if (player.killLog.length) player.killLog.pop();
+  player.score = 0;
+  player.killLog = [];
   persist();
-  player.say('The feed glitches on reconnect: -1000 score, one obelisk kill struck from the record.');
+  player.say('The feed glitches on reconnect: score and obelisk kill record wiped clean.');
 }
 
 // Character picker in the help modal.
@@ -353,13 +359,16 @@ player.onObeliskDestroyed = (ob) => {
     const [bx, by] = boardTiles[Math.floor(Math.random() * boardTiles.length)];
     map.groundItems.push({ item: 'wifiblock', qty: 1, power: 600, x: bx + 0.5, y: by + 0.5 });
   }
-  // A revenge squad boils out of the wreckage the instant a tower falls.
+  // A revenge squad is dispatched the instant a tower falls — from the
+  // W-factory itself, where W1s are actually built, not from the crater.
   if (ob) {
     const squadSeed = ((ob.x * 92821 + ob.y * 1237 + Math.floor(Math.random() * 1e6)) >>> 0) || 1;
-    const squad = spawnW1s(map, squadSeed, ob.x + 0.5, ob.y + 0.5, 2 + Math.floor(Math.random() * 3));
+    const originX = wfactory ? wfactory.x + 0.5 : ob.x + 0.5;
+    const originY = wfactory ? wfactory.y + 0.5 : ob.y + 0.5;
+    const squad = spawnW1s(map, squadSeed, originX, originY, 2 + Math.floor(Math.random() * 3));
     if (squad.length) {
       robots.push(...squad);
-      player.say(`A revenge squad boils out of the wreckage: ${squad.length} W1 hunter${squad.length > 1 ? 's' : ''}, already coming for you.`);
+      player.say(`The W-factory dispatches a revenge squad: ${squad.length} W1 hunter${squad.length > 1 ? 's' : ''}, already coming for you.`);
     }
   }
   // Victory: every obelisk toppled before the deadline.
@@ -430,6 +439,7 @@ let regrowClock = 0;
 let ronResupplyClock = 0, ronResupplyNext = 90 + Math.random() * 60;
 let wFactoryClock = 0, wFactoryNext = 60 + Math.random() * 60;
 let wFactoryW1Clock = 0, wFactoryW1Next = 100 + Math.random() * 80;
+let lastW4GameHour = dayNight.totalHours; // ticks a W4 every 30 game-minutes, not real time
 function update(dt) {
   if (input.consumePress('KeyH')) toggleHelp();
   if (input.inventoryPressed()) showBackpack = !showBackpack;
@@ -594,6 +604,17 @@ function update(dt) {
       }
     }
     if (wFactoryW4Cooldown > 0) wFactoryW4Cooldown = Math.max(0, wFactoryW4Cooldown - dt);
+
+    // A W4 also rolls off the factory floor every 30 minutes of game time
+    // (not real time), independent of the attack-triggered dispatch above.
+    if (dayNight.totalHours - lastW4GameHour >= 0.5) {
+      lastW4GameHour = dayNight.totalHours;
+      const liveW4 = robots.filter((r) => r.type === 'w4' && !r.dead).length;
+      if (liveW4 < 3) {
+        const w4 = spawnW4(map, Math.floor(Math.random() * 0x7fffffff), wfactory.x + 0.5, wfactory.y + 0.5);
+        if (w4) { robots.push(w4); player.say('The W-factory rolls out another W4 hunter-killer.'); }
+      }
+    }
   }
 
   // Trees grow: saplings thicken over about a minute, and now and then a new
