@@ -1,6 +1,6 @@
 # postAI
 
-**Version:** 0.32 · **Authors:** David M. Berry and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI
+**Version:** 0.33 · **Authors:** David M. Berry and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
 
 *(Versioning policy: 0.01 increments from v0.3 onwards.)*
 
@@ -9,6 +9,8 @@ An isometric 2D survival game set in a world devastated by an AI takeover. Civil
 Inspired by Project Zomboid: knowledge is the real progression, scarcity drives movement, every fight is optional and risky, and the world tells the story.
 
 **The machines (v0.32):** T1 is a wheeled hunter, faster than your walk but unable to climb — put a rise between you, or bait it into a hollow and it is trapped for good. T2 is a biped that stalks at exactly your walking pace and never tires; sprint or fight. The penknife barely scratches them: search the resistance's crates in buildings (E) for bats, machetes, and the crowbar, the machine-killer. Wrecked robots drop scrap. The obelisks cannot be destroyed. Yet.
+
+**Batteries and guns (v0.33):** every machine runs on a battery. Hunting drains it; they trundle back to their obelisk to recharge, and one that gets stuck runs flat where it stands. A drained machine can be **reprogrammed** (R, costs a battery): it turns friendly, follows you, and a friendly T2 will fell trees for you. The caches now also hold ranged weapons: the **stun-gun** drops a machine cold for a good while, the **electro-gun** fuses one permanently into a blackened wreck you can mine for scrap, and the **pistol** and **shotgun** simply punch holes in things (flesh included) — though gunfire mangles the salvage. All of them are dead weight without **batteries**, **ammo**, or **shells**, also hidden in the caches. Machines wear their designation (T1/T2) on their hulls.
 
 Created by David M. Berry and Henrik.
 

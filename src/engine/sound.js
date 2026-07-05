@@ -145,6 +145,14 @@ class Sound {
         case 'swing': // air whoosh for a missed swing
           this._noiseBurst({ when: t, dur: 0.15, gain: 0.12, attack: 0.03, filter: 'bandpass', freq: 420 * v, end: 1900 * v, q: 1.5 });
           break;
+        case 'shot': // gunshot: sharp crack + low report tail
+          this._noiseBurst({ when: t, dur: 0.06, gain: 0.6, attack: 0.001, filter: 'highpass', freq: 900 });
+          this._noiseBurst({ when: t + 0.02, dur: 0.3, gain: 0.3, attack: 0.005, freq: 500 * v, end: 120 });
+          break;
+        case 'zap': // electric discharge: buzzy square drop + crackle
+          this._tone({ when: t, dur: 0.25, type: 'square', freq: 1600 * v, end: 180, gain: 0.2, attack: 0.002, filter: 'bandpass', filterFreq: 1500 });
+          this._noiseBurst({ when: t, dur: 0.18, gain: 0.2, attack: 0.002, filter: 'highpass', freq: 3000 });
+          break;
         default:
           break; // unknown names are ignored silently
       }

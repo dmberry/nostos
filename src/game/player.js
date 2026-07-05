@@ -149,12 +149,36 @@ export class Player {
 
     if (input.usePressed()) this.useHands(map, animals, robots);
     if (input.eatPressed()) this.eat();
-    if (input.readPressed()) this.read();
+    if (input.readPressed()) this.read(robots);
     this.pickupNearby(map);
   }
 
+  // R interfaces with things: a drained robot nearby gets reprogrammed
+  // (costs a battery); otherwise read the first book in the pockets.
+  read(robots = []) {
+    const bot = robots.find((r) => !r.dead && !r.fused && r.drained
+      && Math.hypot(r.x - this.x, r.y - this.y) < 1.3);
+    if (bot) {
+      const i = this.pockets.findIndex((s) => s && s.item === 'battery');
+      if (i < 0) {
+        this.say('Its cells are flat. You need a battery to restart it.');
+        return;
+      }
+      this.pockets[i].qty -= 1;
+      if (this.pockets[i].qty <= 0) this.pockets[i] = null;
+      bot.friendly = true;
+      bot.drained = false;
+      bot.battery = 100;
+      bot.disabledT = 0;
+      sfx.play('zap');
+      this.say(`You splice into the ${bot.type.toUpperCase()} and rewrite its orders. It works for you now.`);
+      return;
+    }
+    this.readBook();
+  }
+
   // Read the first book in the pockets and learn its skill for good.
-  read() {
+  readBook() {
     for (let i = 0; i < this.pockets.length; i++) {
       const slot = this.pockets[i];
       if (!slot) continue;
@@ -205,16 +229,18 @@ export class Player {
   // mid-jump.
   useHands(map, animals = [], robots = []) {
     const tool = ITEMS[this.hands];
-    if (!tool || tool.kind !== 'tool' || this.swingTimer > 0 || this.z > 0) return;
+    if (!tool || (tool.kind !== 'tool' && tool.kind !== 'gun') || this.swingTimer > 0 || this.z > 0) return;
+    if (tool.kind === 'gun') { this.fire(tool, map, animals, robots); return; }
     if (this.stamina < tool.staminaCost) {
       this.say('Too exhausted to swing.');
       return;
     }
 
     // Nearest living creature or machine within reach and roughly in front.
+    // Fused wrecks stay targetable: hitting one mines it for parts.
     let target = null, best = Infinity, isRobot = false;
     const consider = (e, robot) => {
-      if (e.dead) return;
+      if (e.dead || e.drained || e.friendly) return;
       const dx = e.x - this.x, dy = e.y - this.y;
       const d = Math.hypot(dx, dy);
       if (d > 1.1 || d === 0) return;
@@ -223,6 +249,20 @@ export class Player {
     };
     for (const a of animals) consider(a, false);
     for (const r of robots) consider(r, true);
+    if (target && isRobot && target.fused) {
+      this.swingTimer = tool.swingCooldown;
+      this.stamina -= tool.staminaCost;
+      sfx.play('chop');
+      target.mineCharges = (target.mineCharges ?? 3) - 1;
+      map.groundItems.push({ item: 'scrap', qty: 2, x: target.x, y: target.y });
+      if (target.mineCharges <= 0) {
+        target.dead = true;
+        this.say('You strip the last usable parts from the wreck.');
+      } else {
+        this.say('You pry parts out of the fused machine.');
+      }
+      return;
+    }
     if (target) {
       this.swingTimer = tool.swingCooldown;
       this.stamina -= tool.staminaCost;
@@ -254,9 +294,10 @@ export class Player {
         this.say('The box is empty.');
       } else {
         obj.opened = true;
-        map.groundItems.push({ ...obj.loot, x: this.x, y: this.y });
+        const drops = Array.isArray(obj.loot) ? obj.loot : [obj.loot];
+        for (const l of drops) map.groundItems.push({ ...l, x: this.x, y: this.y });
         sfx.play('pickup');
-        this.say(`You prise open the cache: ${ITEMS[obj.loot.item].name.toLowerCase()}.`);
+        this.say(`You prise open the cache: ${drops.map((l) => ITEMS[l.item].name.toLowerCase()).join(', ')}.`);
       }
       return;
     }
@@ -280,6 +321,67 @@ export class Player {
       this.say('The tree comes down.');
     } else {
       this.say(`You hack at the tree with the ${ITEMS[this.hands].name.toLowerCase()}.`);
+    }
+  }
+
+  // Fire the held gun at the nearest target in range and roughly in front.
+  // Guns consume ammunition (ammoType) from the pockets per shot. Stun and
+  // fuse effects work on machines only; pistol and shotgun hit flesh too.
+  fire(tool, map, animals, robots) {
+    let target = null, best = Infinity, isRobot = false;
+    const consider = (e, robot) => {
+      if (e.dead || e.fused || e.drained || e.friendly) return;
+      const dx = e.x - this.x, dy = e.y - this.y;
+      const d = Math.hypot(dx, dy);
+      if (d > tool.range || d === 0) return;
+      if (dx * this.facing.x + dy * this.facing.y < 0) return;
+      if (d < best) { best = d; target = e; isRobot = robot; }
+    };
+    if (tool.animalDamage != null) for (const a of animals) consider(a, false);
+    for (const r of robots) consider(r, true);
+    if (!target) {
+      this.say('No clear shot.');
+      return;
+    }
+    const i = this.pockets.findIndex((s) => s && s.item === tool.ammoType);
+    if (i < 0) {
+      this.say(`The ${tool.name.toLowerCase()} is dead weight without ${ITEMS[tool.ammoType].name.toLowerCase()}.`);
+      return;
+    }
+    this.pockets[i].qty -= 1;
+    if (this.pockets[i].qty <= 0) this.pockets[i] = null;
+    this.swingTimer = tool.swingCooldown;
+    this.stamina = Math.max(0, this.stamina - (tool.staminaCost ?? 0));
+
+    if (tool.effect === 'stun') {
+      sfx.play('zap');
+      target.disabledT = tool.stunTime;
+      this.say('The stun bolt drops the machine cold. It will not stay down forever.');
+    } else if (tool.effect === 'fuse') {
+      sfx.play('zap');
+      target.fused = true;
+      target.mineCharges = 3;
+      target.disabledT = 0;
+      this.say('The machine fuses solid: blackened, dead, and full of parts.');
+    } else if (isRobot) {
+      sfx.play('shot');
+      target.scrapPenalty = true; // gunfire mangles the salvage
+      target.hp -= tool.robotDamage;
+      target.hurt = true;
+      this.say(target.hp <= 0
+        ? 'The machine collapses in a shower of sparks.'
+        : 'The round punches into the machine.');
+    } else {
+      sfx.play('shot');
+      target.hp -= tool.animalDamage;
+      target.hurt = true;
+      if (target.hp <= 0) {
+        target.dead = true;
+        map.groundItems.push({ item: 'meat', qty: 1, x: target.x, y: target.y });
+        this.say(`The ${target.type} drops where it stands.`);
+      } else {
+        this.say(`You wing the ${target.type}.`);
+      }
     }
   }
 

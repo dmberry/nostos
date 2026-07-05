@@ -76,12 +76,35 @@ const obelisks = [];
       }
     }
   }
-  const WEAPONS = ['crowbar', 'bat', 'machete', 'crowbar'];
-  for (let i = 0; i < 14 && inner.length; i++) {
+  // Each cache holds a list of drops. The first few are guaranteed so every
+  // run can find the key anti-machine gear; the rest roll on a table.
+  const guaranteed = [
+    [{ item: 'stungun', qty: 1 }, { item: 'battery', qty: 2 }],
+    [{ item: 'pistol', qty: 1 }, { item: 'ammo', qty: 6 }],
+    [{ item: 'electrogun', qty: 1 }, { item: 'battery', qty: 1 }],
+    [{ item: 'shotgun', qty: 1 }, { item: 'shells', qty: 4 }],
+    [{ item: 'crowbar', qty: 1 }],
+    [{ item: 'battery', qty: 2 }],
+  ];
+  const rollLoot = () => {
+    const r = rng();
+    if (r < 0.30) {
+      const MELEE = ['crowbar', 'bat', 'machete', 'crowbar'];
+      return [{ item: MELEE[Math.floor(rng() * MELEE.length)], qty: 1 }];
+    }
+    if (r < 0.65) {
+      const AMMO = [
+        [{ item: 'battery', qty: 2 }],
+        [{ item: 'ammo', qty: 6 }],
+        [{ item: 'shells', qty: 4 }],
+      ];
+      return AMMO[Math.floor(rng() * AMMO.length)];
+    }
+    return rng() < 0.5 ? [{ item: 'tin', qty: 1 }] : [{ item: 'torch', qty: 1 }];
+  };
+  for (let i = 0; i < 20 && inner.length; i++) {
     const [x, y] = inner.splice(Math.floor(rng() * inner.length), 1)[0];
-    const loot = rng() < 0.65
-      ? { item: WEAPONS[Math.floor(rng() * WEAPONS.length)], qty: 1 }
-      : rng() < 0.5 ? { item: 'tin', qty: 1 } : { item: 'torch', qty: 1 };
+    const loot = i < guaranteed.length ? guaranteed[i] : rollLoot();
     map.addObject('box', x, y, { loot, opened: false });
   }
 }
