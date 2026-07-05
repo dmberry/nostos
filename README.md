@@ -1,6 +1,6 @@
 # postAI
 
-**Version:** 0.39 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
+**Version:** 0.40 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
 
 *(Versioning policy: 0.01 increments from v0.3 onwards.)*
 
@@ -23,6 +23,8 @@ Inspired by Project Zomboid: knowledge is the real progression, scarcity drives 
 **First lore (v0.38):** the ruins now carry a little history. Sprayed slogans turn up on a sparse scattering of walls — fragments, never an explanation, of who fought the machines and how. Abandoned cars sit dead on the roads here and there, left where the grid failed.
 
 **RON (v0.39):** the resistance has a name now — **RON, Reality or Nothing** — and it shows up in the graffiti: some of it reads like a living movement (*RON LIVES*, *RON NEVER LEFT*), some like an epitaph (*RON IS DEAD*, *no one is coming*), painted fainter as if older or written by a less certain hand. Whether RON still exists is left open on purpose; nothing in the game answers it.
+
+**Icons, aim, XP, and watchful towers (v0.40):** every item now draws as a little picture of the thing it is — guns, blades, batteries, food, books — in your pockets, in hand, and on the ground; the held weapon shows in your sprite's hand too, kicking out when swung or fired. Fighting now trains you: melee practice hits harder, gun practice steadies your aim and its range, and reading books builds a knowledge level — all three show in the stats line and, like your skills, survive death. The obelisk towers blink only occasionally rather than pulsing constantly, and when you linger close their light deepens to a saturated blood-red — they have sensed you, and quietly steer nearby patrols to sweep the area (never your exact position). Machines now carry a faint drone that swells as one nears, and the crickets fall silent around any active robot — they are scared of them too.
 
 Created by David and Henrik.
 

@@ -195,3 +195,14 @@ export const ITEMS = {
     skillText: 'Fleet foot: sprinting drains far less stamina.',
   },
 };
+
+// Each def keeps a self-reference to its own key, so any code holding a
+// resolved item (ITEMS[k]) can still look up which icon to draw for it.
+// Tools/guns don't stack, but still need stack:1 — stow() falls back to
+// pocketing a displaced weapon (e.g. swapping tools with no backpack
+// room), and without a stack size that path divides by an undefined and
+// leaves the slot with qty: NaN.
+for (const k in ITEMS) {
+  ITEMS[k].key = k;
+  if (ITEMS[k].stack == null) ITEMS[k].stack = 1;
+}

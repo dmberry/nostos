@@ -62,6 +62,25 @@ export class Player {
     this.name = 'Adam';
     this.gender = 'm';    // 'm' | 'f' | 'u'
     this.skills = new Set(); // knowledge from books; survives death
+
+    // Practice makes better: melee/guns sharpen with use, knowledge with
+    // reading. Levels rise on a square-root curve (25, 100, 225... xp per
+    // level) and, like skills, survive death and reloads.
+    this.xp = { melee: 0, guns: 0, knowledge: 0 };
+  }
+
+  xpLevel(kind) {
+    return Math.floor(Math.sqrt((this.xp[kind] || 0) / 25));
+  }
+
+  gainXp(kind, amount) {
+    const before = this.xpLevel(kind);
+    this.xp[kind] = (this.xp[kind] || 0) + amount;
+    if (this.xpLevel(kind) > before) {
+      const label = kind === 'guns' ? 'aim' : kind === 'melee' ? 'swordarm' : 'mind';
+      this.say(`Practice pays off: your ${label} sharpens.`);
+    }
+    if (this.onXpGain) this.onXpGain();
   }
 
   setPersona(name, gender) {
@@ -282,9 +301,11 @@ export class Player {
       if (i < pocketsLen) this.pockets[i] = null;
       else this.backpack.slots[i - pocketsLen] = null;
       if (this.skills.has(def.skill)) {
+        this.gainXp('knowledge', 2); // re-reading still teaches a little
         this.say(`You have already read ${def.name}.`);
       } else {
         this.skills.add(def.skill);
+        this.gainXp('knowledge', 10);
         this.say(`You read "${def.name}". ${def.skillText}`);
         if (this.onSkillLearned) this.onSkillLearned(def.skill);
       }
@@ -383,8 +404,11 @@ export class Player {
       this.swingTimer = tool.swingCooldown;
       this.stamina -= tool.staminaCost;
       sfx.play('chop');
-      target.hp -= isRobot ? (tool.robotDamage ?? 1) : (tool.animalDamage ?? 3);
+      // A practised swordarm hits harder.
+      const bonus = this.xpLevel('melee');
+      target.hp -= (isRobot ? (tool.robotDamage ?? 1) : (tool.animalDamage ?? 3)) + bonus;
       target.hurt = true; // modules read this (pack flee, boar enrage, robot aggro)
+      this.gainXp('melee', target.hp <= 0 ? 5 : 1);
       if (isRobot) {
         // The robots module marks it dead and drops scrap on its next tick.
         this.say(target.hp <= 0
@@ -444,12 +468,14 @@ export class Player {
   // Guns consume ammunition (ammoType) from the pockets per shot. Stun and
   // fuse effects work on machines only; pistol and shotgun hit flesh too.
   fire(tool, map, animals, robots) {
+    // Gun practice steadies the hand: range grows a little with the level.
+    const range = tool.range + this.xpLevel('guns') * 0.3;
     let target = null, best = Infinity, isRobot = false;
     const consider = (e, robot) => {
       if (e.dead || e.fused || e.drained || e.friendly) return;
       const dx = e.x - this.x, dy = e.y - this.y;
       const d = Math.hypot(dx, dy);
-      if (d > tool.range || d === 0) return;
+      if (d > range || d === 0) return;
       if (dx * this.facing.x + dy * this.facing.y < 0) return;
       if (d < best) { best = d; target = e; isRobot = robot; }
     };
@@ -489,15 +515,17 @@ export class Player {
     } else if (isRobot) {
       sfx.play('shot');
       target.scrapPenalty = true; // gunfire mangles the salvage
-      target.hp -= tool.robotDamage;
+      target.hp -= tool.robotDamage + this.xpLevel('guns');
       target.hurt = true;
+      this.gainXp('guns', target.hp <= 0 ? 5 : 1);
       this.say(target.hp <= 0
         ? 'The machine collapses in a shower of sparks.'
         : 'The round punches into the machine.');
     } else {
       sfx.play('shot');
-      target.hp -= tool.animalDamage;
+      target.hp -= tool.animalDamage + this.xpLevel('guns');
       target.hurt = true;
+      this.gainXp('guns', target.hp <= 0 ? 5 : 1);
       if (target.hp <= 0) {
         target.dead = true;
         map.groundItems.push({ item: 'meat', qty: 1, x: target.x, y: target.y });

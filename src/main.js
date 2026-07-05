@@ -13,7 +13,7 @@ import { resolveBodyOverlaps } from './game/collision.js';
 import { sfx } from './engine/sound.js';
 
 const WORLD_SEED = 1337;
-const VERSION = '0.39';
+const VERSION = '0.40';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -113,6 +113,11 @@ const obelisks = [];
   }
 }
 const robots = spawnRobots(map, WORLD_SEED, obelisks, { x: spawn.x, y: spawn.y, r: 14 });
+// The tower objects themselves (for alert/blink state): {x,y} plus the
+// alert level cannot live on the plain {x,y} obelisks list, since that's
+// shared with spawnRobots as a read-only anchor list.
+const obeliskObjs = obelisks.map((o) => map.objectAt(o.x, o.y)).filter(Boolean);
+for (const ob of obeliskObjs) { ob.alert = 0; ob.blinkFlash = 0; ob._blinkT = 2 + Math.random() * 5; ob._nudgeT = 0; }
 
 // Character persona and learned skills persist across sessions and deaths.
 const SAVE_KEY = 'postai-character';
@@ -121,16 +126,18 @@ try {
   if (saved) {
     player.setPersona(saved.name || 'Adam', saved.gender || 'm');
     for (const s of saved.skills || []) player.skills.add(s);
+    if (saved.xp) Object.assign(player.xp, saved.xp);
   }
 } catch { /* corrupt save: start fresh */ }
 const persist = () => {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
-      name: player.name, gender: player.gender, skills: [...player.skills],
+      name: player.name, gender: player.gender, skills: [...player.skills], xp: player.xp,
     }));
   } catch { /* storage unavailable */ }
 };
 player.onSkillLearned = persist;
+player.onXpGain = persist;
 
 // Character picker in the help modal.
 const nameInput = document.getElementById('charName');
@@ -213,6 +220,7 @@ let playTime = 0;
 let showBackpack = false;
 
 let wasNight = null;
+let wasRobotNear = false;
 function update(dt) {
   if (input.consumePress('KeyH')) toggleHelp();
   if (input.inventoryPressed()) showBackpack = !showBackpack;
@@ -275,18 +283,69 @@ function update(dt) {
     if (b.shrieking && !b._sShriek) { b._sShriek = true; sfx.play('shriek'); }
     if (!b.shrieking) b._sShriek = false;
   }
+  let nearestRobot = Infinity;
   for (const r of robots) {
     if (r.dead) continue;
     const hunting = r.state === 'chase' || r.chasing || r.aggro;
-    const close = Math.hypot(r.x - player.x, r.y - player.y) < 16;
+    const dist = Math.hypot(r.x - player.x, r.y - player.y);
+    const close = dist < 16;
     if (hunting && close) underThreat = true;
     if (hunting && !r._sHunt && close) {
       r._sHunt = true;
       sfx.play('charge');
     }
     if (!hunting) r._sHunt = false;
+    // Any active machine, hunting or not, is a "nearby robot" for the drone
+    // and the crickets — they are scared of the machines themselves, not
+    // just of being hunted.
+    if (!r.drained && !r.fused && r.disabledT <= 0 && dist < nearestRobot) nearestRobot = dist;
   }
   sfx.setMusicTension(underThreat);
+
+  // A quiet drone swells as a machine closes in; the crickets fall silent
+  // near any active robot, unsettled by them.
+  sfx.setDrone(nearestRobot < 16 ? 1 - nearestRobot / 16 : 0);
+  const robotNear = nearestRobot < 14;
+  if (robotNear !== wasRobotNear) {
+    wasRobotNear = robotNear;
+    sfx.setAmbience({ robotNear });
+  }
+
+  // Obelisks sense a human close by: their light deepens toward blood-red
+  // and holds, and nearby non-aggro robots get nudged to sweep near the
+  // tower — a report of closeness, never an exact position.
+  for (const ob of obeliskObjs) {
+    const d = Math.hypot(ob.x + 0.5 - player.x, ob.y + 0.5 - player.y);
+    if (d < 9) {
+      ob.alert = Math.min(1, ob.alert + dt * 1.5);
+    } else {
+      ob.alert = Math.max(0, ob.alert - dt * 0.4);
+    }
+    // Occasional blink, independent of alert: a short bright flash, then a
+    // random quiet spell before the next one. Alert makes it flicker faster.
+    ob._blinkT -= dt;
+    if (ob._blinkT <= 0) {
+      ob.blinkFlash = 0.18;
+      ob._blinkT = (2 + Math.random() * 5) * (1 - ob.alert * 0.6);
+    }
+    if (ob.blinkFlash > 0) ob.blinkFlash = Math.max(0, ob.blinkFlash - dt);
+
+    if (ob.alert > 0.5) {
+      ob._nudgeT -= dt;
+      if (ob._nudgeT <= 0) {
+        ob._nudgeT = 2.5;
+        for (const r of robots) {
+          if (r.dead || r.drained || r.fused || r.friendly || r.disabledT > 0 || r.aggro) continue;
+          if (Math.hypot(r.x - ob.x, r.y - ob.y) > 18) continue;
+          r.wanderTarget = {
+            x: ob.x + 0.5 + (Math.random() * 12 - 6),
+            y: ob.y + 0.5 + (Math.random() * 12 - 6),
+          };
+          r.wanderTimer = 4;
+        }
+      }
+    }
+  }
 }
 
 function frame(now) {

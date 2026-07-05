@@ -341,7 +341,7 @@ export class Renderer {
       case 'tree': this.drawTree(obj); break;
       case 'rock': this.drawRock(obj.x, obj.y); break;
       case 'rubble': this.drawRubble(obj.x, obj.y); break;
-      case 'obelisk': this.drawObelisk(obj.x, obj.y); break;
+      case 'obelisk': this.drawObelisk(obj); break;
       case 'box': this.drawBox(obj); break;
       case 'car': this.drawCar(obj); break;
     }
@@ -423,9 +423,9 @@ export class Renderer {
 
   // AI signal tower: a tall narrow black monolith with a slow-pulsing red
   // light near the crown. Destructible in a later phase.
-  drawObelisk(tx, ty) {
+  drawObelisk(obj) {
     const ctx = this.ctx;
-    const c = worldToScreen(tx + 0.5, ty + 0.5);
+    const c = worldToScreen(obj.x + 0.5, obj.y + 0.5);
     const H = 96, W = 9;
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
     ctx.beginPath();
@@ -449,11 +449,18 @@ export class Renderer {
     ctx.lineTo(c.x + W, c.y - 4 - H); ctx.lineTo(c.x, c.y - 10 - H);
     ctx.closePath();
     ctx.fill();
-    // Pulsing signal light.
-    const pulse = 0.45 + 0.55 * Math.abs(Math.sin(performance.now() / 900));
-    ctx.fillStyle = `rgba(224, 60, 50, ${pulse})`;
+    // Signal light: normally a dim, occasional blink (obj.blinkFlash, ticked
+    // in main.js); it deepens toward a saturated blood-red and holds nearly
+    // steady as obj.alert rises — the tower has sensed someone close.
+    const alert = obj.alert || 0;
+    const flash = obj.blinkFlash || 0;
+    const baseAlpha = 0.15 + alert * 0.55;
+    const alpha = Math.min(1, baseAlpha + flash * 0.7);
+    const r = alert > 0.15 ? Math.round(200 - alert * 70) : 224;
+    const g = alert > 0.15 ? Math.round(60 - alert * 50) : 60;
+    ctx.fillStyle = `rgba(${r}, ${g}, 48, ${alpha})`;
     ctx.beginPath();
-    ctx.arc(c.x, c.y - H + 8, 2.6, 0, Math.PI * 2);
+    ctx.arc(c.x, c.y - H + 8, 2.6 + flash * 1.5, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -608,15 +615,200 @@ export class Renderer {
     ctx.beginPath();
     ctx.ellipse(c.x, c.y + 1, 8, 4, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = def.color;
-    ctx.fillRect(c.x - 5, c.y - 8, 10, 7);
-    ctx.strokeStyle = 'rgba(0,0,0,0.4)';
-    ctx.strokeRect(c.x - 4.5, c.y - 7.5, 9, 6);
+    this.drawItemIcon(def, c.x, c.y - 4, 0.62);
     if (gi.qty > 1) {
       ctx.font = '9px system-ui, sans-serif';
       ctx.fillStyle = '#e8e0d0';
-      ctx.fillText(String(gi.qty), c.x + 6, c.y - 2);
+      ctx.fillText(String(gi.qty), c.x + 8, c.y - 2);
     }
+  }
+
+  // Miniature vector art per item, centred on (cx, cy), so things look like
+  // the thing they are — in slots, on the ground, and held in hand.
+  drawItemIcon(itemDef, cx, cy, s = 1) {
+    const ctx = this.ctx;
+    if (!itemDef) return;
+    const key = itemDef.key;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(s, s);
+    if (key && key.startsWith('book_')) {
+      ctx.fillStyle = itemDef.color;
+      ctx.fillRect(-8, -10, 16, 20);
+      ctx.fillStyle = '#e5dcc7';
+      ctx.fillRect(6, -9, 2, 18); // page edge
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.fillRect(-8, -10, 2.5, 20); // spine
+      ctx.restore();
+      return;
+    }
+    switch (key) {
+      case 'penknife':
+        ctx.fillStyle = itemDef.color;
+        ctx.fillRect(-9, 1, 12, 5);
+        ctx.fillStyle = '#c9cdd1';
+        ctx.beginPath();
+        ctx.moveTo(3, 1); ctx.lineTo(11, -5); ctx.lineTo(3, 4);
+        ctx.closePath();
+        ctx.fill();
+        break;
+      case 'bat':
+        ctx.strokeStyle = itemDef.color;
+        ctx.lineCap = 'round';
+        ctx.lineWidth = 6;
+        ctx.beginPath(); ctx.moveTo(-6, 8); ctx.lineTo(5, -3); ctx.stroke();
+        ctx.lineWidth = 3.5;
+        ctx.beginPath(); ctx.moveTo(4, -4); ctx.lineTo(9, -9); ctx.stroke();
+        ctx.lineCap = 'butt';
+        break;
+      case 'machete':
+        ctx.fillStyle = '#c9cdd1';
+        ctx.beginPath();
+        ctx.moveTo(-4, 4); ctx.lineTo(9, -9); ctx.lineTo(11, -4); ctx.lineTo(-2, 8);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#3a2f22';
+        ctx.fillRect(-10, 4, 7, 4);
+        break;
+      case 'crowbar':
+        ctx.strokeStyle = itemDef.color;
+        ctx.lineCap = 'round';
+        ctx.lineWidth = 3.5;
+        ctx.beginPath();
+        ctx.moveTo(-8, 8); ctx.lineTo(6, -6);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(4, -8, 4, Math.PI * 0.1, Math.PI * 1.1);
+        ctx.stroke();
+        ctx.lineCap = 'butt';
+        break;
+      case 'stungun':
+      case 'electrogun':
+        ctx.fillStyle = '#2c3036';
+        ctx.fillRect(-8, -3, 14, 5); // barrel body
+        ctx.fillRect(-6, 2, 4, 7);   // grip
+        ctx.fillStyle = itemDef.color;
+        ctx.beginPath();
+        ctx.arc(8, -0.5, 3, 0, Math.PI * 2); // charged emitter
+        ctx.fill();
+        ctx.strokeStyle = itemDef.color;
+        ctx.lineWidth = 1;
+        ctx.beginPath(); // little spark
+        ctx.moveTo(10, -6); ctx.lineTo(12, -3); ctx.lineTo(10.5, -3); ctx.lineTo(12.5, 0);
+        ctx.stroke();
+        break;
+      case 'pistol':
+        ctx.fillStyle = '#23262b';
+        ctx.fillRect(-7, -4, 14, 5);
+        ctx.fillRect(-5, 1, 4.5, 8);
+        ctx.fillStyle = '#4a4f57';
+        ctx.fillRect(5, -3, 2, 3);
+        break;
+      case 'shotgun':
+        ctx.fillStyle = '#5a4632';
+        ctx.fillRect(-11, 2, 8, 4); // stock
+        ctx.fillStyle = '#2c2f34';
+        ctx.fillRect(-4, 1, 15, 2.2); // barrels
+        ctx.fillRect(-4, 3.6, 15, 2.2);
+        break;
+      case 'battery':
+        ctx.fillStyle = itemDef.color;
+        ctx.fillRect(-4, -7, 8, 14);
+        ctx.fillRect(-1.5, -9, 3, 2); // terminal
+        ctx.fillStyle = '#2c2f34';
+        ctx.beginPath(); // lightning tick
+        ctx.moveTo(1, -4); ctx.lineTo(-2, 1); ctx.lineTo(0, 1); ctx.lineTo(-1, 5); ctx.lineTo(2.5, 0); ctx.lineTo(0.5, 0);
+        ctx.closePath();
+        ctx.fill();
+        break;
+      case 'ammo':
+        for (let i = -1; i <= 1; i++) {
+          ctx.fillStyle = '#b09a55';
+          ctx.fillRect(i * 5 - 1.5, -2, 3, 8);
+          ctx.fillStyle = '#8a7440';
+          ctx.beginPath();
+          ctx.arc(i * 5, -2, 1.5, Math.PI, Math.PI * 2);
+          ctx.fill();
+        }
+        break;
+      case 'shells':
+        for (let i = 0; i <= 1; i++) {
+          ctx.fillStyle = itemDef.color;
+          ctx.fillRect(i * 6 - 4, -6, 4, 10);
+          ctx.fillStyle = '#b09a55';
+          ctx.fillRect(i * 6 - 4, 4, 4, 3);
+        }
+        break;
+      case 'torch':
+        ctx.strokeStyle = '#6a4c2c';
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(-4, 9); ctx.lineTo(3, -2); ctx.stroke();
+        ctx.fillStyle = '#e0a030';
+        ctx.beginPath(); ctx.arc(4, -5, 4.5, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#f2d060';
+        ctx.beginPath(); ctx.arc(4.5, -6, 2, 0, Math.PI * 2); ctx.fill();
+        break;
+      case 'wood':
+        ctx.fillStyle = itemDef.color;
+        ctx.fillRect(-9, -5, 18, 5);
+        ctx.fillRect(-7, 1, 18, 5);
+        ctx.fillStyle = '#c4a26a';
+        ctx.beginPath();
+        ctx.ellipse(-9, -2.5, 2, 2.5, 0, 0, Math.PI * 2);
+        ctx.ellipse(-7, 3.5, 2, 2.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      case 'meat':
+        ctx.fillStyle = itemDef.color;
+        ctx.beginPath();
+        ctx.ellipse(-1, -1, 7, 5, -0.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#e5dcc7';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.moveTo(4, 3); ctx.lineTo(8, 7); ctx.stroke();
+        ctx.fillStyle = '#e5dcc7';
+        ctx.beginPath(); ctx.arc(9, 8, 2, 0, Math.PI * 2); ctx.fill();
+        break;
+      case 'tin':
+        ctx.fillStyle = itemDef.color;
+        ctx.fillRect(-5, -6, 10, 13);
+        ctx.fillStyle = '#c3ccd3';
+        ctx.beginPath(); ctx.ellipse(0, -6, 5, 2, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(0,0,0,0.25)';
+        ctx.fillRect(-5, -1, 10, 4); // label band
+        break;
+      case 'berries':
+        ctx.fillStyle = itemDef.color;
+        for (const [ox, oy] of [[-3, 1], [3, 0], [0, 5]]) {
+          ctx.beginPath(); ctx.arc(ox, oy, 3.2, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.strokeStyle = '#4a7c3f';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(0, -2); ctx.lineTo(2, -8); ctx.stroke();
+        break;
+      case 'scrap':
+        ctx.fillStyle = itemDef.color;
+        ctx.beginPath();
+        ctx.moveTo(-8, 2); ctx.lineTo(-2, -7); ctx.lineTo(6, -4); ctx.lineTo(8, 4); ctx.lineTo(0, 7);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#3a3f46';
+        ctx.beginPath(); ctx.arc(0, 0, 2.2, 0, Math.PI * 2); ctx.fill();
+        break;
+      case 'backpack':
+        ctx.fillStyle = itemDef.color;
+        ctx.fillRect(-7, -8, 14, 17);
+        ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+        ctx.strokeRect(-4, -5, 8, 6); // front pocket
+        ctx.fillStyle = '#3a2f20';
+        ctx.fillRect(-6, -10, 3, 4); // strap
+        ctx.fillRect(3, -10, 3, 4);
+        break;
+      default:
+        ctx.fillStyle = itemDef.color;
+        ctx.fillRect(-6, -6, 12, 12);
+    }
+    ctx.restore();
   }
 
   drawPlayer(player) {
@@ -687,15 +879,19 @@ export class Renderer {
       ctx.lineTo(c.x + 1.5 + ex, hb - 25.2);
       ctx.stroke();
     }
-    // Swing feedback: the held tool flashes out ahead while swinging.
-    if (player.swingTimer > 0) {
-      const t = worldToScreen(player.x + player.facing.x * 0.6, player.y + player.facing.y * 0.6);
-      ctx.strokeStyle = '#e8e0d0';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(c.x, by - 14);
-      ctx.lineTo(t.x, t.y - lift - 16);
-      ctx.stroke();
+    // The held tool/gun shown in hand, out toward the facing direction; it
+    // kicks further out and slightly wider while swinging or firing.
+    if (player.hands && ITEMS[player.hands]) {
+      const swung = player.swingTimer > 0;
+      const reach = swung ? 0.62 : 0.42;
+      const hx = c.x + player.facing.x * 14 * reach / 0.42;
+      const hy = by - 12 + player.facing.y * 8 * reach / 0.42;
+      ctx.save();
+      ctx.translate(hx, hy);
+      const ang = Math.atan2(player.facing.y * 0.5, player.facing.x) + (swung ? 0.35 : 0);
+      ctx.rotate(ang);
+      this.drawItemIcon(ITEMS[player.hands], 0, 0, 0.85);
+      ctx.restore();
     }
     // Facing indicator: a small dot ahead of the feet.
     const f = worldToScreen(player.x + player.facing.x * 0.45, player.y + player.facing.y * 0.45);
@@ -795,6 +991,11 @@ export class Renderer {
     const nameLine = hud.timeLabel ? `${player.name || ''} · ${hud.timeLabel}` : (player.name || '');
     ctx.fillText(nameLine, this.w - 16, line); line += 16;
     ctx.fillText(state, this.w - 16, line); line += 16;
+    if (player.xp) {
+      ctx.fillText(`melee ${player.xpLevel('melee')} · aim ${player.xpLevel('guns')} · mind ${player.xpLevel('knowledge')}`,
+        this.w - 16, line);
+      line += 16;
+    }
     ctx.fillText(`tile ${player.x.toFixed(1)}, ${player.y.toFixed(1)}`, this.w - 16, line); line += 16;
     ctx.fillText(`${hud.fps ?? 0} fps`, this.w - 16, line);
     ctx.textAlign = 'left';
@@ -844,24 +1045,7 @@ export class Renderer {
     ctx.strokeRect(x + 0.5, y + 0.5, size - 1, size - 1);
     ctx.lineWidth = 1;
     if (!itemDef) return;
-
-    if (itemDef.name === 'Penknife') {
-      // Tiny penknife icon: red handle, steel blade.
-      const cx = x + size / 2, cy = y + size / 2;
-      ctx.fillStyle = itemDef.color;
-      ctx.fillRect(cx - 9, cy + 1, 12, 5);
-      ctx.fillStyle = '#c9cdd1';
-      ctx.beginPath();
-      ctx.moveTo(cx + 3, cy + 1);
-      ctx.lineTo(cx + 11, cy - 5);
-      ctx.lineTo(cx + 3, cy + 4);
-      ctx.closePath();
-      ctx.fill();
-    } else {
-      // Generic resource: coloured square.
-      ctx.fillStyle = itemDef.color;
-      ctx.fillRect(x + 8, y + 8, size - 16, size - 16);
-    }
+    this.drawItemIcon(itemDef, x + size / 2, y + size / 2, size / 40);
     if (qty > 1) {
       ctx.font = '10px system-ui, sans-serif';
       ctx.fillStyle = '#e8e0d0';

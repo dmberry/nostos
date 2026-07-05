@@ -12,6 +12,7 @@ const STEP_DEBOUNCE_MS = 120;  // minimum interval between footsteps
 const WIND_GAIN = 0.02;        // level of the constant wind bed
 const CRICKET_GAIN = 0.015;    // level of the night cricket layer
 const AMBIENCE_FADE = 2;       // seconds to crossfade ambience layers
+const DRONE_GAIN = 0.035;      // ceiling of the robot-proximity drone
 const VARIATION = 0.06;        // random pitch spread so repeats don't grate
 const ENV_FLOOR = 0.0001;      // exponential ramps can never reach zero
 
@@ -27,7 +28,8 @@ class Sound {
     this.master = null;
     this._muted = false;
     this._last = new Map();          // debounce timestamps by key
-    this._ambience = { night: false, wind: 1 };
+    this._ambience = { night: false, wind: 1, robotNear: false };
+    this._droneGain = null;
     this._noise = null;              // shared white-noise buffer
     this._brown = null;              // shared brown-noise buffer (wind)
     this._windGain = null;
@@ -63,6 +65,7 @@ class Sound {
       this._brown = this._makeNoise(2, true);
       this._buildWind();
       this._buildCrickets();
+      this._buildDrone();
       this._applyAmbience(0.1); // snap quickly to whatever was requested
       this._startMusic();
     } catch (e) {
@@ -203,12 +206,27 @@ class Sound {
   // Continuous, very quiet bed: wind always, crickets at night. The loops
   // are built once at unlock and only their gains are ramped, so toggling
   // costs nothing and idle CPU stays low.
-  setAmbience({ night, wind } = {}) {
+  setAmbience({ night, wind, robotNear } = {}) {
     try {
       if (night !== undefined) this._ambience.night = !!night;
       if (wind !== undefined) this._ambience.wind = Math.max(0, wind);
+      if (robotNear !== undefined) this._ambience.robotNear = !!robotNear;
       if (!this.ctx) return;
       this._applyAmbience(AMBIENCE_FADE);
+    } catch (e) { /* ignore */ }
+  }
+
+  // A quiet mechanical drone that swells as a machine closes in, 0..1.
+  // Built lazily so callers never need to know whether unlock() has run.
+  setDrone(intensity) {
+    try {
+      if (!this.ctx) return;
+      if (!this._droneGain) this._buildDrone();
+      const t = this.ctx.currentTime;
+      const target = Math.max(0, Math.min(1, intensity)) * DRONE_GAIN;
+      this._droneGain.gain.cancelScheduledValues(t);
+      this._droneGain.gain.setValueAtTime(this._droneGain.gain.value, t);
+      this._droneGain.gain.linearRampToValueAtTime(target, t + 0.35);
     } catch (e) { /* ignore */ }
   }
 
@@ -220,7 +238,34 @@ class Sound {
       param.linearRampToValueAtTime(target, t + fade);
     };
     ramp(this._windGain.gain, WIND_GAIN * this._ambience.wind);
-    ramp(this._cricketGain.gain, this._ambience.night ? CRICKET_GAIN : 0);
+    // Crickets are scared of the machines: they fall silent when one is near.
+    const crickets = this._ambience.night && !this._ambience.robotNear ? CRICKET_GAIN : 0;
+    ramp(this._cricketGain.gain, crickets);
+  }
+
+  // Quiet mechanical drone: two barely-detuned low sawtooths through a
+  // lowpass, so proximity reads as an uneasy beat frequency rather than a
+  // pure tone. Built once; setDrone() only ramps its gain.
+  _buildDrone() {
+    if (this._droneGain) return;
+    const ctx = this.ctx;
+    this._droneGain = ctx.createGain();
+    this._droneGain.gain.value = 0;
+    this._droneGain.connect(this.master);
+    const a = ctx.createOscillator();
+    a.type = 'sawtooth';
+    a.frequency.value = 58;
+    const b = ctx.createOscillator();
+    b.type = 'sawtooth';
+    b.frequency.value = 58.9;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 240;
+    a.connect(lp);
+    b.connect(lp);
+    lp.connect(this._droneGain);
+    a.start();
+    b.start();
   }
 
   // Wind bed: looped brown noise through a lowpass whose cutoff wanders

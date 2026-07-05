@@ -4,7 +4,7 @@ This file is the shared planning board for the game. **Henrik: add your ideas an
 
 Versioning: 0.01 increments (v0.32, v0.33, ...). The game is pushed after every sizeable change so the latest build is always on `main`.
 
-## Where we are (v0.39)
+## Where we are (v0.40)
 
 - Isometric world, seeded 128x128: river, two bridges, ten-building town, hamlet, forests, tall grass, hills and hollows, wadeable streams.
 - Survival: food/hunger, health, stamina, venom, day/night (dark nights), torches, minimap with fog of war (grey, not black), permadeath that drops your loot where you fell.
@@ -23,23 +23,19 @@ Versioning: 0.01 increments (v0.32, v0.33, ...). The game is pushed after every 
 - **Backpack**: a rare find in the ruins. Once found, it's automatic — 16 more slots and one spare-weapon slot (select with 5, swap with G), filled from overflow; eating and gunfire draw from it once the pockets are empty. I views it (read-only — nothing to drag, the split is automatic). Dropped, with everything in it, on death.
 - Synthesized sound: footsteps by surface, action and creature sounds, wind, night crickets, and now a sparse, haunting solo-piano ambience that only plays in calm moments — it fades out while fighting or being hunted and back in once safe. P toggles it.
 - Grass tiles carry a little blade texture instead of a flat colour fill.
-- First lore pass: sparse sprayed slogans on walls (generic anti-machine sentiment), and abandoned cars littering the roads here and there. Environmental only, no readable/interactive layer yet (that's still the planned "hidden story" phase below).
+- First lore pass: sparse sprayed slogans on walls, and abandoned cars littering the roads here and there. Environmental only, no readable/interactive layer yet (that's still the planned "hidden story" phase below).
 - **RON — Reality or Nothing** — the resistance now has a name. A share of the wall graffiti is RON-specific and deliberately contradictory: some reads like a live movement (RON LIVES, RON NEVER LEFT), some like an epitaph (RON IS DEAD, NO ONE IS COMING) and is painted fainter, as if older or less certain. Whether RON still exists is left open on purpose — nothing in the game settles it, and nothing should until/unless a future lore phase decides deliberately.
+- **Items look like the thing they are**: every weapon, gun, food, book, and material has its own small vector icon — in the pockets, in hand, and on the ground — rather than a generic coloured square. The held tool/gun now draws in the player sprite's hand and kicks out further when swinging or firing.
+- **Experience**: melee practice hits harder over time, gun practice extends range and hits harder, and reading (even a re-read) builds a knowledge level; all three show in the stats line and survive death and reloads, like skills.
+- **Obelisks are watchful, not just decorative**: the signal light blinks occasionally rather than pulsing continuously, and deepens to a saturated blood-red the longer a human lingers close — the tower has sensed you. While alert, it periodically nudges nearby non-hunting robots to sweep the area around it (closeness reported, never your exact position).
+- **Machines have a presence**: a faint mechanical drone swells as one nears, and the night crickets fall silent around any active robot, not just a hunting one — they're afraid of the machines themselves.
 
 ## Planned / backlog
 
-**v0.40 (in progress — David's requests, 5 July)**
-- Item icons that look like the thing they are (weapons, guns, food, books, ammo), in the dashboard slots and on the ground.
-- Show the held weapon in the player sprite's hands.
-- Experience points: melee practice improves fighting, gun practice sharpens aim and effect, books give knowledge points.
-- Crickets fall silent when a machine is near (they are scared of them).
-- Machines carry a quiet drone hum you can hear approaching.
-- Obelisk light: blinks occasionally rather than pulsing; goes deeper red when it senses you close, and reports your closeness (not exact position) to robots nearby.
-
 **Near term**
-- Obelisk destruction mechanic — towers are placed and pulsing but indestructible. Idea: destroying one quiets/disables the robots it controls, making tower-toppling the endgame loop.
+- Obelisk destruction mechanic — towers are placed and blinking but indestructible. Idea: destroying one quiets/disables the robots it controls, making tower-toppling the endgame loop. (See Henrik's hacking-parts proposal below for a concrete resource to gate this on.)
 - Friendly-robot orders: currently follow + (T2) tree-felling; add "collect wood/loot and bring it back", guard mode, and a way to see your robots on the minimap.
-- Visual pass on the new machines art (obelisks, crates, robots) and hollows.
+- Visual pass on the machines art (obelisks, crates, robots) and hollows.
 - Limping animation + WOUNDED tag when health is low (the slowdown exists; it needs a visual cue).
 - Persist minimap fog/exploration across reloads (map knowledge should survive death, like skills).
 
