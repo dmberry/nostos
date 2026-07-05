@@ -32,6 +32,9 @@ class Sound {
     this._brown = null;              // shared brown-noise buffer (wind)
     this._windGain = null;
     this._cricketGain = null;
+    this._musicGain = null;          // fade bus: on/off (P) and combat tension both ramp this
+    this._musicOn = true;            // toggled by P
+    this._musicTense = false;        // true while fighting or being hunted
   }
 
   // ---- lifecycle -------------------------------------------------------
@@ -61,6 +64,7 @@ class Sound {
       this._buildWind();
       this._buildCrickets();
       this._applyAmbience(0.1); // snap quickly to whatever was requested
+      this._startMusic();
     } catch (e) {
       this.ctx = null; // audio is optional; never let it take the game down
     }
@@ -293,21 +297,98 @@ class Sound {
     chirpLfo.start();
   }
 
+  // ---- ambient music ------------------------------------------------------
+
+  // A haunting, sparse solo-piano bed: single notes from a low minor scale,
+  // played softly at long random intervals — this is ambience, not a tune.
+  // Routed through its own gain bus so both the P toggle and combat/hunted
+  // tension can fade it independently of everything else. Scheduling itself
+  // (via setTimeout) keeps running even while muted/tense; only the bus gain
+  // and an early-out in _playPianoNote actually silence it, so there's
+  // nothing to restart when it should resume.
+  _startMusic() {
+    if (this._musicGain) return; // already running (e.g. unlock() called twice)
+    this._musicGain = this.ctx.createGain();
+    this._musicGain.gain.value = 0;
+    this._musicGain.connect(this.master);
+    this._scheduleNote();
+    this._applyMusicGain(0.1);
+  }
+
+  // Low, spare, minor-leaning scale (F below middle C and around), with the
+  // odd note dropped an octave for a hollow, uneasy low end.
+  _pianoScale() {
+    return [87.31, 98.00, 103.83, 116.54, 130.81, 146.83, 155.56, 174.61];
+  }
+
+  _scheduleNote() {
+    const gap = 4 + Math.random() * 7; // very sparse: one note every 4-11s
+    setTimeout(() => {
+      try { this._playPianoNote(); } catch (e) { /* audio must never crash the game */ }
+      this._scheduleNote();
+    }, gap * 1000);
+  }
+
+  _playPianoNote() {
+    if (!this.ctx || !this._musicOn || this._musicTense) return;
+    const scale = this._pianoScale();
+    const freq = scale[Math.floor(Math.random() * scale.length)] * (Math.random() < 0.25 ? 0.5 : 1);
+    const t = this.ctx.currentTime + 0.05;
+    const dur = 3.5 + Math.random() * 3;
+    // A soft pluck: fundamental (triangle) plus a quiet octave and a faint
+    // fifth-ish overtone, all decaying at slightly different rates.
+    this._tone({ when: t, dur, type: 'triangle', freq, gain: 0.05, attack: 0.015, filterFreq: 1200, bus: this._musicGain });
+    this._tone({ when: t, dur: dur * 0.55, type: 'sine', freq: freq * 2, gain: 0.018, attack: 0.01, bus: this._musicGain });
+    this._tone({ when: t, dur: dur * 0.35, type: 'sine', freq: freq * 1.5, gain: 0.01, attack: 0.01, bus: this._musicGain });
+  }
+
+  // 'P' toggles the music on/off entirely. Returns the new state.
+  toggleMusic() {
+    this._musicOn = !this._musicOn;
+    this._applyMusicGain();
+    return this._musicOn;
+  }
+
+  get musicOn() {
+    return this._musicOn;
+  }
+
+  // Called every frame from the game loop: true while fighting or being
+  // actively hunted. Fades the music out (not an abrupt cut) so it only
+  // ever plays in calm moments, and eases back in once the threat passes.
+  setMusicTension(active) {
+    const tense = !!active;
+    if (tense === this._musicTense) return;
+    this._musicTense = tense;
+    this._applyMusicGain();
+  }
+
+  _applyMusicGain(fade = 2.5) {
+    if (!this.ctx || !this._musicGain) return;
+    const target = (this._musicOn && !this._musicTense) ? 1 : 0;
+    const t = this.ctx.currentTime;
+    const g = this._musicGain.gain;
+    g.cancelScheduledValues(t);
+    g.setValueAtTime(g.value, t);
+    g.linearRampToValueAtTime(target, t + fade);
+  }
+
   // ---- synthesis helpers -------------------------------------------------
 
-  // Shared output stage: gain envelope into the master. Linear attack to
-  // the peak, then an exponential decay to (near) silence at when + dur.
-  _out(when, dur, peak, attack = 0.005) {
+  // Shared output stage: gain envelope into the given bus (master by
+  // default). Linear attack to the peak, then an exponential decay to
+  // (near) silence at when + dur.
+  _out(when, dur, peak, attack = 0.005, bus = this.master) {
     const g = this.ctx.createGain();
     g.gain.setValueAtTime(0, when);
     g.gain.linearRampToValueAtTime(peak, when + Math.min(attack, dur * 0.9));
     g.gain.exponentialRampToValueAtTime(ENV_FLOOR, when + dur);
-    g.connect(this.master);
+    g.connect(bus);
     return g;
   }
 
   // A single oscillator gesture, optionally pitch-swept and filtered.
-  _tone({ when, dur, type = 'sine', freq, end, gain, attack = 0.005, filter, filterFreq }) {
+  _tone({ when, dur, type = 'sine', freq, end, gain, attack = 0.005, filter, filterFreq, bus }) {
     const o = this.ctx.createOscillator();
     o.type = type;
     o.frequency.setValueAtTime(freq, when);
@@ -320,7 +401,7 @@ class Sound {
       o.connect(f);
       node = f;
     }
-    node.connect(this._out(when, dur, gain, attack));
+    node.connect(this._out(when, dur, gain, attack, bus));
     o.start(when);
     o.stop(when + dur + 0.05);
   }

@@ -32,6 +32,14 @@ function rgbScale([r, g, b], f) {
   return `rgb(${(r * f) | 0},${(g * f) | 0},${(b * f) | 0})`;
 }
 
+// Cheap deterministic hash for per-tile pseudo-randomness (grass blades)
+// that stays put frame to frame instead of shimmering like Math.random().
+function tileHash(x, y) {
+  let h = (x * 374761393 + y * 668265263) ^ (x * 3266489917);
+  h = (h ^ (h >>> 13)) * 1274126177;
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+}
+
 export class Renderer {
   constructor(canvas) {
     this.canvas = canvas;
@@ -157,6 +165,71 @@ export class Renderer {
       }
     }
     this.drawDashboard(player, hud);
+    if (hud.showBackpack) this.drawBackpackPanel(player);
+  }
+
+  // Read-only backpack view (I). Read-only because the split between
+  // pockets and backpack is already automatic — there's nothing to drag.
+  drawBackpackPanel(player) {
+    const ctx = this.ctx;
+    const cols = 4, size = 42, gap = 14;
+    const gridW = cols * size + (cols - 1) * gap;
+    const panelW = gridW + 40;
+    const panelH = 420;
+    const px = Math.round((this.w - panelW) / 2);
+    const py = Math.round((this.h - panelH) / 2);
+
+    ctx.fillStyle = 'rgba(10,12,8,0.94)';
+    ctx.fillRect(px, py, panelW, panelH);
+    ctx.strokeStyle = 'rgba(207,216,195,0.4)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(px + 0.5, py + 0.5, panelW - 1, panelH - 1);
+
+    ctx.font = 'bold 14px system-ui, sans-serif';
+    ctx.fillStyle = '#e8e0d0';
+    ctx.fillText('BACKPACK', px + 20, py + 26);
+    ctx.font = '10px system-ui, sans-serif';
+    ctx.fillStyle = 'rgba(207,216,195,0.6)';
+    ctx.textAlign = 'right';
+    ctx.fillText('I to close', px + panelW - 20, py + 26);
+    ctx.textAlign = 'left';
+
+    if (!player.backpack) {
+      ctx.font = '12px system-ui, sans-serif';
+      ctx.fillStyle = 'rgba(207,216,195,0.7)';
+      ctx.fillText("You aren't carrying one yet.", px + 20, py + 60);
+      return;
+    }
+
+    // Spare weapon slot: select with 5, swap with G, same as a pocket.
+    const weaponY = py + 42;
+    this.drawLabel('SPARE WEAPON — 5, then G', px + 20, weaponY + 10);
+    this.drawSlot(px + 20, weaponY + 16, size,
+      player.backpack.weapon ? ITEMS[player.backpack.weapon] : null, 0, player.selectedPocket === 'bw');
+    if (player.backpack.weapon) {
+      ctx.font = '9px system-ui, sans-serif';
+      ctx.fillStyle = 'rgba(207,216,195,0.7)';
+      ctx.fillText(ITEMS[player.backpack.weapon].name, px + 20 + size + 10, weaponY + 16 + size / 2 + 3);
+    }
+
+    // 16-slot storage grid: fills automatically; food and ammo are drawn
+    // from here on their own once the pockets run out.
+    const gridX = px + 20, gridY = weaponY + 16 + size + 34;
+    this.drawLabel('STORAGE — auto-fills; food & ammo used automatically', gridX, gridY - 8);
+    for (let i = 0; i < 16; i++) {
+      const col = i % cols, row = Math.floor(i / cols);
+      const sx = gridX + col * (size + gap);
+      const sy = gridY + row * (size + gap);
+      const slot = player.backpack.slots[i];
+      this.drawSlot(sx, sy, size, slot ? ITEMS[slot.item] : null, slot ? slot.qty : 0);
+      if (slot) {
+        ctx.font = '7px system-ui, sans-serif';
+        ctx.fillStyle = 'rgba(207,216,195,0.6)';
+        ctx.textAlign = 'center';
+        ctx.fillText(ITEMS[slot.item].name, sx + size / 2, sy + size + 9, size + 10);
+        ctx.textAlign = 'left';
+      }
+    }
   }
 
   // Inverse-project the screen corners to get the visible tile bounding box.
@@ -220,6 +293,31 @@ export class Renderer {
     ctx.strokeStyle = 'rgba(0,0,0,0.07)';
     ctx.lineWidth = 1;
     ctx.stroke();
+    if (type === 'grass' || type === 'tallgrass') this.drawGrassBlades(tx, ty, corners, def.color, shade);
+  }
+
+  // A handful of small blade strokes per tile so grass reads as textured
+  // turf rather than a flat colour fill. Hashed from tile coordinates so
+  // the pattern holds still frame to frame instead of shimmering.
+  drawGrassBlades(tx, ty, corners, color, shade) {
+    const ctx = this.ctx;
+    const cx = (corners[0].x + corners[2].x) / 2;
+    const cy = (corners[0].y + corners[2].y) / 2;
+    const n = 3;
+    for (let i = 0; i < n; i++) {
+      const h1 = tileHash(tx * 7 + i * 3, ty * 13 + i * 5);
+      const h2 = tileHash(tx * 11 + i * 17 + 1, ty * 5 + i * 23 + 1);
+      const ox = (h1 - 0.5) * 24;
+      const oy = (h2 - 0.5) * 10;
+      const lean = (h1 - 0.5) * 3;
+      const len = 4 + h2 * 4;
+      ctx.strokeStyle = shadeHex(color, shade + (h2 > 0.5 ? -0.25 : 0.2));
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(cx + ox, cy + oy + 3);
+      ctx.lineTo(cx + ox + lean, cy + oy - len);
+      ctx.stroke();
+    }
   }
 
   skirt(a, b, depth, color) {
@@ -586,8 +684,9 @@ export class Renderer {
 
       const heldDef = ITEMS[player.hands];
       if (heldDef.kind === 'gun') {
-        const ammoCount = player.pockets.reduce(
+        const countIn = (slots) => slots.reduce(
           (sum, s) => (s && s.item === heldDef.ammoType ? sum + s.qty : sum), 0);
+        const ammoCount = countIn(player.pockets) + (player.backpack ? countIn(player.backpack.slots) : 0);
         ctx.font = 'bold 10px system-ui, sans-serif';
         ctx.fillStyle = ammoCount > 0 ? '#e8e0d0' : '#e05548';
         ctx.textAlign = 'right';
@@ -611,6 +710,17 @@ export class Renderer {
         ctx.fillText(ITEMS[slot.item].name, slotX + 18, top + 66, 40);
         ctx.textAlign = 'left';
       }
+    }
+
+    // Backpack summary badge, once found: press I for the full panel.
+    if (player.backpack) {
+      const bpX = pocketsX + player.pockets.length * 42 + 10;
+      const used = player.backpack.slots.filter(Boolean).length;
+      this.drawLabel('PACK (I)', bpX, top + 14);
+      this.drawSlot(bpX, top + 20, 36, ITEMS.backpack, 0);
+      ctx.font = '9px system-ui, sans-serif';
+      ctx.fillStyle = 'rgba(207,216,195,0.7)';
+      ctx.fillText(`${used}/16`, bpX, top + 66);
     }
 
     // Stats block, right-aligned

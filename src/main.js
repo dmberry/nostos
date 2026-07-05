@@ -13,7 +13,7 @@ import { resolveBodyOverlaps } from './game/collision.js';
 import { sfx } from './engine/sound.js';
 
 const WORLD_SEED = 1337;
-const VERSION = '0.36';
+const VERSION = '0.37';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -46,6 +46,8 @@ const animals = spawnAnimals(map, WORLD_SEED, { x: spawn.x, y: spawn.y, r: 12 })
   // Books are rarer: one copy of each plus two duplicates, buildings only.
   const books = ['book_wood', 'book_herbs', 'book_track', 'book_run', 'book_herbs', 'book_track'];
   for (const b of books) drop(boards, b, 1);
+  // A single backpack, somewhere in the ruins.
+  drop(boards, 'backpack', 1);
 }
 
 // The AIs control the landscape: black obelisk towers dot the wilds (their
@@ -205,9 +207,19 @@ const hintEl = document.getElementById('hint');
 const HINT_LIFETIME = 120; // seconds of played time
 let playTime = 0;
 
+// Backpack view: I toggles a read-only panel (drawn by the renderer). It's
+// read-only because the pockets/backpack split is already automatic —
+// there's nothing to drag between them.
+let showBackpack = false;
+
 let wasNight = null;
 function update(dt) {
   if (input.consumePress('KeyH')) toggleHelp();
+  if (input.inventoryPressed()) showBackpack = !showBackpack;
+  if (input.musicTogglePressed()) {
+    const on = sfx.toggleMusic();
+    player.say(on ? 'Music on.' : 'Music off.');
+  }
   if (hintEl.style.display !== 'none') {
     playTime += dt;
     if (playTime >= HINT_LIFETIME) hintEl.style.display = 'none';
@@ -240,13 +252,18 @@ function update(dt) {
     wasNight = night;
     sfx.setAmbience({ night });
   }
+  // The ambient piano only plays in calm moments: silent while anything is
+  // actively aggroed on the player and close enough to matter.
+  let underThreat = false;
   for (const a of animals) {
     if (a.dead) continue;
     const close = Math.hypot(a.x - player.x, a.y - player.y) < 18;
     if (a.type === 'dog') {
+      if (a.aggro && close) underThreat = true;
       if (a.aggro && !a._sBark && close) { a._sBark = true; sfx.play('bark'); }
       if (!a.aggro) a._sBark = false;
     } else if (a.type === 'boar') {
+      if (close && (a.state === 'telegraph' || a.state === 'charge')) underThreat = true;
       if (a.state !== a._sState) {
         if (close && a.state === 'telegraph') sfx.play('boar');
         if (close && a.state === 'charge') sfx.play('charge');
@@ -261,12 +278,15 @@ function update(dt) {
   for (const r of robots) {
     if (r.dead) continue;
     const hunting = r.state === 'chase' || r.chasing || r.aggro;
-    if (hunting && !r._sHunt && Math.hypot(r.x - player.x, r.y - player.y) < 16) {
+    const close = Math.hypot(r.x - player.x, r.y - player.y) < 16;
+    if (hunting && close) underThreat = true;
+    if (hunting && !r._sHunt && close) {
       r._sHunt = true;
       sfx.play('charge');
     }
     if (!hunting) r._sHunt = false;
   }
+  sfx.setMusicTension(underThreat);
 }
 
 function frame(now) {
@@ -287,6 +307,7 @@ function frame(now) {
     birds,
     robots,
     torch: player.pockets.some((s) => s && s.item === 'torch'),
+    showBackpack,
   });
 
   frameCount += 1;

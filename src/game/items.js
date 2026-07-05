@@ -107,6 +107,15 @@ export const ITEMS = {
     stack: 6,
     color: '#d8c94f',
   },
+  // Found rarely, worn once found (see Player.backpack): 16 more general
+  // slots plus one dedicated spare-weapon slot. Dropped with everything in
+  // it on death.
+  backpack: {
+    name: 'Backpack',
+    kind: 'backpack',
+    stack: 1,
+    color: '#5a4a32',
+  },
   ammo: {
     name: 'Ammo (9mm)',
     kind: 'resource',

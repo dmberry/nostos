@@ -6,8 +6,8 @@ const TRACKED = new Set([
   'KeyW', 'KeyA', 'KeyS', 'KeyD',
   'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
   'ShiftLeft', 'ShiftRight',
-  'KeyE', 'Slash', 'Space', 'KeyQ', 'KeyH', 'KeyR', 'KeyG', 'KeyF',
-  'Digit1', 'Digit2', 'Digit3', 'Digit4',
+  'KeyE', 'Slash', 'Space', 'KeyQ', 'KeyH', 'KeyR', 'KeyG', 'KeyF', 'KeyI', 'KeyP',
+  'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5',
 ]);
 
 const POCKET_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4'];
@@ -115,5 +115,17 @@ export class Input {
 
   dropPressed() {
     return this.consumePress('KeyF');
+  }
+
+  backpackWeaponSelectPressed() {
+    return this.consumePress('Digit5');
+  }
+
+  inventoryPressed() {
+    return this.consumePress('KeyI');
+  }
+
+  musicTogglePressed() {
+    return this.consumePress('KeyP');
   }
 }

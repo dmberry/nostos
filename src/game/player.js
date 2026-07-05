@@ -53,7 +53,8 @@ export class Player {
 
     this.hands = 'penknife';                 // starting tool
     this.pockets = [null, null, null, null]; // {item, qty} or null
-    this.selectedPocket = null;              // index chosen with 1-4, for G to swap
+    this.backpack = null;                    // {slots: [16], weapon} once found; dropped on death
+    this.selectedPocket = null;              // 0-3 (pockets), 'bw' (backpack weapon), or null
     this.swingTimer = 0;
     this.hurtTimer = 0;   // brief red flash after taking damage
     this.message = null;  // {text, ttl} transient HUD line
@@ -161,6 +162,7 @@ export class Player {
     if (input.readPressed()) this.read(robots);
     const picked = input.pocketSelectPressed();
     if (picked >= 0) this.selectPocket(picked);
+    if (input.backpackWeaponSelectPressed()) this.selectBackpackWeapon();
     if (input.swapPressed()) this.swapHands();
     if (input.dropPressed()) this.drop(map);
     this.pickupNearby(map);
@@ -172,7 +174,13 @@ export class Player {
   drop(map) {
     const dropX = this.x + this.facing.x * (PICKUP_RANGE + 0.4);
     const dropY = this.y + this.facing.y * (PICKUP_RANGE + 0.4);
-    if (this.selectedPocket != null && this.pockets[this.selectedPocket]) {
+    if (this.selectedPocket === 'bw' && this.backpack && this.backpack.weapon) {
+      map.groundItems.push({ item: this.backpack.weapon, qty: 1, x: dropX, y: dropY });
+      this.say(`You drop the ${ITEMS[this.backpack.weapon].name.toLowerCase()}.`);
+      this.backpack.weapon = null;
+      return;
+    }
+    if (this.selectedPocket != null && this.selectedPocket !== 'bw' && this.pockets[this.selectedPocket]) {
       const slot = this.pockets[this.selectedPocket];
       map.groundItems.push({ item: slot.item, qty: slot.qty, x: dropX, y: dropY });
       this.pockets[this.selectedPocket] = null;
@@ -193,13 +201,31 @@ export class Player {
     this.selectedPocket = this.selectedPocket === i ? null : i;
   }
 
-  // G swaps the held tool with whatever is in the selected pocket slot, so
-  // a weapon can be put away and swapped for another without dropping it.
-  // Only tools/guns move into the hands slot; a pocket full of resources
-  // (wood, ammo, food, ...) has nothing sensible to hold there.
+  // Press 5 to select the backpack's dedicated spare-weapon slot, once
+  // you're carrying one.
+  selectBackpackWeapon() {
+    if (!this.backpack) {
+      this.say('No backpack.');
+      return;
+    }
+    this.selectedPocket = this.selectedPocket === 'bw' ? null : 'bw';
+  }
+
+  // G swaps the held tool with whatever is in the selected pocket (or the
+  // backpack's spare-weapon slot), so a weapon can be put away and swapped
+  // for another without dropping it. Only tools/guns move into the hands
+  // slot; a pocket full of resources (wood, ammo, food, ...) has nothing
+  // sensible to hold there.
   swapHands() {
     if (this.selectedPocket == null) {
       this.say('Select a pocket (1-4) first.');
+      return;
+    }
+    if (this.selectedPocket === 'bw') {
+      const heldItem = this.hands;
+      this.hands = this.backpack.weapon || null;
+      this.backpack.weapon = heldItem || null;
+      this.say(this.hands ? `You ready the ${ITEMS[this.hands].name.toLowerCase()}.` : 'You put your weapon away.');
       return;
     }
     const i = this.selectedPocket;
@@ -220,13 +246,18 @@ export class Player {
     const bot = robots.find((r) => !r.dead && !r.fused && r.drained
       && Math.hypot(r.x - this.x, r.y - this.y) < 1.3);
     if (bot) {
-      const i = this.pockets.findIndex((s) => s && s.item === 'battery');
+      let batterySlots = this.pockets;
+      let i = this.pockets.findIndex((s) => s && s.item === 'battery');
+      if (i < 0 && this.backpack) {
+        i = this.backpack.slots.findIndex((s) => s && s.item === 'battery');
+        batterySlots = this.backpack.slots;
+      }
       if (i < 0) {
         this.say('Its cells are flat. You need a battery to restart it.');
         return;
       }
-      this.pockets[i].qty -= 1;
-      if (this.pockets[i].qty <= 0) this.pockets[i] = null;
+      batterySlots[i].qty -= 1;
+      if (batterySlots[i].qty <= 0) batterySlots[i] = null;
       bot.friendly = true;
       bot.drained = false;
       bot.battery = 100;
@@ -238,14 +269,18 @@ export class Player {
     this.readBook();
   }
 
-  // Read the first book in the pockets and learn its skill for good.
+  // Read the first book in the pockets (then the backpack) and learn its
+  // skill for good.
   readBook() {
-    for (let i = 0; i < this.pockets.length; i++) {
-      const slot = this.pockets[i];
+    const slots = this.backpack ? [...this.pockets, ...this.backpack.slots] : this.pockets;
+    const pocketsLen = this.pockets.length;
+    for (let i = 0; i < slots.length; i++) {
+      const slot = slots[i];
       if (!slot) continue;
       const def = ITEMS[slot.item];
       if (def.kind !== 'book') continue;
-      this.pockets[i] = null;
+      if (i < pocketsLen) this.pockets[i] = null;
+      else this.backpack.slots[i - pocketsLen] = null;
       if (this.skills.has(def.skill)) {
         this.say(`You have already read ${def.name}.`);
       } else {
@@ -258,30 +293,36 @@ export class Player {
     this.say('Nothing to read.');
   }
 
-  // Eat the first edible thing in the pockets.
+  // Eat the first edible thing in the pockets, then the backpack — a
+  // backpack is just more room, not a separate inventory to manage by hand.
   eat() {
-    for (let i = 0; i < this.pockets.length; i++) {
-      const slot = this.pockets[i];
-      if (!slot) continue;
-      const def = ITEMS[slot.item];
-      if (def.food == null) continue;
-      if (this.food >= this.maxFood - 2) {
-        this.say('You are not hungry.');
-        return;
+    const tryEat = (slots) => {
+      for (let i = 0; i < slots.length; i++) {
+        const slot = slots[i];
+        if (!slot) continue;
+        const def = ITEMS[slot.item];
+        if (def.food == null) continue;
+        if (this.food >= this.maxFood - 2) {
+          this.say('You are not hungry.');
+          return true;
+        }
+        slot.qty -= 1;
+        if (slot.qty <= 0) slots[i] = null;
+        this.food = Math.min(this.maxFood, this.food + def.food);
+        sfx.play('eat');
+        if (slot.item === 'berries' && this.skills.has('herbalism')) {
+          this.venom = 0;
+          this.health = Math.min(this.maxHealth, this.health + 5);
+          this.say('You eat the berries. The right ones: the venom fades.');
+        } else {
+          this.say(`You eat the ${def.name.toLowerCase()}.`);
+        }
+        return true;
       }
-      slot.qty -= 1;
-      if (slot.qty <= 0) this.pockets[i] = null;
-      this.food = Math.min(this.maxFood, this.food + def.food);
-      sfx.play('eat');
-      if (slot.item === 'berries' && this.skills.has('herbalism')) {
-        this.venom = 0;
-        this.health = Math.min(this.maxHealth, this.health + 5);
-        this.say('You eat the berries. The right ones: the venom fades.');
-      } else {
-        this.say(`You eat the ${def.name.toLowerCase()}.`);
-      }
-      return;
-    }
+      return false;
+    };
+    if (tryEat(this.pockets)) return;
+    if (this.backpack && tryEat(this.backpack.slots)) return;
     this.say('Nothing to eat.');
   }
 
@@ -418,13 +459,20 @@ export class Player {
       this.say('No clear shot.');
       return;
     }
-    const i = this.pockets.findIndex((s) => s && s.item === tool.ammoType);
+    // Ammo comes from the pockets first, then the backpack — no need to
+    // manually shuffle rounds forward before a fight.
+    let ammoSlots = this.pockets;
+    let i = this.pockets.findIndex((s) => s && s.item === tool.ammoType);
+    if (i < 0 && this.backpack) {
+      i = this.backpack.slots.findIndex((s) => s && s.item === tool.ammoType);
+      ammoSlots = this.backpack.slots;
+    }
     if (i < 0) {
       this.say(`The ${tool.name.toLowerCase()} is dead weight without ${ITEMS[tool.ammoType].name.toLowerCase()}.`);
       return;
     }
-    this.pockets[i].qty -= 1;
-    if (this.pockets[i].qty <= 0) this.pockets[i] = null;
+    ammoSlots[i].qty -= 1;
+    if (ammoSlots[i].qty <= 0) ammoSlots[i] = null;
     this.swingTimer = tool.swingCooldown;
     this.stamina = Math.max(0, this.stamina - (tool.staminaCost ?? 0));
 
@@ -460,18 +508,30 @@ export class Player {
     }
   }
 
-  // Walk over dropped loot to collect it (if there is pocket room). A
-  // better weapon than the one in hand is equipped on the spot; the old
-  // tool goes to a pocket, or to the ground if there is no room.
+  // Walk over dropped loot to collect it (if there is room). A backpack
+  // found on the ground is worn, not stowed. A better weapon than the one
+  // in hand is equipped on the spot; the old tool goes to the backpack's
+  // spare-weapon slot if there's one free, otherwise a pocket, otherwise
+  // the ground.
   pickupNearby(map) {
     for (const gi of map.groundItems) {
       if (Math.hypot(gi.x - this.x, gi.y - this.y) > PICKUP_RANGE) continue;
       const def = ITEMS[gi.item];
+      if (def.kind === 'backpack') {
+        if (this.backpack) continue; // already carrying one; leave it be
+        this.backpack = { slots: new Array(16).fill(null), weapon: null };
+        gi.qty -= 1;
+        sfx.play('pickup');
+        this.say('You find a backpack — 16 more slots, and room for a spare weapon.');
+        continue;
+      }
       if (def.kind === 'tool' && (def.tier ?? 0) > (ITEMS[this.hands]?.tier ?? 0)) {
         const old = this.hands;
         this.hands = gi.item;
         gi.qty -= 1;
-        if (this.stow(old, 1) === 0) {
+        if (this.backpack && !this.backpack.weapon) {
+          this.backpack.weapon = old;
+        } else if (this.stow(old, 1) === 0) {
           map.groundItems.push({ item: old, qty: 1, x: this.x, y: this.y });
         }
         sfx.play('pickup');
@@ -495,15 +555,27 @@ export class Player {
     if (this.health <= 0) this.die(this.map, `the ${source}`);
   }
 
-  // Death: drop everything where you fell, wake back at the spawn point.
+  // Death: drop everything where you fell (including the backpack itself
+  // and everything in it), wake back at the spawn point.
   die(map, cause) {
     map = map || this.map;
     if (map) {
       for (const slot of this.pockets) {
         if (slot) map.groundItems.push({ item: slot.item, qty: slot.qty, x: this.x, y: this.y });
       }
+      if (this.backpack) {
+        for (const slot of this.backpack.slots) {
+          if (slot) map.groundItems.push({ item: slot.item, qty: slot.qty, x: this.x, y: this.y });
+        }
+        if (this.backpack.weapon) {
+          map.groundItems.push({ item: this.backpack.weapon, qty: 1, x: this.x, y: this.y });
+        }
+        map.groundItems.push({ item: 'backpack', qty: 1, x: this.x, y: this.y });
+      }
     }
     this.pockets = [null, null, null, null];
+    this.backpack = null;
+    this.selectedPocket = null;
     this.hands = 'penknife';
     this.health = this.maxHealth;
     this.stamina = this.maxStamina;
@@ -517,26 +589,35 @@ export class Player {
     this.say(`You were killed by ${cause}. You wake back at the road.`);
   }
 
-  // Add qty of an item to pockets, stacking first. Returns how many fitted.
+  // Add qty of an item to pockets, stacking first, then overflow into the
+  // backpack (if carried). Returns how many fitted.
   stow(itemKey, qty) {
+    let left = this._fillSlots(this.pockets, itemKey, qty);
+    if (left > 0 && this.backpack) left = this._fillSlots(this.backpack.slots, itemKey, left);
+    return qty - left;
+  }
+
+  // Stack into existing matching slots first, then fill empty ones.
+  // Returns how much of qty is left over (didn't fit in this slot array).
+  _fillSlots(slots, itemKey, qty) {
     const def = ITEMS[itemKey];
     let left = qty;
-    for (let i = 0; i < this.pockets.length && left > 0; i++) {
-      const slot = this.pockets[i];
+    for (let i = 0; i < slots.length && left > 0; i++) {
+      const slot = slots[i];
       if (slot && slot.item === itemKey && slot.qty < def.stack) {
         const take = Math.min(left, def.stack - slot.qty);
         slot.qty += take;
         left -= take;
       }
     }
-    for (let i = 0; i < this.pockets.length && left > 0; i++) {
-      if (!this.pockets[i]) {
+    for (let i = 0; i < slots.length && left > 0; i++) {
+      if (!slots[i]) {
         const take = Math.min(left, def.stack);
-        this.pockets[i] = { item: itemKey, qty: take };
+        slots[i] = { item: itemKey, qty: take };
         left -= take;
       }
     }
-    return qty - left;
+    return left;
   }
 
   say(text) {

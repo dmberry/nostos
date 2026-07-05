@@ -1,6 +1,6 @@
 # postAI
 
-**Version:** 0.36 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
+**Version:** 0.37 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
 
 *(Versioning policy: 0.01 increments from v0.3 onwards.)*
 
@@ -17,6 +17,8 @@ Inspired by Project Zomboid: knowledge is the real progression, scarcity drives 
 **Aiming and recovery (v0.35):** you now always face the mouse cursor, independent of movement — strafe around a target while keeping a weapon trained on it. Using the held tool is now **/** or **left click**, freeing up Ctrl/Cmd. If a fight (or a bad respawn) ever leaves you wedged inside a wall or a machine's collision box, you're automatically pushed out to the nearest open tile.
 
 **Housekeeping (v0.36):** press **F** to drop the selected pocket's contents, or the tool in hand if no pocket is selected. A gun no longer blocks your other hand — a resistance cache in front of you is always searchable, whatever you're holding. Dying always leaves you with a penknife in hand, never empty-handed. Guns now show their remaining ammo count on the hands slot. The minimap's fog of unexplored ground is grey rather than black, and the version number now sits under the postAI logo, top-left.
+
+**Backpack and mood (v0.37):** find a **backpack** somewhere in the ruins and it carries itself from then on — 16 more slots plus one spare-weapon slot, filled automatically once your pockets are full. Eating and firing a gun draw from it too, once the pockets run dry. Press **5** then **G** to swap the spare weapon, **I** to see what's inside. Die and you drop the backpack, and everything in it, where you fell. A haunting, sparse solo-piano ambience now plays softly in calm moments — it fades out while you're fighting or being hunted, and fades back in once it's safe; **P** turns it off or on. Grass tiles now carry a little blade texture instead of a flat fill.
 
 Created by David and Henrik.
 
@@ -39,8 +41,11 @@ python3 -m http.server 8000
 - **Space**: jump
 - **E / / / left click**: use the held tool (start with a penknife; face a tree and swing to cut it down — felled trees drop wood you pick up by walking over it; the blade also fends off animals)
 - **1 / 2 / 3 / 4**: select a pocket slot
-- **G**: swap the selected pocket with your hands
+- **5**: select the backpack's spare-weapon slot (if you have one)
+- **G**: swap the selected pocket (or spare-weapon slot) with your hands
 - **F**: drop the selected pocket's contents (or the held tool, if none selected)
+- **I**: view your backpack
+- **P**: toggle the ambient music
 
 The dashboard along the bottom of the screen shows health, stamina, the hands slot (current tool), four pocket slots (each labelled with its contents), and current stats.
 
