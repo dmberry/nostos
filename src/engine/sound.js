@@ -28,7 +28,7 @@ class Sound {
     this.master = null;
     this._muted = false;
     this._last = new Map();          // debounce timestamps by key
-    this._ambience = { night: false, wind: 1, robotNear: false };
+    this._ambience = { night: false, dusk: false, wind: 1, robotNear: false };
     this._droneGain = null;
     this._noise = null;              // shared white-noise buffer
     this._brown = null;              // shared brown-noise buffer (wind)
@@ -206,9 +206,10 @@ class Sound {
   // Continuous, very quiet bed: wind always, crickets at night. The loops
   // are built once at unlock and only their gains are ramped, so toggling
   // costs nothing and idle CPU stays low.
-  setAmbience({ night, wind, robotNear } = {}) {
+  setAmbience({ night, dusk, wind, robotNear } = {}) {
     try {
       if (night !== undefined) this._ambience.night = !!night;
+      if (dusk !== undefined) this._ambience.dusk = !!dusk;
       if (wind !== undefined) this._ambience.wind = Math.max(0, wind);
       if (robotNear !== undefined) this._ambience.robotNear = !!robotNear;
       if (!this.ctx) return;
@@ -238,8 +239,9 @@ class Sound {
       param.linearRampToValueAtTime(target, t + fade);
     };
     ramp(this._windGain.gain, WIND_GAIN * this._ambience.wind);
-    // Crickets are scared of the machines: they fall silent when one is near.
-    const crickets = this._ambience.night && !this._ambience.robotNear ? CRICKET_GAIN : 0;
+    // Crickets sing only at dusk (late afternoon into early evening), and
+    // fall silent when a machine is near — they're scared of them.
+    const crickets = this._ambience.dusk && !this._ambience.robotNear ? CRICKET_GAIN : 0;
     ramp(this._cricketGain.gain, crickets);
   }
 

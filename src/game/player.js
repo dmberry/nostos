@@ -31,6 +31,12 @@ const JUMP_COST = 3;      // stamina
 const CLIMB_COST = 2;     // stamina per height level climbed
 
 const WIFI_MAX = 600;    // Wi-Fi block charge in seconds (10 real minutes)
+const SWIM_STAMINA_DRAIN = 8;  // stamina/sec while in deep water
+const SWIM_HEALTH_DRAIN = 1.2; // health/sec: swimming a river is exhausting
+
+// Survival score awards. A felled tree is the baseline point; skilled tools
+// and tougher kills are worth more.
+const SCORE = { tree: 1, animal: 3, robot: 10, wreck: 2, cache: 2, book: 5, fragment: 5 };
 
 // Item kinds that can occupy the hands slot.
 const HOLDABLE = new Set(['tool', 'gun', 'gadget']);
@@ -76,6 +82,7 @@ export class Player {
     this.wifiPower = 0;   // Wi-Fi block charge (seconds) while one is held
     this.wifiMax = WIFI_MAX;
     this.invisibleToRobots = false; // true while a charged block is in hand
+    this.score = 0;       // survival score; persists across deaths
 
     // Practice makes better: melee/guns sharpen with use, knowledge with
     // reading. Levels rise on a square-root curve (25, 100, 225... xp per
@@ -100,6 +107,43 @@ export class Player {
   setPersona(name, gender) {
     this.name = name;
     this.gender = gender;
+  }
+
+  addScore(n) {
+    this.score += n;
+    if (this.onScore) this.onScore();
+  }
+
+  // Equip / stow via a clicked dashboard or backpack slot. Clicking a pocket
+  // (or the spare-weapon slot) swaps it with the hands slot; clicking the
+  // hands slot puts the held item away; clicking a backpack storage slot
+  // takes a weapon from it into the hand.
+  equipSlot(slot) {
+    if (slot.kind === 'pocket') { this.selectedPocket = slot.i; this.swapHands(); return; }
+    if (slot.kind === 'bw') { this.selectedPocket = 'bw'; this.swapHands(); return; }
+    if (slot.kind === 'hands') {
+      if (!this.hands) return;
+      const item = this.hands;
+      if (this.stow(item, 1) > 0) {
+        this.hands = null;
+        this.say(`You put the ${ITEMS[item].name.toLowerCase()} away.`);
+      } else {
+        this.say('No room to stow it.');
+      }
+      return;
+    }
+    if (slot.kind === 'bpstore' && this.backpack) {
+      const s = this.backpack.slots[slot.i];
+      if (s && !HOLDABLE.has(ITEMS[s.item].kind)) {
+        this.say(`Can't hold ${ITEMS[s.item].name.toLowerCase()} in hand.`);
+        return;
+      }
+      if (s && s.qty > 1) { this.say('Too many to take in hand.'); return; }
+      const held = this.hands;
+      this.hands = s ? s.item : null;
+      this.backpack.slots[slot.i] = held ? { item: held, qty: 1 } : null;
+      this.say(this.hands ? `You ready the ${ITEMS[this.hands].name.toLowerCase()}.` : 'You put your weapon away.');
+    }
   }
 
   update(dt, input, map, animals = [], robots = [], mouseWorld = null) {
@@ -157,8 +201,11 @@ export class Player {
       // Badly hurt, you hobble — though adrenaline still lets you sprint,
       // just not for long (see the wounded stamina drain above).
       if (this.health < WOUNDED_AT && !this.sprinting) speed = WOUNDED_SPEED;
-      // Wading a stream is slow; climbing costs stamina (handled below).
-      if (map.floorAt(Math.floor(this.x), Math.floor(this.y)) === 'stream') speed *= 0.55;
+      // Wading a stream is slow; swimming a river slower still; climbing
+      // costs stamina (handled below).
+      const under = map.floorAt(Math.floor(this.x), Math.floor(this.y));
+      if (under === 'stream') speed *= 0.55;
+      else if (under === 'water') speed *= 0.45;
       const hBefore = map.heightAt ? map.heightAt(Math.floor(this.x), Math.floor(this.y)) : 0;
       this.moveAxis(dir.x * speed * dt, 0, map);
       this.moveAxis(0, dir.y * speed * dt, map);
@@ -173,6 +220,14 @@ export class Player {
       }
     } else {
       this.walkPhase = 0;
+    }
+
+    // Swimming a river is exhausting: it drains stamina fast and chips at
+    // health, whether you're moving or treading water. Get across and out.
+    if (map.floorAt(Math.floor(this.x), Math.floor(this.y)) === 'water') {
+      this.stamina = Math.max(0, this.stamina - SWIM_STAMINA_DRAIN * dt);
+      this.health = Math.max(0, this.health - SWIM_HEALTH_DRAIN * dt);
+      if (this.health <= 0) { this.die(map, 'the cold river'); return; }
     }
 
     // Jump: purely vertical hop; collision footprint is unchanged.
@@ -347,6 +402,7 @@ export class Player {
     } else {
       this.skills.add(def.skill);
       this.gainXp('knowledge', 10);
+      this.addScore(SCORE.book);
       this.say(`You read "${def.name}". ${def.skillText}`);
       if (this.onSkillLearned) this.onSkillLearned(def.skill);
     }
@@ -433,6 +489,7 @@ export class Player {
       map.groundItems.push({ item: 'scrap', qty: 2, x: target.x, y: target.y });
       if (target.mineCharges <= 0) {
         target.dead = true;
+        this.addScore(SCORE.wreck);
         this.say('You strip the last usable parts from the wreck.');
       } else {
         this.say('You pry parts out of the fused machine.');
@@ -450,12 +507,14 @@ export class Player {
       this.gainXp('melee', target.hp <= 0 ? 5 : 1);
       if (isRobot) {
         // The robots module marks it dead and drops scrap on its next tick.
+        if (target.hp <= 0) this.addScore(SCORE.robot);
         this.say(target.hp <= 0
           ? 'The machine sparks, shudders, and dies.'
           : `The ${tool.name.toLowerCase()} clangs off the machine.`);
       } else if (target.hp <= 0) {
         target.dead = true;
         map.groundItems.push({ item: 'meat', qty: 1, x: target.x, y: target.y });
+        this.addScore(SCORE.animal);
         this.say(`The ${target.type} goes down.`);
       } else {
         this.say(`You catch the ${target.type} with the blade.`);
@@ -465,6 +524,9 @@ export class Player {
 
     // Resistance cache: search it rather than hit it.
     if (facingBox) { this.openBox(obj, map); return; }
+
+    // Abandoned car: smash it open (best with a crowbar) for what's inside.
+    if (obj && obj.type === 'car') { this.smashCar(obj, map, tool); return; }
 
     // Shovel: dig a pit in the open ground ahead. A steep pit (height -2)
     // is a trap — a wheeled T1 rolls in and can't climb out, and you can
@@ -488,7 +550,13 @@ export class Player {
       map.removeObject(obj);
       map.groundItems.push({ item: 'wood', qty: WOOD_PER_TREE, x: obj.x + 0.5, y: obj.y + 0.5 });
       sfx.play('treefall');
-      this.say('The tree comes down.');
+      // A felled tree scores a point; the right tool (a saw) or the skill to
+      // use it earns more.
+      let pts = SCORE.tree;
+      if (tool.sawBonus) pts += tool.sawBonus;
+      if (this.skills.has('woodcraft')) pts += 1;
+      this.addScore(pts);
+      this.say(`The tree comes down. +${pts}`);
     } else {
       this.say(`You hack at the tree with the ${ITEMS[this.hands].name.toLowerCase()}.`);
     }
@@ -576,6 +644,46 @@ export class Player {
       : 'You dig at the ground.');
   }
 
+  // Smash an abandoned car open. A crowbar (high robotDamage) pries it apart
+  // in a couple of blows; anything else takes longer. When it gives, scatter
+  // what was left inside around the wreck.
+  smashCar(obj, map, tool) {
+    if (obj.smashed) { this.say('The wreck is already stripped.'); return; }
+    if (!tool || (tool.kind !== 'tool' && tool.kind !== 'gun')) {
+      this.say('You need something to break it open — a crowbar works best.');
+      return;
+    }
+    if (this.stamina < (tool.staminaCost ?? 4)) { this.say('Too exhausted.'); return; }
+    this.swingTimer = tool.swingCooldown ?? 0.5;
+    this.stamina -= tool.staminaCost ?? 4;
+    sfx.play('chop');
+    obj.hp = (obj.hp ?? 10) - (tool.robotDamage ?? 1);
+    obj.shake = 0.3;
+    map.shaking.add(obj);
+    if (obj.hp > 0) {
+      this.say('You smash at the car. Glass and metal give.');
+      return;
+    }
+    obj.smashed = true;
+    this.addScore(3);
+    sfx.play('treefall');
+    // Loot spills out at your feet (the car footprint itself is solid, so it
+    // must land on the walkable tile you're standing on to be collectable).
+    // A car battery is a generous find; the rest is a grab-bag of salvage,
+    // tools, and reading matter.
+    const drop = (item, qty) => map.groundItems.push({
+      item, qty, x: this.x + (Math.random() - 0.5) * 0.8, y: this.y + (Math.random() - 0.5) * 0.8,
+    });
+    drop('battery', 2 + Math.floor(Math.random() * 2)); // the big car battery
+    if (Math.random() < 0.5) drop('seatbelt', 1);
+    if (Math.random() < 0.35) drop(['bat', 'machete', 'crowbar'][Math.floor(Math.random() * 3)], 1);
+    if (Math.random() < 0.3) drop(['book_wood', 'book_herbs', 'book_track', 'book_run'][Math.floor(Math.random() * 4)], 1);
+    if (Math.random() < 0.5) drop('scrap', 1 + Math.floor(Math.random() * 2));
+    if (Math.random() < 0.4) drop('tin', 1);
+    if (Math.random() < 0.3) drop('torch', 1);
+    this.say('You break the car open and strip what is inside.');
+  }
+
   // Search a resistance cache with the free hand — usable whatever the
   // primary hand is holding, gun, tool, or nothing.
   openBox(obj, map) {
@@ -587,6 +695,7 @@ export class Player {
     obj.opened = true;
     const drops = Array.isArray(obj.loot) ? obj.loot : [obj.loot];
     for (const l of drops) map.groundItems.push({ ...l, x: this.x, y: this.y });
+    this.addScore(SCORE.cache);
     sfx.play('pickup');
     this.say(`You prise open the cache: ${drops.map((l) => ITEMS[l.item].name.toLowerCase()).join(', ')}.`);
   }
@@ -645,6 +754,7 @@ export class Player {
       target.hp -= tool.robotDamage + this.xpLevel('guns');
       target.hurt = true;
       this.gainXp('guns', target.hp <= 0 ? 5 : 1);
+      if (target.hp <= 0) this.addScore(SCORE.robot);
       this.say(target.hp <= 0
         ? 'The machine collapses in a shower of sparks.'
         : 'The round punches into the machine.');
@@ -656,6 +766,7 @@ export class Player {
       if (target.hp <= 0) {
         target.dead = true;
         map.groundItems.push({ item: 'meat', qty: 1, x: target.x, y: target.y });
+        this.addScore(SCORE.animal);
         this.say(`The ${target.type} drops where it stands.`);
       } else {
         this.say(`You wing the ${target.type}.`);
@@ -831,7 +942,9 @@ export class Player {
     const h = map.heightAt ? map.heightAt(Math.floor(this.x), Math.floor(this.y)) : 0;
     const maxStep = (this.z > 0 || this.vz !== 0) ? 2 : 1;
     const blocked = (tx, ty) => {
-      if (map.isSolid(tx, ty)) return true;
+      // The player can swim: water is passable for them (slow and tiring,
+      // handled in movement) even though it stays solid for everything else.
+      if (map.isSolid(tx, ty) && map.floorAt(tx, ty) !== 'water') return true;
       if (!map.heightAt) return false;
       return Math.abs(map.heightAt(tx, ty) - h) > maxStep;
     };

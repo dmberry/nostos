@@ -537,18 +537,38 @@ function scatterLoners(map, rng, keepClear) {
 }
 
 // Abandoned cars, left where they stalled or crashed when the grid died.
-// Sparse and spread out (minimum spacing) so they read as scenery, not a
-// hazard course; one lane of a two-lane road stays clear at every wreck.
+// Big now — a 2x3 hulk of six tiles — and smashable with a crowbar for what
+// was left inside. Sparse and spread out so they read as landmarks, not a
+// hazard course. Placed on or beside a road with all six footprint tiles
+// clear; the whole footprint points back at one car object so a hit on any
+// tile strips the same wreck.
 function scatterWrecks(map, rng) {
   const placed = [];
-  const minGap = 14;
+  const minGap = 18;
   let guard = 0;
-  while (placed.length < 9 && guard++ < 4000) {
-    const x = Math.floor(rng() * map.w);
-    const y = Math.floor(rng() * map.h);
-    if (map.floorAt(x, y) !== 'road' || map.objectAt(x, y)) continue;
+  while (placed.length < 7 && guard++ < 6000) {
+    const x = Math.floor(rng() * (map.w - 3));
+    const y = Math.floor(rng() * (map.h - 3));
+    const wide = rng() < 0.5;
+    const fw = wide ? 3 : 2, fh = wide ? 2 : 3;
+    // Every footprint tile must be empty, walkable-height ground, and at
+    // least one must be road so the wreck sits on the tarmac.
+    let ok = true, onRoad = false;
+    for (let dy = 0; dy < fh && ok; dy++) {
+      for (let dx = 0; dx < fw; dx++) {
+        const f = map.floorAt(x + dx, y + dy);
+        if (map.objectAt(x + dx, y + dy) || (map.heightAt && map.heightAt(x + dx, y + dy) !== 0)
+          || f === 'water' || f === 'stream' || f === 'boards') { ok = false; break; }
+        if (f === 'road') onRoad = true;
+      }
+    }
+    if (!ok || !onRoad) continue;
     if (placed.some((p) => Math.hypot(p.x - x, p.y - y) < minGap)) continue;
-    map.addObject('car', x, y, { hue: rng() });
+    const footprint = [];
+    for (let dy = 0; dy < fh; dy++) for (let dx = 0; dx < fw; dx++) footprint.push({ x: x + dx, y: y + dy });
+    const car = map.addObject('car', x, y, { hue: rng(), fw, fh, footprint, hp: 10, smashed: false });
+    // Point every footprint tile at the one car object.
+    for (const t of footprint) map.objectGrid[t.y * map.w + t.x] = car;
     placed.push({ x, y });
   }
 }

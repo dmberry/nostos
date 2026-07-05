@@ -53,6 +53,8 @@ export const FRAGMENTS = [
 
 const READ_RANGE = 0.7;    // how close you must be to pick a fragment up
 const NOTE_LIFT = 10;      // pixels the note floats above its tile
+const FLASH_TIME = 9;      // seconds the found-fragment note lingers on screen
+const FRAGMENT_SCORE = 5;  // points for recovering a fragment
 
 export class Lore {
   constructor(map, seed) {
@@ -101,6 +103,13 @@ export class Lore {
   update(dt, player, input) {
     if (input.archivePressed()) this.archiveOpen = !this.archiveOpen;
 
+    // The just-found fragment shows briefly bottom-right; it fades on its own
+    // and a click clears it at once.
+    if (this.flash) {
+      this.flash.ttl -= dt;
+      if (this.flash.ttl <= 0 || input.clickPos()) this.flash = null;
+    }
+
     // Walk over an unread fragment to collect it into the Archive.
     for (const p of this.placed) {
       if (p.found) continue;
@@ -108,7 +117,9 @@ export class Lore {
       p.found = true;
       this.found.add(p.frag.id);
       this._persist();
-      player.say(`You find a fragment: ${p.frag.title}. (J to read the Archive.)`);
+      if (player.addScore) player.addScore(FRAGMENT_SCORE);
+      this.flash = { frag: p.frag, ttl: FLASH_TIME };
+      player.say(`You find a fragment: ${p.frag.title}.`);
     }
   }
 
@@ -136,9 +147,10 @@ export class Lore {
     }
   }
 
-  // Screen-space Archive overlay: the found fragments as a timeline that
-  // fills with gaps, most recent era last. Called after the world is drawn.
+  // Screen-space overlays: the transient found-fragment note (bottom-right,
+  // semi-transparent, auto-fading) and, when open, the full Archive.
   drawOverlay(ctx, w, h) {
+    if (this.flash && !this.archiveOpen) this._drawFlash(ctx, w, h);
     if (!this.archiveOpen) return;
     ctx.fillStyle = 'rgba(6,8,5,0.82)';
     ctx.fillRect(0, 0, w, h);
@@ -199,5 +211,48 @@ export class Lore {
     }
     if (line && y <= maxY) { ctx.fillText(line, x, y); y += lineH; }
     return y;
+  }
+
+  // Split text into wrapped lines for a given width (ctx.font must be set).
+  _wrapLines(ctx, text, maxW) {
+    const words = text.split(' ');
+    const lines = [];
+    let line = '';
+    for (const word of words) {
+      const test = line ? line + ' ' + word : word;
+      if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = word; }
+      else line = test;
+    }
+    if (line) lines.push(line);
+    return lines;
+  }
+
+  // The transient found-fragment note: bottom-right, semi-transparent so the
+  // world reads through it, fading out in its last second.
+  _drawFlash(ctx, w, h) {
+    const boxW = 300, pad = 14;
+    ctx.font = '12px system-ui, sans-serif';
+    const lines = this._wrapLines(ctx, this.flash.frag.text, boxW - pad * 2);
+    const boxH = pad * 2 + 22 + lines.length * 15 + 8;
+    const x = w - boxW - 16;
+    const y = h - boxH - 92; // clear of the dashboard panel
+    const alpha = Math.min(1, this.flash.ttl / 1.2); // ease out over the last ~1.2s
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = 'rgba(12,16,10,0.6)'; // transparent: the map shows through
+    ctx.fillRect(x, y, boxW, boxH);
+    ctx.strokeStyle = 'rgba(207,216,195,0.4)';
+    ctx.strokeRect(x + 0.5, y + 0.5, boxW - 1, boxH - 1);
+    ctx.fillStyle = '#e8d27a';
+    ctx.font = 'bold 12px system-ui, sans-serif';
+    ctx.fillText(this.flash.frag.title, x + pad, y + pad + 8);
+    ctx.fillStyle = 'rgba(232,228,214,0.95)';
+    ctx.font = '12px system-ui, sans-serif';
+    let ly = y + pad + 28;
+    for (const line of lines) { ctx.fillText(line, x + pad, ly); ly += 15; }
+    ctx.fillStyle = 'rgba(207,216,195,0.5)';
+    ctx.font = '9px system-ui, sans-serif';
+    ctx.fillText('click to dismiss · J for the Archive', x + pad, y + boxH - 8);
+    ctx.restore();
   }
 }

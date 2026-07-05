@@ -89,6 +89,16 @@ export class Input {
     return { x: this.mouseX, y: this.mouseY };
   }
 
+  // A pending left-click position without consuming it (so the UI can claim
+  // clicks on dashboard slots before they reach the in-world "use" action).
+  clickPos() {
+    return this.mousePressed ? { x: this.mouseX, y: this.mouseY } : null;
+  }
+
+  consumeClick() {
+    this.mousePressed = false;
+  }
+
   jumpPressed() {
     return this.consumePress('Space');
   }

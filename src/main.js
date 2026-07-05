@@ -14,7 +14,7 @@ import { Lore } from './game/lore.js';
 import { sfx } from './engine/sound.js';
 
 const WORLD_SEED = 1337;
-const VERSION = '0.42';
+const VERSION = '0.43';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -94,6 +94,8 @@ const obelisks = [];
     [{ item: 'wifiblock', qty: 1 }, { item: 'battery', qty: 2 }],
     // A shovel for digging robot traps.
     [{ item: 'shovel', qty: 1 }],
+    // A saw: fells trees fast and scores more per tree.
+    [{ item: 'saw', qty: 1 }],
   ];
   const rollLoot = () => {
     const r = rng();
@@ -132,17 +134,19 @@ try {
     player.setPersona(saved.name || 'Adam', saved.gender || 'm');
     for (const s of saved.skills || []) player.skills.add(s);
     if (saved.xp) Object.assign(player.xp, saved.xp);
+    if (typeof saved.score === 'number') player.score = saved.score;
   }
 } catch { /* corrupt save: start fresh */ }
 const persist = () => {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
-      name: player.name, gender: player.gender, skills: [...player.skills], xp: player.xp,
+      name: player.name, gender: player.gender, skills: [...player.skills], xp: player.xp, score: player.score,
     }));
   } catch { /* storage unavailable */ }
 };
 player.onSkillLearned = persist;
 player.onXpGain = persist;
+player.onScore = persist;
 
 // Character picker in the help modal.
 const nameInput = document.getElementById('charName');
@@ -226,6 +230,7 @@ let playTime = 0;
 let showBackpack = false;
 
 let wasNight = null;
+let wasDusk = null;
 let wasRobotNear = false;
 function update(dt) {
   if (input.consumePress('KeyH')) toggleHelp();
@@ -242,6 +247,13 @@ function update(dt) {
   }
   const mouse = input.mousePos();
   const mouseWorld = camera.toWorld(mouse.x, mouse.y, renderer.w, renderer.h);
+  // A click on a dashboard/backpack slot equips or stows it, and is claimed
+  // here so it doesn't also swing the held tool in the world.
+  const click = input.clickPos();
+  if (click && renderer.slotAt) {
+    const slot = renderer.slotAt(click.x, click.y);
+    if (slot) { player.equipSlot(slot); input.consumeClick(); }
+  }
   player.update(dt, input, map, animals, robots, mouseWorld);
   updateAnimals(dt, animals, player, map);
   updateBirds(dt, birds, animals, player, map);
@@ -263,6 +275,12 @@ function update(dt) {
   }
 
   // Ambience follows the clock; creature calls fire on state transitions.
+  // Crickets are a dusk sound only: late afternoon into early evening.
+  const dusk = dayNight.hour >= 16.5 && dayNight.hour < 20;
+  if (dusk !== wasDusk) {
+    wasDusk = dusk;
+    sfx.setAmbience({ dusk });
+  }
   const night = dayNight.isNight();
   if (night !== wasNight) {
     wasNight = night;

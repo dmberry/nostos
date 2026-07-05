@@ -59,6 +59,7 @@ export class Renderer {
 
   draw(camera, map, player, animals = [], hud = {}) {
     const ctx = this.ctx;
+    this.uiSlots = []; // clickable dashboard/backpack slots, rebuilt each frame
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.fillStyle = '#0b0e0a';
     ctx.fillRect(0, 0, this.w, this.h);
@@ -208,9 +209,10 @@ export class Renderer {
 
     // Spare weapon slot: select with 5, swap with G, same as a pocket.
     const weaponY = py + 42;
-    this.drawLabel('SPARE WEAPON — 5, then G', px + 20, weaponY + 10);
+    this.drawLabel('SPARE WEAPON — click or 5+G', px + 20, weaponY + 10);
     this.drawSlot(px + 20, weaponY + 16, size,
       player.backpack.weapon ? ITEMS[player.backpack.weapon] : null, 0, player.selectedPocket === 'bw');
+    this.uiSlots.push({ x: px + 20, y: weaponY + 16, w: size, h: size, kind: 'bw' });
     if (player.backpack.weapon) {
       ctx.font = '9px system-ui, sans-serif';
       ctx.fillStyle = 'rgba(207,216,195,0.7)';
@@ -227,6 +229,7 @@ export class Renderer {
       const sy = gridY + row * (size + gap);
       const slot = player.backpack.slots[i];
       this.drawSlot(sx, sy, size, slot ? ITEMS[slot.item] : null, slot ? slot.qty : 0);
+      this.uiSlots.push({ x: sx, y: sy, w: size, h: size, kind: 'bpstore', i });
       if (slot) {
         ctx.font = '7px system-ui, sans-serif';
         ctx.fillStyle = 'rgba(207,216,195,0.6)';
@@ -235,6 +238,16 @@ export class Renderer {
         ctx.textAlign = 'left';
       }
     }
+  }
+
+  // Which dashboard/backpack slot (if any) is under a screen point. Later
+  // entries (the backpack panel, drawn on top) win over earlier ones.
+  slotAt(mx, my) {
+    for (let k = this.uiSlots.length - 1; k >= 0; k--) {
+      const s = this.uiSlots[k];
+      if (mx >= s.x && mx <= s.x + s.w && my >= s.y && my <= s.y + s.h) return s;
+    }
+    return null;
   }
 
   // Inverse-project the screen corners to get the visible tile bounding box.
@@ -595,41 +608,73 @@ export class Renderer {
     }
   }
 
-  // An abandoned car: a low, faded box with a cabin hump, sitting dead on
-  // the road. Litter, not a landmark — a hint that people left in a hurry.
+  // An abandoned car: now a big 2x3 hulk sitting dead across the road.
+  // Smash it with a crowbar (it flips to `smashed`) for what was inside.
   drawCar(obj) {
     const ctx = this.ctx;
-    const c = worldToScreen(obj.x + 0.5, obj.y + 0.5);
+    const fw = obj.fw || 2, fh = obj.fh || 3;
+    const c = worldToScreen(obj.x + fw / 2, obj.y + fh / 2);
+    const wob = obj.shake ? Math.sin(obj.shake * 50) * obj.shake * 6 : 0;
+    // The footprint diagonal sets the on-screen size; a wider car is longer
+    // along the x screen axis.
+    const half = (fw + fh) * 8;   // half-length along the body
+    const wide = 22;              // half-width of the body
+    const roofH = obj.smashed ? 10 : 22;
     const hue = obj.hue ?? 0.5;
-    const body = `hsl(${Math.floor(hue * 360)}, 26%, ${38 + hue * 10}%)`;
+    const lum = obj.smashed ? 22 : 38 + hue * 10;
+    const body = `hsl(${Math.floor(hue * 360)}, ${obj.smashed ? 10 : 26}%, ${lum}%)`;
+
+    ctx.save();
+    ctx.translate(c.x + wob, c.y);
+    // Shadow
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.beginPath();
-    ctx.ellipse(c.x, c.y + 2, 20, 9, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, 6, half, wide * 0.6, 0, 0, Math.PI * 2);
     ctx.fill();
     // Hull
     ctx.fillStyle = body;
     ctx.beginPath();
-    ctx.moveTo(c.x - 19, c.y - 2);
-    ctx.lineTo(c.x - 12, c.y - 10);
-    ctx.lineTo(c.x + 12, c.y - 10);
-    ctx.lineTo(c.x + 19, c.y - 2);
-    ctx.lineTo(c.x + 15, c.y + 6);
-    ctx.lineTo(c.x - 15, c.y + 6);
+    ctx.moveTo(-half, -2);
+    ctx.lineTo(-half + 10, -12);
+    ctx.lineTo(half - 10, -12);
+    ctx.lineTo(half, -2);
+    ctx.lineTo(half - 8, 10);
+    ctx.lineTo(-half + 8, 10);
     ctx.closePath();
     ctx.fill();
-    // Cabin
-    ctx.fillStyle = 'rgba(20,22,20,0.55)';
+    // Cabin / roof
+    ctx.fillStyle = obj.smashed ? 'rgba(15,16,15,0.75)' : 'rgba(20,22,20,0.55)';
     ctx.beginPath();
-    ctx.moveTo(c.x - 8, c.y - 10);
-    ctx.lineTo(c.x - 5, c.y - 19);
-    ctx.lineTo(c.x + 5, c.y - 19);
-    ctx.lineTo(c.x + 8, c.y - 10);
+    ctx.moveTo(-half * 0.45, -12);
+    ctx.lineTo(-half * 0.3, -12 - roofH);
+    ctx.lineTo(half * 0.3, -12 - roofH);
+    ctx.lineTo(half * 0.45, -12);
     ctx.closePath();
     ctx.fill();
-    // Rust streaks
-    ctx.fillStyle = 'rgba(120,60,30,0.35)';
-    ctx.fillRect(c.x - 16, c.y - 3, 4, 8);
-    ctx.fillRect(c.x + 9, c.y - 5, 3, 9);
+    if (obj.smashed) {
+      // Shattered: jagged roof edge, blown glass, an open door gap, rust.
+      ctx.strokeStyle = 'rgba(200,210,220,0.5)';
+      ctx.lineWidth = 1;
+      for (let i = -3; i <= 3; i++) {
+        ctx.beginPath();
+        ctx.moveTo(i * 5, -12 - roofH + 2);
+        ctx.lineTo(i * 5 + 2, -12 - roofH - 3 - (i & 1) * 3);
+        ctx.stroke();
+      }
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(-half + 6, -8, 12, 14); // open door hole
+      ctx.fillStyle = 'rgba(120,60,30,0.5)';
+      ctx.fillRect(half - 18, -6, 6, 12);
+    } else {
+      // Rust streaks on an intact wreck.
+      ctx.fillStyle = 'rgba(120,60,30,0.35)';
+      ctx.fillRect(-half + 8, -4, 5, 10);
+      ctx.fillRect(half - 14, -6, 4, 12);
+      // A faint gleam of windscreen.
+      ctx.fillStyle = 'rgba(150,170,180,0.25)';
+      ctx.fillRect(-half * 0.28, -12 - roofH + 3, half * 0.56, roofH - 5);
+    }
+    ctx.restore();
   }
 
   // Fog of war over the minimap: an offscreen 1px-per-tile mask, darkened
@@ -753,6 +798,28 @@ export class Renderer {
         ctx.moveTo(-2, 2); ctx.lineTo(-8, 6); ctx.lineTo(-5, 10);
         ctx.lineTo(1, 8); ctx.closePath();
         ctx.fill();
+        break;
+      case 'saw':
+        ctx.fillStyle = '#6a4c2c'; // handle
+        ctx.fillRect(-10, -5, 5, 7);
+        ctx.strokeStyle = itemDef.color; // steel blade
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(-5, -1); ctx.lineTo(10, -6); ctx.stroke();
+        ctx.strokeStyle = '#8a9098'; // teeth
+        ctx.lineWidth = 1;
+        for (let i = 0; i < 7; i++) {
+          const t = -4 + i * 2;
+          ctx.beginPath(); ctx.moveTo(t, 0); ctx.lineTo(t + 1, 2); ctx.stroke();
+        }
+        break;
+      case 'seatbelt':
+        ctx.strokeStyle = itemDef.color;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(-8, -8); ctx.quadraticCurveTo(6, 0, -6, 9);
+        ctx.stroke();
+        ctx.fillStyle = '#9a9aa0'; // buckle
+        ctx.fillRect(-9, 6, 6, 4);
         break;
       case 'stungun':
       case 'electrogun':
@@ -1053,6 +1120,7 @@ export class Renderer {
     const handsX = 210;
     this.drawLabel('HANDS', handsX, top + 14);
     this.drawSlot(handsX, top + 20, 44, ITEMS[player.hands], 0);
+    this.uiSlots.push({ x: handsX, y: top + 20, w: 44, h: 44, kind: 'hands' });
     if (player.hands) {
       ctx.fillStyle = 'rgba(207,216,195,0.7)';
       ctx.font = '10px system-ui, sans-serif';
@@ -1095,6 +1163,7 @@ export class Renderer {
       const slotX = pocketsX + i * 42;
       this.drawSlot(slotX, top + 20, 36, slot ? ITEMS[slot.item] : null, slot ? slot.qty : 0,
         player.selectedPocket === i);
+      this.uiSlots.push({ x: slotX, y: top + 20, w: 36, h: 36, kind: 'pocket', i });
       if (slot) {
         ctx.font = '7px system-ui, sans-serif';
         ctx.fillStyle = 'rgba(207,216,195,0.6)';
@@ -1132,7 +1201,11 @@ export class Renderer {
         this.w - 16, line);
       line += 16;
     }
-    ctx.fillText(`tile ${player.x.toFixed(1)}, ${player.y.toFixed(1)}`, this.w - 16, line); line += 16;
+    ctx.font = 'bold 12px system-ui, sans-serif';
+    ctx.fillStyle = '#e8d27a';
+    ctx.fillText(`Score ${player.score ?? 0}`, this.w - 16, line); line += 16;
+    ctx.font = '11px system-ui, sans-serif';
+    ctx.fillStyle = 'rgba(207,216,195,0.85)';
     ctx.fillText(`${hud.fps ?? 0} fps`, this.w - 16, line);
     ctx.textAlign = 'left';
 

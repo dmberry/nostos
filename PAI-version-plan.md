@@ -17,7 +17,7 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
-## Where we are (v0.42)
+## Where we are (v0.43)
 
 - Isometric world, seeded 128x128: river, two bridges, ten-building town, hamlet, forests, tall grass, hills and hollows, wadeable streams.
 - Survival: food/hunger, health, stamina, venom, day/night (dark nights), torches, minimap with fog of war (grey, not black), permadeath that drops your loot where you fell.
@@ -53,6 +53,12 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Wi-Fi block works while carried**, not only held; it draws a battery only when a machine is actually near, so it never wastes cells while you're safe. A "HIDDEN" tag + minutes shows on the HUD while active.
 - **Books and notes read on pickup**: walk onto a book and it grants its skill on the spot (no pocketing, no R needed); notes go straight to the Archive.
 - **Sparser grass texture** and the **aim dot set further from the sprite** so facing reads clearly.
+- **Score** on the dashboard (replaced the tile readout): +1 tree (more with a saw's `sawBonus` or the woodcraft skill), +3 animal, +10 robot, +2 mined wreck, +2 cache, +5 book, +5 fragment. Survives death; persisted with the character save. A **saw** (in a cache) fells trees fast and scores more.
+- **Swimming**: rivers (water floor) are passable for the player only — slow (0.45x) and exhausting (drains stamina fast, chips health), so a crossing costs you. Water stays solid for everything else.
+- **Click-to-equip**: click a pocket, spare-weapon, or backpack storage slot to put that tool/gun/gadget in hand (and click the hands slot to stow it). Handled in main via `renderer.slotAt()` before the in-world click is consumed.
+- **Big smashable cars**: abandoned cars are now 2x3 six-tile hulks (one car object, whole footprint solid and pointing back at it). Smash with a crowbar (or any weapon, slower) to strip them: car battery, a salvaged **seatbelt** (improvised weapon), weapons, books, scrap, tins, torches. Loot spills at your feet since the footprint itself is solid.
+- **Lore fragment note**: on pickup the text shows in a soft, transparent panel bottom-right that auto-fades (~9s) or clears on a click — alongside the full Archive (J).
+- **Crickets at dusk only** (16:30–20:00), not all night. **T1/T2 hull labels** are a softer light grey, not stark white.
 
 ## Planned / backlog
 

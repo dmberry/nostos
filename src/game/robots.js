@@ -587,7 +587,7 @@ function drawDesignation(ctx, r, x, y) {
   ctx.font = 'bold 7px system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#ffffff';
+  ctx.fillStyle = '#b8bcc2'; // light grey, softer than stark white
   ctx.fillText(r.type.toUpperCase(), x, y);
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';

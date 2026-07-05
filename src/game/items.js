@@ -60,6 +60,31 @@ export const ITEMS = {
     dig: true,
     color: '#7c6a4a',
   },
+  // Cuts wood fast and scores more per tree than an improvised blade.
+  saw: {
+    name: 'Saw',
+    kind: 'tool',
+    tier: 2,
+    treeDamage: 3,
+    animalDamage: 3,
+    robotDamage: 1,
+    sawBonus: 2,       // extra score per felled tree
+    swingCooldown: 0.5,
+    staminaCost: 4,
+    color: '#b0b6bc',
+  },
+  // Salvaged from a wrecked car: an improvised flail of a weapon.
+  seatbelt: {
+    name: 'Seatbelt',
+    kind: 'tool',
+    tier: 1,
+    treeDamage: 0,
+    animalDamage: 4,
+    robotDamage: 1,
+    swingCooldown: 0.45,
+    staminaCost: 3,
+    color: '#4a4640',
+  },
   scrap: {
     name: 'Scrap',
     kind: 'resource',

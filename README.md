@@ -1,6 +1,6 @@
 # postAI
 
-**Version:** 0.42 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
+**Version:** 0.43 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
 
 *(Versioning policy: 0.01 increments from v0.3 onwards.)*
 
@@ -29,6 +29,8 @@ Inspired by Project Zomboid: knowledge is the real progression, scarcity drives 
 **Zoom, jamming, and the first fragments (v0.41):** the game now plays at a closer over-the-shoulder zoom by default; press **Z** to pull the camera out to the wide view and back. A rare **Wi-Fi block** hides in one of the resistance caches — hold it and the machines simply cannot find you, their sensors jammed. It runs on a ten-minute charge (shown as a battery gauge on the hands slot); feed it a battery (use key) to keep it going. Using a tool or weapon now visibly animates — melee sweeps through an arc, guns kick back with a muzzle flash — so you can always see a swing land. And the hidden story has begun: scattered paper **fragments** wait in the ruins; walk over one to recover it, and press **J** to open the **Archive** and read what you have found. Six to start, deliberately out of order and ambiguous — the truth is never stated, only assembled.
 
 **Ruin, terrain, traps, and knowledge (v0.42):** the world has more character now. Walls weather through a range of decay — new, old, mossy, breaking down, crumbling — so the ruins read as genuinely aged. The land is more dramatic: hills rise higher and trenches cut deeper. You can **jump** to clamber up onto higher ground you couldn't just walk up. A **shovel** (found in a cache) digs pits: sink the ground in front of you into a steep trap that a wheeled T1 rolls into and can never climb out of, while you can still jump clear. The **Wi-Fi block** no longer needs to be held — carry it anywhere and it jams the machines, drawing on a battery only when one is actually near. **Books and notes are read simply by picking them up** — a book grants its skill on the spot, a note goes into the Archive. The grass texture is sparser, and the aim dot sits further from your character so your facing reads at a glance.
+
+**Score, swimming, cars, and click-to-equip (v0.43):** the dashboard now keeps a **score** — a point for felling a tree (more with a saw or the woodcraft skill), and more again for killing an animal, wrecking a machine, cracking a cache, reading a book, or recovering a fragment; it survives death. You can now **swim across rivers** — slow and exhausting, chipping at your health, so pick your crossing. **Click a weapon or tool** in a pocket or backpack slot to put it straight in your hand (and click the hands slot to stow it). Abandoned **cars are big now** — a six-tile hulk you can **smash open with a crowbar** for what was left inside: a hefty car battery, a salvaged seatbelt, weapons, books, and odds and ends. Finding a lore fragment now shows its text in a soft, transparent note bottom-right that fades on its own or clears when you click. Crickets sing only at dusk now, and the machines' designation reads in a softer grey.
 
 Created by David and Henrik.
 
