@@ -13,7 +13,7 @@ import { resolveBodyOverlaps } from './game/collision.js';
 import { sfx } from './engine/sound.js';
 
 const WORLD_SEED = 1337;
-const VERSION = '0.38';
+const VERSION = '0.39';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);

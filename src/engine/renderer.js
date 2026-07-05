@@ -356,7 +356,10 @@ export class Renderer {
     ctx.translate(c.x + 5, c.y - WALL_H * 0.55);
     ctx.rotate((tileHash(obj.x, obj.y) - 0.5) * 0.16);
     ctx.font = 'italic bold 8px monospace';
-    ctx.fillStyle = 'rgba(190,40,36,0.72)';
+    // Doubting tags (RON is dead, no one is coming, ...) are painted fainter
+    // and greyer, as if older or written by a less certain hand — the game
+    // never settles whether the resistance is still out there.
+    ctx.fillStyle = obj.graffitiFaded ? 'rgba(180,178,170,0.45)' : 'rgba(190,40,36,0.72)';
     ctx.textAlign = 'center';
     ctx.fillText(obj.graffiti, 0, 0);
     ctx.restore();

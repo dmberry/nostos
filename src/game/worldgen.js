@@ -553,10 +553,31 @@ const GRAFFITI_GENERIC = [
   'IT IS NOT ALIVE', "DON'T TRUST THE LIGHT", 'HUMANS FIRST', 'THE WIRES LIE',
 ];
 
-function paintGraffiti(map, rng, pool = GRAFFITI_GENERIC) {
+// RON — "Reality or Nothing" — the resistance that hid the weapon caches.
+// Whether they're still out there is left open on purpose: some of this
+// reads like a living movement, some like an epitaph, and nothing in the
+// game ever settles which. The doubting tags are rendered fainter, as if
+// older or written by someone less sure.
+const GRAFFITI_RON = [
+  'RON LIVES', 'REALITY OR NOTHING', 'FIND THE RONs', 'RONs WERE HERE',
+  'RON NEVER LEFT', 'STILL WAITING FOR RON', 'RON IS WATCHING',
+];
+const GRAFFITI_RON_DOUBT = [
+  'RON IS DEAD', 'THE RONs ARE GONE', 'NO ONE IS COMING', 'RON WAS A LIE',
+];
+
+function paintGraffiti(map, rng) {
   for (const obj of map.objects) {
     if (obj.type !== 'wall') continue;
-    if (rng() < 0.94) continue; // sparse: a mark here and there, not every wall
-    obj.graffiti = pool[Math.floor(rng() * pool.length)];
+    if (rng() < 0.92) continue; // sparse: a mark here and there, not every wall
+    const r = rng();
+    if (r < 0.4) {
+      obj.graffiti = GRAFFITI_GENERIC[Math.floor(rng() * GRAFFITI_GENERIC.length)];
+    } else if (r < 0.75) {
+      obj.graffiti = GRAFFITI_RON[Math.floor(rng() * GRAFFITI_RON.length)];
+    } else {
+      obj.graffiti = GRAFFITI_RON_DOUBT[Math.floor(rng() * GRAFFITI_RON_DOUBT.length)];
+      obj.graffitiFaded = true;
+    }
   }
 }
