@@ -30,7 +30,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '0.50';
+const VERSION = '0.51';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -121,6 +121,12 @@ const obelisks = [];
     [{ item: 'katana', qty: 1 }],
     [{ item: 'sledgehammer', qty: 1 }],
     [{ item: 'railgun', qty: 1 }, { item: 'battery', qty: 2 }],
+    // Every remaining tool/weapon in ITEMS gets at least one guaranteed
+    // spawn too — except the wave gun and OB-gun, which stay crafting-only.
+    [{ item: 'penknife', qty: 1 }],
+    [{ item: 'seatbelt', qty: 1 }],
+    [{ item: 'bat', qty: 1 }],
+    [{ item: 'machete', qty: 1 }],
   ];
   const rollLoot = () => {
     const r = rng();
@@ -144,7 +150,10 @@ const obelisks = [];
     }
     return rng() < 0.5 ? [{ item: 'tin', qty: 1 }] : [{ item: 'torch', qty: 1 }];
   };
-  for (let i = 0; i < 20 && inner.length; i++) {
+  // At least as many boxes as guaranteed drops, plus a healthy handful left
+  // over to roll on the random table.
+  const boxCount = Math.max(20, guaranteed.length + 9);
+  for (let i = 0; i < boxCount && inner.length; i++) {
     const [x, y] = inner.splice(Math.floor(rng() * inner.length), 1)[0];
     const loot = i < guaranteed.length ? guaranteed[i] : rollLoot();
     map.addObject('box', x, y, { loot, opened: false });
