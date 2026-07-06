@@ -85,6 +85,31 @@ export class GameMap {
     const o = this.objectGrid[y * this.w + x];
     return !!(o && OBJECTS[o.type].solid);
   }
+
+  // Whether a solid *object* — wall, tree, rock, wreck, obelisk, cache, car,
+  // the W-factory — occupies this tile. Deliberately narrower than isSolid:
+  // solid floor (deep water) blocks walking but must never block a shot
+  // fired across or over it.
+  blocksShot(x, y) {
+    if (!this.inBounds(x, y)) return true;
+    const o = this.objectGrid[y * this.w + x];
+    return !!(o && OBJECTS[o.type].solid);
+  }
+
+  // True if nothing solid stands between the two points. Sampled at a fine
+  // enough interval for this game's short weapon ranges (a dozen tiles at
+  // most) — a full Bresenham walk isn't needed at that scale.
+  hasLineOfSight(x0, y0, x1, y1) {
+    const dx = x1 - x0, dy = y1 - y0;
+    const dist = Math.hypot(dx, dy);
+    if (dist < 1e-6) return true;
+    const steps = Math.ceil(dist * 4);
+    for (let i = 1; i < steps; i++) {
+      const t = i / steps;
+      if (this.blocksShot(Math.floor(x0 + dx * t), Math.floor(y0 + dy * t))) return false;
+    }
+    return true;
+  }
 }
 
 // Hand-written 48x48 test map: grass with a crossroads, a pond, a tree

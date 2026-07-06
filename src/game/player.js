@@ -213,6 +213,19 @@ export class Player {
     (map.sparks ??= []).push({ x, y, ttl: 0.3, max: 0.3 });
   }
 
+  // How far a beam actually reaches along the facing direction before a
+  // solid object (wall, tree, rock, wreck) cuts it short. Never further
+  // than maxRange.
+  beamRange(map, maxRange) {
+    const steps = Math.ceil(maxRange * 4);
+    for (let i = 1; i <= steps; i++) {
+      const t = (i / steps) * maxRange;
+      const x = Math.floor(this.x + this.facing.x * t), y = Math.floor(this.y + this.facing.y * t);
+      if (map.blocksShot(x, y)) return t;
+    }
+    return maxRange;
+  }
+
   // ---- generic slot access (for click-equip and pointer drag) ----------
 
   // Read the {item, qty} in a slot descriptor, or null.
@@ -981,13 +994,17 @@ export class Player {
     this.swingTimer = tool.swingCooldown;
     sfx.play('zap');
     const rng = tool.range + this.xpLevel('guns') * 0.3;
+    // The beam stops dead at the first solid object in its path — it
+    // doesn't cut through walls to hit whatever's cowering behind one.
+    const maxAlong = this.beamRange(map, rng);
     let zombified = false;
-    // Everything within a narrow corridor ahead, up to range, gets hit.
+    // Everything within a narrow corridor ahead, up to the beam's actual
+    // (possibly wall-shortened) reach, gets hit.
     const hit = (e, robot) => {
       if (e.dead || e.fused || e.drained || e.friendly) return;
       const dx = e.x - this.x, dy = e.y - this.y;
       const along = dx * this.facing.x + dy * this.facing.y;
-      if (along < 0 || along > rng) return;
+      if (along < 0 || along > maxAlong) return;
       const perp = Math.abs(dx * -this.facing.y + dy * this.facing.x);
       if (perp > 0.8) return;
       // The OB-gun's own beam doesn't kill a machine outright — it corrupts
@@ -1009,9 +1026,9 @@ export class Player {
     };
     for (const a of animals) hit(a, false);
     for (const r of robots) hit(r, true);
-    // A long tracer to the end of the beam.
+    // A long tracer to the end of the beam (or the wall that stopped it).
     map.projectiles = map.projectiles || [];
-    map.projectiles.push({ x0: this.x + this.facing.x * 0.4, y0: this.y + this.facing.y * 0.4, x1: this.x + this.facing.x * rng, y1: this.y + this.facing.y * rng, prog: 0, kind: 'fuse' });
+    map.projectiles.push({ x0: this.x + this.facing.x * 0.4, y0: this.y + this.facing.y * 0.4, x1: this.x + this.facing.x * maxAlong, y1: this.y + this.facing.y * maxAlong, prog: 0, kind: 'fuse' });
     this.say(zombified
       ? "The beam doesn't kill the machine — it corrupts it into a lurching husk. Only a bow or the wave gun will finish it now."
       : 'The beam cuts a line clean through them.');
@@ -1036,6 +1053,7 @@ export class Player {
       const d = Math.hypot(dx, dy);
       if (d > rng || d === 0) return;
       if ((dx * this.facing.x + dy * this.facing.y) / d < HALF) return; // outside the cone
+      if (!map.hasLineOfSight(this.x, this.y, e.x, e.y)) return; // a wall shadows this one
       e.hp -= robot ? tool.robotDamage : tool.animalDamage;
       e.hurt = true;
       if (robot) { e.scrapPenalty = true; this.sparkAt(map, e.x, e.y); }
@@ -1079,7 +1097,7 @@ export class Player {
       const d = Math.hypot(dx, dy);
       if (d > range || d === 0) return;
       if (dx * this.facing.x + dy * this.facing.y < 0) return;
-      if (d < best) { best = d; target = e; isRobot = robot; }
+      if (d < best && map.hasLineOfSight(this.x, this.y, e.x, e.y)) { best = d; target = e; isRobot = robot; }
     };
     if (tool.animalDamage != null) for (const a of animals) consider(a, false);
     for (const r of robots) consider(r, true);

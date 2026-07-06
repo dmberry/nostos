@@ -30,7 +30,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '0.56';
+const VERSION = '0.57';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -233,6 +233,16 @@ try {
 // autosave below can't silently rewrite the character save out from under
 // the reset the player just confirmed.
 let resettingGame = false;
+// Wipes every trace of the current run — character save, lore progress,
+// world seed — and reloads to a freshly shuffled world. Used by New Game
+// (after a confirm) and, unconditionally, whenever the player dies.
+function fullReset() {
+  resettingGame = true; // block the beforeunload/hidden autosave from undoing this
+  localStorage.removeItem('postai-character');
+  localStorage.removeItem('postai-lore');
+  localStorage.removeItem(SEED_KEY);
+  location.reload();
+}
 const persist = () => {
   if (resettingGame) return;
   try {
@@ -501,11 +511,7 @@ function update(dt) {
   if (paused) return;
   if (input.newGamePressed()) {
     if (window.confirm('Start a new game? This erases your saved progress.')) {
-      resettingGame = true; // block the beforeunload/hidden autosave from undoing this
-      localStorage.removeItem('postai-character');
-      localStorage.removeItem('postai-lore');
-      localStorage.removeItem(SEED_KEY); // a fresh game gets a freshly shuffled world
-      location.reload();
+      fullReset();
       return;
     }
   }
@@ -547,7 +553,15 @@ function update(dt) {
       copyCert();
       return;
     }
-    if (click || input.consumeUp()) { input.consumeClick(); player.deathCert = null; }
+    // Dying restarts the game from defaults — score, skills, and everything
+    // else wiped, same as New Game, no confirm needed since death already
+    // made the choice for you. Winning is not dying: dismissing a victory
+    // cert just lets you carry on with what you've earned.
+    if (click || input.consumeUp()) {
+      input.consumeClick();
+      if (player.deathCert.victory) player.deathCert = null;
+      else fullReset();
+    }
     return;
   }
 

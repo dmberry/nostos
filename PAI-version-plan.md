@@ -17,7 +17,7 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
-## Where we are (v0.56)
+## Where we are (v0.57)
 
 - Isometric world, seeded 128x128: river, two bridges, ten-building town, hamlet, forests, tall grass, hills and hollows, wadeable streams.
 - Survival: food/hunger, health, stamina, venom, day/night (dark nights), torches, minimap with fog of war (grey, not black), permadeath that drops your loot where you fell.
@@ -69,6 +69,12 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Certificate of Death**: on death a modal shows name, cause, score, skills, deaths, and an amusing rank (COMPOST → NOOB → SCRAPPER → SURVIVOR → VETERAN → L33T). Freezes the world until clicked. `player.deathCert` snapshot; `deathRank()` in renderer.
 - **Lore notes styled**: Archive fragments render as their own note cards — paper colour + typeface per kind (handwritten note, newsprint, diary, poster, green-on-black disk/tape). `NOTE_STYLE` in lore.js.
 - **Autosave**: character + xp + score + deaths + a run-state snapshot (vitals, position, inventory) persist to localStorage; saved every 8s, on tab-hide, and on unload; restored on load. World regenerates from seed (so caches/cars reset — a known limitation; world-object persistence is a follow-up).
+
+### v0.57 — weapons respect walls, and death is final
+
+- **BUG FIX: weapons could shoot straight through walls.** Every ranged attack (`fire()`, `pierceShot()`, `coneShot()`, and the W4's laser) now checks line of sight against `map`'s solid *objects* (walls, trees, rocks, wrecks, obelisks, caches, cars, the W-factory) before landing a hit — not against solid floor, so a shot still crosses open water fine. New `GameMap.blocksShot()`/`hasLineOfSight()` in `map.js`; `Player.beamRange()` shortens a piercing beam (and its tracer) to the first wall it meets; the wave-gun cone checks each target individually since it isn't a single line; single-target `fire()`'s candidate search skips blocked targets and picks the nearest *unblocked* one instead.
+- **Death now restarts the game from defaults.** Dismissing a (non-victory) Certificate of Death wipes score, skills, kills, everything — exactly like New Game, no confirm needed since death already made the choice. Shared `fullReset()` in `main.js` used by both New Game and death. Winning is not dying: a victory cert still just lets you carry on.
+- **Docs**: help modal rewrote the Backpack/Books sections (no longer claim anything survives death) and added a "Death is final" section; noted that weapons don't fire through walls.
 
 ### v0.56 — pause, and an open-ended SKYLINK purge
 

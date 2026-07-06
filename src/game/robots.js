@@ -705,7 +705,9 @@ function updateW4(r, dt, player, map) {
   }
   if (d <= W4_RANGE && d > 1e-4) {
     r.facing = { x: (player.x - r.x) / d, y: (player.y - r.y) / d };
-    if (r.attackTimer <= 0) {
+    // A wall between it and the player blocks the shot — it can't laser
+    // you through a building.
+    if (r.attackTimer <= 0 && map.hasLineOfSight(r.x, r.y, player.x, player.y)) {
       r.attackTimer = W4_FIRE_COOLDOWN;
       player.takeDamage(W4_DAMAGE, 'machine');
       (map.projectiles ??= []).push({ x0: r.x, y0: r.y, x1: player.x, y1: player.y, prog: 0, kind: 'laser' });

@@ -1,6 +1,6 @@
 # postAI
 
-**Version:** 0.56 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
+**Version:** 0.57 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
 
 *(Versioning policy: 0.01 increments from v0.3 onwards.)*
 
@@ -61,6 +61,8 @@ Inspired by Project Zomboid: knowledge is the real progression, scarcity drives 
 **Deadline halved (v0.55):** the countdown to SKYLINK is 12 hours now, down from 24.
 
 **Pause, and a purge with no clock (v0.56):** **P** now pauses the game (music toggle moved to **M** to make room). And running out the countdown no longer ends things after a fixed 30 seconds — SKYLINK's W4 onslaught just keeps coming, capped so it can't tank the frame rate, and the run only ends when it actually catches you.
+
+**Walls stop bullets, and death is final (v0.57):** a real bug is fixed — weapons could shoot straight through walls. Every ranged attack now checks line of sight against solid objects first. And death now restarts the game from scratch, same as New Game — score, skills, kills, all wiped — since surviving with everything intact after dying stopped making sense once the world got this dangerous.
 
 **Still queued (large systems):** walking on top of walls/blocks (a multi-level feature), and a mobile phone + RON text tips. Both want their own focused pass.
 
