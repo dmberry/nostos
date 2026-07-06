@@ -759,7 +759,18 @@ export class Player {
   dropBomb(tool, map) {
     this.swingTimer = 0.4;
     map.bombs = map.bombs || [];
-    const bx = this.x + this.facing.x * 0.8, by = this.y + this.facing.y * 0.8;
+    // Thrown, not just dropped: it lands a real distance out, in an arc —
+    // like an actual lobbed grenade it clears a wall or a low block in its
+    // path rather than stopping dead at the first one. Only pulled back if
+    // the landing spot itself would be inside solid geometry.
+    const THROW_RANGE = tool.throwRange ?? 4.5;
+    let bx = this.x + this.facing.x * THROW_RANGE, by = this.y + this.facing.y * THROW_RANGE;
+    if (map.isSolid(Math.floor(bx), Math.floor(by))) {
+      for (let d = THROW_RANGE - 0.5; d > 0.5; d -= 0.5) {
+        const tx = this.x + this.facing.x * d, ty = this.y + this.facing.y * d;
+        if (!map.isSolid(Math.floor(tx), Math.floor(ty))) { bx = tx; by = ty; break; }
+      }
+    }
     map.bombs.push({ x: bx, y: by, fuse: tool.fuse, radius: tool.radius, damage: tool.damage, obelisk: !!tool.obelisk, key: tool.key });
     // Remove one bomb of this kind from the kit.
     if (this.hands === tool.key) {
@@ -771,7 +782,7 @@ export class Player {
       this.removeItem(tool.key);
     }
     sfx.play('pickup');
-    this.say(`You set a ${tool.name.toLowerCase()} ticking. Get clear.`);
+    this.say(`You lob the ${tool.name.toLowerCase()} out, ticking. Get clear.`);
   }
 
   // Use the Wi-Fi block: spend a battery (pockets, then backpack) to top

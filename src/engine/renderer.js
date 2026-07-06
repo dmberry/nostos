@@ -853,7 +853,12 @@ export class Renderer {
       let tintColor = null, tintMode = 'multiply';
       if (shade < -0.02) tintColor = `rgba(10,10,12,${Math.min(0.85, -shade)})`;
       else if (shade > 0.02) { tintColor = `rgba(255,255,255,${Math.min(0.45, shade)})`; tintMode = 'screen'; }
-      this.drawTexturedQuad(corners, tex, shadeHex(def.color, shade), tintColor, tintMode);
+      // Grass is by far the busiest photo (a mass of high-frequency blade
+      // detail) and reads as noisy even at the general texture alpha —
+      // toned down further, on top of the grass-blade strokes already
+      // drawn over it.
+      const alpha = (type === 'grass' || type === 'tallgrass') ? 0.28 : 0.55;
+      this.drawTexturedQuad(corners, tex, shadeHex(def.color, shade), tintColor, tintMode, alpha);
     } else {
       this.diamondPath(corners);
       ctx.fillStyle = shadeHex(def.color, shade);

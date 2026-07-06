@@ -8,12 +8,13 @@ import { makeRng } from './game/rng.js';
 import { DayNight } from './game/daynight.js';
 import { Minimap } from './game/minimap.js';
 import { spawnBirds, updateBirds } from './game/birds.js';
-import { spawnRobots, updateRobots, spawnW1s, spawnW3, spawnW4 } from './game/robots.js';
+import { spawnRobots, updateRobots, spawnW1s, spawnW3, spawnW4, drawRobot } from './game/robots.js';
 import { resolveBodyOverlaps } from './game/collision.js';
-import { spawnWaterDroids, updateWaterDroids } from './game/waterdroids.js';
+import { spawnWaterDroids, updateWaterDroids, drawWaterDroid } from './game/waterdroids.js';
 import { Lore } from './game/lore.js';
 import { ITEMS } from './game/items.js';
 import { sfx } from './engine/sound.js';
+import { worldToScreen } from './engine/iso.js';
 
 // Each new game gets its own random seed, persisted so a continuing run
 // (autosave) always regenerates the same map. Without this every playthrough
@@ -30,7 +31,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '0.60';
+const VERSION = '0.61';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -315,6 +316,32 @@ const saveName = () => {
 nameInput.addEventListener('change', saveName);
 nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') saveName(); });
 document.getElementById('charNameSave').addEventListener('click', saveName);
+
+// Machine gallery in the help modal: renders each robot type through its
+// own real draw function onto a small offscreen canvas, so the picture is
+// exactly what you'll meet in the world rather than a separately drawn
+// icon that could drift out of sync with it.
+function renderMachineIcon(type) {
+  const size = 96;
+  const off = document.createElement('canvas');
+  off.width = size; off.height = size;
+  const octx = off.getContext('2d');
+  octx.translate(size / 2, size * 0.74);
+  if (type === 'w2') {
+    drawWaterDroid(octx, { type: 'w2', x: 0, y: 0, dead: false, z: 0.5, animT: 1.2, aggro: false, facing: { x: 0, y: 1 } }, worldToScreen);
+  } else {
+    drawRobot(octx, {
+      type, x: 0, y: 0, dead: false, fused: false, drained: false, disabledT: 0,
+      friendly: false, aggro: type === 'w1' || type === 'w4', zombie: false, stuck: false,
+      facing: { x: 0, y: 1 }, animT: 1.5, walkPhase: 0.6,
+    }, worldToScreen);
+  }
+  return off.toDataURL('image/png');
+}
+for (const type of ['t1', 't2', 'w1', 'w2', 'w3', 'w4']) {
+  const img = document.getElementById(`gal-${type}`);
+  if (img) img.src = renderMachineIcon(type);
+}
 const camera = new Camera(player.x, player.y);
 const lore = new Lore(map, WORLD_SEED);
 

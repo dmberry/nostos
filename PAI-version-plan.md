@@ -17,7 +17,7 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
-## Where we are (v0.60)
+## Where we are (v0.61)
 
 - Isometric world, seeded 128x128: river, two bridges, ten-building town, hamlet, forests, tall grass, hills and hollows, wadeable streams.
 - Survival: food/hunger, health, stamina, venom, day/night (dark nights), torches, minimap with fog of war (grey, not black), permadeath that drops your loot where you fell.
@@ -69,6 +69,14 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Certificate of Death**: on death a modal shows name, cause, score, skills, deaths, and an amusing rank (COMPOST → NOOB → SCRAPPER → SURVIVOR → VETERAN → L33T). Freezes the world until clicked. `player.deathCert` snapshot; `deathRank()` in renderer.
 - **Lore notes styled**: Archive fragments render as their own note cards — paper colour + typeface per kind (handwritten note, newsprint, diary, poster, green-on-black disk/tape). `NOTE_STYLE` in lore.js.
 - **Autosave**: character + xp + score + deaths + a run-state snapshot (vitals, position, inventory) persist to localStorage; saved every 8s, on tab-hide, and on unload; restored on load. World regenerates from seed (so caches/cars reset — a known limitation; world-object persistence is a follow-up).
+
+### v0.61 — combat tuning, thrown bombs, a machine gallery
+
+- **Grass texture opacity dropped further** (0.55 → 0.28) — it stayed the busiest of the floor photos even at the general texture alpha; other floor types keep 0.55.
+- **W4 now gives up.** Losing line of sight to the player (a wall, a hill) for `W4_GIVEUP_AFTER` (6s) straight makes it disengage and head back to the factory instead of homing in on a memorised position forever. Taking a hit while disengaging (handled by the existing generic hurt→aggro hook in `updateRobots`) snaps it right back into the fight.
+- **W1 is properly melee-only now.** `W1_HIT_RANGE` 0.9 → 0.6 (roughly the sum of the two collision radii — genuine contact, not a lunge from a few paces off) and `W1_HIT_DAMAGE` 20 → 12; `W1_ATTACK_STANDOFF` tightened to 0.55 so they actually close to hit range during the attack phase instead of holding just outside it.
+- **Bombs are thrown, not dropped.** `dropBomb` now lands the bomb `THROW_RANGE` (4.5 tiles) out along the facing direction in a straight shot that ignores solid objects in between — like a lobbed grenade clearing a wall or a low block — only pulling back along the same line if the exact landing tile would be inside solid geometry. Useful for reaching a W4 sheltering behind cover.
+- **Machine gallery in the help modal**: a picture for every robot type (T1/T2/W1/W2/W3/W4), rendered through the actual in-game draw functions (`drawRobot`/`drawWaterDroid`) onto small offscreen canvases and injected as `<img>` elements, so the picture can never drift out of sync with what you actually meet — `renderMachineIcon()` in `main.js`.
 
 ### v0.60 — face-covering bug, ammo economy, a real perf regression, bare-handed combat
 

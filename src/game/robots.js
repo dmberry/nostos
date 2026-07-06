@@ -49,12 +49,16 @@ const T2_HIT_COOLDOWN = 1.2;
 const W1_HP = 45;
 const W1_CHASE_SPEED = 4.6;
 const W1_DETECT_RANGE = 999;    // deployed hunting you; no detection needed
-const W1_HIT_RANGE = 0.9;
-const W1_HIT_DAMAGE = 20;
+// Melee only, and it means it: hit range is roughly the sum of the two
+// collision radii (player 0.28 + W1 0.3) — genuine contact, not a lunge
+// from a few paces off. Damage lowered too; a full squad landing hits
+// every cooldown was killing far too fast even at proper range.
+const W1_HIT_RANGE = 0.6;
+const W1_HIT_DAMAGE = 12;
 const W1_HIT_COOLDOWN = 1.0;
 const W1_ATTACK_TIME = 6;       // seconds closing in and striking...
 const W1_WITHDRAW_TIME = 4;     // ...then this long falling back before the next wave
-const W1_ATTACK_STANDOFF = 0.8; // spread this far apart from each other while attacking
+const W1_ATTACK_STANDOFF = 0.55; // close enough during "attack" to actually reach hit range
 const W1_WITHDRAW_RANGE = 7;    // distance fallen back to during a withdrawal
 const W1_TRIANGULATE_EVERY = 2.5; // seconds between fresh position fixes from the network
 const W1_BODY = '#3a1418';      // scorched red-black chassis
@@ -62,13 +66,16 @@ const W1_HEAD = '#2a0e10';
 
 // W4s: laser hunter-killers the W-factory dispatches the instant the player
 // attacks an obelisk. Unlike a W1 they never close to melee — they hold at
-// range and fire, backing off if the player closes the gap.
+// range and fire, backing off if the player closes the gap. Losing line of
+// sight for too long makes them give up and head home rather than hunt
+// forever on a memorised position.
 const W4_HP = 30;
 const W4_SPEED = 3.6;
 const W4_RANGE = 8;             // preferred firing distance
 const W4_MIN_RANGE = 4.5;       // backs away if the player gets this close
 const W4_FIRE_COOLDOWN = 1.6;
 const W4_DAMAGE = 9;
+const W4_GIVEUP_AFTER = 6;      // seconds of lost line of sight before it disengages
 const W4_BODY = '#4a1408';      // dull furnace red-black
 const W4_HEAD = '#2c0c05';
 
@@ -689,25 +696,41 @@ function updateW3(r, dt, map) {
 
 // A W4 laser hunter-killer: holds at range and fires rather than closing to
 // melee, backing off if the player gets within its minimum range so it
-// always keeps a clear line to shoot down.
+// always keeps a clear line to shoot down. Losing line of sight (a wall or
+// a hill in the way) for W4_GIVEUP_AFTER seconds straight makes it give up
+// and head back to the factory instead of homing in on a memorised spot
+// forever; taking a hit while it's giving up snaps it right back into the
+// fight (handled generically in updateRobots, above this dispatch).
 function updateW4(r, dt, player, map) {
   r.attackTimer = Math.max(0, r.attackTimer - dt);
-  r.aggro = true;
   drainBattery(r, DRAIN_CHASE, dt);
   if (r.drained) return;
 
+  if (r.disengaged && !r.aggro) {
+    moveToward(r, r.home.x, r.home.y, W4_SPEED, dt, map);
+    return;
+  }
+  r.disengaged = false;
+  r.aggro = true;
+
   const d = distTo(r, player);
+  const canSee = map.hasLineOfSight(r.x, r.y, player.x, player.y);
+  r.losLostT = canSee ? 0 : (r.losLostT || 0) + dt;
+  if (r.losLostT > W4_GIVEUP_AFTER) {
+    r.disengaged = true;
+    r.aggro = false;
+    return;
+  }
+
   if (d > W4_RANGE) {
     moveToward(r, player.x, player.y, W4_SPEED, dt, map);
   } else if (d < W4_MIN_RANGE && d > 1e-4) {
     const dx = r.x - player.x, dy = r.y - player.y;
     moveToward(r, r.x + (dx / d) * 2, r.y + (dy / d) * 2, W4_SPEED, dt, map);
   }
-  if (d <= W4_RANGE && d > 1e-4) {
+  if (d <= W4_RANGE && d > 1e-4 && canSee) {
     r.facing = { x: (player.x - r.x) / d, y: (player.y - r.y) / d };
-    // A wall between it and the player blocks the shot — it can't laser
-    // you through a building.
-    if (r.attackTimer <= 0 && map.hasLineOfSight(r.x, r.y, player.x, player.y)) {
+    if (r.attackTimer <= 0) {
       r.attackTimer = W4_FIRE_COOLDOWN;
       player.takeDamage(W4_DAMAGE, 'machine');
       (map.projectiles ??= []).push({ x0: r.x, y0: r.y, x1: player.x, y1: player.y, prog: 0, kind: 'laser' });
