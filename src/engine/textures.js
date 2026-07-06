@@ -9,26 +9,54 @@ function load(path) {
   return img;
 }
 
+// Floor/wall textures are re-warped from scratch onto a tiny (~64x32)
+// diamond every tile, every frame, via a transform tied to the camera's
+// continuous, sub-pixel position — so each frame samples a very slightly
+// different window of the full-resolution source. At the ~500px source vs
+// ~50px destination minification ratio involved, that shift reads as a
+// visible shimmer/moiré as soon as anything moves (the camera follows the
+// player, so this hit constantly) and stops the instant it's still.
+// Pre-shrinking the source once, in the background, to roughly the size it
+// actually renders at removes almost all of that fine detail up front, so
+// there's nothing left for the per-frame sub-pixel jitter to alias against.
+function loadDownscaled(path, size = 64) {
+  const raw = new Image();
+  const out = new Image();
+  raw.onload = () => {
+    const c = document.createElement('canvas');
+    c.width = size; c.height = size;
+    c.getContext('2d').drawImage(raw, 0, 0, size, size);
+    out.src = c.toDataURL('image/jpeg', 0.85);
+  };
+  raw.src = path;
+  return out;
+}
+
 const T = 'assets/textures/';
 
 // Keyed by FLOORS type (tiles.js). Types not listed here keep their flat
 // colour fill (sand, tallgrass2) — no matching photo texture was worth
 // forcing.
 export const FLOOR_TEXTURES = {
-  grass: load(T + 'floor-grass.jpg'),
-  tallgrass: load(T + 'floor-grass.jpg'),
-  water: load(T + 'floor-water.jpg'),
-  stream: load(T + 'floor-water.jpg'),
-  dirt: load(T + 'floor-dirt.jpg'),
-  road: load(T + 'floor-road.jpg'),
-  boards: load(T + 'floor-boards.png'),
-  bridge: load(T + 'floor-boards.png'),
+  grass: loadDownscaled(T + 'floor-grass.jpg'),
+  tallgrass: loadDownscaled(T + 'floor-grass.jpg'),
+  water: loadDownscaled(T + 'floor-water.jpg'),
+  stream: loadDownscaled(T + 'floor-water.jpg'),
+  dirt: loadDownscaled(T + 'floor-dirt.jpg'),
+  road: loadDownscaled(T + 'floor-road.jpg'),
+  boards: loadDownscaled(T + 'floor-boards.png'),
+  bridge: loadDownscaled(T + 'floor-boards.png'),
 };
+
+// A sparse dirt-patch variant scattered thinly through grass tiles for
+// ground variety — see Renderer.drawFloor, which rolls a low, per-tile
+// deterministic chance to use this instead of the usual grass texture.
+export const GRASS_PATCH_TEXTURE = loadDownscaled(T + 'floor-secret.jpg');
 
 // Keyed by the wall object's `material` field (tiles.js/worldgen.js).
 export const WALL_TEXTURES = {
-  stone: load(T + 'wall-stone.jpg'),
-  brick: load(T + 'wall-brick.jpg'),
+  stone: loadDownscaled(T + 'wall-stone.jpg'),
+  brick: loadDownscaled(T + 'wall-brick.jpg'),
 };
 
 // Keyed by player gender (m/f/u). face-sheet-male-alien.png is a 128x64

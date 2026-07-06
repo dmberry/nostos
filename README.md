@@ -1,6 +1,6 @@
 # postAI
 
-**Version:** 0.61 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
+**Version:** 0.62 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
 
 *(Versioning policy: 0.01 increments from v0.3 onwards.)*
 
@@ -71,6 +71,8 @@ Inspired by Project Zomboid: knowledge is the real progression, scarcity drives 
 **Face fix, ammo economy, a real perf fix, bare-handed combat (v0.60):** the player's face was being covered by the procedural hair drawing (both personas showed only a sliver of chin — that's the "bearded" look reported, not a wrong-image bug). Removed an unnecessary `ctx.clip()` call happening on every floor tile and wall face, every frame — a genuine performance regression severe enough to make picking things back up feel broken. Battery/ammo/shells/arrow quantities doubled across the board. And bare hands can throw a (weak) punch now instead of refusing outright.
 
 **Combat tuning, thrown bombs, a machine gallery (v0.61):** grass texture opacity dropped further. A W4 that loses sight of you for 6 seconds straight gives up and heads home instead of hunting forever. W1s are proper melee now — a hit needs one genuinely touching you, and it hits softer. Bombs are thrown a real distance in an arc that clears a wall or low block in the way, instead of just dropping a step ahead. And the help modal now shows a picture of every machine type, rendered straight from the actual in-game art.
+
+**Texture shimmer fixed, hiding actually works now (v0.62):** floor and wall textures no longer shimmer while moving — a real minification/aliasing bug, fixed by pre-shrinking each source photo instead of re-warping it at full resolution every tile, every frame. Grass opacity dropped further, and a sparse dirt-patch variant breaks up grass tiles here and there. Biggest change: every hunting machine (T1, T2, W1, W4) now needs genuine line of sight, not just proximity — duck behind a wall or a hill for a few seconds and it gives up and wanders off, so hiding is a real tactic.
 
 **Still queued (large systems):** walking on top of walls/blocks (a multi-level feature), and a mobile phone + RON text tips. Both want their own focused pass.
 

@@ -17,7 +17,7 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
-## Where we are (v0.61)
+## Where we are (v0.62)
 
 - Isometric world, seeded 128x128: river, two bridges, ten-building town, hamlet, forests, tall grass, hills and hollows, wadeable streams.
 - Survival: food/hunger, health, stamina, venom, day/night (dark nights), torches, minimap with fog of war (grey, not black), permadeath that drops your loot where you fell.
@@ -69,6 +69,13 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Certificate of Death**: on death a modal shows name, cause, score, skills, deaths, and an amusing rank (COMPOST → NOOB → SCRAPPER → SURVIVOR → VETERAN → L33T). Freezes the world until clicked. `player.deathCert` snapshot; `deathRank()` in renderer.
 - **Lore notes styled**: Archive fragments render as their own note cards — paper colour + typeface per kind (handwritten note, newsprint, diary, poster, green-on-black disk/tape). `NOTE_STYLE` in lore.js.
 - **Autosave**: character + xp + score + deaths + a run-state snapshot (vitals, position, inventory) persist to localStorage; saved every 8s, on tab-hide, and on unload; restored on load. World regenerates from seed (so caches/cars reset — a known limitation; world-object persistence is a follow-up).
+
+### v0.62 — texture shimmer fix, sparse dirt patches, universal line-of-sight give-up
+
+- **BUG FIX: floor/wall textures shimmered while moving, stopped when still.** Root cause: `drawTexturedQuad` re-warps the full-resolution source photo onto a tiny (~64x32) diamond via a transform tied to the camera's continuous sub-pixel position, every tile, every frame — at a ~500px-source-to-~50px-destination minification ratio, the sampled window shifts very slightly frame to frame as the camera follows the player, and the browser's resampling (no mipmaps) aliases that shift into visible shimmer/moiré. Fixed by pre-shrinking each source image once, in the background, to roughly the size it actually renders at (`loadDownscaled()` in `textures.js`) — removes almost all the fine detail the per-frame jitter had to alias against.
+- **Grass opacity dropped further**, per direct request, plus a **sparse dirt-patch variant**: ~5% of grass/tallgrass tiles (deterministic per tile via the existing `tileHash`) render `floor-secret.jpg` (a pebbly dirt/earth photo) instead of the grass texture, for a little ground variety without overusing it.
+- **Every hunting machine now needs real line of sight, not just proximity.** Generalized v0.61's W4-only "gives up and heads home" mechanic to T1, T2, and W1 as well: `LOS_GIVEUP_AFTER` (6s) of broken sight drops aggro and starts a `LOSE_INTEREST_COOLDOWN` (5s) that suppresses normal proximity re-detection, so ducking behind a wall or a hill is now a genuine way to lose a pursuer, not just running far enough. W1/W4 (which have no patrol state of their own) wander near home and re-acquire by a flat distance (`HUNTER_REACQUIRE_RANGE`, 14) once the cooldown clears; T1/T2 slot straight into their existing patrol/return logic. Verified with a standalone Node script (pinned-position scenario, since live movement/collision against a test wall introduces its own pathing noise): correctly held aggro under 6s of blocked sight, gave up past it, stayed uninterested through the full cooldown even at close range, and re-acquired the instant the cooldown expired.
+- **Researched better player character art** (see conversation) — found a strong, thematically-fitting CC0 candidate (Kenney's "Topdown Shooter" pack: rotatable survivor/zombie sprites, CC0, no attribution needed, and a natural fit for the game's existing rotate-to-face-cursor mechanic) but couldn't complete the download through available tooling (Kenney's site serves the archive via client-side JS, not a plain link `curl` can follow) — parked pending either a manual download handed off for integration, or another discovery route.
 
 ### v0.61 — combat tuning, thrown bombs, a machine gallery
 

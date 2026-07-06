@@ -5,7 +5,7 @@ import { drawAnimal } from '../game/animals.js';
 import { drawBird } from '../game/birds.js';
 import { drawRobot } from '../game/robots.js';
 import { drawWaterDroid } from '../game/waterdroids.js';
-import { FLOOR_TEXTURES, WALL_TEXTURES, FACE_TEXTURES } from './textures.js';
+import { FLOOR_TEXTURES, WALL_TEXTURES, FACE_TEXTURES, GRASS_PATCH_TEXTURE } from './textures.js';
 
 // Canvas renderer. Two passes per frame: floor diamonds first, then all
 // "drawables" (objects + player) painter-sorted by world depth (x + y).
@@ -848,7 +848,11 @@ export class Renderer {
       const he = map.heightAt(tx + 1, ty);
       if (he < h) this.skirt(corners[1], corners[2], (h - he) * ELEV, shadeHex(def.color, shade - 0.45));
     }
-    const tex = FLOOR_TEXTURES[type];
+    // A sparse scatter of bare dirt patches through grass — a few percent
+    // of tiles, deterministic per tile so it holds still frame to frame
+    // rather than flickering between the two textures.
+    const patchy = (type === 'grass' || type === 'tallgrass') && tileHash(tx * 5 + 2, ty * 5 + 7) < 0.05;
+    const tex = patchy ? GRASS_PATCH_TEXTURE : FLOOR_TEXTURES[type];
     if (tex) {
       let tintColor = null, tintMode = 'multiply';
       if (shade < -0.02) tintColor = `rgba(10,10,12,${Math.min(0.85, -shade)})`;
@@ -856,8 +860,8 @@ export class Renderer {
       // Grass is by far the busiest photo (a mass of high-frequency blade
       // detail) and reads as noisy even at the general texture alpha —
       // toned down further, on top of the grass-blade strokes already
-      // drawn over it.
-      const alpha = (type === 'grass' || type === 'tallgrass') ? 0.28 : 0.55;
+      // drawn over it. The dirt patch variant can hold a bit more strength.
+      const alpha = patchy ? 0.4 : (type === 'grass' || type === 'tallgrass') ? 0.28 : 0.55;
       this.drawTexturedQuad(corners, tex, shadeHex(def.color, shade), tintColor, tintMode, alpha);
     } else {
       this.diamondPath(corners);

@@ -67,15 +67,14 @@ const W1_HEAD = '#2a0e10';
 // W4s: laser hunter-killers the W-factory dispatches the instant the player
 // attacks an obelisk. Unlike a W1 they never close to melee — they hold at
 // range and fire, backing off if the player closes the gap. Losing line of
-// sight for too long makes them give up and head home rather than hunt
-// forever on a memorised position.
+// sight for too long (LOS_GIVEUP_AFTER, generic) makes them give up and
+// head home rather than hunt forever on a memorised position.
 const W4_HP = 30;
 const W4_SPEED = 3.6;
 const W4_RANGE = 8;             // preferred firing distance
 const W4_MIN_RANGE = 4.5;       // backs away if the player gets this close
 const W4_FIRE_COOLDOWN = 1.6;
 const W4_DAMAGE = 9;
-const W4_GIVEUP_AFTER = 6;      // seconds of lost line of sight before it disengages
 const W4_BODY = '#4a1408';      // dull furnace red-black
 const W4_HEAD = '#2c0c05';
 
@@ -95,6 +94,19 @@ const W3_REPAIR_RANGE = 1.3;
 const W3_REPAIR_RATE = 2;       // obDamage points healed per second
 const W3_BODY = '#1c3a44';      // dull blue-teal, unmistakably not a hunter
 const W3_HEAD = '#122730';
+
+// Line-of-sight give-up: any hunting machine that can't see the player for
+// this long stands down for a while (LOSE_INTEREST_COOLDOWN), during which
+// normal proximity-based re-detection is suppressed — so ducking behind a
+// wall or a hill for a few seconds is a real way to shake pursuit, not just
+// a distance game. W1/W4 are dispatched already hunting with no patrol
+// range of their own, so they get a plain re-acquire distance for coming
+// back off cooldown.
+const LOS_GIVEUP_AFTER = 6;
+const LOSE_INTEREST_COOLDOWN = 5;
+const HUNTER_REACQUIRE_RANGE = 14;
+const HUNTER_WANDER_SPEED = 1.8;
+const HUNTER_WANDER_RANGE = 6;
 
 const STUCK_AFTER = 2;          // seconds of no progress while aggroed
 const PROGRESS_FRACTION = 0.25; // moved less than this share of a full step counts as no progress
@@ -517,6 +529,21 @@ export function updateRobots(dt, robots, player, map) {
       continue;
     }
 
+    // Losing line of sight for long enough breaks off the hunt regardless
+    // of type or distance; see LOS_GIVEUP_AFTER above.
+    if (r.aggro && r.type !== 'w3') {
+      const canSee = map.hasLineOfSight(r.x, r.y, player.x, player.y);
+      r.losLostT = canSee ? 0 : (r.losLostT || 0) + dt;
+      if (r.losLostT > LOS_GIVEUP_AFTER) {
+        r.aggro = false;
+        r.losLostT = 0;
+        r.loseInterestT = LOSE_INTEREST_COOLDOWN;
+        if (r.type !== 't1') r.returning = true; // head back toward home/tower/factory
+      }
+    } else if (r.loseInterestT > 0) {
+      r.loseInterestT = Math.max(0, r.loseInterestT - dt);
+    }
+
     if (r.type === 't1') updateT1(r, dt, player, map);
     else if (r.type === 'w1') updateW1(r, dt, player, map);
     else if (r.type === 'w3') updateW3(r, dt, map);
@@ -567,7 +594,7 @@ function updateT1(r, dt, player, map) {
   r.attackTimer = Math.max(0, r.attackTimer - dt);
 
   const d = distTo(r, player);
-  if (!r.aggro && d < T1_DETECT_RANGE) r.aggro = true; // no line of sight needed
+  if (!r.aggro && d < T1_DETECT_RANGE && !(r.loseInterestT > 0)) r.aggro = true; // no line of sight needed to notice
   if (r.aggro && d > T1_DEAGGRO_RANGE) r.aggro = false;
 
   drainBattery(r, r.aggro ? DRAIN_CHASE : DRAIN_PATROL, dt);
@@ -597,7 +624,7 @@ function updateT2(r, dt, player, map) {
   r.attackTimer = Math.max(0, r.attackTimer - dt);
 
   const d = distTo(r, player);
-  if (!r.aggro && d < T2_DETECT_RANGE) {
+  if (!r.aggro && d < T2_DETECT_RANGE && !(r.loseInterestT > 0)) {
     r.aggro = true;
     r.returning = false;
   }
@@ -623,19 +650,32 @@ function updateT2(r, dt, player, map) {
   }
 }
 
-// A W1 revenge-squad hunter: spawned already aggroed and never disengages —
-// no detection phase, no giving up the trail, no patrol. Only a flat
-// battery stops it (handled generically in updateRobots, same as any type).
+// A W1 revenge-squad hunter: spawned already aggroed, no detection phase.
 // It cycles attack (close in and strike) and withdraw (fall back) phases, so
 // a squad hits in waves rather than a single relentless charge, and it tracks
 // a position triangulated from the obelisk network — refreshed every couple
 // of seconds rather than live, so it still finds you (laggily) even behind a
-// jammed Wi-Fi block that blinds every other machine.
+// jammed Wi-Fi block that blinds every other machine. Losing line of sight
+// for long enough (handled generically in updateRobots) breaks it off the
+// hunt like any other machine — it heads back toward the crater, wanders,
+// and re-acquires by plain distance once its cooldown expires.
 function updateW1(r, dt, player, map) {
   r.attackTimer = Math.max(0, r.attackTimer - dt);
-  r.aggro = true;
-  drainBattery(r, DRAIN_CHASE, dt);
+  drainBattery(r, r.aggro ? DRAIN_CHASE : DRAIN_PATROL, dt);
   if (r.drained) return;
+
+  if (!r.aggro) {
+    if (!(r.loseInterestT > 0) && Math.hypot(player.x - r.x, player.y - r.y) < HUNTER_REACQUIRE_RANGE) {
+      r.aggro = true;
+    } else if (r.returning) {
+      moveToward(r, r.home.x, r.home.y, W1_CHASE_SPEED * 0.5, dt, map);
+      if (Math.hypot(r.home.x - r.x, r.home.y - r.y) < 1) r.returning = false;
+      return;
+    } else {
+      patrol(r, HUNTER_WANDER_SPEED, HUNTER_WANDER_RANGE, dt, map);
+      return;
+    }
+  }
 
   r.w1PhaseT -= dt;
   if (r.w1PhaseT <= 0) {
@@ -697,31 +737,33 @@ function updateW3(r, dt, map) {
 // A W4 laser hunter-killer: holds at range and fires rather than closing to
 // melee, backing off if the player gets within its minimum range so it
 // always keeps a clear line to shoot down. Losing line of sight (a wall or
-// a hill in the way) for W4_GIVEUP_AFTER seconds straight makes it give up
-// and head back to the factory instead of homing in on a memorised spot
-// forever; taking a hit while it's giving up snaps it right back into the
-// fight (handled generically in updateRobots, above this dispatch).
+// a hill in the way) for LOS_GIVEUP_AFTER seconds straight (generic, in
+// updateRobots) makes it give up and head back to the factory instead of
+// homing in on a memorised spot forever; taking a hit while it's giving up
+// snaps it right back into the fight.
 function updateW4(r, dt, player, map) {
   r.attackTimer = Math.max(0, r.attackTimer - dt);
-  drainBattery(r, DRAIN_CHASE, dt);
+  drainBattery(r, r.aggro ? DRAIN_CHASE : DRAIN_PATROL, dt);
   if (r.drained) return;
 
-  if (r.disengaged && !r.aggro) {
-    moveToward(r, r.home.x, r.home.y, W4_SPEED, dt, map);
-    return;
+  if (!r.aggro) {
+    // Given up (generic line-of-sight give-up in updateRobots): head back
+    // to the factory and wander, re-acquiring by plain distance once its
+    // cooldown expires.
+    if (!(r.loseInterestT > 0) && distTo(r, player) < HUNTER_REACQUIRE_RANGE) {
+      r.aggro = true;
+    } else if (r.returning) {
+      moveToward(r, r.home.x, r.home.y, W4_SPEED * 0.6, dt, map);
+      if (Math.hypot(r.home.x - r.x, r.home.y - r.y) < 1) r.returning = false;
+      return;
+    } else {
+      patrol(r, HUNTER_WANDER_SPEED, HUNTER_WANDER_RANGE, dt, map);
+      return;
+    }
   }
-  r.disengaged = false;
-  r.aggro = true;
 
   const d = distTo(r, player);
   const canSee = map.hasLineOfSight(r.x, r.y, player.x, player.y);
-  r.losLostT = canSee ? 0 : (r.losLostT || 0) + dt;
-  if (r.losLostT > W4_GIVEUP_AFTER) {
-    r.disengaged = true;
-    r.aggro = false;
-    return;
-  }
-
   if (d > W4_RANGE) {
     moveToward(r, player.x, player.y, W4_SPEED, dt, map);
   } else if (d < W4_MIN_RANGE && d > 1e-4) {
