@@ -178,6 +178,9 @@ export const ITEMS = {
     range: 6,
     effect: 'fuse',
     ammoType: 'battery',
+    // A big internal cell: 40 fuse shots before it ever touches your pocket
+    // batteries (it used to run dry almost immediately off shared cells).
+    builtIn: 40,
     swingCooldown: 1.0,
     staminaCost: 2,
     color: '#7f5fd8',

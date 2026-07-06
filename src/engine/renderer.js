@@ -1604,26 +1604,33 @@ export class Renderer {
       ctx.restore();
     }
     const dx = -dw / 2, dy = -dh * 0.72; // wheels sit near the footprint centre
+    // Every car is composited through the offscreen so it can be weathered:
+    // even an intact one gets a faint grime texture dusted over its own pixels
+    // (source-atop keeps it inside the silhouette) — it has, after all, sat
+    // out in the open for years. A smashed one is darkened to a husk on top
+    // and gets a heavier rust pass.
+    const off = tintScratch(spr.naturalWidth, spr.naturalHeight);
+    const OW = off.canvas.width, OH = off.canvas.height;
+    off.ctx.clearRect(0, 0, OW, OH);
+    off.ctx.drawImage(spr, 0, 0);
+    off.ctx.globalCompositeOperation = 'source-atop';
+    const ready = (t) => t && t.complete && t.naturalWidth;
+    if (ready(EDGE_TEXTURE)) {
+      off.ctx.globalAlpha = 0.16;              // faint age/dirt on any car
+      off.ctx.drawImage(EDGE_TEXTURE, 0, 0, OW, OH);
+      off.ctx.globalAlpha = 1;
+    }
     if (obj.smashed) {
-      const off = tintScratch(spr.naturalWidth, spr.naturalHeight);
-      off.ctx.clearRect(0, 0, off.canvas.width, off.canvas.height);
-      off.ctx.drawImage(spr, 0, 0);
-      off.ctx.globalCompositeOperation = 'source-atop';
       off.ctx.fillStyle = 'rgba(22,18,15,0.62)'; // burnt-out husk
-      off.ctx.fillRect(0, 0, off.canvas.width, off.canvas.height);
-      // Faint grime/rust texture over the car's own pixels (source-atop keeps
-      // it inside the car silhouette) so the wreck reads as ruined, not just
-      // a dimmer car.
-      if (CAR_RUIN_TEXTURE && CAR_RUIN_TEXTURE.complete && CAR_RUIN_TEXTURE.naturalWidth) {
+      off.ctx.fillRect(0, 0, OW, OH);
+      if (ready(CAR_RUIN_TEXTURE)) {
         off.ctx.globalAlpha = 0.32;
-        off.ctx.drawImage(CAR_RUIN_TEXTURE, 0, 0, off.canvas.width, off.canvas.height);
+        off.ctx.drawImage(CAR_RUIN_TEXTURE, 0, 0, OW, OH);
         off.ctx.globalAlpha = 1;
       }
-      off.ctx.globalCompositeOperation = 'source-over';
-      ctx.drawImage(off.canvas, dx, dy, dw, dh);
-    } else {
-      ctx.drawImage(spr, dx, dy, dw, dh);
     }
+    off.ctx.globalCompositeOperation = 'source-over';
+    ctx.drawImage(off.canvas, dx, dy, dw, dh);
     ctx.restore();
   }
 
@@ -2201,13 +2208,23 @@ export class Renderer {
     this.drawPlayerSprite(player, c, by);
     if (!heldBehind) this.drawHeldItem(player, c, by);
 
-    // Facing indicator: a small dot set well ahead of the feet, so the aim
-    // direction reads clearly at a glance.
+    // Facing indicator: a small chevron set ahead of the feet, pointing the
+    // way you aim (in screen space), so the direction reads at a glance.
     const f = worldToScreen(player.x + player.facing.x * 1.2, player.y + player.facing.y * 1.2);
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    const fp0 = worldToScreen(player.x, player.y);
+    const fp1 = worldToScreen(player.x + player.facing.x, player.y + player.facing.y);
+    const fang = Math.atan2(fp1.y - fp0.y, fp1.x - fp0.x);
+    ctx.save();
+    ctx.translate(f.x, f.y - 10);
+    ctx.rotate(fang);
+    ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
     ctx.beginPath();
-    ctx.arc(f.x, f.y - 10, 2.5, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.moveTo(-3, -4.5); ctx.lineTo(4, 0); ctx.lineTo(-3, 4.5);
+    ctx.stroke();
+    ctx.restore();
 
     // Forcefield: a shimmering green shell around the whole character.
     if (player.forcefieldActive && player.forcefieldActive()) {

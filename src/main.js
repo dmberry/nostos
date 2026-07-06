@@ -31,7 +31,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '0.76';
+const VERSION = '0.77';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -420,6 +420,17 @@ const toggleHelp = (force) => {
 };
 document.getElementById('helpBtn').addEventListener('click', () => toggleHelp(true));
 helpEl.addEventListener('click', (e) => { if (e.target === helpEl) toggleHelp(false); });
+// Tabbed help: clicking a tab shows its panel(s) and hides the rest. Several
+// panels can share a data-panel name (Survival is split around the machine
+// section), so all matching panels toggle together.
+for (const btn of helpEl.querySelectorAll('.helpTab')) {
+  btn.addEventListener('click', () => {
+    const name = btn.dataset.panel;
+    for (const b of helpEl.querySelectorAll('.helpTab')) b.classList.toggle('active', b === btn);
+    for (const p of helpEl.querySelectorAll('.helpPanel')) p.classList.toggle('active', p.dataset.panel === name);
+    helpEl.querySelector('.panel').scrollTop = 0;
+  });
+}
 
 // The control hint is only for new players: fade it out after two minutes
 // of play so it stops cluttering the screen once the controls have sunk in.

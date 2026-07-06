@@ -81,6 +81,7 @@ export class Player {
     this.vz = 0;
     this.doubleJumped = false; // a second, mid-air jump: reaches block tops
     this.forcefieldCharge = 0; // seconds of forcefield left in the current cell
+    this.gunAmmo = {};         // per-gun built-in ammo reserves (e.g. electro-gun)
     this.facing = { x: 0, y: 1 };
     this.moving = false;
     this.sprinting = false;
@@ -846,17 +847,41 @@ export class Player {
       }
     }
     map.bombs.push({ x: bx, y: by, fuse: tool.fuse, radius: tool.radius, damage: tool.damage, obelisk: !!tool.obelisk, key: tool.key });
-    // Remove one bomb of this kind from the kit.
-    if (this.hands === tool.key) {
-      this.hands = null;
-      // pull another of the same from a pocket into hand if you have more
-      const j = this.pockets.findIndex((s) => s && s.item === tool.key);
-      if (j >= 0) { this.hands = tool.key; this.pockets[j].qty -= 1; if (this.pockets[j].qty <= 0) this.pockets[j] = null; }
-    } else {
-      this.removeItem(tool.key);
-    }
+    // The thrown bomb leaves your hand; rather than leave you empty-handed (or
+    // fumbling to re-arm), your best weapon is brought straight to hand. Any
+    // spare bombs stay in your pockets to re-select if you want another.
+    if (this.hands === tool.key) this.hands = null;
+    else this.removeItem(tool.key);
+    this.autoEquipBestWeapon();
     sfx.play('pickup');
     this.say(`You lob the ${tool.name.toLowerCase()} out, ticking. Get clear.`);
+  }
+
+  // Bring the highest-power weapon you're carrying (pockets, then backpack)
+  // into the hands slot. Used after throwing a bomb so you're immediately
+  // ready to fight. Leaves the hand empty if you have no weapon at all.
+  autoEquipBestWeapon() {
+    if (this.hands) return;
+    let bestArr = null, bestIdx = -1, bestPow = -1;
+    const scan = (arr) => {
+      if (!arr) return;
+      for (let k = 0; k < arr.length; k++) {
+        const s = arr[k];
+        if (!s) continue;
+        const def = ITEMS[s.item];
+        if (!def || (def.kind !== 'tool' && def.kind !== 'gun')) continue;
+        const pow = def.power || 0;
+        if (pow > bestPow) { bestPow = pow; bestArr = arr; bestIdx = k; }
+      }
+    };
+    scan(this.pockets);
+    if (this.backpack) scan(this.backpack.slots);
+    if (bestArr) {
+      this.hands = bestArr[bestIdx].item;
+      bestArr[bestIdx].qty -= 1;
+      if (bestArr[bestIdx].qty <= 0) bestArr[bestIdx] = null;
+      this.say(`You bring the ${ITEMS[this.hands].name.toLowerCase()} up.`);
+    }
   }
 
   // Use the Wi-Fi block: spend a battery (pockets, then backpack) to top
@@ -1205,22 +1230,32 @@ export class Player {
     if (tool.animalDamage != null) for (const a of animals) consider(a, false);
     for (const r of robots) consider(r, true);
 
-    // Ammo comes from the pockets first, then the backpack — no need to
-    // manually shuffle rounds forward before a fight. Consumed whether or
+    // A weapon with a big built-in cell (the electro-gun) fires off that
+    // reserve first, so it doesn't drain your shared pocket batteries until
+    // its own charge is spent.
+    let usedBuiltIn = false;
+    if (tool.builtIn) {
+      if (this.gunAmmo[tool.key] == null) this.gunAmmo[tool.key] = tool.builtIn;
+      if (this.gunAmmo[tool.key] > 0) { this.gunAmmo[tool.key] -= 1; usedBuiltIn = true; }
+    }
+    // Otherwise ammo comes from the pockets first, then the backpack — no need
+    // to manually shuffle rounds forward before a fight. Consumed whether or
     // not there's a target in range: pulling the trigger with nothing in
     // your sights still wastes the round rather than refusing to fire.
-    let ammoSlots = this.pockets;
-    let i = this.pockets.findIndex((s) => s && s.item === tool.ammoType);
-    if (i < 0 && this.backpack) {
-      i = this.backpack.slots.findIndex((s) => s && s.item === tool.ammoType);
-      ammoSlots = this.backpack.slots;
+    if (!usedBuiltIn) {
+      let ammoSlots = this.pockets;
+      let i = this.pockets.findIndex((s) => s && s.item === tool.ammoType);
+      if (i < 0 && this.backpack) {
+        i = this.backpack.slots.findIndex((s) => s && s.item === tool.ammoType);
+        ammoSlots = this.backpack.slots;
+      }
+      if (i < 0) {
+        this.say(`The ${tool.name.toLowerCase()} is dead weight without ${ITEMS[tool.ammoType].name.toLowerCase()}.`);
+        return;
+      }
+      ammoSlots[i].qty -= 1;
+      if (ammoSlots[i].qty <= 0) ammoSlots[i] = null;
     }
-    if (i < 0) {
-      this.say(`The ${tool.name.toLowerCase()} is dead weight without ${ITEMS[tool.ammoType].name.toLowerCase()}.`);
-      return;
-    }
-    ammoSlots[i].qty -= 1;
-    if (ammoSlots[i].qty <= 0) ammoSlots[i] = null;
     this.swingTimer = tool.swingCooldown;
     this.stamina = Math.max(0, this.stamina - (tool.staminaCost ?? 0));
 

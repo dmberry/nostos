@@ -37,6 +37,19 @@
   #help h3 { font-size: 11px; letter-spacing: 0.04em;
     color: #8a9878; margin: 14px 0 4px; }
   #help h3:first-of-type { margin-top: 4px; }
+  #help .helpTabs { display: flex; gap: 6px; margin: 12px 0 6px; flex-wrap: wrap;
+    position: sticky; top: -22px; background: #141a10; padding: 6px 0; z-index: 1; }
+  #help .helpTab {
+    background: rgba(207,216,195,0.10); color: #9db284;
+    border: 1px solid rgba(207,216,195,0.25); border-radius: 5px;
+    padding: 5px 15px; font: 12px system-ui, sans-serif; cursor: pointer;
+    text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  #help .helpTab:hover { background: rgba(207,216,195,0.18); }
+  #help .helpTab.active { background: rgba(157,178,132,0.28); color: #e8e0d0; border-color: rgba(157,178,132,0.6); }
+  #help .helpPanel { display: none; }
+  #help .helpPanel.active { display: block; }
+  #help h2:first-child { margin-top: 4px; }
   #help .meta { color: #8a9878; font-size: 12px; }
   #help table { border-collapse: collapse; width: 100%; }
   #help td { padding: 3px 10px 3px 0; vertical-align: top; }
@@ -76,6 +89,14 @@
     <h1>postAI</h1>
     <p class="meta">An isometric survival game &middot; by David and Henrik</p>
 
+    <div class="helpTabs">
+      <button class="helpTab active" data-panel="controls" type="button">Controls</button>
+      <button class="helpTab" data-panel="survival" type="button">Survival</button>
+      <button class="helpTab" data-panel="animals" type="button">Animals</button>
+      <button class="helpTab" data-panel="machines" type="button">Machines</button>
+    </div>
+
+    <div class="helpPanel active" data-panel="controls">
     <h2>Character</h2>
     <p>
       <button class="persona" data-gender="m">Adam</button>
@@ -134,7 +155,9 @@
       <tr><td><kbd>N</kbd></td><td>Start a new game (asks first — wipes saved progress)</td></tr>
       <tr><td><kbd>S</kbd></td><td>On the Certificate of Death: copy it to the clipboard as an image (or click the Copy button)</td></tr>
     </table>
+    </div><!-- /controls -->
 
+    <div class="helpPanel" data-panel="survival">
     <h2>Books</h2>
     <p>Some buildings still hold <b>books</b>. Read one (<kbd>R</kbd>) and the knowledge is yours for the rest of the run. Woodcraft, herb lore, tracking, endurance: each book teaches a skill that changes how you survive.</p>
 
@@ -148,6 +171,9 @@
     <p>Food drains all the time and faster when you sprint. Find <b>tinned food</b> in the broken buildings and <b>berries</b> in the tall grass, and walk over loot to pocket it. Health only recovers when you are well fed; starve and it drains away. A felled tree drops <b>wood</b> — but not to a penknife: it's too flimsy to cut timber, and trying just tires you out and nicks your health. A saw, machete, or axe-like tool does the job. Nights are dark and dangerous: find <b>torches</b> in the buildings to carry a pool of light with you. An emptied resistance cache isn't gone for good either — RON quietly restocks one every so often with fresh batteries, ammo or shells.</p>
     <p>Reloading the page without starting a new game isn't a clean reset either — it wipes your <b>score and your entire obelisk kill record</b>, just like a death would. Reload is only punished when it's used to duck out of the run you're already in.</p>
 
+    </div><!-- /survival (part 1) -->
+
+    <div class="helpPanel" data-panel="animals">
     <h2>The animals</h2>
     <table>
       <tr><td>Feral dogs</td><td>Hunt in packs; barking (<b>!</b>) means they have seen you. Hurt one and the pack backs off. Don't let them surround you.</td></tr>
@@ -156,6 +182,9 @@
       <tr><td>Ravens</td><td>They don't bite; they <i>tell everything else where you are</i>, and they steal food. Keep to the trees.</td></tr>
     </table>
 
+    </div><!-- /animals -->
+
+    <div class="helpPanel" data-panel="machines">
     <h2>The machines</h2>
     <p>The AIs still control this land. Their black <b>obelisk towers</b> pulse across the landscape, and their T-class hunters patrol around them.</p>
     <div class="machineGallery" id="machineGallery">
@@ -179,12 +208,15 @@
     <p>Somewhere on the map sits a <b>W-factory</b>: everything mechanical that isn't an obelisk-side T1/T2 is actually built there, not at the towers. Topple a tower and the factory dispatches a <b>revenge squad of W1 hunters</b>, tougher and faster than a T2, but strictly melee — a hit needs one standing right on top of you, not just nearby. W1s attack in real waves — each one closes in and strikes, then falls back to regroup, then closes in again — and a squad spreads out to surround you rather than piling onto one spot. They track a position <b>triangulated from the obelisk network</b>, refreshed every few seconds rather than live, so even a jammed Wi-Fi block only slows them down, not stops them. The factory also fields fresh W1 waves on its own clock, an unarmed <b>W3 repair drone</b> whenever a damaged tower is left standing, and a <b>W4 laser hunter-killer</b> — unlike a W1 it never closes to melee, holding its range and firing on you instead, both the instant you attack an obelisk and, independently, every half hour of game time.</p>
     <p>Out on the water, <b>W2 droids</b> hover in squads just above the river. Idle, they drift; but come near them and the whole squad turns and fires on you in waves. Their shots only reach you <b>while you're in the water</b> though — stay on dry land or a bridge and you can pick the squad off from the bank in safety.</p>
     <p>Weapon strikes on any machine now throw a shower of <b>sparks</b> on impact.</p>
+    </div><!-- /machines -->
 
+    <div class="helpPanel" data-panel="survival">
     <h2>Bombs</h2>
     <p>Scavenged <b>timed bombs</b> come in four sizes — small, medium, large, and a rare <b>insane</b> one. Hold a bomb and use it (<kbd>/</kbd> or left click) to <b>throw</b> it, ticking, a good distance out — thrown in an arc, so it clears a wall or a low block between you and the target instead of stopping dead at the first one, useful for reaching a W4 that's holed up behind cover. Then get clear. When the fuse runs out it goes off in a cloud of fire that hurts <b>everything</b> nearby — animals, machines, droids, and you. The insane bomb is fierce enough to bring down an obelisk.</p>
 
     <h2>The world</h2>
     <p>A river divides the map; the bridges are the only crossings. Streams can be waded, slowly. Away from the towns the ground gets properly rugged — steep, tall hills and deep hollows, not just gentle rises — and high ground costs stamina to climb. Rubble and rocks can be climbed too, one step up like any other rise, and walked across the top of once you're up there — building walls stay solid, so a town or a house is still a real boundary, not just another slope. Somewhere in the ruins, the story of what happened here is waiting to be found. Sprayed slogans turn up here and there on the walls — some anti-machine, some signed by RON — and abandoned cars sit dead on the roads where the grid failed them.</p>
+    </div><!-- /survival (part 2) -->
 
     <p class="meta">Press <kbd>H</kbd> or click anywhere outside this panel to close.</p>
   </div>
