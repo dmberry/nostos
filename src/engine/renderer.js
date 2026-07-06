@@ -155,7 +155,14 @@ export class Renderer {
     const drawables = [];
     for (const obj of map.objects) {
       if (obj.x < range.minX || obj.x > range.maxX || obj.y < range.minY || obj.y > range.maxY) continue;
-      drawables.push({ depth: obj.x + obj.y + 1, obj });
+      // The big 8x8 factory must sort by its centre, not its origin corner —
+      // otherwise its low corner-depth let trees and machines behind it draw
+      // over the block. Centre depth occludes what's behind and lets what's
+      // genuinely in front (south/east of it) still draw on top.
+      const depth = obj.type === 'wfactory'
+        ? obj.x + (obj.fw || 1) / 2 + obj.y + (obj.fh || 1) / 2
+        : obj.x + obj.y + 1;
+      drawables.push({ depth, obj });
     }
     for (const gi of map.groundItems) {
       if (gi.x < range.minX || gi.x > range.maxX + 1 || gi.y < range.minY || gi.y > range.maxY + 1) continue;
@@ -1112,8 +1119,17 @@ export class Renderer {
     ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1.5; ctx.stroke();
     const roofC = { x: (r.top.x + r.bottom.x) / 2, y: (r.top.y + r.bottom.y) / 2 };
     const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 420);
+    ctx.save();
+    ctx.beginPath(); ctx.ellipse(roofC.x, roofC.y, 16, 8, 0, 0, Math.PI * 2); ctx.clip();
     ctx.fillStyle = `rgba(224,120,40,${(0.35 + 0.4 * pulse).toFixed(3)})`;
-    ctx.beginPath(); ctx.ellipse(roofC.x, roofC.y, 16, 8, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillRect(roofC.x - 16, roofC.y - 8, 32, 16);
+    // A grubby metal grille over the glow so the vent isn't a clean flat oval.
+    if (FACTORY_TEXTURE && FACTORY_TEXTURE.complete && FACTORY_TEXTURE.naturalWidth) {
+      ctx.globalAlpha = 0.4;
+      ctx.drawImage(FACTORY_TEXTURE, roofC.x - 16, roofC.y - 8, 32, 16);
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
     // Label on the near face.
     const labelC = worldToScreen(cx, obj.y + fh);
     ctx.font = 'bold 13px system-ui, sans-serif';
@@ -2271,7 +2287,7 @@ export class Renderer {
     ctx.save();
     ctx.translate(f.x, f.y - 10);
     ctx.rotate(fang);
-    ctx.strokeStyle = 'rgba(150,150,150,0.45)';
+    ctx.strokeStyle = 'rgba(200,200,200,0.55)';
     ctx.lineWidth = 2;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';

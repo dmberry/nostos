@@ -17,7 +17,15 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
-## Where we are (v0.78)
+## Where we are (v0.79)
+
+### v0.79 — factory depth + spawn fixes, textured vent, railgun ammo, whiter chevron
+
+- **Factory no longer has trees/machines drawn over it.** The 8×8 object was sorted by its origin corner (very low depth), so anything with a higher tile-depth painted over the block. It now sorts by its **centre** (`obj.x+fw/2 + obj.y+fh/2`), which occludes what's behind it while still letting things genuinely in front (south/east) draw on top.
+- **Dispatched machines spawn beside the factory, not inside it.** The dispatch point (`factoryCy`) moved from the solid centre to just south of the footprint (`y + fh + 1.5`), so W1/W3/W4 seat on open ground rather than stuck in the block. Verified a W4 spawns outside the footprint on non-solid ground.
+- **Grubby vent.** The roof vent's orange glow now has the metal texture drawn over it (clipped to the ellipse, 0.4 alpha) so it isn't a clean flat oval.
+- **More railgun ammo** — its cache now bundles 14 batteries (was 4).
+- **Chevron whiter** — `rgba(200,200,200,0.55)`.
 
 ### v0.78 — destructible 8×8 factory + AI key, 24h deadline, electro-gun sips, raven perch fix, jumpable crates
 

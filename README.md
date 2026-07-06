@@ -1,6 +1,6 @@
 # postAI
 
-**Version:** 0.78 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
+**Version:** 0.79 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
 
 *(Versioning policy: 0.01 increments from v0.3 onwards.)*
 
@@ -8,7 +8,7 @@ An isometric 2D survival game set in a world devastated by an AI takeover. Civil
 
 Inspired by Project Zomboid: knowledge is the real progression, scarcity drives movement, every fight is optional and risky, and the world tells the story.
 
-## Current build (v0.78)
+## Current build (v0.79)
 
 **The world:** a seeded 128x128 isometric map — a river with two bridges, a ten-building town, a ruined hamlet, forests, tall grass, and roads. Away from the towns the terrain gets properly rugged: steep hills and deep hollows, always climbable one step at a time. Rubble and rocks are low enough to step straight over; a **wall block** is taller, so it takes a **double jump** (press jump again in mid-air) to get on top — once up there you move a little slower for control, can roam the block tops, and just walk off any edge to drop back down and carry on. Building walls still stop you on foot, so a town or house is a real boundary until you deliberately climb it. The forests are drawn with proper hand-drawn tree art — mostly full leafy trees, with the odd small or bare/dead one — and a chopped tree shows a damage bar so you can see how many swings it has left. The map is ringed by impassable dark-gravel rock cliffs at its edge — drawn semi-transparent so you still see yourself if one stands between you and the camera. Streams can be waded; the river can be swum (only your head and shoulders show above the water), slowly and at a cost. Day and night cycle, with genuinely dark nights and torches to push them back.
 
@@ -34,6 +34,7 @@ Full technical detail (root causes, exact numbers) lives in [PAI-version-plan.md
 
 | Version | Summary |
 |---|---|
+| v0.79 | Factory sorts by its centre so trees/machines behind it are hidden; robots dispatch beside it, not inside; grubby textured vent; more railgun ammo; whiter chevron |
 | v0.78 | Destructible 8×8 W-factory (damage bar, drops an AI key); 24h SKYLINK deadline; electro-gun sips 5% battery/shot; ravens only perch on big trees; jumpable crates; greyer chevron |
 | v0.77 | Electro-gun built-in ammo reserve; cars faintly weathered; facing indicator is a chevron; throwing a bomb auto-arms your best weapon; tabbed help modal; version plan pruned |
 | v0.76 | Shields (absorb / mirror-reflect a laser) and a rare battery-powered forcefield; bigger trees drop more wood; in-hand tool sits at hand height; softer car shadow |

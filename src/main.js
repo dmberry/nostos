@@ -31,7 +31,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '0.78';
+const VERSION = '0.79';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -123,7 +123,7 @@ const obelisks = [];
     [{ item: 'bow', qty: 1 }, { item: 'arrow', qty: 24 }],
     [{ item: 'katana', qty: 1 }],
     [{ item: 'sledgehammer', qty: 1 }],
-    [{ item: 'railgun', qty: 1 }, { item: 'battery', qty: 4 }],
+    [{ item: 'railgun', qty: 1 }, { item: 'battery', qty: 14 }],
     // Every remaining tool/weapon in ITEMS gets at least one guaranteed
     // spawn too — except the wave gun and OB-gun, which stay crafting-only.
     [{ item: 'penknife', qty: 1 }],
@@ -203,8 +203,11 @@ let wfactory = null;
 // The dispatch/repair code fires from the factory's centre, and stops once
 // it's destroyed.
 const factoryLive = () => wfactory && !wfactory.destroyed;
+// Dispatch point for new machines: the centre column but just SOUTH of the
+// 8x8 footprint, so they're built onto open ground beside the factory rather
+// than stuck inside its solid block.
 const factoryCx = () => wfactory.x + (wfactory.fw || 1) / 2;
-const factoryCy = () => wfactory.y + (wfactory.fh || 1) / 2;
+const factoryCy = () => wfactory.y + (wfactory.fh || 1) + 1.5;
 
 const robots = spawnRobots(map, WORLD_SEED, obelisks, { x: spawn.x, y: spawn.y, r: 14 });
 const waterdroids = spawnWaterDroids(map, WORLD_SEED);
