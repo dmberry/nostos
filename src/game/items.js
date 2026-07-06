@@ -178,9 +178,9 @@ export const ITEMS = {
     range: 6,
     effect: 'fuse',
     ammoType: 'battery',
-    // A big internal cell: 40 fuse shots before it ever touches your pocket
-    // batteries (it used to run dry almost immediately off shared cells).
-    builtIn: 40,
+    // Sips its cell: each shot draws only 5% of a battery, so one lasts ~20
+    // fuse shots (it used to eat a whole battery per shot).
+    fractionalAmmo: 0.05,
     swingCooldown: 1.0,
     staminaCost: 2,
     color: '#7f5fd8',
@@ -283,6 +283,15 @@ export const ITEMS = {
     staminaCost: 2,
     stack: 1,
     color: '#40e0d0',
+  },
+  // Dropped by a destroyed W-factory. A physical key into one AI's mainframe —
+  // the way in for the obelisk terminals / code-hacking to come. Kept even
+  // through death would be too strong later, but for now it's a rare trophy.
+  ai_key: {
+    name: 'AI key',
+    kind: 'key',
+    stack: 4,
+    color: '#e6d24a',
   },
   battery: {
     name: 'Battery',

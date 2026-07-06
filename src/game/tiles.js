@@ -35,7 +35,7 @@ export const OBJECTS = {
   rubble:  { solid: true, climbable: true, climbHeight: 1 },
   rock:    { solid: true, climbable: true, climbHeight: 1 },
   obelisk: { solid: true }, // AI signal tower; destructible in a later phase
-  box:     { solid: true }, // resistance weapons cache, searchable (kept flatly solid so you bump-and-search it rather than climbing on top)
+  box:     { solid: true, climbable: true, climbHeight: 1 }, // resistance cache — a low crate you can step or jump onto, still searchable from beside it
   car:     { solid: true }, // abandoned wreck littering the roads; scenery only
   wfactory: { solid: true }, // W-unit foundry; periodically fields a W3 repair drone
 };

@@ -14,6 +14,13 @@ import { ITEMS } from './items.js';
 
 const RAVEN_COUNT = 14;
 
+// A raven only perches in a full, grown canopy — variants 0-2 are the big
+// trees; 3 is a small one, 4 a bare/dead one, and a part-grown sapling is
+// still too short. Landing on any of those left the bird floating above it.
+function isBigTree(o) {
+  return o.type === 'tree' && (o.variant == null || o.variant <= 2) && (o.grow == null || o.grow > 0.75);
+}
+
 const Z_GROUND = 0;     // flight height in world units
 const Z_CANOPY = 1.4;   // cruising tree to tree
 const Z_CIRCLE = 2.2;   // circling above the player
@@ -80,8 +87,10 @@ export function spawnBirds(map, seed) {
   const rng = makeRng(seed);
   const birds = [];
 
-  // Shuffle the map's trees and take well-spread perches.
-  const trees = map.objects.filter((o) => o.type === 'tree');
+  // Shuffle the (big, grown) trees and take well-spread perches — a raven
+  // sits high in a proper canopy, so it must not try to land on a small or
+  // bare/dead one (that left it floating above the sprite).
+  const trees = map.objects.filter(isBigTree);
   for (let i = trees.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1));
     [trees[i], trees[j]] = [trees[j], trees[i]];
@@ -173,7 +182,7 @@ function pickPerch(map, bird, birds, cx, cy, range) {
   let best = null;
   let bestScore = Infinity;
   for (const o of map.objects) {
-    if (o.type !== 'tree' || o === bird.perchTree) continue;
+    if (!isBigTree(o) || o === bird.perchTree) continue;
     const d = Math.hypot(o.x + 0.5 - cx, o.y + 0.5 - cy);
     if (d > range) continue;
     if (perchTaken(o, birds, bird)) continue;

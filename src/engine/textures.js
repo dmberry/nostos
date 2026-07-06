@@ -70,6 +70,9 @@ export const WALL_TEXTURES = {
 // rather than another road. See Renderer.drawEdgeRock.
 export const EDGE_TEXTURE = loadDownscaled(T + 'photo-unsorted-2.jpg');
 
+// Dark riveted-metal texture facing the big W-factory structure.
+export const FACTORY_TEXTURE = loadDownscaled(T + 'decor-train.jpg');
+
 // Abandoned cars: real 3/4-view sprites (assets/textures/cars/) instead of the
 // old procedural hull. Several models/colours, each in the four iso-diagonal
 // facings so a street of wrecks points every which way. A car object carries

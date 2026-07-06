@@ -5,7 +5,7 @@ import { drawAnimal } from '../game/animals.js';
 import { drawBird } from '../game/birds.js';
 import { drawRobot } from '../game/robots.js';
 import { drawWaterDroid } from '../game/waterdroids.js';
-import { FLOOR_TEXTURES, WALL_TEXTURES, GRASS_PATCH_TEXTURE, CHARACTER_SPRITE_SETS, CHAR_COMPASS_DIRS, TREE_SHEET, TREE_SPRITES, EDGE_TEXTURE, CAR_SPRITES, CAR_MODEL_KEYS, CAR_DIR_KEYS, CAR_RUIN_TEXTURE } from './textures.js';
+import { FLOOR_TEXTURES, WALL_TEXTURES, GRASS_PATCH_TEXTURE, CHARACTER_SPRITE_SETS, CHAR_COMPASS_DIRS, TREE_SHEET, TREE_SPRITES, EDGE_TEXTURE, CAR_SPRITES, CAR_MODEL_KEYS, CAR_DIR_KEYS, CAR_RUIN_TEXTURE, FACTORY_TEXTURE } from './textures.js';
 
 // Maps a facing vector to one of 8 pre-rendered screen-compass directions
 // for CHARACTER_SPRITE_SETS (see textures.js) — replaces the old trick of
@@ -116,6 +116,7 @@ export class Renderer {
   draw(camera, map, player, animals = [], hud = {}) {
     const ctx = this.ctx;
     this.uiSlots = []; // clickable dashboard/backpack slots, rebuilt each frame
+    this.hudPlayer = player; // referenced by drawWfactory for the near-by damage bar
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.fillStyle = '#0b0e0a';
     ctx.fillRect(0, 0, this.w, this.h);
@@ -1059,30 +1060,83 @@ export class Renderer {
     }
   }
 
-  // The W-factory: a squat, riveted foundry block with a vent that pulses a
-  // dull orange — visually distinct from the obelisks' clean red sensor.
+  // The W-factory: a big 8x8 riveted-metal foundry, an extruded prism faced
+  // with the train texture. Once it's a walkable heap (destroyed) it draws as
+  // scorched rubble. A damage bar floats over it while it's hurt and you're
+  // near, and a dull orange vent pulses on the roof.
   drawWfactory(obj) {
     const ctx = this.ctx;
-    const c = worldToScreen(obj.x + 0.5, obj.y + 0.5);
-    ctx.fillStyle = 'rgba(0,0,0,0.32)';
+    const fw = obj.fw || 1, fh = obj.fh || 1;
+    const cx = obj.x + fw / 2, cy = obj.y + fh / 2;
+    if (obj.destroyed) {
+      // A flattened, scorched footprint — a few dark heaps of slag.
+      for (let i = 0; i < 10; i++) {
+        const hx = obj.x + 0.6 + tileHash(obj.x + i, obj.y * 2 + i) * (fw - 1.2);
+        const hy = obj.y + 0.6 + tileHash(obj.x * 3 + i, obj.y + i * 2) * (fh - 1.2);
+        const p = worldToScreen(hx, hy);
+        ctx.fillStyle = i % 2 ? '#211d18' : '#2c2620';
+        ctx.beginPath();
+        ctx.ellipse(p.x, p.y, 12, 6, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      return;
+    }
+
+    const H = 84; // tall industrial block
+    const g = {
+      top: worldToScreen(obj.x, obj.y),
+      right: worldToScreen(obj.x + fw, obj.y),
+      bottom: worldToScreen(obj.x + fw, obj.y + fh),
+      left: worldToScreen(obj.x, obj.y + fh),
+    };
+    const r = {
+      top: { x: g.top.x, y: g.top.y - H },
+      right: { x: g.right.x, y: g.right.y - H },
+      bottom: { x: g.bottom.x, y: g.bottom.y - H },
+      left: { x: g.left.x, y: g.left.y - H },
+    };
+    // Ground shadow.
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.beginPath();
-    ctx.ellipse(c.x, c.y, 20, 9, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#2a2620';
-    ctx.fillRect(c.x - 18, c.y - 34, 36, 34);
-    ctx.strokeStyle = '#1a1712';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(c.x - 18, c.y - 34, 36, 34);
-    ctx.fillStyle = '#453f34'; // corrugated roof band
-    ctx.fillRect(c.x - 18, c.y - 34, 36, 6);
+    ctx.moveTo(g.top.x, g.top.y + 6); ctx.lineTo(g.right.x, g.right.y + 6);
+    ctx.lineTo(g.bottom.x, g.bottom.y + 6); ctx.lineTo(g.left.x, g.left.y + 6);
+    ctx.closePath(); ctx.fill();
+
+    const base = [58, 54, 50];
+    // Two visible faces, train-textured, then a darker roof.
+    this.drawTexturedQuad([g.left, g.bottom, r.bottom, r.left], FACTORY_TEXTURE, rgbScale(base, 0.7), rgbScale(base, 0.7), 'multiply', 0.7);
+    this.drawTexturedQuad([g.bottom, g.right, r.right, r.bottom], FACTORY_TEXTURE, rgbScale(base, 0.5), rgbScale(base, 0.5), 'multiply', 0.7);
+    this.drawTexturedQuad([r.top, r.right, r.bottom, r.left], FACTORY_TEXTURE, rgbScale(base, 0.95), rgbScale(base, 0.95), 'multiply', 0.35);
+    // Roof outline + a pulsing vent block.
+    this.diamondPath([r.top, r.right, r.bottom, r.left]);
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1.5; ctx.stroke();
+    const roofC = { x: (r.top.x + r.bottom.x) / 2, y: (r.top.y + r.bottom.y) / 2 };
     const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 420);
-    ctx.fillStyle = `rgba(224,120,40,${(0.4 + 0.4 * pulse).toFixed(3)})`;
-    ctx.fillRect(c.x - 6, c.y - 24, 12, 8); // vent glow
-    ctx.font = 'bold 9px system-ui, sans-serif';
-    ctx.fillStyle = '#b8bcc2';
+    ctx.fillStyle = `rgba(224,120,40,${(0.35 + 0.4 * pulse).toFixed(3)})`;
+    ctx.beginPath(); ctx.ellipse(roofC.x, roofC.y, 16, 8, 0, 0, Math.PI * 2); ctx.fill();
+    // Label on the near face.
+    const labelC = worldToScreen(cx, obj.y + fh);
+    ctx.font = 'bold 13px system-ui, sans-serif';
+    ctx.fillStyle = '#c8ccd2';
     ctx.textAlign = 'center';
-    ctx.fillText('W-FACTORY', c.x, c.y - 12);
+    ctx.fillText('W-FACTORY', labelC.x, labelC.y - H * 0.55);
     ctx.textAlign = 'left';
+
+    // Damage bar above the roof when it's been hit and the player is near.
+    const p = this.hudPlayer;
+    if (obj.hp != null && obj.maxHp && obj.hp < obj.maxHp && p
+      && Math.hypot(p.x - cx, p.y - cy) < 14) {
+      const facTop = worldToScreen(cx, cy);
+      const bw = 110, bh = 8;
+      const bx = facTop.x - bw / 2, by = facTop.y - H - 20;
+      const frac = Math.max(0, obj.hp / obj.maxHp);
+      ctx.fillStyle = 'rgba(0,0,0,0.65)';
+      ctx.fillRect(bx - 2, by - 2, bw + 4, bh + 4);
+      ctx.fillStyle = '#3a3f46';
+      ctx.fillRect(bx, by, bw, bh);
+      ctx.fillStyle = frac > 0.5 ? '#6cc24a' : frac > 0.25 ? '#e0b53a' : '#e05548';
+      ctx.fillRect(bx, by, bw * frac, bh);
+    }
   }
 
   // Sprayed lore fragment, warped onto the wall's south-east face like it's
@@ -2217,7 +2271,7 @@ export class Renderer {
     ctx.save();
     ctx.translate(f.x, f.y - 10);
     ctx.rotate(fang);
-    ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+    ctx.strokeStyle = 'rgba(150,150,150,0.45)';
     ctx.lineWidth = 2;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';

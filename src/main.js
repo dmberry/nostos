@@ -31,7 +31,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '0.77';
+const VERSION = '0.78';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -175,16 +175,36 @@ const obelisks = [];
 let wfactory = null;
 {
   const rng = makeRng(WORLD_SEED ^ 0x5a11c0de);
+  const FW = 8, FH = 8;               // a big 8x8 industrial structure
+  const FACTORY_HP = 160;             // takes many hits to bring down
   let guard = 0;
-  while (!wfactory && guard++ < 5000) {
-    const x = 4 + Math.floor(rng() * (map.w - 8));
-    const y = 4 + Math.floor(rng() * (map.h - 8));
-    const f = map.floorAt(x, y);
-    if ((f !== 'grass' && f !== 'tallgrass') || map.objectAt(x, y)) continue;
-    if (Math.hypot(x - spawn.x, y - spawn.y) < 20) continue;
-    wfactory = map.addObject('wfactory', x, y);
+  while (!wfactory && guard++ < 8000) {
+    const x = 4 + Math.floor(rng() * (map.w - FW - 8));
+    const y = 4 + Math.floor(rng() * (map.h - FH - 8));
+    // The whole 8x8 footprint must be clear, flat, grassy ground.
+    let ok = true;
+    for (let dy = 0; dy < FH && ok; dy++) {
+      for (let dx = 0; dx < FW; dx++) {
+        const f = map.floorAt(x + dx, y + dy);
+        if ((f !== 'grass' && f !== 'tallgrass') || map.objectAt(x + dx, y + dy)
+          || (map.heightAt && map.heightAt(x + dx, y + dy) !== 0)) { ok = false; break; }
+      }
+    }
+    if (!ok) continue;
+    if (Math.hypot(x + FW / 2 - spawn.x, y + FH / 2 - spawn.y) < 26) continue;
+    const footprint = [];
+    for (let dy = 0; dy < FH; dy++) for (let dx = 0; dx < FW; dx++) footprint.push({ x: x + dx, y: y + dy });
+    wfactory = map.addObject('wfactory', x, y, { fw: FW, fh: FH, footprint, hp: FACTORY_HP, maxHp: FACTORY_HP });
+    // Every footprint tile points back at the one factory object, so it's
+    // solid across its whole 8x8 and a hit anywhere on it counts.
+    for (const t of footprint) map.objectGrid[t.y * map.w + t.x] = wfactory;
   }
 }
+// The dispatch/repair code fires from the factory's centre, and stops once
+// it's destroyed.
+const factoryLive = () => wfactory && !wfactory.destroyed;
+const factoryCx = () => wfactory.x + (wfactory.fw || 1) / 2;
+const factoryCy = () => wfactory.y + (wfactory.fh || 1) / 2;
 
 const robots = spawnRobots(map, WORLD_SEED, obelisks, { x: spawn.x, y: spawn.y, r: 14 });
 const waterdroids = spawnWaterDroids(map, WORLD_SEED);
@@ -467,8 +487,8 @@ player.onObeliskDestroyed = (ob) => {
   // W-factory itself, where W1s are actually built, not from the crater.
   if (ob) {
     const squadSeed = ((ob.x * 92821 + ob.y * 1237 + Math.floor(Math.random() * 1e6)) >>> 0) || 1;
-    const originX = wfactory ? wfactory.x + 0.5 : ob.x + 0.5;
-    const originY = wfactory ? wfactory.y + 0.5 : ob.y + 0.5;
+    const originX = factoryLive() ? factoryCx() : ob.x + 0.5;
+    const originY = factoryLive() ? factoryCy() : ob.y + 0.5;
     const squad = spawnW1s(map, squadSeed, originX, originY, 2 + Math.floor(Math.random() * 3));
     if (squad.length) {
       robots.push(...squad);
@@ -493,8 +513,8 @@ player.onObeliskDestroyed = (ob) => {
     player.skylinkActive = false;
     ob.needsRebuild = true;
     player.say('The tower comes down and the SKYLINK web collapses — dark, for now. A repair drone is already inbound to raise it.');
-    if (wfactory && !robots.some((r) => r.type === 'w3' && !r.dead)) {
-      const drone = spawnW3(map, Math.floor(Math.random() * 0x7fffffff), wfactory.x + 0.5, wfactory.y + 0.5);
+    if (factoryLive() && !robots.some((r) => r.type === 'w3' && !r.dead)) {
+      const drone = spawnW3(map, Math.floor(Math.random() * 0x7fffffff), factoryCx(), factoryCy());
       if (drone) robots.push(drone);
     }
   }
@@ -505,9 +525,9 @@ player.onObeliskDestroyed = (ob) => {
 // hits (one obelisk) or rapid OB-gun fire can't spam a whole squadron.
 let wFactoryW4Cooldown = 0;
 player.onObeliskAttacked = () => {
-  if (!wfactory || wFactoryW4Cooldown > 0) return;
+  if (!factoryLive() || wFactoryW4Cooldown > 0) return;
   wFactoryW4Cooldown = 25;
-  const w4 = spawnW4(map, Math.floor(Math.random() * 0x7fffffff), wfactory.x + 0.5, wfactory.y + 0.5);
+  const w4 = spawnW4(map, Math.floor(Math.random() * 0x7fffffff), factoryCx(), factoryCy());
   if (w4) {
     robots.push(w4);
     player.say('A W4 hunter-killer streaks out of the W-factory, lasers charging.');
@@ -570,7 +590,7 @@ let skylinkW4Clock = 0;
 function dispatchSkylinkW4s(n) {
   const towers = obeliskObjs.filter((o) => !o.destroyed);
   for (let i = 0; i < n; i++) {
-    const src = towers.length ? towers[Math.floor(Math.random() * towers.length)] : wfactory;
+    const src = towers.length ? towers[Math.floor(Math.random() * towers.length)] : (factoryLive() ? { x: factoryCx() - 0.5, y: factoryCy() - 0.5 } : null);
     const ox = src ? src.x + 0.5 : player.x, oy = src ? src.y + 0.5 : player.y;
     const w4 = spawnW4(map, Math.floor(Math.random() * 0x7fffffff), ox, oy);
     if (w4) robots.push(w4);
@@ -766,7 +786,7 @@ function update(dt) {
   // one W3 is ever out at a time. It also builds W1 hunting waves on its own
   // clock — not just as a one-off revenge squad when a tower falls — so long
   // as it isn't already fielding one.
-  if (wfactory) {
+  if (factoryLive()) {
     wFactoryClock += dt;
     if (wFactoryClock > wFactoryNext) {
       wFactoryClock = 0;
@@ -774,7 +794,7 @@ function update(dt) {
       const anyDamaged = obeliskObjs.some((o) => (!o.destroyed && o.obDamage > 0) || o.needsRebuild);
       const w3Active = robots.some((r) => r.type === 'w3' && !r.dead);
       if (anyDamaged && !w3Active) {
-        const drone = spawnW3(map, Math.floor(Math.random() * 0x7fffffff), wfactory.x + 0.5, wfactory.y + 0.5);
+        const drone = spawnW3(map, Math.floor(Math.random() * 0x7fffffff), factoryCx(), factoryCy());
         if (drone) { robots.push(drone); player.say('A repair drone whirs out of the W-factory.'); }
       }
     }
@@ -784,7 +804,7 @@ function update(dt) {
       wFactoryW1Next = 100 + Math.random() * 80;
       const liveW1 = robots.filter((r) => r.type === 'w1' && !r.dead).length;
       if (liveW1 < 3) {
-        const wave = spawnW1s(map, Math.floor(Math.random() * 0x7fffffff), wfactory.x + 0.5, wfactory.y + 0.5, 2 + Math.floor(Math.random() * 2));
+        const wave = spawnW1s(map, Math.floor(Math.random() * 0x7fffffff), factoryCx(), factoryCy(), 2 + Math.floor(Math.random() * 2));
         if (wave.length) { robots.push(...wave); player.say('The W-factory dispatches a hunting wave.'); }
       }
     }
@@ -796,7 +816,7 @@ function update(dt) {
       lastW4GameHour = dayNight.totalHours;
       const liveW4 = robots.filter((r) => r.type === 'w4' && !r.dead).length;
       if (liveW4 < 3) {
-        const w4 = spawnW4(map, Math.floor(Math.random() * 0x7fffffff), wfactory.x + 0.5, wfactory.y + 0.5);
+        const w4 = spawnW4(map, Math.floor(Math.random() * 0x7fffffff), factoryCx(), factoryCy());
         if (w4) { robots.push(w4); player.say('The W-factory rolls out another W4 hunter-killer.'); }
       }
     }

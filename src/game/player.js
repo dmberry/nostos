@@ -81,7 +81,7 @@ export class Player {
     this.vz = 0;
     this.doubleJumped = false; // a second, mid-air jump: reaches block tops
     this.forcefieldCharge = 0; // seconds of forcefield left in the current cell
-    this.gunAmmo = {};         // per-gun built-in ammo reserves (e.g. electro-gun)
+    this.ammoFrac = {};        // accumulated fractional ammo per gun (e.g. electro-gun sips 5%/shot)
     this.facing = { x: 0, y: 1 };
     this.moving = false;
     this.sprinting = false;
@@ -769,6 +769,10 @@ export class Player {
     // Abandoned car: smash it open (best with a crowbar) for what's inside.
     if (obj && obj.type === 'car') { this.smashCar(obj, map, tool); return; }
 
+    // The W-factory: hammer at its 8x8 hull. Many blows bring it down and it
+    // drops an AI key.
+    if (obj && obj.type === 'wfactory') { this.hitFactory(obj, map, tool); return; }
+
     // Shovel: dig a pit in the open ground ahead. A steep pit (height -2)
     // is a trap — a wheeled T1 rolls in and can't climb out, and you can
     // only get out yourself by jumping.
@@ -966,6 +970,41 @@ export class Player {
       : 'You dig at the ground.');
   }
 
+  // A melee blow on the W-factory hull.
+  hitFactory(obj, map, tool) {
+    if (obj.destroyed) { this.say('The factory is already a smoking ruin.'); return; }
+    this.swingTimer = tool.swingCooldown || 0.5;
+    this.stamina = Math.max(0, this.stamina - (tool.staminaCost ?? 0));
+    sfx.play('chop');
+    const cx = obj.x + (obj.fw || 1) / 2, cy = obj.y + (obj.fh || 1) / 2;
+    this.sparkAt(map, cx, cy);
+    obj.shake = 0.2;
+    this.damageFactory(obj, map, (tool.robotDamage ?? 1) + this.xpLevel('melee'));
+  }
+
+  // Apply `amount` damage to the factory (from a melee blow or a bomb blast);
+  // when its hull gives, flatten the whole footprint to a walkable heap and
+  // spill an AI key + salvage.
+  damageFactory(obj, map, amount) {
+    if (obj.destroyed) return;
+    obj.maxHp = obj.maxHp ?? obj.hp ?? 160;
+    obj.hp = (obj.hp ?? obj.maxHp) - amount;
+    if (obj.hp > 0) return;
+    obj.destroyed = true;
+    if (obj.footprint) {
+      for (const t of obj.footprint) {
+        if (map.objectGrid[t.y * map.w + t.x] === obj) map.objectGrid[t.y * map.w + t.x] = null;
+      }
+    }
+    const cx = obj.x + (obj.fw || 1) / 2, cy = obj.y + (obj.fh || 1) / 2;
+    map.groundItems.push({ item: 'ai_key', qty: 1, x: cx, y: cy });
+    map.groundItems.push({ item: 'scrap', qty: 6, x: cx + 0.6, y: cy });
+    map.groundItems.push({ item: 'battery', qty: 4, x: cx - 0.6, y: cy });
+    this.addScore(40);
+    sfx.play('treefall');
+    this.say('The W-factory buckles and collapses in a roar. An AI key glints in the wreckage.');
+  }
+
   // Smash an abandoned car open. A crowbar (high robotDamage) pries it apart
   // in a couple of blows; anything else takes longer. When it gives, scatter
   // what was left inside around the wreck.
@@ -1094,6 +1133,14 @@ export class Player {
     hitList(robots, true);
     if (droids) hitList(droids, true);
     if (Math.hypot(this.x - b.x, this.y - b.y) <= b.radius) this.takeDamage(b.damage * 0.6, 'the blast');
+    // A blast near the W-factory chews into its hull too (its footprint is
+    // big, so measure to the nearest edge of it, not just its centre).
+    const fac = map.objects.find((o) => o.type === 'wfactory' && !o.destroyed);
+    if (fac) {
+      const nx = Math.max(fac.x, Math.min(b.x, fac.x + (fac.fw || 1)));
+      const ny = Math.max(fac.y, Math.min(b.y, fac.y + (fac.fh || 1)));
+      if (Math.hypot(nx - b.x, ny - b.y) <= b.radius) this.damageFactory(fac, map, b.damage);
+    }
     if (b.obelisk && obeliskObjs) {
       for (const ob of obeliskObjs) {
         if (ob.destroyed) continue;
@@ -1230,29 +1277,31 @@ export class Player {
     if (tool.animalDamage != null) for (const a of animals) consider(a, false);
     for (const r of robots) consider(r, true);
 
-    // A weapon with a big built-in cell (the electro-gun) fires off that
-    // reserve first, so it doesn't drain your shared pocket batteries until
-    // its own charge is spent.
-    let usedBuiltIn = false;
-    if (tool.builtIn) {
-      if (this.gunAmmo[tool.key] == null) this.gunAmmo[tool.key] = tool.builtIn;
-      if (this.gunAmmo[tool.key] > 0) { this.gunAmmo[tool.key] -= 1; usedBuiltIn = true; }
+    // Ammo comes from the pockets first, then the backpack — no need to
+    // manually shuffle rounds forward before a fight. Consumed whether or not
+    // there's a target in range: pulling the trigger with nothing in your
+    // sights still wastes the round rather than refusing to fire.
+    let ammoSlots = this.pockets;
+    let i = this.pockets.findIndex((s) => s && s.item === tool.ammoType);
+    if (i < 0 && this.backpack) {
+      i = this.backpack.slots.findIndex((s) => s && s.item === tool.ammoType);
+      ammoSlots = this.backpack.slots;
     }
-    // Otherwise ammo comes from the pockets first, then the backpack — no need
-    // to manually shuffle rounds forward before a fight. Consumed whether or
-    // not there's a target in range: pulling the trigger with nothing in
-    // your sights still wastes the round rather than refusing to fire.
-    if (!usedBuiltIn) {
-      let ammoSlots = this.pockets;
-      let i = this.pockets.findIndex((s) => s && s.item === tool.ammoType);
-      if (i < 0 && this.backpack) {
-        i = this.backpack.slots.findIndex((s) => s && s.item === tool.ammoType);
-        ammoSlots = this.backpack.slots;
+    if (i < 0) {
+      this.say(`The ${tool.name.toLowerCase()} is dead weight without ${ITEMS[tool.ammoType].name.toLowerCase()}.`);
+      return;
+    }
+    // A weapon that only sips its cell (the electro-gun, 5% per shot) spends a
+    // whole battery only once the accumulated fraction tips over one; the
+    // pocket count stays a clean integer.
+    if (tool.fractionalAmmo) {
+      this.ammoFrac[tool.key] = (this.ammoFrac[tool.key] || 0) + tool.fractionalAmmo;
+      if (this.ammoFrac[tool.key] >= 1) {
+        this.ammoFrac[tool.key] -= 1;
+        ammoSlots[i].qty -= 1;
+        if (ammoSlots[i].qty <= 0) ammoSlots[i] = null;
       }
-      if (i < 0) {
-        this.say(`The ${tool.name.toLowerCase()} is dead weight without ${ITEMS[tool.ammoType].name.toLowerCase()}.`);
-        return;
-      }
+    } else {
       ammoSlots[i].qty -= 1;
       if (ammoSlots[i].qty <= 0) ammoSlots[i] = null;
     }

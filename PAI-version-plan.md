@@ -17,7 +17,16 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
-## Where we are (v0.77)
+## Where we are (v0.78)
+
+### v0.78 — destructible 8×8 factory + AI key, 24h deadline, electro-gun sips, raven perch fix, jumpable crates
+
+- **The W-factory is now a big 8×8 destructible structure.** Placed on a clear 8×8 grassy area (main.js), all 64 footprint tiles point at the one object (solid across the whole thing). `drawWfactory` renders it as a tall extruded prism faced with the `decor-train.jpg` texture (`FACTORY_TEXTURE`), with a pulsing vent and a **damage bar centred above it when you're within 14 tiles**. Hitting it in melee (`useHands` → `hitFactory` → `damageFactory`) or catching it in a bomb blast chews its `hp` (160); when it gives, the footprint is flattened to a walkable, scorched heap and it drops an **AI key** (new `ai_key` item) plus salvage. All the factory's dispatch/repair code now fires from its centre and stops once it's `destroyed` (`factoryLive()`).
+- **SKYLINK deadline back to 24 hours** (`DEADLINE_DAYS` 0.5 → 1.0) — there's more to do in a run now.
+- **Electro-gun sips its cell**: `fractionalAmmo` 0.05 — each shot accumulates 5% and only spends a whole battery when the fraction tips over one (`player.ammoFrac`), so a battery lasts ~20 fuse shots and the pocket count stays integer. (Replaces the v0.77 built-in reserve.)
+- **Ravens only perch on big, grown trees** (`isBigTree`: variants 0–2, `grow > 0.75`) — landing on a small/dead/sapling left the bird floating above the sprite.
+- **Crates are jumpable** — `box` is now `climbable` (climbHeight 1), so you can step or hop onto/over one; still searchable from beside it.
+- **Facing chevron** is greyer and less opaque (`rgba(150,150,150,0.45)`).
 
 ### v0.77 — electro-gun reserve, aged cars, chevron aim, bomb→weapon autoload, tabbed help, plan pruned
 
