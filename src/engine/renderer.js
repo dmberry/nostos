@@ -116,6 +116,7 @@ export class Renderer {
   draw(camera, map, player, animals = [], hud = {}) {
     const ctx = this.ctx;
     this.uiSlots = []; // clickable dashboard/backpack slots, rebuilt each frame
+    this.obeliskHits = []; // clickable obelisk towers (world-screen rects), rebuilt each frame
     this.hudPlayer = player; // referenced by drawWfactory for the near-by damage bar
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.fillStyle = '#0b0e0a';
@@ -1550,6 +1551,28 @@ export class Renderer {
         ctx.fill();
       }
     }
+    // A small green CRT terminal set into the SE face, flickering faintly to
+    // hint it can be used. Clickable — the whole tower body is registered as a
+    // hit rect (world-screen space; main converts the click the same way).
+    const sx = c.x + 1, sy = c.y - Math.round(H * 0.32);
+    const flick = 0.7 + 0.3 * Math.abs(Math.sin(performance.now() / 240 + obj.x));
+    ctx.fillStyle = '#0a140c';
+    ctx.fillRect(sx - 5, sy - 6, 11, 13);
+    ctx.fillStyle = `rgba(80,225,125,${(0.4 * flick).toFixed(3)})`;
+    ctx.fillRect(sx - 4, sy - 5, 9, 11);
+    ctx.strokeStyle = 'rgba(30,70,40,0.7)'; ctx.lineWidth = 1;
+    for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.moveTo(sx - 4, sy - 3 + k * 3); ctx.lineTo(sx + 5, sy - 3 + k * 3); ctx.stroke(); }
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.strokeRect(sx - 5.5, sy - 6.5, 12, 14);
+    this.obeliskHits.push({ obj, x: c.x - W - 6, y: c.y - H - 14, w: 2 * W + 12, h: H + 22 });
+  }
+
+  // The obelisk whose tower body contains a world-screen point (from a click
+  // converted via worldToScreen(camera.toWorld(...))), or null.
+  obeliskAt(wsx, wsy) {
+    for (const h of this.obeliskHits) {
+      if (wsx >= h.x && wsx <= h.x + h.w && wsy >= h.y && wsy <= h.y + h.h) return h.obj;
+    }
+    return null;
   }
 
   // Resistance cache: a wooden crate; opened ones sit dark and empty.
@@ -1848,6 +1871,18 @@ export class Renderer {
       } else {
         ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.beginPath(); ctx.moveTo(0, -7); ctx.lineTo(0, 9); ctx.stroke();
       }
+      ctx.restore();
+      return;
+    }
+    if (itemDef.kind === 'compass') {
+      ctx.fillStyle = '#243138';
+      ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = itemDef.color; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = '#e05548'; // needle
+      ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(2.5, 0); ctx.lineTo(-2.5, 0); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#cfd8c3';
+      ctx.beginPath(); ctx.moveTo(0, 6); ctx.lineTo(2.5, 0); ctx.lineTo(-2.5, 0); ctx.closePath(); ctx.fill();
       ctx.restore();
       return;
     }
@@ -2278,16 +2313,27 @@ export class Renderer {
     this.drawPlayerSprite(player, c, by);
     if (!heldBehind) this.drawHeldItem(player, c, by);
 
-    // Facing indicator: a small chevron set ahead of the feet, pointing the
-    // way you aim (in screen space), so the direction reads at a glance.
-    const f = worldToScreen(player.x + player.facing.x * 1.2, player.y + player.facing.y * 1.2);
+    // Facing indicator: a small chevron ahead of the feet, pointing (in screen
+    // space) the way you aim. Holding the electro-compass repurposes it into a
+    // homing pointer to the nearest notable thing, coloured by what that is.
+    let dir = player.facing;
+    let chevColor = 'rgba(200,200,200,0.55)';
+    if (player.hands === 'compass' && player.compassTarget) {
+      const t = player.compassTarget();
+      if (t) {
+        const dx = t.x - player.x, dy = t.y - player.y, d = Math.hypot(dx, dy) || 1;
+        dir = { x: dx / d, y: dy / d };
+        chevColor = t.color;
+      }
+    }
+    const f = worldToScreen(player.x + dir.x * 1.2, player.y + dir.y * 1.2);
     const fp0 = worldToScreen(player.x, player.y);
-    const fp1 = worldToScreen(player.x + player.facing.x, player.y + player.facing.y);
+    const fp1 = worldToScreen(player.x + dir.x, player.y + dir.y);
     const fang = Math.atan2(fp1.y - fp0.y, fp1.x - fp0.x);
     ctx.save();
     ctx.translate(f.x, f.y - 10);
     ctx.rotate(fang);
-    ctx.strokeStyle = 'rgba(200,200,200,0.55)';
+    ctx.strokeStyle = chevColor;
     ctx.lineWidth = 2;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';

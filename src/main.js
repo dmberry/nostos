@@ -31,7 +31,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '0.79';
+const VERSION = '0.80';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -136,6 +136,8 @@ const obelisks = [];
     [{ item: 'shield', qty: 1 }],
     [{ item: 'mirror_shield', qty: 1 }, { item: 'battery', qty: 2 }],
     [{ item: 'forcefield', qty: 1 }, { item: 'battery', qty: 4 }],
+    // A navigation aid: the electro-compass.
+    [{ item: 'compass', qty: 1 }],
   ];
   const rollLoot = () => {
     const r = rng();
@@ -455,6 +457,35 @@ for (const btn of helpEl.querySelectorAll('.helpTab')) {
   });
 }
 
+// Obelisk terminal (VT220 style). Non-functional for now — it boots, shows the
+// node's code and a prompt, and waits. The hooks are here for the code-hacking
+// language to come. Opened by clicking an obelisk within OB_TERMINAL_RANGE.
+const OB_TERMINAL_RANGE = 4.5;
+const obTermEl = document.getElementById('obterminal');
+const obTermScreen = document.getElementById('obterminal-screen');
+function openObTerminal(ob) {
+  const boot = [
+    'SKYLINK NODE TERMINAL  v2.20',
+    'RON-DOS 4.11  (c) Reality Or Nothing',
+    '',
+    `> connecting to node ${ob.code || 'OB-????'} ...`,
+    '> handshake ....... OK',
+    `> circuit id ...... ${ob.circuitNum != null ? '#' + ob.circuitNum : 'sealed'}`,
+    '> access .......... LOCKED',
+    '',
+    'no key recognised. terminal is read-only.',
+    'awaiting instruction set.',
+    '',
+    'READY.',
+    '_',
+  ].join('\n');
+  obTermScreen.textContent = boot;
+  obTermEl.style.display = 'flex';
+  player.say(`You jack into obelisk ${ob.code || ''}. The screen wakes, green and waiting.`);
+}
+function closeObTerminal() { obTermEl.style.display = 'none'; }
+obTermEl.addEventListener('click', (e) => { if (e.target === obTermEl) closeObTerminal(); });
+
 // The control hint is only for new players: fade it out after two minutes
 // of play so it stops cluttering the screen once the controls have sunk in.
 const hintEl = document.getElementById('hint');
@@ -723,6 +754,20 @@ function update(dt) {
       input.consumeClick();
       if (player.getSlot(slot)) drag = { from: slot };
       else player.equipSlot(slot); // empty hands slot: stow whatever's held
+    }
+  }
+  // Click an obelisk's terminal to open its screen — if you're close enough to
+  // reach it. Checked after the HUD slots (so a slot click wins) and before
+  // the in-world tool use (consuming the click here stops it swinging).
+  const obPress = input.clickPos();
+  if (obPress && renderer.obeliskAt) {
+    const w = camera.toWorld(obPress.x, obPress.y, renderer.w, renderer.h);
+    const ws = worldToScreen(w.x, w.y);
+    const ob = renderer.obeliskAt(ws.x, ws.y);
+    if (ob) {
+      input.consumeClick();
+      if (Math.hypot(ob.x + 0.5 - player.x, ob.y + 0.5 - player.y) <= OB_TERMINAL_RANGE) openObTerminal(ob);
+      else player.say('Too far from the obelisk to reach its terminal.');
     }
   }
   const up = input.consumeUp();

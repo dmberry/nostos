@@ -219,6 +219,15 @@ export const ITEMS = {
     ammoType: 'battery',
     color: '#4fd8c3',
   },
+  // Electro-compass: hold it and your facing chevron turns into a homing
+  // pointer to the nearest notable thing, colour-coded by what it is (see
+  // Player.compassTarget). A navigation aid, not a weapon.
+  compass: {
+    name: 'Electro-compass',
+    kind: 'compass',
+    tier: 2,
+    color: '#8fd0e0',
+  },
   // Held defensive gear (kind 'shield'): while it's in your hands a laser
   // coming at you from roughly the front is stopped. A plain shield absorbs
   // it; a mirror shield throws it straight back at whoever fired. Holding one

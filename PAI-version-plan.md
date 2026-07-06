@@ -17,7 +17,13 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
-## Where we are (v0.79)
+## Where we are (v0.80)
+
+### v0.80 — electro-compass, clickable obelisk terminals, terminal-language design
+
+- **Electro-compass** (new held tool, `kind: 'compass'`). While held, `Player.compassTarget()` finds the nearest of {factory (blue), obelisk (green), dropped backpack (yellow), dropped OB-gun (orange)} and the facing chevron becomes a homing pointer to it, coloured by type. (Red AI-mainframe slot reserved for later.) Passive — using it does nothing but flavour text. Seeded one per world in the caches.
+- **Clickable obelisk terminals.** Each obelisk now draws a small flickering green CRT on its face. Clicking the tower (within `OB_TERMINAL_RANGE` 4.5) opens a **VT220-style terminal modal** (`#obterminal`, green phosphor + scanlines + CRT glow) that boots RON-DOS, shows the node's code and circuit id, and reports access LOCKED. Read-only for now — the hooks are in place. Click detection: `renderer.obeliskAt` stores per-tower world-screen hit rects each frame; main converts the click via `camera.toWorld → worldToScreen` (same path as right-click inspect).
+- **Design written for the terminal mini-language** — `docs/ob-terminal-language.md`. RON-ML: a tiny ML-flavoured functional console language (≈7 primitives + let/pipe/application), gated by the AI key, range, and not-getting-hit; the HACK→CRASH chain as the teaching moment; codes seeded in lore fragments; the `sing` Portal easter egg; a self-contained implementation plan (`src/game/ronml.js`).
 
 ### v0.79 — factory depth + spawn fixes, textured vent, railgun ammo, whiter chevron
 

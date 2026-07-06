@@ -679,8 +679,9 @@ export class Player {
     // Defensive gear is passive — a shield blocks by being held and facing the
     // shot, a forcefield by simply being up. Using it just searches a cache
     // ahead if there is one, otherwise does nothing.
-    if (tool.kind === 'shield' || tool.kind === 'forcefield') {
+    if (tool.kind === 'shield' || tool.kind === 'forcefield' || tool.kind === 'compass') {
       if (facingBox) this.openBox(obj, map);
+      else if (tool.kind === 'compass') this.say('The compass needle swings, seeking.');
       else if (tool.kind === 'shield') this.say('You raise the shield.');
       return;
     }
@@ -1431,6 +1432,30 @@ export class Player {
 
   forcefieldActive() {
     return this.hands === 'forcefield' && this.forcefieldCharge > 0;
+  }
+
+  // While the electro-compass is held, the facing chevron becomes a pointer
+  // to the nearest notable thing, colour-coded: factory (blue), obelisk
+  // (green), a dropped backpack (yellow), a dropped OB-gun (orange). The AI
+  // mainframe (red) will slot in here once it exists. Returns {x, y, color}
+  // in world coords, or null if nothing's around.
+  compassTarget() {
+    const map = this.map;
+    if (!map) return null;
+    let best = null, bestD = Infinity;
+    const consider = (x, y, color) => {
+      const d = Math.hypot(x - this.x, y - this.y);
+      if (d < bestD) { bestD = d; best = { x, y, color }; }
+    };
+    for (const o of map.objects) {
+      if (o.type === 'wfactory' && !o.destroyed) consider(o.x + (o.fw || 1) / 2, o.y + (o.fh || 1) / 2, '#4f8fe0');
+      else if (o.type === 'obelisk' && !o.destroyed) consider(o.x + 0.5, o.y + 0.5, '#4fe07a');
+    }
+    for (const gi of (map.groundItems || [])) {
+      if (gi.item === 'backpack') consider(gi.x, gi.y, '#e6d24a');
+      else if (gi.item === 'obgun') consider(gi.x, gi.y, '#e0842f');
+    }
+    return best;
   }
 
   // A laser is on its way from (sx,sy). Returns how it's stopped, if at all:
