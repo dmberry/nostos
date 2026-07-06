@@ -17,7 +17,14 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
-## Where we are (v0.74)
+## Where we are (v0.75)
+
+### v0.75 — smashed-car grime, tighter car collision, smaller tools, fainter boundary
+
+- **Smashed cars look ruined, not just dim.** The offscreen husk tint now also paints a faint metallic grime texture (`misc-ring-bottoms.jpg` → `CAR_RUIN_TEXTURE`) over the car's own pixels (source-atop) at 0.32 alpha, so a wreck reads as burnt/rusted.
+- **Tighter car collision.** Cars were a 3x2/2x3 solid footprint whose iso width (~160px) was wider than the 147px sprite, so you were stopped a step short of the visible car (the "janky edge detection"). Footprint is now a tight 2x2 (128px) that the sprite slightly overhangs, so you stop when you touch the car body.
+- **In-hand tools no longer oversized.** The held-item icon scale was still tuned for the old larger character; dropped from ~0.85 to ~0.55 to suit the v0.67 smaller sprite.
+- **Boundary blocks fainter.** `EDGE_ROCK_ALPHA` 0.5 → 0.38.
 
 ### v0.74 — real car sprites, wall-top texture, softer boundary
 

@@ -566,8 +566,12 @@ function scatterWrecks(map, rng) {
   while (placed.length < 7 && guard++ < 6000) {
     const x = Math.floor(rng() * (map.w - 3));
     const y = Math.floor(rng() * (map.h - 3));
-    const wide = rng() < 0.5;
-    const fw = wide ? 3 : 2, fh = wide ? 2 : 3;
+    // A tight 2x2 solid core. The car sprite is a touch wider than this on
+    // screen, so it overhangs the collision slightly — meaning you stop when
+    // you actually touch the visible car, rather than being blocked by an
+    // invisible tile a step short of it (the old 3x2/2x3 footprint was wider
+    // than the sprite and read as janky edge detection).
+    const fw = 2, fh = 2;
     // Every footprint tile must be empty, walkable-height ground, and at
     // least one must be road so the wreck sits on the tarmac.
     let ok = true, onRoad = false;

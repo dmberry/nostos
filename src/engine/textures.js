@@ -77,6 +77,9 @@ export const EDGE_TEXTURE = loadDownscaled(T + 'photo-unsorted-2.jpg');
 // against these lists (modulo, so the counts can change freely).
 export const CAR_MODEL_KEYS = ['chevrolet', 'rolls-blue', 'rolls-red', 'rolls-white', 'police', 'ambulance'];
 export const CAR_DIR_KEYS = ['se', 'sw', 'ne', 'nw'];
+// A mottled metallic grime texture painted faintly over a smashed car so a
+// wreck reads as burnt/ruined, not just a darker version of the intact car.
+export const CAR_RUIN_TEXTURE = loadDownscaled(T + 'misc-ring-bottoms.jpg');
 export const CAR_SPRITES = {};
 for (const m of CAR_MODEL_KEYS) {
   CAR_SPRITES[m] = {};

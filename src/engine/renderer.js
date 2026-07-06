@@ -5,7 +5,7 @@ import { drawAnimal } from '../game/animals.js';
 import { drawBird } from '../game/birds.js';
 import { drawRobot } from '../game/robots.js';
 import { drawWaterDroid } from '../game/waterdroids.js';
-import { FLOOR_TEXTURES, WALL_TEXTURES, GRASS_PATCH_TEXTURE, CHARACTER_SPRITE_SETS, CHAR_COMPASS_DIRS, TREE_SHEET, TREE_SPRITES, EDGE_TEXTURE, CAR_SPRITES, CAR_MODEL_KEYS, CAR_DIR_KEYS } from './textures.js';
+import { FLOOR_TEXTURES, WALL_TEXTURES, GRASS_PATCH_TEXTURE, CHARACTER_SPRITE_SETS, CHAR_COMPASS_DIRS, TREE_SHEET, TREE_SPRITES, EDGE_TEXTURE, CAR_SPRITES, CAR_MODEL_KEYS, CAR_DIR_KEYS, CAR_RUIN_TEXTURE } from './textures.js';
 
 // Maps a facing vector to one of 8 pre-rendered screen-compass directions
 // for CHARACTER_SPRITE_SETS (see textures.js) — replaces the old trick of
@@ -43,7 +43,7 @@ function tintScratch(w, h) {
 
 const WALL_H = 40;
 const EDGE_ROCK_H = 52;   // height of the impassable rock blocks ringing the map edge
-const EDGE_ROCK_ALPHA = 0.5; // semi-transparent so the player shows through a block in front
+const EDGE_ROCK_ALPHA = 0.38; // semi-transparent so the player shows through a block in front
 const DASH_H = 78; // dashboard panel height
 const ELEV = 16;   // pixels of lift per height level
 const MINIMAP_SIZE = 160;
@@ -1597,6 +1597,14 @@ export class Renderer {
       off.ctx.globalCompositeOperation = 'source-atop';
       off.ctx.fillStyle = 'rgba(22,18,15,0.62)'; // burnt-out husk
       off.ctx.fillRect(0, 0, off.canvas.width, off.canvas.height);
+      // Faint grime/rust texture over the car's own pixels (source-atop keeps
+      // it inside the car silhouette) so the wreck reads as ruined, not just
+      // a dimmer car.
+      if (CAR_RUIN_TEXTURE && CAR_RUIN_TEXTURE.complete && CAR_RUIN_TEXTURE.naturalWidth) {
+        off.ctx.globalAlpha = 0.32;
+        off.ctx.drawImage(CAR_RUIN_TEXTURE, 0, 0, off.canvas.width, off.canvas.height);
+        off.ctx.globalAlpha = 1;
+      }
       off.ctx.globalCompositeOperation = 'source-over';
       ctx.drawImage(off.canvas, dx, dy, dw, dh);
     } else {
@@ -2180,12 +2188,14 @@ export class Renderer {
       reach = 0.42 + pulse * 0.55;
       extraAng = p >= 0 ? (-1.0 + p * 1.7) : 0;
     }
-    const hx = c.x + 4 + player.facing.x * 13 * reach / 0.42;
-    const hy = by - 18 + player.facing.y * 8 * reach / 0.42;
+    const hx = c.x + 3 + player.facing.x * 11 * reach / 0.42;
+    const hy = by - 16 + player.facing.y * 7 * reach / 0.42;
     ctx.save();
     ctx.translate(hx, hy);
     ctx.rotate(baseAng + extraAng);
-    this.drawItemIcon(def, 0, 0, 0.85 + pulse * 0.15);
+    // Scaled down to suit the smaller (v0.67) character sprite — the old 0.85
+    // left tools looking oversized in hand.
+    this.drawItemIcon(def, 0, 0, 0.55 + pulse * 0.12);
     ctx.restore();
     if (isRanged && def.kind === 'gun' && pulse > 0.3) {
       const fx = c.x + player.facing.x * 26, fy = by - 12 + player.facing.y * 14;
