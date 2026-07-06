@@ -17,7 +17,15 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
-## Where we are (v0.69)
+## Where we are (v0.70)
+
+### v0.70 — hand-drawn trees, block-top movement polish
+
+- **Real tree art.** Trees were procedural circles/triangles; they now blit from a copied CC0 "Premium Trees" sheet (`assets/textures/trees.png`, the No-Outline set David dropped into `assets/textures/Shadow/`). No files were sliced — each `variant` (0/1/2) is a source-rect (`TREE_SPRITES` in textures.js, bounds measured off the sheet's alpha) drawn with `drawImage`, scaled by the existing `grow` value and carrying its own baked shadow. `Renderer.drawTree` keeps the procedural version as a fallback until the sheet loads.
+- **Slower, steadier walk on block tops.** On a climbable ledge the walk speed is cut to `BLOCK_WALK_MULT` (0.6) — the footprint is small and full pace made edges twitchy to line up.
+- **Walk off a block to drop down.** Stepping off the edge of a block onto lower ground now seeds `z` with the height lost (rendered at 32px/unit vs a level's 16px, hence ×0.5) and lets the existing jump/gravity integrator carry you down, so you fall smoothly and keep walking instead of snapping down.
+
+> **Larger requests still open (not in v0.70):** a shield weapon (standard absorbs a laser, mirror reflects it back at the shooter); a much bigger, tougher **factory** (8×8, damage bar when near, many hits to destroy, drops an "AI key"); and the big one — a **4× map with four AI factions**, one per quadrant, each with its own coloured obelisks/droids/bots, inter-faction combat (bot weapons hurting other factions' bots), and mainframe access via the AI keys. The factions/mainframe/4×-map is a large architectural change and wants its own focused build; see the discussion note.
 
 ### v0.69 — double-jump onto blocks, textured box lids, graffiti fix, idle sway
 

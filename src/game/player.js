@@ -5,6 +5,7 @@ import { OBJECTS } from './tiles.js';
 
 const WALK_SPEED = 4.2;   // tiles per second
 const SPRINT_SPEED = 7.5;
+const BLOCK_WALK_MULT = 0.6; // slower, steadier pace while up on a block top
 const WOUNDED_SPEED = 3.2; // hobble walking pace when health is very low
 const WOUNDED_AT = 20;     // health threshold for the hobble
 const WOUNDED_SPRINT_DRAIN = 2.5; // wounded sprinting burns stamina this much faster
@@ -370,11 +371,25 @@ export class Player {
       const under = map.floorAt(Math.floor(this.x), Math.floor(this.y));
       if (under === 'stream') speed *= 0.55;
       else if (under === 'water') speed *= 0.45;
+      // Up on a block top, ease off the pace — the footprint is small and a
+      // full walking speed makes edges twitchy to line up. Slower is easier
+      // to control up there.
+      const effBefore = map.effectiveHeightAt ? map.effectiveHeightAt(Math.floor(this.x), Math.floor(this.y)) : 0;
       const hBefore = map.heightAt ? map.heightAt(Math.floor(this.x), Math.floor(this.y)) : 0;
+      if (this.z === 0 && effBefore > hBefore) speed *= BLOCK_WALK_MULT;
       this.moveAxis(dir.x * speed * dt, 0, map);
       this.moveAxis(0, dir.y * speed * dt, map);
+      const effAfter = map.effectiveHeightAt ? map.effectiveHeightAt(Math.floor(this.x), Math.floor(this.y)) : 0;
       const hAfter = map.heightAt ? map.heightAt(Math.floor(this.x), Math.floor(this.y)) : 0;
       if (hAfter > hBefore) this.stamina = Math.max(0, this.stamina - CLIMB_COST);
+      // Walked off the edge of a block onto lower ground: drop off it and
+      // keep going, rather than snapping down. Seed `z` with the height lost
+      // (z renders at 32px/unit, a level is 16px, so half the level drop) and
+      // let the jump/gravity integrator below carry you down smoothly.
+      if (this.z === 0 && this.vz === 0 && effAfter < effBefore) {
+        this.z = (effBefore - effAfter) * 0.5;
+        this.doubleJumped = false;
+      }
       this.walkPhase += dt * (this.sprinting ? 13 : 9);
       // Footstep on each stride, voiced by the surface underfoot.
       const stride = Math.floor(this.walkPhase / Math.PI);

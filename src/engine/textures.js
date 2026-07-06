@@ -59,6 +59,19 @@ export const WALL_TEXTURES = {
   brick: loadDownscaled(T + 'wall-brick.jpg'),
 };
 
+// Hand-drawn tree art (a copy of the CC0 "Premium Trees" sheet dropped in at
+// assets/textures/Shadow/). One transparent 512x224 sheet; each TREE_SPRITE
+// is the tight pixel bounds of one tree cut out of it via drawImage source
+// rects (no need to slice separate files). The three chosen are full, leafy
+// trees, one per `variant` (tiles/worldgen), each with its baked soft shadow.
+// Bounds measured off the sheet's alpha. Rendered by Renderer.drawTree.
+export const TREE_SHEET = load(T + 'trees.png');
+export const TREE_SPRITES = [
+  { sx: 454, sy: 121, sw: 51, sh: 95 }, // variant 0: big leafy round
+  { sx: 454, sy: 13, sw: 51, sh: 91 },  // variant 1: big bushy
+  { sx: 392, sy: 145, sw: 46, sh: 71 }, // variant 2: medium
+];
+
 // Directional character renders for Adam/Eve/Neve, used by
 // Renderer.drawPlayer/drawPlayerSprite. Sourced from Kenney's CC0
 // "Animated Characters Retro" pack

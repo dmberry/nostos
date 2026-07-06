@@ -5,7 +5,7 @@ import { drawAnimal } from '../game/animals.js';
 import { drawBird } from '../game/birds.js';
 import { drawRobot } from '../game/robots.js';
 import { drawWaterDroid } from '../game/waterdroids.js';
-import { FLOOR_TEXTURES, WALL_TEXTURES, GRASS_PATCH_TEXTURE, CHARACTER_SPRITE_SETS, CHAR_COMPASS_DIRS } from './textures.js';
+import { FLOOR_TEXTURES, WALL_TEXTURES, GRASS_PATCH_TEXTURE, CHARACTER_SPRITE_SETS, CHAR_COMPASS_DIRS, TREE_SHEET, TREE_SPRITES } from './textures.js';
 
 // Maps a facing vector to one of 8 pre-rendered screen-compass directions
 // for CHARACTER_SPRITE_SETS (see textures.js) — replaces the old trick of
@@ -1154,6 +1154,23 @@ export class Renderer {
     // Three kinds of tree, plus a growth scale for saplings that grow in.
     const variant = obj.variant || 0;
     const g = Math.max(0.35, Math.min(1, obj.grow == null ? 1 : obj.grow));
+
+    // Hand-drawn tree art (assets/textures/trees.png) cut out per variant.
+    // The sprite carries its own baked shadow, so it's positioned with its
+    // base at the tile centre; the wobble rotates it a hair about that base.
+    // Falls back to the procedural tree below until the sheet has loaded.
+    const spr = TREE_SPRITES[variant % TREE_SPRITES.length];
+    if (spr && TREE_SHEET && TREE_SHEET.complete && TREE_SHEET.naturalWidth) {
+      const BASE = 0.72;          // sheet px -> screen px for a full-grown tree
+      const dw = spr.sw * BASE * g, dh = spr.sh * BASE * g;
+      ctx.save();
+      ctx.translate(c.x, c.y + 3);   // pivot at the trunk base (shadow sits here)
+      if (wob) ctx.rotate(wob * 0.012);
+      ctx.drawImage(TREE_SHEET, spr.sx, spr.sy, spr.sw, spr.sh, -dw / 2, -dh, dw, dh);
+      ctx.restore();
+      return;
+    }
+
     const trunkH = 26 * g;
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
     ctx.beginPath();
