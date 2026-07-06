@@ -846,8 +846,17 @@ function updateW4(r, dt, player, map) {
     r.facing = { x: (player.x - r.x) / d, y: (player.y - r.y) / d };
     if (r.attackTimer <= 0) {
       r.attackTimer = W4_FIRE_COOLDOWN;
-      player.takeDamage(W4_DAMAGE, 'machine');
       (map.projectiles ??= []).push({ x0: r.x, y0: r.y, x1: player.x, y1: player.y, prog: 0, kind: 'laser' });
+      // A shield or forcefield can stop the bolt; a mirror shield throws it
+      // straight back and hurts the shooter.
+      const block = player.blockRangedShot ? player.blockRangedShot(r.x, r.y) : null;
+      if (block === 'reflect') {
+        r.hp -= 8; r.hurt = true;
+        (map.sparks ??= []).push({ x: r.x, y: r.y, ttl: 0.3, max: 0.3 });
+        map.projectiles.push({ x0: player.x, y0: player.y, x1: r.x, y1: r.y, prog: 0, kind: 'laser' });
+      } else if (!block) {
+        player.takeDamage(W4_DAMAGE, 'machine');
+      }
     }
   }
 }

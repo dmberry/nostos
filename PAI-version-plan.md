@@ -17,7 +17,14 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
-## Where we are (v0.75)
+## Where we are (v0.76)
+
+### v0.76 — shields + forcefield, bigger-tree wood, hand-height tools, softer car shadow
+
+- **Shields and a forcefield.** Three new held items (`items.js`): `shield` (absorbs a laser from the front), `mirror_shield` (reflects it back for `REFLECT_DAMAGE`), and `forcefield` (a battery-powered green shell that stops everything, all-round). `Player.blockRangedShot(sx,sy)` decides absorb/reflect/none by facing; the W4 and W2 fire sites consult it before dealing laser damage (and take the reflected hit). `Player.takeDamage` short-circuits entirely while the forcefield is up, so it also stops melee. Forcefield burns `FORCEFIELD_MAX` (60s) per battery, auto-pulling a fresh cell when one runs dry (mirrors the Wi-Fi block). Bubble drawn in `drawPlayer`; shield/forcefield icons in `drawItemIcon`; all three seeded into caches (shield common-ish, mirror rarer, forcefield a single rare find). Verified: reflect only from the front, forcefield blocks any direction and zeroes incoming damage.
+- **Bigger trees drop more wood.** Wood yield is now per tree variant (`[4,4,3,1,2]` for big/big/medium/small/dead), scaled by `grow` for saplings, instead of a flat 2.
+- **In-hand tool at hand height.** The held-item anchor moved down (`by-16` → `by-10`) so it reads as held in the hands, not floating at the shoulder.
+- **Softer car shadow.** Replaced the hard flat oval with a radial-gradient ellipse hugging the car's footprint; it's cosmetic only (collision is the tight 2x2), so you can walk across it.
 
 ### v0.75 — smashed-car grime, tighter car collision, smaller tools, fainter boundary
 

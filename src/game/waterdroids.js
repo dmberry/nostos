@@ -281,7 +281,9 @@ export function updateWaterDroids(dt, droids, player, map) {
       const playerInWater = player.swimming || pf === 'water' || pf === 'stream';
       if (playerInWater && distTo(d, player) < FIRE_RANGE && d.fireTimer <= 0) {
         d.fireTimer = FIRE_COOLDOWN;
-        player.takeDamage(FIRE_DAMAGE, 'droid');
+        const block = player.blockRangedShot ? player.blockRangedShot(d.x, d.y) : null;
+        if (block === 'reflect') { d.hp -= 8; d.hurt = true; }
+        else if (!block) player.takeDamage(FIRE_DAMAGE, 'droid');
       }
     } else {
       // Idle: drift home along the river with a gentle hover.

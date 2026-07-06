@@ -1585,10 +1585,24 @@ export class Renderer {
     const dw = spr.naturalWidth * scale, dh = spr.naturalHeight * scale;
     ctx.save();
     ctx.translate(c.x + wob, c.y);
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.beginPath();
-    ctx.ellipse(0, 8, dw * 0.4, dh * 0.2, 0, 0, Math.PI * 2);
-    ctx.fill();
+    // Soft, gradient-edged shadow hugging the car's ground footprint, rather
+    // than the old hard flat oval. Purely cosmetic — it isn't collision (that
+    // is the tight 2x2), so you can walk across it.
+    {
+      const shW = dw * 0.34, shH = dh * 0.15;
+      ctx.save();
+      ctx.translate(0, 14);
+      ctx.scale(1, shH / shW);
+      const grad = ctx.createRadialGradient(0, 0, shW * 0.2, 0, 0, shW);
+      grad.addColorStop(0, 'rgba(0,0,0,0.32)');
+      grad.addColorStop(0.72, 'rgba(0,0,0,0.2)');
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(0, 0, shW, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
     const dx = -dw / 2, dy = -dh * 0.72; // wheels sit near the footprint centre
     if (obj.smashed) {
       const off = tintScratch(spr.naturalWidth, spr.naturalHeight);
@@ -1742,6 +1756,36 @@ export class Renderer {
     ctx.save();
     ctx.translate(cx, cy);
     ctx.scale(s, s);
+    if (itemDef.kind === 'shield') {
+      // A rounded heater-shield outline; a mirror shield gets a bright sheen.
+      ctx.fillStyle = itemDef.color;
+      ctx.beginPath();
+      ctx.moveTo(-7, -9); ctx.lineTo(7, -9);
+      ctx.lineTo(7, 3); ctx.quadraticCurveTo(0, 12, 0, 12);
+      ctx.quadraticCurveTo(0, 12, -7, 3);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1; ctx.stroke();
+      if (itemDef.reflect) {
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        ctx.beginPath(); ctx.moveTo(-3, -6); ctx.lineTo(2, -6); ctx.lineTo(-2, 6); ctx.lineTo(-5, 6); ctx.closePath(); ctx.fill();
+      } else {
+        ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.beginPath(); ctx.moveTo(0, -7); ctx.lineTo(0, 9); ctx.stroke();
+      }
+      ctx.restore();
+      return;
+    }
+    if (itemDef.kind === 'forcefield') {
+      // A little emitter with a green energy halo.
+      ctx.fillStyle = '#2a3b30';
+      ctx.fillRect(-4, 2, 8, 7);
+      ctx.strokeStyle = itemDef.color; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 0.4;
+      ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.restore();
+      return;
+    }
     if (key && key.startsWith('book_')) {
       ctx.fillStyle = itemDef.color;
       ctx.fillRect(-8, -10, 16, 20);
@@ -2164,6 +2208,21 @@ export class Renderer {
     ctx.beginPath();
     ctx.arc(f.x, f.y - 10, 2.5, 0, Math.PI * 2);
     ctx.fill();
+
+    // Forcefield: a shimmering green shell around the whole character.
+    if (player.forcefieldActive && player.forcefieldActive()) {
+      const t = performance.now();
+      const rr = 25 + Math.sin(t / 260) * 1.8;
+      ctx.save();
+      ctx.fillStyle = 'rgba(80,230,140,0.12)';
+      ctx.strokeStyle = `rgba(120,245,170,${(0.55 + 0.2 * Math.sin(t / 180)).toFixed(3)})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(c.x, by - 12, rr, rr * 1.08, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   // The held tool/gun/gadget/shield shown in hand, out toward the facing
@@ -2189,7 +2248,9 @@ export class Renderer {
       extraAng = p >= 0 ? (-1.0 + p * 1.7) : 0;
     }
     const hx = c.x + 3 + player.facing.x * 11 * reach / 0.42;
-    const hy = by - 16 + player.facing.y * 7 * reach / 0.42;
+    // Sit the item at the character's hand height (mid-torso), not up by the
+    // shoulders where it read as floating.
+    const hy = by - 10 + player.facing.y * 7 * reach / 0.42;
     ctx.save();
     ctx.translate(hx, hy);
     ctx.rotate(baseAng + extraAng);

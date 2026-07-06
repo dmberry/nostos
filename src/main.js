@@ -31,7 +31,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '0.75';
+const VERSION = '0.76';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -130,6 +130,12 @@ const obelisks = [];
     [{ item: 'seatbelt', qty: 1 }],
     [{ item: 'bat', qty: 1 }],
     [{ item: 'machete', qty: 1 }],
+    // Defensive gear: a plain riot shield (common-ish), a rarer mirror shield
+    // that reflects lasers, and a single very rare forcefield with a few
+    // cells to run it.
+    [{ item: 'shield', qty: 1 }],
+    [{ item: 'mirror_shield', qty: 1 }, { item: 'battery', qty: 2 }],
+    [{ item: 'forcefield', qty: 1 }, { item: 'battery', qty: 4 }],
   ];
   const rollLoot = () => {
     const r = rng();

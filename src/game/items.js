@@ -216,6 +216,35 @@ export const ITEMS = {
     ammoType: 'battery',
     color: '#4fd8c3',
   },
+  // Held defensive gear (kind 'shield'): while it's in your hands a laser
+  // coming at you from roughly the front is stopped. A plain shield absorbs
+  // it; a mirror shield throws it straight back at whoever fired. Holding one
+  // means no weapon in hand, so it's a real choice.
+  shield: {
+    name: 'Riot shield',
+    kind: 'shield',
+    tier: 3,
+    reflect: false,
+    color: '#5a6b7a',
+  },
+  mirror_shield: {
+    name: 'Mirror shield',
+    kind: 'shield',
+    tier: 5,
+    reflect: true,
+    color: '#a6dbe6',
+  },
+  // A rare held gadget: while carried it wraps you in a green energy bubble
+  // that nothing — shot or blow — can get through, but it burns a battery a
+  // minute. When the cell runs out it pulls another from your kit; with none
+  // left the field drops.
+  forcefield: {
+    name: 'Forcefield',
+    kind: 'forcefield',
+    tier: 6,
+    ammoType: 'battery',
+    color: '#4fe08a',
+  },
   // Crafted from a stun-gun + electro-gun + Wi-Fi block (press C when you
   // hold all three). Sets an obelisk ablaze; five hits bring one down.
   obgun: {

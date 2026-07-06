@@ -32,6 +32,10 @@ const JUMP_VZ = 3.8;      // initial jump velocity (world units/s)
 const GRAVITY = 12;
 const JUMP_COST = 3;      // stamina
 const CLIMB_COST = 2;     // stamina per height level climbed
+const FORCEFIELD_MAX = 60;  // seconds of forcefield per battery
+const FORCEFIELD_DRAIN = 1; // charge/sec while the field is up
+const SHIELD_FRONT = 0.2;   // a shield covers shots from within this facing dot
+const REFLECT_DAMAGE = 8;   // a mirror shield throws this back at the shooter
 
 const WIFI_MAX = 600;    // Wi-Fi block charge in seconds (10 real minutes)
 const SWIM_STAMINA_DRAIN = 8;  // stamina/sec while in deep water
@@ -76,6 +80,7 @@ export class Player {
     this.z = 0;           // height above ground while jumping
     this.vz = 0;
     this.doubleJumped = false; // a second, mid-air jump: reaches block tops
+    this.forcefieldCharge = 0; // seconds of forcefield left in the current cell
     this.facing = { x: 0, y: 1 };
     this.moving = false;
     this.sprinting = false;
@@ -456,6 +461,23 @@ export class Player {
     this.invisibleToRobots = this.ownsWifiBlock() && this.wifiPower > 0;
     this._wifiOn = this.invisibleToRobots;
 
+    // Forcefield: only up while it's the item in your hands. It burns its
+    // charge; when a cell runs out it pulls a fresh battery from your kit, and
+    // with none left the field drops until you feed it one.
+    if (this.hands === 'forcefield') {
+      if (this.forcefieldCharge > 0) {
+        this.forcefieldCharge = Math.max(0, this.forcefieldCharge - FORCEFIELD_DRAIN * dt);
+      } else if (this.consumeBattery()) {
+        this.forcefieldCharge = FORCEFIELD_MAX;
+        if (!this._ffOn) this.say('The forcefield hums up around you — a green shell nothing gets through.');
+      } else if (this._ffOn) {
+        this.say('The forcefield flickers out. It needs a battery.');
+      }
+      this._ffOn = this.forcefieldCharge > 0;
+    } else {
+      this._ffOn = false;
+    }
+
     if (input.usePressed()) this.useHands(map, animals, robots);
     if (input.eatPressed()) this.eat();
     if (input.readPressed()) this.read(robots);
@@ -653,6 +675,15 @@ export class Player {
     const obj = map.objectAt(tx, ty);
     const facingBox = obj && obj.type === 'box';
 
+    // Defensive gear is passive — a shield blocks by being held and facing the
+    // shot, a forcefield by simply being up. Using it just searches a cache
+    // ahead if there is one, otherwise does nothing.
+    if (tool.kind === 'shield' || tool.kind === 'forcefield') {
+      if (facingBox) this.openBox(obj, map);
+      else if (tool.kind === 'shield') this.say('You raise the shield.');
+      return;
+    }
+
     if (tool.kind === 'gun' || tool.kind === 'gadget' || tool.kind === 'bomb') {
       if (facingBox) { this.openBox(obj, map); return; }
       if (tool.kind === 'gun') this.fire(tool, map, animals, robots);
@@ -778,7 +809,12 @@ export class Player {
 
     if (obj.hp <= 0) {
       map.removeObject(obj);
-      map.groundItems.push({ item: 'wood', qty: WOOD_PER_TREE, x: obj.x + 0.5, y: obj.y + 0.5 });
+      // Bigger trees yield more wood: the two large variants most, the medium
+      // one less, a small one least, a bare/dead one somewhere between. A
+      // part-grown sapling (obj.grow) yields proportionally less.
+      const byVariant = [4, 4, 3, 1, 2];
+      const wood = Math.max(1, Math.round((byVariant[obj.variant] ?? WOOD_PER_TREE) * (obj.grow == null ? 1 : obj.grow)));
+      map.groundItems.push({ item: 'wood', qty: wood, x: obj.x + 0.5, y: obj.y + 0.5 });
       sfx.play('treefall');
       // A felled tree scores a point; the right tool (a saw) or the skill to
       // use it earns more.
@@ -1309,7 +1345,32 @@ export class Player {
     map.groundItems = map.groundItems.filter((gi) => gi.qty > 0);
   }
 
+  forcefieldActive() {
+    return this.hands === 'forcefield' && this.forcefieldCharge > 0;
+  }
+
+  // A laser is on its way from (sx,sy). Returns how it's stopped, if at all:
+  //  'reflect' — a mirror shield facing the shooter throws it back
+  //  'absorb'  — a plain shield facing the shooter, or the forcefield, eats it
+  //  null      — nothing stops it; it lands
+  // A shield only covers the front, so it's no help against a shot from
+  // behind; the forcefield is all-round.
+  blockRangedShot(sx, sy) {
+    if (this.forcefieldActive()) return 'absorb';
+    const held = this.hands && ITEMS[this.hands];
+    if (held && held.kind === 'shield') {
+      const dx = sx - this.x, dy = sy - this.y;
+      const d = Math.hypot(dx, dy) || 1;
+      if ((dx / d) * this.facing.x + (dy / d) * this.facing.y > SHIELD_FRONT) {
+        return held.reflect ? 'reflect' : 'absorb';
+      }
+    }
+    return null;
+  }
+
   takeDamage(amount, source) {
+    // The forcefield stops everything — shot or blow — while it's up.
+    if (this.forcefieldActive()) { this.hurtTimer = 0.12; return; }
     this.health -= amount;
     this.hurtTimer = 0.35;
     if (source === 'viper') sfx.play('hiss');
