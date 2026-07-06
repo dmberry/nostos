@@ -273,8 +273,13 @@ export function updateWaterDroids(dt, droids, player, map) {
       const target = edge || { x: d.homeX, y: d.homeY };
       skimToward(d, target.x, target.y, CHASE_SPEED, dt, map);
 
-      // Fire in the wave while within range and near the bank the player is on.
-      if (distTo(d, player) < FIRE_RANGE && d.fireTimer <= 0) {
+      // Fire in the wave — but a water droid can only reach you while you're
+      // actually in the water (swimming, or standing in a stream). Step onto
+      // dry land or a bridge and its shots can't touch you, though you can
+      // still shoot it from the bank. It keeps tracking you either way.
+      const pf = map.floorAt(Math.floor(player.x), Math.floor(player.y));
+      const playerInWater = player.swimming || pf === 'water' || pf === 'stream';
+      if (playerInWater && distTo(d, player) < FIRE_RANGE && d.fireTimer <= 0) {
         d.fireTimer = FIRE_COOLDOWN;
         player.takeDamage(FIRE_DAMAGE, 'droid');
       }

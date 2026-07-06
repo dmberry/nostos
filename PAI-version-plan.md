@@ -17,7 +17,12 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
-## Where we are (v0.72)
+## Where we are (v0.73)
+
+### v0.73 — gravel boundary texture, water droids gated to water
+
+- **Boundary blocks re-textured.** They were faced with the road texture and read as just more road. Now faced with a dark crushed-gravel/asphalt photo (`photo-unsorted-2.jpg`, new `EDGE_TEXTURE` in textures.js) so the map edge reads as rock, clearly distinct from the roads inside the map. Still semi-transparent and depth-sorted as in v0.72.
+- **Water droids can only hit you in the water.** `updateWaterDroids` gated the fire/damage on `player.swimming || floorAt(player) is water/stream`. Step onto dry land or a bridge and a W2's shots can't reach you — though it keeps tracking you and you can still shoot it from the bank. (They fire on the whole squad's wave otherwise unchanged.)
 
 ### v0.72 — render fixes: held-item depth, boundary blocks, swimming head
 

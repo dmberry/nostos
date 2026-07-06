@@ -65,6 +65,11 @@ export const WALL_TEXTURES = {
 // rects (no need to slice separate files). The three chosen are full, leafy
 // trees, one per `variant` (tiles/worldgen), each with its baked soft shadow.
 // Bounds measured off the sheet's alpha. Rendered by Renderer.drawTree.
+// Dark crushed-gravel/asphalt used to face the impassable blocks ringing the
+// map edge — deliberately NOT the road texture, so the boundary reads as rock
+// rather than another road. See Renderer.drawEdgeRock.
+export const EDGE_TEXTURE = loadDownscaled(T + 'photo-unsorted-2.jpg');
+
 export const TREE_SHEET = load(T + 'trees.png');
 export const TREE_SPRITES = [
   { sx: 454, sy: 121, sw: 51, sh: 95 }, // variant 0: big leafy round

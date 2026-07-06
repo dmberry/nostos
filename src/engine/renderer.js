@@ -5,7 +5,7 @@ import { drawAnimal } from '../game/animals.js';
 import { drawBird } from '../game/birds.js';
 import { drawRobot } from '../game/robots.js';
 import { drawWaterDroid } from '../game/waterdroids.js';
-import { FLOOR_TEXTURES, WALL_TEXTURES, GRASS_PATCH_TEXTURE, CHARACTER_SPRITE_SETS, CHAR_COMPASS_DIRS, TREE_SHEET, TREE_SPRITES } from './textures.js';
+import { FLOOR_TEXTURES, WALL_TEXTURES, GRASS_PATCH_TEXTURE, CHARACTER_SPRITE_SETS, CHAR_COMPASS_DIRS, TREE_SHEET, TREE_SPRITES, EDGE_TEXTURE } from './textures.js';
 
 // Maps a facing vector to one of 8 pre-rendered screen-compass directions
 // for CHARACTER_SPRITE_SETS (see textures.js) — replaces the old trick of
@@ -861,7 +861,7 @@ export class Renderer {
   drawEdgeRock(tx, ty) {
     const ctx = this.ctx;
     const H = EDGE_ROCK_H;
-    const tex = FLOOR_TEXTURES.road;
+    const tex = EDGE_TEXTURE;
     const ready = tex && tex.complete && tex.naturalWidth;
     const shade = 0.9 + tileHash(tx * 7 + 3, ty * 5 + 1) * 0.2;
     const base = [96 * shade, 100 * shade, 108 * shade];
