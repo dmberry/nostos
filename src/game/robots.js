@@ -127,6 +127,7 @@ const PROGRESS_FRACTION = 0.25; // moved less than this share of a full step cou
 const SPAWN_MIN_R = 1.5;        // robots seat this far from their tower...
 const SPAWN_MAX_R = 4;          // ...to about this far, expanding if crowded
 const SPAWN_MAX_R_FALLBACK = 8;
+const FACTORY_SPAWN_T = 0.75;  // seconds a factory-dispatched bot flickers in
 const SCRAP_MIN = 1;            // scrap dropped on destruction: SCRAP_MIN + 0 or 1
 
 // Battery: every machine spawns part-charged and burns power by activity.
@@ -281,6 +282,7 @@ export function spawnW1s(map, seed, ox, oy, count = 3) {
     used.add(`${spot[0]},${spot[1]}`);
     const r = baseRobot('w1', spot[0], spot[1], W1_HP, rng);
     r.aggro = true; // deployed hunting: no detection phase
+    r.spawnT = FACTORY_SPAWN_T; // flicker into existence out of the factory
     // Evenly spread around the target angle-wise (plus a little jitter) so a
     // squad surrounds rather than stacks, and staggered attack/withdraw
     // phases so the wave doesn't hit and retreat in perfect unison.
@@ -303,6 +305,7 @@ export function spawnW4(map, seed, fx, fy) {
   if (!spot) return null;
   const r = baseRobot('w4', spot[0], spot[1], W4_HP, rng);
   r.aggro = true;
+  r.spawnT = FACTORY_SPAWN_T;
   return r;
 }
 
@@ -315,7 +318,9 @@ export function spawnW3(map, seed, fx, fy) {
   const avoid = { x: fx, y: fy, r: 0 };
   const spot = seatNear(map, fx, fy, avoid, used, rng, SPAWN_MAX_R_FALLBACK);
   if (!spot) return null;
-  return baseRobot('w3', spot[0], spot[1], W3_HP, rng);
+  const r = baseRobot('w3', spot[0], spot[1], W3_HP, rng);
+  r.spawnT = FACTORY_SPAWN_T;
+  return r;
 }
 
 // ---- Movement helpers -----------------------------------------------------
@@ -478,6 +483,10 @@ function updateRecharge(r, dt, map) {
 export function updateRobots(dt, robots, player, map) {
   for (const r of robots) {
     if (r.dead) continue; // external code may set dead directly; nothing runs after
+
+    // Materialising out of the factory: tick down the flicker timer. The bot
+    // still moves and fights normally while it fades in.
+    if (r.spawnT > 0) r.spawnT = Math.max(0, r.spawnT - dt);
 
     // Fused wrecks: permanently dead-in-place scenery. No AI, no recharge,
     // no scrap of their own; external mining code decrements mineCharges and
@@ -851,8 +860,9 @@ function updateW4(r, dt, player, map) {
       // straight back and hurts the shooter.
       const block = player.blockRangedShot ? player.blockRangedShot(r.x, r.y) : null;
       if (block === 'reflect') {
-        r.hp -= 8; r.hurt = true;
-        (map.sparks ??= []).push({ x: r.x, y: r.y, ttl: 0.3, max: 0.3 });
+        // A mirror shield throws the bolt straight back and destroys the shooter.
+        r.hp -= 999; r.hurt = true;
+        for (let s = 0; s < 5; s++) (map.sparks ??= []).push({ x: r.x + (s - 2) * 0.15, y: r.y + (s % 2) * 0.2, ttl: 0.35, max: 0.35 });
         map.projectiles.push({ x0: player.x, y0: player.y, x1: r.x, y1: r.y, prog: 0, kind: 'laser' });
       } else if (!block) {
         player.takeDamage(W4_DAMAGE, 'machine');
@@ -1024,6 +1034,15 @@ function drawBatteryIcon(ctx, x, y) {
 
 export function drawRobot(ctx, robot, worldToScreen) {
   if (robot.dead) return;
+  // Factory materialisation: flicker in from nothing over FACTORY_SPAWN_T.
+  let flickered = false;
+  if (robot.spawnT > 0) {
+    const base = 1 - robot.spawnT / FACTORY_SPAWN_T;          // 0 -> 1 fade-in
+    const buzz = 0.55 + 0.45 * Math.abs(Math.sin(performance.now() / 45));
+    ctx.save();
+    ctx.globalAlpha = Math.max(0.08, Math.min(1, base * buzz));
+    flickered = true;
+  }
   const c = worldToScreen(robot.x, robot.y);
   if (robot.zombie) {
     // A sickly green halo: the tell that only a bow or the wave gun works.
@@ -1034,6 +1053,7 @@ export function drawRobot(ctx, robot, worldToScreen) {
   }
   if (robot.type === 't1') drawT1(ctx, robot, c, worldToScreen);
   else drawT2(ctx, robot, c);
+  if (flickered) ctx.restore();
 }
 
 function drawT1(ctx, r, c, worldToScreen) {

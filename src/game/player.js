@@ -81,7 +81,9 @@ export class Player {
     this.vz = 0;
     this.doubleJumped = false; // a second, mid-air jump: reaches block tops
     this.forcefieldCharge = 0; // seconds of forcefield left in the current cell
-    this.ammoFrac = {};        // accumulated fractional ammo per gun (e.g. electro-gun sips 5%/shot)
+    this.ammoFrac = {};        // accumulated fractional ammo per gun
+    this.electroCharge = (ITEMS.electrogun && ITEMS.electrogun.internalMax) || 4; // electro-gun's self-charging internal cell
+    this.terminalSafe = false;  // true while jacked into an obelisk terminal (invisible to machines)
     this.facing = { x: 0, y: 1 };
     this.moving = false;
     this.sprinting = false;
@@ -232,6 +234,23 @@ export class Player {
   // main.js ticks the ttl and the renderer draws + prunes it.
   sparkAt(map, x, y) {
     (map.sparks ??= []).push({ x, y, ttl: 0.3, max: 0.3 });
+  }
+
+  // A bright burst — several sparks scattered around a point (electro-gun kills).
+  sparkBurst(map, x, y) {
+    const off = [[0, 0], [0.4, 0.1], [-0.3, 0.2], [0.2, -0.3], [-0.25, -0.2]];
+    for (const [ox, oy] of off) (map.sparks ??= []).push({ x: x + ox, y: y + oy, ttl: 0.35, max: 0.35 });
+  }
+
+  // Startle nearby animals into fleeing (e.g. the electro-gun's crackle). Sets
+  // a scared timer that updateAnimals turns into a run away from the player.
+  scareAnimals(animals, range) {
+    for (const a of (animals || [])) {
+      if (a.dead) continue;
+      if (Math.hypot(a.x - this.x, a.y - this.y) > range) continue;
+      a.scaredT = Math.max(a.scaredT || 0, 3);
+      if (a.type === 'dog') { a.fleeTimer = Math.max(a.fleeTimer || 0, 3); a.aggro = false; }
+    }
   }
 
   // How far a beam actually reaches along the facing direction before a
@@ -459,8 +478,10 @@ export class Player {
         this.say('Your Wi-Fi block is flat. It needs a battery.');
       }
     }
-    this.invisibleToRobots = this.ownsWifiBlock() && this.wifiPower > 0;
-    this._wifiOn = this.invisibleToRobots;
+    // Jacked into an obelisk terminal (with a chip), the obelisk shields you —
+    // the machines lose you entirely, same as a live Wi-Fi block.
+    this.invisibleToRobots = (this.ownsWifiBlock() && this.wifiPower > 0) || this.terminalSafe;
+    this._wifiOn = this.ownsWifiBlock() && this.wifiPower > 0;
 
     // Forcefield: only up while it's the item in your hands. It burns its
     // charge; when a cell runs out it pulls a fresh battery from your kit, and
@@ -477,6 +498,13 @@ export class Player {
       this._ffOn = this.forcefieldCharge > 0;
     } else {
       this._ffOn = false;
+    }
+
+    // Electro-gun solar trickle: while you carry it (hand, pocket, or pack)
+    // its internal cell slowly refills, so it comes back to life on its own.
+    if (this.hasItem('electrogun')) {
+      const eg = ITEMS.electrogun;
+      this.electroCharge = Math.min(eg.internalMax, this.electroCharge + eg.chargeRate * dt);
     }
 
     if (input.usePressed()) this.useHands(map, animals, robots);
@@ -1278,31 +1306,31 @@ export class Player {
     if (tool.animalDamage != null) for (const a of animals) consider(a, false);
     for (const r of robots) consider(r, true);
 
-    // Ammo comes from the pockets first, then the backpack — no need to
-    // manually shuffle rounds forward before a fight. Consumed whether or not
-    // there's a target in range: pulling the trigger with nothing in your
-    // sights still wastes the round rather than refusing to fire.
-    let ammoSlots = this.pockets;
-    let i = this.pockets.findIndex((s) => s && s.item === tool.ammoType);
-    if (i < 0 && this.backpack) {
-      i = this.backpack.slots.findIndex((s) => s && s.item === tool.ammoType);
-      ammoSlots = this.backpack.slots;
-    }
-    if (i < 0) {
-      this.say(`The ${tool.name.toLowerCase()} is dead weight without ${ITEMS[tool.ammoType].name.toLowerCase()}.`);
-      return;
-    }
-    // A weapon that only sips its cell (the electro-gun, 5% per shot) spends a
-    // whole battery only once the accumulated fraction tips over one; the
-    // pocket count stays a clean integer.
-    if (tool.fractionalAmmo) {
-      this.ammoFrac[tool.key] = (this.ammoFrac[tool.key] || 0) + tool.fractionalAmmo;
-      if (this.ammoFrac[tool.key] >= 1) {
-        this.ammoFrac[tool.key] -= 1;
-        ammoSlots[i].qty -= 1;
-        if (ammoSlots[i].qty <= 0) ammoSlots[i] = null;
+    // The electro-gun runs off its own self-charging cell — no pocket ammo.
+    // When the cell's too low it just needs a moment to trickle back up.
+    if (tool.selfCharge) {
+      if (this.electroCharge < tool.shotCost) {
+        this.say('The electro-gun hums, near flat — give its cell a moment to recharge.');
+        return;
       }
+      this.electroCharge -= tool.shotCost;
+      // Firing near wildlife spooks it: the crackle sends animals bolting.
+      this.scareAnimals(animals, 7);
     } else {
+      // Other guns draw ammo from the pockets first, then the backpack — no
+      // need to manually shuffle rounds forward. Consumed whether or not
+      // there's a target in range: pulling the trigger with nothing in your
+      // sights still wastes the round rather than refusing to fire.
+      let ammoSlots = this.pockets;
+      let i = this.pockets.findIndex((s) => s && s.item === tool.ammoType);
+      if (i < 0 && this.backpack) {
+        i = this.backpack.slots.findIndex((s) => s && s.item === tool.ammoType);
+        ammoSlots = this.backpack.slots;
+      }
+      if (i < 0) {
+        this.say(`The ${tool.name.toLowerCase()} is dead weight without ${ITEMS[tool.ammoType].name.toLowerCase()}.`);
+        return;
+      }
       ammoSlots[i].qty -= 1;
       if (ammoSlots[i].qty <= 0) ammoSlots[i] = null;
     }
@@ -1341,8 +1369,8 @@ export class Player {
       target.fused = true;
       target.mineCharges = 3;
       target.disabledT = 0;
-      this.sparkAt(map, target.x, target.y);
-      this.say('The machine fuses solid: blackened, dead, and full of parts.');
+      this.sparkBurst(map, target.x, target.y);
+      this.say('The machine fries solid in a shower of sparks: blackened, dead, and full of parts.');
     } else if (isRobot) {
       sfx.play('shot');
       target.scrapPenalty = true; // gunfire mangles the salvage
@@ -1458,23 +1486,24 @@ export class Player {
     return best;
   }
 
-  // A laser is on its way from (sx,sy). Returns how it's stopped, if at all:
-  //  'reflect' — a mirror shield facing the shooter throws it back
-  //  'absorb'  — a plain shield facing the shooter, or the forcefield, eats it
+  // A laser is on its way. Returns how it's stopped, if at all:
+  //  'reflect' — a mirror shield throws it back, destroying the shooter
+  //  'absorb'  — a plain shield or the forcefield eats it
   //  null      — nothing stops it; it lands
-  // A shield only covers the front, so it's no help against a shot from
-  // behind; the forcefield is all-round.
-  blockRangedShot(sx, sy) {
+  // Shields work while simply CARRIED (hand, pocket, or pack) — they're a
+  // worn deflector, not something you have to hold up and aim — and cover you
+  // from any direction. The mirror shield takes priority over the plain one.
+  blockRangedShot() {
     if (this.forcefieldActive()) return 'absorb';
-    const held = this.hands && ITEMS[this.hands];
-    if (held && held.kind === 'shield') {
-      const dx = sx - this.x, dy = sy - this.y;
-      const d = Math.hypot(dx, dy) || 1;
-      if ((dx / d) * this.facing.x + (dy / d) * this.facing.y > SHIELD_FRONT) {
-        return held.reflect ? 'reflect' : 'absorb';
-      }
-    }
+    if (this.hasItem('mirror_shield')) return 'reflect';
+    if (this.hasItem('shield')) return 'absorb';
     return null;
+  }
+
+  // True if a carried shield/forcefield is currently shielding you — used to
+  // draw the protective glow even when the item isn't in hand.
+  shielded() {
+    return this.forcefieldActive() || this.hasItem('mirror_shield') || this.hasItem('shield');
   }
 
   takeDamage(amount, source) {

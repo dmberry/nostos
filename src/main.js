@@ -31,7 +31,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '0.80';
+const VERSION = '0.81';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -138,6 +138,8 @@ const obelisks = [];
     [{ item: 'forcefield', qty: 1 }, { item: 'battery', qty: 4 }],
     // A navigation aid: the electro-compass.
     [{ item: 'compass', qty: 1 }],
+    // The access chip: your interface into the obelisk terminals.
+    [{ item: 'chip', qty: 1 }],
   ];
   const rollLoot = () => {
     const r = rng();
@@ -457,34 +459,88 @@ for (const btn of helpEl.querySelectorAll('.helpTab')) {
   });
 }
 
-// Obelisk terminal (VT220 style). Non-functional for now — it boots, shows the
-// node's code and a prompt, and waits. The hooks are here for the code-hacking
-// language to come. Opened by clicking an obelisk within OB_TERMINAL_RANGE.
+// Obelisk terminal. With an access chip carried, clicking an obelisk opens a
+// channel (a progress bar) into the RON-DOS console — and while you're jacked
+// in the obelisk hides you from the machines. Without a chip you instead see
+// the AI's own OS: alive with data, and unusable. Both are read-only for now;
+// the hooks are here for the code-hacking language to come.
 const OB_TERMINAL_RANGE = 4.5;
 const obTermEl = document.getElementById('obterminal');
 const obTermScreen = document.getElementById('obterminal-screen');
+const obTermConnect = document.getElementById('obterminal-connect');
+const obTermBar = document.getElementById('obterminal-bar');
+const aiosEl = document.getElementById('aios');
+const aiosScreen = document.getElementById('aios-screen');
+const aiosHeader = document.getElementById('aios-header');
+
 function openObTerminal(ob) {
-  const boot = [
-    'SKYLINK NODE TERMINAL  v2.20',
-    'RON-DOS 4.11  (c) Reality Or Nothing',
-    '',
-    `> connecting to node ${ob.code || 'OB-????'} ...`,
-    '> handshake ....... OK',
-    `> circuit id ...... ${ob.circuitNum != null ? '#' + ob.circuitNum : 'sealed'}`,
-    '> access .......... LOCKED',
-    '',
-    'no key recognised. terminal is read-only.',
-    'awaiting instruction set.',
-    '',
-    'READY.',
-    '_',
-  ].join('\n');
-  obTermScreen.textContent = boot;
+  if (!player.hasItem('chip')) { openAiOs(ob); return; }
+  // Chip present: jack in. Go invisible, then run the connect progress bar.
+  player.terminalSafe = true;
   obTermEl.style.display = 'flex';
-  player.say(`You jack into obelisk ${ob.code || ''}. The screen wakes, green and waiting.`);
+  obTermScreen.style.display = 'none';
+  obTermConnect.style.display = 'block';
+  obTermBar.style.width = '0%';
+  player.say(`Access chip accepted. Opening a channel into ${ob.code || 'the node'} — you drop off their sensors.`);
+  const start = performance.now(), DURATION = 1600;
+  const step = (now) => {
+    if (obTermEl.style.display === 'none') return; // closed early
+    const p = Math.min(1, (now - start) / DURATION);
+    obTermBar.style.width = (p * 100).toFixed(0) + '%';
+    if (p < 1) { requestAnimationFrame(step); return; }
+    obTermConnect.style.display = 'none';
+    obTermScreen.style.display = 'block';
+    obTermScreen.textContent = [
+      'SKYLINK NODE TERMINAL  v2.20',
+      'RON-DOS 4.11  (c) Reality Or Nothing',
+      '',
+      `> node ............ ${ob.code || 'OB-????'}`,
+      `> circuit id ...... ${ob.circuitNum != null ? '#' + ob.circuitNum : 'sealed'}`,
+      '> chip ............ ACCEPTED',
+      '> shield .......... you are hidden while jacked in',
+      '> access .......... GRANTED (read-only)',
+      '',
+      'no instruction set loaded yet.',
+      'collect code fragments to teach this terminal.',
+      '',
+      'READY.',
+      '_',
+    ].join('\n');
+  };
+  requestAnimationFrame(step);
 }
-function closeObTerminal() { obTermEl.style.display = 'none'; }
+function closeObTerminal() { obTermEl.style.display = 'none'; player.terminalSafe = false; }
 obTermEl.addEventListener('click', (e) => { if (e.target === obTermEl) closeObTerminal(); });
+
+// The AI's own console (no chip): a wall of restless, unreadable data.
+const AIOS_GLYPHS = '0123456789ABCDEF▒▓█░■▢≡§¤◢◣∴∷';
+let aiosRAF = null;
+function openAiOs(ob) {
+  aiosHeader.textContent = `SKYLINK CORE  //  NODE ${ob.code || '????'}  //  ACCESS DENIED  //  NO KEY`;
+  aiosEl.style.display = 'flex';
+  player.say('No chip. The obelisk throws up the AI’s own console instead — a wall of moving data you can’t read.');
+  const cols = 60, rows = 26;
+  const t0 = performance.now();
+  const frame = (now) => {
+    if (aiosEl.style.display === 'none') { aiosRAF = null; return; }
+    const phase = (now - t0) / 1000;
+    let out = '';
+    for (let r = 0; r < rows; r++) {
+      let line = '';
+      for (let cX = 0; cX < cols; cX++) {
+        const wave = Math.abs(Math.sin(r * 0.7 + cX * 0.35 + phase * 2.5));
+        const n = Math.floor((wave * AIOS_GLYPHS.length + Math.random() * 4)) % AIOS_GLYPHS.length;
+        line += (Math.random() < 0.06) ? ' ' : AIOS_GLYPHS[n];
+      }
+      out += line + '\n';
+    }
+    aiosScreen.textContent = out;
+    aiosRAF = requestAnimationFrame(frame);
+  };
+  aiosRAF = requestAnimationFrame(frame);
+}
+function closeAiOs() { aiosEl.style.display = 'none'; if (aiosRAF) cancelAnimationFrame(aiosRAF); aiosRAF = null; }
+aiosEl.addEventListener('click', (e) => { if (e.target === aiosEl) closeAiOs(); });
 
 // The control hint is only for new players: fade it out after two minutes
 // of play so it stops cluttering the screen once the controls have sunk in.

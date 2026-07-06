@@ -178,9 +178,15 @@ export const ITEMS = {
     range: 6,
     effect: 'fuse',
     ammoType: 'battery',
-    // Sips its cell: each shot draws only 5% of a battery, so one lasts ~20
-    // fuse shots (it used to eat a whole battery per shot).
-    fractionalAmmo: 0.05,
+    // Self-sufficient: a sealed internal cell worth 4 normal batteries that
+    // trickle-charges from a solar film while carried (in hand, pocket, or
+    // pack). Each fuse shot spends 5% of a battery; the trickle refills a
+    // whole battery over a few minutes, so it recovers on its own between
+    // fights and never needs feeding.
+    selfCharge: true,
+    internalMax: 4,        // in battery-units
+    shotCost: 0.05,        // battery-units per shot (~80 shots from full)
+    chargeRate: 0.0085,    // battery-units per second while carried (~8min to full)
     swingCooldown: 1.0,
     staminaCost: 2,
     color: '#7f5fd8',
@@ -218,6 +224,15 @@ export const ITEMS = {
     tier: 4,
     ammoType: 'battery',
     color: '#4fd8c3',
+  },
+  // Access chip: carried (not held), it's your interface into the obelisk
+  // terminals — the RON-DOS console only opens for someone holding one. While
+  // you're jacked in, the obelisk masks you: the machines lose you entirely.
+  chip: {
+    name: 'Access chip',
+    kind: 'chip',
+    stack: 1,
+    color: '#6ad0a0',
   },
   // Electro-compass: hold it and your facing chevron turns into a homing
   // pointer to the nearest notable thing, colour-coded by what it is (see

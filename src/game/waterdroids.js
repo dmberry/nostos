@@ -282,7 +282,7 @@ export function updateWaterDroids(dt, droids, player, map) {
       if (playerInWater && distTo(d, player) < FIRE_RANGE && d.fireTimer <= 0) {
         d.fireTimer = FIRE_COOLDOWN;
         const block = player.blockRangedShot ? player.blockRangedShot(d.x, d.y) : null;
-        if (block === 'reflect') { d.hp -= 8; d.hurt = true; }
+        if (block === 'reflect') { d.hp -= 999; d.hurt = true; }
         else if (!block) player.takeDamage(FIRE_DAMAGE, 'droid');
       }
     } else {

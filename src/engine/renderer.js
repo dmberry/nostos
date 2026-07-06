@@ -1564,6 +1564,19 @@ export class Renderer {
     for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.moveTo(sx - 4, sy - 3 + k * 3); ctx.lineTo(sx + 5, sy - 3 + k * 3); ctx.stroke(); }
     ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.strokeRect(sx - 5.5, sy - 6.5, 12, 14);
     this.obeliskHits.push({ obj, x: c.x - W - 6, y: c.y - H - 14, w: 2 * W + 12, h: H + 22 });
+
+    // Damage bar above a scorched obelisk when the player's near — five OB-gun
+    // burns (or an insane bomb) to fell one, so it needs the heavy kit.
+    const obDmg = obj.obDamage || 0;
+    const pl = this.hudPlayer;
+    if (obDmg > 0 && pl && Math.hypot(pl.x - (obj.x + 0.5), pl.y - (obj.y + 0.5)) < 12) {
+      const bw = 48, bh = 5, bx = c.x - bw / 2, by = c.y - H - 12;
+      const frac = Math.max(0, 1 - obDmg / 5);
+      ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(bx - 1.5, by - 1.5, bw + 3, bh + 3);
+      ctx.fillStyle = '#3a3f46'; ctx.fillRect(bx, by, bw, bh);
+      ctx.fillStyle = frac > 0.5 ? '#6cc24a' : frac > 0.25 ? '#e0b53a' : '#e05548';
+      ctx.fillRect(bx, by, bw * frac, bh);
+    }
   }
 
   // The obelisk whose tower body contains a world-screen point (from a click
@@ -2353,6 +2366,20 @@ export class Renderer {
       ctx.beginPath();
       ctx.ellipse(c.x, by - 12, rr, rr * 1.08, 0, 0, Math.PI * 2);
       ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    } else if (player.shielded && player.shielded()) {
+      // A carried shield shows a thinner deflector ring (no need to hold it):
+      // pale blue for the plain shield, brighter cyan for the mirror.
+      const t = performance.now();
+      const mirror = player.hasItem && player.hasItem('mirror_shield');
+      ctx.save();
+      ctx.strokeStyle = mirror
+        ? `rgba(180,235,245,${(0.45 + 0.18 * Math.sin(t / 200)).toFixed(3)})`
+        : 'rgba(130,175,225,0.4)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.ellipse(c.x, by - 12, 22, 24, 0, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     }

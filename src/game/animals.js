@@ -290,6 +290,17 @@ export function updateAnimals(dt, animals, player, map) {
     // keeps a big map cheap (only nearby wildlife thinks each frame).
     if (distTo(a, player) > ANIMAL_ACTIVE_RANGE) continue;
     a.animT += dt;
+    // Startled (e.g. by the electro-gun's crackle): bolt straight away from
+    // the player, overriding normal behaviour, until the scare wears off.
+    if (a.scaredT > 0) {
+      a.scaredT -= dt;
+      const d = distTo(a, player);
+      const ax = d > 1e-6 ? (a.x - player.x) / d : 1;
+      const ay = d > 1e-6 ? (a.y - player.y) / d : 0;
+      moveToward(a, a.x + ax * 3, a.y + ay * 3, DOG_CHASE_SPEED, dt, map);
+      a.justHurt = false;
+      continue;
+    }
     if (a.type === 'dog') updateDog(a, dt, player, map, hurtPacks, aggroPacks);
     else if (a.type === 'boar') updateBoar(a, dt, player, map);
     else if (a.type === 'viper') updateViper(a, dt, player, map);

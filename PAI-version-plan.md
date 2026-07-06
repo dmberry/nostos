@@ -17,7 +17,17 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
-## Where we are (v0.80)
+## Where we are (v0.81)
+
+### v0.81 — access chip + AI OS, self-charging electro-gun, carried shields, obelisk damage bar, factory flicker-spawn
+
+- **Access chip → terminal, or the AI's own OS.** A new carried `chip` item (`kind: 'chip'`, seeded one per world) is your interface into the obelisks — you don't hold it, just carry it. Clicking an obelisk **with** a chip opens a **connect channel**: a progress bar (`#obterminal-connect`, ~1.6s) that then reveals the RON-DOS boot screen with access GRANTED (read-only). **Without** a chip you instead get the AI's own console — `#aios`, a magenta glitch-CRT filling with restless, unreadable data (sine-driven hex/glyph field, per-frame `requestAnimationFrame`), header ACCESS DENIED · NO KEY. Both close on backdrop click.
+- **The chip hides you while jacked in.** Opening a terminal sets `player.terminalSafe = true`, which ORs into `player.invisibleToRobots` — the obelisk shields you from the machines for as long as you're logged in. Closing the terminal drops the shield.
+- **Electro-gun self-charges.** Replaced the fractional pocket-battery model with a **self-charging internal cell** (`selfCharge`, `internalMax: 4` — four batteries' worth, tracked on `player.electroCharge`). It trickles back up (`chargeRate` 0.0085/s) whenever it's carried, spends `shotCost` 0.05 per fuse shot, and skips your pocket batteries entirely. Runs flat, then quietly comes good again — no more dead weight.
+- **Electro-gun destroys bots in a shower of sparks** (`sparkBurst`, 5 scattered sparks) and **scares nearby animals** — firing sets `scaredT` on animals within 7 tiles, and they flee straight away from you (`scareAnimals`).
+- **Mirror shield reflects lethally, and shields work while carried.** `blockRangedShot` no longer needs the shield in-hand or a facing check: a carried forcefield absorbs, a carried `mirror_shield` **reflects the shot back to destroy the shooter** (`hp -= 999` at both the W4 and water-droid fire sites), a carried plain shield absorbs. A pale deflector ring (cyan for the mirror) shows around you while any shield is carried.
+- **Obelisk damage bar.** A 48×5 bar floats above a scorched obelisk (when you're within 12 tiles) showing `obDamage` 0→5 — green/amber/red. Obelisks are hard to fell: five OB-gun burns (or an insane bomb), and W3 drones repair the damage back down, so it takes the heavy kit.
+- **Factory flicker-spawn.** Machines dispatched from the factory now **flicker into existence** — `spawnT` 0.75s set on W1/W3/W4 at dispatch, rendered as a buzzing fade-in (`drawRobot` globalAlpha ramp × sine). They move and fight normally while materialising.
 
 ### v0.80 — electro-compass, clickable obelisk terminals, terminal-language design
 
