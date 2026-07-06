@@ -1,6 +1,6 @@
 # postAI
 
-**Version:** 0.67 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
+**Version:** 0.68 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
 
 *(Versioning policy: 0.01 increments from v0.3 onwards.)*
 
@@ -8,7 +8,7 @@ An isometric 2D survival game set in a world devastated by an AI takeover. Civil
 
 Inspired by Project Zomboid: knowledge is the real progression, scarcity drives movement, every fight is optional and risky, and the world tells the story.
 
-## Current build (v0.67)
+## Current build (v0.68)
 
 **The world:** a seeded 128x128 isometric map — a river with two bridges, a ten-building town, a ruined hamlet, forests, tall grass, and roads. Away from the towns the terrain gets properly rugged: steep hills and deep hollows, always climbable one step at a time (rubble and rocks climb the same way, and are walkable on top once you're up there — building walls stay solid, a real boundary). Streams can be waded; the river can be swum, slowly and at a cost. Day and night cycle, with genuinely dark nights and torches to push them back.
 
@@ -34,6 +34,7 @@ Full technical detail (root causes, exact numbers) lives in [PAI-version-plan.md
 
 | Version | Summary |
 |---|---|
+| v0.68 | Machine gallery robots drawn larger inside their help-modal boxes |
 | v0.67 | Smaller player sprite, robots hurt each other on collision, bigger machine gallery pictures in help |
 | v0.66 | Robots now slow crossing a height step, either way; README pruned to a current-state summary + this table |
 | v0.65 | Directional character sprite with a real walk cycle, replacing the procedural body |

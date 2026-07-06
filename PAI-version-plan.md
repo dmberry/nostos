@@ -17,7 +17,11 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
-## Where we are (v0.67)
+## Where we are (v0.68)
+
+### v0.68 — machine gallery robots drawn larger
+
+- **Follow-up to v0.67: the help-modal robots were still small inside their boxes.** v0.67 enlarged the display `<img>` (60→96px) and the source canvas was already 96px, but `renderMachineIcon()` drew each machine at world scale (~30px) alone in the middle of it. Added `octx.scale(1.9, 1.9)` (and nudged the vertical origin from `size*0.74` to `size*0.82` so the taller, now-scaled W-towers stay in frame) so the machine itself fills the box rather than floating small in the centre.
 
 ### v0.67 — smaller player sprite, robots hurt each other, bigger help pictures
 

@@ -31,7 +31,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '0.67';
+const VERSION = '0.68';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -326,7 +326,12 @@ function renderMachineIcon(type) {
   const off = document.createElement('canvas');
   off.width = size; off.height = size;
   const octx = off.getContext('2d');
-  octx.translate(size / 2, size * 0.74);
+  // Scale the world-space robot draw up so it fills the box: at 1:1 the
+  // renderer draws a machine at its ~30px in-world size, which sits lost in
+  // the middle of a 96px chip. 1.9x brings it up close to the edges without
+  // clipping the tallest ones (the W-class towers).
+  octx.translate(size / 2, size * 0.82);
+  octx.scale(1.9, 1.9);
   if (type === 'w2') {
     drawWaterDroid(octx, { type: 'w2', x: 0, y: 0, dead: false, z: 0.5, animT: 1.2, aggro: false, facing: { x: 0, y: 1 } }, worldToScreen);
   } else {
