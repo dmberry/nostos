@@ -42,7 +42,8 @@ function tintScratch(w, h) {
 // means replacing the draw* methods only.
 
 const WALL_H = 40;
-const EDGE_ROCK_H = 52;  // height of the impassable rock blocks ringing the map edge
+const EDGE_ROCK_H = 52;   // height of the impassable rock blocks ringing the map edge
+const EDGE_ROCK_ALPHA = 0.7; // semi-transparent so the player shows through a block in front
 const DASH_H = 78; // dashboard panel height
 const ELEV = 16;   // pixels of lift per height level
 const MINIMAP_SIZE = 160;
@@ -124,15 +125,18 @@ export class Renderer {
 
     const range = this.visibleRange(camera, map);
 
-    // Pass 0: the world beyond the map edge is a wall of impassable grey rock,
-    // not a black void. Fill every visible out-of-bounds tile (the unclamped
-    // range minus the in-bounds range) with a raised rock block, row-major so
-    // they stack correctly. Only the strip actually on screen near an edge is
-    // drawn, so it stays cheap; in the middle of a large map there are none.
+    // The world beyond the map edge is a wall of impassable rock, not a black
+    // void. Every visible out-of-bounds tile becomes a raised block; they're
+    // pushed into the depth-sorted drawables below (not drawn here) so the
+    // ones in front of the player — the south and east edges — sort and
+    // occlude correctly instead of being painted over by the grass behind
+    // them (the "south looks weird" bug). Only the on-screen edge strip is
+    // collected, so mid-map it costs nothing.
     const raw = this.rawVisibleRange(camera);
+    const edgeTiles = [];
     for (let y = raw.minY; y <= raw.maxY; y++) {
       for (let x = raw.minX; x <= raw.maxX; x++) {
-        if (!map.inBounds(x, y)) this.drawEdgeRock(x, y);
+        if (!map.inBounds(x, y)) edgeTiles.push([x, y]);
       }
     }
 
@@ -190,6 +194,11 @@ export class Renderer {
     const climbRaise = (map.effectiveHeightAt && map.heightAt)
       ? map.effectiveHeightAt(pfx, pfy) - map.heightAt(pfx, pfy) : 0;
     drawables.push({ depth: player.x + player.y + climbRaise, player });
+    // Edge rocks sort by their tile depth like anything else, so a south/east
+    // block in front of the player draws after (and, being semi-transparent,
+    // lets the player show through it) while a north/west block behind draws
+    // first.
+    for (const [ex, ey] of edgeTiles) drawables.push({ depth: ex + ey + 0.5, edgeRock: [ex, ey] });
     drawables.sort((a, b) => a.depth - b.depth);
 
     // Everything on a hill tile is lifted by its elevation.
@@ -206,6 +215,7 @@ export class Renderer {
         : d.droid ? elevOf(d.droid.x, d.droid.y)
         : d.bomb ? elevOf(d.bomb.x, d.bomb.y)
         : d.groundItem ? elevOf(d.groundItem.x, d.groundItem.y)
+        : d.edgeRock ? 0 // draws its own height from the tile base
         // Objects sit on the terrain height only — NOT effectiveHeightAt.
         // A climbable object (a wall) draws its own extrusion upward from
         // this base; effectiveHeightAt adds its climbHeight so an entity can
@@ -213,7 +223,8 @@ export class Renderer {
         // the whole block up off the ground by its climb height.
         : (map.heightAt ? map.heightAt(d.obj.x, d.obj.y) : 0) * ELEV;
       if (lift) { ctx.save(); ctx.translate(0, -lift); }
-      if (d.player) this.drawPlayer(d.player);
+      if (d.edgeRock) this.drawEdgeRock(d.edgeRock[0], d.edgeRock[1]);
+      else if (d.player) this.drawPlayer(d.player);
       else if (d.animal) { drawAnimal(this.ctx, d.animal, worldToScreen); this.creatureHealthBar(d.animal, player, 44); }
       else if (d.bird) drawBird(this.ctx, d.bird, worldToScreen);
       else if (d.robot) { drawRobot(this.ctx, d.robot, worldToScreen); this.creatureHealthBar(d.robot, player, 48); }
@@ -842,25 +853,40 @@ export class Renderer {
     };
   }
 
-  // A block of impassable grey rock filling one out-of-bounds tile at the map
-  // edge — an extruded diamond prism like a wall, but stone-grey with a hint
-  // of per-tile shade variation so the border doesn't read as one flat slab.
+  // A block of impassable rock filling one out-of-bounds tile at the map
+  // edge — an extruded diamond prism, faced with the road-stone texture and
+  // drawn semi-transparent so if one stands between you and the camera you
+  // still see yourself through it. Per-tile shade variation keeps the border
+  // from reading as one flat slab.
   drawEdgeRock(tx, ty) {
     const ctx = this.ctx;
     const H = EDGE_ROCK_H;
-    const shade = 0.9 + tileHash(tx * 7 + 3, ty * 5 + 1) * 0.2; // subtle mottling
+    const tex = FLOOR_TEXTURES.road;
+    const ready = tex && tex.complete && tex.naturalWidth;
+    const shade = 0.9 + tileHash(tx * 7 + 3, ty * 5 + 1) * 0.2;
     const base = [96 * shade, 100 * shade, 108 * shade];
     const [t0, t1, t2, t3] = this.tileCorners(tx, ty, H);
     const [, b1, b2, b3] = this.tileCorners(tx, ty);
-    ctx.beginPath(); // south-west face
-    ctx.moveTo(b3.x, b3.y); ctx.lineTo(b2.x, b2.y); ctx.lineTo(t2.x, t2.y); ctx.lineTo(t3.x, t3.y);
-    ctx.closePath(); ctx.fillStyle = rgbScale(base, 0.7); ctx.fill();
-    ctx.beginPath(); // south-east face
-    ctx.moveTo(b1.x, b1.y); ctx.lineTo(b2.x, b2.y); ctx.lineTo(t2.x, t2.y); ctx.lineTo(t1.x, t1.y);
-    ctx.closePath(); ctx.fillStyle = rgbScale(base, 0.52); ctx.fill();
-    this.diamondPath([t0, t1, t2, t3]); // top
-    ctx.fillStyle = rgbScale(base, 1); ctx.fill();
+    // One face: flat stone base then the road texture over it, both at the
+    // same block alpha so the whole face is uniformly see-through.
+    const face = (corners, flat) => {
+      const [p0, p1, , p3] = corners;
+      ctx.save();
+      ctx.globalAlpha = EDGE_ROCK_ALPHA;
+      ctx.transform(p1.x - p0.x, p1.y - p0.y, p3.x - p0.x, p3.y - p0.y, p0.x, p0.y);
+      ctx.fillStyle = flat;
+      ctx.fillRect(0, 0, 1, 1);
+      if (ready) { ctx.globalAlpha = EDGE_ROCK_ALPHA * 0.8; ctx.drawImage(tex, 0, 0, 1, 1); }
+      ctx.restore();
+    };
+    face([b3, b2, t2, t3], rgbScale(base, 0.7));  // south-west face
+    face([b1, b2, t2, t1], rgbScale(base, 0.52)); // south-east face
+    face([t0, t1, t2, t3], rgbScale(base, 1));    // top
+    ctx.save();
+    ctx.globalAlpha = EDGE_ROCK_ALPHA;
+    this.diamondPath([t0, t1, t2, t3]);
     ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.restore();
   }
 
   tileCorners(tx, ty, lift = 0) {
@@ -2020,7 +2046,10 @@ export class Renderer {
     const ctx = this.ctx;
     const c = worldToScreen(player.x, player.y);
 
-    // Swimming: only the head shows above the water, bobbing, with ripples.
+    // Swimming: only the head and shoulders show above the water, bobbing,
+    // with ripples. Uses the real character sprite (the top slice of the
+    // idle frame for the way they're facing) rather than a drawn blob, so it
+    // matches the on-land look.
     if (player.swimming) {
       const bobY = Math.sin(performance.now() / 380) * 1.8;
       ctx.strokeStyle = 'rgba(255,255,255,0.22)';
@@ -2030,16 +2059,27 @@ export class Renderer {
         ctx.ellipse(c.x, c.y - 4, 7 * i, 3.5 * i, 0, 0, Math.PI * 2);
         ctx.stroke();
       }
-      const hy = c.y - 10 + bobY;
-      ctx.fillStyle = '#d9b48c';
-      ctx.beginPath(); ctx.arc(c.x, hy, 6, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = player.gender === 'f' ? '#7a4520' : player.gender === 'u' ? '#26262c' : '#5a3d22';
-      ctx.beginPath(); ctx.arc(c.x, hy - 1.5, 6, Math.PI, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#2c2119';
-      ctx.beginPath();
-      ctx.arc(c.x - 2.2, hy + 1, 1, 0, Math.PI * 2);
-      ctx.arc(c.x + 2.2, hy + 1, 1, 0, Math.PI * 2);
-      ctx.fill();
+      const set = CHARACTER_SPRITE_SETS[player.gender || 'm'];
+      const sprite = set && set.idle[facingToCompassDir(player.facing)];
+      if (sprite && sprite.complete && sprite.naturalWidth) {
+        const scale = 0.6;
+        const dw = sprite.naturalWidth * scale;
+        const showFrac = 0.5;                       // top half = head + shoulders
+        const srcH = sprite.naturalHeight * showFrac;
+        const ddh = sprite.naturalHeight * scale * showFrac;
+        // Clip to the water surface so the submerged body doesn't show if the
+        // slice ever runs long, and sit the shoulders right at the ripples.
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(c.x - dw / 2, c.y - 2 + bobY - ddh, dw, ddh);
+        ctx.clip();
+        ctx.drawImage(sprite, 0, 0, sprite.naturalWidth, srcH, c.x - dw / 2, c.y - 2 + bobY - ddh, dw, ddh);
+        ctx.restore();
+      } else {
+        const hy = c.y - 10 + bobY;
+        ctx.fillStyle = '#d9b48c';
+        ctx.beginPath(); ctx.arc(c.x, hy, 6, 0, Math.PI * 2); ctx.fill();
+      }
       return;
     }
 
@@ -2052,46 +2092,17 @@ export class Renderer {
     ctx.fill();
     const by = c.y - lift;
 
+    // The held item is drawn either behind or in front of the body depending
+    // on which way the character faces: when they face away from the camera
+    // (up the screen — the facing's world x+y points "back", so its screen
+    // depth is behind the feet) the hand and its tool are behind the torso
+    // and must be painted first, otherwise the icon floats over the head
+    // (the reported bug). Facing toward the camera, the tool is in front.
+    const heldBehind = (player.facing.x + player.facing.y) < 0;
+    if (heldBehind) this.drawHeldItem(player, c, by);
     this.drawPlayerSprite(player, c, by);
+    if (!heldBehind) this.drawHeldItem(player, c, by);
 
-    // The held tool/gun/gadget shown in hand, out toward the facing
-    // direction. Using it animates clearly: a tool sweeps through an arc, a
-    // gun or gadget kicks back with recoil — so a swing or a shot always
-    // reads on screen.
-    if (player.hands && ITEMS[player.hands]) {
-      const def = ITEMS[player.hands];
-      const cd = def.swingCooldown || 0.5;
-      // p runs 0 (start of use) -> 1 (finished); -1 means idle.
-      const p = player.swingTimer > 0 ? Math.max(0, 1 - player.swingTimer / cd) : -1;
-      const pulse = p >= 0 ? Math.sin(p * Math.PI) : 0; // 0 -> 1 -> 0 across the action
-      const isRanged = def.kind === 'gun' || def.kind === 'gadget';
-
-      const baseAng = Math.atan2(player.facing.y * 0.5, player.facing.x);
-      let reach = 0.42;
-      let extraAng = 0;
-      if (isRanged) {
-        reach = 0.42 - pulse * 0.14; // recoil: jerk back toward the body
-      } else {
-        reach = 0.42 + pulse * 0.55; // swing: thrust out
-        extraAng = p >= 0 ? (-1.0 + p * 1.7) : 0; // sweep through an arc
-      }
-      const hx = c.x + 4 + player.facing.x * 13 * reach / 0.42;
-      const hy = by - 18 + player.facing.y * 8 * reach / 0.42;
-      ctx.save();
-      ctx.translate(hx, hy);
-      ctx.rotate(baseAng + extraAng);
-      this.drawItemIcon(def, 0, 0, 0.85 + pulse * 0.15);
-      ctx.restore();
-
-      // A brief muzzle flash when a gun fires.
-      if (isRanged && def.kind === 'gun' && pulse > 0.3) {
-        const fx = c.x + player.facing.x * 26, fy = by - 12 + player.facing.y * 14;
-        ctx.fillStyle = `rgba(255,220,120,${pulse * 0.8})`;
-        ctx.beginPath();
-        ctx.arc(fx, fy, 3 + pulse * 3, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
     // Facing indicator: a small dot set well ahead of the feet, so the aim
     // direction reads clearly at a glance.
     const f = worldToScreen(player.x + player.facing.x * 1.2, player.y + player.facing.y * 1.2);
@@ -2099,6 +2110,44 @@ export class Renderer {
     ctx.beginPath();
     ctx.arc(f.x, f.y - 10, 2.5, 0, Math.PI * 2);
     ctx.fill();
+  }
+
+  // The held tool/gun/gadget/shield shown in hand, out toward the facing
+  // direction. Using it animates: a tool sweeps through an arc, a gun kicks
+  // back with recoil — so a swing or a shot always reads on screen. Drawn
+  // before or after the body by the caller depending on facing (see
+  // drawPlayer), so it sits behind the character when they face away.
+  drawHeldItem(player, c, by) {
+    if (!player.hands || !ITEMS[player.hands]) return;
+    const ctx = this.ctx;
+    const def = ITEMS[player.hands];
+    const cd = def.swingCooldown || 0.5;
+    const p = player.swingTimer > 0 ? Math.max(0, 1 - player.swingTimer / cd) : -1;
+    const pulse = p >= 0 ? Math.sin(p * Math.PI) : 0;
+    const isRanged = def.kind === 'gun' || def.kind === 'gadget';
+    const baseAng = Math.atan2(player.facing.y * 0.5, player.facing.x);
+    let reach = 0.42;
+    let extraAng = 0;
+    if (isRanged) {
+      reach = 0.42 - pulse * 0.14;
+    } else {
+      reach = 0.42 + pulse * 0.55;
+      extraAng = p >= 0 ? (-1.0 + p * 1.7) : 0;
+    }
+    const hx = c.x + 4 + player.facing.x * 13 * reach / 0.42;
+    const hy = by - 18 + player.facing.y * 8 * reach / 0.42;
+    ctx.save();
+    ctx.translate(hx, hy);
+    ctx.rotate(baseAng + extraAng);
+    this.drawItemIcon(def, 0, 0, 0.85 + pulse * 0.15);
+    ctx.restore();
+    if (isRanged && def.kind === 'gun' && pulse > 0.3) {
+      const fx = c.x + player.facing.x * 26, fy = by - 12 + player.facing.y * 14;
+      ctx.fillStyle = `rgba(255,220,120,${pulse * 0.8})`;
+      ctx.beginPath();
+      ctx.arc(fx, fy, 3 + pulse * 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
   // Draws the Kenney directional character set (m/f personas) in place of

@@ -17,7 +17,15 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
-## Where we are (v0.71)
+## Where we are (v0.72)
+
+### v0.72 — render fixes: held-item depth, boundary blocks, swimming head
+
+- **BUG FIX: the held item floated over the character's head when facing away.** The tool/gun was always painted after the body. It's now drawn before the body when the facing points "back" (`player.facing.x + player.facing.y < 0`, i.e. behind the torso in screen depth) and after when it points toward the camera. Extracted to `drawHeldItem`.
+- **Boundary edge blocks reworked.** They're now (a) faced with the `floor-road.jpg` texture, (b) drawn semi-transparent (`EDGE_ROCK_ALPHA` 0.7) so a block between you and the camera lets you show through, and (c) pushed into the depth-sorted drawables (with tile depth) instead of a flat pre-pass — which fixes the "south edge looks weird" bug, where front (south/east) blocks were being painted over by the grass behind them. Only the on-screen out-of-bounds strip is collected, so mid-map it's free.
+- **Swimming uses the real character sprite.** Instead of a drawn skin-tone blob, the swim view now clips the top half (head + shoulders) of the current-facing idle frame at the water line, with the existing ripples — matching the on-land look.
+
+> **Still open from this batch (larger, staged next):** shield weapons (standard absorbs a laser, mirror reflects it), a battery-powered green **forcefield**, the **8×8 factory** (train-textured, damage bar, drops an AI key), a **W5 tree-planting bot**, and the big one — **OB terminals** you can access to type ML-style code fragments seeded in the lore (SLEEP / REPEL / CRASH / HACK, plus the Portal-choir easter egg), a mini functional language the player actually learns to hack machines. The terminal + language is its own design project.
 
 ### v0.71 — SKYLINK reprieve, rock map edges, tree variety + chop feedback, CPU culling
 
