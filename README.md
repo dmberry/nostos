@@ -1,6 +1,6 @@
 # postAI
 
-**Version:** 0.62 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
+**Version:** 0.63 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
 
 *(Versioning policy: 0.01 increments from v0.3 onwards.)*
 
@@ -74,7 +74,9 @@ Inspired by Project Zomboid: knowledge is the real progression, scarcity drives 
 
 **Texture shimmer fixed, hiding actually works now (v0.62):** floor and wall textures no longer shimmer while moving — a real minification/aliasing bug, fixed by pre-shrinking each source photo instead of re-warping it at full resolution every tile, every frame. Grass opacity dropped further, and a sparse dirt-patch variant breaks up grass tiles here and there. Biggest change: every hunting machine (T1, T2, W1, W4) now needs genuine line of sight, not just proximity — duck behind a wall or a hill for a few seconds and it gives up and wanders off, so hiding is a real tactic.
 
-**Still queued (large systems):** walking on top of walls/blocks (a multi-level feature), and a mobile phone + RON text tips. Both want their own focused pass.
+**Rugged terrain, real climbing, sleep, and real character art (v0.63):** the wilds away from the towns are properly rugged now — taller hills, deeper hollows, more of both — while staying climbable (the height-step rule that guarantees no impassable one-tile cliffs still holds). Walls, rubble, and rocks can now be **climbed** and walked across the top of, not just bumped into. Graffiti no longer floats past the blocks it's sprayed on — it's warped to match the wall's actual isometric face. Press **B** to **sleep** for 10 game-minutes and recover health, if nothing's hunting you nearby. Firing at empty air now genuinely fires — it spends the round and sends a tracer out to range instead of silently refusing. Arrows stack to 30. And the player finally has real character art: a rotatable pixel-art sprite (Kenney's CC0 "Topdown Shooter" pack) standing in for the old procedural head-and-torso, turning freely to face the cursor.
+
+**Still queued (large systems):** a mobile phone + RON text tips.
 
 Created by David and Henrik.
 

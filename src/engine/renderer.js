@@ -5,7 +5,7 @@ import { drawAnimal } from '../game/animals.js';
 import { drawBird } from '../game/birds.js';
 import { drawRobot } from '../game/robots.js';
 import { drawWaterDroid } from '../game/waterdroids.js';
-import { FLOOR_TEXTURES, WALL_TEXTURES, FACE_TEXTURES, GRASS_PATCH_TEXTURE } from './textures.js';
+import { FLOOR_TEXTURES, WALL_TEXTURES, CHARACTER_SPRITES, GRASS_PATCH_TEXTURE } from './textures.js';
 
 // Canvas renderer. Two passes per frame: floor diamonds first, then all
 // "drawables" (objects + player) painter-sorted by world depth (x + y).
@@ -141,7 +141,11 @@ export class Renderer {
     drawables.sort((a, b) => a.depth - b.depth);
 
     // Everything on a hill tile is lifted by its elevation.
-    const elevOf = (x, y) => (map.heightAt ? map.heightAt(Math.floor(x), Math.floor(y)) : 0) * ELEV;
+    // effectiveHeightAt includes standing on top of a climbed block (a
+    // wall, rubble, a rock), so the player visually lifts the same way
+    // climbing a hill already does.
+    const elevOf = (x, y) => (map.effectiveHeightAt ? map.effectiveHeightAt(Math.floor(x), Math.floor(y))
+      : map.heightAt ? map.heightAt(Math.floor(x), Math.floor(y)) : 0) * ELEV;
     for (const d of drawables) {
       const lift = d.player ? elevOf(player.x, player.y)
         : d.animal ? elevOf(d.animal.x, d.animal.y)
@@ -797,16 +801,32 @@ export class Renderer {
   // top via `tintMode` ('multiply' to darken/colourise, 'screen' to
   // lighten) so day-night and decay shading still applies the same way it
   // did to a flat fill.
+  // Four corners of a fractional sub-rectangle (u0..u1 along the p0->p1
+  // edge, v0..v1 along the p0->p3 edge) of a parallelogram — itself always
+  // a parallelogram, so it's directly usable with drawTexturedQuad. Used to
+  // warp graffiti onto a band of a wall face rather than the whole thing.
+  subQuad(p0, p1, p3, u0, u1, v0, v1) {
+    const ex = p1.x - p0.x, ey = p1.y - p0.y;
+    const fx = p3.x - p0.x, fy = p3.y - p0.y;
+    const at = (u, v) => ({ x: p0.x + ex * u + fx * v, y: p0.y + ey * u + fy * v });
+    return [at(u0, v0), at(u1, v0), at(u1, v1), at(u0, v1)];
+  }
+
   drawTexturedQuad(corners, img, fallbackColor, tintColor, tintMode, textureAlpha = 0.55) {
     const ctx = this.ctx;
     const [p0, p1, , p3] = corners;
+    // Canvas sources (e.g. pre-rendered graffiti text) are always ready to
+    // draw immediately, unlike an Image that may still be loading.
+    const ready = img && (img instanceof HTMLCanvasElement || (img.complete && img.naturalWidth));
     ctx.save();
     const ex = p1.x - p0.x, ey = p1.y - p0.y;
     const fx = p3.x - p0.x, fy = p3.y - p0.y;
     ctx.transform(ex, ey, fx, fy, p0.x, p0.y);
-    ctx.fillStyle = fallbackColor;
-    ctx.fillRect(0, 0, 1, 1);
-    if (img && img.complete && img.naturalWidth) {
+    if (fallbackColor) {
+      ctx.fillStyle = fallbackColor;
+      ctx.fillRect(0, 0, 1, 1);
+    }
+    if (ready) {
       ctx.globalAlpha = textureAlpha;
       ctx.drawImage(img, 0, 0, 1, 1);
       ctx.globalAlpha = 1;
@@ -818,21 +838,6 @@ export class Renderer {
       }
     }
     ctx.restore();
-  }
-
-  // Clips a crop of `img` (source rect sx,sy,sw,sh) into a circle at
-  // (cx,cy,radius) — used for the player's face. Returns false (drawing
-  // nothing) if the image hasn't loaded yet, so the caller can fall back.
-  drawFaceCircle(cx, cy, radius, img, sx, sy, sw, sh) {
-    if (!img || !img.complete || !img.naturalWidth) return false;
-    const ctx = this.ctx;
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-    ctx.clip();
-    ctx.drawImage(img, sx, sy, sw, sh, cx - radius, cy - radius, radius * 2, radius * 2);
-    ctx.restore();
-    return true;
   }
 
   drawFloor(map, tx, ty, type, shade) {
@@ -918,7 +923,6 @@ export class Renderer {
     switch (obj.type) {
       case 'wall':
         this.drawWall(obj);
-        if (obj.graffiti) this.drawGraffiti(obj);
         break;
       case 'tree': this.drawTree(obj); break;
       case 'rock': this.drawRock(obj.x, obj.y); break;
@@ -956,23 +960,32 @@ export class Renderer {
     ctx.textAlign = 'left';
   }
 
-  // Sprayed lore fragment on a wall face: irregular baseline and a slight
-  // tilt so it reads as graffiti rather than a label.
-  drawGraffiti(obj) {
+  // Sprayed lore fragment, warped onto the wall's south-east face like it's
+  // actually painted on the tilted surface — it used to draw as flat,
+  // unwarped text at a fixed screen offset, so as the camera panned the
+  // wall's face perspective shifted under it while the text didn't,
+  // reading as floating in front of the block rather than on it.
+  drawGraffiti(obj, seFace) {
     const ctx = this.ctx;
-    const c = worldToScreen(obj.x + 0.5, obj.y + 0.5);
-    ctx.save();
-    ctx.translate(c.x + 5, c.y - WALL_H * 0.55);
-    ctx.rotate((tileHash(obj.x, obj.y) - 0.5) * 0.16);
-    ctx.font = 'italic bold 8px monospace';
-    // Doubting tags (RON is dead, no one is coming, ...) are painted fainter
-    // and greyer, as if older or written by a less certain hand — the game
-    // never settles whether the resistance is still out there.
-    ctx.fillStyle = obj.graffitiFaded ? 'rgba(180,178,170,0.45)' : 'rgba(190,40,36,0.72)';
-    ctx.textAlign = 'center';
-    ctx.fillText(obj.graffiti, 0, 0);
-    ctx.restore();
-    ctx.textAlign = 'left';
+    // Rendered once per object onto a small offscreen canvas and cached —
+    // it's static text, no need to re-rasterize it every frame.
+    if (!obj._graffitiCanvas) {
+      const c = document.createElement('canvas');
+      c.width = 200; c.height = 48;
+      const octx = c.getContext('2d');
+      octx.font = 'italic bold 26px monospace';
+      octx.textAlign = 'center';
+      octx.textBaseline = 'middle';
+      // Doubting tags (RON is dead, no one is coming, ...) are painted
+      // fainter and greyer, as if older or written by a less certain hand —
+      // the game never settles whether the resistance is still out there.
+      octx.fillStyle = obj.graffitiFaded ? 'rgba(180,178,170,0.8)' : 'rgba(190,40,36,0.88)';
+      octx.fillText(obj.graffiti, 100, 24);
+      obj._graffitiCanvas = c;
+    }
+    const jitter = (tileHash(obj.x, obj.y) - 0.5) * 0.12;
+    const quad = this.subQuad(seFace[0], seFace[1], seFace[3], 0.06, 0.94, 0.28 + jitter, 0.62 + jitter);
+    this.drawTexturedQuad(quad, obj._graffitiCanvas, null, null, null, 1);
   }
 
   // A wall is an extruded diamond prism: two visible faces plus a top.
@@ -1074,6 +1087,8 @@ export class Renderer {
         ctx.fill();
       }
     }
+
+    if (obj.graffiti) this.drawGraffiti(obj, [b1, b2, t2, t1]);
   }
 
   drawTree(obj) {
@@ -1880,76 +1895,45 @@ export class Renderer {
     ctx.ellipse(c.x, c.y, 10 * sh, 5 * sh, 0, 0, Math.PI * 2);
     ctx.fill();
     const by = c.y - lift;
-    // Gait: legs scissor and the body bobs while walking.
-    const swing = Math.sin(player.walkPhase) * 3;
     const bob = Math.abs(Math.sin(player.walkPhase)) * 1.8;
-    ctx.fillStyle = '#4a3a2a';
-    ctx.fillRect(c.x - 4 + swing, by - 9 - Math.max(0, Math.sin(player.walkPhase)) * 2.5, 3, 9);
-    ctx.fillRect(c.x + 1 - swing, by - 9 - Math.max(0, -Math.sin(player.walkPhase)) * 2.5, 3, 9);
-    // Torso, flashing red briefly when hurt.
-    ctx.fillStyle = player.hurtTimer > 0 ? '#c94a3a' : player.sprinting ? '#c97f3e' : '#b0703c';
-    ctx.beginPath();
-    ctx.ellipse(c.x, by - 16 - bob, 7, 9.5, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // Head. The face follows the direction of travel: eyes and mouth when
-    // facing the camera, back-of-the-head hair when walking away, eyes
-    // slid to the side in profile.
-    const horiz = (player.facing.x - player.facing.y) * 0.7071;  // screen-right component
-    const toward = (player.facing.x + player.facing.y) * 0.7071; // toward-camera component
-    const hb = by - bob; // head bobs with the torso
-    // Persona: Adam short brown mop, Eve longer auburn hair that falls to
-    // the shoulders, Neve a close dark crop.
+
+    // A small top-down pixel-art body (Kenney's CC0 "Topdown Shooter" pack,
+    // assets/textures/player-*.png), rotated to face the same direction the
+    // player already always faces (the mouse cursor) — replaces the old
+    // hand-drawn legs/torso/head with real character art. No walk-cycle
+    // frames exist in the pack, so it just bobs with the same walk phase
+    // the old sprite used. Falls back to a plain silhouette for the brief
+    // window before the image finishes loading.
     const gender = player.gender || 'm';
-    const hairCol = gender === 'f' ? '#7a4520' : gender === 'u' ? '#26262c' : '#5a3d22';
-    // Facing the camera: try the persona's face photo first (clipped into
-    // the head circle); falls back to the flat skin tone + drawn eyes/mouth
-    // below if the texture hasn't loaded yet.
-    const face = FACE_TEXTURES[gender];
-    const usedFace = toward >= -0.15 && face
-      && this.drawFaceCircle(c.x, hb - 29, 6, face.img, face.sx, face.sy, face.sw, face.sh);
-    if (!usedFace) {
-      ctx.fillStyle = '#d9b48c';
+    const sprite = CHARACTER_SPRITES[gender];
+    const cy = by - 14 - bob;
+    if (sprite && sprite.complete && sprite.naturalWidth) {
+      const scale = 1.15;
+      const dw = sprite.naturalWidth * scale, dh = sprite.naturalHeight * scale;
+      const angle = Math.atan2(player.facing.y, player.facing.x) + Math.PI / 2;
+      ctx.save();
+      ctx.translate(c.x, cy);
+      ctx.rotate(angle);
+      ctx.drawImage(sprite, -dw / 2, -dh / 2, dw, dh);
+      // A tint layered on with source-atop only colours the sprite's own
+      // opaque pixels, not the transparent square around it.
+      if (player.hurtTimer > 0) {
+        ctx.globalCompositeOperation = 'source-atop';
+        ctx.fillStyle = 'rgba(220,60,50,0.55)';
+        ctx.fillRect(-dw / 2, -dh / 2, dw, dh);
+        ctx.globalCompositeOperation = 'source-over';
+      } else if (player.sprinting) {
+        ctx.globalCompositeOperation = 'source-atop';
+        ctx.fillStyle = 'rgba(255,190,110,0.18)';
+        ctx.fillRect(-dw / 2, -dh / 2, dw, dh);
+        ctx.globalCompositeOperation = 'source-over';
+      }
+      ctx.restore();
+    } else {
+      ctx.fillStyle = player.hurtTimer > 0 ? '#c94a3a' : '#b0703c';
       ctx.beginPath();
-      ctx.arc(c.x, hb - 29, 6, 0, Math.PI * 2);
+      ctx.ellipse(c.x, cy, 7, 12, 0, 0, Math.PI * 2);
       ctx.fill();
-    }
-    ctx.fillStyle = hairCol;
-    if (gender === 'f' && !usedFace) {
-      // Side falls, visible from every direction — only drawn for the flat
-      // fallback head; the face photo already has its own hair.
-      ctx.fillRect(c.x - 7.5, hb - 31, 3, 12);
-      ctx.fillRect(c.x + 4.5, hb - 31, 3, 12);
-    }
-    if (toward < -0.15) {
-      // Back to us: hair wraps the whole back of the head, a sliver of neck.
-      // No face is shown from behind either way, textured or not.
-      ctx.beginPath();
-      ctx.arc(c.x, hb - 29.5, 6, 0, Math.PI * 2);
-      ctx.fill();
-    } else if (!usedFace) {
-      // Hair mop with a fringe, pushed slightly opposite the gaze. Skipped
-      // when a face photo is showing — it used to paint straight over the
-      // top half of the texture, hiding the eyes/forehead and leaving only
-      // an unflattering sliver of chin visible (the actual "weird, same for
-      // every persona" look reported — not a wrong-image bug, a covered one).
-      ctx.beginPath();
-      ctx.arc(c.x - horiz * 0.8, hb - 30.5, 6, Math.PI, Math.PI * 2);
-      ctx.closePath();
-      ctx.fill();
-      if (gender !== 'u') ctx.fillRect(c.x - 6 - horiz * 0.8, hb - 31.5, 12, 2.5);
-      // Eyes and mouth track the horizontal component of travel.
-      const ex = horiz * 2.4;
-      ctx.fillStyle = '#2c2119';
-      ctx.beginPath();
-      ctx.arc(c.x - 2.2 + ex, hb - 28, 1.1, 0, Math.PI * 2);
-      ctx.arc(c.x + 2.2 + ex, hb - 28, 1.1, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(44,33,25,0.7)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(c.x - 1.5 + ex, hb - 25.2);
-      ctx.lineTo(c.x + 1.5 + ex, hb - 25.2);
-      ctx.stroke();
     }
     // The held tool/gun/gadget shown in hand, out toward the facing
     // direction. Using it animates clearly: a tool sweeps through an arc, a

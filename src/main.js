@@ -31,7 +31,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '0.62';
+const VERSION = '0.63';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -415,6 +415,11 @@ let showBackpack = false;
 let showSkills = false;
 let showWeapons = false;
 let paused = false;  // P: freezes movement, AI, clocks, and timers
+let sleepCooldown = 0; // B: real-seconds before another rest is allowed
+const SLEEP_MINUTES = 10;   // game-clock minutes skipped per rest
+const SLEEP_HEAL = 35;      // health restored per rest
+const SLEEP_COOLDOWN_S = 90; // real seconds before resting again
+const SLEEP_SAFE_RANGE = 12; // no hostile robot allowed within this many tiles
 let detail = null;   // right-click inspection tooltip {text, x, y, ttl}
 let drag = null;     // in-progress pointer drag {from: slotDescriptor}
 const PROJECTILE_SPEED = 16; // tiles/sec for gun tracers
@@ -553,6 +558,26 @@ function update(dt) {
   if (input.musicTogglePressed()) {
     const on = sfx.toggleMusic();
     player.say(on ? 'Music on.' : 'Music off.');
+  }
+  // Rest (B): skips the clock forward 10 game-minutes and restores some
+  // health, so long as nothing hostile is close enough to make that a bad
+  // idea, and not so often it's a free heal button.
+  if (sleepCooldown > 0) sleepCooldown = Math.max(0, sleepCooldown - dt);
+  if (input.sleepPressed()) {
+    if (player.health >= player.maxHealth) {
+      player.say("You're not hurt enough to need the rest.");
+    } else if (sleepCooldown > 0) {
+      player.say('Still too keyed up to rest again so soon.');
+    } else if (robots.some((r) => !r.dead && !r.friendly && !r.drained && r.aggro
+      && Math.hypot(r.x - player.x, r.y - player.y) < SLEEP_SAFE_RANGE)) {
+      player.say("Too dangerous to rest with something hunting you.");
+    } else {
+      dayNight.advance(SLEEP_MINUTES);
+      player.health = Math.min(player.maxHealth, player.health + SLEEP_HEAL);
+      sleepCooldown = SLEEP_COOLDOWN_S;
+      player.say(`You rest for ${SLEEP_MINUTES} minutes. Some strength returns.`);
+      persist();
+    }
   }
   if (hintEl.style.display !== 'none') {
     playTime += dt;

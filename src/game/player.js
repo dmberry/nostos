@@ -1,6 +1,7 @@
 import { screenDirToWorld } from '../engine/iso.js';
 import { sfx } from '../engine/sound.js';
 import { ITEMS } from './items.js';
+import { OBJECTS } from './tiles.js';
 
 const WALK_SPEED = 4.2;   // tiles per second
 const SPRINT_SPEED = 7.5;
@@ -1130,12 +1131,11 @@ export class Player {
     };
     if (tool.animalDamage != null) for (const a of animals) consider(a, false);
     for (const r of robots) consider(r, true);
-    if (!target) {
-      this.say('No clear shot.');
-      return;
-    }
+
     // Ammo comes from the pockets first, then the backpack — no need to
-    // manually shuffle rounds forward before a fight.
+    // manually shuffle rounds forward before a fight. Consumed whether or
+    // not there's a target in range: pulling the trigger with nothing in
+    // your sights still wastes the round rather than refusing to fire.
     let ammoSlots = this.pockets;
     let i = this.pockets.findIndex((s) => s && s.item === tool.ammoType);
     if (i < 0 && this.backpack) {
@@ -1152,13 +1152,24 @@ export class Player {
     this.stamina = Math.max(0, this.stamina - (tool.staminaCost ?? 0));
 
     // A visible round travels from the muzzle to the target (cosmetic; the
-    // hit itself is instant). Electric guns fire a cyan/violet bolt.
+    // hit itself is instant). Electric guns fire a cyan/violet bolt. With no
+    // target it still flies out to the shot's real reach (a wall or a hill
+    // stops it early, same as beamRange elsewhere) rather than nowhere.
+    const missRange = this.beamRange(map, range);
+    const tx = target ? target.x : this.x + this.facing.x * missRange;
+    const ty = target ? target.y : this.y + this.facing.y * missRange;
     map.projectiles = map.projectiles || [];
     map.projectiles.push({
       x0: this.x + this.facing.x * 0.4, y0: this.y + this.facing.y * 0.4,
-      x1: target.x, y1: target.y, prog: 0,
+      x1: tx, y1: ty, prog: 0,
       kind: tool.effect === 'stun' ? 'stun' : tool.effect === 'fuse' ? 'fuse' : 'bullet',
     });
+
+    if (!target) {
+      sfx.play('shot');
+      this.say('You fire into the empty air.');
+      return;
+    }
 
     if (isRobot && zombieImmune(target, tool)) {
       this.say('The shot has no effect — the husk is only vulnerable to a bow or the wave gun now.');
@@ -1387,16 +1398,23 @@ export class Player {
   // blocks if its tile is solid or too many height levels away. On foot you
   // can step one level; while airborne (jumping) you can clear two, so a
   // jump gets you up onto higher ground and out of a dug pit — where a
-  // wheeled robot, which cannot climb at all, stays stuck.
+  // wheeled robot, which cannot climb at all, stays stuck. A "climbable"
+  // object (wall, rubble, rock — tiles.js) counts as a +1 height step
+  // instead of flatly blocking, so it can be climbed the same way, and
+  // stood on top of once there.
   collides(x, y, map) {
-    const h = map.heightAt ? map.heightAt(Math.floor(this.x), Math.floor(this.y)) : 0;
+    const h = map.effectiveHeightAt ? map.effectiveHeightAt(Math.floor(this.x), Math.floor(this.y))
+      : (map.heightAt ? map.heightAt(Math.floor(this.x), Math.floor(this.y)) : 0);
     const maxStep = (this.z > 0 || this.vz !== 0) ? 2 : 1;
     const blocked = (tx, ty) => {
+      const obj = map.objectAt ? map.objectAt(tx, ty) : null;
+      const climbable = obj && OBJECTS[obj.type] && OBJECTS[obj.type].climbable;
       // The player can swim: water is passable for them (slow and tiring,
       // handled in movement) even though it stays solid for everything else.
-      if (map.isSolid(tx, ty) && map.floorAt(tx, ty) !== 'water') return true;
+      if (map.isSolid(tx, ty) && map.floorAt(tx, ty) !== 'water' && !climbable) return true;
       if (!map.heightAt) return false;
-      return Math.abs(map.heightAt(tx, ty) - h) > maxStep;
+      const targetH = map.effectiveHeightAt ? map.effectiveHeightAt(tx, ty) : map.heightAt(tx, ty);
+      return Math.abs(targetH - h) > maxStep;
     };
     return (
       blocked(Math.floor(x - RADIUS), Math.floor(y - RADIUS)) ||

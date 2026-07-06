@@ -45,6 +45,18 @@ export class GameMap {
     if (this.inBounds(x, y)) this.height[y * this.w + x] = h;
   }
 
+  // Ground height, plus the extra step of standing on top of a climbable
+  // object (a wall, rubble, a rock — see OBJECTS in tiles.js) if one
+  // occupies this tile. Used by the player's own climb check and by the
+  // renderer, so a climbed block visually lifts them the same way a hill
+  // does.
+  effectiveHeightAt(x, y) {
+    const base = this.heightAt(x, y);
+    const obj = this.objectAt(x, y);
+    const def = obj && OBJECTS[obj.type];
+    return def && def.climbable ? base + (def.climbHeight || 1) : base;
+  }
+
   objectAt(x, y) {
     return this.inBounds(x, y) ? this.objectGrid[y * this.w + x] : null;
   }

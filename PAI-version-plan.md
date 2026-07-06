@@ -17,7 +17,7 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
-## Where we are (v0.62)
+## Where we are (v0.63)
 
 - Isometric world, seeded 128x128: river, two bridges, ten-building town, hamlet, forests, tall grass, hills and hollows, wadeable streams.
 - Survival: food/hunger, health, stamina, venom, day/night (dark nights), torches, minimap with fog of war (grey, not black), permadeath that drops your loot where you fell.
@@ -69,6 +69,16 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Certificate of Death**: on death a modal shows name, cause, score, skills, deaths, and an amusing rank (COMPOST → NOOB → SCRAPPER → SURVIVOR → VETERAN → L33T). Freezes the world until clicked. `player.deathCert` snapshot; `deathRank()` in renderer.
 - **Lore notes styled**: Archive fragments render as their own note cards — paper colour + typeface per kind (handwritten note, newsprint, diary, poster, green-on-black disk/tape). `NOTE_STYLE` in lore.js.
 - **Autosave**: character + xp + score + deaths + a run-state snapshot (vitals, position, inventory) persist to localStorage; saved every 8s, on tab-hide, and on unload; restored on load. World regenerates from seed (so caches/cars reset — a known limitation; world-object persistence is a follow-up).
+
+### v0.63 — rugged terrain, warped graffiti, fire-without-target, sleep, walkable climbs, real character art
+
+- **Rugged, taller terrain away from the towns.** `raiseHills`/`carveHollows` now push peaks up to 8 (was 5) and hollows down to -5 (was -3), with more hills and hollows per world and blob radius scaling with peak height so slopes stay climbable. The Lipschitz relaxation that guarantees no two adjacent tiles differ by more than one height step still holds — verified with a 4-seed Node smoke test (zero violations at the new heights).
+- **BUG FIX: graffiti floated past the blocks it was sprayed on.** It was drawn as flat, unwarped text at a fixed screen offset, independent of the wall's actual iso-projected face — so it visibly slid out of alignment as the camera panned. Now rendered once to a cached offscreen canvas and warped onto a jittered band of the wall's face with the same affine-transform technique used for floor/wall textures (`subQuad()` in `renderer.js`).
+- **Firing with nothing in your sights now still fires.** Guns and the bow used to refuse ("No clear shot") and waste nothing; pulling the trigger at empty air now consumes ammo and sends a tracer out to your weapon's range, same as any other shot.
+- **Sleep mechanic:** press **B** to rest for 10 game-clock minutes and recover health, provided you're actually hurt, nothing hostile is hunting you nearby, and you haven't just rested (90-second real-time cooldown).
+- **Climbing, properly: walls, rubble, and rocks are now climbable** (one height step, same rule as a natural rise) and, once you're up, walkable across the top like any other high ground — not just a dead end.
+- **Arrows stack to 30** (was 20) so a full cache pickup fits in one pocket.
+- **Real character art.** The player's body is now a rotatable pixel-art sprite from Kenney's CC0 "Topdown Shooter" pack (one per gender/persona) instead of a procedurally drawn head/torso — it rotates freely to face the cursor, matching the game's existing aiming mechanic exactly. The held weapon/tool icon still draws in the sprite's hand on top, unchanged.
 
 ### v0.62 — texture shimmer fix, sparse dirt patches, universal line-of-sight give-up
 

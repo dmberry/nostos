@@ -28,6 +28,13 @@ export class DayNight {
     this.elapsed += dt;
   }
 
+  // Skips the clock forward by a number of *game* minutes (e.g. sleeping)
+  // rather than real seconds — converts via the same real-seconds-per-
+  // game-hour ratio `update()` uses.
+  advance(gameMinutes) {
+    this.elapsed += (gameMinutes / 60) * (this.dayLength / 24);
+  }
+
   // Total game hours since day 1, 00:00.
   get totalHours() {
     return this.startHour + (this.elapsed / this.dayLength) * 24;

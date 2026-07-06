@@ -7,7 +7,7 @@ const TRACKED = new Set([
   'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
   'ShiftLeft', 'ShiftRight',
   'KeyE', 'Slash', 'Space', 'KeyQ', 'KeyH', 'KeyR', 'KeyG', 'KeyF', 'KeyI', 'KeyP', 'KeyZ', 'KeyJ',
-  'KeyK', 'KeyC', 'KeyM', 'KeyV', 'KeyN',
+  'KeyK', 'KeyC', 'KeyM', 'KeyV', 'KeyN', 'KeyB',
   'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5',
 ]);
 
@@ -190,6 +190,10 @@ export class Input {
 
   pausePressed() {
     return this.consumePress('KeyP');
+  }
+
+  sleepPressed() {
+    return this.consumePress('KeyB');
   }
 
   zoomTogglePressed() {

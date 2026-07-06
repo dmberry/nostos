@@ -239,22 +239,25 @@ function raiseHills(map, rng) {
     { x: 10, y: 118 },  // south-west corner
     { x: 108, y: 102 }, // south-east forest
     { x: 66, y: 92 },   // south mid, east of the river
+    { x: 30, y: 30 },   // open country between the hamlet and the river
+    { x: 100, y: 60 },  // wilds east of the main town
   ];
   for (let i = optional.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1));
     [optional[i], optional[j]] = [optional[j], optional[i]];
   }
-  const extra = 2 + Math.floor(rng() * 3); // 5-7 hills in total: more undulation
+  const extra = 3 + Math.floor(rng() * 3); // 6-8 hills in total: rugged, not just the town's edge
   const chosen = [...mandatory, ...optional.slice(0, extra)];
 
   const hills = [];
   for (const z of chosen) {
     const cx = z.x + Math.round((rng() - 0.5) * 2);
     const cy = z.y + Math.round((rng() - 0.5) * 2);
-    // Taller, more dramatic hills: peaks up to 5, with a wide enough base
-    // that the Lipschitz clamp still leaves a climbable one-step slope.
-    const peak = rng() < 0.45 ? 5 : rng() < 0.75 ? 4 : 3;
-    const r = 6 + rng() * 3;
+    // Much taller, more dramatic hills: peaks up to 8 now. Radius scales
+    // with peak so the Lipschitz clamp (max one height step per tile) still
+    // leaves a climbable slope rather than an unclimbable cliff.
+    const peak = rng() < 0.3 ? 8 : rng() < 0.55 ? 6 : rng() < 0.8 ? 4 : 3;
+    const r = peak * 1.4 + rng() * 3;
     const blobs = [{ x: cx, y: cy, p: peak, r }];
     const nSub = 1 + (rng() < 0.5 ? 1 : 0);
     for (let i = 0; i < nSub; i++) {
@@ -271,7 +274,7 @@ function raiseHills(map, rng) {
         for (let x = b.x - R; x <= b.x + R; x++) {
           if (!map.inBounds(x, y)) continue;
           const v = Math.round(b.p * (1 - Math.hypot(x - b.x, y - b.y) / b.r));
-          if (v > map.heightAt(x, y)) map.setHeight(x, y, Math.min(5, v));
+          if (v > map.heightAt(x, y)) map.setHeight(x, y, Math.min(8, v));
         }
       }
     }
@@ -410,16 +413,16 @@ function carveHollows(map, rng, keepClear) {
   for (const z of zones.slice(0, n)) {
     const cx = z.x + Math.round((rng() - 0.5) * 4);
     const cy = z.y + Math.round((rng() - 0.5) * 4);
-    // Deeper trenches: valley floors down to -3, with a wide enough mouth
-    // that the rim still steps down one tile at a time.
-    const depth = rng() < 0.4 ? 3 : 2;
-    const r = 5 + rng() * 3;
+    // Deeper trenches now too: valley floors down to -5, with a wide enough
+    // mouth that the rim still steps down one tile at a time.
+    const depth = rng() < 0.3 ? 5 : rng() < 0.6 ? 4 : rng() < 0.85 ? 3 : 2;
+    const r = depth * 1.7 + rng() * 3;
     const R = Math.ceil(r);
     for (let y = cy - R; y <= cy + R; y++) {
       for (let x = cx - R; x <= cx + R; x++) {
         if (!map.inBounds(x, y)) continue;
         const v = Math.round(depth * (1 - Math.hypot(x - cx, y - cy) / r));
-        if (v > D[y * w + x]) D[y * w + x] = Math.min(3, v);
+        if (v > D[y * w + x]) D[y * w + x] = Math.min(5, v);
       }
     }
   }

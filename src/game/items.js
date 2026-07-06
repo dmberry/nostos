@@ -101,7 +101,7 @@ export const ITEMS = {
   arrow: {
     name: 'Arrows',
     kind: 'resource',
-    stack: 20,
+    stack: 30, // holds a full cache pickup (24, since v0.60's ammo doubling) in one pocket
     color: '#c9b48a',
   },
   // A cool late-game find: an energy lance that punches clean through
