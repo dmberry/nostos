@@ -5,6 +5,7 @@ import { drawAnimal } from '../game/animals.js';
 import { drawBird } from '../game/birds.js';
 import { drawRobot } from '../game/robots.js';
 import { drawWaterDroid } from '../game/waterdroids.js';
+import { FLOOR_TEXTURES, WALL_TEXTURES, FACE_TEXTURES } from './textures.js';
 
 // Canvas renderer. Two passes per frame: floor diamonds first, then all
 // "drawables" (objects + player) painter-sorted by world depth (x + y).
@@ -780,6 +781,52 @@ export class Renderer {
     ctx.closePath();
   }
 
+  // Warps `img` to exactly fill the quadrilateral `corners` (must be a
+  // parallelogram — true of every floor diamond and wall face here: corner
+  // order is [origin, +u edge, +u+v corner, +v edge]), clipped to that
+  // shape. An optional tint layers on top via `tintMode` ('multiply' to
+  // darken/colourise, 'screen' to lighten) so day-night and decay shading
+  // still applies to a real photo the same way it did to a flat fill. Falls
+  // back to `fallbackColor` if the image hasn't finished loading yet.
+  drawTexturedQuad(corners, img, fallbackColor, tintColor, tintMode) {
+    const ctx = this.ctx;
+    const [p0, p1, , p3] = corners;
+    ctx.save();
+    this.diamondPath(corners);
+    ctx.clip();
+    const ex = p1.x - p0.x, ey = p1.y - p0.y;
+    const fx = p3.x - p0.x, fy = p3.y - p0.y;
+    ctx.transform(ex, ey, fx, fy, p0.x, p0.y);
+    if (img && img.complete && img.naturalWidth) {
+      ctx.drawImage(img, 0, 0, 1, 1);
+      if (tintColor) {
+        ctx.globalCompositeOperation = tintMode || 'multiply';
+        ctx.fillStyle = tintColor;
+        ctx.fillRect(0, 0, 1, 1);
+        ctx.globalCompositeOperation = 'source-over';
+      }
+    } else {
+      ctx.fillStyle = fallbackColor;
+      ctx.fillRect(0, 0, 1, 1);
+    }
+    ctx.restore();
+  }
+
+  // Clips a crop of `img` (source rect sx,sy,sw,sh) into a circle at
+  // (cx,cy,radius) — used for the player's face. Returns false (drawing
+  // nothing) if the image hasn't loaded yet, so the caller can fall back.
+  drawFaceCircle(cx, cy, radius, img, sx, sy, sw, sh) {
+    if (!img || !img.complete || !img.naturalWidth) return false;
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.drawImage(img, sx, sy, sw, sh, cx - radius, cy - radius, radius * 2, radius * 2);
+    ctx.restore();
+    return true;
+  }
+
   drawFloor(map, tx, ty, type, shade) {
     const ctx = this.ctx;
     const def = FLOORS[type];
@@ -793,9 +840,18 @@ export class Renderer {
       const he = map.heightAt(tx + 1, ty);
       if (he < h) this.skirt(corners[1], corners[2], (h - he) * ELEV, shadeHex(def.color, shade - 0.45));
     }
+    const tex = FLOOR_TEXTURES[type];
+    if (tex) {
+      let tintColor = null, tintMode = 'multiply';
+      if (shade < -0.02) tintColor = `rgba(10,10,12,${Math.min(0.85, -shade)})`;
+      else if (shade > 0.02) { tintColor = `rgba(255,255,255,${Math.min(0.45, shade)})`; tintMode = 'screen'; }
+      this.drawTexturedQuad(corners, tex, shadeHex(def.color, shade), tintColor, tintMode);
+    } else {
+      this.diamondPath(corners);
+      ctx.fillStyle = shadeHex(def.color, shade);
+      ctx.fill();
+    }
     this.diamondPath(corners);
-    ctx.fillStyle = shadeHex(def.color, shade);
-    ctx.fill();
     ctx.strokeStyle = 'rgba(0,0,0,0.07)';
     ctx.lineWidth = 1;
     ctx.stroke();
@@ -927,19 +983,26 @@ export class Renderer {
     const [b0, b1, b2, b3] = this.tileCorners(tx, ty);
     const [t0, t1, t2, t3] = this.tileCorners(tx, ty, H);
 
-    ctx.beginPath(); // south-west face
-    ctx.moveTo(b3.x, b3.y); ctx.lineTo(b2.x, b2.y);
-    ctx.lineTo(t2.x, t2.y); ctx.lineTo(t3.x, t3.y);
-    ctx.closePath();
-    ctx.fillStyle = rgbScale(base, 0.72);
-    ctx.fill();
+    const wallTex = WALL_TEXTURES[obj.material === 'brick' ? 'brick' : 'stone'];
+    const swFace = [b3, b2, t2, t3], seFace = [b1, b2, t2, t1];
+    if (wallTex) {
+      this.drawTexturedQuad(swFace, wallTex, rgbScale(base, 0.72), rgbScale(base, 0.72), 'multiply');
+      this.drawTexturedQuad(seFace, wallTex, rgbScale(base, 0.55), rgbScale(base, 0.55), 'multiply');
+    } else {
+      ctx.beginPath(); // south-west face
+      ctx.moveTo(b3.x, b3.y); ctx.lineTo(b2.x, b2.y);
+      ctx.lineTo(t2.x, t2.y); ctx.lineTo(t3.x, t3.y);
+      ctx.closePath();
+      ctx.fillStyle = rgbScale(base, 0.72);
+      ctx.fill();
 
-    ctx.beginPath(); // south-east face
-    ctx.moveTo(b1.x, b1.y); ctx.lineTo(b2.x, b2.y);
-    ctx.lineTo(t2.x, t2.y); ctx.lineTo(t1.x, t1.y);
-    ctx.closePath();
-    ctx.fillStyle = rgbScale(base, 0.55);
-    ctx.fill();
+      ctx.beginPath(); // south-east face
+      ctx.moveTo(b1.x, b1.y); ctx.lineTo(b2.x, b2.y);
+      ctx.lineTo(t2.x, t2.y); ctx.lineTo(t1.x, t1.y);
+      ctx.closePath();
+      ctx.fillStyle = rgbScale(base, 0.55);
+      ctx.fill();
+    }
 
     this.diamondPath([t0, t1, t2, t3]); // top
     ctx.fillStyle = rgbScale(base, 1);
@@ -1821,10 +1884,18 @@ export class Renderer {
     // the shoulders, Neve a close dark crop.
     const gender = player.gender || 'm';
     const hairCol = gender === 'f' ? '#7a4520' : gender === 'u' ? '#26262c' : '#5a3d22';
-    ctx.fillStyle = '#d9b48c';
-    ctx.beginPath();
-    ctx.arc(c.x, hb - 29, 6, 0, Math.PI * 2);
-    ctx.fill();
+    // Facing the camera: try the persona's face photo first (clipped into
+    // the head circle); falls back to the flat skin tone + drawn eyes/mouth
+    // below if the texture hasn't loaded yet.
+    const face = FACE_TEXTURES[gender];
+    const usedFace = toward >= -0.15 && face
+      && this.drawFaceCircle(c.x, hb - 29, 6, face.img, face.sx, face.sy, face.sw, face.sh);
+    if (!usedFace) {
+      ctx.fillStyle = '#d9b48c';
+      ctx.beginPath();
+      ctx.arc(c.x, hb - 29, 6, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.fillStyle = hairCol;
     if (gender === 'f') {
       // Side falls, visible from every direction.
@@ -1843,19 +1914,21 @@ export class Renderer {
       ctx.closePath();
       ctx.fill();
       if (gender !== 'u') ctx.fillRect(c.x - 6 - horiz * 0.8, hb - 31.5, 12, 2.5);
-      // Eyes and mouth track the horizontal component of travel.
-      const ex = horiz * 2.4;
-      ctx.fillStyle = '#2c2119';
-      ctx.beginPath();
-      ctx.arc(c.x - 2.2 + ex, hb - 28, 1.1, 0, Math.PI * 2);
-      ctx.arc(c.x + 2.2 + ex, hb - 28, 1.1, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(44,33,25,0.7)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(c.x - 1.5 + ex, hb - 25.2);
-      ctx.lineTo(c.x + 1.5 + ex, hb - 25.2);
-      ctx.stroke();
+      if (!usedFace) {
+        // Eyes and mouth track the horizontal component of travel.
+        const ex = horiz * 2.4;
+        ctx.fillStyle = '#2c2119';
+        ctx.beginPath();
+        ctx.arc(c.x - 2.2 + ex, hb - 28, 1.1, 0, Math.PI * 2);
+        ctx.arc(c.x + 2.2 + ex, hb - 28, 1.1, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(44,33,25,0.7)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(c.x - 1.5 + ex, hb - 25.2);
+        ctx.lineTo(c.x + 1.5 + ex, hb - 25.2);
+        ctx.stroke();
+      }
     }
     // The held tool/gun/gadget shown in hand, out toward the facing
     // direction. Using it animates clearly: a tool sweeps through an arc, a

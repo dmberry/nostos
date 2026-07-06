@@ -17,7 +17,7 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
-## Where we are (v0.57)
+## Where we are (v0.58)
 
 - Isometric world, seeded 128x128: river, two bridges, ten-building town, hamlet, forests, tall grass, hills and hollows, wadeable streams.
 - Survival: food/hunger, health, stamina, venom, day/night (dark nights), torches, minimap with fog of war (grey, not black), permadeath that drops your loot where you fell.
@@ -69,6 +69,15 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Certificate of Death**: on death a modal shows name, cause, score, skills, deaths, and an amusing rank (COMPOST → NOOB → SCRAPPER → SURVIVOR → VETERAN → L33T). Freezes the world until clicked. `player.deathCert` snapshot; `deathRank()` in renderer.
 - **Lore notes styled**: Archive fragments render as their own note cards — paper colour + typeface per kind (handwritten note, newsprint, diary, poster, green-on-black disk/tape). `NOTE_STYLE` in lore.js.
 - **Autosave**: character + xp + score + deaths + a run-state snapshot (vitals, position, inventory) persist to localStorage; saved every 8s, on tab-hide, and on unload; restored on load. World regenerates from seed (so caches/cars reset — a known limitation; world-object persistence is a follow-up).
+
+### v0.58 — real textures on tiles, walls, and the player's face
+
+- **Henrik dropped a folder of texture photos into `assets/textures/` (untracked at the time); renamed all 30 to describe their assigned role** (`floor-grass.jpg`, `wall-stone.jpg`, `face-female.png`, etc. — see the folder for the full list) rather than the original opaque asset-pack filenames (`gras364.jpg`, `stone1512.jpg`, `chest006-new4.png`...). A few (`chest006-new4/5/7.png`) turned out to be face portraits despite the "chest" name.
+- **New `src/engine/textures.js`**: preloads `FLOOR_TEXTURES` (grass/tallgrass, water/stream, dirt, road, boards/bridge), `WALL_TEXTURES` (stone, brick), and `FACE_TEXTURES` (keyed by persona gender m/f/u — `face-sheet-male-alien.png` is a two-head sheet: human for Adam, a green alien-ish head for Neve; `face-female.png` for Eve).
+- **`Renderer.drawTexturedQuad`**: warps a bitmap to exactly fill any parallelogram (a floor diamond or a wall face) via a single `ctx.transform` affine mapping, clipped to the shape, with a multiply/screen tint layered on top so day-night and wall-decay shading still works on a real photo the same as it did on a flat colour. Falls back to the original flat fill if the image hasn't finished loading (images load async via plain `<img>` tags — no promises needed since a game loop naturally redraws every frame anyway).
+- **`Renderer.drawFaceCircle`**: clips a crop of the persona's face photo into the player's head circle when facing the camera; falls back to the original flat skin tone + drawn eyes/mouth if the texture isn't ready or the player has their back turned (hair/back-of-head rendering is unchanged either way).
+- Floors and walls without a matching texture (sand, tallgrass2, rubble-adjacent flat colours) keep their existing flat fill — no texture was forced where none fit well.
+- **Not yet used, renamed and waiting**: several more wall/floor variants (`wall-brick-olive-alt.png`, `wall-sandstone.jpg`, `wall-pebbledash.png`, `wall-darkstone-alt.png`, `wall-mossystone-alt.png`, `floor-pavingstone.jpg`, `floor-secret.jpg`, `roof-terracotta.jpg`), decor (`decor-sandbags.png`, `decor-train.jpg`), a graffiti stamp (`graffiti-ron-cross.jpg`) that could replace/supplement the procedural text tags, spare face portraits (`face-female-alt1/2.png`), and a handful of unsorted photos/panels. Good material for a follow-up visual pass.
 
 ### v0.57 — weapons respect walls, and death is final
 
