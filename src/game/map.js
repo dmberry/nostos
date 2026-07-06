@@ -96,17 +96,29 @@ export class GameMap {
     return !!(o && OBJECTS[o.type].solid);
   }
 
-  // True if nothing solid stands between the two points. Sampled at a fine
-  // enough interval for this game's short weapon ranges (a dozen tiles at
-  // most) — a full Bresenham walk isn't needed at that scale.
+  // True if nothing solid — nor a ridge of raised terrain — stands between
+  // the two points. Sampled at a fine enough interval for this game's short
+  // weapon ranges (a dozen tiles at most) — a full Bresenham walk isn't
+  // needed at that scale. A tile blocks sight only if it's higher than
+  // *both* endpoints (a hill genuinely taller than shooter and target
+  // alike); checking against an interpolated straight sightline instead
+  // sounds more precise but isn't — it falsely blocks a shooter's own view
+  // across a plateau sitting at their own height for several tiles before
+  // it drops away.
   hasLineOfSight(x0, y0, x1, y1) {
     const dx = x1 - x0, dy = y1 - y0;
     const dist = Math.hypot(dx, dy);
     if (dist < 1e-6) return true;
+    const ceiling = Math.max(
+      this.heightAt(Math.floor(x0), Math.floor(y0)),
+      this.heightAt(Math.floor(x1), Math.floor(y1)),
+    ) + 0.5;
     const steps = Math.ceil(dist * 4);
     for (let i = 1; i < steps; i++) {
       const t = i / steps;
-      if (this.blocksShot(Math.floor(x0 + dx * t), Math.floor(y0 + dy * t))) return false;
+      const x = Math.floor(x0 + dx * t), y = Math.floor(y0 + dy * t);
+      if (this.blocksShot(x, y)) return false;
+      if (this.heightAt(x, y) > ceiling) return false;
     }
     return true;
   }

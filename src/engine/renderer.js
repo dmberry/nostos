@@ -784,11 +784,15 @@ export class Renderer {
   // Warps `img` to exactly fill the quadrilateral `corners` (must be a
   // parallelogram — true of every floor diamond and wall face here: corner
   // order is [origin, +u edge, +u+v corner, +v edge]), clipped to that
-  // shape. An optional tint layers on top via `tintMode` ('multiply' to
+  // shape. The flat colour is always painted first and the photo blended
+  // over it at `textureAlpha` (a busy, high-contrast photo at full strength
+  // read as noisy against this game's flatter palette — toning it down
+  // keeps the texture's detail without it fighting the art style) — that
+  // base colour is also what shows if the image hasn't loaded yet. An
+  // optional tint layers on top via `tintMode` ('multiply' to
   // darken/colourise, 'screen' to lighten) so day-night and decay shading
-  // still applies to a real photo the same way it did to a flat fill. Falls
-  // back to `fallbackColor` if the image hasn't finished loading yet.
-  drawTexturedQuad(corners, img, fallbackColor, tintColor, tintMode) {
+  // still applies the same way it did to a flat fill.
+  drawTexturedQuad(corners, img, fallbackColor, tintColor, tintMode, textureAlpha = 0.55) {
     const ctx = this.ctx;
     const [p0, p1, , p3] = corners;
     ctx.save();
@@ -797,17 +801,18 @@ export class Renderer {
     const ex = p1.x - p0.x, ey = p1.y - p0.y;
     const fx = p3.x - p0.x, fy = p3.y - p0.y;
     ctx.transform(ex, ey, fx, fy, p0.x, p0.y);
+    ctx.fillStyle = fallbackColor;
+    ctx.fillRect(0, 0, 1, 1);
     if (img && img.complete && img.naturalWidth) {
+      ctx.globalAlpha = textureAlpha;
       ctx.drawImage(img, 0, 0, 1, 1);
+      ctx.globalAlpha = 1;
       if (tintColor) {
         ctx.globalCompositeOperation = tintMode || 'multiply';
         ctx.fillStyle = tintColor;
         ctx.fillRect(0, 0, 1, 1);
         ctx.globalCompositeOperation = 'source-over';
       }
-    } else {
-      ctx.fillStyle = fallbackColor;
-      ctx.fillRect(0, 0, 1, 1);
     }
     ctx.restore();
   }

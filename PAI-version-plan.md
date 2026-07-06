@@ -17,7 +17,7 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
-## Where we are (v0.58)
+## Where we are (v0.59)
 
 - Isometric world, seeded 128x128: river, two bridges, ten-building town, hamlet, forests, tall grass, hills and hollows, wadeable streams.
 - Survival: food/hunger, health, stamina, venom, day/night (dark nights), torches, minimap with fog of war (grey, not black), permadeath that drops your loot where you fell.
@@ -69,6 +69,11 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Certificate of Death**: on death a modal shows name, cause, score, skills, deaths, and an amusing rank (COMPOST → NOOB → SCRAPPER → SURVIVOR → VETERAN → L33T). Freezes the world until clicked. `player.deathCert` snapshot; `deathRank()` in renderer.
 - **Lore notes styled**: Archive fragments render as their own note cards — paper colour + typeface per kind (handwritten note, newsprint, diary, poster, green-on-black disk/tape). `NOTE_STYLE` in lore.js.
 - **Autosave**: character + xp + score + deaths + a run-state snapshot (vitals, position, inventory) persist to localStorage; saved every 8s, on tab-hide, and on unload; restored on load. World regenerates from seed (so caches/cars reset — a known limitation; world-object persistence is a follow-up).
+
+### v0.59 — line of sight respects terrain, softer textures
+
+- **BUG FIX: line of sight ignored terrain height entirely.** v0.57's `hasLineOfSight()` only checked solid *objects* (walls, trees, etc.), so a W4 (or the player) could shoot straight over/through a hill with nothing but open air between the two tiles at ground level — "it can't even see you if you're behind a block" was the actual bug, not a metaphor. Fixed by also blocking sight through any sampled tile taller than *both* endpoints (a genuine ridge between them) — checked via `Math.max`, not an interpolated straight sightline, because the interpolated version has its own bug: it falsely blocks a shooter's view across their *own* plateau if it sits at their height for several tiles before dropping away. Verified with a standalone Node script exercising five cases (flat/clear, wall, hill between two ground-level points, target in a pit seen from flat ground, shooter on a hilltop looking down) — all five now resolve correctly.
+- **Textures toned down.** The v0.58 photo textures read as busy/noisy against the game's flatter palette (grass especially). `Renderer.drawTexturedQuad` now always paints the flat colour first and blends the photo over it at 55% opacity (was 100%) — same day-night/decay tinting layered on top as before.
 
 ### v0.58 — real textures on tiles, walls, and the player's face
 
@@ -202,6 +207,7 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - Visual pass on the machines art (obelisks, crates, robots) and hollows.
 - Limping animation + WOUNDED tag when health is low (the slowdown exists; it needs a visual cue).
 - Persist minimap fog/exploration across reloads (map knowledge should survive death, like skills).
+- **File size**: `renderer.js` (2150+ lines), `player.js` (1380), `robots.js` (1000), `main.js` (900) are all getting long from steady feature accretion. Worth a split before they get much bigger — candidates: pull renderer.js's HUD/modal drawing (dashboard, backpack, skills, weapons chart, death cert) into its own `ui.js`; split player.js's weapon-fire logic (fire/pierceShot/coneShot/burnObelisk) into a `combat.js` mixin or module; robots.js could separate the AI update functions (updateT1/T2/W1/W3/W4) from the drawing code. Not urgent — nothing is currently hard to find or edit — but flagged here since it was asked about directly (2026-07-06) and will only get harder to justify skipping the longer we wait.
 
 **The hidden story (the big one)**
 - Lore fragments as loot: newspapers, diaries, floppy disks, VHS tapes, answering machines — readable/playable once you find power and devices; an Archive screen assembles the timeline. The truth about the takeover, and what the obelisks really do, told in pieces.
