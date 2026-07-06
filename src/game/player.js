@@ -19,7 +19,7 @@ const PICKUP_RANGE = 0.55;
 const STAMINA_MAX = 100;
 const SPRINT_DRAIN = 9;   // stamina per second while sprinting
 const STAMINA_REGEN = 12; // per second when not sprinting
-const HEALTH_REGEN = 0.5; // per second while fed and unpoisoned
+const HEALTH_REGEN = 1.5; // per second while fed and unpoisoned
 const VENOM_DRAIN = 2;    // health per second while poisoned
 
 const FOOD_MAX = 100;

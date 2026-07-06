@@ -17,7 +17,12 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
-## Where we are (v0.81)
+## Where we are (v0.82)
+
+### v0.82 — faster health regen, obelisk terminal only opens on a screen click
+
+- **Health regenerates 3x faster.** `HEALTH_REGEN` 0.5 → 1.5/s while fed and unpoisoned — dying to attrition after a fight was too easy; recovery between scrapes is now meaningfully faster.
+- **Obelisk terminal only opens when you click the little green screen**, not anywhere on the tower body. `drawObelisk`'s `obeliskHits` push shrank from the whole tower footprint to the CRT screen rect plus an 8px padding for a comfortable target (`sx-5.5-8, sy-6.5-8, 12+16, 14+16`).
 
 ### v0.81 — access chip + AI OS, self-charging electro-gun, carried shields, obelisk damage bar, factory flicker-spawn
 

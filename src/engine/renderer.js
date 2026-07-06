@@ -1552,8 +1552,9 @@ export class Renderer {
       }
     }
     // A small green CRT terminal set into the SE face, flickering faintly to
-    // hint it can be used. Clickable — the whole tower body is registered as a
-    // hit rect (world-screen space; main converts the click the same way).
+    // hint it can be used. Only the screen itself is clickable — not the
+    // whole tower body — with a little padding for a comfortable target
+    // (world-screen space; main converts the click the same way).
     const sx = c.x + 1, sy = c.y - Math.round(H * 0.32);
     const flick = 0.7 + 0.3 * Math.abs(Math.sin(performance.now() / 240 + obj.x));
     ctx.fillStyle = '#0a140c';
@@ -1563,7 +1564,8 @@ export class Renderer {
     ctx.strokeStyle = 'rgba(30,70,40,0.7)'; ctx.lineWidth = 1;
     for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.moveTo(sx - 4, sy - 3 + k * 3); ctx.lineTo(sx + 5, sy - 3 + k * 3); ctx.stroke(); }
     ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.strokeRect(sx - 5.5, sy - 6.5, 12, 14);
-    this.obeliskHits.push({ obj, x: c.x - W - 6, y: c.y - H - 14, w: 2 * W + 12, h: H + 22 });
+    const SCREEN_PAD = 8;
+    this.obeliskHits.push({ obj, x: sx - 5.5 - SCREEN_PAD, y: sy - 6.5 - SCREEN_PAD, w: 12 + 2 * SCREEN_PAD, h: 14 + 2 * SCREEN_PAD });
 
     // Damage bar above a scorched obelisk when the player's near — five OB-gun
     // burns (or an insane bomb) to fell one, so it needs the heavy kit.
