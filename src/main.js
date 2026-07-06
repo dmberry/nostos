@@ -30,7 +30,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '0.59';
+const VERSION = '0.60';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -99,15 +99,17 @@ const obelisks = [];
   }
   // Each cache holds a list of drops. The first few are guaranteed so every
   // run can find the key anti-machine gear; the rest roll on a table.
+  // Ammo/battery quantities doubled from their original defaults — the
+  // railgun (batteries) and other guns were running dry far too fast.
   const guaranteed = [
-    [{ item: 'stungun', qty: 1 }, { item: 'battery', qty: 2 }],
-    [{ item: 'pistol', qty: 1 }, { item: 'ammo', qty: 6 }],
-    [{ item: 'electrogun', qty: 1 }, { item: 'battery', qty: 1 }],
-    [{ item: 'shotgun', qty: 1 }, { item: 'shells', qty: 4 }],
+    [{ item: 'stungun', qty: 1 }, { item: 'battery', qty: 4 }],
+    [{ item: 'pistol', qty: 1 }, { item: 'ammo', qty: 12 }],
+    [{ item: 'electrogun', qty: 1 }, { item: 'battery', qty: 2 }],
+    [{ item: 'shotgun', qty: 1 }, { item: 'shells', qty: 8 }],
     [{ item: 'crowbar', qty: 1 }],
-    [{ item: 'battery', qty: 2 }],
+    [{ item: 'battery', qty: 4 }],
     // Exactly one Wi-Fi block per world: rare, in a random guaranteed cache.
-    [{ item: 'wifiblock', qty: 1 }, { item: 'battery', qty: 2 }],
+    [{ item: 'wifiblock', qty: 1 }, { item: 'battery', qty: 4 }],
     // A shovel for digging robot traps.
     [{ item: 'shovel', qty: 1 }],
     // A saw: fells trees fast and scores more per tree.
@@ -117,10 +119,10 @@ const obelisks = [];
     [{ item: 'bomb_medium', qty: 1 }],
     // Late-game weapons: previously defined in ITEMS but never actually
     // placed anywhere in the world, so they were unobtainable in play.
-    [{ item: 'bow', qty: 1 }, { item: 'arrow', qty: 12 }],
+    [{ item: 'bow', qty: 1 }, { item: 'arrow', qty: 24 }],
     [{ item: 'katana', qty: 1 }],
     [{ item: 'sledgehammer', qty: 1 }],
-    [{ item: 'railgun', qty: 1 }, { item: 'battery', qty: 2 }],
+    [{ item: 'railgun', qty: 1 }, { item: 'battery', qty: 4 }],
     // Every remaining tool/weapon in ITEMS gets at least one guaranteed
     // spawn too — except the wave gun and OB-gun, which stay crafting-only.
     [{ item: 'penknife', qty: 1 }],
@@ -136,9 +138,9 @@ const obelisks = [];
     }
     if (r < 0.58) {
       const AMMO = [
-        [{ item: 'battery', qty: 2 }],
-        [{ item: 'ammo', qty: 6 }],
-        [{ item: 'shells', qty: 4 }],
+        [{ item: 'battery', qty: 4 }],
+        [{ item: 'ammo', qty: 12 }],
+        [{ item: 'shells', qty: 8 }],
       ];
       return AMMO[Math.floor(rng() * AMMO.length)];
     }
@@ -639,7 +641,7 @@ function update(dt) {
     if (emptyBoxes.length) {
       const box = emptyBoxes[Math.floor(Math.random() * emptyBoxes.length)];
       const r = Math.random();
-      box.loot = r < 0.4 ? [{ item: 'battery', qty: 2 }] : r < 0.7 ? [{ item: 'ammo', qty: 6 }] : [{ item: 'shells', qty: 4 }];
+      box.loot = r < 0.4 ? [{ item: 'battery', qty: 4 }] : r < 0.7 ? [{ item: 'ammo', qty: 12 }] : [{ item: 'shells', qty: 8 }];
       box.opened = false;
     }
   }

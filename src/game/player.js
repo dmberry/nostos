@@ -41,6 +41,17 @@ const SCORE = { tree: 1, animal: 3, robot: 10, wreck: 2, cache: 2, book: 5, frag
 // Item kinds that can occupy the hands slot.
 const HOLDABLE = new Set(['tool', 'gun', 'gadget', 'bomb']);
 
+// Empty-handed is still a weapon, just a bad one: a stand-in "tool" so bare
+// fists flow through the exact same melee path as a real one (target
+// finding, wreck-mining, zombie immunity, tree handling) rather than the
+// old "Your hands are empty" no-op. Barely scratches a machine and can't
+// fell a tree at all — see the bare-hands branch alongside penknife's.
+const BARE_HANDS = {
+  name: 'Bare hands', kind: 'tool', tier: 0,
+  treeDamage: 0, animalDamage: 2, robotDamage: 1,
+  swingCooldown: 0.4, staminaCost: 2,
+};
+
 // A robot the OB-gun's beam has corrupted into a "zombie" shrugs off every
 // weapon except the bow and the wave gun — the only two builds precise
 // enough to hit whatever in it is still killable.
@@ -600,7 +611,9 @@ export class Player {
   // ahead is always searched with the free hand regardless of what's in
   // the primary hand.
   useHands(map, animals = [], robots = []) {
-    const tool = ITEMS[this.hands];
+    // Empty hands still throw a (weak) punch — see BARE_HANDS — rather than
+    // refusing to do anything.
+    const tool = this.hands ? ITEMS[this.hands] : BARE_HANDS;
     if (this.swingTimer > 0 || this.z > 0) return;
 
     const tx = Math.floor(this.x + this.facing.x * REACH);
@@ -608,15 +621,13 @@ export class Player {
     const obj = map.objectAt(tx, ty);
     const facingBox = obj && obj.type === 'box';
 
-    if (!tool || tool.kind === 'gun' || tool.kind === 'gadget' || tool.kind === 'bomb') {
+    if (tool.kind === 'gun' || tool.kind === 'gadget' || tool.kind === 'bomb') {
       if (facingBox) { this.openBox(obj, map); return; }
-      if (tool && tool.kind === 'gun') this.fire(tool, map, animals, robots);
-      else if (tool && tool.kind === 'gadget') this.useGadget(tool);
-      else if (tool && tool.kind === 'bomb') this.dropBomb(tool, map);
-      else if (!tool) this.say('Your hands are empty.');
+      if (tool.kind === 'gun') this.fire(tool, map, animals, robots);
+      else if (tool.kind === 'gadget') this.useGadget(tool);
+      else if (tool.kind === 'bomb') this.dropBomb(tool, map);
       return;
     }
-    if (tool.kind !== 'tool') return;
     if (this.stamina < tool.staminaCost) {
       this.say('Too exhausted to swing.');
       return;
@@ -702,13 +713,20 @@ export class Player {
     }
 
     // A penknife is far too small to fell a tree — hacking away with one just
-    // burns energy and wears you down.
+    // burns energy and wears you down. Bare hands are worse still.
     if (this.hands === 'penknife') {
       this.swingTimer = tool.swingCooldown;
       this.stamina = Math.max(0, this.stamina - 8);
       this.health = Math.max(1, this.health - 0.6);
       sfx.play('swing');
       this.say('The penknife is useless against a tree — you only tire yourself out.');
+      return;
+    }
+    if (!this.hands) {
+      this.swingTimer = tool.swingCooldown;
+      this.stamina = Math.max(0, this.stamina - 6);
+      sfx.play('swing');
+      this.say('Bare hands against a tree trunk get you nowhere.');
       return;
     }
 
@@ -937,7 +955,7 @@ export class Player {
       // across the world's towers) — collect all eight to build a wave gun.
       const num = ob.circuitNum || (1 + Math.floor(Math.random() * 8));
       map.groundItems.push({ item: 'circuit', qty: 1, num, x: ob.x + 0.5, y: ob.y + 0.5 });
-      map.groundItems.push({ item: 'battery', qty: 2, x: ob.x + 0.5, y: ob.y + 0.5 });
+      map.groundItems.push({ item: 'battery', qty: 4, x: ob.x + 0.5, y: ob.y + 0.5 });
       map.groundItems.push({ item: 'scrap', qty: 3, x: ob.x + 0.5, y: ob.y + 0.5 });
       if (ob.code) this.killLog.push(ob.code);
       if (this.onObeliskDestroyed) this.onObeliskDestroyed(ob);
@@ -975,7 +993,7 @@ export class Player {
         this.addScore(20);
         const num = ob.circuitNum || (1 + Math.floor(Math.random() * 8));
         map.groundItems.push({ item: 'circuit', qty: 1, num, x: ob.x + 0.5, y: ob.y + 0.5 });
-        map.groundItems.push({ item: 'battery', qty: 2, x: ob.x + 0.5, y: ob.y + 0.5 });
+        map.groundItems.push({ item: 'battery', qty: 4, x: ob.x + 0.5, y: ob.y + 0.5 });
         map.groundItems.push({ item: 'scrap', qty: 3, x: ob.x + 0.5, y: ob.y + 0.5 });
         if (ob.code) this.killLog.push(ob.code);
         if (this.onObeliskDestroyed) this.onObeliskDestroyed(ob);

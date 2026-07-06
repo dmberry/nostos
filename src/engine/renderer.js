@@ -783,21 +783,24 @@ export class Renderer {
 
   // Warps `img` to exactly fill the quadrilateral `corners` (must be a
   // parallelogram — true of every floor diamond and wall face here: corner
-  // order is [origin, +u edge, +u+v corner, +v edge]), clipped to that
-  // shape. The flat colour is always painted first and the photo blended
-  // over it at `textureAlpha` (a busy, high-contrast photo at full strength
-  // read as noisy against this game's flatter palette — toning it down
-  // keeps the texture's detail without it fighting the art style) — that
-  // base colour is also what shows if the image hasn't loaded yet. An
-  // optional tint layers on top via `tintMode` ('multiply' to
-  // darken/colourise, 'screen' to lighten) so day-night and decay shading
-  // still applies the same way it did to a flat fill.
+  // order is [origin, +u edge, +u+v corner, +v edge]). No explicit clip is
+  // needed: drawImage/fillRect's destination rect (0,0,1,1) already maps,
+  // via the transform below, to exactly that parallelogram and no further —
+  // ctx.clip() was here originally but is one of the more expensive canvas
+  // 2D calls, and doing it on every floor tile and wall face, every frame,
+  // was a real performance regression (severe enough to make close-range
+  // interactions like re-collecting a dropped item feel broken). The flat
+  // colour is always painted first and the photo blended over it at
+  // `textureAlpha` (a busy, high-contrast photo at full strength read as
+  // noisy against this game's flatter palette) — that base colour is also
+  // what shows if the image hasn't loaded yet. An optional tint layers on
+  // top via `tintMode` ('multiply' to darken/colourise, 'screen' to
+  // lighten) so day-night and decay shading still applies the same way it
+  // did to a flat fill.
   drawTexturedQuad(corners, img, fallbackColor, tintColor, tintMode, textureAlpha = 0.55) {
     const ctx = this.ctx;
     const [p0, p1, , p3] = corners;
     ctx.save();
-    this.diamondPath(corners);
-    ctx.clip();
     const ex = p1.x - p0.x, ey = p1.y - p0.y;
     const fx = p3.x - p0.x, fy = p3.y - p0.y;
     ctx.transform(ex, ey, fx, fy, p0.x, p0.y);
@@ -1902,38 +1905,42 @@ export class Renderer {
       ctx.fill();
     }
     ctx.fillStyle = hairCol;
-    if (gender === 'f') {
-      // Side falls, visible from every direction.
+    if (gender === 'f' && !usedFace) {
+      // Side falls, visible from every direction — only drawn for the flat
+      // fallback head; the face photo already has its own hair.
       ctx.fillRect(c.x - 7.5, hb - 31, 3, 12);
       ctx.fillRect(c.x + 4.5, hb - 31, 3, 12);
     }
     if (toward < -0.15) {
       // Back to us: hair wraps the whole back of the head, a sliver of neck.
+      // No face is shown from behind either way, textured or not.
       ctx.beginPath();
       ctx.arc(c.x, hb - 29.5, 6, 0, Math.PI * 2);
       ctx.fill();
-    } else {
-      // Hair mop with a fringe, pushed slightly opposite the gaze.
+    } else if (!usedFace) {
+      // Hair mop with a fringe, pushed slightly opposite the gaze. Skipped
+      // when a face photo is showing — it used to paint straight over the
+      // top half of the texture, hiding the eyes/forehead and leaving only
+      // an unflattering sliver of chin visible (the actual "weird, same for
+      // every persona" look reported — not a wrong-image bug, a covered one).
       ctx.beginPath();
       ctx.arc(c.x - horiz * 0.8, hb - 30.5, 6, Math.PI, Math.PI * 2);
       ctx.closePath();
       ctx.fill();
       if (gender !== 'u') ctx.fillRect(c.x - 6 - horiz * 0.8, hb - 31.5, 12, 2.5);
-      if (!usedFace) {
-        // Eyes and mouth track the horizontal component of travel.
-        const ex = horiz * 2.4;
-        ctx.fillStyle = '#2c2119';
-        ctx.beginPath();
-        ctx.arc(c.x - 2.2 + ex, hb - 28, 1.1, 0, Math.PI * 2);
-        ctx.arc(c.x + 2.2 + ex, hb - 28, 1.1, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(44,33,25,0.7)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(c.x - 1.5 + ex, hb - 25.2);
-        ctx.lineTo(c.x + 1.5 + ex, hb - 25.2);
-        ctx.stroke();
-      }
+      // Eyes and mouth track the horizontal component of travel.
+      const ex = horiz * 2.4;
+      ctx.fillStyle = '#2c2119';
+      ctx.beginPath();
+      ctx.arc(c.x - 2.2 + ex, hb - 28, 1.1, 0, Math.PI * 2);
+      ctx.arc(c.x + 2.2 + ex, hb - 28, 1.1, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(44,33,25,0.7)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(c.x - 1.5 + ex, hb - 25.2);
+      ctx.lineTo(c.x + 1.5 + ex, hb - 25.2);
+      ctx.stroke();
     }
     // The held tool/gun/gadget shown in hand, out toward the facing
     // direction. Using it animates clearly: a tool sweeps through an arc, a

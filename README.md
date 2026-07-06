@@ -1,6 +1,6 @@
 # postAI
 
-**Version:** 0.59 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
+**Version:** 0.60 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
 
 *(Versioning policy: 0.01 increments from v0.3 onwards.)*
 
@@ -67,6 +67,8 @@ Inspired by Project Zomboid: knowledge is the real progression, scarcity drives 
 **Real textures (v0.58):** floors and walls now render with actual photo textures (grass, water, dirt, road, wooden boards, stone, brick) warped to fit the isometric tiles, instead of flat colour fills — day/night and wall decay shading still applies on top. Adam, Eve, and Neve each now show a real face when you look at them. A folder of texture assets (`assets/textures/`) got renamed from opaque asset-pack names to ones that describe what they're for; several more (alternate wall finishes, a graffiti stamp, decor) are renamed and ready for a future pass.
 
 **Line of sight fixed, softer textures (v0.59):** a real bug — line of sight ignored terrain entirely, so a hill between you and a W4 didn't block its shot. Fixed: a tile now blocks sight if it's higher than both ends of the shot. The v0.58 photo textures also read as too busy; they're blended at 55% opacity over the flat colour now instead of drawn at full strength.
+
+**Face fix, ammo economy, a real perf fix, bare-handed combat (v0.60):** the player's face was being covered by the procedural hair drawing (both personas showed only a sliver of chin — that's the "bearded" look reported, not a wrong-image bug). Removed an unnecessary `ctx.clip()` call happening on every floor tile and wall face, every frame — a genuine performance regression severe enough to make picking things back up feel broken. Battery/ammo/shells/arrow quantities doubled across the board. And bare hands can throw a (weak) punch now instead of refusing outright.
 
 **Still queued (large systems):** walking on top of walls/blocks (a multi-level feature), and a mobile phone + RON text tips. Both want their own focused pass.
 

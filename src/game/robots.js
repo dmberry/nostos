@@ -453,14 +453,14 @@ export function updateRobots(dt, robots, player, map) {
       if (r.type === 't1' && (scrapQty(r.x * 1.7 + 3, r.y * 2.3 + 1) & 7) === 0
         && ((Math.floor(r.x * 31 + r.y * 17)) % 20 === 0)) {
         map.groundItems.push({ item: 'obgun', qty: 1, x: r.x, y: r.y });
-        map.groundItems.push({ item: 'battery', qty: 2, x: r.x + 0.3, y: r.y });
+        map.groundItems.push({ item: 'battery', qty: 4, x: r.x + 0.3, y: r.y });
       }
       // A W4 is the toughest thing the factory builds — bringing one down is
       // a proper win, so it drops a generous spoil of war on top of the
       // usual scrap: a stack of batteries, bonus scrap, and a heavy bomb
       // (rarely the insane one), deterministic from its wreck position.
       if (r.type === 'w4') {
-        map.groundItems.push({ item: 'battery', qty: 3, x: r.x + 0.3, y: r.y });
+        map.groundItems.push({ item: 'battery', qty: 6, x: r.x + 0.3, y: r.y });
         map.groundItems.push({ item: 'scrap', qty: 4, x: r.x - 0.3, y: r.y - 0.2 });
         const rareBomb = Math.floor(r.x * 53 + r.y * 29) % 5 === 0;
         map.groundItems.push({ item: rareBomb ? 'bomb_insane' : 'bomb_large', qty: 1, x: r.x, y: r.y + 0.3 });

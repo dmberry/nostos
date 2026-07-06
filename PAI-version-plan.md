@@ -17,7 +17,7 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
-## Where we are (v0.59)
+## Where we are (v0.60)
 
 - Isometric world, seeded 128x128: river, two bridges, ten-building town, hamlet, forests, tall grass, hills and hollows, wadeable streams.
 - Survival: food/hunger, health, stamina, venom, day/night (dark nights), torches, minimap with fog of war (grey, not black), permadeath that drops your loot where you fell.
@@ -69,6 +69,13 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Certificate of Death**: on death a modal shows name, cause, score, skills, deaths, and an amusing rank (COMPOST → NOOB → SCRAPPER → SURVIVOR → VETERAN → L33T). Freezes the world until clicked. `player.deathCert` snapshot; `deathRank()` in renderer.
 - **Lore notes styled**: Archive fragments render as their own note cards — paper colour + typeface per kind (handwritten note, newsprint, diary, poster, green-on-black disk/tape). `NOTE_STYLE` in lore.js.
 - **Autosave**: character + xp + score + deaths + a run-state snapshot (vitals, position, inventory) persist to localStorage; saved every 8s, on tab-hide, and on unload; restored on load. World regenerates from seed (so caches/cars reset — a known limitation; world-object persistence is a follow-up).
+
+### v0.60 — face-covering bug, ammo economy, a real perf regression, bare-handed combat
+
+- **BUG FIX: the player's face texture was covered by the procedural hair drawing.** The v0.58 face-photo code (correctly) picked a different image per gender, but the pre-existing "hair mop with a fringe" arc still drew a solid hair-coloured shape over the *top half* of the head circle regardless, leaving only an unflattering sliver of chin/jaw visible from under it — for both Adam and Eve. That's what read as "the bearded face on the female character too": not a wrong-image bug, a covered one. Fixed by skipping the fringe arc, its eyebrow-line rect, and Eve's side-hair falls whenever a face texture is actually showing (`renderer.js` `drawPlayer`) — the photo already has its own hair.
+- **BUG FIX: a real performance regression from `ctx.clip()` on every floor tile and wall face, every frame.** `drawTexturedQuad` clipped to the diamond/parallelogram before drawing — turns out unnecessary, since `drawImage`'s destination rect already exactly bounds the shape once warped through the same transform, and clip is one of the more expensive Canvas 2D calls. Removed. Severe enough on a full-screen tile grid to make close-range interactions (re-collecting a dropped item, in particular) feel broken — this is almost certainly what was reported as "can't pick things up after dropping something."
+- **Ammo economy doubled.** Battery/ammo/shells/arrow quantities were running out far too fast (the railgun in particular, since batteries are shared across so many systems). Doubled every guaranteed-cache, roll-table, RON-resupply, and combat-drop quantity for these four resources.
+- **Bare hands can now fight.** `useHands()` used to refuse outright with "Your hands are empty." — now a `BARE_HANDS` stand-in tool (2 animal / 1 robot damage, can't fell a tree) flows through the exact same melee path as a real tool, so an empty-handed swing still lands, just weakly. Held guns/gadgets/bombs are unchanged (their dedicated fire/use/drop action, not melee).
 
 ### v0.59 — line of sight respects terrain, softer textures
 
