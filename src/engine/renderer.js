@@ -1992,7 +1992,7 @@ export class Renderer {
       sprite = set.idle[dir];
     }
     if (!sprite || !sprite.complete || !sprite.naturalWidth) return;
-    const scale = 0.9;
+    const scale = 0.6; // 0.9 towered over a 32px-tall tile diamond; scaled down to fit
     const dw = sprite.naturalWidth * scale, dh = sprite.naturalHeight * scale;
     const cy = by - dh / 2 + 6;
     const tint = player.hurtTimer > 0 ? 'rgba(220,60,50,0.55)'

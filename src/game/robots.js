@@ -84,6 +84,8 @@ const W4_HEAD = '#2c0c05';
 // has moved them, so a swarm spreads out around its target instead of
 // stacking on the same tile.
 const ROBOT_MIN_SEP = 0.62;
+const BUMP_DAMAGE = 2;     // a collision between two machines chips both of them
+const BUMP_COOLDOWN = 1.5; // seconds before the same machine can be bump-hurt again
 
 // W3s: unarmed repair drones fielded by the W-factory. They walk straight to
 // the nearest obelisk that's been damaged but not yet destroyed and mend it
@@ -199,6 +201,7 @@ function baseRobot(type, x, y, hp, rng) {
     workScanT: 0,
     chopPulseT: 0,
     following: false,     // friendly follow hysteresis between FOLLOW_MIN/MAX
+    bumpCooldown: 0,      // seconds before another machine colliding with this one can hurt it again
     rng: makeRng(Math.floor(rng() * 0xffffffff)),
   };
 }
@@ -563,7 +566,7 @@ export function updateRobots(dt, robots, player, map) {
     else if (r.type === 'w4') updateW4(r, dt, player, map);
     else updateT2(r, dt, player, map);
   }
-  separateRobots(robots, map);
+  separateRobots(robots, map, dt);
 }
 
 // No two live machines may occupy (near enough) the same tile: after every
@@ -576,7 +579,10 @@ export function updateRobots(dt, robots, player, map) {
 // and the AI's own pull each frame would otherwise out-muscle it. A handful
 // of cheap iterations converges to a clean spread instead.
 const SEPARATION_PASSES = 4;
-function separateRobots(robots, map) {
+function separateRobots(robots, map, dt) {
+  for (const r of robots) {
+    if (r.bumpCooldown > 0) r.bumpCooldown = Math.max(0, r.bumpCooldown - dt);
+  }
   for (let pass = 0; pass < SEPARATION_PASSES; pass++) {
     let moved = false;
     for (let i = 0; i < robots.length; i++) {
@@ -589,6 +595,18 @@ function separateRobots(robots, map) {
         const d = Math.hypot(dx, dy);
         if (d >= ROBOT_MIN_SEP) continue;
         moved = true;
+        // A collision hurts both machines, gated by their own cooldown so a
+        // pair jammed together for several frames (or several relaxation
+        // passes within the same frame) chips away rather than melting
+        // instantly. Only checked on the first pass — later passes this same
+        // frame are just finishing the push-apart, not a fresh collision.
+        if (pass === 0 && a.bumpCooldown <= 0 && b.bumpCooldown <= 0) {
+          a.hp -= BUMP_DAMAGE; a.hurt = true;
+          b.hp -= BUMP_DAMAGE; b.hurt = true;
+          a.bumpCooldown = BUMP_COOLDOWN;
+          b.bumpCooldown = BUMP_COOLDOWN;
+          (map.sparks ??= []).push({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, ttl: 0.3, max: 0.3 });
+        }
         // Nearly coincident: no meaningful direction to push along, so pick
         // one from their (deterministic) index difference rather than divide
         // by ~0.

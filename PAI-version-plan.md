@@ -17,7 +17,13 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
-## Where we are (v0.66)
+## Where we are (v0.67)
+
+### v0.67 — smaller player sprite, robots hurt each other, bigger help pictures
+
+- **BUG FIX: the v0.65 player sprite was oversized.** Drawn at `scale = 0.9` against 64x64 source frames, it stood ~58px tall next to a 32px-tall tile diamond — visibly towering over the world. Dropped to `scale = 0.6` (~38px tall), close to the old procedural body's proportions and back in scale with the environment.
+- **Robots now hurt each other on collision.** `separateRobots()` in `robots.js` already pushes apart any two machines that end up too close (so a crowd spreads out instead of stacking); it now also chips `BUMP_DAMAGE` (2hp) off both on a genuine collision, gated by a per-robot `bumpCooldown` (1.5s) so a pair jammed together for several frames chips away rather than melting instantly, and only checked on the relaxation pass's first iteration so a single frame's multi-pass push-apart doesn't multi-count the same bump. A spark plays at the midpoint. Reuses the existing hp<=0 death/loot path in `updateRobots` (one-tick delay, same as every other damage source in this file).
+- **Machine gallery pictures in the help modal were being squashed.** `renderMachineIcon()` already rendered each robot onto a 96x96 offscreen canvas, but the CSS displayed it at 60x60 — a needless 62% downscale. `.machineChip img` is now 96x96 to match, so the pictures show at their native, crisper size.
 
 ### v0.66 — robots feel a slope too, README pruned
 
