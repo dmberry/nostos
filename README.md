@@ -1,6 +1,6 @@
 # postAI
 
-**Version:** 0.73 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
+**Version:** 0.74 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
 
 *(Versioning policy: 0.01 increments from v0.3 onwards.)*
 
@@ -8,7 +8,7 @@ An isometric 2D survival game set in a world devastated by an AI takeover. Civil
 
 Inspired by Project Zomboid: knowledge is the real progression, scarcity drives movement, every fight is optional and risky, and the world tells the story.
 
-## Current build (v0.73)
+## Current build (v0.74)
 
 **The world:** a seeded 128x128 isometric map — a river with two bridges, a ten-building town, a ruined hamlet, forests, tall grass, and roads. Away from the towns the terrain gets properly rugged: steep hills and deep hollows, always climbable one step at a time. Rubble and rocks are low enough to step straight over; a **wall block** is taller, so it takes a **double jump** (press jump again in mid-air) to get on top — once up there you move a little slower for control, can roam the block tops, and just walk off any edge to drop back down and carry on. Building walls still stop you on foot, so a town or house is a real boundary until you deliberately climb it. The forests are drawn with proper hand-drawn tree art — mostly full leafy trees, with the odd small or bare/dead one — and a chopped tree shows a damage bar so you can see how many swings it has left. The map is ringed by impassable dark-gravel rock cliffs at its edge — drawn semi-transparent so you still see yourself if one stands between you and the camera. Streams can be waded; the river can be swum (only your head and shoulders show above the water), slowly and at a cost. Day and night cycle, with genuinely dark nights and torches to push them back.
 
@@ -18,7 +18,7 @@ Inspired by Project Zomboid: knowledge is the real progression, scarcity drives 
 
 **Combat & weapons:** a full armoury from the penknife up through swords, guns, and a railgun, viewable with a power rating in the Armoury (**V**) as you find each one. Bombs come in four sizes. Melee and gun practice both build XP over time. Every ranged weapon fires by line of sight and stops at a solid wall; pulling the trigger with nothing in view still spends the round. The **OB-gun** brings down obelisk towers (or corrupts a robot into a **zombie**, killable only by the bow or wave gun); the **wave gun** fans laser fire through a crowd.
 
-**Story & progression:** books teach permanent skills (woodcraft, herbalism, tracking, fleet foot). Lore fragments scattered through the ruins build into a scrollable Archive (**J**) — newspapers, diaries, disks, tapes — that never quite states what happened, only lets you assemble it. RON graffiti and abandoned cars litter the world for texture. Resistance caches restock over time.
+**Story & progression:** books teach permanent skills (woodcraft, herbalism, tracking, fleet foot). Lore fragments scattered through the ruins build into a scrollable Archive (**J**) — newspapers, diaries, disks, tapes — that never quite states what happened, only lets you assemble it. RON graffiti and abandoned cars (real 3/4-view sprites — classic saloons in several colours, a police car, an ambulance — pointing every which way) litter the world for texture. Resistance caches restock over time.
 
 **Character & UI:** play as Adam, Eve, or Neve (or a custom name), now rendered as a directional pixel-art sprite with a real walk cycle that turns to face wherever you aim. Backpack (**I**), skills (**K**), Armoury (**V**), and Archive (**J**) all close on **H** — or by clicking away from the panel, same as the help modal. Dying (or winning) shows a shareable Certificate of Death.
 
@@ -34,6 +34,7 @@ Full technical detail (root causes, exact numbers) lives in [PAI-version-plan.md
 
 | Version | Summary |
 |---|---|
+| v0.74 | Abandoned cars replaced with real sprites (several models/colours + police + ambulance, random facings); wall tops carry the same texture as the sides at low opacity; boundary blocks more transparent |
 | v0.73 | Boundary blocks re-textured to dark gravel (distinct from roads); water droids can only hit you while you're in the water |
 | v0.72 | Held item draws behind the body when facing away; boundary blocks road-textured + semi-transparent + fixed south sorting; swimming shows the real character's head |
 | v0.71 | Fell a tower mid-SKYLINK to shut it down (repair drone rebuilds it); rock-block map edges; small/dead trees + tree damage bar + faster chop; far-away robots/animals skip their AI to save CPU |

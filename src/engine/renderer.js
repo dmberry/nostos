@@ -5,7 +5,7 @@ import { drawAnimal } from '../game/animals.js';
 import { drawBird } from '../game/birds.js';
 import { drawRobot } from '../game/robots.js';
 import { drawWaterDroid } from '../game/waterdroids.js';
-import { FLOOR_TEXTURES, WALL_TEXTURES, GRASS_PATCH_TEXTURE, CHARACTER_SPRITE_SETS, CHAR_COMPASS_DIRS, TREE_SHEET, TREE_SPRITES, EDGE_TEXTURE } from './textures.js';
+import { FLOOR_TEXTURES, WALL_TEXTURES, GRASS_PATCH_TEXTURE, CHARACTER_SPRITE_SETS, CHAR_COMPASS_DIRS, TREE_SHEET, TREE_SPRITES, EDGE_TEXTURE, CAR_SPRITES, CAR_MODEL_KEYS, CAR_DIR_KEYS } from './textures.js';
 
 // Maps a facing vector to one of 8 pre-rendered screen-compass directions
 // for CHARACTER_SPRITE_SETS (see textures.js) — replaces the old trick of
@@ -43,7 +43,7 @@ function tintScratch(w, h) {
 
 const WALL_H = 40;
 const EDGE_ROCK_H = 52;   // height of the impassable rock blocks ringing the map edge
-const EDGE_ROCK_ALPHA = 0.7; // semi-transparent so the player shows through a block in front
+const EDGE_ROCK_ALPHA = 0.5; // semi-transparent so the player shows through a block in front
 const DASH_H = 78; // dashboard panel height
 const ELEV = 16;   // pixels of lift per height level
 const MINIMAP_SIZE = 160;
@@ -1167,9 +1167,18 @@ export class Renderer {
       ctx.fill();
     }
 
-    this.diamondPath([t0, t1, t2, t3]); // top
-    ctx.fillStyle = rgbScale(base, 1);
-    ctx.fill();
+    // Top face. On a textured wall the top gets the SAME stone/brick texture
+    // as the sides but at a low opacity, so it reads as the same material yet
+    // clearly a distinct (flatter, top-lit) surface rather than a hard flat
+    // cap. Untextured walls keep the plain fill.
+    if (wallTex) {
+      this.drawTexturedQuad([t0, t1, t2, t3], wallTex, rgbScale(base, 1), null, null, 0.22);
+    } else {
+      this.diamondPath([t0, t1, t2, t3]);
+      ctx.fillStyle = rgbScale(base, 1);
+      ctx.fill();
+    }
+    this.diamondPath([t0, t1, t2, t3]); // top outline
     ctx.strokeStyle = 'rgba(0,0,0,0.25)';
     ctx.lineWidth = 1;
     ctx.stroke();
@@ -1559,7 +1568,44 @@ export class Renderer {
 
   // An abandoned car: now a big 2x3 hulk sitting dead across the road.
   // Smash it with a crowbar (it flips to `smashed`) for what was inside.
+  // An abandoned car: a real 3/4-view sprite (model + iso facing picked at
+  // world-gen), centred on its footprint. A smashed one is darkened to a
+  // burnt-out husk via the offscreen tint trick. Falls back to the old
+  // procedural hull until the sprite has loaded.
   drawCar(obj) {
+    const model = CAR_MODEL_KEYS[(obj.carModel || 0) % CAR_MODEL_KEYS.length];
+    const dir = CAR_DIR_KEYS[(obj.carDir || 0) % CAR_DIR_KEYS.length];
+    const spr = CAR_SPRITES[model] && CAR_SPRITES[model][dir];
+    if (!spr || !spr.complete || !spr.naturalWidth) { this.drawCarProcedural(obj); return; }
+    const ctx = this.ctx;
+    const fw = obj.fw || 2, fh = obj.fh || 3;
+    const c = worldToScreen(obj.x + fw / 2, obj.y + fh / 2);
+    const wob = obj.shake ? Math.sin(obj.shake * 50) * obj.shake * 6 : 0;
+    const scale = 0.92;
+    const dw = spr.naturalWidth * scale, dh = spr.naturalHeight * scale;
+    ctx.save();
+    ctx.translate(c.x + wob, c.y);
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(0, 8, dw * 0.4, dh * 0.2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    const dx = -dw / 2, dy = -dh * 0.72; // wheels sit near the footprint centre
+    if (obj.smashed) {
+      const off = tintScratch(spr.naturalWidth, spr.naturalHeight);
+      off.ctx.clearRect(0, 0, off.canvas.width, off.canvas.height);
+      off.ctx.drawImage(spr, 0, 0);
+      off.ctx.globalCompositeOperation = 'source-atop';
+      off.ctx.fillStyle = 'rgba(22,18,15,0.62)'; // burnt-out husk
+      off.ctx.fillRect(0, 0, off.canvas.width, off.canvas.height);
+      off.ctx.globalCompositeOperation = 'source-over';
+      ctx.drawImage(off.canvas, dx, dy, dw, dh);
+    } else {
+      ctx.drawImage(spr, dx, dy, dw, dh);
+    }
+    ctx.restore();
+  }
+
+  drawCarProcedural(obj) {
     const ctx = this.ctx;
     const fw = obj.fw || 2, fh = obj.fh || 3;
     const c = worldToScreen(obj.x + fw / 2, obj.y + fh / 2);

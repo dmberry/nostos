@@ -17,7 +17,13 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
-## Where we are (v0.73)
+## Where we are (v0.74)
+
+### v0.74 — real car sprites, wall-top texture, softer boundary
+
+- **Abandoned cars are real sprites now.** Replaced the procedural hull with 3/4-view PNGs (`assets/textures/cars/`, from `_tmp/cars`): Chevrolet Bel Air, Rolls-Royce Phantom in blue/red/white, a police car, and an ambulance — each in the four iso-diagonal facings (SE/SW/NE/NW). Worldgen stamps a random `carModel`/`carDir` per car; `CAR_SPRITES`/`CAR_MODEL_KEYS`/`CAR_DIR_KEYS` in textures.js; `Renderer.drawCar` blits the sprite (old procedural draw kept as `drawCarProcedural` fallback until the image loads). A smashed car is darkened to a burnt husk via the offscreen source-atop tint.
+- **Wall tops textured.** A stone/brick wall's top face now gets the same wall texture as its sides but at low opacity (0.22), so it reads as the same material yet a distinct top-lit surface rather than a flat cap. Untextured walls keep the plain fill.
+- **Boundary blocks more transparent.** `EDGE_ROCK_ALPHA` 0.7 → 0.5, so a block between you and the camera is easier to see through.
 
 ### v0.73 — gravel boundary texture, water droids gated to water
 

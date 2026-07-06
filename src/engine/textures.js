@@ -70,6 +70,19 @@ export const WALL_TEXTURES = {
 // rather than another road. See Renderer.drawEdgeRock.
 export const EDGE_TEXTURE = loadDownscaled(T + 'photo-unsorted-2.jpg');
 
+// Abandoned cars: real 3/4-view sprites (assets/textures/cars/) instead of the
+// old procedural hull. Several models/colours, each in the four iso-diagonal
+// facings so a street of wrecks points every which way. A car object carries
+// numeric carModel/carDir indices (worldgen); the renderer resolves them
+// against these lists (modulo, so the counts can change freely).
+export const CAR_MODEL_KEYS = ['chevrolet', 'rolls-blue', 'rolls-red', 'rolls-white', 'police', 'ambulance'];
+export const CAR_DIR_KEYS = ['se', 'sw', 'ne', 'nw'];
+export const CAR_SPRITES = {};
+for (const m of CAR_MODEL_KEYS) {
+  CAR_SPRITES[m] = {};
+  for (const d of CAR_DIR_KEYS) CAR_SPRITES[m][d] = load(`${T}cars/${m}-${d}.png`);
+}
+
 export const TREE_SHEET = load(T + 'trees.png');
 export const TREE_SPRITES = [
   { sx: 454, sy: 121, sw: 51, sh: 95 }, // variant 0: big leafy round
