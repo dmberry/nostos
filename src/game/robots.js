@@ -1037,6 +1037,14 @@ function sensorStyle(r) {
     const a = 0.25 + 0.35 * gate;
     return { fill: `rgba(${STUN_AMBER[0]},${STUN_AMBER[1]},${STUN_AMBER[2]},${a.toFixed(3)})`, halo: null };
   }
+  // Singing (RON-ML sing): the red light pulses in time with the choir. Each
+  // machine is on a different vocal part (r.choirFlash, set in main from the
+  // music), so the row of lights blinks out of step — a choir, not a metronome.
+  if (r.singing) {
+    const f = r.choirFlash || 0;
+    const g = Math.round(18 + 62 * f), b = Math.round(14 + 46 * f);
+    return { fill: `rgb(255,${g},${b})`, halo: f > 0.25 ? `rgba(255,70,50,${(0.18 + 0.42 * f).toFixed(3)})` : null };
+  }
   if (r.friendly) return { fill: EYE_FRIEND, halo: EYE_FRIEND_HALO };
   return { fill: r.aggro ? EYE_HOT : EYE_DIM, halo: r.aggro ? 'rgba(255,59,42,0.3)' : null };
 }

@@ -17,7 +17,16 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
-## Where we are (v0.94)
+## Where we are (v0.95)
+
+### v0.95 — the robot choir actually sings (Dowland, MIDI), Flow My Tears note
+
+- **`sing` now plays real music.** The opening ~30s of John Dowland's *Flow My Tears* (Lachrimae, 1596, public domain) was parsed from `assets/midi/02-dowland--flow_my_tears-lacrime.midi` into a compact note list (`src/engine/choir-notes.js`, 227 notes as `[start, dur, midiPitch]`). `Sound.playChoir()` schedules them as soft synthesised voices (triangle body low-passed + a quiet sine octave, slow attack, gentle detune) on their own bus. Guarded so it never crashes and the visual runs even if audio is muted/locked.
+- **The red lights flash in time, as a choir.** Note onsets are split into four pitch registers (`CHOIR_REGISTERS` in main.js); each singing machine is assigned a vocal part (`r.choirVoice`) and its sensor light pulses to that part's notes (`r.choirFlash`, computed each frame from `sfx.choirElapsed()`, rendered by `Robots.sensorStyle`). The row of them blinks *out of step* — a choir, not a metronome. Verified: all flash together on the opening chord, then diverge.
+- **`sing` sings the whole piece** — robots hold the choir formation for `CHOIR_DURATION` (30s) instead of the old short timer, then (v0.93) go back to work.
+- **Flow My Tears lore note.** A new torn, water-warped song-sheet fragment (`ronml-06` in lore.js) carries the first verse plus an operator's note about hearing the machines sing it at night — the in-world seed of the easter egg (without naming the secret trigger).
+
+**Concurrent work:** the mainframe / Adamantine fortress is being built in a parallel session (fortress.js, the `unlock` RON-ML verb, panel/quad/sanctum textures, tiles/items changes). Those files are left untouched here; this commit stages only the choir/lore files.
 
 ### v0.94 — RON-ML manual + pages, world-loot never decays, book-unlocked autocomplete
 

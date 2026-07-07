@@ -6,6 +6,8 @@
 // guarded no-op until unlocked, and try/catch wrapped so a misbehaving
 // audio stack can never crash the game.
 
+import { CHOIR_NOTES, CHOIR_DURATION } from './choir-notes.js';
+
 const MASTER_GAIN = 0.3;
 const PLAY_DEBOUNCE_MS = 70;   // per-name minimum interval for play()
 const STEP_DEBOUNCE_MS = 120;  // minimum interval between footsteps
@@ -421,6 +423,45 @@ class Sound {
   }
 
   // ---- synthesis helpers -------------------------------------------------
+
+  // The robot choir (RON-ML `sing`): schedules the opening of Dowland's
+  // "Flow My Tears" as soft synth voices. Records the start time (both audio
+  // and wall clock) so the robots' red lights can be flashed in time — see
+  // choirElapsed() and the flash sync in main.js. Returns the piece length.
+  playChoir() {
+    // The wall clock drives the robots' light-flash, so set it up front —
+    // the visual choir must run even if audio is muted or hasn't unlocked.
+    this._choirWall = now() + 200; // wall-clock ms when the first note sounds
+    try {
+      this.unlock();
+      if (!this.ctx) return CHOIR_DURATION;
+      const ctx = this.ctx;
+      const t0 = ctx.currentTime + 0.2;
+      this._choirStart = t0;
+      // A dedicated bus so the choir sits above the ambient bed.
+      const bus = ctx.createGain();
+      bus.gain.value = 0.85;
+      bus.connect(this.master);
+      for (const [t, d, m] of CHOIR_NOTES) {
+        const when = t0 + t;
+        const freq = 440 * Math.pow(2, (m - 69) / 12);
+        const dur = Math.max(0.28, d);
+        // A soft vocal-ish voice: a triangle body low-passed for warmth, plus a
+        // quiet sine octave, slow attack/release, gentle detune for a choral
+        // shimmer so the many overlapping notes read as voices, not an organ.
+        this._tone({ when, dur, type: 'triangle', freq: freq * (1 + (m % 3 - 1) * 0.002), gain: 0.07, attack: 0.06, filter: 'lowpass', filterFreq: 1500, bus });
+        this._tone({ when, dur, type: 'sine', freq: freq * 2, gain: 0.018, attack: 0.09, bus });
+      }
+      return CHOIR_DURATION;
+    } catch (e) { return CHOIR_DURATION; }
+  }
+
+  // Seconds since the choir began (for flash sync), or -1 if it isn't singing.
+  choirElapsed() {
+    if (!this._choirWall) return -1;
+    const e = (now() - this._choirWall) / 1000;
+    return (e >= 0 && e <= CHOIR_DURATION + 0.5) ? e : -1;
+  }
 
   // Shared output stage: gain envelope into the given bus (master by
   // default). Linear attack to the peak, then an exponential decay to

@@ -16,6 +16,20 @@ import { ITEMS } from './game/items.js';
 import { sfx } from './engine/sound.js';
 import { worldToScreen } from './engine/iso.js';
 import { runRonml } from './game/ronml.js';
+import { CHOIR_NOTES, CHOIR_DURATION } from './engine/choir-notes.js';
+
+// Note onsets split into four pitch registers, so each singing machine can be
+// put on a different vocal "part" and its red light flashes to that part's
+// notes — a choir of out-of-step blinking lights (see the flash sync in the
+// update loop and Robots.sensorStyle).
+const CHOIR_REGISTERS = (() => {
+  const bands = [[], [], [], []];
+  const lo = 45, span = (72 - 45) / 4;
+  for (const [t, , m] of CHOIR_NOTES) {
+    bands[Math.max(0, Math.min(3, Math.floor((m - lo) / span)))].push(t);
+  }
+  return bands.map((a) => a.sort((x, y) => x - y));
+})();
 
 // Each new game gets its own random seed, persisted so a continuing run
 // (autosave) always regenerates the same map. Without this every playthrough
@@ -32,7 +46,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '0.94';
+const VERSION = '0.95';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -600,11 +614,14 @@ function ronmlCtx() {
         const spread = (i - (targets.length - 1) / 2) * 1.6;
         r.singing = true;
         r.aggro = false;
-        r.choirT = SING_DURATION;
+        r.choirT = CHOIR_DURATION; // sing for the whole piece
+        r.choirVoice = i;          // which vocal part its light flashes to
+        r.choirFlash = 0;
         r.choirX = player.x + player.facing.x * 4 + perp.x * spread;
         r.choirY = player.y + player.facing.y * 4 + perp.y * spread;
       });
-      player.say('Every machine in earshot stops dead, turns, and lines up.');
+      sfx.playChoir(); // Dowland's "Flow My Tears", the machines' voices
+      player.say('Every machine in earshot stops dead, turns, and lines up. Then, impossibly, they begin to sing.');
       closeObTerminal(); // drop out of the terminal so you can actually watch it
     },
     showMap: () => { openRonMap(); },
@@ -1308,6 +1325,19 @@ function update(dt) {
   updateAnimals(dt, animals, player, map);
   updateBirds(dt, birds, animals, player, map);
   updateRobots(dt, robots, player, map);
+  // Choir light-flash sync: while the piece plays, each singing machine's red
+  // light pulses to the notes of its assigned vocal part, so the row of them
+  // blinks out of step like a choir. (r.choirFlash is read by sensorStyle.)
+  const choirT = sfx.choirElapsed();
+  if (choirT >= 0) {
+    for (const r of robots) {
+      if (!r.singing) continue;
+      const band = CHOIR_REGISTERS[(r.choirVoice || 0) % 4];
+      let last = -1;
+      for (let i = band.length - 1; i >= 0; i--) { if (band[i] <= choirT) { last = band[i]; break; } }
+      r.choirFlash = last >= 0 ? Math.max(0, 1 - (choirT - last) / 0.4) : 0;
+    }
+  }
   resolveBodyOverlaps(player, animals, robots);
   map.updateShakes(dt);
   dayNight.update(dt);

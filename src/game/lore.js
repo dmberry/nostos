@@ -444,6 +444,14 @@ export const FRAGMENTS = [
     text: '...the old operators had a word buried in the console for when it was\n' +
       'already over. never saw it used. never saw it written down whole. one line\n' +
       'in the margin, water-damaged: "...ing. just t...  it. it knows the tune."' },
+  { id: 'ronml-06', kind: 'code', era: 2, title: 'a torn, water-warped song sheet',
+    text: 'Flow, my tears, fall from your springs!\n' +
+      'Exiled for ever, let me mourn;\n' +
+      'where night\'s black bird her sad infamy sings,\n' +
+      'there let me live forlorn.\n\n' +
+      '// Dowland. someone taught it to the machines. i have heard them do it,\n' +
+      '// out past the towers at night — a whole row of them, red lights blinking,\n' +
+      '// singing this. it is the loneliest sound left in the world. — J' },
 
   // ---- ron: RON transmissions, signed, defiant or doubting ----------------
   { id: 'ron-01', kind: 'ron', era: 1, title: 'RON — first broadcast',
