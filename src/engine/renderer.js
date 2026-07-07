@@ -2555,12 +2555,12 @@ export class Renderer {
       ctx.stroke();
       ctx.restore();
     };
+    // Always show the normal facing chevron; an armed compass adds its homing
+    // needles on top, so you keep your bearings as well as the pointers.
+    drawChevron(player.facing.x, player.facing.y, 'rgba(200,200,200,0.55)');
     const compassOn = player.hasItem && player.hasItem('compass') && player.compassArmed && player.compassTargets;
-    const targets = compassOn ? player.compassTargets() : [];
-    if (targets.length) {
-      for (const t of targets) drawChevron(t.x - player.x, t.y - player.y, t.color);
-    } else {
-      drawChevron(player.facing.x, player.facing.y, 'rgba(200,200,200,0.55)');
+    if (compassOn) {
+      for (const t of player.compassTargets()) drawChevron(t.x - player.x, t.y - player.y, t.color);
     }
 
     // Forcefield: a shimmering green shell around the whole character.
@@ -2570,7 +2570,7 @@ export class Renderer {
       ctx.save();
       ctx.fillStyle = 'rgba(80,230,140,0.12)';
       ctx.strokeStyle = `rgba(120,245,170,${(0.55 + 0.2 * Math.sin(t / 180)).toFixed(3)})`;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 0.6;
       ctx.beginPath();
       ctx.ellipse(c.x, by - 12, rr, rr * 1.08, 0, 0, Math.PI * 2);
       ctx.fill();
@@ -2585,7 +2585,7 @@ export class Renderer {
       ctx.strokeStyle = mirror
         ? `rgba(180,235,245,${(0.45 + 0.18 * Math.sin(t / 200)).toFixed(3)})`
         : 'rgba(130,175,225,0.4)';
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = 0.6;
       ctx.beginPath();
       ctx.ellipse(c.x, by - 12, 22, 24, 0, 0, Math.PI * 2);
       ctx.stroke();

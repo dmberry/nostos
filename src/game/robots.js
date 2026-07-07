@@ -564,15 +564,20 @@ export function updateRobots(dt, robots, player, map) {
       continue;
     }
 
-    // RON-ML `sing`: the Portal easter egg — lines up facing the player,
-    // performs its bit, then powers down for good.
+    // RON-ML `sing`: the Portal easter egg — lines up facing the player and
+    // performs its bit, then simply goes back to work (no longer powers down
+    // for good; it drops aggro and resumes its normal patrol/hunt).
     if (r.singing) {
       r.choirT -= dt;
       moveToward(r, r.choirX, r.choirY, REPEL_FLEE_SPEED, dt, map);
       const dx = player.x - r.x, dy = player.y - r.y, dd = Math.hypot(dx, dy) || 1;
       r.facing = { x: dx / dd, y: dy / dd };
       r.animT += dt;
-      if (r.choirT <= 0) { r.singing = false; r.drained = true; }
+      if (r.choirT <= 0) {
+        r.singing = false;
+        r.aggro = false;
+        r.loseInterestT = LOSE_INTEREST_COOLDOWN; // a beat before it re-acquires
+      }
       continue;
     }
 

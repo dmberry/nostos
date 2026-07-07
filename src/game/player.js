@@ -1674,9 +1674,22 @@ export class Player {
     return this.forcefieldActive() || this.hasItem('mirror_shield') || this.hasItem('shield');
   }
 
+  // True when standing (not mid-jump) on top of a raised block — its
+  // effective height sits above the bare terrain height there.
+  onBlockTop() {
+    const m = this.map;
+    if (!m || !m.effectiveHeightAt || !m.heightAt || this.z > 0) return false;
+    const fx = Math.floor(this.x), fy = Math.floor(this.y);
+    return m.effectiveHeightAt(fx, fy) > m.heightAt(fx, fy);
+  }
+
   takeDamage(amount, source) {
     // The forcefield stops everything — shot or blow — while it's up.
     if (this.forcefieldActive()) { this.hurtTimer = 0.12; return; }
+    // Up on a block top, ground enemies can't reach you — melee, bites, and
+    // lasers all fall short. (A bomb blast still catches you; flying machines,
+    // to come, will too.) So they keep trying in vain while you're safe up high.
+    if (source !== 'the blast' && this.onBlockTop()) return;
     this.health -= amount;
     this.hurtTimer = 0.35;
     if (source === 'viper') sfx.play('hiss');

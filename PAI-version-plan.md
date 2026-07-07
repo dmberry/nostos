@@ -17,7 +17,14 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
-## Where we are (v0.92)
+## Where we are (v0.93)
+
+### v0.93 — block-top safety, compass chevron kept, thin shield rings, sing returns to work
+
+- **You can't be attacked while standing on top of a block.** New `Player.onBlockTop()` (true when the tile's `effectiveHeightAt > heightAt` and you're grounded); `takeDamage` now returns early for any enemy source while you're up on a block — melee, bites, and lasers all fall short. A bomb blast (`source === 'the blast'`) still catches you, and the future flying machines will too. Verified: machine/boar blocked up top, blast lands, normal damage on flat ground.
+- **The electro-compass keeps the normal chevron.** `drawPlayer` now always draws the white facing chevron and *adds* the coloured homing needles on top when the compass is armed, instead of replacing it — so you keep your bearings as well as the pointers.
+- **Thinner deflector rings.** The forcefield shell outline (2 → 0.6) and the carried-shield deflector ring (1.5 → 0.6) are now hairline-thin.
+- **`sing` sends robots back to work.** After the choir easter egg a machine no longer powers down for good — it drops aggro (with a brief `loseInterestT` beat) and resumes its normal patrol/hunt.
 
 ### v0.92 — decay guards, always-a-chip, RON-ML `help`, W4 presses shielded players
 
