@@ -47,7 +47,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '0.98';
+const VERSION = '0.99';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -184,6 +184,8 @@ const obelisks = [];
     [{ item: 'chip', qty: 1 }],
     // The RON-ML manual: teaches the terminal console language.
     [{ item: 'book_ronml', qty: 1 }],
+    // A single battered can of Ubiq, somewhere in the ruins.
+    [{ item: 'ubiq', qty: 1 }],
   ];
   const rollLoot = () => {
     const r = rng();

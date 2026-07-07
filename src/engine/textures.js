@@ -65,6 +65,11 @@ export const WALL_TEXTURES = {
   // Fortress ramparts (riveted metal) and the inner charcoal maze (dark stone).
   metal: loadDownscaled(T + 'panel-metal-2.jpg'),
   darkstone: loadDownscaled(T + 'wall-darkstone-alt.png'),
+  // Adamantine's inner maze: darker "AI" wall designs, mixed for variety —
+  // riveted panels, an iron grate, and a louvred vent.
+  aiwall: loadDownscaled(T + 'AI-texture/metal_06.jpg'),
+  aigrate: loadDownscaled(T + 'AI-texture/grating_10.jpg'),
+  aivent: loadDownscaled(T + 'AI-texture/grating_05.jpg'),
 };
 
 // Hand-drawn tree art (a copy of the CC0 "Premium Trees" sheet dropped in at

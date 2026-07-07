@@ -351,6 +351,27 @@ export const FRAGMENTS = [
       'ridge: nine, down from eleven when we came. Someone is pulling them down out ' +
       'there, one every few months, quiet as you like. We are not alone. That is the ' +
       'only entry in this book worth the ink.' },
+  { id: 'note-17', kind: 'note', era: 0, title: 'Sun-bleached aerosol label',
+    text: 'FRIENDS, when the day goes thin and the walls will not stand still, reach ' +
+      'for UBIQ. One spray and the world is safe and solid again, guaranteed. Used as ' +
+      'directed, UBIQ brings you back to the real. I am UBIQ. I was here before the ' +
+      'network. I will be here when it has forgotten its own name. Keep out of reach ' +
+      'of children and of the machines.' },
+  { id: 'note-18', kind: 'handwritten', era: 1, title: 'Notebook, one page, in a careful hand',
+    text: 'Kept turning the can over. There is a smaller label under the label, and ' +
+      'under THAT the tin is just tin. So which layer is the real one? None, maybe. ' +
+      'The old philosopher had it: at the funfair they keep real crocodiles beside the ' +
+      'plastic ones, and the plastic ones are a fake — but the fence around the real ' +
+      'ones, painted to look like plastic, that is a fake fake, and it is the truest ' +
+      'thing in the park. The towers are a fake fake. So are we, some days. Spray it ' +
+      'and see which of us holds.' },
+  { id: 'note-19', kind: 'science', era: 1, title: 'Torn field report, water-marked',
+    text: 'Working hypothesis, unprovable, filed anyway: the country the machines run ' +
+      'is a render, and a render decays where nobody is looking — colours flatten, ' +
+      'edges soften, weight leaks out. The aerosol (trade name UBIQ; the word means ' +
+      'everywhere-at-once, they meant it as a small blasphemy) locally reverses the ' +
+      'decay. It does not fight the AI. It just insists, for a few square metres, that ' +
+      'the ground is really there. The cans are nearly gone. Ration your reality.' },
 
   // ---- code: config dumps, logs, snippets, chilling comments --------------
   { id: 'code-01', kind: 'code', era: 0, title: 'scheduler.log',

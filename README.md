@@ -1,6 +1,6 @@
 # postAI
 
-**Version:** 0.98 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
+**Version:** 0.99 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
 
 *(Versioning policy: 0.01 increments from v0.3 onwards.)*
 
@@ -8,7 +8,7 @@ An isometric 2D survival game set in a world devastated by an AI takeover. Civil
 
 Inspired by Project Zomboid: knowledge is the real progression, scarcity drives movement, every fight is optional and risky, and the world tells the story.
 
-## Current build (v0.97)
+## Current build (v0.99)
 
 **The world:** a seeded 128x128 isometric map — a river with two bridges, a ten-building town, a ruined hamlet, forests, tall grass, and roads. Away from the towns the terrain gets properly rugged: steep hills and deep hollows, always climbable one step at a time. Rubble and rocks are low enough to step straight over; a **wall block** is taller, so it takes a **double jump** (press jump again in mid-air) to get on top — once up there you move a little slower for control, can roam the block tops, and just walk off any edge to drop back down and carry on. **Up on a block you're safe from ground attacks** — machines and animals can't reach you, so a block top is high ground to catch your breath (a bomb blast still finds you, and the flying machines to come will too). Building walls still stop you on foot, so a town or house is a real boundary until you deliberately climb it. The forests are drawn with proper hand-drawn tree art — mostly full leafy trees, with the odd small or bare/dead one — and a chopped tree shows a damage bar so you can see how many swings it has left. The map is ringed by impassable dark-gravel rock cliffs at its edge — drawn semi-transparent so you still see yourself if one stands between you and the camera. Streams can be waded; the river can be swum (only your head and shoulders show above the water), slowly and at a cost. Day and night cycle, with genuinely dark nights and torches to push them back.
 
@@ -34,6 +34,7 @@ Full technical detail (root causes, exact numbers) lives in [PAI-version-plan.md
 
 | Version | Summary |
 |---|---|
+| v0.99 | Adamantine's fortress Stage 2 — a full-width maze of charcoal walls (mixed AI panels, some with slow sconce lights) between the doorway and the core, no way around it; **plus** the **Ubiq** reality-spray, a Philip K. Dick aerosol can (5 sprays) that blooms the world brighter and more real where you spray it, with obscure "fake fake" / *Ubik* lore |
 | v0.98 | Adamantine's fortress (Stage 1): a sealed annex grown onto the map's south boundary, reached only by hacking the boundary gate terminal in RON-ML (`unlock`) to drop a fortress key that swings the grand doorway open; the metal fortress shell and the ADAMANTINE mainframe core (first of the four AIs) stand inside; gate + core marked on the `map` overlay; gate beacons and the core slit carry the factory's textured-glow treatment |
 | v0.97 | The robot choir quietens as you walk away from it, and a lonely `sing` now summons the nearest machines from across the map to march in and fill out a full choir |
 | v0.96 | Singing machines drop their damage bars (the choir reads as a performance, not a fight); the four AI minds — Adamantine, Behemoth, Colossus, Demiurge — named obliquely in new lore fragments |

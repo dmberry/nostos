@@ -50,7 +50,8 @@ const SWIM_HEALTH_DRAIN = 1.2; // health/sec: swimming a river is exhausting
 const SCORE = { tree: 1, animal: 3, robot: 10, wreck: 2, cache: 2, book: 5, fragment: 5 };
 
 // Item kinds that can occupy the hands slot.
-const HOLDABLE = new Set(['tool', 'gun', 'gadget', 'bomb', 'map']);
+const HOLDABLE = new Set(['tool', 'gun', 'gadget', 'bomb', 'map', 'spray']);
+const UBIQ_SPRAYS = 5; // charges in a Ubiq can before it runs dry
 
 // Empty-handed is still a weapon, just a bad one: a stand-in "tool" so bare
 // fists flow through the exact same melee path as a real one (target
@@ -91,6 +92,7 @@ export class Player {
     this.ammoFrac = {};        // accumulated fractional ammo per gun
     this.electroCharge = (ITEMS.electrogun && ITEMS.electrogun.internalMax) || 4; // electro-gun's self-charging internal cell
     this.terminalSafe = false;  // true while jacked into an obelisk terminal (invisible to machines)
+    this.ubiqSprays = UBIQ_SPRAYS; // charges left in the Ubiq can (set on pickup below too)
     this.facing = { x: 0, y: 1 };
     this.moving = false;
     this.sprinting = false;
@@ -833,11 +835,12 @@ export class Player {
       return;
     }
 
-    if (tool.kind === 'gun' || tool.kind === 'gadget' || tool.kind === 'bomb') {
+    if (tool.kind === 'gun' || tool.kind === 'gadget' || tool.kind === 'bomb' || tool.kind === 'spray') {
       if (facingBox) { this.openBox(obj, map); return; }
       if (tool.kind === 'gun') this.fire(tool, map, animals, robots);
       else if (tool.kind === 'gadget') this.useGadget(tool);
       else if (tool.kind === 'bomb') this.dropBomb(tool, map);
+      else if (tool.kind === 'spray') this.sprayUbiq(map);
       return;
     }
     if (this.stamina < tool.staminaCost) {
@@ -1072,6 +1075,28 @@ export class Player {
     this.wifiPower = this.wifiMax;
     sfx.play('zap');
     this.say('You slot a fresh cell into the block. The machines lose your signal.');
+  }
+
+  // Spray the can of Ubiq: lays down a lasting patch of "realness" a little
+  // ahead of you where the ground and everything on it reads brighter, warmer,
+  // more solid — as if a thin fake had been dissolved off the top. Five sprays
+  // to a can, tracked on the player; then it hisses dry.
+  sprayUbiq(map) {
+    this.swingTimer = 0.5;
+    if (this.ubiqSprays == null) this.ubiqSprays = UBIQ_SPRAYS;
+    if (this.ubiqSprays <= 0) {
+      sfx.play('pickup');
+      this.say('The can hisses, empty. Whatever was in it, there is no more of it.');
+      return;
+    }
+    this.ubiqSprays -= 1;
+    const px = this.x + this.facing.x * 1.2, py = this.y + this.facing.y * 1.2;
+    (map.ubiqPatches ??= []).push({ x: px, y: py, r: 3.2, t: 0 });
+    sfx.play('zap');
+    const left = this.ubiqSprays;
+    this.say(left > 0
+      ? `A fine mist settles, and the world here comes true — colours, edges, weight. ${left} spray${left === 1 ? '' : 's'} left.`
+      : 'The last of it drifts down and holds. The can is spent now, and lighter than it should be.');
   }
 
   // True if a Wi-Fi block is anywhere on the player: in hand, a pocket, or

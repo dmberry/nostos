@@ -359,6 +359,18 @@ export const ITEMS = {
     stack: 1,
     color: '#7fe0ff',
   },
+  // Ubiq: a battered aerosol can, its label half-worn. Held and used (E / click)
+  // it sprays the world back into focus — wherever the mist settles the ground
+  // and everything on it goes brighter, warmer, more real, as if the fake had a
+  // fake under it and this dissolved the top layer. Five sprays, then dry.
+  // (kind 'spray' — routed in Player.useHands to sprayUbiq. Charge tracked on
+  // the player, not the stack.)
+  ubiq: {
+    name: 'Ubiq',
+    kind: 'spray',
+    stack: 1,
+    color: '#e6c93a',
+  },
   battery: {
     name: 'Battery',
     kind: 'resource',

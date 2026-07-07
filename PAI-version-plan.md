@@ -17,7 +17,20 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
-## Where we are (v0.98)
+## Art conventions
+
+- **Always put a texture on a glowing thing.** No glow is ever a flat coloured blob — a grille/panel texture is laid over it (the factory-vent trick). Everything luminous goes through `Renderer.texturedGlow`, which caps the glow with an AI grate texture; if you add a new light, use it rather than a bare `fill`. (David, 2026-07-07.)
+- **Vary texture opacity per tile.** Floors jitter their texture alpha deterministically per tile (`drawFloor`) so a large expanse of one floor reads as worn/varied rather than a flat repeat.
+
+## Where we are (v0.99)
+
+### v0.99 — Adamantine's maze (fortress Stage 2) + the Ubiq reality-spray
+
+Combined commit reconciling the two parallel sessions (both features complete and verified independently; they were co-located in `renderer.js`/`main.js`).
+
+**Fortress Stage 2 — the maze** (Adamantine session): a recursive-backtracker labyrinth (`buildMaze` in `fortress.js`) carved into a **full-width band** of the annex between the doorway and the sanctum — edge to edge, no walking around it. 3-wide metal-panel corridors, 1-thick charcoal `darkstone` walls (~1385), a single entrance aligned to the doorway and a single exit aligned to the core. Verified: BFS from the entrance reaches the core, no bypass; ~120fps. `drawFortWall` honours `material` + `wallH`; `texturedGlow` reworked so the metal grille fills the core oval into the tips. Maze walls now use mixed **AI panel designs** (new `assets/textures/AI-texture/`: riveted `metal_06`, iron `grating_10`, louvred `grating_05`, added to `WALL_TEXTURES` as `aiwall`/`aigrate`/`aivent`) and ~15% carry **slow-glowing sconce lights** (cyan/amber, each on its own ~5.6s phase, so a run of wall shimmers gently out of sync).
+
+**The Ubiq reality-spray** (this session): a new `ubiq` item (`kind: 'spray'`) — a battered aerosol can (Philip K. Dick's *Ubik*). Held and used (`E`/click), `Player.sprayUbiq` lays a lasting "reality patch" (`map.ubiqPatches`) just ahead of you; the renderer blooms it with an `overlay`+`screen` composite so the ground and everything on it reads brighter, warmer, more real. **Five sprays** to a can (`player.ubiqSprays`), then it hisses dry. One can seeded per world. Spray-can icon. Obscure PKD lore: a Ubik-style aerosol advert (`note-17`), a "fake fake" notebook musing after the Disneyland-crocodiles idea (`note-18`), and a field report framing the AI's world as a decaying render the spray locally reverses (`note-19`).
 
 ### v0.98 — Adamantine's fortress, Stage 1 (annex, hackable doorway, core)
 
@@ -29,7 +42,13 @@ First slice of the four-AI endgame (Adamantine, Behemoth, Colossus, Demiurge —
 - **New data:** `panel`/`quad`/`sanctum` floors + `metal`/`darkstone` wall textures (drawn generically); `fortwall`/`fortdoor`/`gateterm`/`mainframe` objects. Renderer: `drawFortWall`/`drawFortDoor`/`drawGateTerm`/`drawMainframe` + a shared `texturedGlow` (the factory's grille-over-glow trick) on the gate beacons and the core slit.
 - **Hub touch (small, append-only, reconciled live with the parallel bug-fix session):** `main.js` (fortress build replacing the old mainframe stub, `unlockGate` ctx hook, `openGateTerminal`, a gate click branch, an update tick, map markers) and `renderer.js` (the four draw methods + cases + depth rule).
 
-Next stages: **maze** (charcoal `darkstone` labyrinth behind the door) → **M6 guards + quad** → **core confrontation** (Adamantine speaks; break it → "1 of 4").
+**Stage 2 — the maze (built, sitting uncommitted, texture fix done):** a recursive-backtracker labyrinth (`buildMaze` in `fortress.js`) carved into a **full-width band** of the annex between the doorway and the sanctum — it spans edge to edge so there's no walking around it. 3-wide metal-panel corridors (room to fight), 1-thick charcoal `darkstone` walls (~1385 of them), a single entrance aligned to the doorway and a single exit aligned to the core. Verified: a BFS from the entrance reaches the core through the maze, no bypass; ~120fps with the full fortress. `drawFortWall` now honours `material` (darkstone vs metal) + `wallH`; `texturedGlow` reworked so the metal grille fills the core oval **into the tips** (bloom drawn behind, crisp textured fixture on top). *(Shipped in the combined v0.99 commit above, alongside the Ubiq spray.)*
+
+**Stage 3 design (David, to build) — the guarded core:**
+- **Multiple factories inside the core**, not just the one W-factory outside. They **turn out M6 guards** (elite; M5 is the phalanx-formation type) — but only **once a breach of the gates is discovered**. So an undiscovered raid stays quiet; getting spotted escalates production.
+- **Stealth matters.** You want to cross the maze/quad without being picked up. Robots **take a while to report being attacked**, so speed is a real tactic: drop a guard fast (e.g. the **electro-gun**, which destroys outright) before it can raise the alarm. Detection + a report-delay timer is the core mechanic.
+
+Next stages: **M6 guards + quad** (Stage 3, per the design above) → **core confrontation** (Adamantine speaks; break it → "1 of 4").
 
 ### v0.97 — choir quietens with distance, and recruits a full section
 

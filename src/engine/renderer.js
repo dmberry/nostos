@@ -260,6 +260,40 @@ export class Renderer {
 
     ctx.restore();
 
+    // Ubiq: where the can has been sprayed the world is brighter, warmer, more
+    // real — a soft-light bloom that lifts the tiles and everything on them.
+    // Patches persist on the map. Drawn over the world, under night and HUD.
+    if (map.ubiqPatches && map.ubiqPatches.length) {
+      const z = camera.zoom || 1;
+      const cw = worldToScreen(camera.x, camera.y);
+      const shimmer = 0.9 + 0.1 * Math.sin(performance.now() / 900);
+      const spots = [];
+      for (const p of map.ubiqPatches) {
+        const pw = worldToScreen(p.x, p.y);
+        const sx = (pw.x - cw.x) * z + this.w / 2;
+        const sy = (pw.y - cw.y) * z + this.h / 2 - 8 * z;
+        const R = (p.r || 3) * 24 * z;
+        if (sx < -R - 40 || sx > this.w + R + 40 || sy < -R - 40 || sy > this.h + R + 40) continue;
+        spots.push([sx, sy, R]);
+      }
+      const paint = (op, stops) => {
+        ctx.save();
+        ctx.globalCompositeOperation = op;
+        for (const [sx, sy, R] of spots) {
+          const g = ctx.createRadialGradient(sx, sy, R * 0.1, sx, sy, R);
+          for (const [o, c] of stops) g.addColorStop(o, c);
+          ctx.fillStyle = g;
+          ctx.beginPath(); ctx.arc(sx, sy, R, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.restore();
+      };
+      // Pass 1 — 'overlay' deepens colour and contrast so the patch reads as
+      // "more real", not merely lit. Pass 2 — 'screen' adds a warm glow that
+      // lifts the brightness on top.
+      paint('overlay', [[0, `rgba(255,240,205,${(0.9 * shimmer).toFixed(3)})`], [0.6, 'rgba(255,235,195,0.5)'], [1, 'rgba(255,235,195,0)']]);
+      paint('screen', [[0, `rgba(255,246,214,${(0.28 * shimmer).toFixed(3)})`], [0.6, 'rgba(255,240,200,0.12)'], [1, 'rgba(255,240,200,0)']]);
+    }
+
     // Night: a dark veil over the world, never over the HUD. A carried
     // torch opens a pool of light around the player; without one you get
     // only a faint arm's-length glimmer.
@@ -1093,7 +1127,11 @@ export class Renderer {
       // detail) and reads as noisy even at the general texture alpha —
       // toned down further, on top of the grass-blade strokes already
       // drawn over it. The dirt patch variant can hold a bit more strength.
-      const alpha = patchy ? 0.4 : (type === 'grass' || type === 'tallgrass') ? 0.28 : type === 'sand' ? 0.32 : 0.55;
+      const baseAlpha = patchy ? 0.4 : (type === 'grass' || type === 'tallgrass') ? 0.28 : type === 'sand' ? 0.32 : 0.55;
+      // Vary the texture opacity a little per tile (deterministic, so it holds
+      // still frame to frame) — worn patches and stronger patches break up an
+      // otherwise flat expanse of the same floor.
+      const alpha = Math.max(0.12, Math.min(0.85, baseAlpha * (0.72 + 0.56 * tileHash(tx * 3 + 11, ty * 3 + 5))));
       this.drawTexturedQuad(corners, tex, shadeHex(def.color, shade), tintColor, tintMode, alpha);
     } else {
       this.diamondPath(corners);
@@ -1168,34 +1206,41 @@ export class Renderer {
   // --- Adamantine's fortress (southern annex) ------------------------------
   // A single fortress-rampart block: a tall, non-climbable extruded metal
   // prism. Pylons (flanking the doorway) stand taller and carry a red beacon.
-  // A glowing lamp/vent with a grubby metal grille laid over it — the same
-  // trick the factory vent uses: an optional soft bloom, the glow colour, then
-  // a metal texture clipped to the ellipse at low alpha so it reads as a lit
-  // fixture in the hull rather than a flat coloured oval.
-  texturedGlow(cx, cy, rx, ry, color, bloom = 0, texAlpha = 0.5) {
+  // CONVENTION: every glowing fixture in the game goes through here so it's
+  // never a flat coloured blob — a grille/panel texture is always laid over the
+  // glow (the factory-vent trick). If you add a new light, use texturedGlow.
+  // An optional soft bloom behind, the glow colour, then an AI grate texture
+  // clipped to the ellipse so it reads as a lit fixture caged in the hull.
+  texturedGlow(cx, cy, rx, ry, color, bloom = 0, texAlpha = 0.5, texKey = 'aigrate') {
     const ctx = this.ctx;
-    ctx.save();
-    if (bloom) { ctx.shadowColor = color; ctx.shadowBlur = bloom; }
-    ctx.fillStyle = color;
-    ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.restore();
-    const tex = WALL_TEXTURES.metal;
-    if (tex && tex.complete && tex.naturalWidth) {
+    // 1. A soft outer bloom drawn BEHIND, so its blurred bleed reads as a halo
+    //    around the fixture rather than washing out the fixture's own tips.
+    if (bloom) {
       ctx.save();
-      ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); ctx.clip();
-      ctx.globalAlpha = texAlpha;
-      // Cover the whole ellipse with the square texture (side = its longer
-      // axis) so a tall, thin oval fills edge-to-edge instead of leaving the
-      // stretched texture short of the ends.
-      const s = Math.max(rx, ry) * 2;
-      ctx.drawImage(tex, cx - s / 2, cy - s / 2, s, s);
+      ctx.shadowColor = color; ctx.shadowBlur = bloom;
+      ctx.fillStyle = color;
+      ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
+    // 2. The crisp fixture on top: fill the ellipse solid, then lay the texture
+    //    over the WHOLE clip (square sized to the longer axis so a tall, thin
+    //    oval is covered corner to corner, right into the tips).
+    ctx.save();
+    ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); ctx.clip();
+    ctx.fillStyle = color;
+    ctx.fillRect(cx - rx, cy - ry, rx * 2, ry * 2);
+    const tex = WALL_TEXTURES[texKey] || WALL_TEXTURES.metal;
+    if (tex && tex.complete && tex.naturalWidth) {
+      ctx.globalAlpha = texAlpha;
+      const s = Math.max(rx, ry) * 2;
+      ctx.drawImage(tex, cx - s / 2, cy - s / 2, s, s);
+    }
+    ctx.restore();
   }
 
   drawFortWall(obj) {
     const ctx = this.ctx;
-    const H = obj.pylon ? 78 : 52;
+    const H = obj.wallH || (obj.pylon ? 78 : 52);
     const g = {
       top: worldToScreen(obj.x, obj.y), right: worldToScreen(obj.x + 1, obj.y),
       bottom: worldToScreen(obj.x + 1, obj.y + 1), left: worldToScreen(obj.x, obj.y + 1),
@@ -1205,7 +1250,11 @@ export class Renderer {
     ctx.fillStyle = 'rgba(0,0,0,0.28)';
     ctx.beginPath(); ctx.moveTo(g.top.x, g.top.y + 4); ctx.lineTo(g.right.x, g.right.y + 4);
     ctx.lineTo(g.bottom.x, g.bottom.y + 4); ctx.lineTo(g.left.x, g.left.y + 4); ctx.closePath(); ctx.fill();
-    const tex = WALL_TEXTURES.metal, base = [46, 50, 56];
+    // Riveted metal for the outer rampart; darker "AI" panel/grate/vent designs
+    // for the inner maze, each with its own dim base tint.
+    const tex = WALL_TEXTURES[obj.material] || WALL_TEXTURES.metal;
+    const WALL_BASE_TINT = { darkstone: [34, 33, 38], aiwall: [40, 46, 56], aigrate: [28, 29, 33], aivent: [44, 48, 52] };
+    const base = WALL_BASE_TINT[obj.material] || [46, 50, 56];
     this.drawTexturedQuad([g.left, g.bottom, r.bottom, r.left], tex, rgbScale(base, 0.7), rgbScale(base, 0.7), 'multiply', 0.85);
     this.drawTexturedQuad([g.bottom, g.right, r.right, r.bottom], tex, rgbScale(base, 0.5), rgbScale(base, 0.5), 'multiply', 0.85);
     this.drawTexturedQuad([r.top, r.right, r.bottom, r.left], tex, rgbScale(base, 0.95), rgbScale(base, 0.95), 'multiply', 0.5);
@@ -1215,6 +1264,18 @@ export class Renderer {
       const c = { x: (r.top.x + r.bottom.x) / 2, y: (r.top.y + r.bottom.y) / 2 };
       const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 500);
       this.texturedGlow(c.x, c.y, 4.5, 2.8, `rgba(255,60,60,${(0.45 + 0.5 * pulse).toFixed(3)})`, 6);
+    }
+    // Sconce light on the wall's front (SE) face, glowing slowly on its own
+    // phase (~5.6s cycle) so a run of maze walls shimmers gently out of sync.
+    if (obj.light) {
+      const hue = obj.lightHue === 'amber' ? [255, 176, 64] : [95, 214, 255];
+      const pulse = 0.28 + 0.6 * (0.5 + 0.5 * Math.sin(performance.now() / 900 + (obj.lightPhase || 0)));
+      const fx = (g.bottom.x + g.right.x + r.right.x + r.bottom.x) / 4;
+      const fy = (g.bottom.y + g.right.y + r.right.y + r.bottom.y) / 4 - 3;
+      const col = `rgba(${hue[0]},${hue[1]},${hue[2]},${pulse.toFixed(3)})`;
+      // Textured like every other glow (grate over the light — the sconce reads
+      // as a caged lamp, not a plain dot).
+      this.texturedGlow(fx, fy, 2.8, 4.6, col, 12, 0.55, 'aigrate');
     }
   }
 
@@ -2575,6 +2636,19 @@ export class Renderer {
         ctx.beginPath(); ctx.moveTo(-6, 3); ctx.lineTo(-1, -1); ctx.lineTo(4, 2); ctx.stroke();
         ctx.fillStyle = '#e0552f'; ctx.beginPath(); ctx.arc(4, 2, 1.3, 0, Math.PI * 2); ctx.fill();
         break;
+      case 'ubiq': {
+        // An aerosol can: body, a domed cap, a nozzle, and a puff of mist.
+        ctx.fillStyle = itemDef.color;
+        ctx.fillRect(-4, -3, 8, 11);
+        ctx.fillStyle = '#c9a92a';
+        ctx.fillRect(-4, 2, 8, 2); // worn label band
+        ctx.fillStyle = '#8a8f96';
+        ctx.fillRect(-3, -6, 6, 3); // cap
+        ctx.fillRect(-1, -8, 2, 2); // nozzle
+        ctx.fillStyle = 'rgba(255,246,214,0.6)';
+        ctx.beginPath(); ctx.arc(4, -8, 1.4, 0, Math.PI * 2); ctx.arc(6, -6, 1, 0, Math.PI * 2); ctx.arc(5, -10, 0.9, 0, Math.PI * 2); ctx.fill();
+        break;
+      }
       default:
         ctx.fillStyle = itemDef.color;
         ctx.fillRect(-6, -6, 12, 12);
