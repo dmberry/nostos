@@ -207,6 +207,12 @@ function makeBuiltins() {
         return { tag: 'unit' };
       },
     },
+    // Hack a fortress gate open. Only meaningful at a fortress gate terminal;
+    // ctx.unlockGate reports back why if it can't (wrong terminal, no AI key).
+    unlock: {
+      arity: 0,
+      fn: (_args, ctx) => { ctx.unlockGate(); return { tag: 'unit' }; },
+    },
   };
 }
 
@@ -299,6 +305,7 @@ const HELP_VERBS = [
   ['repel', 'unit -> unit', 'nearby machines turn tail and flee you', 'needs AI key'],
   ['map', 'unit -> unit', 'show the territory map (obelisks, machines, mainframe)', ''],
   ['print', 'unit -> unit', 'print a carryable map that drops at your feet', ''],
+  ['unlock', 'unit -> unit', 'hack a fortress gate open (drops a fortress key)', 'at a gate; needs AI key'],
   ['help', 'unit -> unit', 'this reference, or `help <verb>` for one verb', ''],
 ];
 function helpText(topic) {

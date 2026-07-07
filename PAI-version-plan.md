@@ -17,7 +17,19 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
-## Where we are (v0.97)
+## Where we are (v0.98)
+
+### v0.98 — Adamantine's fortress, Stage 1 (annex, hackable doorway, core)
+
+First slice of the four-AI endgame (Adamantine, Behemoth, Colossus, Demiurge — only **Adamantine** built so far). The mainframe is no longer a bare map marker: it's a real place you raid.
+
+- **A fortress annex grown onto the map.** New `src/game/fortress.js` (self-contained) grows the grid southward in place by 64 rows (`growSouth` — appends rows, so every existing tile index is unchanged and the overworld needs no rework), then builds Adamantine's compound into that annex. All overworld spawning runs *before* the grow, so the annex stays clean. Map is now 128×192.
+- **The only way in is a hacked doorway.** A non-climbable metal rampart seals the whole seam bar a 3-tile grand doorway (flanked by beaconed pylons). Click the boundary **gate terminal** → RON-ML console → `unlock` (needs an AI key from a felled W-factory) drops a **fortress key**; carry it to the doorway and it swings open. New `unlock` RON-ML primitive + help entry; `fortress_key` item.
+- **The core stands inside.** A 6×6 near-black **ADAMANTINE** mainframe monolith with a magenta core-slit, on a dark sanctum deck, at the far south end. `hp`/`defeated` stubs in place for the confrontation to come. Gate + core are marked on the RON-ML `map` overlay.
+- **New data:** `panel`/`quad`/`sanctum` floors + `metal`/`darkstone` wall textures (drawn generically); `fortwall`/`fortdoor`/`gateterm`/`mainframe` objects. Renderer: `drawFortWall`/`drawFortDoor`/`drawGateTerm`/`drawMainframe` + a shared `texturedGlow` (the factory's grille-over-glow trick) on the gate beacons and the core slit.
+- **Hub touch (small, append-only, reconciled live with the parallel bug-fix session):** `main.js` (fortress build replacing the old mainframe stub, `unlockGate` ctx hook, `openGateTerminal`, a gate click branch, an update tick, map markers) and `renderer.js` (the four draw methods + cases + depth rule).
+
+Next stages: **maze** (charcoal `darkstone` labyrinth behind the door) → **M6 guards + quad** → **core confrontation** (Adamantine speaks; break it → "1 of 4").
 
 ### v0.97 — choir quietens with distance, and recruits a full section
 

@@ -1,6 +1,6 @@
 # postAI
 
-**Version:** 0.97 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
+**Version:** 0.98 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
 
 *(Versioning policy: 0.01 increments from v0.3 onwards.)*
 
@@ -34,6 +34,7 @@ Full technical detail (root causes, exact numbers) lives in [PAI-version-plan.md
 
 | Version | Summary |
 |---|---|
+| v0.98 | Adamantine's fortress (Stage 1): a sealed annex grown onto the map's south boundary, reached only by hacking the boundary gate terminal in RON-ML (`unlock`) to drop a fortress key that swings the grand doorway open; the metal fortress shell and the ADAMANTINE mainframe core (first of the four AIs) stand inside; gate + core marked on the `map` overlay; gate beacons and the core slit carry the factory's textured-glow treatment |
 | v0.97 | The robot choir quietens as you walk away from it, and a lonely `sing` now summons the nearest machines from across the map to march in and fill out a full choir |
 | v0.96 | Singing machines drop their damage bars (the choir reads as a performance, not a fight); the four AI minds — Adamantine, Behemoth, Colossus, Demiurge — named obliquely in new lore fragments |
 | v0.95 | The robot choir now actually sings — the opening of Dowland's *Flow My Tears* (parsed from MIDI, synthesised as soft voices), with each machine's red light flashing to its own vocal part so the row blinks out of step; a torn song-sheet of the lyrics hidden in the ruins |

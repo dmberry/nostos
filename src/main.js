@@ -47,7 +47,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '0.97';
+const VERSION = '0.98';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -487,7 +487,7 @@ function revealAround(px, py) {
 }
 
 // Debug handle for inspecting live state from the console.
-window.__game = { player, map, camera, animals, birds, robots, waterdroids, obelisks, obeliskObjs, wfactory, dayNight, lore, input, renderer };
+window.__game = { player, map, camera, animals, birds, robots, waterdroids, obelisks, obeliskObjs, wfactory, dayNight, lore, input, renderer, fortress };
 
 function resize() {
   renderer.resize(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1);
@@ -685,8 +685,17 @@ function openRonMap() {
     g.fillStyle = '#e0b53a';
     g.beginPath(); g.moveTo(x, y - 6); g.lineTo(x + 6, y); g.lineTo(x, y + 6); g.lineTo(x - 6, y); g.closePath(); g.fill();
   }
-  // The mainframe (magenta star) — what you're searching for.
+  // Adamantine's fortress: the grand doorway (cyan) you hack in through the
+  // boundary, and the mainframe core (magenta star) deep inside it.
   {
+    const m = fortress.markers();
+    // The gate in the rampart.
+    const gx = sx(m.gate.x), gy = sy(m.gate.y);
+    g.fillStyle = m.gate.open ? '#67d6ff' : m.gate.hacked ? '#5ae08c' : '#7fe0ff';
+    g.fillRect(gx - 4, gy - 4, 8, 8);
+    g.fillStyle = 'rgba(127,224,255,0.9)';
+    g.fillText(m.gate.open ? 'GATE (OPEN)' : 'GATE', gx + 8, gy + 3);
+    // The core.
     const x = sx(mainframe.x), y = sy(mainframe.y);
     g.fillStyle = '#ff3d8b';
     g.beginPath();
@@ -696,7 +705,7 @@ function openRonMap() {
       k === 0 ? g.moveTo(px, py) : g.lineTo(px, py);
     }
     g.closePath(); g.fill();
-    g.fillStyle = 'rgba(255,120,180,0.9)'; g.fillText('MAINFRAME', x + 10, y + 3);
+    g.fillStyle = 'rgba(255,120,180,0.9)'; g.fillText(`${m.core.ai.toUpperCase()} CORE`, x + 10, y + 3);
   }
   // You (cyan ring).
   {
@@ -758,6 +767,34 @@ function openObTerminal(ob) {
     obTermInput.focus();
   };
   requestAnimationFrame(step);
+}
+
+// The fortress gate terminal reuses the same RON-ML console, minus the chip
+// gate and connect bar. You type `unlock` here (needs an AI key) to hack the
+// grand doorway; it drops a fortress key that then swings the door open.
+function openGateTerminal() {
+  player.terminalSafe = true;
+  obTermEl.style.display = 'flex';
+  obTermScreen.parentElement.style.display = 'flex';
+  obTermConnect.style.display = 'none';
+  replLog = [];
+  replHistory = [];
+  replHistoryIdx = -1;
+  const keyed = player.hasItem('ai_key');
+  replPrint(
+    `${fortress.AI_NAME.toUpperCase()} — OUTER GATE TERMINAL`,
+    'RON-DOS 4.11  (c) Reality Or Nothing',
+    '',
+    `> gate ............ ${fortress.terminal.obj.code}`,
+    `> rampart ......... ${fortress.open ? 'OPEN' : fortress.hacked ? 'UNLOCKED' : 'SEALED'}`,
+    `> ai key .......... ${keyed ? 'DETECTED' : 'NOT HELD (unlock will fail)'}`,
+    '',
+    'The doorway is bolted from within. type: unlock   (type help for commands)',
+    '_',
+  );
+  obTermInput.value = '';
+  obTermGhost.textContent = '';
+  obTermInput.focus();
 }
 function closeObTerminal() { obTermEl.style.display = 'none'; obTermGhost.textContent = ''; obTermInput.blur(); player.terminalSafe = false; }
 obTermEl.addEventListener('click', (e) => { if (e.target === obTermEl) closeObTerminal(); });
@@ -1187,6 +1224,18 @@ function update(dt) {
       else player.say('Too far from the obelisk to reach its terminal.');
     }
   }
+  // Click the fortress gate terminal (kiosk beside the grand doorway) to open
+  // its hack console, if you're standing close enough to reach it.
+  const gPress = input.clickPos();
+  if (gPress) {
+    const w = camera.toWorld(gPress.x, gPress.y, renderer.w, renderer.h);
+    const t = fortress.terminal;
+    if (Math.hypot(w.x - (t.x + 0.5), w.y - (t.y + 0.5)) <= 1.2) {
+      input.consumeClick();
+      if (fortress.nearTerminal(player.x, player.y, 2.6)) openGateTerminal();
+      else player.say('Too far from the gate terminal to reach it.');
+    }
+  }
   const up = input.consumeUp();
   if (up && drag) {
     const target = renderer.slotAt ? renderer.slotAt(up.x, up.y) : null;
@@ -1354,6 +1403,7 @@ function update(dt) {
   }
   resolveBodyOverlaps(player, animals, robots);
   map.updateShakes(dt);
+  fortress.update(dt, player); // swings the grand doorway open once you carry the key up to it
   dayNight.update(dt);
   // Time's up: SKYLINK-9000 comes online. Every obelisk lights up and links
   // to every other in a web of lasers, and the factory throws wave after

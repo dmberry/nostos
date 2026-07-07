@@ -161,7 +161,7 @@ export class Renderer {
       // otherwise its low corner-depth let trees and machines behind it draw
       // over the block. Centre depth occludes what's behind and lets what's
       // genuinely in front (south/east of it) still draw on top.
-      const depth = obj.type === 'wfactory'
+      const depth = (obj.type === 'wfactory' || obj.type === 'mainframe')
         ? obj.x + (obj.fw || 1) / 2 + obj.y + (obj.fh || 1) / 2
         : obj.x + obj.y + 1;
       drawables.push({ depth, obj });
@@ -1158,6 +1158,140 @@ export class Renderer {
       case 'box': this.drawBox(obj); break;
       case 'car': this.drawCar(obj); break;
       case 'wfactory': this.drawWfactory(obj); break;
+      case 'fortwall': this.drawFortWall(obj); break;
+      case 'fortdoor': this.drawFortDoor(obj); break;
+      case 'gateterm': this.drawGateTerm(obj); break;
+      case 'mainframe': this.drawMainframe(obj); break;
+    }
+  }
+
+  // --- Adamantine's fortress (southern annex) ------------------------------
+  // A single fortress-rampart block: a tall, non-climbable extruded metal
+  // prism. Pylons (flanking the doorway) stand taller and carry a red beacon.
+  // A glowing lamp/vent with a grubby metal grille laid over it — the same
+  // trick the factory vent uses: an optional soft bloom, the glow colour, then
+  // a metal texture clipped to the ellipse at low alpha so it reads as a lit
+  // fixture in the hull rather than a flat coloured oval.
+  texturedGlow(cx, cy, rx, ry, color, bloom = 0, texAlpha = 0.5) {
+    const ctx = this.ctx;
+    ctx.save();
+    if (bloom) { ctx.shadowColor = color; ctx.shadowBlur = bloom; }
+    ctx.fillStyle = color;
+    ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+    const tex = WALL_TEXTURES.metal;
+    if (tex && tex.complete && tex.naturalWidth) {
+      ctx.save();
+      ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); ctx.clip();
+      ctx.globalAlpha = texAlpha;
+      // Cover the whole ellipse with the square texture (side = its longer
+      // axis) so a tall, thin oval fills edge-to-edge instead of leaving the
+      // stretched texture short of the ends.
+      const s = Math.max(rx, ry) * 2;
+      ctx.drawImage(tex, cx - s / 2, cy - s / 2, s, s);
+      ctx.restore();
+    }
+  }
+
+  drawFortWall(obj) {
+    const ctx = this.ctx;
+    const H = obj.pylon ? 78 : 52;
+    const g = {
+      top: worldToScreen(obj.x, obj.y), right: worldToScreen(obj.x + 1, obj.y),
+      bottom: worldToScreen(obj.x + 1, obj.y + 1), left: worldToScreen(obj.x, obj.y + 1),
+    };
+    const r = { top: { x: g.top.x, y: g.top.y - H }, right: { x: g.right.x, y: g.right.y - H },
+      bottom: { x: g.bottom.x, y: g.bottom.y - H }, left: { x: g.left.x, y: g.left.y - H } };
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.beginPath(); ctx.moveTo(g.top.x, g.top.y + 4); ctx.lineTo(g.right.x, g.right.y + 4);
+    ctx.lineTo(g.bottom.x, g.bottom.y + 4); ctx.lineTo(g.left.x, g.left.y + 4); ctx.closePath(); ctx.fill();
+    const tex = WALL_TEXTURES.metal, base = [46, 50, 56];
+    this.drawTexturedQuad([g.left, g.bottom, r.bottom, r.left], tex, rgbScale(base, 0.7), rgbScale(base, 0.7), 'multiply', 0.85);
+    this.drawTexturedQuad([g.bottom, g.right, r.right, r.bottom], tex, rgbScale(base, 0.5), rgbScale(base, 0.5), 'multiply', 0.85);
+    this.drawTexturedQuad([r.top, r.right, r.bottom, r.left], tex, rgbScale(base, 0.95), rgbScale(base, 0.95), 'multiply', 0.5);
+    this.diamondPath([r.top, r.right, r.bottom, r.left]);
+    ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 1.2; ctx.stroke();
+    if (obj.pylon) {
+      const c = { x: (r.top.x + r.bottom.x) / 2, y: (r.top.y + r.bottom.y) / 2 };
+      const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 500);
+      this.texturedGlow(c.x, c.y, 4.5, 2.8, `rgba(255,60,60,${(0.45 + 0.5 * pulse).toFixed(3)})`, 6);
+    }
+  }
+
+  // The grand doorway. Solid metal until hacked; a lock beacon burns red while
+  // locked and green once the hack throws its bolts (the door object is removed
+  // from the grid when the key actually opens it, so this only shows closed).
+  drawFortDoor(obj) {
+    const ctx = this.ctx, H = 64;
+    const g = {
+      top: worldToScreen(obj.x, obj.y), right: worldToScreen(obj.x + 1, obj.y),
+      bottom: worldToScreen(obj.x + 1, obj.y + 1), left: worldToScreen(obj.x, obj.y + 1),
+    };
+    const r = { top: { x: g.top.x, y: g.top.y - H }, right: { x: g.right.x, y: g.right.y - H },
+      bottom: { x: g.bottom.x, y: g.bottom.y - H }, left: { x: g.left.x, y: g.left.y - H } };
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath(); ctx.moveTo(g.top.x, g.top.y + 4); ctx.lineTo(g.right.x, g.right.y + 4);
+    ctx.lineTo(g.bottom.x, g.bottom.y + 4); ctx.lineTo(g.left.x, g.left.y + 4); ctx.closePath(); ctx.fill();
+    const tex = WALL_TEXTURES.metal, base = [40, 40, 48];
+    this.drawTexturedQuad([g.left, g.bottom, r.bottom, r.left], tex, rgbScale(base, 0.62), rgbScale(base, 0.62), 'multiply', 0.92);
+    this.drawTexturedQuad([g.bottom, g.right, r.right, r.bottom], tex, rgbScale(base, 0.46), rgbScale(base, 0.46), 'multiply', 0.92);
+    this.drawTexturedQuad([r.top, r.right, r.bottom, r.left], tex, rgbScale(base, 0.82), rgbScale(base, 0.82), 'multiply', 0.5);
+    const lit = obj.hacked;
+    const fc = { x: (g.bottom.x + g.right.x) / 2, y: (g.bottom.y + g.right.y) / 2 - H / 2 };
+    const pulse = 0.5 + 0.5 * Math.sin(performance.now() / (lit ? 300 : 700));
+    const col = lit ? `rgba(90,240,140,${(0.55 + 0.45 * pulse).toFixed(3)})` : `rgba(240,70,60,${(0.55 + 0.4 * pulse).toFixed(3)})`;
+    this.texturedGlow(fc.x, fc.y, 5.5, 5.5, col, 10);
+  }
+
+  // The gate console kiosk: a low pedestal with a glowing green screen.
+  drawGateTerm(obj) {
+    const ctx = this.ctx, H = 22;
+    const s = worldToScreen(obj.x + 0.5, obj.y + 0.5);
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath(); ctx.ellipse(s.x, s.y + 2, 10, 5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#2a2e33'; ctx.fillRect(s.x - 7, s.y - H, 14, H);
+    const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 280);
+    ctx.fillStyle = `rgba(90,220,140,${(0.45 + 0.4 * pulse).toFixed(3)})`;
+    ctx.fillRect(s.x - 6, s.y - H + 2, 12, 9);
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 1; ctx.strokeRect(s.x - 7, s.y - H, 14, H);
+  }
+
+  // Adamantine's mainframe core: a tall, near-black metal monolith with a
+  // vertical slit of magenta light burning up its front face. Goes cold and
+  // grey once defeated. A damage bar floats over it when hurt and you're near.
+  drawMainframe(obj) {
+    const ctx = this.ctx, fw = obj.fw || 6, fh = obj.fh || 6;
+    const cx = obj.x + fw / 2, cy = obj.y + fh / 2, H = 122, dead = obj.defeated;
+    const g = {
+      top: worldToScreen(obj.x, obj.y), right: worldToScreen(obj.x + fw, obj.y),
+      bottom: worldToScreen(obj.x + fw, obj.y + fh), left: worldToScreen(obj.x, obj.y + fh),
+    };
+    const r = { top: { x: g.top.x, y: g.top.y - H }, right: { x: g.right.x, y: g.right.y - H },
+      bottom: { x: g.bottom.x, y: g.bottom.y - H }, left: { x: g.left.x, y: g.left.y - H } };
+    ctx.fillStyle = 'rgba(0,0,0,0.42)';
+    ctx.beginPath(); ctx.moveTo(g.top.x, g.top.y + 8); ctx.lineTo(g.right.x, g.right.y + 8);
+    ctx.lineTo(g.bottom.x, g.bottom.y + 8); ctx.lineTo(g.left.x, g.left.y + 8); ctx.closePath(); ctx.fill();
+    const tex = WALL_TEXTURES.metal, base = dead ? [32, 32, 36] : [26, 24, 32];
+    this.drawTexturedQuad([g.left, g.bottom, r.bottom, r.left], tex, rgbScale(base, 0.7), rgbScale(base, 0.7), 'multiply', 0.92);
+    this.drawTexturedQuad([g.bottom, g.right, r.right, r.bottom], tex, rgbScale(base, 0.5), rgbScale(base, 0.5), 'multiply', 0.92);
+    this.drawTexturedQuad([r.top, r.right, r.bottom, r.left], tex, rgbScale(base, 0.9), rgbScale(base, 0.9), 'multiply', 0.5);
+    this.diamondPath([r.top, r.right, r.bottom, r.left]);
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 1.5; ctx.stroke();
+    const pulse = 0.5 + 0.5 * Math.sin(performance.now() / (dead ? 2000 : 520));
+    const glow = dead ? 'rgba(120,120,130,0.22)' : `rgba(214,90,220,${(0.45 + 0.5 * pulse).toFixed(3)})`;
+    const fb = { x: (g.bottom.x + g.right.x) / 2, y: (g.bottom.y + g.right.y) / 2 };
+    this.texturedGlow(fb.x, fb.y - H / 2, 6.5, H * 0.32, glow, dead ? 0 : 18, 0.85);
+    const labelC = worldToScreen(cx, obj.y + fh);
+    ctx.font = 'bold 14px system-ui, sans-serif'; ctx.textAlign = 'center';
+    ctx.fillStyle = dead ? '#6a6a72' : '#e0a8e6';
+    ctx.fillText((obj.ai || 'ADAMANTINE').toUpperCase(), labelC.x, labelC.y - H * 0.62);
+    ctx.textAlign = 'left';
+    const p = this.hudPlayer;
+    if (!dead && obj.hp != null && obj.maxHp && obj.hp < obj.maxHp && p && Math.hypot(p.x - cx, p.y - cy) < 16) {
+      const t = worldToScreen(cx, cy), bw = 130, bh = 9, bx = t.x - bw / 2, by = t.y - H - 24, frac = Math.max(0, obj.hp / obj.maxHp);
+      ctx.fillStyle = 'rgba(0,0,0,0.65)'; ctx.fillRect(bx - 2, by - 2, bw + 4, bh + 4);
+      ctx.fillStyle = '#3a3f46'; ctx.fillRect(bx, by, bw, bh);
+      ctx.fillStyle = frac > 0.5 ? '#c24ac2' : frac > 0.25 ? '#e0b53a' : '#e05548'; ctx.fillRect(bx, by, bw * frac, bh);
     }
   }
 

@@ -350,6 +350,15 @@ export const ITEMS = {
     stack: 4,
     color: '#e6d24a',
   },
+  // Spat out by the fortress gate terminal once you hack it with RON-ML. Its
+  // bolts throw the grand doorway in the southern rampart open — the only way
+  // into Adamantine's fortress. A one-way trophy; carried, not held.
+  fortress_key: {
+    name: 'fortress key',
+    kind: 'key',
+    stack: 1,
+    color: '#7fe0ff',
+  },
   battery: {
     name: 'Battery',
     kind: 'resource',

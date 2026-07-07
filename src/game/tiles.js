@@ -12,6 +12,12 @@ export const FLOORS = {
   stream: { color: '#4f83b5', solid: false }, // shallow water, wadeable
   bridge: { color: '#8a7048', solid: false },
   tallgrass: { color: '#6f8f3f', solid: false },
+  // Adamantine's fortress (the map's southern annex): a cold metal-panel deck
+  // for the corridors and maze, a paved quadrangle for the open killing-ground,
+  // and a dark charcoal deck for the inner sanctum. All walkable.
+  panel:  { color: '#3c4045', solid: false },
+  quad:   { color: '#55575c', solid: false },
+  sanctum:{ color: '#26282c', solid: false },
 };
 
 export const OBJECTS = {
@@ -38,4 +44,17 @@ export const OBJECTS = {
   box:     { solid: true, climbable: true, climbHeight: 1 }, // resistance cache — a low crate you can step or jump onto, still searchable from beside it
   car:     { solid: true }, // abandoned wreck littering the roads; scenery only
   wfactory: { solid: true }, // W-unit foundry; periodically fields a W3 repair drone
+  // --- Adamantine's fortress (southern annex) ---
+  // Deliberately NON-climbable, unlike a town wall: the fortress rampart and
+  // its inner maze can't be double-jumped, so the hacked doorway is the only
+  // way in. `material` ('metal' | 'darkstone') selects the wall texture.
+  fortwall: { solid: true },
+  // The grand doorway in the rampart: solid until the terminal hack drops a
+  // fortress key and the key throws its bolts. Removed from the grid when open.
+  fortdoor: { solid: true },
+  // The console kiosk beside the doorway: walk up and click to open its RON-ML
+  // hack. A low pillar you bump into, not climb.
+  gateterm: { solid: true },
+  // Adamantine's mainframe core: the multi-tile structure at the far end.
+  mainframe: { solid: true },
 };

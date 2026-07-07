@@ -46,6 +46,11 @@ export const FLOOR_TEXTURES = {
   boards: loadDownscaled(T + 'floor-boards.png'),
   bridge: loadDownscaled(T + 'floor-boards.png'),
   sand: loadDownscaled(T + 'wall-pebbledash.png'),
+  // Adamantine's fortress decks: riveted metal panels for the corridors/maze,
+  // paving for the open quad, and a darker panel for the inner sanctum.
+  panel: loadDownscaled(T + 'panel-metal-1.jpg'),
+  quad: loadDownscaled(T + 'floor-pavingstone.jpg'),
+  sanctum: loadDownscaled(T + 'panel-metal-2.jpg'),
 };
 
 // A sparse dirt-patch variant scattered thinly through grass tiles for
@@ -57,6 +62,9 @@ export const GRASS_PATCH_TEXTURE = loadDownscaled(T + 'floor-secret.jpg');
 export const WALL_TEXTURES = {
   stone: loadDownscaled(T + 'wall-stone.jpg'),
   brick: loadDownscaled(T + 'wall-brick.jpg'),
+  // Fortress ramparts (riveted metal) and the inner charcoal maze (dark stone).
+  metal: loadDownscaled(T + 'panel-metal-2.jpg'),
+  darkstone: loadDownscaled(T + 'wall-darkstone-alt.png'),
 };
 
 // Hand-drawn tree art (a copy of the CC0 "Premium Trees" sheet dropped in at
