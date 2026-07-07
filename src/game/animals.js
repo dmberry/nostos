@@ -491,7 +491,7 @@ export function drawAnimal(ctx, animal, worldToScreen) {
 // the rest are rendered and ready in assets/textures/animals/ for whenever
 // boar/viper substitutes or further species are picked.
 const ANIMAL_SPRITE_SCALE = {
-  dog: 0.42, bee: 0.23, caterpillar: 0.19, chick: 0.23, crab: 0.23, fish: 0.26,
+  dog: 0.21, bee: 0.23, caterpillar: 0.19, chick: 0.23, crab: 0.23, fish: 0.26,
   bunny: 0.32, beaver: 0.32, cat: 0.36, koala: 0.36, penguin: 0.36, parrot: 0.26,
   fox: 0.39, monkey: 0.39, pig: 0.48, hog: 0.52, panda: 0.55, deer: 0.58,
   lion: 0.61, tiger: 0.65, cow: 0.71, polar: 0.71, giraffe: 0.9, elephant: 1.03,
