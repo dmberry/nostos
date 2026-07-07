@@ -290,6 +290,14 @@ export function updateAnimals(dt, animals, player, map) {
     // keeps a big map cheap (only nearby wildlife thinks each frame).
     if (distTo(a, player) > ANIMAL_ACTIVE_RANGE) continue;
     a.animT += dt;
+    // Knocked back by a solid hit: frozen (no movement, no attack) for a
+    // beat, same as the shove the player's strike just gave it — stops it
+    // trading blows nose-to-nose the instant it's been hit.
+    if (a.knockT > 0) {
+      a.knockT -= dt;
+      a.justHurt = false;
+      continue;
+    }
     // Startled (e.g. by the electro-gun's crackle): bolt straight away from
     // the player, overriding normal behaviour, until the scare wears off.
     if (a.scaredT > 0) {

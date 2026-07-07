@@ -2329,33 +2329,35 @@ export class Renderer {
     if (!heldBehind) this.drawHeldItem(player, c, by);
 
     // Facing indicator: a small chevron ahead of the feet, pointing (in screen
-    // space) the way you aim. Holding the electro-compass repurposes it into a
-    // homing pointer to the nearest notable thing, coloured by what that is.
-    let dir = player.facing;
-    let chevColor = 'rgba(200,200,200,0.55)';
-    if (player.hands === 'compass' && player.compassTarget) {
-      const t = player.compassTarget();
-      if (t) {
-        const dx = t.x - player.x, dy = t.y - player.y, d = Math.hypot(dx, dy) || 1;
-        dir = { x: dx / d, y: dy / d };
-        chevColor = t.color;
-      }
-    }
-    const f = worldToScreen(player.x + dir.x * 1.2, player.y + dir.y * 1.2);
+    // space) the way you aim. An armed, carried electro-compass repurposes it
+    // into a cluster of homing pointers, one per notable thing nearby, each
+    // coloured by what it is.
     const fp0 = worldToScreen(player.x, player.y);
-    const fp1 = worldToScreen(player.x + dir.x, player.y + dir.y);
-    const fang = Math.atan2(fp1.y - fp0.y, fp1.x - fp0.x);
-    ctx.save();
-    ctx.translate(f.x, f.y - 10);
-    ctx.rotate(fang);
-    ctx.strokeStyle = chevColor;
-    ctx.lineWidth = 2;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.beginPath();
-    ctx.moveTo(-3, -4.5); ctx.lineTo(4, 0); ctx.lineTo(-3, 4.5);
-    ctx.stroke();
-    ctx.restore();
+    const drawChevron = (dx, dy, color) => {
+      const d = Math.hypot(dx, dy) || 1;
+      const dir = { x: dx / d, y: dy / d };
+      const f = worldToScreen(player.x + dir.x * 1.2, player.y + dir.y * 1.2);
+      const fp1 = worldToScreen(player.x + dir.x, player.y + dir.y);
+      const fang = Math.atan2(fp1.y - fp0.y, fp1.x - fp0.x);
+      ctx.save();
+      ctx.translate(f.x, f.y - 10);
+      ctx.rotate(fang);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(-3, -4.5); ctx.lineTo(4, 0); ctx.lineTo(-3, 4.5);
+      ctx.stroke();
+      ctx.restore();
+    };
+    const compassOn = player.hasItem && player.hasItem('compass') && player.compassArmed && player.compassTargets;
+    const targets = compassOn ? player.compassTargets() : [];
+    if (targets.length) {
+      for (const t of targets) drawChevron(t.x - player.x, t.y - player.y, t.color);
+    } else {
+      drawChevron(player.facing.x, player.facing.y, 'rgba(200,200,200,0.55)');
+    }
 
     // Forcefield: a shimmering green shell around the whole character.
     if (player.forcefieldActive && player.forcefieldActive()) {
@@ -2576,12 +2578,13 @@ export class Renderer {
       }
     }
 
-    // Backpack summary badge, once found: press I for the full panel.
+    // Backpack summary badge, once found: click it (or press I) for the full panel.
     if (player.backpack) {
       const bpX = pocketsX + player.pockets.length * 42 + 10;
       const used = player.backpack.slots.filter(Boolean).length;
-      this.drawLabel('PACK (I)', bpX, top + 14);
+      this.drawLabel('PACK (click or I)', bpX, top + 14);
       this.drawSlot(bpX, top + 20, 36, ITEMS.backpack, 0);
+      this.uiSlots.push({ x: bpX, y: top + 20, w: 36, h: 36, kind: 'packbadge' });
       ctx.font = '9px system-ui, sans-serif';
       ctx.fillStyle = 'rgba(207,216,195,0.7)';
       ctx.fillText(`${used}/16`, bpX, top + 66);

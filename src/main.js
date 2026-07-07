@@ -31,7 +31,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '0.82';
+const VERSION = '0.83';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -239,6 +239,14 @@ for (const ob of obeliskObjs) {
 
 // Character persona and learned skills persist across sessions and deaths.
 const SAVE_KEY = 'postai-character';
+// Name and gender live in their own durable key, separate from the run save.
+// Dying or starting a New Game wipes score/skills/inventory (fullReset below)
+// but should not make you re-pick who you are — that identity outlives runs.
+const IDENTITY_KEY = 'postai-identity';
+try {
+  const identity = JSON.parse(localStorage.getItem(IDENTITY_KEY) || 'null');
+  if (identity) player.setPersona(identity.name || player.name, identity.gender || player.gender);
+} catch { /* corrupt: keep the default persona */ }
 let hadExistingSave = false;
 try {
   const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
@@ -292,6 +300,7 @@ const persist = () => {
         pockets: player.pockets, backpack: player.backpack,
       },
     }));
+    localStorage.setItem(IDENTITY_KEY, JSON.stringify({ name: player.name, gender: player.gender }));
   } catch { /* storage unavailable */ }
 };
 player.onSkillLearned = persist;
@@ -808,7 +817,8 @@ function update(dt) {
     const slot = renderer.slotAt(press.x, press.y);
     if (slot) {
       input.consumeClick();
-      if (player.getSlot(slot)) drag = { from: slot };
+      if (slot.kind === 'packbadge') showBackpack = true; // click the badge to open the full panel
+      else if (player.getSlot(slot)) drag = { from: slot };
       else player.equipSlot(slot); // empty hands slot: stow whatever's held
     }
   }

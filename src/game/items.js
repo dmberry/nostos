@@ -234,9 +234,11 @@ export const ITEMS = {
     stack: 1,
     color: '#6ad0a0',
   },
-  // Electro-compass: hold it and your facing chevron turns into a homing
-  // pointer to the nearest notable thing, colour-coded by what it is (see
-  // Player.compassTarget). A navigation aid, not a weapon.
+  // Electro-compass: click it (in hand, pocket, or pack) to arm it — once
+  // armed and carried, your facing chevron becomes a cluster of homing
+  // pointers, one per notable thing nearby, colour-coded (see
+  // Player.compassTargets). Stays armed until you drop it. A navigation aid,
+  // not a weapon.
   compass: {
     name: 'Electro-compass',
     kind: 'compass',

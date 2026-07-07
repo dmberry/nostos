@@ -11,6 +11,8 @@ const WOUNDED_AT = 20;     // health threshold for the hobble
 const WOUNDED_SPRINT_DRAIN = 2.5; // wounded sprinting burns stamina this much faster
 const RADIUS = 0.28;      // collision radius in tiles
 const REACH = 0.9;        // how far ahead the player can use a tool
+const KNOCKBACK_DIST = 0.5; // tiles a melee hit shoves an animal/robot back
+const KNOCKBACK_STUN = 0.4; // seconds it's frozen (no move, no attack) after
 const TREE_HP = 4;        // penknife swings to fell a tree
 const TREE_CHOP_SPEEDUP = 0.55; // chop cooldown vs a normal swing: faster axe work
 const WOOD_PER_TREE = 2;
@@ -81,6 +83,8 @@ export class Player {
     this.vz = 0;
     this.doubleJumped = false; // a second, mid-air jump: reaches block tops
     this.forcefieldCharge = 0; // seconds of forcefield left in the current cell
+    this.forcefieldArmed = false; // toggled by clicking the forcefield in any slot
+    this.compassArmed = false; // toggled by clicking the electro-compass in any slot
     this.ammoFrac = {};        // accumulated fractional ammo per gun
     this.electroCharge = (ITEMS.electrogun && ITEMS.electrogun.internalMax) || 4; // electro-gun's self-charging internal cell
     this.terminalSafe = false;  // true while jacked into an obelisk terminal (invisible to machines)
@@ -308,8 +312,22 @@ export class Player {
   // Equip / stow via a clicked dashboard or backpack slot. Clicking a pocket
   // (or the spare-weapon slot) swaps it with the hands slot; clicking the
   // hands slot puts the held item away; clicking a backpack storage slot
-  // takes a weapon from it into the hand.
+  // takes a weapon from it into the hand. The forcefield and electro-compass
+  // are the exception: clicking either in any slot just arms/disarms it in
+  // place — you never need to hold them, since they work the moment they're
+  // carried and armed.
   equipSlot(slot) {
+    const held = this.getSlot(slot);
+    if (held && held.item === 'forcefield') {
+      this.forcefieldArmed = !this.forcefieldArmed;
+      this.say(this.forcefieldArmed ? 'Forcefield armed — it will power up once it has a battery.' : 'Forcefield disarmed.');
+      return;
+    }
+    if (held && held.item === 'compass') {
+      this.compassArmed = !this.compassArmed;
+      this.say(this.compassArmed ? 'Compass armed — the chevrons will home on anything notable nearby.' : 'Compass disarmed.');
+      return;
+    }
     if (slot.kind === 'pocket') { this.selectedPocket = slot.i; this.swapHands(); return; }
     if (slot.kind === 'bw') { this.selectedPocket = 'bw'; this.swapHands(); return; }
     if (slot.kind === 'hands') {
@@ -483,10 +501,13 @@ export class Player {
     this.invisibleToRobots = (this.ownsWifiBlock() && this.wifiPower > 0) || this.terminalSafe;
     this._wifiOn = this.ownsWifiBlock() && this.wifiPower > 0;
 
-    // Forcefield: only up while it's the item in your hands. It burns its
-    // charge; when a cell runs out it pulls a fresh battery from your kit, and
-    // with none left the field drops until you feed it one.
-    if (this.hands === 'forcefield') {
+    // Forcefield: armed by clicking it in whatever slot it's carried in (hand,
+    // pocket, or backpack — no need to hold it). While armed and carried it
+    // burns its charge; when a cell runs out it pulls a fresh battery from
+    // your kit, and with none left the field drops until you feed it one.
+    // Losing the item entirely disarms it so a freshly found one starts off.
+    if (!this.hasItem('forcefield')) this.forcefieldArmed = false;
+    if (this.hasItem('forcefield') && this.forcefieldArmed) {
       if (this.forcefieldCharge > 0) {
         this.forcefieldCharge = Math.max(0, this.forcefieldCharge - FORCEFIELD_DRAIN * dt);
       } else if (this.consumeBattery()) {
@@ -499,6 +520,10 @@ export class Player {
     } else {
       this._ffOn = false;
     }
+
+    // Electro-compass: armed the same way — click it in whatever slot it's
+    // carried in. Stays armed (chevrons on) until you drop the item entirely.
+    if (!this.hasItem('compass')) this.compassArmed = false;
 
     // Electro-gun solar trickle: while you carry it (hand, pocket, or pack)
     // its internal cell slowly refills, so it comes back to life on its own.
@@ -773,6 +798,15 @@ export class Player {
       const bonus = this.xpLevel('melee');
       target.hp -= (isRobot ? (tool.robotDamage ?? 1) : (tool.animalDamage ?? 3)) + bonus;
       target.hurt = true; // modules read this (pack flee, boar enrage, robot aggro)
+      // A solid blow shoves it back and rattles it for a beat (frozen, no
+      // attack) — otherwise it just stands there trading hits nose-to-nose,
+      // landing its own attack the instant yours lands and out-damaging you
+      // even though you struck first.
+      const kd = best > 1e-4 ? best : 1;
+      const kx = target.x + ((target.x - this.x) / kd) * KNOCKBACK_DIST;
+      const ky = target.y + ((target.y - this.y) / kd) * KNOCKBACK_DIST;
+      if (!map.isSolid(Math.floor(kx), Math.floor(ky))) { target.x = kx; target.y = ky; }
+      target.knockT = KNOCKBACK_STUN;
       this.gainXp('melee', target.hp <= 0 ? 5 : 1);
       if (isRobot) {
         this.sparkAt(map, target.x, target.y);
@@ -1459,21 +1493,22 @@ export class Player {
   }
 
   forcefieldActive() {
-    return this.hands === 'forcefield' && this.forcefieldCharge > 0;
+    return this.hasItem('forcefield') && this.forcefieldArmed && this.forcefieldCharge > 0;
   }
 
-  // While the electro-compass is held, the facing chevron becomes a pointer
-  // to the nearest notable thing, colour-coded: factory (blue), obelisk
+  // While the electro-compass is armed and carried, the facing chevron
+  // becomes a cluster of pointers — one per category of notable thing,
+  // each to the nearest of its kind, colour-coded: factory (blue), obelisk
   // (green), a dropped backpack (yellow), a dropped OB-gun (orange). The AI
-  // mainframe (red) will slot in here once it exists. Returns {x, y, color}
-  // in world coords, or null if nothing's around.
-  compassTarget() {
+  // mainframe (red) will slot in here once it exists. Returns an array of
+  // {x, y, color}, one entry per category that has something to point at.
+  compassTargets() {
     const map = this.map;
-    if (!map) return null;
-    let best = null, bestD = Infinity;
+    if (!map) return [];
+    const nearest = {}; // color -> {x,y,d}
     const consider = (x, y, color) => {
       const d = Math.hypot(x - this.x, y - this.y);
-      if (d < bestD) { bestD = d; best = { x, y, color }; }
+      if (!nearest[color] || d < nearest[color].d) nearest[color] = { x, y, d };
     };
     for (const o of map.objects) {
       if (o.type === 'wfactory' && !o.destroyed) consider(o.x + (o.fw || 1) / 2, o.y + (o.fh || 1) / 2, '#4f8fe0');
@@ -1483,7 +1518,7 @@ export class Player {
       if (gi.item === 'backpack') consider(gi.x, gi.y, '#e6d24a');
       else if (gi.item === 'obgun') consider(gi.x, gi.y, '#e0842f');
     }
-    return best;
+    return Object.entries(nearest).map(([color, t]) => ({ x: t.x, y: t.y, color }));
   }
 
   // A laser is on its way. Returns how it's stopped, if at all:

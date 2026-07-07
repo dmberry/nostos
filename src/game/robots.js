@@ -538,6 +538,15 @@ export function updateRobots(dt, robots, player, map) {
       continue;
     }
 
+    // Knocked back by a solid hit: frozen (no movement, no attack) for a
+    // beat, same as the shove the player's strike just gave it — stops it
+    // trading blows nose-to-nose the instant it's been hit.
+    if (r.knockT > 0) {
+      r.knockT = Math.max(0, r.knockT - dt);
+      r.animT += dt;
+      continue;
+    }
+
     // Flat battery: fully inert until the player re-batteries it.
     if (r.drained) continue;
 
