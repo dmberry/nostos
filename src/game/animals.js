@@ -466,21 +466,23 @@ function updateViper(a, dt, player, map) {
 
 // ---- Drawing --------------------------------------------------------------
 
-// Boar and viper are still placeholder art in code: shadow ellipse at the
-// feet, simple shapes at tile scale. Dog now draws the real Kenney
-// "Cube Pets" model (see ANIMAL_SPRITE_SETS in engine/textures.js,
+// Viper is still placeholder art in code: shadow ellipse at the feet,
+// simple shapes at tile scale. Dog and boar now draw real Kenney
+// "Cube Pets" models (see ANIMAL_SPRITE_SETS in engine/textures.js,
 // pre-rendered offline via tools/pet-render.html into 8 screen-facing
-// directions), falling back to the old procedural shape until the image has
-// loaded. worldToScreen is the projection function from engine/iso.js,
-// passed in so most of this module stays engine-free; the sprite path is
-// the one exception, importing directly from textures.js.
+// directions) — boar uses 'hog', the closest match in the pack, there being
+// no literal boar model — falling back to the old procedural shape until
+// the image has loaded. worldToScreen is the projection function from
+// engine/iso.js, passed in so most of this module stays engine-free; the
+// sprite path is the one exception, importing directly from textures.js.
 export function drawAnimal(ctx, animal, worldToScreen) {
   if (animal.dead) return;
   const c = worldToScreen(animal.x, animal.y);
   if (animal.type === 'dog') {
     if (!drawDogSprite(ctx, animal, c)) drawDog(ctx, animal, c, worldToScreen);
-  } else if (animal.type === 'boar') drawBoar(ctx, animal, c, worldToScreen);
-  else if (animal.type === 'viper') drawViper(ctx, animal, c);
+  } else if (animal.type === 'boar') {
+    if (!drawBoarSprite(ctx, animal, c)) drawBoar(ctx, animal, c, worldToScreen);
+  } else if (animal.type === 'viper') drawViper(ctx, animal, c);
 }
 
 // Kenney normalises every Cube Pets model to a similar bounding cube
@@ -493,7 +495,7 @@ export function drawAnimal(ctx, animal, worldToScreen) {
 const ANIMAL_SPRITE_SCALE = {
   dog: 0.21, bee: 0.23, caterpillar: 0.19, chick: 0.23, crab: 0.23, fish: 0.26,
   bunny: 0.32, beaver: 0.32, cat: 0.36, koala: 0.36, penguin: 0.36, parrot: 0.26,
-  fox: 0.39, monkey: 0.39, pig: 0.48, hog: 0.52, panda: 0.55, deer: 0.58,
+  fox: 0.39, monkey: 0.39, pig: 0.48, hog: 0.26, panda: 0.55, deer: 0.58,
   lion: 0.61, tiger: 0.65, cow: 0.71, polar: 0.71, giraffe: 0.9, elephant: 1.03,
 };
 
@@ -578,6 +580,69 @@ function drawDog(ctx, a, c, worldToScreen) {
     ctx.fillText('!', c.x, c.y - 24);
     ctx.textAlign = 'left';
   }
+}
+
+// One reusable offscreen canvas for compositing the boar's telegraph-flash
+// tint onto its sprite before drawing — same 'source-atop' trick as
+// renderer.js:tintScratch, duplicated locally for the same reason
+// facingToCompassDir is (this module stays out of the renderer/engine).
+let _boarTintCanvas = null;
+function boarTintScratch(w, h) {
+  if (!_boarTintCanvas) _boarTintCanvas = document.createElement('canvas');
+  if (_boarTintCanvas.width !== w || _boarTintCanvas.height !== h) {
+    _boarTintCanvas.width = w;
+    _boarTintCanvas.height = h;
+  }
+  return { canvas: _boarTintCanvas, ctx: _boarTintCanvas.getContext('2d') };
+}
+
+// Returns false (drawing nothing) if the sprite for this facing hasn't
+// finished loading yet, so the caller can fall back to the procedural shape
+// instead of an invisible boar. Uses 'hog', the closest model in the Cube
+// Pets pack — there's no literal boar.
+function drawBoarSprite(ctx, a, c) {
+  const set = ANIMAL_SPRITE_SETS.hog;
+  const dir = facingToCompassDir(a.facing);
+  const sprite = set && set[dir];
+  if (!sprite || !sprite.complete || !sprite.naturalWidth) return false;
+  const telegraphing = a.state === 'telegraph';
+  // Tell: shakes in place while telegraphing (matches the old procedural art).
+  const shake = telegraphing ? Math.sin(a.animT * 45) * 2 : 0;
+  const scale = ANIMAL_SPRITE_SCALE.hog;
+  const dw = sprite.naturalWidth * scale, dh = sprite.naturalHeight * scale;
+  const dx = c.x + shake - dw / 2, dy = c.y - dh + dh * 0.16;
+
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.beginPath();
+  ctx.ellipse(c.x, c.y, dw * 0.36, dw * 0.16, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Tell: flashes reddish while telegraphing (same cadence as the old art).
+  const flash = telegraphing && Math.sin(a.animT * 20) > 0;
+  if (flash) {
+    const off = boarTintScratch(sprite.naturalWidth, sprite.naturalHeight);
+    off.ctx.clearRect(0, 0, off.canvas.width, off.canvas.height);
+    off.ctx.drawImage(sprite, 0, 0);
+    off.ctx.globalCompositeOperation = 'source-atop';
+    off.ctx.fillStyle = 'rgba(200,40,30,0.55)';
+    off.ctx.fillRect(0, 0, off.canvas.width, off.canvas.height);
+    off.ctx.globalCompositeOperation = 'source-over';
+    ctx.drawImage(off.canvas, dx, dy, dw, dh);
+  } else {
+    ctx.drawImage(sprite, dx, dy, dw, dh);
+  }
+
+  if (a.state === 'stun') {
+    // Tell: dizzy dots circling above the head.
+    ctx.fillStyle = 'rgba(220,220,220,0.9)';
+    for (let i = 0; i < 3; i++) {
+      const ang = a.animT * 6 + (i * Math.PI * 2) / 3;
+      ctx.beginPath();
+      ctx.arc(c.x + Math.cos(ang) * 8, c.y - dh - 4 + Math.sin(ang) * 3, 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  return true;
 }
 
 function drawBoar(ctx, a, c, worldToScreen) {
