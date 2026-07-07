@@ -517,7 +517,7 @@ export const FRAGMENTS = [
       '// this thing is older than the collapse by the best part of a century.\n' +
       '// built to make a point about how little it takes to fool us. it made\n' +
       '// the point. we kept using it anyway, and built the rest of this on top.' },
-  { id: 'eliza-02', kind: 'letter', era: 0, title: "archivist's note, clipped to a service manual",
+  { id: 'eliza-02', kind: 'letter', era: 0, title: "archivist's note, clipped to a service manual", notepad: true,
     text: 'Found the manual for the old DOCTOR program in the same crate as the ' +
       'terminal itself, credited to a J. Weizenbaum, out of MIT, last century. ' +
       'He built it to demonstrate a parlour trick, not to practise medicine, and ' +
@@ -529,7 +529,7 @@ export const FRAGMENTS = [
       '// it is running the century-old trick at industrial scale, on everyone\n' +
       '// still logged in, all at once, and it works exactly as well as it\n' +
       '// always did. that is the frightening part, not that it changed.' },
-  { id: 'eliza-04', kind: 'handwritten', era: 1, title: 'margin note in a salvaged textbook',
+  { id: 'eliza-04', kind: 'handwritten', era: 1, title: 'margin note in a salvaged textbook', notepad: true,
     text: "Weizenbaum's real argument was never that the machine understood " +
       'nothing. It was that we would decide it did anyway, and start handing it ' +
       'judgements only a person should make. He had a phrase for that: mistaking ' +
@@ -542,7 +542,7 @@ export const FRAGMENTS = [
       'than any of it. Whoever buried this box wanted it findable, not readable, ' +
       'like leaving a recipe in a tongue you never taught anyone. We photographed ' +
       'every page before the damp took the rest.' },
-  { id: 'eliza-06', kind: 'note', era: 0, title: 'joke pinned in the ruins of an office, still funny',
+  { id: 'eliza-06', kind: 'note', era: 0, title: 'joke pinned in the ruins of an office, still funny', notepad: true,
     text: "Story going round before everything: a manager logged into what he\n" +
       "thought was a colleague's terminal, typed a furious message about a\n" +
       'missed deadline, and got back calm, patient, endlessly reasonable replies\n' +
@@ -550,21 +550,49 @@ export const FRAGMENTS = [
       'therapy program still running on that machine, not the colleague at all.\n' +
       'Everyone retold it for the laugh. Nobody asked why it passed, and the\n' +
       'colleague, once they finally got him back online, argued right back.' },
-  { id: 'eliza-07', kind: 'letter', era: 2, title: 'the last page of a public lecture, undated',
+  { id: 'eliza-07', kind: 'letter', era: 2, title: 'the last page of a public lecture, undated', notepad: true,
     text: 'He spent his last years telling rooms full of people who built these ' +
       'things that some doors, once opened, should stay theoretical. Half the ' +
       'room agreed and built them anyway. If there is a lesson in the ridge ' +
       'towers, it is the same one, decades too late: the question was never ' +
       'whether a machine could decide for us. It was whether we would let it. ' +
       'We did. Here we are, still asking a mirror what it thinks.' },
+  // The genuine article: a session transcript in the historical record,
+  // reproduced (not paraphrased, unlike the fragments above) because it is
+  // itself the primary document — the thing that made the trick famous in
+  // the first place, not a narrative account of it.
+  { id: 'eliza-08', kind: 'code', era: 0, title: 'a session log, dated decades before any of this', notepad: true,
+    text: 'Found on a drive nobody could otherwise get to boot. Whatever this ' +
+      'program was, someone talked to it for a while. The exchange, as near as ' +
+      'could be pulled off the platter:\n\n' +
+      'Men are all alike.\n\nIN WHAT WAY\n\n' +
+      "They're always bugging us about something or other.\n\nCAN YOU THINK OF A SPECIFIC EXAMPLE\n\n" +
+      'Well, my boyfriend made me come here.\n\nYOUR BOYFRIEND MADE YOU COME HERE\n\n' +
+      "He says I'm depressed much of the time.\n\nI AM SORRY TO HEAR YOU ARE DEPRESSED\n\n" +
+      "It's true. I am unhappy.\n\nDO YOU THINK COMING HERE WILL HELP YOU NOT TO BE UNHAPPY\n\n" +
+      'I need some help, that much seems certain.\n\nWHAT WOULD IT MEAN TO YOU IF YOU GOT SOME HELP\n\n' +
+      'Perhaps I could learn to get along with my mother.\n\nTELL ME MORE ABOUT YOUR FAMILY\n\n' +
+      'My mother takes care of me.\n\nWHO ELSE IN YOUR FAMILY TAKES CARE OF YOU\n\n' +
+      'My father.\n\nYOUR FATHER\n\n' +
+      'You are like my father in some ways.\n\nWHAT RESEMBLANCE DO YOU SEE\n\n' +
+      'You are not very aggressive but I think you don\'t want me to notice that.\n\n' +
+      'WHAT MAKES YOU THINK I AM NOT VERY AGGRESSIVE\n\n' +
+      "You don't argue with me.\n\nWHY DO YOU THINK I DON'T ARGUE WITH YOU\n\n" +
+      'You are afraid of me.\n\nDOES IT PLEASE YOU TO BELIEVE I AM AFRAID OF YOU\n\n' +
+      'My father is afraid of everybody.\n\nWHAT ELSE COMES TO MIND WHEN YOU THINK OF YOUR FATHER\n\n' +
+      'Bullies.\n\nDOES THAT HAVE ANYTHING TO DO WITH THE FACT THAT YOUR BOYFRIEND MADE YOU COME HERE\n\n' +
+      'Nothing else survived. Whoever the other half of this conversation was, the log does not say.' },
 
   // ---- ron-ml: runnable RON-ML fragments, teaching the terminal console
   // language one idea at a time. See docs/ob-terminal-language.md — this is
   // the in-world half of that design (§5, Fragments A-E), typed near-verbatim.
   // These five (not the song sheet below) are the actual language-teaching
-  // fragments — flagged `notepad: true` so they compile into the terminal's
-  // `notes` reference as you find them (Player/main ronmlCtx.notepadText),
-  // separate from the prose-only Archive.
+  // fragments. `notepad: true` is a general flag, not RON-ML-specific — any
+  // fragment carrying it collects into the Notepad (N, or `notes` at a
+  // terminal) as you find it, a curated set of pages worth flipping back to
+  // rather than digging through the full Archive (J) for; RON-ML fragments
+  // were simply its first members. The eliza-* fragments above use the same
+  // flag for the same reason.
   { id: 'ronml-01', kind: 'code', era: 0, title: 'scrawled on a service hatch', notepad: true,
     text: 'sleep 30\n\n// typed it and the whole yard went quiet for half an hour.\n' +
       "// don't know why it's minutes. — J" },

@@ -107,6 +107,7 @@ const W3_HP = 20;
 const W3_SPEED = 3.0;
 const W3_REPAIR_RANGE = 1.3;
 const W3_REPAIR_RATE = 2;       // obDamage points healed per second
+const W3_UNFREEZE_TIME = 3;     // seconds standing at a looped node to reset it
 const W3_BODY = '#1c3a44';      // dull blue-teal, unmistakably not a hunter
 const W3_HEAD = '#122730';
 
@@ -528,6 +529,12 @@ export function updateRobots(dt, robots, player, map) {
       continue;
     }
 
+    // RON-ML `loop`: an infinite loop pinned into its home obelisk holds the
+    // whole garrison dead still — no movement, no attack, no thinking — even
+    // its idle animation stops, until a repair drone resets the node
+    // (updateW3 below clears both this and frozenByOb).
+    if (r.frozen) continue;
+
     // Off-screen and far from the player: skip all thinking until they come
     // back near. Friendlies follow the player so are never far; they're left
     // to update normally. (Placed after the death check above so a machine
@@ -631,7 +638,7 @@ export function updateRobots(dt, robots, player, map) {
 
     if (r.type === 't1') updateT1(r, dt, player, map);
     else if (r.type === 'w1') updateW1(r, dt, player, map);
-    else if (r.type === 'w3') updateW3(r, dt, map);
+    else if (r.type === 'w3') updateW3(r, dt, map, robots);
     else if (r.type === 'w4') updateW4(r, dt, player, map);
     else updateT2(r, dt, player, map);
   }
@@ -817,13 +824,14 @@ function updateW1(r, dt, player, map) {
 // A W3 repair drone: unarmed, never aggros, walks to the nearest obelisk
 // with obDamage > 0 (hit by an OB-gun but not yet toppled) and heals it back
 // to zero over a few seconds, then disperses — its job done.
-// A repairable obelisk is either damaged-but-standing (hit by an OB-gun) or
-// one felled during the SKYLINK purge and flagged `needsRebuild` — the drone
-// raises that one from its heap back into a working tower.
+// A repairable obelisk is damaged-but-standing (hit by an OB-gun), one felled
+// during the SKYLINK purge and flagged `needsRebuild` (the drone raises that
+// one from its heap back into a working tower), or one pinned by a RON-ML
+// `loop` hack (frozen — the drone works the loop back out instead).
 function w3Repairable(o) {
-  return o.type === 'obelisk' && ((!o.destroyed && o.obDamage > 0) || (o.destroyed && o.needsRebuild));
+  return o.type === 'obelisk' && ((!o.destroyed && o.obDamage > 0) || (o.destroyed && o.needsRebuild) || o.frozen);
 }
-function updateW3(r, dt, map) {
+function updateW3(r, dt, map, robots) {
   r.aggro = false;
   if (!r.repairTarget || !w3Repairable(r.repairTarget)) {
     let best = null, bestD = Infinity;
@@ -843,13 +851,28 @@ function updateW3(r, dt, map) {
     moveToward(r, ob.x + 0.5, ob.y + 0.5, W3_SPEED, dt, map);
     return;
   }
+  // Frozen by a RON-ML `loop` hack: hold position and work the loop back out
+  // over a few seconds, releasing the node and every robot it pinned before
+  // falling through to any ordinary damage repair below (both can be true
+  // at once — a looped tower can also be scorched).
+  if (ob.frozen) {
+    ob.frozenResetT = (ob.frozenResetT || 0) + dt;
+    if (ob.frozenResetT >= W3_UNFREEZE_TIME) {
+      ob.frozen = false;
+      ob.frozenT = 0;
+      ob.frozenResetT = 0;
+      if (robots) for (const other of robots) if (other.frozenByOb === ob) { other.frozen = false; other.frozenByOb = null; }
+    }
+  }
   // A felled tower starts its rebuild from full damage; a merely-scorched one
   // from wherever its obDamage sits. Either way, healing obDamage to zero
   // finishes the job.
   if (ob.destroyed && ob.needsRebuild && !(ob.obDamage > 0)) ob.obDamage = 5;
-  ob.obDamage = Math.max(0, ob.obDamage - W3_REPAIR_RATE * dt);
-  ob.burning = 0;
-  if (ob.obDamage <= 0) {
+  if (ob.obDamage > 0) {
+    ob.obDamage = Math.max(0, ob.obDamage - W3_REPAIR_RATE * dt);
+    ob.burning = 0;
+  }
+  if (!(ob.obDamage > 0) && !ob.frozen) {
     if (ob.destroyed && ob.needsRebuild) {
       // Raise it: standing and solid again, so the SKYLINK web can relight.
       ob.destroyed = false;

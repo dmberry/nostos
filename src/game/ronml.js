@@ -205,12 +205,42 @@ function makeBuiltins() {
         return { tag: 'unit' };
       },
     },
+    // The easy way in: one word, one node, no key. Pins an infinite loop
+    // into the node instead of physically felling it — it and its garrison
+    // freeze where they stand, burning CPU, until a repair drone eventually
+    // resets it. Weaker than crash (nothing is destroyed, and it self-heals
+    // on its own schedule) but far cheaper to pull off.
+    loop: {
+      arity: 1,
+      fn: ([node], ctx) => {
+        if (!node || node.tag !== 'node') throw new RonmlError('loop needs a node — try: loop OB-XXXX');
+        const label = node.id || 'OB-XXXX';
+        if (!ctx.nodeExists(node.id)) throw new RonmlError(`no node ${label} on the wire`);
+        if (ctx.nodeFrozen(node.id)) throw new RonmlError(`${label} is already looping — it needs a repair drone, not a second one`);
+        ctx.loopNode(node.id);
+        return { tag: 'unit' };
+      },
+    },
     sleep: {
       arity: 1,
       fn: ([num], ctx) => {
         if (!num || num.tag !== 'num') throw new RonmlError('sleep needs a number of minutes — try: sleep 30');
         ctx.requireAiKey('sleep');
         ctx.sleepNearby(num.v);
+        return { tag: 'unit' };
+      },
+    },
+    // Claws hours back off the SKYLINK deadline — the resistance's own clock
+    // sabotage, buying more time before the towers link up for the purge.
+    // Only meaningful before the purge starts; once SKYLINK is actually live
+    // the deadline clock isn't running anymore, so ctx reports back if so.
+    rewind: {
+      arity: 1,
+      fn: ([num], ctx) => {
+        if (!num || num.tag !== 'num') throw new RonmlError('rewind needs a number of hours — try: rewind 3');
+        ctx.requireAiKey('rewind');
+        if (ctx.skylinkActive()) throw new RonmlError('SKYLINK is already live — the deadline clock isn\'t running anymore. Knock towers dark instead.');
+        ctx.rewindClock(num.v);
         return { tag: 'unit' };
       },
     },
@@ -296,8 +326,10 @@ function formatValue(v) {
 const USAGE_HINTS = {
   hack: 'hack needs a node. try: hack OB-XXXX',
   crash: "crash needs a node and its key. try: let k = hack OB-XXXX in crash OB-XXXX k",
+  loop: 'loop needs a node. try: loop OB-XXXX',
   nearest: 'nearest needs a list. try: scan |> nearest',
   sleep: 'sleep needs a number of minutes. try: sleep 30',
+  rewind: 'rewind needs a number of hours. try: rewind 3',
 };
 
 // `help` reference, shown when the operator types it at the terminal. Per-verb
@@ -308,12 +340,14 @@ const HELP_VERBS = [
   ['keys', 'unit -> list', 'the access keys you currently hold', ''],
   ['hack n', 'node -> key', "take node n's access key", 'needs an AI key'],
   ['crash n k', 'node key -> unit', 'knock node n dark until a drone mends it', 'needs k from hack'],
+  ['loop n', 'node -> unit', 'pin an infinite loop into node n — freezes it and its garrison until a drone resets it', 'no key needed'],
   ['sleep t', 'num -> unit', 'idle local machines for t game-minutes', 'needs AI key'],
+  ['rewind t', 'num -> unit', 'claw t hours back off the SKYLINK deadline', 'needs AI key; before the purge only'],
   ['repel', 'unit -> unit', 'nearby machines turn tail and flee you', 'needs AI key'],
   ['map', 'unit -> unit', 'show the territory map (obelisks, machines, mainframe)', ''],
   ['print', 'unit -> unit', 'print a carryable map that drops at your feet', ''],
   ['unlock', 'unit -> unit', 'hack a fortress gate open (drops a fortress key)', 'at a gate; needs AI key'],
-  ['notes', 'unit -> unit', 'open the notepad — browse the language fragments you\'ve found', ''],
+  ['notes', 'unit -> unit', 'open the notepad — browse the pages you\'ve found worth keeping', ''],
   ['help', 'unit -> unit', 'this reference, or `help <verb>` for one verb', ''],
 ];
 function helpText(topic) {

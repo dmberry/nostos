@@ -237,7 +237,7 @@ export class Input {
     return false;
   }
 
-  // Bare N opens the RON-ML notepad directly, no terminal needed.
+  // Bare N opens the notepad directly, no terminal needed.
   notesPressed() {
     if (this.pressed.has('KeyN') && !this._keyNCtrl) {
       this.pressed.delete('KeyN');

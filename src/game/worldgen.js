@@ -627,9 +627,15 @@ const GRAFFITI_UBIK = [
   'UBIK SAVES', 'SPRAY THE REAL', 'KEEP IT REAL — UBIK', 'UBIK HOLDS IT UP',
   'ONE SPRAY AND YOU ARE SAFE', 'UBIK WAS HERE FIRST',
 ];
+// The last four are original slogans distilling two real arguments David
+// keeps returning to — technology's means outrunning its ethics (Leo XIV's
+// encyclical) and its power outrunning its moral light (Benjamin, on
+// imperialist war) — reframed as wall-tag shorthand, not quotation.
 const GRAFFITI_HUMANITAS = [
   'MAGNIFICA HUMANITAS', 'HUMANITAS WAS A CAGE', 'THEY PROMISED MAGNIFICA',
   'MAGNIFICA LIED', 'HUMANITAS ATE ITS YOUNG', 'NO MORE MAGNIFICA',
+  'GREAT MEANS, SMALL SOULS', 'THE LIGHT NEVER CAUGHT UP',
+  'ALL POWER, NO LIGHT LEFT', 'PROGRESS OUTGREW ITS PEOPLE',
 ];
 const GRAFFITI_VECTOR = [
   'MEANING IS POSITION', 'WE LIVE IN THE MANIFOLD', 'THERE IS NO WORD FOR HERE',
@@ -650,15 +656,17 @@ function paintGraffiti(map, rng) {
     // Renderer.drawGraffitiPoster). Mutually exclusive with the text tags.
     if (rng() < 0.14) { obj.graffitiImage = Math.floor(rng() * GRAFFITI_IMAGE_COUNT); continue; }
     const r = rng();
-    if (r < 0.32) {
+    if (r < 0.29) {
       obj.graffiti = pick(GRAFFITI_GENERIC);
-    } else if (r < 0.56) {
+    } else if (r < 0.53) {
       obj.graffiti = pick(GRAFFITI_RON);
-    } else if (r < 0.68) {
+    } else if (r < 0.65) {
       obj.graffiti = pick(GRAFFITI_RON_DOUBT); obj.graffitiFaded = true;
-    } else if (r < 0.80) {
+    } else if (r < 0.77) {
       obj.graffiti = pick(GRAFFITI_UBIK);
-    } else if (r < 0.90) {
+    } else if (r < 0.93) {
+      // Bumped up from a 10% to a 16% share — Magnifica Humanitas earns more
+      // wall space than the other one-off themes.
       obj.graffiti = pick(GRAFFITI_HUMANITAS); if (rng() < 0.5) obj.graffitiFaded = true;
     } else {
       obj.graffiti = pick(GRAFFITI_VECTOR); obj.graffitiFaded = true; // old academic scrawl

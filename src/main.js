@@ -47,7 +47,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '1.03';
+const VERSION = '1.04';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -487,6 +487,7 @@ window.addEventListener('pointerdown', unlockAudio, { once: true });
 map.projectiles = []; // in-flight gun rounds (cosmetic tracers)
 map.bombs = [];       // dropped ticking bombs
 map.explosions = [];  // active fire clouds (visual)
+const UBIK_PATCH_LIFE = 75; // seconds a sprayed patch stays brightened before fading back
 
 // Fog of war: the minimap only shows where you have been.
 map.explored = new Uint8Array(map.w * map.h);
@@ -608,10 +609,42 @@ function ronmlCtx() {
       }
       player.say(`${id} goes dark. A repair drone is already inbound to raise it.`);
     },
+    nodeFrozen: (id) => { const o = findObelisk(id); return !!(o && o.frozen); },
+    // RON-ML `loop`: the easy hack. No AI key, no hack/crash two-step —
+    // pins the node itself and any T1/T2 garrisoned near it in place until
+    // a repair drone works the loop back out (updateW3, robots.js). Robots
+    // are tagged `frozenByOb` so the drone can find exactly who to release
+    // without recomputing a proximity radius.
+    loopNode: (id) => {
+      const o = findObelisk(id);
+      if (!o) return;
+      o.frozen = true;
+      o.frozenT = 0;
+      let count = 0;
+      for (const r of robots) {
+        if (r.dead || r.fused || r.friendly) continue;
+        if ((r.type === 't1' || r.type === 't2') && r.home
+          && Math.hypot(r.home.x - (o.x + 0.5), r.home.y - (o.y + 0.5)) < 10) {
+          r.frozen = true;
+          r.frozenByOb = o;
+          count++;
+        }
+      }
+      if (factoryLive() && !robots.some((r) => r.type === 'w3' && !r.dead)) {
+        const drone = spawnW3(map, Math.floor(Math.random() * 0x7fffffff), factoryCx(), factoryCy());
+        if (drone) robots.push(drone);
+      }
+      player.say(`${id} pins itself in a loop that never returns. Its light flares white-hot${count ? ' and its garrison seizes up mid-stride' : ''} — only a repair drone can talk it down now.`);
+    },
     sleepNearby: (mins) => {
       const secs = Math.max(1, mins);
       for (const r of robots) if (nearby(r)) r.disabledT = Math.max(r.disabledT || 0, secs);
       player.say('The local machines idle. The yard goes quiet for a spell.');
+    },
+    skylinkActive: () => !!player.skylinkActive,
+    rewindClock: (hours) => {
+      dayNight.rewind(Math.max(0, hours));
+      player.say(`The deadline clock stutters and loses ${Math.max(0, hours)} hour${Math.max(0, hours) === 1 ? '' : 's'}. SKYLINK waits a little longer.`);
     },
     repelNearby: () => {
       for (const r of robots) if (nearby(r)) { r.repelledT = REPEL_DURATION; r.aggro = false; }
@@ -745,8 +778,10 @@ ronmapEl.addEventListener('click', (e) => { if (e.target === ronmapEl) closeRonM
 // Using a held printed map (kind 'map') unfolds the same overlay anywhere.
 player.onReadMap = openRonMap;
 
-// The RON-ML notepad (`notes`): a real paper page you flip through with the
-// language-teaching lore fragments you've found (lore.js, `notepad: true`),
+// The Notepad (`notes`, or press N anywhere): a real paper page you flip
+// through with whatever lore fragments were flagged worth keeping (lore.js,
+// `notepad: true`) — not RON-ML-specific, just the pages worth flipping back
+// to (language fragments, found transcripts, whatever else earns the flag),
 // one per page, in the order you found them — easier to read than a console
 // dump, and doesn't depend on Tab (browsers reserve it for focus, so it was
 // never reliable as an in-page shortcut anyway).
@@ -760,8 +795,8 @@ let notebookEntries = [];
 let notebookIdx = 0;
 function renderNotebookPage() {
   if (!notebookEntries.length) {
-    notebookTitleEl.textContent = 'RON-ML NOTEPAD';
-    notebookBodyEl.innerHTML = '<span id="ronnotebook-empty">Nothing yet. RON-ML fragments are ' +
+    notebookTitleEl.textContent = 'NOTEPAD';
+    notebookBodyEl.innerHTML = '<span id="ronnotebook-empty">Nothing yet. Pages worth keeping are ' +
       'scattered through the ruins — walk over one to read it, and it copies itself in here.</span>';
     notebookPageLabelEl.textContent = '0 / 0';
     notebookPrevBtn.disabled = true;
@@ -880,7 +915,7 @@ obTermEl.addEventListener('click', (e) => { if (e.target === obTermEl) closeObTe
 // suggests the rest of a verb as faded ghost text you can accept with Tab.
 // (sing stays out of the list — it's a secret.) Purely a convenience the book
 // unlocks; you can always type the whole thing by hand.
-const RONML_VERBS = ['scan', 'nearest', 'keys', 'hack', 'crash', 'sleep', 'repel', 'map', 'print', 'unlock', 'notes', 'help', 'let'];
+const RONML_VERBS = ['scan', 'nearest', 'keys', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'map', 'print', 'unlock', 'notes', 'help', 'let'];
 const escapeHtml = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 function ronmlCompletion(value) {
   if (!player.readManuals || !player.readManuals.has('book_ronml')) return '';
@@ -968,9 +1003,10 @@ const hintEl = document.getElementById('hint');
 const HINT_LIFETIME = 120; // seconds of played time
 let playTime = 0;
 
-// Backpack view: I toggles a read-only panel (drawn by the renderer). It's
-// read-only because the pockets/backpack split is already automatic —
-// there's nothing to drag between them.
+// Backpack view: I toggles the full panel (drawn by the renderer), which
+// exposes the backpack's own storage/weapon slots for dragging — the
+// dashboard's pockets and hands slot are always draggable, panel or not
+// (see the drag/drop handling below).
 let showBackpack = false;
 let showSkills = false;
 let showWeapons = false;
@@ -1048,7 +1084,7 @@ player.onObeliskDestroyed = (ob) => {
   if (obeliskObjs.every((o) => o.destroyed) && !player._ended) {
     player._ended = true;
     player.addScore(100);
-    player.deathCert = { name: player.name, cause: 'nothing — you won', score: player.score, skills: [...player.skills], deaths: player.deaths || 0, victory: true };
+    player.deathCert = { name: player.name, gender: player.gender, cause: 'nothing — you won', score: player.score, skills: [...player.skills], deaths: player.deaths || 0, victory: true };
     persist();
     return;
   }
@@ -1182,7 +1218,7 @@ function update(dt) {
       return;
     }
   }
-  // N alone opens the RON-ML notepad directly — no need to be jacked into a
+  // N alone opens the notepad directly — no need to be jacked into a
   // terminal just to read back what you've already learned.
   if (input.notesPressed()) openNotebook();
   if (input.craftPressed()) {
@@ -1328,10 +1364,12 @@ function update(dt) {
       player.equipSlot(drag.from); // released on the source: treat as a click
     } else if (target) {
       player.moveItem(drag.from, target);
-    } else if (showBackpack) {
-      // Released away from any slot while the backpack panel is open: drag it
-      // off the panel to drop it on the ground. Gated on the panel being up so
-      // a fumbled dashboard drag doesn't fling a pocket item away by accident.
+    } else {
+      // Released away from any slot — pocket, hands, or (with the backpack
+      // panel open) backpack storage — drag it off to drop it on the ground.
+      // Not gated on the panel being open: a genuine drag always lands well
+      // outside the small source slot, so it doesn't get mistaken for the
+      // release-on-source click case above.
       player.dropSlot(drag.from, map);
     }
     drag = null;
@@ -1387,6 +1425,13 @@ function update(dt) {
     for (const s of map.sparks) s.ttl -= dt;
     map.sparks = map.sparks.filter((s) => s.ttl > 0);
   }
+  // Ubik's brightening is a temporary win, not a permanent one: each patch
+  // ages and fades back to the ordinary, decayed world over UBIK_PATCH_LIFE,
+  // rather than lifting a spot of ground forever.
+  if (map.ubikPatches && map.ubikPatches.length) {
+    for (const p of map.ubikPatches) p.t += dt;
+    map.ubikPatches = map.ubikPatches.filter((p) => p.t < UBIK_PATCH_LIFE);
+  }
 
   // RON resupply: every couple of minutes, one already-emptied cache gets
   // quietly restocked with a fresh drop of batteries, ammo or shells.
@@ -1413,7 +1458,7 @@ function update(dt) {
     if (wFactoryClock > wFactoryNext) {
       wFactoryClock = 0;
       wFactoryNext = 60 + Math.random() * 60;
-      const anyDamaged = obeliskObjs.some((o) => (!o.destroyed && o.obDamage > 0) || o.needsRebuild);
+      const anyDamaged = obeliskObjs.some((o) => (!o.destroyed && o.obDamage > 0) || o.needsRebuild || o.frozen);
       const w3Active = robots.some((r) => r.type === 'w3' && !r.dead);
       if (anyDamaged && !w3Active) {
         const drone = spawnW3(map, Math.floor(Math.random() * 0x7fffffff), factoryCx(), factoryCy());
@@ -1596,6 +1641,7 @@ function update(dt) {
   // tower — a report of closeness, never an exact position.
   for (const ob of obeliskObjs) {
     if (ob.burning > 0) ob.burning -= dt; // OB-gun flame timer, ticked for the renderer
+    if (ob.frozen) ob.frozenT = (ob.frozenT || 0) + dt; // CPU-burn age for the renderer's smoke ramp
     if (ob.destroyed) continue;
     const d = Math.hypot(ob.x + 0.5 - player.x, ob.y + 0.5 - player.y);
     if (d < 9) {

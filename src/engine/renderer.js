@@ -97,6 +97,20 @@ function tileHash(x, y) {
   return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
 }
 
+// Ubik patch ageing: a patch (main.js ages `p.t` and culls past
+// UBIK_PATCH_LIFE, currently 75s) holds at full brightness, then spends its
+// last UBIK_PATCH_FADE_TIME seconds fading back to nothing — kept as sibling
+// constants here rather than imported, since main.js imports this module.
+const UBIK_PATCH_FADE_TIME = 15;
+const UBIK_PATCH_FADE_START = 60;
+
+function scaleRgbaAlpha(rgba, factor) {
+  const m = rgba.match(/^rgba\(([^,]+),([^,]+),([^,]+),([^)]+)\)$/);
+  if (!m) return rgba;
+  const a = parseFloat(m[4]) * factor;
+  return `rgba(${m[1]},${m[2]},${m[3]},${a.toFixed(3)})`;
+}
+
 export class Renderer {
   constructor(canvas) {
     this.canvas = canvas;
@@ -267,21 +281,27 @@ export class Renderer {
       const z = camera.zoom || 1;
       const cw = worldToScreen(camera.x, camera.y);
       const shimmer = 0.9 + 0.1 * Math.sin(performance.now() / 900);
+      // Each patch fades in quickly, holds, then fades back out to nothing
+      // as it ages past UBIK_PATCH_LIFE (main.js ages and culls it) — Ubik's
+      // win here is temporary, not a permanent lift on that patch of ground.
       const spots = [];
       for (const p of map.ubikPatches) {
+        const age = p.t || 0;
+        const fade = Math.min(1, age / 2) * Math.min(1, Math.max(0, (UBIK_PATCH_FADE_START - age) / UBIK_PATCH_FADE_TIME + 1));
+        if (fade <= 0.01) continue;
         const pw = worldToScreen(p.x, p.y);
         const sx = (pw.x - cw.x) * z + this.w / 2;
         const sy = (pw.y - cw.y) * z + this.h / 2 - 8 * z;
         const R = (p.r || 3) * 24 * z;
         if (sx < -R - 40 || sx > this.w + R + 40 || sy < -R - 40 || sy > this.h + R + 40) continue;
-        spots.push([sx, sy, R]);
+        spots.push([sx, sy, R, fade]);
       }
       const paint = (op, stops) => {
         ctx.save();
         ctx.globalCompositeOperation = op;
-        for (const [sx, sy, R] of spots) {
+        for (const [sx, sy, R, fade] of spots) {
           const g = ctx.createRadialGradient(sx, sy, R * 0.1, sx, sy, R);
-          for (const [o, c] of stops) g.addColorStop(o, c);
+          for (const [o, c] of stops) g.addColorStop(o, scaleRgbaAlpha(c, fade));
           ctx.fillStyle = g;
           ctx.beginPath(); ctx.arc(sx, sy, R, 0, Math.PI * 2); ctx.fill();
         }
@@ -659,10 +679,39 @@ export class Renderer {
     this._certBounds = { x: px, y: py, w: pw, h: ph }; // for the S-to-share capture
     ctx.fillStyle = '#141810';
     ctx.fillRect(px, py, pw, ph);
+    // A weathered stone-and-gravel texture (the same photo used to face the
+    // map's edge cliffs) behind the certificate, so it reads as something
+    // carved rather than a flat UI panel — a dark tint on top keeps the text
+    // readable over it.
+    if (EDGE_TEXTURE.complete && EDGE_TEXTURE.naturalWidth) {
+      ctx.save();
+      ctx.globalAlpha = 0.5;
+      ctx.drawImage(EDGE_TEXTURE, px, py, pw, ph);
+      ctx.restore();
+      ctx.fillStyle = 'rgba(10,12,8,0.55)';
+      ctx.fillRect(px, py, pw, ph);
+    }
     ctx.strokeStyle = 'rgba(207,216,195,0.5)';
     ctx.lineWidth = 2;
     ctx.strokeRect(px + 1, py + 1, pw - 2, ph - 2);
     ctx.lineWidth = 1;
+
+    // A small portrait of who this was, bottom-left, so the certificate
+    // pictures the survivor it's naming rather than only naming them.
+    const portraitSet = CHARACTER_SPRITE_SETS[cert.gender || 'm'];
+    const portrait = portraitSet && portraitSet.idle && portraitSet.idle.S;
+    if (portrait && portrait.complete && portrait.naturalWidth) {
+      const ps = 56;
+      const pptx = px + 24, ppty = py + ph - ps - 16;
+      ctx.save();
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.fillRect(pptx - 4, ppty - 4, ps + 8, ps + 8);
+      ctx.strokeStyle = 'rgba(207,216,195,0.4)';
+      ctx.strokeRect(pptx - 4, ppty - 4, ps + 8, ps + 8);
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(portrait, pptx, ppty, ps, ps);
+      ctx.restore();
+    }
 
     ctx.textAlign = 'center';
     ctx.fillStyle = cert.victory ? '#6fbf4a' : '#b0392f';
@@ -1148,7 +1197,15 @@ export class Renderer {
       // Vary the texture opacity subtly per tile (deterministic, so it holds
       // still frame to frame) — a gentle ±10% breaks up an otherwise flat
       // expanse of the same floor without reading as a patchwork.
-      const alpha = Math.max(0.12, Math.min(0.85, baseAlpha * (0.9 + 0.2 * tileHash(tx * 3 + 11, ty * 3 + 5))));
+      let alpha = Math.max(0.12, Math.min(0.85, baseAlpha * (0.9 + 0.2 * tileHash(tx * 3 + 11, ty * 3 + 5))));
+      // River and stream tiles carry a slow travelling opacity ripple (phased
+      // off tx+ty rather than pure per-tile random, so it reads as a pulse
+      // moving along the watercourse) — a cheap stand-in for flowing water
+      // without an actual scrolling texture.
+      if (type === 'water' || type === 'stream') {
+        const flow = 0.5 + 0.5 * Math.sin((tx + ty) * 0.6 - performance.now() / 260);
+        alpha = Math.max(0.12, Math.min(0.85, alpha + flow * 0.14 - 0.07));
+      }
       this.drawTexturedQuad(corners, tex, shadeHex(def.color, shade), tintColor, tintMode, alpha);
     } else {
       this.diamondPath(corners);
@@ -1837,7 +1894,33 @@ export class Renderer {
     const alert = obj.alert || 0;
     const flash = obj.blinkFlash || 0;
     const ly = c.y - H + 8;
-    if (alert > 0.3) {
+    // RON-ML `loop`: an infinite loop pinned into it burns CPU instead of
+    // doing anything useful — the signal light runs a hot white-cyan
+    // overload glow instead of the usual alert red, and it starts smoking,
+    // more heavily the longer it's been looping, until a repair drone
+    // resets it (updateW3, robots.js).
+    if (obj.frozen) {
+      const burn = Math.min(1, (obj.frozenT || 0) / 20); // ramps up over ~20s
+      const flare = 0.6 + 0.4 * Math.sin(performance.now() / 140);
+      const glow = ctx.createRadialGradient(c.x, ly, 0, c.x, ly, 18);
+      glow.addColorStop(0, `rgba(210, 240, 255, ${((0.5 + 0.3 * burn) * flare).toFixed(3)})`);
+      glow.addColorStop(1, 'rgba(210, 240, 255, 0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath(); ctx.arc(c.x, ly, 18, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = `rgba(230, 250, 255, ${(0.7 + 0.3 * flare).toFixed(3)})`;
+      ctx.beginPath(); ctx.arc(c.x, ly, 3, 0, Math.PI * 2); ctx.fill();
+      // Wisps of smoke, more of them and rising higher the longer it burns.
+      const t = performance.now() / 700;
+      const wisps = 1 + Math.round(burn * 3);
+      for (let i = 0; i < wisps; i++) {
+        const phase = (t + i * 0.6) % 1;
+        const wy = c.y - H - phase * 22;
+        const wx = c.x + Math.sin(t * 1.7 + i * 2) * 4;
+        const wr = 3 + phase * 5;
+        ctx.fillStyle = `rgba(180,180,190,${(0.35 * (1 - phase) * (0.4 + burn)).toFixed(3)})`;
+        ctx.beginPath(); ctx.ellipse(wx, wy, wr, wr * 0.7, 0, 0, Math.PI * 2); ctx.fill();
+      }
+    } else if (alert > 0.3) {
       // Fast alarm blink, bright and saturated, with a glow halo.
       const blink = 0.5 + 0.5 * Math.abs(Math.sin(performance.now() / 130));
       const a = Math.min(1, 0.55 + alert * 0.45) * blink;
@@ -3091,9 +3174,6 @@ export class Renderer {
     ctx.font = 'bold 10px system-ui, sans-serif';
     ctx.fillStyle = rank.color;
     ctx.fillText(rank.title, this.w - 16, line); line += 16;
-    ctx.font = '10px system-ui, sans-serif';
-    ctx.fillStyle = 'rgba(207,216,195,0.6)';
-    ctx.fillText(`K: skills · ${hud.fps ?? 0} fps`, this.w - 16, line);
     ctx.textAlign = 'left';
 
     // Transient message line above the panel

@@ -1804,7 +1804,7 @@ export class Player {
     this._ended = true;
     this.deaths = (this.deaths || 0) + 1;
     this.deathCert = {
-      name: this.name, cause: 'SKYLINK-9000 coming online',
+      name: this.name, gender: this.gender, cause: 'SKYLINK-9000 coming online',
       score: this.score, skills: [...this.skills], deaths: this.deaths, skylink: true,
     };
     if (this.onDeath) this.onDeath();
@@ -1819,7 +1819,7 @@ export class Player {
     // is cumulative and survives; deaths count up. main shows it as a modal.
     this.deaths = (this.deaths || 0) + 1;
     this.deathCert = {
-      name: this.name, cause, score: this.score,
+      name: this.name, gender: this.gender, cause, score: this.score,
       skills: [...this.skills], deaths: this.deaths,
     };
     if (this.onDeath) this.onDeath();
