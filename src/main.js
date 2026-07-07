@@ -11,7 +11,7 @@ import { spawnBirds, updateBirds } from './game/birds.js';
 import { spawnRobots, updateRobots, spawnW1s, spawnW3, spawnW4, drawRobot } from './game/robots.js';
 import { resolveBodyOverlaps } from './game/collision.js';
 import { spawnWaterDroids, updateWaterDroids, drawWaterDroid } from './game/waterdroids.js';
-import { Lore } from './game/lore.js';
+import { Lore, FRAGMENTS } from './game/lore.js';
 import { ITEMS } from './game/items.js';
 import { sfx } from './engine/sound.js';
 import { worldToScreen } from './engine/iso.js';
@@ -47,7 +47,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '1.00';
+const VERSION = '1.01';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -641,6 +641,18 @@ function ronmlCtx() {
       // proximity + AI key and drops the fortress key on success.
       player.say(fortress.hack(player).msg);
     },
+    // `notes`: the language-teaching lore fragments (kind 'code', flagged
+    // `notepad: true` in lore.js — not the whole Archive) compile into a
+    // running reference as you find them, in the order they were found.
+    notepadText: () => {
+      const entries = FRAGMENTS.filter((f) => f.notepad && lore.found.has(f.id));
+      if (!entries.length) {
+        return 'notepad empty. RON-ML fragments are scattered through the ruins — ' +
+          'walk over one to read it, and it copies itself in here.';
+      }
+      const lines = entries.map((f) => `-- ${f.title} --\n${f.text}`);
+      return `RON-ML NOTEPAD (${entries.length}/5 found)\n\n` + lines.join('\n\n');
+    },
   };
 }
 
@@ -804,7 +816,7 @@ obTermEl.addEventListener('click', (e) => { if (e.target === obTermEl) closeObTe
 // suggests the rest of a verb as faded ghost text you can accept with Tab.
 // (sing stays out of the list — it's a secret.) Purely a convenience the book
 // unlocks; you can always type the whole thing by hand.
-const RONML_VERBS = ['scan', 'nearest', 'keys', 'hack', 'crash', 'sleep', 'repel', 'map', 'print', 'help', 'let'];
+const RONML_VERBS = ['scan', 'nearest', 'keys', 'hack', 'crash', 'sleep', 'repel', 'map', 'print', 'unlock', 'notes', 'help', 'let'];
 const escapeHtml = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 function ronmlCompletion(value) {
   if (!player.readManuals || !player.readManuals.has('book_ronml')) return '';

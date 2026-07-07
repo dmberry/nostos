@@ -5,7 +5,7 @@ import { drawAnimal } from '../game/animals.js';
 import { drawBird } from '../game/birds.js';
 import { drawRobot } from '../game/robots.js';
 import { drawWaterDroid } from '../game/waterdroids.js';
-import { FLOOR_TEXTURES, WALL_TEXTURES, GRASS_PATCH_TEXTURE, CHARACTER_SPRITE_SETS, CHAR_COMPASS_DIRS, TREE_SHEET, TREE_SPRITES, EDGE_TEXTURE, CAR_SPRITES, CAR_MODEL_KEYS, CAR_DIR_KEYS, CAR_RUIN_TEXTURE, FACTORY_TEXTURE } from './textures.js';
+import { FLOOR_TEXTURES, WALL_TEXTURES, GRASS_PATCH_TEXTURE, CHARACTER_SPRITE_SETS, CHAR_COMPASS_DIRS, TREE_SHEET, TREE_SPRITES, EDGE_TEXTURE, CAR_SPRITES, CAR_MODEL_KEYS, CAR_DIR_KEYS, CAR_RUIN_TEXTURE, FACTORY_TEXTURE, GRAFFITI_TEXTURES } from './textures.js';
 
 // Maps a facing vector to one of 8 pre-rendered screen-compass directions
 // for CHARACTER_SPRITE_SETS (see textures.js) — replaces the old trick of
@@ -1480,6 +1480,21 @@ export class Renderer {
     this.drawTexturedQuad(quad, obj._graffitiCanvas, null, null, null, 1);
   }
 
+  // A rarer, older register of wall-marking: an actual weathered poster/mural
+  // photo (assets/textures/graffiti/) rather than painted text — see
+  // paintGraffiti in worldgen.js, which flags obj.graffitiImage with an index
+  // into GRAFFITI_TEXTURES. Same face-mapping convention as drawGraffiti
+  // (un-mirror + right-way-up — see its comment), a touch larger to read as a
+  // stuck-on poster, with a dark backing (torn paper) and a grimy multiply
+  // tint so a bright old photo doesn't look pasted on straight out of a
+  // camera roll.
+  drawGraffitiPoster(obj, seFace) {
+    const tex = GRAFFITI_TEXTURES[obj.graffitiImage % GRAFFITI_TEXTURES.length];
+    const jitter = (tileHash(obj.x + 3, obj.y + 7) - 0.5) * 0.08;
+    const quad = this.subQuad(seFace[0], seFace[1], seFace[3], 0.90, 0.10, 0.70 + jitter, 0.20 + jitter);
+    this.drawTexturedQuad(quad, tex, '#1c1a16', 'rgba(30,22,14,0.35)', 'multiply', 0.9);
+  }
+
   // A wall is an extruded diamond prism: two visible faces plus a top.
   // obj.decay (0..5: new / old / older / mossy / breaking / crumbling)
   // greys and darkens the stone, lowers and roughens the top, and adds
@@ -1589,7 +1604,8 @@ export class Renderer {
       }
     }
 
-    if (obj.graffiti) this.drawGraffiti(obj, [b1, b2, t2, t1]);
+    if (obj.graffitiImage != null) this.drawGraffitiPoster(obj, [b1, b2, t2, t1]);
+    else if (obj.graffiti) this.drawGraffiti(obj, [b1, b2, t2, t1]);
   }
 
   drawTree(obj) {

@@ -494,19 +494,23 @@ export const FRAGMENTS = [
   // ---- ron-ml: runnable RON-ML fragments, teaching the terminal console
   // language one idea at a time. See docs/ob-terminal-language.md — this is
   // the in-world half of that design (§5, Fragments A-E), typed near-verbatim.
-  { id: 'ronml-01', kind: 'code', era: 0, title: 'scrawled on a service hatch',
+  // These five (not the song sheet below) are the actual language-teaching
+  // fragments — flagged `notepad: true` so they compile into the terminal's
+  // `notes` reference as you find them (Player/main ronmlCtx.notepadText),
+  // separate from the prose-only Archive.
+  { id: 'ronml-01', kind: 'code', era: 0, title: 'scrawled on a service hatch', notepad: true,
     text: 'sleep 30\n\n// typed it and the whole yard went quiet for half an hour.\n' +
       "// don't know why it's minutes. — J" },
-  { id: 'ronml-02', kind: 'code', era: 0, title: 'note, back of a manual',
+  { id: 'ronml-02', kind: 'code', era: 0, title: 'note, back of a manual', notepad: true,
     text: 'scan |> nearest\n\n// it lists what\'s on the wire. nearest picks the closest.\n' +
       '// the |> just passes it along, like handing it down a line.' },
-  { id: 'ronml-03', kind: 'code', era: 1, title: 'taped inside a relay box',
+  { id: 'ronml-03', kind: 'code', era: 1, title: 'taped inside a relay box', notepad: true,
     text: 'let k = hack node in\ncrash node k\n\n' +
       "// you can't crash blind. hack first — it hands you the node's own key —\n" +
       '// then crash with it. put your obelisk\'s code where it says node.' },
-  { id: 'ronml-04', kind: 'code', era: 1, title: 'chalked on a wall, half-rubbed-out',
+  { id: 'ronml-04', kind: 'code', era: 1, title: 'chalked on a wall, half-rubbed-out', notepad: true,
     text: 'repel\n\n// flips them. they run from you instead of at you.\n// buys a minute, no more.' },
-  { id: 'ronml-05', kind: 'code', era: 2, title: 'torn page, barely legible',
+  { id: 'ronml-05', kind: 'code', era: 2, title: 'torn page, barely legible', notepad: true,
     text: '...the old operators had a word buried in the console for when it was\n' +
       'already over. never saw it used. never saw it written down whole. one line\n' +
       'in the margin, water-damaged: "...ing. just t...  it. it knows the tune."' },

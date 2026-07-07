@@ -72,6 +72,17 @@ export const WALL_TEXTURES = {
   aivent: loadDownscaled(T + 'AI-texture/grating_05.jpg'),
 };
 
+// Real photographic street-art/flyer photos (assets/textures/graffiti/), used
+// as a rare, older register of wall-marking — an actual weathered poster
+// stuck to a wall, distinct from the painted RON/UBIQ/vector text tags.
+// worldgen.js's paintGraffiti flags a wall with `graffitiImage` (an index
+// into this array, kept in sync by count); Renderer.drawGraffitiPoster reads
+// it. Downscaled like every other photo texture (see loadDownscaled above).
+export const GRAFFITI_TEXTURES = [
+  'graffiti_01.jpg', 'graffiti_02.jpg', 'graffiti_12.jpg', 'graffiti_19.jpg',
+  'graffiti_21.jpg', 'graffiti_30.jpg', 'graffiti_33.jpg', 'sign_08.jpg',
+].map((f) => loadDownscaled(T + 'graffiti/' + f, 96));
+
 // Hand-drawn tree art (a copy of the CC0 "Premium Trees" sheet dropped in at
 // assets/textures/Shadow/). One transparent 512x224 sheet; each TREE_SPRITE
 // is the tight pixel bounds of one tree cut out of it via drawImage source

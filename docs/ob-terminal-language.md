@@ -70,6 +70,7 @@ Comments are `(* ml style *)`. Whitespace-insensitive. Case-insensitive keywords
 | `map` | `unit -> unit` | opens a schematic of the AI's territory: obelisks (coded), machines, the factory, the mainframe you're hunting, and you | always (added post-design) |
 | `print` | `unit -> unit` | runs off a physical **printed map** item that drops at your feet — pick it up and use it to unfold the map anywhere, away from a terminal | always (added post-design) |
 | `help` | (meta) | prints the command reference; `help <verb>` details one verb. Intercepted before evaluation, not a real expression | always (added post-design) |
+| `notes` | (meta) | prints a compiled reference of the language-teaching lore fragments (`lore.js`, `notepad: true`) you've found so far, in discovery order | always (added post-design) |
 
 Two more worth adding once the base works:
 - `disable n` (`node -> key -> unit`) — permanently fuses a *robot* (not an obelisk)

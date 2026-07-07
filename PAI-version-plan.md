@@ -22,7 +22,12 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Always put a texture on a glowing thing.** No glow is ever a flat coloured blob — a grille/panel texture is laid over it (the factory-vent trick). Everything luminous goes through `Renderer.texturedGlow`, which caps the glow with an AI grate texture; if you add a new light, use it rather than a bare `fill`. (David, 2026-07-07.)
 - **Vary texture opacity per tile.** Floors jitter their texture alpha deterministically per tile (`drawFloor`) so a large expanse of one floor reads as worn/varied rather than a flat repeat.
 
-## Where we are (v1.00)
+## Where we are (v1.01)
+
+### v1.01 — RON-ML notepad, and real photo graffiti posters on walls
+
+- **The RON-ML notepad.** The five language-teaching lore fragments (`ronml-01`..`05` in `lore.js`) are now flagged `notepad: true`; a new `notes` console meta-command (intercepted in `runRonml`, alongside `help`) compiles the ones you've found into a running reference — title + the actual runnable line + its flavour comment, in discovery order. Backed by `ronmlCtx().notepadText()` in `main.js` (filters `FRAGMENTS` against `lore.found`). Added to `help`, the autocomplete verb list, and the design doc. (The song-sheet fragment, `ronml-06`, stays out — lyrics, not language.)
+- **Real photo graffiti posters, rarely, on walls.** New `GRAFFITI_TEXTURES` in `textures.js` — the 8 photos in `assets/textures/graffiti/`, downscaled like every other photo texture. `worldgen.js`'s `paintGraffiti` now gives ~14% of tagged walls an actual weathered poster (`obj.graffitiImage`, an index) instead of painted text — mutually exclusive with the RON/UBIQ/Humanitas/vector text tags. New `Renderer.drawGraffitiPoster` mirrors `drawGraffiti`'s face-mapping math with a dark torn-paper backing and a grimy multiply tint so an old bright photo reads as a weathered stuck-on poster, not a clean modern print. Verified: textures load (8/8, `complete: true`), the draw call executes cleanly and paints real pixel data, two poster walls generated naturally in a test world.
 
 ### v1.00 — vector-theory & Magnifica Humanitas lore; Ubiq / Humanitas / vector graffiti
 

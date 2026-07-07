@@ -636,11 +636,19 @@ const GRAFFITI_VECTOR = [
   'IT DOES NOT THINK IN WORDS', 'THE UNVISITED COORDINATES', 'WE ARE ALL VECTORS NOW',
 ];
 
+// Count of Renderer's GRAFFITI_TEXTURES (assets/textures/graffiti/) — kept in
+// sync by hand since worldgen never imports render-side texture assets.
+const GRAFFITI_IMAGE_COUNT = 8;
+
 function paintGraffiti(map, rng) {
   const pick = (list) => list[Math.floor(rng() * list.length)];
   for (const obj of map.objects) {
     if (obj.type !== 'wall') continue;
     if (rng() < 0.92) continue; // sparse: a mark here and there, not every wall
+    // A minority of tagged walls carry an actual weathered poster/mural photo
+    // instead of painted text — an older, different register (see
+    // Renderer.drawGraffitiPoster). Mutually exclusive with the text tags.
+    if (rng() < 0.14) { obj.graffitiImage = Math.floor(rng() * GRAFFITI_IMAGE_COUNT); continue; }
     const r = rng();
     if (r < 0.32) {
       obj.graffiti = pick(GRAFFITI_GENERIC);
