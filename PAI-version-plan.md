@@ -17,7 +17,13 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
-## Where we are (v0.93)
+## Where we are (v0.94)
+
+### v0.94 — RON-ML manual + pages, world-loot never decays, book-unlocked autocomplete
+
+- **The RON-DOS Operator’s Manual + torn pages.** New `book_ronml` (a bound manual) and `ronml_page` (torn scraps) items, `kind: 'book'` but flagged `manual` so `Player.learnFromBook` shows their text and counts as knowledge instead of teaching a survival skill. The manual is a guaranteed cache; six torn pages scatter through the ruins and woods. Distinct folded-book / torn-paper icons.
+- **World-placed loot no longer decays.** The v0.91 decay was stripping the *scattered* world-gen loot (torches, tins, berries, books, backpacks, pages) before the player reached it — buildings read as looted. Now the world-gen `drop()` helper tags items `keep: true`, and the aging pass skips them: only things that appear *during play* (combat drops, items you drop, loot spilled from an opened box) run the timer. Box contents never decayed (they live in `box.loot`, not `groundItems`); once you open a box, the spilled loot starts its countdown, exactly as intended.
+- **Reading the manual unlocks terminal autocomplete.** Once `book_ronml` is read (`player.readManuals`), the RON-DOS console suggests the rest of a verb as faded ghost text (`#obterminal-ghost`, transparent typed-prefix + faded suffix, monospace-aligned); **Tab** accepts it. `sing` is left out of the completion list (secret). Purely a convenience the book grants — you can still type everything by hand.
 
 ### v0.93 — block-top safety, compass chevron kept, thin shield rings, sing returns to work
 

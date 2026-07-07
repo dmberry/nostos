@@ -32,7 +32,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '0.93';
+const VERSION = '0.94';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -57,7 +57,11 @@ const animals = spawnAnimals(map, WORLD_SEED, { x: spawn.x, y: spawn.y, r: 12 })
   const drop = (list, item, qty) => {
     if (!list.length) return;
     const [x, y] = list[Math.floor(rng() * list.length)];
-    map.groundItems.push({ item, qty, x: x + 0.5, y: y + 0.5 });
+    // keep: true — world-placed loot never decays. Only things that appear
+    // during play (combat drops, items you drop, loot spilled from an opened
+    // box) run the decay timer, so the world isn't stripped bare before you
+    // reach it, and a cache still holds its prize whenever you find it.
+    map.groundItems.push({ item, qty, x: x + 0.5, y: y + 0.5, keep: true });
   };
   for (let i = 0; i < 12; i++) drop(boards, 'torch', 1);
   for (let i = 0; i < 14; i++) drop(boards, 'tin', 1);
@@ -85,6 +89,10 @@ const animals = spawnAnimals(map, WORLD_SEED, { x: spawn.x, y: spawn.y, r: 12 })
     }
   }
   for (let i = 0; i < 4; i++) drop(forestGrass, 'backpack', 1);
+  // Torn pages of the RON-ML manual, scattered — mostly in the ruins, a couple
+  // out in the woods — as loose scraps that echo the bound manual in the caches.
+  for (let i = 0; i < 4; i++) drop(boards, 'ronml_page', 1);
+  for (let i = 0; i < 2; i++) drop(forestGrass, 'ronml_page', 1);
 }
 
 // The AIs control the landscape: black obelisk towers dot the wilds (their
@@ -159,6 +167,8 @@ const obelisks = [];
     [{ item: 'compass', qty: 1 }],
     // The access chip: your interface into the obelisk terminals.
     [{ item: 'chip', qty: 1 }],
+    // The RON-ML manual: teaches the terminal console language.
+    [{ item: 'book_ronml', qty: 1 }],
   ];
   const rollLoot = () => {
     const r = rng();
@@ -526,6 +536,7 @@ const obTermScreen = document.getElementById('obterminal-screen');
 const obTermConnect = document.getElementById('obterminal-connect');
 const obTermBar = document.getElementById('obterminal-bar');
 const obTermInput = document.getElementById('obterminal-input');
+const obTermGhost = document.getElementById('obterminal-ghost');
 const aiosEl = document.getElementById('aios');
 const aiosScreen = document.getElementById('aios-screen');
 const aiosHeader = document.getElementById('aios-header');
@@ -718,28 +729,60 @@ function openObTerminal(ob) {
       '_',
     );
     obTermInput.value = '';
+    obTermGhost.textContent = '';
     obTermInput.focus();
   };
   requestAnimationFrame(step);
 }
-function closeObTerminal() { obTermEl.style.display = 'none'; obTermInput.blur(); player.terminalSafe = false; }
+function closeObTerminal() { obTermEl.style.display = 'none'; obTermGhost.textContent = ''; obTermInput.blur(); player.terminalSafe = false; }
 obTermEl.addEventListener('click', (e) => { if (e.target === obTermEl) closeObTerminal(); });
+// Autocomplete: once you've read the RON-DOS manual (book_ronml), the console
+// suggests the rest of a verb as faded ghost text you can accept with Tab.
+// (sing stays out of the list — it's a secret.) Purely a convenience the book
+// unlocks; you can always type the whole thing by hand.
+const RONML_VERBS = ['scan', 'nearest', 'keys', 'hack', 'crash', 'sleep', 'repel', 'map', 'print', 'help', 'let'];
+const escapeHtml = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+function ronmlCompletion(value) {
+  if (!player.readManuals || !player.readManuals.has('book_ronml')) return '';
+  const m = value.match(/([A-Za-z]+)$/); // the alphabetic token at the caret
+  if (!m) return '';
+  const tok = m[1];
+  const hit = RONML_VERBS.find((v) => v.length > tok.length && v.startsWith(tok));
+  return hit ? hit.slice(tok.length) : '';
+}
+function updateGhost() {
+  const suffix = ronmlCompletion(obTermInput.value);
+  if (!suffix) { obTermGhost.textContent = ''; return; }
+  obTermGhost.style.left = obTermInput.offsetLeft + 'px';
+  obTermGhost.innerHTML = `<span class="typed">${escapeHtml(obTermInput.value)}</span>${escapeHtml(suffix)}`;
+}
+obTermInput.addEventListener('input', updateGhost);
 obTermInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Tab') {
+    const suffix = ronmlCompletion(obTermInput.value);
+    if (suffix) { obTermInput.value += suffix; updateGhost(); }
+    e.preventDefault();
+    e.stopPropagation();
+    return;
+  }
   if (e.key === 'Enter') {
     const line = obTermInput.value.trim();
     obTermInput.value = '';
+    obTermGhost.textContent = '';
     if (line) replRun(line);
   } else if (e.key === 'ArrowUp') {
     if (replHistory.length) {
       replHistoryIdx = Math.max(0, replHistoryIdx - 1);
       obTermInput.value = replHistory[replHistoryIdx] || '';
     }
+    updateGhost();
     e.preventDefault();
   } else if (e.key === 'ArrowDown') {
     if (replHistory.length) {
       replHistoryIdx = Math.min(replHistory.length, replHistoryIdx + 1);
       obTermInput.value = replHistory[replHistoryIdx] || '';
     }
+    updateGhost();
     e.preventDefault();
   }
   e.stopPropagation();
@@ -1154,14 +1197,17 @@ function update(dt) {
   // slower, and real prizes (weapons, keys, chips, a backpack) linger a good
   // long while. Aged centrally here rather than at the ~20 push sites; each
   // item's `age` ticks up and it fades/flickers (gi.fade, drawn by the
-  // renderer) over its last few seconds before it's culled.
+  // renderer) over its last few seconds before it's culled. Items flagged
+  // `keep` (world-placed loot) never age — only stuff dropped during play does,
+  // so the world isn't stripped bare before you find it.
   if (map.groundItems && map.groundItems.length) {
     for (const gi of map.groundItems) {
+      if (gi.keep) { gi.fade = 1; continue; }
       gi.age = (gi.age || 0) + dt;
       const life = groundLifetime(gi.item);
       gi.fade = life === Infinity ? 1 : Math.min(1, (life - gi.age) / GROUND_ITEM_FADE);
     }
-    map.groundItems = map.groundItems.filter((gi) => gi.age < groundLifetime(gi.item));
+    map.groundItems = map.groundItems.filter((gi) => gi.keep || gi.age < groundLifetime(gi.item));
   }
 
   // Timed bombs: tick fuses, then detonate — a fire cloud that hurts every

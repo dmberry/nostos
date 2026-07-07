@@ -443,6 +443,26 @@ export const ITEMS = {
     skill: 'fleetfoot',
     skillText: 'Fleet foot: sprinting drains far less stamina.',
   },
+  // The RON-ML manual and its torn pages: readable like a skill book (kind
+  // 'book' so R / walk-onto reads them), but flagged `manual` so they teach
+  // the console language instead of a survival skill (Player.learnFromBook).
+  book_ronml: {
+    name: 'the RON-DOS Operator’s Manual',
+    kind: 'book',
+    manual: true,
+    stack: 1,
+    color: '#3fbf6a',
+    text: 'The obelisk console runs RON-ML. Verbs: scan (list the wire), nearest (closest of a list), hack a node for its key, crash it with that key, sleep, repel, map, print. Pipe with |> and bind with let … in. At any terminal, type help for the full reference.',
+  },
+  ronml_page: {
+    name: 'a torn page of RON-ML',
+    kind: 'book',
+    manual: true,
+    tip: true,
+    stack: 1,
+    color: '#b8ac82',
+    text: 'A water-stained page from an operator’s manual. One block survives: "scan |> nearest — lists the wire, takes the closest. can’t crash blind: hack first for the key. type help at the console for the rest."',
+  },
 };
 
 // Each def keeps a self-reference to its own key, so any code holding a

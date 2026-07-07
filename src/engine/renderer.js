@@ -2417,6 +2417,18 @@ export class Renderer {
         ctx.strokeStyle = '#d8b24a'; ctx.lineWidth = 0.8;
         ctx.beginPath(); ctx.moveTo(-3, -6); ctx.lineTo(0, 0); ctx.lineTo(2, 6); ctx.stroke();
         break;
+      case 'ronml_page':
+        // A torn sheet of paper with a couple of lines of code and a ragged edge.
+        ctx.fillStyle = itemDef.color;
+        ctx.beginPath();
+        ctx.moveTo(-6, -8); ctx.lineTo(6, -8); ctx.lineTo(6, 5);
+        ctx.lineTo(3, 8); ctx.lineTo(-1, 5); ctx.lineTo(-6, 8);
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = 'rgba(60,90,60,0.7)'; ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.moveTo(-4, -4); ctx.lineTo(3, -4); ctx.moveTo(-4, -1); ctx.lineTo(4, -1); ctx.moveTo(-4, 2); ctx.lineTo(1, 2);
+        ctx.stroke();
+        break;
       case 'printed_map':
         // A folded paper map: parchment rectangle with fold creases and a
         // little green route marking.

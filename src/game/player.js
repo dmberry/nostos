@@ -751,6 +751,15 @@ export class Player {
   // spot rather than pocketing it.
   learnFromBook(itemKey) {
     const def = ITEMS[itemKey];
+    // The RON-ML manual and its torn pages teach the console language, not a
+    // survival skill — just show their text and count as a little knowledge.
+    if (def.manual) {
+      this.gainXp('knowledge', def.tip ? 3 : 8);
+      this.readManuals ??= new Set();
+      if (!this.readManuals.has(itemKey)) { this.addScore(SCORE.book); this.readManuals.add(itemKey); }
+      this.say(`You read ${def.name}. ${def.text}`);
+      return;
+    }
     if (this.skills.has(def.skill)) {
       this.gainXp('knowledge', 2); // re-reading still teaches a little
       this.say(`You have already read ${def.name}.`);
