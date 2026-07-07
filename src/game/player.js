@@ -85,6 +85,7 @@ export class Player {
     this.forcefieldCharge = 0; // seconds of forcefield left in the current cell
     this.forcefieldArmed = false; // toggled by clicking the forcefield in any slot
     this.compassArmed = false; // toggled by clicking the electro-compass in any slot
+    this.ronmlKeys = new Set(); // node ids RON-ML's `hack` has cracked open this session
     this.ammoFrac = {};        // accumulated fractional ammo per gun
     this.electroCharge = (ITEMS.electrogun && ITEMS.electrogun.internalMax) || 4; // electro-gun's self-charging internal cell
     this.terminalSafe = false;  // true while jacked into an obelisk terminal (invisible to machines)

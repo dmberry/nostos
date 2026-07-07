@@ -15,6 +15,7 @@ import { Lore } from './game/lore.js';
 import { ITEMS } from './game/items.js';
 import { sfx } from './engine/sound.js';
 import { worldToScreen } from './engine/iso.js';
+import { runRonml } from './game/ronml.js';
 
 // Each new game gets its own random seed, persisted so a continuing run
 // (autosave) always regenerates the same map. Without this every playthrough
@@ -31,7 +32,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '0.83';
+const VERSION = '0.84';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -469,25 +470,106 @@ for (const btn of helpEl.querySelectorAll('.helpTab')) {
 }
 
 // Obelisk terminal. With an access chip carried, clicking an obelisk opens a
-// channel (a progress bar) into the RON-DOS console — and while you're jacked
+// channel (a progress bar) into a live RON-ML REPL — and while you're jacked
 // in the obelisk hides you from the machines. Without a chip you instead see
-// the AI's own OS: alive with data, and unusable. Both are read-only for now;
-// the hooks are here for the code-hacking language to come.
+// the AI's own OS: alive with data, and unusable. See docs/ob-terminal-language.md
+// for the language design.
 const OB_TERMINAL_RANGE = 4.5;
+const RONML_ROBOT_RANGE = 20;   // sleep/repel/sing reach this far from the player
+const REPEL_DURATION = 60;      // seconds `repel`-ed machines flee for
+const SING_DURATION = 4.5;      // seconds the choir lines up before powering down
 const obTermEl = document.getElementById('obterminal');
 const obTermScreen = document.getElementById('obterminal-screen');
 const obTermConnect = document.getElementById('obterminal-connect');
 const obTermBar = document.getElementById('obterminal-bar');
+const obTermInput = document.getElementById('obterminal-input');
 const aiosEl = document.getElementById('aios');
 const aiosScreen = document.getElementById('aios-screen');
 const aiosHeader = document.getElementById('aios-header');
+
+let replLog = [];
+let replHistory = [];
+let replHistoryIdx = -1;
+const REPL_MAX_LINES = 300;
+
+function replPrint(...lines) {
+  replLog.push(...lines);
+  if (replLog.length > REPL_MAX_LINES) replLog = replLog.slice(replLog.length - REPL_MAX_LINES);
+  obTermScreen.textContent = replLog.join('\n');
+  obTermScreen.scrollTop = obTermScreen.scrollHeight;
+}
+
+// Builds a fresh ctx object each command: primitives read/mutate the live
+// world (map, robots, obeliskObjs, player) through these hooks, and never
+// touch game state directly — ronml.js only handles language mechanics.
+function ronmlCtx() {
+  const findObelisk = (id) => obeliskObjs.find((o) => o.code === id && !o.destroyed);
+  const nearby = (r) => !r.dead && !r.friendly && !r.fused
+    && Math.hypot(r.x - player.x, r.y - player.y) <= RONML_ROBOT_RANGE;
+  return {
+    listObelisks: () => obeliskObjs.filter((o) => !o.destroyed).map((o) => o.code),
+    distanceToNode: (id) => {
+      const o = findObelisk(id);
+      return o ? Math.hypot(o.x + 0.5 - player.x, o.y + 0.5 - player.y) : Infinity;
+    },
+    nodeExists: (id) => !!findObelisk(id),
+    requireAiKey: (verb) => { if (!player.hasItem('ai_key')) throw new Error(`${verb} needs an AI key`); },
+    recordHack: (id) => player.ronmlKeys.add(id),
+    heldKeys: () => player.ronmlKeys,
+    crashNode: (id) => {
+      const o = findObelisk(id);
+      if (!o) return;
+      o.destroyed = true;
+      o.needsRebuild = true; // temporary — this is a hack, not a physical fell
+      map.objectGrid[o.y * map.w + o.x] = null;
+      if (player.skylinkActive) player.skylinkActive = false;
+      if (factoryLive() && !robots.some((r) => r.type === 'w3' && !r.dead)) {
+        const drone = spawnW3(map, Math.floor(Math.random() * 0x7fffffff), factoryCx(), factoryCy());
+        if (drone) robots.push(drone);
+      }
+      player.say(`${id} goes dark. A repair drone is already inbound to raise it.`);
+    },
+    sleepNearby: (mins) => {
+      const secs = Math.max(1, mins);
+      for (const r of robots) if (nearby(r)) r.disabledT = Math.max(r.disabledT || 0, secs);
+      player.say('The local machines idle. The yard goes quiet for a spell.');
+    },
+    repelNearby: () => {
+      for (const r of robots) if (nearby(r)) { r.repelledT = REPEL_DURATION; r.aggro = false; }
+      player.say('Targeting flips. Anything nearby turns tail and runs.');
+    },
+    sing: () => {
+      const targets = robots.filter((r) => nearby(r) && !r.drained);
+      if (!targets.length) { player.say('Nothing nearby to sing to.'); return; }
+      const perp = { x: -player.facing.y, y: player.facing.x };
+      targets.forEach((r, i) => {
+        const spread = (i - (targets.length - 1) / 2) * 1.6;
+        r.singing = true;
+        r.aggro = false;
+        r.choirT = SING_DURATION;
+        r.choirX = player.x + player.facing.x * 4 + perp.x * spread;
+        r.choirY = player.y + player.facing.y * 4 + perp.y * spread;
+      });
+      player.say('Every machine in earshot stops dead, turns, and lines up.');
+      closeObTerminal(); // drop out of the terminal so you can actually watch it
+    },
+  };
+}
+
+function replRun(line) {
+  replPrint(`> ${line}`);
+  const result = runRonml(line, ronmlCtx());
+  replPrint(result.text);
+  replHistory.push(line);
+  replHistoryIdx = replHistory.length;
+}
 
 function openObTerminal(ob) {
   if (!player.hasItem('chip')) { openAiOs(ob); return; }
   // Chip present: jack in. Go invisible, then run the connect progress bar.
   player.terminalSafe = true;
   obTermEl.style.display = 'flex';
-  obTermScreen.style.display = 'none';
+  obTermScreen.parentElement.style.display = 'none';
   obTermConnect.style.display = 'block';
   obTermBar.style.width = '0%';
   player.say(`Access chip accepted. Opening a channel into ${ob.code || 'the node'} — you drop off their sensors.`);
@@ -498,8 +580,11 @@ function openObTerminal(ob) {
     obTermBar.style.width = (p * 100).toFixed(0) + '%';
     if (p < 1) { requestAnimationFrame(step); return; }
     obTermConnect.style.display = 'none';
-    obTermScreen.style.display = 'block';
-    obTermScreen.textContent = [
+    obTermScreen.parentElement.style.display = 'flex';
+    replLog = [];
+    replHistory = [];
+    replHistoryIdx = -1;
+    replPrint(
       'SKYLINK NODE TERMINAL  v2.20',
       'RON-DOS 4.11  (c) Reality Or Nothing',
       '',
@@ -507,19 +592,38 @@ function openObTerminal(ob) {
       `> circuit id ...... ${ob.circuitNum != null ? '#' + ob.circuitNum : 'sealed'}`,
       '> chip ............ ACCEPTED',
       '> shield .......... you are hidden while jacked in',
-      '> access .......... GRANTED (read-only)',
+      '> access .......... GRANTED',
       '',
-      'no instruction set loaded yet.',
-      'collect code fragments to teach this terminal.',
-      '',
-      'READY.',
+      'RON-ML console ready. try: scan',
       '_',
-    ].join('\n');
+    );
+    obTermInput.value = '';
+    obTermInput.focus();
   };
   requestAnimationFrame(step);
 }
-function closeObTerminal() { obTermEl.style.display = 'none'; player.terminalSafe = false; }
+function closeObTerminal() { obTermEl.style.display = 'none'; obTermInput.blur(); player.terminalSafe = false; }
 obTermEl.addEventListener('click', (e) => { if (e.target === obTermEl) closeObTerminal(); });
+obTermInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    const line = obTermInput.value.trim();
+    obTermInput.value = '';
+    if (line) replRun(line);
+  } else if (e.key === 'ArrowUp') {
+    if (replHistory.length) {
+      replHistoryIdx = Math.max(0, replHistoryIdx - 1);
+      obTermInput.value = replHistory[replHistoryIdx] || '';
+    }
+    e.preventDefault();
+  } else if (e.key === 'ArrowDown') {
+    if (replHistory.length) {
+      replHistoryIdx = Math.min(replHistory.length, replHistoryIdx + 1);
+      obTermInput.value = replHistory[replHistoryIdx] || '';
+    }
+    e.preventDefault();
+  }
+  e.stopPropagation();
+});
 
 // The AI's own console (no chip): a wall of restless, unreadable data.
 const AIOS_GLYPHS = '0123456789ABCDEF▒▓█░■▢≡§¤◢◣∴∷';

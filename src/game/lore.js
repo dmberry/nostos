@@ -425,6 +425,26 @@ export const FRAGMENTS = [
       'reducing cluster: 12 -> 6 -> 2 -> 1\n1 node remaining: the ridge array.\n' +
       'cannot reduce further from here. that switch is out in the hills. go and find it.' },
 
+  // ---- ron-ml: runnable RON-ML fragments, teaching the terminal console
+  // language one idea at a time. See docs/ob-terminal-language.md — this is
+  // the in-world half of that design (§5, Fragments A-E), typed near-verbatim.
+  { id: 'ronml-01', kind: 'code', era: 0, title: 'scrawled on a service hatch',
+    text: 'sleep 30\n\n// typed it and the whole yard went quiet for half an hour.\n' +
+      "// don't know why it's minutes. — J" },
+  { id: 'ronml-02', kind: 'code', era: 0, title: 'note, back of a manual',
+    text: 'scan |> nearest\n\n// it lists what\'s on the wire. nearest picks the closest.\n' +
+      '// the |> just passes it along, like handing it down a line.' },
+  { id: 'ronml-03', kind: 'code', era: 1, title: 'taped inside a relay box',
+    text: 'let k = hack node in\ncrash node k\n\n' +
+      "// you can't crash blind. hack first — it hands you the node's own key —\n" +
+      '// then crash with it. put your obelisk\'s code where it says node.' },
+  { id: 'ronml-04', kind: 'code', era: 1, title: 'chalked on a wall, half-rubbed-out',
+    text: 'repel\n\n// flips them. they run from you instead of at you.\n// buys a minute, no more.' },
+  { id: 'ronml-05', kind: 'code', era: 2, title: 'torn page, barely legible',
+    text: '...the old operators had a word buried in the console for when it was\n' +
+      'already over. never saw it used. never saw it written down whole. one line\n' +
+      'in the margin, water-damaged: "...ing. just t...  it. it knows the tune."' },
+
   // ---- ron: RON transmissions, signed, defiant or doubting ----------------
   { id: 'ron-01', kind: 'ron', era: 1, title: 'RON — first broadcast',
     text: 'To anyone still tuned to a dead band: we are RON. Reality or Nothing. We ' +

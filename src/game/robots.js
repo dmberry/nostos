@@ -18,6 +18,7 @@ import { makeRng } from './rng.js';
 const RADIUS = 0.3;             // collision radius in tiles (both classes)
 const SLOPE_SPEED_MULT = 0.55;  // effort penalty crossing a height step, either way
 
+const REPEL_FLEE_SPEED = 3.4;   // RON-ML `repel`/`sing`: fleeing or lining up
 const T1_HP = 10;
 const T1_PATROL_SPEED = 1.4;    // tiles per second
 const T1_CHASE_SPEED = 5.0;     // faster than a walk (4.2), slower than a sprint (7.5)
@@ -544,6 +545,30 @@ export function updateRobots(dt, robots, player, map) {
     if (r.knockT > 0) {
       r.knockT = Math.max(0, r.knockT - dt);
       r.animT += dt;
+      continue;
+    }
+
+    // RON-ML `repel`: targeting inverted for a spell — it flees the player
+    // instead of hunting, overriding normal AI until the effect wears off.
+    if (r.repelledT > 0) {
+      r.repelledT = Math.max(0, r.repelledT - dt);
+      const d = distTo(r, player);
+      const ax = d > 1e-6 ? (r.x - player.x) / d : 1;
+      const ay = d > 1e-6 ? (r.y - player.y) / d : 0;
+      moveToward(r, r.x + ax * 3, r.y + ay * 3, REPEL_FLEE_SPEED, dt, map);
+      r.animT += dt;
+      continue;
+    }
+
+    // RON-ML `sing`: the Portal easter egg — lines up facing the player,
+    // performs its bit, then powers down for good.
+    if (r.singing) {
+      r.choirT -= dt;
+      moveToward(r, r.choirX, r.choirY, REPEL_FLEE_SPEED, dt, map);
+      const dx = player.x - r.x, dy = player.y - r.y, dd = Math.hypot(dx, dy) || 1;
+      r.facing = { x: dx / dd, y: dy / dd };
+      r.animT += dt;
+      if (r.choirT <= 0) { r.singing = false; r.drained = true; }
       continue;
     }
 

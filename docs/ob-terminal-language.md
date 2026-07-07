@@ -1,8 +1,13 @@
 # RON-ML — the obelisk terminal language (design)
 
-*Design note, not yet implemented. Status: proposed. The terminal UI + click-to-open
-shipped in v0.80 as a read-only VT220 shell; this doc is the plan for making it do
-something.*
+*Status: implemented in v0.84 (`src/game/ronml.js` + the REPL wired into `#obterminal`
+in `main.js`). The terminal UI + click-to-open shipped in v0.80 as a read-only VT220
+shell; this doc was the plan for making it do something, and is now also the reference
+for how it actually works. Shipped without lambdas, per §8. `sing` deviates from the
+"kicked out on a hit" plan below: instead of an interrupt-on-hit mechanic, being
+jacked in keeps you fully hidden from the machines the whole time (`player.terminalSafe`),
+and typing `sing` deliberately drops you straight out of the terminal so you can watch
+the choir sequence happen in the world, rather than reading about it in the console.*
 
 ## 1. The fiction
 
