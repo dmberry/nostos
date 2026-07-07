@@ -161,6 +161,13 @@ function makeBuiltins() {
       arity: 0,
       fn: (_args, ctx) => { ctx.printMap(); return { tag: 'unit' }; },
     },
+    // Opens the browsable notepad overlay (ctx.showNotepad, main.js) rather
+    // than printing to the console — a real page you flip through, not a
+    // wall of scrollback.
+    notes: {
+      arity: 0,
+      fn: (_args, ctx) => { ctx.showNotepad(); return { tag: 'unit' }; },
+    },
     nearest: {
       arity: 1,
       fn: ([list], ctx) => {
@@ -306,7 +313,7 @@ const HELP_VERBS = [
   ['map', 'unit -> unit', 'show the territory map (obelisks, machines, mainframe)', ''],
   ['print', 'unit -> unit', 'print a carryable map that drops at your feet', ''],
   ['unlock', 'unit -> unit', 'hack a fortress gate open (drops a fortress key)', 'at a gate; needs AI key'],
-  ['notes', 'unit -> unit', 'the language fragments you\'ve found, compiled into a notepad', ''],
+  ['notes', 'unit -> unit', 'open the notepad — browse the language fragments you\'ve found', ''],
   ['help', 'unit -> unit', 'this reference, or `help <verb>` for one verb', ''],
 ];
 function helpText(topic) {
@@ -332,17 +339,14 @@ function helpText(topic) {
 // {ok, text} — text is either the printed result or a "ERR: ..." message,
 // always a teaching error per the design doc (never a raw stack trace).
 export function runRonml(source, ctx) {
-  // `help` and `notes` are console meta-commands, not language expressions —
-  // intercepted before evaluation so they print straight to the console
-  // instead of failing as an unknown name. `help <verb>` gives detail on one
-  // verb; `notes` prints the language-teaching lore fragments found so far
-  // (ctx.notepadText, built from the player's Archive discoveries).
+  // `help` is a console meta-command, not a language expression — intercept it
+  // before evaluation so a bare `help` prints the reference instead of failing
+  // as an unknown name. `help <verb>` gives detail on one verb. (`notes` is a
+  // real builtin now — see makeBuiltins — since it opens a UI overlay rather
+  // than printing text.)
   const trimmed = source.trim();
   if (trimmed === 'help' || trimmed.startsWith('help ')) {
     return { ok: true, text: helpText(trimmed.slice(4).trim()) };
-  }
-  if (trimmed === 'notes') {
-    return { ok: true, text: ctx.notepadText ? ctx.notepadText() : 'notepad unavailable.' };
   }
   try {
     const toks = tokenize(source);

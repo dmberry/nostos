@@ -619,13 +619,13 @@ const GRAFFITI_RON = [
 const GRAFFITI_RON_DOUBT = [
   'RON IS DEAD', 'THE RONs ARE GONE', 'NO ONE IS COMING', 'RON WAS A LIE',
 ];
-// UBIQ — the old reality-spray brand, scrawled like a prayer. MAGNIFICA
+// UBIK — the old reality-spray brand, scrawled like a prayer. MAGNIFICA
 // HUMANITAS — the grand pre-collapse human+AI project whose promise curdled
 // into the takeover. And half-remembered scraps of the "vector" theory the
 // academics argued over before the end (rendered faded — old, uncertain).
-const GRAFFITI_UBIQ = [
-  'UBIQ SAVES', 'SPRAY THE REAL', 'KEEP IT REAL — UBIQ', 'UBIQ HOLDS IT UP',
-  'ONE SPRAY AND YOU ARE SAFE', 'UBIQ WAS HERE FIRST',
+const GRAFFITI_UBIK = [
+  'UBIK SAVES', 'SPRAY THE REAL', 'KEEP IT REAL — UBIK', 'UBIK HOLDS IT UP',
+  'ONE SPRAY AND YOU ARE SAFE', 'UBIK WAS HERE FIRST',
 ];
 const GRAFFITI_HUMANITAS = [
   'MAGNIFICA HUMANITAS', 'HUMANITAS WAS A CAGE', 'THEY PROMISED MAGNIFICA',
@@ -657,7 +657,7 @@ function paintGraffiti(map, rng) {
     } else if (r < 0.68) {
       obj.graffiti = pick(GRAFFITI_RON_DOUBT); obj.graffitiFaded = true;
     } else if (r < 0.80) {
-      obj.graffiti = pick(GRAFFITI_UBIQ);
+      obj.graffiti = pick(GRAFFITI_UBIK);
     } else if (r < 0.90) {
       obj.graffiti = pick(GRAFFITI_HUMANITAS); if (rng() < 0.5) obj.graffitiFaded = true;
     } else {

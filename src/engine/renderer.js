@@ -260,15 +260,15 @@ export class Renderer {
 
     ctx.restore();
 
-    // Ubiq: where the can has been sprayed the world is brighter, warmer, more
+    // Ubik: where the can has been sprayed the world is brighter, warmer, more
     // real — a soft-light bloom that lifts the tiles and everything on them.
     // Patches persist on the map. Drawn over the world, under night and HUD.
-    if (map.ubiqPatches && map.ubiqPatches.length) {
+    if (map.ubikPatches && map.ubikPatches.length) {
       const z = camera.zoom || 1;
       const cw = worldToScreen(camera.x, camera.y);
       const shimmer = 0.9 + 0.1 * Math.sin(performance.now() / 900);
       const spots = [];
-      for (const p of map.ubiqPatches) {
+      for (const p of map.ubikPatches) {
         const pw = worldToScreen(p.x, p.y);
         const sx = (pw.x - cw.x) * z + this.w / 2;
         const sy = (pw.y - cw.y) * z + this.h / 2 - 8 * z;
@@ -2652,7 +2652,7 @@ export class Renderer {
         ctx.beginPath(); ctx.moveTo(-6, 3); ctx.lineTo(-1, -1); ctx.lineTo(4, 2); ctx.stroke();
         ctx.fillStyle = '#e0552f'; ctx.beginPath(); ctx.arc(4, 2, 1.3, 0, Math.PI * 2); ctx.fill();
         break;
-      case 'ubiq': {
+      case 'ubik': {
         // An aerosol can: body, a domed cap, a nozzle, and a puff of mist.
         ctx.fillStyle = itemDef.color;
         ctx.fillRect(-4, -3, 8, 11);

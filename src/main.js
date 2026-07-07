@@ -47,7 +47,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '1.01';
+const VERSION = '1.02';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -184,8 +184,8 @@ const obelisks = [];
     [{ item: 'chip', qty: 1 }],
     // The RON-ML manual: teaches the terminal console language.
     [{ item: 'book_ronml', qty: 1 }],
-    // A single battered can of Ubiq, somewhere in the ruins.
-    [{ item: 'ubiq', qty: 1 }],
+    // A single battered can of Ubik, somewhere in the ruins.
+    [{ item: 'ubik', qty: 1 }],
   ];
   const rollLoot = () => {
     const r = rng();
@@ -641,18 +641,11 @@ function ronmlCtx() {
       // proximity + AI key and drops the fortress key on success.
       player.say(fortress.hack(player).msg);
     },
-    // `notes`: the language-teaching lore fragments (kind 'code', flagged
-    // `notepad: true` in lore.js — not the whole Archive) compile into a
-    // running reference as you find them, in the order they were found.
-    notepadText: () => {
-      const entries = FRAGMENTS.filter((f) => f.notepad && lore.found.has(f.id));
-      if (!entries.length) {
-        return 'notepad empty. RON-ML fragments are scattered through the ruins — ' +
-          'walk over one to read it, and it copies itself in here.';
-      }
-      const lines = entries.map((f) => `-- ${f.title} --\n${f.text}`);
-      return `RON-ML NOTEPAD (${entries.length}/5 found)\n\n` + lines.join('\n\n');
-    },
+    // `notes`: opens the browsable notebook (see openNotebook below) rather
+    // than dumping text into the console — Tab-to-autocomplete is one thing,
+    // but reading a wall of scrollback is another, and browsers don't let a
+    // page reserve Tab reliably anyway.
+    showNotepad: () => { openNotebook(); },
   };
 }
 
@@ -734,6 +727,60 @@ function closeRonMap() { ronmapEl.style.display = 'none'; }
 ronmapEl.addEventListener('click', (e) => { if (e.target === ronmapEl) closeRonMap(); });
 // Using a held printed map (kind 'map') unfolds the same overlay anywhere.
 player.onReadMap = openRonMap;
+
+// The RON-ML notepad (`notes`): a real paper page you flip through with the
+// language-teaching lore fragments you've found (lore.js, `notepad: true`),
+// one per page, in the order you found them — easier to read than a console
+// dump, and doesn't depend on Tab (browsers reserve it for focus, so it was
+// never reliable as an in-page shortcut anyway).
+const notebookEl = document.getElementById('ronnotebook');
+const notebookTitleEl = document.getElementById('ronnotebook-title');
+const notebookBodyEl = document.getElementById('ronnotebook-body');
+const notebookPageLabelEl = document.getElementById('ronnotebook-page-label');
+const notebookPrevBtn = document.getElementById('ronnotebook-prev');
+const notebookNextBtn = document.getElementById('ronnotebook-next');
+let notebookEntries = [];
+let notebookIdx = 0;
+function renderNotebookPage() {
+  if (!notebookEntries.length) {
+    notebookTitleEl.textContent = 'RON-ML NOTEPAD';
+    notebookBodyEl.innerHTML = '<span id="ronnotebook-empty">Nothing yet. RON-ML fragments are ' +
+      'scattered through the ruins — walk over one to read it, and it copies itself in here.</span>';
+    notebookPageLabelEl.textContent = '0 / 0';
+    notebookPrevBtn.disabled = true;
+    notebookNextBtn.disabled = true;
+    return;
+  }
+  const f = notebookEntries[notebookIdx];
+  notebookTitleEl.textContent = f.title;
+  notebookBodyEl.textContent = f.text;
+  notebookPageLabelEl.textContent = `${notebookIdx + 1} / ${notebookEntries.length}`;
+  notebookPrevBtn.disabled = notebookIdx <= 0;
+  notebookNextBtn.disabled = notebookIdx >= notebookEntries.length - 1;
+}
+function notebookPrev() { if (notebookIdx > 0) { notebookIdx--; renderNotebookPage(); } }
+function notebookNext() { if (notebookIdx < notebookEntries.length - 1) { notebookIdx++; renderNotebookPage(); } }
+function openNotebook() {
+  notebookEntries = FRAGMENTS.filter((f) => f.notepad && lore.found.has(f.id));
+  notebookIdx = 0;
+  renderNotebookPage();
+  notebookEl.style.display = 'flex';
+}
+function closeNotebook() { notebookEl.style.display = 'none'; }
+notebookEl.addEventListener('click', (e) => { if (e.target === notebookEl) closeNotebook(); });
+notebookPrevBtn.addEventListener('click', notebookPrev);
+notebookNextBtn.addEventListener('click', notebookNext);
+// Capture-phase on window, ahead of both the still-focused terminal input's
+// own key handling and the game's WASD/arrow movement listener, so paging
+// the notebook can never leak an arrow key into a text caret or a step.
+window.addEventListener('keydown', (e) => {
+  if (notebookEl.style.display !== 'flex') return;
+  if (e.key === 'ArrowLeft') notebookPrev();
+  else if (e.key === 'ArrowRight') notebookNext();
+  else if (e.key === 'Escape') closeNotebook();
+  e.preventDefault();
+  e.stopImmediatePropagation();
+}, true);
 
 function replRun(line) {
   replPrint(`> ${line}`);
@@ -834,11 +881,15 @@ function updateGhost() {
 }
 obTermInput.addEventListener('input', updateGhost);
 obTermInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Tab') {
+  // Tab is a browser-reserved key in a lot of setups (it moves focus off the
+  // page before our handler ever sees it, preventDefault or not) — so Right
+  // Arrow at the very end of the line also accepts the ghost suggestion, a
+  // reliable fallback that never conflicts with normal caret movement.
+  if (e.key === 'Tab' || (e.key === 'ArrowRight' && obTermInput.selectionStart === obTermInput.value.length
+    && obTermInput.selectionEnd === obTermInput.value.length)) {
     const suffix = ronmlCompletion(obTermInput.value);
-    if (suffix) { obTermInput.value += suffix; updateGhost(); }
-    e.preventDefault();
-    e.stopPropagation();
+    if (suffix) { obTermInput.value += suffix; updateGhost(); e.preventDefault(); e.stopPropagation(); }
+    else if (e.key === 'Tab') { e.preventDefault(); e.stopPropagation(); }
     return;
   }
   if (e.key === 'Enter') {

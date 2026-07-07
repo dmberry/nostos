@@ -74,7 +74,7 @@ export const WALL_TEXTURES = {
 
 // Real photographic street-art/flyer photos (assets/textures/graffiti/), used
 // as a rare, older register of wall-marking — an actual weathered poster
-// stuck to a wall, distinct from the painted RON/UBIQ/vector text tags.
+// stuck to a wall, distinct from the painted RON/UBIK/vector text tags.
 // worldgen.js's paintGraffiti flags a wall with `graffitiImage` (an index
 // into this array, kept in sync by count); Renderer.drawGraffitiPoster reads
 // it. Downscaled like every other photo texture (see loadDownscaled above).

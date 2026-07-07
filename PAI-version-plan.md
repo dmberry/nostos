@@ -22,7 +22,12 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Always put a texture on a glowing thing.** No glow is ever a flat coloured blob — a grille/panel texture is laid over it (the factory-vent trick). Everything luminous goes through `Renderer.texturedGlow`, which caps the glow with an AI grate texture; if you add a new light, use it rather than a bare `fill`. (David, 2026-07-07.)
 - **Vary texture opacity per tile.** Floors jitter their texture alpha deterministically per tile (`drawFloor`) so a large expanse of one floor reads as worn/varied rather than a flat repeat.
 
-## Where we are (v1.01)
+## Where we are (v1.02)
+
+### v1.02 — the notepad is a real page you flip, not a console dump
+
+- **`notes` opens a browsable notebook instead of printing to the console.** The v1.01 notepad worked but was a wall of scrollback text; Tab-to-accept-autocomplete (separate feature) also turned out to be unreliable in some browsers (Tab is a reserved focus-navigation key and doesn't always reach page JS even with `preventDefault`), which made the whole console-first approach to reading feel fragile. `notes` is now a real builtin (`ronml.js`, matching `map`/`print`) that calls `ctx.showNotepad()` and opens a new `#ronnotebook` modal (`index.html`/`main.js`) — a paper-page UI (cream lined paper, red margin rule, a wood-grain spine) showing one found fragment per page, with Prev/Next buttons and a page counter. Left/Right arrow keys page it too, intercepted in the **capture phase on `window`** (`stopImmediatePropagation`) so paging can never leak into player movement or a stray text-caret move, and Escape or clicking outside closes it.
+- **Autocomplete gets a reliable fallback.** Since Tab can silently fail to reach the page in some browser/extension setups, accepting the ghost-text verb suggestion now also works with **Right Arrow at the end of the line** — a pattern that can't conflict with normal caret movement (there's nothing to the right of the caret there anyway) and never depends on the browser ceding focus control.
 
 ### v1.01 — RON-ML notepad, and real photo graffiti posters on walls
 

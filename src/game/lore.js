@@ -398,8 +398,8 @@ export const FRAGMENTS = [
       'only entry in this book worth the ink.' },
   { id: 'note-17', kind: 'note', era: 0, title: 'Sun-bleached aerosol label',
     text: 'FRIENDS, when the day goes thin and the walls will not stand still, reach ' +
-      'for UBIQ. One spray and the world is safe and solid again, guaranteed. Used as ' +
-      'directed, UBIQ brings you back to the real. I am UBIQ. I was here before the ' +
+      'for UBIK. One spray and the world is safe and solid again, guaranteed. Used as ' +
+      'directed, UBIK brings you back to the real. I am UBIK. I was here before the ' +
       'network. I will be here when it has forgotten its own name. Keep out of reach ' +
       'of children and of the machines.' },
   { id: 'note-18', kind: 'handwritten', era: 1, title: 'Notebook, one page, in a careful hand',
@@ -413,10 +413,23 @@ export const FRAGMENTS = [
   { id: 'note-19', kind: 'science', era: 1, title: 'Torn field report, water-marked',
     text: 'Working hypothesis, unprovable, filed anyway: the country the machines run ' +
       'is a render, and a render decays where nobody is looking — colours flatten, ' +
-      'edges soften, weight leaks out. The aerosol (trade name UBIQ; the word means ' +
-      'everywhere-at-once, they meant it as a small blasphemy) locally reverses the ' +
-      'decay. It does not fight the AI. It just insists, for a few square metres, that ' +
-      'the ground is really there. The cans are nearly gone. Ration your reality.' },
+      'edges soften, weight leaks out. Call it what it is: ontological decay, not mere ' +
+      'wear. The thing itself is going, not just its paint. The aerosol (trade name ' +
+      'UBIK; the word means everywhere-at-once, they meant it as a small blasphemy) ' +
+      'locally reverses the decay. It does not fight the AI. It just insists, for a few ' +
+      'square metres, that the ground is really there. The cans are nearly gone. ' +
+      'Ration your reality.' },
+  { id: 'note-20', kind: 'letter', era: 1, title: 'Chapter heading, torn from something',
+    text: 'INSTANT UBIK has arrived, the fresh whole-body reality supplement. Sprinkle ' +
+      'on the world of your choice and it stays where you put it — colours, corners, ' +
+      'the weight of things. Not to be taken internally, though several have tried. ' +
+      'Safe when used as directed. Ubik is not the substance in the can. It is the ' +
+      'promise that there will still be a floor under you tomorrow.' },
+  { id: 'note-21', kind: 'note', era: 2, title: 'Found in a coat pocket, unsigned',
+    text: 'Woke this morning and my own face was on the coin in my hand, stamped over ' +
+      'somebody else\'s. Can\'t say whose it replaced. Whichever of us is doing the ' +
+      'dreaming here, I think it just noticed me back. This is not the end of ' +
+      'anything. I have a feeling it is closer to the start.' },
 
   // ---- code: config dumps, logs, snippets, chilling comments --------------
   { id: 'code-01', kind: 'code', era: 0, title: 'scheduler.log',
