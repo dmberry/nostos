@@ -17,7 +17,13 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
-## Where we are (v0.90)
+## Where we are (v0.91)
+
+### v0.91 — dropped items decay off the ground
+
+- **Dropped items now expire at tiered rates** so the world stops silting up with salvage (Henrik's note). Aged centrally in the `main.js` update loop rather than at the ~20 push sites: each ground item's `age` ticks up by `dt`, and it's culled once past a per-item lifetime (`GROUND_LIFETIME` table + a per-kind default via `groundLifetime()`). Perishables go fast (meat 40s, berries 55s), common salvage slower (scrap 100s, chip fragment 110s, ammo/battery 150–190s), and dropped gear (weapons/tools/bombs/shields/compass/map) lingers longest (320s). Real time: a full day is 480s, so ~100s ≈ 5 game hours.
+- **Progression-critical uniques never decay** — the single Wi-Fi block, the AI key, and the numbered circuit boards are `Infinity` lifetime, since losing one (its tower already felled) would soft-lock the OB-gun / wave-gun paths.
+- **Fade-out before vanishing** — over an item's last `GROUND_ITEM_FADE` (8s) it fades and flickers (`gi.fade` set in the aging pass, applied as alpha × sine in `renderer.drawGroundItem`), so things visibly wink out rather than popping.
 
 ### v0.90 — printable map, pebbledash sand texture
 

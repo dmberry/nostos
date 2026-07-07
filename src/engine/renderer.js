@@ -1955,6 +1955,14 @@ export class Renderer {
     const ctx = this.ctx;
     const def = ITEMS[gi.item];
     const c = worldToScreen(gi.x, gi.y);
+    // Near the end of its life a dropped item fades and flickers, so it's
+    // clear it's about to vanish rather than popping out (gi.fade set by the
+    // aging pass in main; 1 = fresh, 0 = gone).
+    const faded = gi.fade != null && gi.fade < 1;
+    if (faded) {
+      ctx.save();
+      ctx.globalAlpha = Math.max(0.08, gi.fade) * (0.6 + 0.4 * Math.abs(Math.sin(performance.now() / 140)));
+    }
     ctx.fillStyle = 'rgba(0,0,0,0.2)';
     ctx.beginPath();
     ctx.ellipse(c.x, c.y + 1, 8, 4, 0, 0, Math.PI * 2);
@@ -1965,6 +1973,7 @@ export class Renderer {
       ctx.fillStyle = '#e8e0d0';
       ctx.fillText(String(gi.qty), c.x + 8, c.y - 2);
     }
+    if (faded) ctx.restore();
   }
 
   // Miniature vector art per item, centred on (cx, cy), so things look like

@@ -32,7 +32,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '0.90';
+const VERSION = '0.91';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -795,6 +795,34 @@ const restDim = (t) => {
   const env = p < 0.2 ? p / 0.2 : p > 0.8 ? (1 - p) / 0.2 : 1;
   return 0.72 * env;
 };
+// How long (real seconds) a dropped item survives on the ground before it
+// decays, keyed by item. Perishables rot fast; common salvage lingers a bit;
+// prizes stay a long while. Anything not listed falls back to a per-kind
+// default in groundLifetime(). Real time: a full day is 480s (~20s per game
+// hour), so 100s ≈ 5 game hours.
+const GROUND_ITEM_FADE = 8; // seconds of fade/flicker before an item vanishes
+const GROUND_LIFETIME = {
+  meat: 40, berries: 55, wood: 90,
+  scrap: 100, chip_fragment: 110,
+  tin: 150, ammo: 150, shells: 150, arrow: 150,
+  battery: 190,
+  chip: 320, printed_map: 260, backpack: 320, obgun: 360,
+  // Progression-critical uniques never decay — losing the only Wi-Fi block,
+  // the AI key, or a numbered circuit board (its tower is already gone) would
+  // soft-lock the OB-gun / wave-gun paths.
+  wifiblock: Infinity, ai_key: Infinity, circuit: Infinity,
+};
+const GROUND_LIFETIME_DEFAULT = 160; // materials/consumables not listed above
+// Held gear left on the ground (weapons, tools, gadgets, shields, bombs, the
+// compass) lingers longest — you might mean to come back for it.
+const GROUND_GEAR_KINDS = new Set(['tool', 'gun', 'gadget', 'bomb', 'shield', 'forcefield', 'compass', 'map']);
+function groundLifetime(item) {
+  if (item in GROUND_LIFETIME) return GROUND_LIFETIME[item];
+  const kind = ITEMS[item] && ITEMS[item].kind;
+  if (GROUND_GEAR_KINDS.has(kind)) return 320;
+  return GROUND_LIFETIME_DEFAULT;
+}
+
 let detail = null;   // right-click inspection tooltip {text, x, y, ttl}
 let drag = null;     // in-progress pointer drag {from: slotDescriptor}
 const PROJECTILE_SPEED = 16; // tiles/sec for gun tracers
@@ -1111,6 +1139,21 @@ function update(dt) {
     p.prog += (PROJECTILE_SPEED * dt) / dist;
   }
   if (map.projectiles.length) map.projectiles = map.projectiles.filter((p) => p.prog < 1);
+
+  // Dropped items decay off the ground so the world doesn't silt up with
+  // salvage — perishables (meat, berries) go fast, common scrap/materials
+  // slower, and real prizes (weapons, keys, chips, a backpack) linger a good
+  // long while. Aged centrally here rather than at the ~20 push sites; each
+  // item's `age` ticks up and it fades/flickers (gi.fade, drawn by the
+  // renderer) over its last few seconds before it's culled.
+  if (map.groundItems && map.groundItems.length) {
+    for (const gi of map.groundItems) {
+      gi.age = (gi.age || 0) + dt;
+      const life = groundLifetime(gi.item);
+      gi.fade = life === Infinity ? 1 : Math.min(1, (life - gi.age) / GROUND_ITEM_FADE);
+    }
+    map.groundItems = map.groundItems.filter((gi) => gi.age < groundLifetime(gi.item));
+  }
 
   // Timed bombs: tick fuses, then detonate — a fire cloud that hurts every
   // living thing in its radius (the player included), and an insane bomb
