@@ -17,7 +17,11 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
-## Where we are (v0.84)
+## Where we are (v0.85)
+
+### v0.85 — felling an obelisk always drops an access chip
+
+- **A destroyed obelisk now always spills an access chip** on top of its usual salvage, so bringing down any tower hands you the means to jack into the others' terminals. Refactored both physical destruction paths (`burnObelisk`'s OB-gun kill and `detonateBomb`'s insane-bomb blast) into a shared `Player.spillObeliskSalvage(ob, map)` helper — circuit board, batteries, scrap, and the chip in one place. Deliberately **not** wired into RON-ML `crash`, which only knocks a tower dark temporarily (`needsRebuild`) and shouldn't be a chip fountain. Fixed a latent double-`addScore(20)` the refactor exposed in `burnObelisk`.
 
 ### v0.84 — RON-ML implemented
 

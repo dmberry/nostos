@@ -1162,16 +1162,7 @@ export class Player {
       ob.destroyed = true;
       // The heap is walkable now, so the salvage on it can be collected.
       map.objectGrid[ob.y * map.w + ob.x] = null;
-      this.addScore(20);
-      // A heap of salvage where the tower stood, including the one numbered
-      // circuit board this obelisk was assigned (1-8, guaranteed spread
-      // across the world's towers) — collect all eight to build a wave gun.
-      const num = ob.circuitNum || (1 + Math.floor(Math.random() * 8));
-      map.groundItems.push({ item: 'circuit', qty: 1, num, x: ob.x + 0.5, y: ob.y + 0.5 });
-      map.groundItems.push({ item: 'battery', qty: 4, x: ob.x + 0.5, y: ob.y + 0.5 });
-      map.groundItems.push({ item: 'scrap', qty: 3, x: ob.x + 0.5, y: ob.y + 0.5 });
-      if (ob.code) this.killLog.push(ob.code);
-      if (this.onObeliskDestroyed) this.onObeliskDestroyed(ob);
+      this.spillObeliskSalvage(ob, map);
       this.say(`Obelisk ${ob.code || ''} buckles and comes down in a shower of sparks and circuitry.`);
     } else {
       this.say(`The obelisk catches fire. ${5 - ob.obDamage} more should finish it.`);
@@ -1211,15 +1202,26 @@ export class Player {
         if (Math.hypot(ob.x + 0.5 - b.x, ob.y + 0.5 - b.y) > b.radius) continue;
         ob.destroyed = true;
         map.objectGrid[ob.y * map.w + ob.x] = null;
-        this.addScore(20);
-        const num = ob.circuitNum || (1 + Math.floor(Math.random() * 8));
-        map.groundItems.push({ item: 'circuit', qty: 1, num, x: ob.x + 0.5, y: ob.y + 0.5 });
-        map.groundItems.push({ item: 'battery', qty: 4, x: ob.x + 0.5, y: ob.y + 0.5 });
-        map.groundItems.push({ item: 'scrap', qty: 3, x: ob.x + 0.5, y: ob.y + 0.5 });
-        if (ob.code) this.killLog.push(ob.code);
-        if (this.onObeliskDestroyed) this.onObeliskDestroyed(ob);
+        this.spillObeliskSalvage(ob, map);
       }
     }
+  }
+
+  // The heap of salvage a physically-destroyed obelisk leaves behind: its one
+  // numbered circuit board (1-8, guaranteed spread across the towers — collect
+  // all eight for a wave gun), batteries, scrap, and — always — an access chip,
+  // so felling any tower hands you the means to jack into the others. Shared by
+  // the OB-gun and the insane bomb. (Not called by RON-ML `crash`, which only
+  // knocks a tower dark temporarily and leaves nothing behind.)
+  spillObeliskSalvage(ob, map) {
+    this.addScore(20);
+    const num = ob.circuitNum || (1 + Math.floor(Math.random() * 8));
+    map.groundItems.push({ item: 'circuit', qty: 1, num, x: ob.x + 0.5, y: ob.y + 0.5 });
+    map.groundItems.push({ item: 'battery', qty: 4, x: ob.x + 0.5, y: ob.y + 0.5 });
+    map.groundItems.push({ item: 'scrap', qty: 3, x: ob.x + 0.5, y: ob.y + 0.5 });
+    map.groundItems.push({ item: 'chip', qty: 1, x: ob.x + 0.3, y: ob.y + 0.7 });
+    if (ob.code) this.killLog.push(ob.code);
+    if (this.onObeliskDestroyed) this.onObeliskDestroyed(ob);
   }
 
   // A piercing beam: cuts a straight line from the muzzle out to `range` and
