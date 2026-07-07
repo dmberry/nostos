@@ -1,6 +1,6 @@
 # postAI
 
-**Version:** 0.87 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
+**Version:** 0.88 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
 
 *(Versioning policy: 0.01 increments from v0.3 onwards.)*
 
@@ -8,11 +8,11 @@ An isometric 2D survival game set in a world devastated by an AI takeover. Civil
 
 Inspired by Project Zomboid: knowledge is the real progression, scarcity drives movement, every fight is optional and risky, and the world tells the story.
 
-## Current build (v0.87)
+## Current build (v0.88)
 
 **The world:** a seeded 128x128 isometric map — a river with two bridges, a ten-building town, a ruined hamlet, forests, tall grass, and roads. Away from the towns the terrain gets properly rugged: steep hills and deep hollows, always climbable one step at a time. Rubble and rocks are low enough to step straight over; a **wall block** is taller, so it takes a **double jump** (press jump again in mid-air) to get on top — once up there you move a little slower for control, can roam the block tops, and just walk off any edge to drop back down and carry on. Building walls still stop you on foot, so a town or house is a real boundary until you deliberately climb it. The forests are drawn with proper hand-drawn tree art — mostly full leafy trees, with the odd small or bare/dead one — and a chopped tree shows a damage bar so you can see how many swings it has left. The map is ringed by impassable dark-gravel rock cliffs at its edge — drawn semi-transparent so you still see yourself if one stands between you and the camera. Streams can be waded; the river can be swum (only your head and shoulders show above the water), slowly and at a cost. Day and night cycle, with genuinely dark nights and torches to push them back.
 
-**Survival:** food, health, stamina, and venom all need managing. Health only recovers when fed and unpoisoned — on its own at a decent clip, or press **B** to rest 10 game-minutes for a much faster recovery, if you're hurt, off cooldown, and nothing's hunting you. Dying wipes score, skills, and kills and restarts the run from scratch, same as starting a New Game (**N**) yourself — but who you are doesn't reset: your chosen name and gender carry over into the new run.
+**Survival:** food, health, stamina, and venom all need managing. Health only recovers when fed and unpoisoned — on its own at a decent clip, or press **B** to lie down and rest — the screen dims, the clock visibly spins on, and health returns as you sleep — if you're hurt, off cooldown, and nothing's hunting you. Dying wipes score, skills, and kills and restarts the run from scratch, same as starting a New Game (**N**) yourself — but who you are doesn't reset: your chosen name and gender carry over into the new run.
 
 **The machines:** black obelisk towers anchor wheeled **T1** hunters (can't climb — trap them in a hollow) and biped **T2** stalkers (match your walking pace exactly). Topple a tower and the **W-factory** — a huge 8×8 foundry — answers with melee **W1** revenge squads and a ranged **W4** laser hunter-killer; unarmed **W3** drones repair damaged obelisks left standing; **W2** droids patrol the river — but their shots can only reach you while you're in the water, so pick them off from the bank. The factory itself can be brought down: hammer its hull (a damage bar shows when you're near) and after many blows it collapses, spilling an **AI key** — a way into one AI's mainframe, ahead of the terminal-hacking to come. Every hunting machine needs genuine line of sight — break it behind cover and it gives up. Crossing a slope costs a machine effort too, same as it costs you stamina — expect any of them to slow down climbing or descending a height step. Machines never overlap each other's tile — a crowd spreads out automatically — and a collision between two of them chips both, so a jammed-together squad is quietly hurting itself. All of them run on a battery: a drained one goes flat and inert, and can either be **reprogrammed** (**R**, costs a battery — it fights for you) or just destroyed for scrap if you'd rather not bother.
 
@@ -34,6 +34,7 @@ Full technical detail (root causes, exact numbers) lives in [PAI-version-plan.md
 
 | Version | Summary |
 |---|---|
+| v0.88 | Resting (B) is now animated: the character lies down, the screen dims, and the clock spins 5x while health returns, instead of an instant heal |
 | v0.87 | Opened loot boxes clearly look spent (dark, lid thrown open); spare backpacks scattered in the forests; drag an item off the open backpack to drop it; bombs land on the tile under the cursor (capped at throw range) |
 | v0.86 | Electro-gun destroys machines outright (not fuses) and its arc scorches obelisks too; every destroyed machine drops a chip fragment, collect eight and press C to craft an access chip |
 | v0.85 | Felling an obelisk (OB-gun or insane bomb) now always drops an access chip among its salvage, so bringing down any tower gives you the means to jack into the others |

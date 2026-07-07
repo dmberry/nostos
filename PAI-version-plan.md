@@ -17,7 +17,13 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
-## Where we are (v0.87)
+## Where we are (v0.88)
+
+### v0.88 — animated rest: screen fade, 5x clock, lie-down pose
+
+- **Resting (B) is now an animation instead of an instant heal.** Pressing B starts a `resting` state (main.js) that runs `REST_DURATION` (2.8s real): the world freezes (early `return` in `update`), the day/night clock advances at **5x** (`dayNight.update(dt * REST_CLOCK_MULT)`) so the on-screen countdown visibly spins, health trickles back over the duration (`SLEEP_HEAL` spread across it), and on completion the cooldown is set and the run is saved. Same guards as before (not while hurt-free, on cooldown, or hunted).
+- **The screen dims over the play area while resting** — a soft envelope (`restDim`, fade in over the first fifth, hold at 0.72, fade out over the last fifth) drawn by `renderer.drawRestOverlay` with a "Resting… / time is passing" caption. Only the play area dims; the dashboard (and its spinning clock) stays bright so you watch time pass.
+- **The character lies down.** `player.resting` drives a new branch in `drawPlayer`: the sprite is tipped onto its back (rotated ~80°) on a wide flat shadow, no tool in hand, with drifting sleep "z"s.
 
 ### v0.87 — loot/inventory polish: used-box look, forest backpacks, drag-to-drop, aimed bombs
 

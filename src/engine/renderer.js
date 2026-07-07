@@ -322,8 +322,28 @@ export class Renderer {
     if (hud.showWeapons) this.drawWeaponChart(player);
     if (hud.detail) this.drawDetail(hud.detail);
     if (hud.drag) this.drawDragGhost(hud.drag, player);
+    if (hud.rest) this.drawRestOverlay(hud.rest.dim);
     if (hud.deathCert) this.drawDeathCert(hud.deathCert);
     if (hud.paused) this.drawPausedOverlay();
+  }
+
+  // A soft dim over the play area while the player rests (the dashboard, and
+  // so the spinning clock, stays bright so you can watch time pass).
+  drawRestOverlay(dim) {
+    const ctx = this.ctx;
+    const playH = this.h - DASH_H;
+    ctx.fillStyle = `rgba(4,6,10,${dim.toFixed(3)})`;
+    ctx.fillRect(0, 0, this.w, playH);
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, dim / 0.72);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(222,227,236,0.92)';
+    ctx.font = '600 20px system-ui, sans-serif';
+    ctx.fillText('Resting…', this.w / 2, playH / 2);
+    ctx.fillStyle = 'rgba(200,205,215,0.7)';
+    ctx.font = '12px system-ui, sans-serif';
+    ctx.fillText('time is passing', this.w / 2, playH / 2 + 22);
+    ctx.restore();
   }
 
   // The weapon chart (V): every weapon in the game, with a power rating.
@@ -2343,6 +2363,41 @@ export class Renderer {
         ctx.fillStyle = '#d9b48c';
         ctx.beginPath(); ctx.arc(c.x, hy, 6, 0, Math.PI * 2); ctx.fill();
       }
+      return;
+    }
+
+    // Resting: the character lies flat on the ground, tipped onto its back,
+    // no tool in hand, with a wide flat shadow and drifting sleep 'z's.
+    if (player.resting) {
+      ctx.fillStyle = 'rgba(0,0,0,0.26)';
+      ctx.beginPath();
+      ctx.ellipse(c.x, c.y + 2, 17, 6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      const set = CHARACTER_SPRITE_SETS[player.gender || 'm'];
+      const sprite = set && set.idle[facingToCompassDir(player.facing)];
+      if (sprite && sprite.complete && sprite.naturalWidth) {
+        const scale = 0.6;
+        const dw = sprite.naturalWidth * scale, dh = sprite.naturalHeight * scale;
+        ctx.save();
+        ctx.translate(c.x, c.y - 4);
+        ctx.rotate(-Math.PI / 2 * 0.9); // tip onto its back
+        ctx.drawImage(sprite, -dw / 2, -dh / 2, dw, dh);
+        ctx.restore();
+      } else {
+        ctx.fillStyle = '#d9b48c';
+        ctx.beginPath(); ctx.arc(c.x - 9, c.y - 4, 5, 0, Math.PI * 2); ctx.fill();
+      }
+      const t = performance.now() / 620;
+      ctx.font = '600 11px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      for (let i = 0; i < 3; i++) {
+        const ph = (t + i * 0.6) % 3;
+        ctx.globalAlpha = Math.max(0, 0.85 - ph / 3);
+        ctx.fillStyle = 'rgba(232,236,244,0.9)';
+        ctx.fillText('z', c.x + 12 + ph * 4, c.y - 16 - ph * 7);
+      }
+      ctx.globalAlpha = 1;
+      ctx.textAlign = 'left';
       return;
     }
 

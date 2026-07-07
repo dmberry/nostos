@@ -32,7 +32,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '0.87';
+const VERSION = '0.88';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -687,10 +687,20 @@ let showSkills = false;
 let showWeapons = false;
 let paused = false;  // P: freezes movement, AI, clocks, and timers
 let sleepCooldown = 0; // B: real-seconds before another rest is allowed
+let resting = null;  // B rest animation in progress: { t } real-seconds elapsed
 const SLEEP_MINUTES = 10;   // game-clock minutes skipped per rest
 const SLEEP_HEAL = 35;      // health restored per rest
 const SLEEP_COOLDOWN_S = 90; // real seconds before resting again
 const SLEEP_SAFE_RANGE = 12; // no hostile robot allowed within this many tiles
+const REST_DURATION = 2.8;  // real seconds the rest animation runs
+const REST_CLOCK_MULT = 5;  // the clock visibly spins this much faster while resting
+// Screen-dim envelope over a rest: fade in over the first fifth, hold, fade
+// back out over the last fifth, peaking at a soft 0.72 (never full black).
+const restDim = (t) => {
+  const p = Math.max(0, Math.min(1, t / REST_DURATION));
+  const env = p < 0.2 ? p / 0.2 : p > 0.8 ? (1 - p) / 0.2 : 1;
+  return 0.72 * env;
+};
 let detail = null;   // right-click inspection tooltip {text, x, y, ttl}
 let drag = null;     // in-progress pointer drag {from: slotDescriptor}
 const PROJECTILE_SPEED = 16; // tiles/sec for gun tracers
@@ -830,6 +840,24 @@ function update(dt) {
   // freezes while paused. Help/backpack/skills/weapons and unpausing itself
   // still work above this line.
   if (paused) return;
+
+  // Resting (from B): the world holds still while the character lies down, the
+  // screen dims, and the clock visibly spins faster (REST_CLOCK_MULT) so you
+  // see time pass. Health trickles back over the animation, then you wake.
+  if (resting) {
+    resting.t += dt;
+    dayNight.update(dt * REST_CLOCK_MULT);
+    player.health = Math.min(player.maxHealth, player.health + (SLEEP_HEAL / REST_DURATION) * dt);
+    if (resting.t >= REST_DURATION) {
+      resting = null;
+      player.resting = false;
+      sleepCooldown = SLEEP_COOLDOWN_S;
+      player.say('You wake, a little stronger.');
+      persist();
+    }
+    return; // everything else — movement, AI, other clocks — is frozen while resting
+  }
+
   if (input.newGamePressed()) {
     if (window.confirm('Start a new game? This erases your saved progress.')) {
       fullReset();
@@ -860,11 +888,11 @@ function update(dt) {
       && Math.hypot(r.x - player.x, r.y - player.y) < SLEEP_SAFE_RANGE)) {
       player.say("Too dangerous to rest with something hunting you.");
     } else {
-      dayNight.advance(SLEEP_MINUTES);
-      player.health = Math.min(player.maxHealth, player.health + SLEEP_HEAL);
-      sleepCooldown = SLEEP_COOLDOWN_S;
-      player.say(`You rest for ${SLEEP_MINUTES} minutes. Some strength returns.`);
-      persist();
+      // Begin the rest animation rather than healing instantly (see the
+      // resting block above). The cooldown is set when it completes.
+      resting = { t: 0 };
+      player.resting = true;
+      player.say('You lie down to rest a while...');
     }
   }
   if (hintEl.style.display !== 'none') {
@@ -1265,6 +1293,7 @@ function frame(now) {
       skylinkTimer,
       obeliskObjs,
       paused,
+      rest: resting ? { dim: restDim(resting.t) } : null,
     });
     frameCount += 1;
   }
