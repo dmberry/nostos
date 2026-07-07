@@ -294,6 +294,23 @@ export class Renderer {
       paint('screen', [[0, `rgba(255,246,214,${(0.28 * shimmer).toFixed(3)})`], [0.6, 'rgba(255,240,200,0.12)'], [1, 'rgba(255,240,200,0)']]);
     }
 
+    // Ubik flicker: for a half-beat right after spraying, the old, decayed
+    // world flashes through — a sickly desaturated pulse over the whole play
+    // area — before Ubik visibly wins and the flicker dies away. Purely
+    // cosmetic (player.ubikFlickerT, ticked in Player.update).
+    if (hud.ubikFlicker > 0) {
+      const t = hud.ubikFlicker / 0.35; // 1 -> 0 over the flicker's life
+      const jitter = Math.sin(performance.now() / 28) * 0.5 + 0.5;
+      ctx.save();
+      ctx.globalCompositeOperation = 'saturation'; // canvas silently ignores this if unsupported
+      ctx.fillStyle = `rgba(140,130,110,${(0.5 * t * jitter).toFixed(3)})`;
+      ctx.fillRect(0, 0, this.w, this.h - DASH_H);
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.fillStyle = `rgba(70,60,45,${(0.22 * t * jitter).toFixed(3)})`;
+      ctx.fillRect(0, 0, this.w, this.h - DASH_H);
+      ctx.restore();
+    }
+
     // Night: a dark veil over the world, never over the HUD. A carried
     // torch opens a pool of light around the player; without one you get
     // only a faint arm's-length glimmer.
@@ -1899,6 +1916,22 @@ export class Renderer {
     const ctx = this.ctx;
     const c = worldToScreen(obj.x + 0.5, obj.y + 0.5);
     const w = 11, h = 10;
+    // The starter cache advertises itself with a wide, slow orange pulse
+    // while the player still reads as a beginner (threatEase() below 1) —
+    // once they've found their feet the nudge is no longer needed, and the
+    // glow fades away on its own along with the easing.
+    if (obj.starterCache && !obj.opened && this.hudPlayer && this.hudPlayer.threatEase) {
+      const ease = this.hudPlayer.threatEase();
+      if (ease < 1) {
+        const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 340);
+        const strength = 1 - ease; // stronger the newer the player looks
+        const glow = ctx.createRadialGradient(c.x, c.y - h / 2, 2, c.x, c.y - h / 2, 34);
+        glow.addColorStop(0, `rgba(240,150,40,${(0.35 + 0.25 * pulse) * strength})`);
+        glow.addColorStop(1, 'rgba(240,150,40,0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath(); ctx.arc(c.x, c.y - h / 2, 34, 0, Math.PI * 2); ctx.fill();
+      }
+    }
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
     ctx.beginPath();
     ctx.ellipse(c.x, c.y + 1, 13, 6, 0, 0, Math.PI * 2);
@@ -2173,6 +2206,20 @@ export class Renderer {
     if (faded) {
       ctx.save();
       ctx.globalAlpha = Math.max(0.08, gi.fade) * (0.6 + 0.4 * Math.abs(Math.sin(performance.now() / 140)));
+    }
+    // A dropped backpack is a big deal early on (extra storage) and easy to
+    // miss in the grass — give it a soft pulsing orange halo once you're
+    // close enough to be looking for it, same colour as its compass chevron.
+    if (gi.item === 'backpack' && this.hudPlayer) {
+      const d = Math.hypot(gi.x - this.hudPlayer.x, gi.y - this.hudPlayer.y);
+      if (d < 10) {
+        const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 260);
+        const glow = ctx.createRadialGradient(c.x, c.y - 3, 1, c.x, c.y - 3, 16);
+        glow.addColorStop(0, `rgba(230,180,70,${(0.4 + 0.25 * pulse).toFixed(3)})`);
+        glow.addColorStop(1, 'rgba(230,180,70,0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath(); ctx.arc(c.x, c.y - 3, 16, 0, Math.PI * 2); ctx.fill();
+      }
     }
     ctx.fillStyle = 'rgba(0,0,0,0.2)';
     ctx.beginPath();

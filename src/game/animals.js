@@ -14,8 +14,15 @@ const ANIMAL_ACTIVE_RANGE = 40; // tiles: beyond this from the player, an animal
 const DOG_HP = 12;
 const DOG_WANDER_SPEED = 1.2;   // tiles per second
 const DOG_CHASE_SPEED = 4.2;
-const DOG_AGGRO_RANGE = 7;      // pack aggros when player this close
 const DOG_DEAGGRO_RANGE = 10;   // pack gives up beyond this
+// A pack no longer aggros just because the player wandered within sight —
+// they're a hazard to provoke, not a tripwire. Getting hit still routs the
+// whole pack (below, unchanged). Otherwise a pack only turns hostile if the
+// player lingers in its personal space: DOG_ANNOY_RANGE is "in its face",
+// and it takes DOG_ANNOY_TIME seconds of that before patience runs out —
+// a passing brush doesn't count, only crowding it.
+const DOG_ANNOY_RANGE = 2.6;
+const DOG_ANNOY_TIME = 1.4;
 const DOG_BITE_RANGE = 0.9;
 const DOG_BITE_DAMAGE = 5;
 const DOG_BITE_COOLDOWN = 1.2;  // seconds between bites
@@ -274,13 +281,16 @@ export function updateAnimals(dt, animals, player, map) {
     a.lastHp = a.hp;
   }
 
-  // Pack-level signals: which packs have a hurt member, which can see the player.
+  // Pack-level signals: which packs have a hurt member, which have had their
+  // patience worn out by the player crowding them.
   const hurtPacks = new Set();
   const aggroPacks = new Set();
   for (const a of animals) {
     if (a.dead || a.type !== 'dog') continue;
     if (a.justHurt) hurtPacks.add(a.packId);
-    if (distTo(a, player) < DOG_AGGRO_RANGE) aggroPacks.add(a.packId);
+    const crowded = distTo(a, player) < DOG_ANNOY_RANGE;
+    a.annoyT = crowded ? Math.min(DOG_ANNOY_TIME, (a.annoyT || 0) + dt) : Math.max(0, (a.annoyT || 0) - dt * 2);
+    if (a.annoyT >= DOG_ANNOY_TIME) aggroPacks.add(a.packId);
   }
 
   for (const a of animals) {

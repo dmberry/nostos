@@ -35,7 +35,13 @@ export class Input {
       const tag = e.target && e.target.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       if (TRACKED.has(e.code)) {
-        if (!e.repeat && !this.down.has(e.code)) this.pressed.add(e.code);
+        if (!e.repeat && !this.down.has(e.code)) {
+          this.pressed.add(e.code);
+          // N alone opens the notepad; only Ctrl/Cmd+N starts a new game
+          // (which wipes the run) — split here so a bare N can never trigger
+          // the destructive action by accident.
+          if (e.code === 'KeyN') this._keyNCtrl = e.ctrlKey || e.metaKey;
+        }
         this.down.add(e.code);
         e.preventDefault();
       }
@@ -221,7 +227,22 @@ export class Input {
     return this.consumePress('KeyV');
   }
 
+  // Ctrl/Cmd+N only — a bare N is notesPressed() below, so a stray tap can
+  // never wipe the run.
   newGamePressed() {
-    return this.consumePress('KeyN');
+    if (this.pressed.has('KeyN') && this._keyNCtrl) {
+      this.pressed.delete('KeyN');
+      return true;
+    }
+    return false;
+  }
+
+  // Bare N opens the RON-ML notepad directly, no terminal needed.
+  notesPressed() {
+    if (this.pressed.has('KeyN') && !this._keyNCtrl) {
+      this.pressed.delete('KeyN');
+      return true;
+    }
+    return false;
   }
 }

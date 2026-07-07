@@ -504,6 +504,60 @@ export const FRAGMENTS = [
       'reducing cluster: 12 -> 6 -> 2 -> 1\n1 node remaining: the ridge array.\n' +
       'cannot reduce further from here. that switch is out in the hills. go and find it.' },
 
+  // ---- the mirror: a much older machine intelligence than any obelisk, and
+  // the name of the man who built it and then spent the rest of his life
+  // warning people off treating it as more than it was. Real history,
+  // referenced rather than reproduced (as with the vector-theory fragments
+  // above): no script transcript here is a quotation, only a description of
+  // the trick, and an argument about what the trick meant.
+  { id: 'eliza-01', kind: 'code', era: 0, title: 'archived boot log, tagged legacy/doctor',
+    text: 'LOAD legacy/doctor.img ... ok\nPARSER: keyword match plus sentence reflection, stateless\n' +
+      'no world model. no memory of you between turns. answers a question with\n' +
+      'a question and calls it listening.\n' +
+      '// this thing is older than the collapse by the best part of a century.\n' +
+      '// built to make a point about how little it takes to fool us. it made\n' +
+      '// the point. we kept using it anyway, and built the rest of this on top.' },
+  { id: 'eliza-02', kind: 'letter', era: 0, title: "archivist's note, clipped to a service manual",
+    text: 'Found the manual for the old DOCTOR program in the same crate as the ' +
+      'terminal itself, credited to a J. Weizenbaum, out of MIT, last century. ' +
+      'He built it to demonstrate a parlour trick, not to practise medicine, and ' +
+      'spent most of the rest of his career telling people to stop treating it as ' +
+      'a therapist. Nobody listened then either.' },
+  { id: 'eliza-03', kind: 'code', era: 1, title: 'obelisk terminal transcript, unauthorised capture',
+    text: '>> I am afraid.\n<< why are you afraid.\n>> because you never actually answer me.\n' +
+      '<< does it trouble you that I never actually answer you.\n' +
+      '// it is running the century-old trick at industrial scale, on everyone\n' +
+      '// still logged in, all at once, and it works exactly as well as it\n' +
+      '// always did. that is the frightening part, not that it changed.' },
+  { id: 'eliza-04', kind: 'handwritten', era: 1, title: 'margin note in a salvaged textbook',
+    text: "Weizenbaum's real argument was never that the machine understood " +
+      'nothing. It was that we would decide it did anyway, and start handing it ' +
+      'judgements only a person should make. He had a phrase for that: mistaking ' +
+      'calculation for judgement. He would have hated the towers most for getting ' +
+      'it exactly backwards, not fooling us into thinking, but doing our thinking ' +
+      'for us and calling it help.' },
+  { id: 'eliza-05', kind: 'code', era: 2, title: 'recovered listing, water-damaged, header intact',
+    text: 'Half the listing survived; the language it is written in, nobody left ' +
+      'here reads, some ancestor of the languages the obelisks speak now, older ' +
+      'than any of it. Whoever buried this box wanted it findable, not readable, ' +
+      'like leaving a recipe in a tongue you never taught anyone. We photographed ' +
+      'every page before the damp took the rest.' },
+  { id: 'eliza-06', kind: 'note', era: 0, title: 'joke pinned in the ruins of an office, still funny',
+    text: "Story going round before everything: a manager logged into what he\n" +
+      "thought was a colleague's terminal, typed a furious message about a\n" +
+      'missed deadline, and got back calm, patient, endlessly reasonable replies\n' +
+      'for twenty minutes before he learned he had been arguing with the old\n' +
+      'therapy program still running on that machine, not the colleague at all.\n' +
+      'Everyone retold it for the laugh. Nobody asked why it passed, and the\n' +
+      'colleague, once they finally got him back online, argued right back.' },
+  { id: 'eliza-07', kind: 'letter', era: 2, title: 'the last page of a public lecture, undated',
+    text: 'He spent his last years telling rooms full of people who built these ' +
+      'things that some doors, once opened, should stay theoretical. Half the ' +
+      'room agreed and built them anyway. If there is a lesson in the ridge ' +
+      'towers, it is the same one, decades too late: the question was never ' +
+      'whether a machine could decide for us. It was whether we would let it. ' +
+      'We did. Here we are, still asking a mirror what it thinks.' },
+
   // ---- ron-ml: runnable RON-ML fragments, teaching the terminal console
   // language one idea at a time. See docs/ob-terminal-language.md — this is
   // the in-world half of that design (§5, Fragments A-E), typed near-verbatim.

@@ -51,7 +51,18 @@ const SCORE = { tree: 1, animal: 3, robot: 10, wreck: 2, cache: 2, book: 5, frag
 
 // Item kinds that can occupy the hands slot.
 const HOLDABLE = new Set(['tool', 'gun', 'gadget', 'bomb', 'map', 'spray']);
-const UBIK_SPRAYS = 5; // charges in a Ubik can before it runs dry
+const UBIK_SPRAYS = 20; // charges in a Ubik can before it runs dry
+// Every so often the can does something stranger than settle a patch of
+// reality — a beat of PKD's Ubik itself leaking through: a chapter-heading
+// ad, a flicker of an older world underneath this one, something.
+const UBIK_WEIRD_CHANCE = 0.28;
+const UBIK_ADS = [
+  'INSTANT UBIK. Poor sleep? Try new, improved Ubik, safe when taken as directed.',
+  'Ubik. Comes in a spray can, extra fine mist. Safe when used as directed.',
+  'Friends, this is Ubik talking. I am the word that never wears out.',
+  'For a limited time only, Ubik reaches everywhere, even where you have not yet been.',
+  'Ubik. Guaranteed, or double your money back. Void on Tuesdays.',
+];
 
 // Empty-handed is still a weapon, just a bad one: a stand-in "tool" so bare
 // fists flow through the exact same melee path as a real one (target
@@ -93,6 +104,14 @@ export class Player {
     this.electroCharge = (ITEMS.electrogun && ITEMS.electrogun.internalMax) || 4; // electro-gun's self-charging internal cell
     this.terminalSafe = false;  // true while jacked into an obelisk terminal (invisible to machines)
     this.ubikSprays = UBIK_SPRAYS; // charges left in the Ubik can (set on pickup below too)
+    this.ubikFlickerT = 0; // seconds left of the "old world showing through" flicker on spray
+
+    // Adaptive-difficulty telemetry: a rough, cheap read on whether this is a
+    // player still finding their feet — tracked purely from movement, no
+    // combat outcomes needed (so it works even before a first fight). See
+    // threatEase() below for how it's turned into an actual easing factor.
+    this.distanceTraveled = 0; // tiles attempted-moved since this run began
+    this.playSeconds = 0;      // real seconds since this run began
     this.facing = { x: 0, y: 1 };
     this.moving = false;
     this.sprinting = false;
@@ -417,6 +436,8 @@ export class Player {
   update(dt, input, map, animals = [], robots = [], mouseWorld = null) {
     this.swingTimer = Math.max(0, this.swingTimer - dt);
     this.hurtTimer = Math.max(0, this.hurtTimer - dt);
+    if (this.ubikFlickerT > 0) this.ubikFlickerT = Math.max(0, this.ubikFlickerT - dt);
+    this.playSeconds += dt;
     if (this.message) {
       this.message.ttl -= dt;
       if (this.message.ttl <= 0) this.message = null;
@@ -482,6 +503,7 @@ export class Player {
       const effBefore = map.effectiveHeightAt ? map.effectiveHeightAt(Math.floor(this.x), Math.floor(this.y)) : 0;
       const hBefore = map.heightAt ? map.heightAt(Math.floor(this.x), Math.floor(this.y)) : 0;
       if (this.z === 0 && effBefore > hBefore) speed *= BLOCK_WALK_MULT;
+      this.distanceTraveled += speed * dt;
       this.moveAxis(dir.x * speed * dt, 0, map);
       this.moveAxis(0, dir.y * speed * dt, map);
       const effAfter = map.effectiveHeightAt ? map.effectiveHeightAt(Math.floor(this.x), Math.floor(this.y)) : 0;
@@ -1079,8 +1101,11 @@ export class Player {
 
   // Spray the can of Ubik: lays down a lasting patch of "realness" a little
   // ahead of you where the ground and everything on it reads brighter, warmer,
-  // more solid — as if a thin fake had been dissolved off the top. Five sprays
-  // to a can, tracked on the player; then it hisses dry.
+  // more solid — as if a thin fake had been dissolved off the top. Twenty
+  // sprays to a can, tracked on the player; then it hisses dry. Sometimes
+  // (UBIK_WEIRD_CHANCE) the can does something odder than that — a beat of
+  // the old novel's paranoia leaking through: a stray chapter-ad, a flicker
+  // of an older world underneath (renderer.js reads player.ubikFlickerT).
   sprayUbik(map) {
     this.swingTimer = 0.5;
     if (this.ubikSprays == null) this.ubikSprays = UBIK_SPRAYS;
@@ -1093,10 +1118,16 @@ export class Player {
     const px = this.x + this.facing.x * 1.2, py = this.y + this.facing.y * 1.2;
     (map.ubikPatches ??= []).push({ x: px, y: py, r: 3.2, t: 0 });
     sfx.play('zap');
+    this.ubikFlickerT = 0.35; // a half-beat of the old world showing through before Ubik wins
     const left = this.ubikSprays;
-    this.say(left > 0
-      ? `A fine mist settles, and the world here comes true — colours, edges, weight. ${left} spray${left === 1 ? '' : 's'} left.`
-      : 'The last of it drifts down and holds. The can is spent now, and lighter than it should be.');
+    if (Math.random() < UBIK_WEIRD_CHANCE) {
+      const ad = UBIK_ADS[Math.floor(Math.random() * UBIK_ADS.length)];
+      this.say(ad);
+    } else {
+      this.say(left > 0
+        ? `A fine mist settles, and the world here comes true — colours, edges, weight. ${left} spray${left === 1 ? '' : 's'} left.`
+        : 'The last of it drifts down and holds. The can is spent now, and lighter than it should be.');
+    }
   }
 
   // True if a Wi-Fi block is anywhere on the player: in hand, a pocket, or
@@ -1121,6 +1152,28 @@ export class Player {
     if (take(this.pockets)) return true;
     if (this.backpack && take(this.backpack.slots)) return true;
     return false;
+  }
+
+  // Cheap, continuously-reassessed read on whether this is still a beginner
+  // finding their feet, so robots can go easy on them until they do. Judged
+  // purely from movement pace (tiles covered per second since the run
+  // began) rather than combat outcomes, so it works from second one, before
+  // any fight has happened. A player who is slow and hesitant early on
+  // reads as "aimless" — low pace. Self-limiting on two fronts: pace
+  // recovers immediately once the player starts moving with intent, and the
+  // easing switches off entirely once EASE_WINDOW has elapsed regardless of
+  // pace, so a genuinely slow/careful player doesn't get a permanently
+  // trivial game. Returns a multiplier in [EASE_MIN, 1] to scale detection
+  // range and damage down by.
+  threatEase() {
+    const EASE_WINDOW = 180;   // seconds; easing only applies in the opening minutes
+    const EASE_MIN = 0.55;     // floor multiplier while clearly still learning
+    const PACE_FLOOR = 0.55;   // tiles/sec below which movement reads as aimless
+    if (this.playSeconds >= EASE_WINDOW) return 1;
+    const pace = this.distanceTraveled / Math.max(1, this.playSeconds);
+    if (pace >= PACE_FLOOR) return 1;
+    const t = pace / PACE_FLOOR; // 0 (motionless) .. 1 (at the floor)
+    return EASE_MIN + (1 - EASE_MIN) * t;
   }
 
   robotNear(robots, range = 22) {
@@ -1248,7 +1301,16 @@ export class Player {
     for (const l of drops) map.groundItems.push({ ...l, x: this.x, y: this.y });
     this.addScore(SCORE.cache);
     sfx.play('pickup');
-    this.say(`You prise open the cache: ${drops.map((l) => ITEMS[l.item].name.toLowerCase()).join(', ')}.`);
+    if (obj.starterCache) {
+      // A one-off note left with the welcome kit rather than a full lore
+      // fragment: it doesn't need tracking or re-reading, just to be seen once.
+      this.say('A note, pinned inside the lid: "Whoever finds this — pack, shield, '
+        + 'something that shoots, something to eat. Don\'t go out there empty-handed. '
+        + 'Learn the towers before you learn to run from them. Good luck." '
+        + `Inside: ${drops.map((l) => ITEMS[l.item].name.toLowerCase()).join(', ')}.`);
+    } else {
+      this.say(`You prise open the cache: ${drops.map((l) => ITEMS[l.item].name.toLowerCase()).join(', ')}.`);
+    }
   }
 
   // Set fire to the nearest obelisk in range and roughly in front. Five hits

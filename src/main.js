@@ -47,7 +47,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '1.02';
+const VERSION = '1.03';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -139,6 +139,23 @@ const obelisks = [];
         inner.push([x, y]);
       }
     }
+  }
+  // A hand-picked "welcome kit": the resistance building nearest spawn gets
+  // a backpack, a shield, a decent ranged weapon and some food together in
+  // one box, so a new run's very first find is worth a detour for. It's the
+  // one box the renderer nudges a beginner toward with a pulsing glow (see
+  // drawBox / Player.threatEase) — the glow fades on its own once the
+  // player no longer reads as a beginner.
+  if (inner.length) {
+    inner.sort((a, b) => Math.hypot(a[0] - spawn.x, a[1] - spawn.y) - Math.hypot(b[0] - spawn.x, b[1] - spawn.y));
+    const [sx, sy] = inner.shift();
+    const starterLoot = [
+      { item: 'backpack', qty: 1 },
+      { item: 'shield', qty: 1 },
+      { item: 'shotgun', qty: 1 }, { item: 'shells', qty: 8 },
+      { item: 'tin', qty: 2 }, { item: 'berries', qty: 3 },
+    ];
+    map.addObject('box', sx, sy, { loot: starterLoot, opened: false, starterCache: true });
   }
   // Each cache holds a list of drops. The first few are guaranteed so every
   // run can find the key anti-machine gear; the rest roll on a table.
@@ -1165,6 +1182,9 @@ function update(dt) {
       return;
     }
   }
+  // N alone opens the RON-ML notepad directly — no need to be jacked into a
+  // terminal just to read back what you've already learned.
+  if (input.notesPressed()) openNotebook();
   if (input.craftPressed()) {
     if (player.canCraftWaveGun()) player.craftWaveGun(map);
     else if (player.canCraftObGun()) player.craftObGun(map);
@@ -1647,6 +1667,7 @@ function frame(now) {
       obeliskObjs,
       paused,
       rest: resting ? { dim: restDim(resting.t) } : null,
+      ubikFlicker: player.ubikFlickerT || 0,
     });
     frameCount += 1;
   }

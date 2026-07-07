@@ -699,7 +699,8 @@ function updateT1(r, dt, player, map) {
   r.attackTimer = Math.max(0, r.attackTimer - dt);
 
   const d = distTo(r, player);
-  if (!r.aggro && d < T1_DETECT_RANGE && !(r.loseInterestT > 0)) r.aggro = true; // no line of sight needed to notice
+  const ease = player.threatEase ? player.threatEase() : 1;
+  if (!r.aggro && d < T1_DETECT_RANGE * ease && !(r.loseInterestT > 0)) r.aggro = true; // no line of sight needed to notice
   if (r.aggro && d > T1_DEAGGRO_RANGE) r.aggro = false;
 
   drainBattery(r, r.aggro ? DRAIN_CHASE : DRAIN_PATROL, dt);
@@ -716,7 +717,7 @@ function updateT1(r, dt, player, map) {
 
     if (d < T1_HIT_RANGE && r.attackTimer <= 0) {
       r.attackTimer = T1_HIT_COOLDOWN;
-      player.takeDamage(T1_HIT_DAMAGE, 'machine');
+      player.takeDamage(T1_HIT_DAMAGE * ease, 'machine');
     }
   } else {
     r.noProgressT = 0;
@@ -729,7 +730,8 @@ function updateT2(r, dt, player, map) {
   r.attackTimer = Math.max(0, r.attackTimer - dt);
 
   const d = distTo(r, player);
-  if (!r.aggro && d < T2_DETECT_RANGE && !(r.loseInterestT > 0)) {
+  const ease = player.threatEase ? player.threatEase() : 1;
+  if (!r.aggro && d < T2_DETECT_RANGE * ease && !(r.loseInterestT > 0)) {
     r.aggro = true;
     r.returning = false;
   }
@@ -745,7 +747,7 @@ function updateT2(r, dt, player, map) {
     moveToward(r, player.x, player.y, T2_STALK_SPEED, dt, map);
     if (d < T2_HIT_RANGE && r.attackTimer <= 0) {
       r.attackTimer = T2_HIT_COOLDOWN;
-      player.takeDamage(T2_HIT_DAMAGE, 'machine');
+      player.takeDamage(T2_HIT_DAMAGE * ease, 'machine');
     }
   } else if (r.returning) {
     moveToward(r, r.home.x, r.home.y, T2_RETURN_SPEED, dt, map);
@@ -766,11 +768,12 @@ function updateT2(r, dt, player, map) {
 // and re-acquires by plain distance once its cooldown expires.
 function updateW1(r, dt, player, map) {
   r.attackTimer = Math.max(0, r.attackTimer - dt);
+  const ease = player.threatEase ? player.threatEase() : 1;
   drainBattery(r, r.aggro ? DRAIN_CHASE : DRAIN_PATROL, dt);
   if (r.drained) return;
 
   if (!r.aggro) {
-    if (!(r.loseInterestT > 0) && Math.hypot(player.x - r.x, player.y - r.y) < HUNTER_REACQUIRE_RANGE) {
+    if (!(r.loseInterestT > 0) && Math.hypot(player.x - r.x, player.y - r.y) < HUNTER_REACQUIRE_RANGE * ease) {
       r.aggro = true;
     } else if (r.returning) {
       moveToward(r, r.home.x, r.home.y, W1_CHASE_SPEED * 0.5, dt, map);
@@ -807,7 +810,7 @@ function updateW1(r, dt, player, map) {
   const realD = Math.hypot(player.x - r.x, player.y - r.y);
   if (r.w1Phase === 'attack' && realD < W1_HIT_RANGE && r.attackTimer <= 0) {
     r.attackTimer = W1_HIT_COOLDOWN;
-    player.takeDamage(W1_HIT_DAMAGE, 'machine');
+    player.takeDamage(W1_HIT_DAMAGE * ease, 'machine');
   }
 }
 
@@ -867,6 +870,7 @@ function updateW3(r, dt, map) {
 // snaps it right back into the fight.
 function updateW4(r, dt, player, map) {
   r.attackTimer = Math.max(0, r.attackTimer - dt);
+  const ease = player.threatEase ? player.threatEase() : 1;
   drainBattery(r, r.aggro ? DRAIN_CHASE : DRAIN_PATROL, dt);
   if (r.drained) return;
 
@@ -874,7 +878,7 @@ function updateW4(r, dt, player, map) {
     // Given up (generic line-of-sight give-up in updateRobots): head back
     // to the factory and wander, re-acquiring by plain distance once its
     // cooldown expires.
-    if (!(r.loseInterestT > 0) && distTo(r, player) < HUNTER_REACQUIRE_RANGE) {
+    if (!(r.loseInterestT > 0) && distTo(r, player) < HUNTER_REACQUIRE_RANGE * ease) {
       r.aggro = true;
     } else if (r.returning) {
       moveToward(r, r.home.x, r.home.y, W4_SPEED * 0.6, dt, map);
@@ -916,7 +920,7 @@ function updateW4(r, dt, player, map) {
         for (let s = 0; s < 5; s++) (map.sparks ??= []).push({ x: r.x + (s - 2) * 0.15, y: r.y + (s % 2) * 0.2, ttl: 0.35, max: 0.35 });
         map.projectiles.push({ x0: player.x, y0: player.y, x1: r.x, y1: r.y, prog: 0, kind: 'laser' });
       } else if (!block) {
-        player.takeDamage(W4_DAMAGE, 'machine');
+        player.takeDamage(W4_DAMAGE * ease, 'machine');
       }
     }
   }
