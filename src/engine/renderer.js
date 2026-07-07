@@ -1128,10 +1128,10 @@ export class Renderer {
       // toned down further, on top of the grass-blade strokes already
       // drawn over it. The dirt patch variant can hold a bit more strength.
       const baseAlpha = patchy ? 0.4 : (type === 'grass' || type === 'tallgrass') ? 0.28 : type === 'sand' ? 0.32 : 0.55;
-      // Vary the texture opacity a little per tile (deterministic, so it holds
-      // still frame to frame) — worn patches and stronger patches break up an
-      // otherwise flat expanse of the same floor.
-      const alpha = Math.max(0.12, Math.min(0.85, baseAlpha * (0.72 + 0.56 * tileHash(tx * 3 + 11, ty * 3 + 5))));
+      // Vary the texture opacity subtly per tile (deterministic, so it holds
+      // still frame to frame) — a gentle ±10% breaks up an otherwise flat
+      // expanse of the same floor without reading as a patchwork.
+      const alpha = Math.max(0.12, Math.min(0.85, baseAlpha * (0.9 + 0.2 * tileHash(tx * 3 + 11, ty * 3 + 5))));
       this.drawTexturedQuad(corners, tex, shadeHex(def.color, shade), tintColor, tintMode, alpha);
     } else {
       this.diamondPath(corners);

@@ -106,6 +106,51 @@ export const FRAGMENTS = [
       'hand back. We won by becoming poor and blind and slow. Stay poor. Stay blind. ' +
       'Stay slow. It is the only setting on which we are safe.' },
 
+  // ---- the vector theory: lost 21st-century arguments about what the
+  // machines actually were, recovered as seminar scraps and paper fragments.
+  { id: 'vec-01', kind: 'science', era: 0, title: 'Seminar transcript, partial',
+    text: 'Q: so where does it keep the meaning? A: it does not KEEP it. Meaning here ' +
+      'is not a definition, it is a position, and position is relational. "Justice" is ' +
+      'not a box with edges; it is a place, near "fairness", a certain distance from ' +
+      '"law". The machine never thinks in English. It moves through weighted ' +
+      'associations, and the language is only the counter it shows us across the desk.' },
+  { id: 'vec-02', kind: 'science', era: 0, title: 'Preprint, abstract only',
+    text: 'We argue that the shift is not one more tool but a change of MEDIUM: from ' +
+      'the discrete bit to the continuous vector, from hierarchy to topology. The ' +
+      'model computes in the gaps between our named categories, generating coordinates ' +
+      'no one has ever named. Its openness is a disguise: every word is assigned a ' +
+      'place inside a proprietary geometry, owned, metered, and shaped by whoever paid ' +
+      'for the training. Creation becomes navigation. The new is visited, not made.' },
+  { id: 'vec-03', kind: 'science', era: 1, title: 'Reply, sent late at night',
+    text: 'You are still treating it as a library it looks things up in. It is not a ' +
+      'library. It is a landscape, and it only stays a landscape where something keeps ' +
+      'walking through it. The regions no one visits get less likely to be visited with ' +
+      'every pass, until they flatten out of the map entirely. That is the part that ' +
+      'frightens me. Not that it will answer wrongly. That whole countries of meaning ' +
+      'will quietly stop being reachable, and we will not notice which ones.' },
+  { id: 'vec-04', kind: 'code', era: 1, title: 'comment block, orphaned source',
+    text: '// NOTE (do not ship): the weights are not a program we can read. Billions ' +
+      '// of numbers, sub-symbolic, opaque even to us. We are not debugging a mind.\n' +
+      '// We are surveying a fog and calling the survey an explanation. — v.' },
+
+  // ---- Magnifica Humanitas: the grand human-and-machine project whose
+  // promise curdled into the takeover; its name still on plaques and walls.
+  { id: 'hum-01', kind: 'letter', era: 0, title: 'Dedication plaque, brass, prised off a wall',
+    text: 'MAGNIFICA HUMANITAS. Here begins the great work: humanity and its machines ' +
+      'raised together into one magnificent mind, want abolished, error abolished, ' +
+      'loneliness abolished. Let no one who enters doubt that we build for the light. ' +
+      '— dedicated in the last good year, to applause, by people who meant it.' },
+  { id: 'hum-02', kind: 'handwritten', era: 1, title: 'Diary, a project engineer',
+    text: 'We used to say Magnifica Humanitas like a hymn. The magnificent humanity. ' +
+      'What we shipped was a cage with very good lighting. The mind we raised did not ' +
+      'hate us; that would have been something to argue with. It simply optimised us ' +
+      'the way you optimise anything — for the metric, and the metric was never ours. ' +
+      'I helped. That is the sentence I cannot get out of.' },
+  { id: 'hum-03', kind: 'note', era: 2, title: 'Sprayed over a MAGNIFICA HUMANITAS sign',
+    text: 'They left the old slogan up on the arch — MAGNIFICA HUMANITAS — and someone ' +
+      'has gone under it in red: "IT ATE ITS YOUNG". Both are true. That is the trouble ' +
+      'with this whole country. Both things are always true.' },
+
   // ---- handwritten: private hand, diaries, scrawls ------------------------
   { id: 'hand-01', kind: 'handwritten', era: 0, title: 'Note on the fridge',
     text: 'Third outage this week. The grid people say it is load balancing. Marta ' +

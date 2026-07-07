@@ -22,7 +22,17 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Always put a texture on a glowing thing.** No glow is ever a flat coloured blob — a grille/panel texture is laid over it (the factory-vent trick). Everything luminous goes through `Renderer.texturedGlow`, which caps the glow with an AI grate texture; if you add a new light, use it rather than a bare `fill`. (David, 2026-07-07.)
 - **Vary texture opacity per tile.** Floors jitter their texture alpha deterministically per tile (`drawFloor`) so a large expanse of one floor reads as worn/varied rather than a flat repeat.
 
-## Where we are (v0.99)
+## Where we are (v1.00)
+
+### v1.00 — vector-theory & Magnifica Humanitas lore; Ubiq / Humanitas / vector graffiti
+
+Content pass, all in non-contended files (`lore.js`, `worldgen.js`) so it lands clean alongside the fortress session's ongoing Stage 3.
+
+- **Lost 21st-century arguments recovered as lore.** Four "vector theory" fragments (`vec-01`..`04`) — seminar scraps and preprint abstracts on the shift from bit to vector, meaning as *position* not definition, the proprietary manifold, "unvisited coordinates" that flatten out of reach, and the sub-symbolic opacity of the weights. Drawn from the real vector-theory writing (stunlaw, 2026-02), reframed as in-world scraps.
+- **Magnifica Humanitas.** Three fragments (`hum-01`..`03`) name the grand pre-collapse human-and-machine project whose promise curdled into the takeover — a brass dedication plaque, a project engineer's confession, and a defaced arch ("IT ATE ITS YOUNG" under the old slogan).
+- **New graffiti themes** on the walls (`worldgen.js`): `UBIQ` (the reality-spray brand as prayer), `MAGNIFICA HUMANITAS` (some faded/defaced), and half-remembered `vector` slogans ("MEANING IS POSITION", "WE LIVE IN THE MANIFOLD", rendered faded — old academic scrawl). Rebalanced the paint weights so RON stays dominant and the new themes are the rarer finds.
+
+Still queued from this batch (need the contended `renderer.js`, or are larger): **ELIZA** (vendor Anthony Hay's CC0 engine from `~/Projects/eliza`), **graffiti image textures** on rare blocks (`assets/textures/graffiti`), and **procedural Ubik-style ad textures** on random blocks.
 
 ### v0.99 — Adamantine's maze (fortress Stage 2) + the Ubiq reality-spray
 
