@@ -153,6 +153,10 @@ function makeBuiltins() {
       arity: 0,
       fn: (_args, ctx) => { ctx.sing(); return { tag: 'unit' }; },
     },
+    map: {
+      arity: 0,
+      fn: (_args, ctx) => { ctx.showMap(); return { tag: 'unit' }; },
+    },
     nearest: {
       arity: 1,
       fn: ([list], ctx) => {

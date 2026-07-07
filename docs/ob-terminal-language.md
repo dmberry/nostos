@@ -67,6 +67,7 @@ Comments are `(* ml style *)`. Whitespace-insensitive. Case-insensitive keywords
 | `repel` | `unit -> unit` | nearby robots' targeting inverts: they flee you for a spell | needs AI key |
 | `sing` | `unit -> unit` | the Portal easter egg (§6) | secret; needs the exact fragment |
 | `keys` | `unit -> list` | the keys you currently hold | always |
+| `map` | `unit -> unit` | opens a schematic of the AI's territory: obelisks (coded), machines, the factory, the mainframe you're hunting, and you | always (added post-design) |
 
 Two more worth adding once the base works:
 - `disable n` (`node -> key -> unit`) — permanently fuses a *robot* (not an obelisk)

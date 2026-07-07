@@ -12,6 +12,7 @@ const WOUNDED_SPRINT_DRAIN = 2.5; // wounded sprinting burns stamina this much f
 const RADIUS = 0.28;      // collision radius in tiles
 const REACH = 0.9;        // how far ahead the player can use a tool
 const CHIP_FRAGMENTS_PER_CHIP = 8; // fragments shed by machines to craft one chip
+const SCRAP_PER_SWORD = 10; // scrap beaten into a robot sword
 const KNOCKBACK_DIST = 0.5; // tiles a melee hit shoves an animal/robot back
 const KNOCKBACK_STUN = 0.4; // seconds it's frozen (no move, no attack) after
 const TREE_HP = 4;        // penknife swings to fell a tree
@@ -224,6 +225,22 @@ export class Player {
     }
     sfx.play('zap');
     this.say('Eight fragments lock together into a working access chip.');
+    return true;
+  }
+
+  // Ten scrap beaten into a robot sword — a heavy anti-machine melee blade.
+  canCraftSword() {
+    return this.countItem('scrap') >= SCRAP_PER_SWORD && !this.hasItem('robot_sword');
+  }
+
+  craftSword() {
+    if (!this.canCraftSword()) { this.say(`You need ${SCRAP_PER_SWORD} scrap; you have ${this.countItem('scrap')}.`); return false; }
+    for (let n = 0; n < SCRAP_PER_SWORD; n++) this.removeItem('scrap');
+    if (this.hands && this.hands !== 'robot_sword') this.stow(this.hands, 1);
+    this.hands = 'robot_sword';
+    this.discoverWeapon('robot_sword');
+    sfx.play('zap');
+    this.say('You beat ten scrap into a robot sword. It bites the machines hard.');
     return true;
   }
 
@@ -660,6 +677,17 @@ export class Player {
       return;
     }
     const heldItem = this.hands;
+    if (slot && slot.qty > 1) {
+      // A stack (e.g. several bombs): take just one into the hand and leave the
+      // rest in the pocket — the hand slot holds a single item, so moving the
+      // whole slot would silently lose the surplus. Any previously-held item is
+      // stowed into free space rather than overwriting the stack.
+      this.hands = slot.item;
+      slot.qty -= 1;
+      if (heldItem) this.stow(heldItem, 1);
+      this.say(`You ready a ${ITEMS[this.hands].name.toLowerCase()}.`);
+      return;
+    }
     this.hands = slot ? slot.item : null;
     this.pockets[i] = heldItem ? { item: heldItem, qty: 1 } : null;
     this.say(this.hands ? `You ready the ${ITEMS[this.hands].name.toLowerCase()}.` : 'You put your weapon away.');

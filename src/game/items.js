@@ -90,9 +90,9 @@ export const ITEMS = {
     name: 'Bow',
     kind: 'gun',
     tier: 3,
-    range: 12,
-    robotDamage: 4,
-    animalDamage: 9,
+    range: 18,
+    robotDamage: 9,
+    animalDamage: 16,
     ammoType: 'arrow',
     swingCooldown: 0.7,
     staminaCost: 2,
@@ -143,6 +143,19 @@ export const ITEMS = {
     staminaCost: 4,
     color: '#cdd3d8',
   },
+  // Forged from ten scrap (press C): a heavy blade beaten out of machine parts,
+  // and it bites the machines hard — the best melee answer to a robot.
+  robot_sword: {
+    name: 'Robot sword',
+    kind: 'tool',
+    tier: 4,
+    treeDamage: 2,
+    animalDamage: 12,
+    robotDamage: 9,
+    swingCooldown: 0.45,
+    staminaCost: 4,
+    color: '#b8c0c8',
+  },
   scrap: {
     name: 'Scrap',
     kind: 'resource',
@@ -152,10 +165,10 @@ export const ITEMS = {
   // Timed bombs: use (E) while holding one to drop it ticking. It goes off
   // after `fuse` seconds in a cloud of fire, hurting everything in `radius`.
   // The insane bomb is a rare find and can even bring down an obelisk.
-  bomb_small: { name: 'Small bomb', kind: 'bomb', stack: 1, fuse: 3, radius: 2.2, damage: 22, color: '#c0552f' },
-  bomb_medium: { name: 'Medium bomb', kind: 'bomb', stack: 1, fuse: 3.5, radius: 3.4, damage: 40, color: '#d0552f' },
-  bomb_large: { name: 'Large bomb', kind: 'bomb', stack: 1, fuse: 4, radius: 4.8, damage: 70, color: '#e0552f' },
-  bomb_insane: { name: 'Insane bomb', kind: 'bomb', stack: 1, fuse: 5, radius: 7, damage: 140, obelisk: true, color: '#ff3010' },
+  bomb_small: { name: 'Small bomb', kind: 'bomb', stack: 5, fuse: 3, radius: 2.2, damage: 22, color: '#c0552f' },
+  bomb_medium: { name: 'Medium bomb', kind: 'bomb', stack: 5, fuse: 3.5, radius: 3.4, damage: 40, color: '#d0552f' },
+  bomb_large: { name: 'Large bomb', kind: 'bomb', stack: 5, fuse: 4, radius: 4.8, damage: 70, color: '#e0552f' },
+  bomb_insane: { name: 'Insane bomb', kind: 'bomb', stack: 3, fuse: 5, radius: 7, damage: 140, obelisk: true, color: '#ff3010' },
   // Ranged weapons. Guns need ammunition from the pockets: ammoType names
   // the item consumed per shot. effect 'stun' disables a robot for a spell;
   // 'fuse' kills it in place as a mineable wreck.
@@ -449,5 +462,5 @@ for (const k in ITEMS) {
 // The weapons, ordered for the chart (roughly weakest to strongest).
 export const WEAPON_ORDER = [
   'penknife', 'seatbelt', 'bat', 'shovel', 'saw', 'machete', 'crowbar', 'sledgehammer',
-  'bow', 'katana', 'pistol', 'stungun', 'shotgun', 'electrogun', 'railgun', 'wavegun', 'obgun',
+  'bow', 'katana', 'robot_sword', 'pistol', 'stungun', 'shotgun', 'electrogun', 'railgun', 'wavegun', 'obgun',
 ];

@@ -45,6 +45,7 @@ const WALL_H = 40;
 const EDGE_ROCK_H = 52;   // height of the impassable rock blocks ringing the map edge
 const EDGE_ROCK_ALPHA = 0.38; // semi-transparent so the player shows through a block in front
 const DASH_H = 78; // dashboard panel height
+const SIGHT_CONE = false; // directional peripheral-fog vision cone (off pending tuning)
 const ELEV = 16;   // pixels of lift per height level
 const MINIMAP_SIZE = 160;
 
@@ -284,6 +285,22 @@ export class Renderer {
         ctx.fillRect(0, 0, this.w, this.h - DASH_H);
       }
     }
+
+    // Sight cone: you see clearly in the direction you face (and in a small
+    // bubble around yourself); the periphery greys to "indistinct". Turned OFF
+    // for now (SIGHT_CONE) — the effect works but wants careful tuning before
+    // it goes live; the drawSightCone method is kept ready to switch back on.
+    if (SIGHT_CONE && !hud.rest && !hud.deathCert && !hud.paused) {
+      const z = camera.zoom || 1;
+      const cw = worldToScreen(camera.x, camera.y);
+      const pw = worldToScreen(player.x, player.y);
+      const fw = worldToScreen(player.x + player.facing.x, player.y + player.facing.y);
+      const px = (pw.x - cw.x) * z + this.w / 2;
+      const py = (pw.y - cw.y) * z + this.h / 2 - 16 * z;
+      const ang = Math.atan2(fw.y - pw.y, fw.x - pw.x);
+      this.drawSightCone(px, py, ang, z);
+    }
+
     if (hud.minimap) {
       const mmX = this.w - MINIMAP_SIZE - 12, mmY = 12;
       hud.minimap.draw(ctx, map, player, mmX, mmY, MINIMAP_SIZE);
@@ -307,11 +324,13 @@ export class Renderer {
         ? 'You have all eight circuit boards — press C to build a wave gun'
         : hud.craftChip
           ? 'You have eight chip fragments — press C to assemble an access chip'
-          : 'You hold a stun-gun, electro-gun and Wi-Fi block — press C to build an OB-gun';
+          : hud.craftSword
+            ? 'You have ten scrap — press C to forge a robot sword'
+            : 'You hold a stun-gun, electro-gun and Wi-Fi block — press C to build an OB-gun';
       ctx.font = 'bold 13px system-ui, sans-serif';
       const w = ctx.measureText(msg).width + 24;
       const x = (this.w - w) / 2, y = this.h - DASH_H - 40;
-      ctx.fillStyle = hud.craftWaveGun ? 'rgba(64,224,208,0.92)' : hud.craftChip ? 'rgba(106,208,160,0.92)' : 'rgba(224,100,47,0.9)';
+      ctx.fillStyle = hud.craftWaveGun ? 'rgba(64,224,208,0.92)' : hud.craftChip ? 'rgba(106,208,160,0.92)' : hud.craftSword ? 'rgba(184,192,200,0.92)' : 'rgba(224,100,47,0.9)';
       ctx.fillRect(x, y, w, 26);
       ctx.fillStyle = '#fff';
       ctx.textAlign = 'center';
@@ -325,6 +344,58 @@ export class Renderer {
     if (hud.rest) this.drawRestOverlay(hud.rest.dim);
     if (hud.deathCert) this.drawDeathCert(hud.deathCert);
     if (hud.paused) this.drawPausedOverlay();
+  }
+
+  // Peripheral indistinctness: a gentle dim over the play area, cleared in a
+  // broad region centred AHEAD of the player so you read what you're facing
+  // and everything to the sides and behind fades softly to indistinct. No
+  // hard wedge edges and no tight pool (which read as a torch) — the clear
+  // zone is a big soft radial offset forward, so the falloff is gradual all
+  // the way round. Composited on an offscreen layer first: `destination-out`
+  // erases the DESTINATION, so doing it on the main canvas would eat the world.
+  drawSightCone(px, py, ang, z) {
+    const ctx = this.ctx;
+    const playH = this.h - DASH_H;
+    const dpr = this.dpr;
+    if (!this._sightCanvas) this._sightCanvas = document.createElement('canvas');
+    const off = this._sightCanvas;
+    const dw = Math.max(1, Math.round(this.w * dpr)), dh = Math.max(1, Math.round(this.h * dpr));
+    if (off.width !== dw || off.height !== dh) { off.width = dw; off.height = dh; }
+    const octx = off.getContext('2d');
+    octx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    octx.clearRect(0, 0, this.w, this.h);
+    // A greyish fog veil — "indistinct", washed-out rather than dark, so what
+    // it covers reads as out of clear sight rather than merely unlit.
+    octx.fillStyle = 'rgba(116,122,138,0.58)';
+    octx.fillRect(0, 0, this.w, playH);
+    octx.globalCompositeOperation = 'destination-out';
+    // Directional clear: a LINEAR gradient along the facing axis, centred on
+    // the player — fully clear ahead, transitioning through you, to fully
+    // fogged behind. This is what makes "behind is grey" actually happen (a
+    // forward-offset radial still cleared the area behind you).
+    const A = 560 * z;
+    const ax = px + Math.cos(ang) * A, ay = py + Math.sin(ang) * A;
+    const bx = px - Math.cos(ang) * A, by = py - Math.sin(ang) * A;
+    const lg = octx.createLinearGradient(ax, ay, bx, by);
+    lg.addColorStop(0, 'rgba(0,0,0,1)');      // ahead: fully clear
+    lg.addColorStop(0.42, 'rgba(0,0,0,0.82)');
+    lg.addColorStop(0.62, 'rgba(0,0,0,0.28)');
+    lg.addColorStop(1, 'rgba(0,0,0,0)');      // behind: stays fully fogged grey
+    octx.fillStyle = lg;
+    octx.fillRect(0, 0, this.w, playH);
+    // Keep your immediate surroundings clear too, so turning never fogs the
+    // ground right at your feet.
+    const near = octx.createRadialGradient(px, py, 16 * z, px, py, 165 * z);
+    near.addColorStop(0, 'rgba(0,0,0,1)');
+    near.addColorStop(1, 'rgba(0,0,0,0)');
+    octx.fillStyle = near;
+    octx.fillRect(0, 0, this.w, playH);
+    octx.globalCompositeOperation = 'source-over';
+    // Blit device-for-device onto the main canvas.
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(off, 0, 0);
+    ctx.restore();
   }
 
   // A soft dim over the play area while the player rests (the dashboard, and
@@ -1594,9 +1665,9 @@ export class Renderer {
     const obDmg = obj.obDamage || 0;
     const pl = this.hudPlayer;
     if (obDmg > 0 && pl && Math.hypot(pl.x - (obj.x + 0.5), pl.y - (obj.y + 0.5)) < 12) {
-      const bw = 48, bh = 5, bx = c.x - bw / 2, by = c.y - H - 12;
+      const bw = 30, bh = 3.5, bx = c.x - bw / 2, by = c.y - H - 26;
       const frac = Math.max(0, 1 - obDmg / 5);
-      ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(bx - 1.5, by - 1.5, bw + 3, bh + 3);
+      ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2);
       ctx.fillStyle = '#3a3f46'; ctx.fillRect(bx, by, bw, bh);
       ctx.fillStyle = frac > 0.5 ? '#6cc24a' : frac > 0.25 ? '#e0b53a' : '#e05548';
       ctx.fillRect(bx, by, bw * frac, bh);
@@ -1621,13 +1692,13 @@ export class Renderer {
     ctx.beginPath();
     ctx.ellipse(c.x, c.y + 1, 13, 6, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = obj.opened ? '#33291a' : '#7a5c38'; // SW face (opened = spent, dark)
+    ctx.fillStyle = obj.opened ? '#33291a' : '#9a774c'; // SW face (opened = spent, dark)
     ctx.beginPath();
     ctx.moveTo(c.x - w, c.y - 3); ctx.lineTo(c.x, c.y + 3);
     ctx.lineTo(c.x, c.y + 3 - h); ctx.lineTo(c.x - w, c.y - 3 - h);
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = obj.opened ? '#271f13' : '#63482c'; // SE face
+    ctx.fillStyle = obj.opened ? '#271f13' : '#805f3b'; // SE face
     ctx.beginPath();
     ctx.moveTo(c.x + w, c.y - 3); ctx.lineTo(c.x, c.y + 3);
     ctx.lineTo(c.x, c.y + 3 - h); ctx.lineTo(c.x + w, c.y - 3 - h);
@@ -1665,7 +1736,7 @@ export class Renderer {
       ctx.stroke();
     } else {
       this.drawTexturedQuad([lidLeft, lidBottom, lidRight, lidTop],
-        FLOOR_TEXTURES.boards, '#8f6d42', '#7a5c34', 'multiply', 0.6);
+        FLOOR_TEXTURES.boards, '#ab8555', '#96703f', 'multiply', 0.6);
     }
     if (!obj.opened) {
       ctx.strokeStyle = 'rgba(40,30,18,0.7)';
@@ -2110,6 +2181,25 @@ export class Renderer {
         ctx.fillRect(-5, 8, 8, 2);
         ctx.fillStyle = itemDef.color;
         ctx.fillRect(-4, 10, 6, 4);
+        ctx.restore();
+        break;
+      case 'robot_sword':
+        // A heavy, straight beaten-metal blade with a bolt-studded guard —
+        // clearly forged from scrap, not a fine sword.
+        ctx.save();
+        ctx.rotate(-0.6);
+        ctx.fillStyle = itemDef.color; // broad blade
+        ctx.beginPath();
+        ctx.moveTo(-3, 9); ctx.lineTo(3, 9); ctx.lineTo(2, -11); ctx.lineTo(0, -13); ctx.lineTo(-2, -11);
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = 'rgba(60,66,72,0.8)'; ctx.lineWidth = 0.8;
+        ctx.beginPath(); ctx.moveTo(0, -11); ctx.lineTo(0, 8); ctx.stroke(); // fuller
+        ctx.fillStyle = '#3a3f46'; // guard
+        ctx.fillRect(-6, 8, 12, 3);
+        ctx.fillStyle = '#d8b24a'; // rivets
+        ctx.beginPath(); ctx.arc(-4, 9.5, 1, 0, Math.PI * 2); ctx.arc(4, 9.5, 1, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#2a2620'; // grip
+        ctx.fillRect(-2, 11, 4, 5);
         ctx.restore();
         break;
       case 'railgun':

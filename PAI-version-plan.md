@@ -17,7 +17,19 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
-## Where we are (v0.88)
+## Where we are (v0.89)
+
+### v0.89 — RON-ML `map`, robot sword, tweaks batch (sight cone parked)
+
+- **RON-ML `map` command.** New `map` primitive (`ronml.js`) → `ctx.showMap()` opens `#ronmap`, a green CRT schematic of the AI's territory drawn to a canvas in `main.js`: every obelisk (green square + code, destroyed ones hollow), every live machine (red dot), the W-factory (amber diamond), the **mainframe** you're hunting (magenta star + label), and you (cyan ring), with a legend. Overlaid on top of the terminal (z-index 22); click outside to close back to the console. A new seed-derived `mainframe` location (far from spawn; marker only, no interaction yet) gives the search a heading. Free to run (a read, like `scan`). Added to the design doc's verb table and the help.
+- **Robot sword** (new `robot_sword` item) — press **C** with 10 scrap to forge one (`canCraftSword`/`craftSword`, new `countItem` helper, craft-prompt banner + distinct beaten-metal icon; added to `WEAPON_ORDER`). A heavy anti-machine melee blade (robotDamage 9 vs the katana's 3).
+- **Bombs stack** (small/medium/large ×5, insane ×3). This exposed a latent `swapHands` bug: moving a pocket stack into the single-item hand slot silently dropped the surplus — now it takes one and stows whatever was held, so nothing is lost.
+- **Arrows buffed** — bow range 12→18, robotDamage 4→9, animalDamage 9→16.
+- **Sleep slower** — rest animation `REST_DURATION` 2.8s→4.6s (was "a bit too fast").
+- **Obelisk damage bar** smaller (30×3.5, was 48×5) and higher above the tower (offset −26, was −12).
+- **Unopened loot boxes lightened** (warmer wood on faces and lid) so closed vs. looted reads at a glance.
+- **Start hint** trimmed to "Press H for help", and moved to the bottom-**right**.
+- **Sight cone parked.** Built and working as a directional grey peripheral fog (`renderer.drawSightCone`, offscreen `destination-out` composite, linear front/back gradient centred on the player so behind greys out), but gated **off** behind `const SIGHT_CONE = false` pending careful tuning — the code stays ready to switch back on.
 
 ### v0.88 — animated rest: screen fade, 5x clock, lie-down pose
 

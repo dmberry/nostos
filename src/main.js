@@ -32,7 +32,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '0.88';
+const VERSION = '0.89';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -255,6 +255,23 @@ for (const ob of obeliskObjs) {
   }
   obeliskObjs.forEach((ob, i) => { ob.circuitNum = nums[i]; });
 }
+
+// The AI's mainframe: the thing you're ultimately hunting for. It has no
+// interaction yet — for now it's a fixed, seed-derived location, far from
+// where you start, that the RON-ML `map` command reveals so you have a
+// heading to strike out toward. (Full mainframe mechanics are future work.)
+const mainframe = (() => {
+  const rng = makeRng(WORLD_SEED ^ 0x4a1f);
+  let best = { x: map.w * 0.75, y: map.h * 0.75 }, bestD = -1;
+  for (let tries = 0; tries < 400; tries++) {
+    const x = 6 + Math.floor(rng() * (map.w - 12));
+    const y = 6 + Math.floor(rng() * (map.h - 12));
+    if (map.isSolid(x, y) || map.heightAt(x, y) < 0) continue;
+    const d = Math.hypot(x - spawn.x, y - spawn.y);
+    if (d > bestD) { bestD = d; best = { x: x + 0.5, y: y + 0.5 }; }
+  }
+  return best;
+})();
 
 // Character persona and learned skills persist across sessions and deaths.
 const SAVE_KEY = 'postai-character';
@@ -571,8 +588,77 @@ function ronmlCtx() {
       player.say('Every machine in earshot stops dead, turns, and lines up.');
       closeObTerminal(); // drop out of the terminal so you can actually watch it
     },
+    showMap: () => { openRonMap(); },
   };
 }
+
+// The RON-ML `map` command: a green schematic of this AI's territory drawn
+// onto the #ronmap canvas — every obelisk (with code), every live machine,
+// the W-factory, the mainframe you're hunting, and you. Overlaid on top of
+// the terminal; clicking outside closes it back to the console.
+const ronmapEl = document.getElementById('ronmap');
+const ronmapCanvas = document.getElementById('ronmap-canvas');
+function openRonMap() {
+  const cv = ronmapCanvas, g = cv.getContext('2d');
+  const W = cv.width, H = cv.height;
+  const sx = (wx) => (wx / map.w) * W;
+  const sy = (wy) => (wy / map.h) * H;
+  g.fillStyle = '#061a0e'; g.fillRect(0, 0, W, H);
+  // Faint grid.
+  g.strokeStyle = 'rgba(80,230,130,0.10)'; g.lineWidth = 1;
+  for (let i = 1; i < 8; i++) {
+    g.beginPath(); g.moveTo((i / 8) * W, 0); g.lineTo((i / 8) * W, H); g.stroke();
+    g.beginPath(); g.moveTo(0, (i / 8) * H); g.lineTo(W, (i / 8) * H); g.stroke();
+  }
+  // Live machines (small red dots).
+  g.fillStyle = '#e0552f';
+  for (const r of robots) {
+    if (r.dead || r.fused || r.friendly) continue;
+    g.beginPath(); g.arc(sx(r.x), sy(r.y), 2.5, 0, Math.PI * 2); g.fill();
+  }
+  // Obelisks (green squares + code), destroyed ones hollow.
+  g.font = '9px ui-monospace, monospace';
+  for (const o of obeliskObjs) {
+    const x = sx(o.x + 0.5), y = sy(o.y + 0.5);
+    if (o.destroyed) {
+      g.strokeStyle = 'rgba(80,230,130,0.4)'; g.lineWidth = 1.2;
+      g.strokeRect(x - 3, y - 3, 6, 6);
+    } else {
+      g.fillStyle = '#4fe07a'; g.fillRect(x - 3.5, y - 3.5, 7, 7);
+      g.fillStyle = 'rgba(150,240,180,0.8)';
+      g.fillText(o.code || '', x + 6, y + 3);
+    }
+  }
+  // The W-factory (amber diamond).
+  if (factoryLive()) {
+    const x = sx(factoryCx()), y = sy(wfactory.y + (wfactory.fh || 1) / 2);
+    g.fillStyle = '#e0b53a';
+    g.beginPath(); g.moveTo(x, y - 6); g.lineTo(x + 6, y); g.lineTo(x, y + 6); g.lineTo(x - 6, y); g.closePath(); g.fill();
+  }
+  // The mainframe (magenta star) — what you're searching for.
+  {
+    const x = sx(mainframe.x), y = sy(mainframe.y);
+    g.fillStyle = '#ff3d8b';
+    g.beginPath();
+    for (let k = 0; k < 5; k++) {
+      const a = -Math.PI / 2 + k * (Math.PI * 4 / 5);
+      const px = x + Math.cos(a) * 8, py = y + Math.sin(a) * 8;
+      k === 0 ? g.moveTo(px, py) : g.lineTo(px, py);
+    }
+    g.closePath(); g.fill();
+    g.fillStyle = 'rgba(255,120,180,0.9)'; g.fillText('MAINFRAME', x + 10, y + 3);
+  }
+  // You (cyan ring).
+  {
+    const x = sx(player.x), y = sy(player.y);
+    g.strokeStyle = '#67d6ff'; g.lineWidth = 2;
+    g.beginPath(); g.arc(x, y, 5, 0, Math.PI * 2); g.stroke();
+    g.fillStyle = '#67d6ff'; g.beginPath(); g.arc(x, y, 1.6, 0, Math.PI * 2); g.fill();
+  }
+  ronmapEl.style.display = 'flex';
+}
+function closeRonMap() { ronmapEl.style.display = 'none'; }
+ronmapEl.addEventListener('click', (e) => { if (e.target === ronmapEl) closeRonMap(); });
 
 function replRun(line) {
   replPrint(`> ${line}`);
@@ -692,7 +778,7 @@ const SLEEP_MINUTES = 10;   // game-clock minutes skipped per rest
 const SLEEP_HEAL = 35;      // health restored per rest
 const SLEEP_COOLDOWN_S = 90; // real seconds before resting again
 const SLEEP_SAFE_RANGE = 12; // no hostile robot allowed within this many tiles
-const REST_DURATION = 2.8;  // real seconds the rest animation runs
+const REST_DURATION = 4.6;  // real seconds the rest animation runs
 const REST_CLOCK_MULT = 5;  // the clock visibly spins this much faster while resting
 // Screen-dim envelope over a rest: fade in over the first fifth, hold, fade
 // back out over the last fifth, peaking at a soft 0.72 (never full black).
@@ -868,6 +954,7 @@ function update(dt) {
     if (player.canCraftWaveGun()) player.craftWaveGun(map);
     else if (player.canCraftObGun()) player.craftObGun(map);
     else if (player.canCraftChip()) player.craftChip();
+    else if (player.canCraftSword()) player.craftSword();
   }
   if (input.zoomTogglePressed()) camera.toggleZoom();
   lore.update(dt, player, input);
@@ -1286,9 +1373,10 @@ function frame(now) {
       deathCert: player.deathCert,
       showSkills,
       showWeapons,
-      craftPrompt: (player.canCraftObGun() && player.hands !== 'obgun') || (player.canCraftWaveGun() && player.hands !== 'wavegun') || player.canCraftChip(),
+      craftPrompt: (player.canCraftObGun() && player.hands !== 'obgun') || (player.canCraftWaveGun() && player.hands !== 'wavegun') || player.canCraftChip() || player.canCraftSword(),
       craftWaveGun: player.canCraftWaveGun() && player.hands !== 'wavegun',
       craftChip: player.canCraftChip() && !player.canCraftWaveGun() && !(player.canCraftObGun() && player.hands !== 'obgun'),
+      craftSword: player.canCraftSword() && !player.canCraftChip() && !player.canCraftWaveGun() && !(player.canCraftObGun() && player.hands !== 'obgun'),
       skylinkActive: player.skylinkActive && !player._ended,
       skylinkTimer,
       obeliskObjs,
