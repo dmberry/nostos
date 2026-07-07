@@ -17,7 +17,14 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
-## Where we are (v0.91)
+## Where we are (v0.92)
+
+### v0.92 — decay guards, always-a-chip, RON-ML `help`, W4 presses shielded players
+
+- **Backpacks never decay** (added to the `Infinity` group in `GROUND_LIFETIME`, alongside the already-permanent Wi-Fi block, AI key, and circuit boards) — too valuable to lose to a timer, and the AI key especially can't be remade.
+- **The world always contains a chip in a box.** The chip was already a guaranteed cache (last in the list), but a small world could run short of interior tiles before it placed. Added a backstop after box placement: if no box holds a chip, push one into a random box.
+- **RON-ML `help`.** Typing `help` at the terminal prints a command reference (verb, type signature, one-line description, and gate); `help <verb>` gives detail on one. Intercepted in `runRonml` before evaluation so bare `help` doesn't fail as an unknown name; `sing` is deliberately omitted (secret). Boot line now nudges "type help for commands". Added to the design-doc verb table.
+- **W4 hunter-killers press a shielded player instead of plinking from range.** Verified empirically that a plain shield / forcefield does *not* stop W4 fire (identical 3 shots/4s shielded vs not) — the real problem was the W4 holding at its firing distance firing absorbed shots, which doesn't read as "hunting". Now, when `player.shielded()` is up (and the player isn't Wi-Fi-invisible), the W4 stops holding at range and closes right in, bearing down on the player (still firing if it gets a clear line; a mirror shield will destroy it as it fires — the price of pressing a shielded target).
 
 ### v0.91 — dropped items decay off the ground
 

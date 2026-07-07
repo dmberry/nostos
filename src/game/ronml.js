@@ -287,10 +287,50 @@ const USAGE_HINTS = {
   sleep: 'sleep needs a number of minutes. try: sleep 30',
 };
 
+// `help` reference, shown when the operator types it at the terminal. Per-verb
+// detail lines keyed by name; `sing` is deliberately omitted (it's a secret).
+const HELP_VERBS = [
+  ['scan', 'unit -> list', 'obelisks/machines in range of this terminal', ''],
+  ['nearest', 'list -> node', 'the closest element of a list', ''],
+  ['keys', 'unit -> list', 'the access keys you currently hold', ''],
+  ['hack n', 'node -> key', "take node n's access key", 'needs an AI key'],
+  ['crash n k', 'node key -> unit', 'knock node n dark until a drone mends it', 'needs k from hack'],
+  ['sleep t', 'num -> unit', 'idle local machines for t game-minutes', 'needs AI key'],
+  ['repel', 'unit -> unit', 'nearby machines turn tail and flee you', 'needs AI key'],
+  ['map', 'unit -> unit', 'show the territory map (obelisks, machines, mainframe)', ''],
+  ['print', 'unit -> unit', 'print a carryable map that drops at your feet', ''],
+  ['help', 'unit -> unit', 'this reference, or `help <verb>` for one verb', ''],
+];
+function helpText(topic) {
+  if (topic) {
+    const row = HELP_VERBS.find((v) => v[0].split(' ')[0] === topic);
+    if (!row) return `no help for '${topic}'. try: help`;
+    const [sig, type, desc, gate] = row;
+    return `${sig}\n  : ${type}\n  ${desc}${gate ? `\n  (${gate})` : ''}`;
+  }
+  const pad = (s, n) => (s + ' '.repeat(n)).slice(0, n);
+  const lines = HELP_VERBS.map(([sig, , desc, gate]) =>
+    `  ${pad(sig, 11)} ${desc}${gate ? `  [${gate}]` : ''}`);
+  return [
+    'RON-ML reference',
+    ...lines,
+    '',
+    '  let x = e in body   bind a value    |>   pipe left into right',
+    '  e.g.  scan |> nearest      let k = hack OB-1A2B in crash OB-1A2B k',
+  ].join('\n');
+}
+
 // Runs one line of RON-ML against a world context. Returns
 // {ok, text} — text is either the printed result or a "ERR: ..." message,
 // always a teaching error per the design doc (never a raw stack trace).
 export function runRonml(source, ctx) {
+  // `help` is a console meta-command, not a language expression — intercept it
+  // before evaluation so a bare `help` prints the reference instead of failing
+  // as an unknown name. `help <verb>` gives detail on one verb.
+  const trimmed = source.trim();
+  if (trimmed === 'help' || trimmed.startsWith('help ')) {
+    return { ok: true, text: helpText(trimmed.slice(4).trim()) };
+  }
   try {
     const toks = tokenize(source);
     const ast = parse(toks);

@@ -32,7 +32,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '0.91';
+const VERSION = '0.92';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -189,6 +189,14 @@ const obelisks = [];
     const [x, y] = inner.splice(Math.floor(rng() * inner.length), 1)[0];
     const loot = i < guaranteed.length ? guaranteed[i] : rollLoot();
     map.addObject('box', x, y, { loot, opened: false });
+  }
+  // A chip is the only way into a terminal, so the world must always contain
+  // one in a box — even if interior tiles ran short before the chip's
+  // guaranteed cache (late in the list) was placed. Backstop it here.
+  const boxes = map.objects.filter((o) => o.type === 'box');
+  if (boxes.length && !boxes.some((b) => (b.loot || []).some((l) => l.item === 'chip'))) {
+    const b = boxes[Math.floor(rng() * boxes.length)];
+    (b.loot ??= []).push({ item: 'chip', qty: 1 });
   }
 }
 
@@ -706,7 +714,7 @@ function openObTerminal(ob) {
       '> shield .......... you are hidden while jacked in',
       '> access .......... GRANTED',
       '',
-      'RON-ML console ready. try: scan',
+      'RON-ML console ready. try: scan   (type help for commands)',
       '_',
     );
     obTermInput.value = '';
@@ -806,11 +814,12 @@ const GROUND_LIFETIME = {
   scrap: 100, chip_fragment: 110,
   tin: 150, ammo: 150, shells: 150, arrow: 150,
   battery: 190,
-  chip: 320, printed_map: 260, backpack: 320, obgun: 360,
-  // Progression-critical uniques never decay — losing the only Wi-Fi block,
-  // the AI key, or a numbered circuit board (its tower is already gone) would
-  // soft-lock the OB-gun / wave-gun paths.
-  wifiblock: Infinity, ai_key: Infinity, circuit: Infinity,
+  chip: 320, printed_map: 260, obgun: 360,
+  // Things that never decay: a backpack is too valuable to lose to a timer,
+  // and the progression-critical uniques (the only Wi-Fi block, the AI key
+  // which can't be remade, and the numbered circuit boards whose towers are
+  // already felled) would soft-lock the OB-gun / wave-gun paths if they went.
+  backpack: Infinity, wifiblock: Infinity, ai_key: Infinity, circuit: Infinity,
 };
 const GROUND_LIFETIME_DEFAULT = 160; // materials/consumables not listed above
 // Held gear left on the ground (weapons, tools, gadgets, shields, bombs, the

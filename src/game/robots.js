@@ -883,7 +883,15 @@ function updateW4(r, dt, player, map) {
 
   const d = distTo(r, player);
   const canSee = map.hasLineOfSight(r.x, r.y, player.x, player.y);
-  if (d > W4_RANGE) {
+  // With the player's shield or forcefield up, plinking from a safe distance
+  // is useless — so the hunter stops holding at range and bears down, closing
+  // right in and staying on the player rather than backing off. It still fires
+  // if it gets a clear line (the shield might drop; a mirror shield will
+  // destroy it as it fires — the price of pressing a shielded target).
+  const pressShielded = !player.invisibleToRobots && player.shielded && player.shielded();
+  if (pressShielded) {
+    if (d > 1.3) moveToward(r, player.x, player.y, W4_SPEED, dt, map);
+  } else if (d > W4_RANGE) {
     moveToward(r, player.x, player.y, W4_SPEED, dt, map);
   } else if (d < W4_MIN_RANGE && d > 1e-4) {
     const dx = r.x - player.x, dy = r.y - player.y;
