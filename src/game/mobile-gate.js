@@ -20,10 +20,11 @@ export function isMobile() {
 
 // Colour themes lifted from the three worlds. Each sets the gate background,
 // text accent, and the Walkman deck's body/edge.
+// Backgrounds are kept fairly light so the (dark) machines read against them.
 const THEMES = {
-  World: { bg1: '#16240f', bg2: '#0b0e0a', accent: '#9db284', deck: '#e6b422', edge: 'rgba(20,18,8,0.9)', bezel: 'rgba(255,240,180,0.75)' },
-  Backspace: { bg1: '#3c3720', bg2: '#100d05', accent: '#cdbd72', deck: '#b9a862', edge: 'rgba(34,28,10,0.9)', bezel: 'rgba(240,230,170,0.6)' },
-  Fortress: { bg1: '#1d222a', bg2: '#080a0d', accent: '#93a1af', deck: '#828d99', edge: 'rgba(8,10,13,0.92)', bezel: 'rgba(210,224,236,0.55)' },
+  World: { bg1: '#3f5730', bg2: '#26331b', accent: '#dce8c8', deck: '#e6b422', edge: 'rgba(20,18,8,0.9)', bezel: 'rgba(255,240,180,0.75)' },
+  Backspace: { bg1: '#8f8250', bg2: '#5c5330', accent: '#211d0c', deck: '#b9a862', edge: 'rgba(34,28,10,0.9)', bezel: 'rgba(240,230,170,0.6)' },
+  Fortress: { bg1: '#4a5563', bg2: '#2b333d', accent: '#e2ecf4', deck: '#828d99', edge: 'rgba(8,10,13,0.92)', bezel: 'rgba(210,224,236,0.55)' },
 };
 
 // A minimal-but-complete machine object for drawRobot — the fields its body
@@ -56,62 +57,63 @@ export function initMobileGate() {
         display: flex; flex-direction: column; align-items: center;
         padding: max(16px, env(safe-area-inset-top)) 16px max(14px, env(safe-area-inset-bottom));
         -webkit-user-select: none; user-select: none; touch-action: manipulation; }
-      #mobile-gate h1 { font-size: 30px; margin: 4px 0 2px; letter-spacing: 0.02em; }
-      #mobile-gate .mg-sub { font-size: 14px; line-height: 1.5; color: var(--accent); text-align: center; max-width: 30em; margin: 0 0 8px; }
-      #mobile-gate .mg-sub b { color: #f0ead8; }
-      .mg-tryanyway { font-size: 12px; color: var(--accent); opacity: 0.75; text-decoration: underline;
-        text-underline-offset: 3px; cursor: pointer; margin: 0 0 8px; background: none; border: none; font-family: inherit; }
+      #mobile-gate h1 { font-size: 26px; margin: 2px 0 1px; letter-spacing: 0.02em; }
+      #mobile-gate .mg-sub { font-size: 15px; line-height: 1.4; color: #f0ead8; font-weight: 700; text-align: center; max-width: 30em; margin: 0 0 2px; }
+      #mobile-gate .mg-sub2 { display: block; font-size: 12px; font-weight: 400; color: var(--accent); margin-top: 6px; }
+      .mg-tryanyway { font-size: 12px; color: var(--accent); opacity: 0.8; text-decoration: underline;
+        text-underline-offset: 3px; cursor: pointer; margin: 10px 0; background: none; border: none; font-family: inherit; }
       .mg-tryanyway:active { opacity: 1; }
-      /* theme switch */
-      .mg-themes { display: flex; gap: 6px; margin-bottom: 8px; }
+      /* theme switch (under the tape rack) */
+      .mg-themes { display: flex; gap: 6px; margin-top: 8px; justify-content: center; flex: 0 0 auto; }
       .mg-themes button { font: 600 11px system-ui, sans-serif; letter-spacing: 0.06em; text-transform: uppercase;
         color: var(--accent); background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.18);
         border-radius: 5px; padding: 5px 11px; cursor: pointer; }
       .mg-themes button.on { color: #10130d; background: var(--accent); border-color: var(--accent); }
       /* SKYLINK uplink clock */
-      .mg-skylink { font: 700 12.5px ui-monospace, monospace; letter-spacing: 0.12em; text-transform: uppercase;
-        color: #ff5ad0; text-shadow: 0 0 8px rgba(255,90,208,0.6); margin: 0 0 8px;
-        border: 1px solid rgba(255,90,208,0.4); border-radius: 4px; padding: 5px 12px; background: rgba(40,6,30,0.5); }
+      .mg-skylink { font: 700 12px ui-monospace, monospace; letter-spacing: 0.1em; text-transform: uppercase;
+        color: #ff5ad0; text-shadow: 0 0 8px rgba(255,90,208,0.6); margin: 0 0 4px;
+        border: 1px solid rgba(255,90,208,0.4); border-radius: 4px; padding: 4px 10px; background: rgba(40,6,30,0.5); }
       .mg-skylink span { color: #ffd0f2; }
       .mg-skylink.imminent { animation: mg-alarm 0.8s steps(1) infinite; }
       @keyframes mg-alarm { 0%,50% { opacity: 1; } 51%,100% { opacity: 0.35; } }
       /* dancing machines (canvas, drawn by drawRobot) */
-      .mg-stage { flex: 1; display: flex; align-items: flex-end; justify-content: center; gap: 6px; width: 100%; min-height: 96px; }
-      .mg-bot { width: 78px; height: 104px; }
+      .mg-stage { flex: 1 1 auto; display: flex; align-items: flex-end; justify-content: center; gap: 8px; width: 100%; min-height: 128px; max-height: 190px;
+        background: radial-gradient(70% 120% at 50% 100%, rgba(255,255,255,0.14), transparent 72%); }
+      .mg-bot { width: 98px; height: 122px; }
       /* walkman deck — the yellow, double-outlined box from the HUD */
-      .mg-deck { width: min(340px, 92vw); background: var(--deck); border-radius: 16px;
-        border: 3px solid var(--edge); box-shadow: 0 10px 30px rgba(0,0,0,0.5), inset 0 0 0 2px var(--bezel);
-        padding: 12px; margin-bottom: 12px; }
+      .mg-deck { width: min(320px, 88vw); background: var(--deck); border-radius: 14px;
+        border: 3px solid var(--edge); box-shadow: 0 8px 22px rgba(0,0,0,0.5), inset 0 0 0 2px var(--bezel);
+        padding: 9px; margin-bottom: 8px; flex: 0 0 auto; }
       .mg-deck-cass { display: block; width: 100%; height: auto; }
-      .mg-nowplaying { text-align: center; font-size: 13px; color: #1c1a10; font-weight: 700; margin-top: 8px; min-height: 17px; letter-spacing: 0.02em; }
-      .mg-hint { text-align: center; font-size: 11px; color: rgba(28,26,16,0.65); margin-top: 2px; }
+      .mg-nowplaying { text-align: center; font-size: 13px; color: #1c1a10; font-weight: 700; margin-top: 5px; min-height: 16px; letter-spacing: 0.02em; }
+      .mg-hint { text-align: center; font-size: 10px; color: rgba(28,26,16,0.65); margin-top: 1px; }
       /* tape rack — real cassettes drawn to canvas */
-      .mg-rack { display: flex; gap: 14px; overflow-x: auto; width: 100%; padding: 4px 4px 12px; justify-content: safe center;
-        -webkit-overflow-scrolling: touch; }
-      .mg-tape { flex: 0 0 auto; width: 120px; cursor: pointer; text-align: center; transition: transform 0.12s; }
+      .mg-rack { display: flex; gap: 12px; overflow-x: auto; width: 100%; padding: 2px 4px 4px; justify-content: safe center;
+        flex: 0 0 auto; -webkit-overflow-scrolling: touch; }
+      .mg-tape { flex: 0 0 auto; width: 100px; cursor: pointer; text-align: center; transition: transform 0.12s; }
       .mg-tape:active { transform: scale(0.95); }
-      .mg-tape canvas { display: block; width: 120px; height: 78px; border-radius: 6px;
+      .mg-tape canvas { display: block; width: 100px; height: 65px; border-radius: 6px;
         background: rgba(0,0,0,0.25); border: 2px solid rgba(0,0,0,0.5); }
       .mg-tape.sel canvas { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent); }
-      .mg-tape .mg-artist { font-size: 12px; font-weight: 700; color: #e8e2d0; margin-top: 7px; }
-      .mg-tape .mg-title { font-size: 11px; color: #9aa0aa; font-style: italic; }
+      .mg-tape .mg-artist { font-size: 11.5px; font-weight: 700; color: #e8e2d0; margin-top: 5px; }
+      .mg-tape .mg-title { font-size: 10.5px; color: #9aa0aa; font-style: italic; }
     </style>
     <h1>postAI</h1>
-    <p class="mg-sub"><b>It is the end of the world, and you will need a keyboard and mouse to save it!</b> Grab a laptop or desktop for the real thing. Meanwhile, here's the soundtrack.</p>
+    <p class="mg-sub">It is the end of the world, and you will need a keyboard and mouse to save it!<span class="mg-sub2">Grab a laptop or desktop for the real thing. Meanwhile, here's the soundtrack.</span></p>
     <button class="mg-tryanyway" id="mg-tryanyway">Try and play it anyway…</button>
+    <div class="mg-skylink" id="mg-skylink">SKYLINK uplink operative · T‑<span id="mg-sky">--:--:--</span></div>
+    <div class="mg-stage" id="mg-stage"></div>
+    <div class="mg-deck">
+      <canvas class="mg-deck-cass" id="mg-deck-cass" width="280" height="110"></canvas>
+      <div class="mg-nowplaying" id="mg-now">— tap a tape below —</div>
+      <div class="mg-hint" id="mg-hint">tap the deck to pause</div>
+    </div>
+    <div class="mg-rack" id="mg-rack"></div>
     <div class="mg-themes" id="mg-themes">
       <button data-theme="World" class="on">World</button>
       <button data-theme="Backspace">Backspace</button>
       <button data-theme="Fortress">Fortress</button>
     </div>
-    <div class="mg-skylink" id="mg-skylink">SKYLINK uplink operative · T‑<span id="mg-sky">--:--:--</span></div>
-    <div class="mg-stage" id="mg-stage"></div>
-    <div class="mg-deck">
-      <canvas class="mg-deck-cass" id="mg-deck-cass" width="300" height="150"></canvas>
-      <div class="mg-nowplaying" id="mg-now">— tap a tape below —</div>
-      <div class="mg-hint" id="mg-hint">tap the deck to pause</div>
-    </div>
-    <div class="mg-rack" id="mg-rack"></div>
   `;
   document.body.appendChild(el);
 
@@ -155,7 +157,7 @@ export function initMobileGate() {
   const stage = el.querySelector('#mg-stage');
   const botDefs = [{ type: 't1' }, { type: 't2' }, { type: 'w4' }];
   const bots = botDefs.map((d, i) => {
-    const cv = document.createElement('canvas'); cv.className = 'mg-bot'; cv.width = 78; cv.height = 104;
+    const cv = document.createElement('canvas'); cv.className = 'mg-bot'; cv.width = 108; cv.height = 150;
     stage.appendChild(cv);
     return { cv, ctx: cv.getContext('2d'), robot: mkRobot(d.type), phase: i * 1.3 };
   });
@@ -168,17 +170,35 @@ export function initMobileGate() {
 
   const audio = new Audio();
   audio.preload = 'auto';
+  audio.playsInline = true;      // iOS: play in place, don't hijack fullscreen
+  audio.setAttribute('playsinline', '');
+  audio.style.display = 'none';
+  el.appendChild(audio);          // in the DOM so the auto-advance play() isn't treated as a fresh, gesture-required start on mobile
   let playlist = [];
   let idx = 0;
   let current = -1;
   const nowEl = el.querySelector('#mg-now');
   const hintEl = el.querySelector('#mg-hint');
 
+  // A readable track name from a filename: drop the extension and any leading
+  // track-number prefix ("01-02- ", "02 ", etc.).
+  const trackName = (path) => decodeURI(path).split('/').pop()
+    .replace(/\.mp3$/i, '').replace(/^\d+[-.\s]*\d*[-.\s]*/, '').trim() || 'track';
+  // Deck readout: while a tape is loaded, show artist + current track (with the
+  // side it's on); otherwise the prompt.
+  const updateNow = () => {
+    if (current < 0) { nowEl.textContent = '— tap a tape below —'; return; }
+    const t = TAPES[current];
+    const side = idx < t.a.tracks.length ? 'A' : 'B';
+    nowEl.textContent = `${t.artist} — ${trackName(playlist[idx])} · ${side}`;
+  };
+
   audio.addEventListener('ended', () => {
     if (!playlist.length) return;
     idx = (idx + 1) % playlist.length;
     audio.src = playlist[idx];
     audio.play().catch(() => {});
+    updateNow();
   });
   audio.addEventListener('play', () => { hintEl.textContent = 'tap the deck to pause'; });
   audio.addEventListener('pause', () => { hintEl.textContent = 'tap the deck to resume'; });
@@ -192,7 +212,7 @@ export function initMobileGate() {
     idx = 0; current = i; deckColor = t.color || '#c9a44a';
     audio.src = playlist[0];
     audio.play().catch(() => {});
-    nowEl.textContent = `${t.artist} — ${t.title}`;
+    updateNow();
     el.querySelectorAll('.mg-tape').forEach((c, j) => c.classList.toggle('sel', j === i));
   };
   el.querySelectorAll('.mg-tape').forEach((card) => card.addEventListener('click', () => loadTape(Number(card.dataset.i))));
@@ -210,20 +230,30 @@ export function initMobileGate() {
     // deck cassette
     if (playing) spin += dt * 2.4; // slow, lazy reel turn
     deckCtx.clearRect(0, 0, deckCv.width, deckCv.height);
-    deckCtx.save(); deckCtx.translate(deckCv.width / 2, deckCv.height / 2); deckCtx.scale(6.4, 6.4);
+    deckCtx.save(); deckCtx.translate(deckCv.width / 2, deckCv.height / 2); deckCtx.scale(5.0, 5.0);
     deckRenderer.drawCassette({ color: deckColor }, spin);
     deckCtx.restore();
-    // machines
+    // machines — bob up and down to the beat (drawRobot's own shadow is
+    // suppressed via r.noShadow; we draw a separate shadow that stays planted
+    // on the floor and just shrinks a touch as the machine springs up).
     for (const b of bots) {
       b.robot.walkPhase += dt * (playing ? 12 : 3);
       b.robot.animT += dt;
-      const bob = playing ? Math.abs(Math.sin(t / 1000 * 6 + b.phase)) * 9 : Math.abs(Math.sin(t / 1000 * 1.5 + b.phase)) * 2;
-      const tilt = playing ? Math.sin(t / 1000 * 6 + b.phase) * 0.12 : 0;
+      b.robot.noShadow = true;
+      const beat = t / 1000 * 6 + b.phase;
+      const bob = playing ? Math.abs(Math.sin(beat)) * 10 : Math.abs(Math.sin(t / 1000 * 1.5 + b.phase)) * 2;
+      const tilt = playing ? Math.sin(beat) * 0.06 : 0;
+      const cx = b.cv.width / 2, floorY = b.cv.height - 16;
       b.ctx.clearRect(0, 0, b.cv.width, b.cv.height);
+      // planted floor shadow
+      const sw = Math.max(9, 17 - bob * 0.5);
+      b.ctx.fillStyle = 'rgba(0,0,0,0.32)';
+      b.ctx.beginPath(); b.ctx.ellipse(cx, floorY, sw, sw * 0.34, 0, 0, Math.PI * 2); b.ctx.fill();
+      // bobbing body
       b.ctx.save();
-      b.ctx.translate(b.cv.width / 2, b.cv.height - 14 - bob);
+      b.ctx.translate(cx, floorY - bob);
       b.ctx.rotate(tilt);
-      b.ctx.scale(1.15, 1.15);
+      b.ctx.scale(1.6, 1.6);
       drawRobot(b.ctx, b.robot, worldToScreen);
       b.ctx.restore();
     }

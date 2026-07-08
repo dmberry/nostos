@@ -1563,10 +1563,12 @@ function drawT1(ctx, r, c, worldToScreen) {
   // Sensor eye sits towards the direction of travel, like the dog's head.
   const f = worldToScreen(r.x + r.facing.x * 0.3, r.y + r.facing.y * 0.3);
 
-  ctx.fillStyle = 'rgba(0,0,0,0.28)';
-  ctx.beginPath();
-  ctx.ellipse(c.x, c.y, 11, 5, 0, 0, Math.PI * 2);
-  ctx.fill();
+  if (!r.noShadow) { // gate uses a separately-drawn, planted shadow while bobbing
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y, 11, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   ctx.save();
   ctx.translate(c.x, c.y);
@@ -1629,10 +1631,12 @@ function drawT1(ctx, r, c, worldToScreen) {
 }
 
 function drawT2(ctx, r, c) {
-  ctx.fillStyle = 'rgba(0,0,0,0.3)';
-  ctx.beginPath();
-  ctx.ellipse(c.x, c.y, 10, 5, 0, 0, Math.PI * 2);
-  ctx.fill();
+  if (!r.noShadow) {
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y, 10, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   ctx.save();
   ctx.translate(c.x, c.y);
@@ -1683,10 +1687,12 @@ function drawT2(ctx, r, c) {
 // unmistakable at a glance.
 function drawT3(ctx, r, c) {
   // A long, thin shadow — it looms rather than stands square.
-  ctx.fillStyle = 'rgba(0,0,0,0.34)';
-  ctx.beginPath();
-  ctx.ellipse(c.x, c.y, 9 * T3_SCALE, 4 * T3_SCALE, 0, 0, Math.PI * 2);
-  ctx.fill();
+  if (!r.noShadow) {
+    ctx.fillStyle = 'rgba(0,0,0,0.34)';
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y, 9 * T3_SCALE, 4 * T3_SCALE, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   ctx.save();
   ctx.translate(c.x, c.y);

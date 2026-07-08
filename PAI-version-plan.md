@@ -22,7 +22,18 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Always put a texture on a glowing thing.** No glow is ever a flat coloured blob — a grille/panel texture is laid over it (the factory-vent trick). Everything luminous goes through `Renderer.texturedGlow`, which caps the glow with an AI grate texture; if you add a new light, use it rather than a bare `fill`. (David, 2026-07-07.)
 - **Vary texture opacity per tile.** Floors jitter their texture alpha deterministically per tile (`drawFloor`) so a large expanse of one floor reads as worn/varied rather than a flat repeat.
 
-## Where we are (v1.22)
+## Where we are (v1.23)
+
+### v1.23 — mobile gate polish
+
+All in `src/game/mobile-gate.js` unless noted:
+- **Lighter theme backgrounds** (World olive, Backspace tan, Fortress steel) so the dark machines read; a soft light pool under the stage.
+- **Bigger dancers that bob with planted shadows.** First attempt (v1.22) bobbed the whole robot incl. its shadow; then a squash-about-feet kept the shadow put but looked worse; David preferred the bob. Final: `robots.js` drawT1/T2/T3 skip their own shadow when `r.noShadow` is set; the gate draws a separate floor shadow (shrinks slightly as the bot rises) and bobs only the body via `translate(0, -bob)`. Best of both — the liked bob, shadow stays on the floor.
+- **Track readout.** Deck now shows `artist — <track name> · <side>` (track name derived from the filename, stripping the numeric prefix), updated on load and on each auto-advance.
+- **Theme switch moved under the tape rack.**
+- **Tighter layout** (smaller header/deck/robots/margins, stage no longer flex-grows unbounded) so the tape names sit on-screen on an iPhone (rack+themes within 812px).
+- **Intro copy**: headline on its own line, "Grab a laptop…" a smaller line beneath, "Try and play it anyway…" spaced above and below.
+- **Readable tape folders.** Renamed `Tape-01` → `Tape-01 meme - compilation` etc. (number first for order + artist/title for humans); `TAPES[].dir` + `docs/tapes.md` updated. (Supersedes the pure-number scheme from v1.22 — the names should be visible in the folder.)
 
 ### v1.22 — mobile Walkman gate, numbered tape folders, minimap rectangle
 
