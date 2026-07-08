@@ -22,7 +22,13 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Always put a texture on a glowing thing.** No glow is ever a flat coloured blob — a grille/panel texture is laid over it (the factory-vent trick). Everything luminous goes through `Renderer.texturedGlow`, which caps the glow with an AI grate texture; if you add a new light, use it rather than a bare `fill`. (David, 2026-07-07.)
 - **Vary texture opacity per tile.** Floors jitter their texture alpha deterministically per tile (`drawFloor`) so a large expanse of one floor reads as worn/varied rather than a flat repeat.
 
-## Where we are (v1.28)
+## Where we are (v1.29)
+
+### v1.29 — title screen laptop layout + slower spools
+
+All in `src/game/mobile-gate.js`:
+- **Title relaid for landscape.** The markup is now composed from pieces (`brandHtml`, `copyHtml`, `deckHtml`, `rackHtml`, `themesHtml`, `skylinkHtml`, `stageHtml`) so the two modes arrange the same DOM differently: the gate is a single flex column (unchanged); the title wraps the pieces into `.mg-hero` (brand, tagline, actions, SKYLINK) and `.mg-player` (deck, rack, themes) plus the full-width `.mg-stage`. A `@media (min-width: 820px)` rule turns the title into a centred CSS grid — `"hero player" / "stage stage"`, columns `minmax(300,460) minmax(340,480)`, rows `1fr auto` — so hero text sits left, the Walkman (with all four tapes visible) right, and the machines run as a ground band along the bottom. Fixes the old bug where the single tall column overflowed a 768px laptop and pushed the tape rack off-screen. Below 820px it falls back to the single column. Verified at 1366×768 (no overflow, all four tapes on-screen) and the mobile gate unchanged (fits 812).
+- **Slower spools.** Deck reel advance `dt*2.4` → `dt*1.1`.
 
 ### v1.28 — SKYLINK clock recoloured dark blue
 

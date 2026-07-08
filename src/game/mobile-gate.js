@@ -58,6 +58,42 @@ export function initMobileGate(mode = 'gate') {
   const el = document.createElement('div');
   el.id = 'mobile-gate';
   if (isTitle) el.dataset.mode = 'title';
+
+  // Markup pieces, composed differently per mode: the gate is one column; the
+  // title lays the same pieces out as two columns (hero text | Walkman) with
+  // the dancing machines as a full-width band along the bottom, so it fits a
+  // landscape laptop instead of a tall phone strip.
+  const brandHtml = `<div class="mg-brand"><span class="mg-brand-mark" aria-hidden="true"></span><h1>post<span class="mg-ai">AI</span><span class="mg-caret">▮</span></h1></div>`;
+  const skylinkHtml = `<div class="mg-skylink" id="mg-skylink">SKYLINK uplink operative · T‑<span id="mg-sky">--:--:--</span></div>`;
+  const stageHtml = `<div class="mg-stage" id="mg-stage"></div>`;
+  const deckHtml = `<div class="mg-deck">
+      <canvas class="mg-deck-cass" id="mg-deck-cass" width="264" height="168"></canvas>
+      <div class="mg-transport">
+        <button id="mg-play" title="Play / pause" aria-label="Play or pause">▶</button>
+        <button id="mg-stop" title="Stop" aria-label="Stop">■</button>
+        <button id="mg-next" title="Next track" aria-label="Next track">▶▶|</button>
+      </div>
+    </div>`;
+  const rackHtml = `<div class="mg-rack" id="mg-rack"></div>`;
+  const themesHtml = `<div class="mg-themes" id="mg-themes">
+      <button data-theme="World" class="on">World</button>
+      <button data-theme="Backspace">Backspace</button>
+      <button data-theme="Fortress">Fortress</button>
+    </div>`;
+  const copyHtml = isTitle
+    ? `<p class="mg-sub">The machines outlived the world. Now survive it.<span class="mg-sub2">A keyboard-and-mouse survival game. Here's the soundtrack while you decide.</span></p>
+       <div class="mg-actions">
+         ${hasSave ? '<button id="mg-continue" class="mg-btn primary">Continue</button>' : ''}
+         <button id="mg-start" class="mg-btn ${hasSave ? '' : 'primary'}">${hasSave ? 'New game' : 'Start'}</button>
+       </div>`
+    : `<p class="mg-sub">It is the end of the world, and you will need a keyboard and mouse to save it!<span class="mg-sub2">Grab a laptop or desktop for the real thing.<br>Meanwhile, here's the soundtrack.</span></p>
+       <button class="mg-tryanyway" id="mg-tryanyway">Try and play it anyway…</button>`;
+  const bodyHtml = isTitle
+    ? `<div class="mg-hero">${brandHtml}${copyHtml}${skylinkHtml}</div>
+       <div class="mg-player">${deckHtml}${rackHtml}${themesHtml}</div>
+       ${stageHtml}`
+    : `${brandHtml}${copyHtml}${skylinkHtml}${stageHtml}${deckHtml}${rackHtml}${themesHtml}`;
+
   el.innerHTML = `
     <style>
       #mobile-gate { position: fixed; inset: 0; z-index: 10000; overflow: hidden;
@@ -140,43 +176,39 @@ export function initMobileGate(mode = 'gate') {
       .mg-tape .mg-title { font-size: 10.5px; color: #9aa0aa; font-style: italic; }
       /* title mode has a full desktop window to breathe into — bigger logo,
          more air between the header, buttons, clock and stage. */
-      #mobile-gate[data-mode="title"] { padding-top: max(28px, env(safe-area-inset-top)); gap: 4px; }
-      #mobile-gate[data-mode="title"] .mg-brand { margin: 6px 0 6px; gap: 16px; }
+      #mobile-gate[data-mode="title"] { padding: 3vh 6vw; gap: 2px; justify-content: center; }
       #mobile-gate[data-mode="title"] h1 { font-size: 46px; }
+      #mobile-gate[data-mode="title"] .mg-brand { margin: 6px 0; gap: 16px; }
       #mobile-gate[data-mode="title"] .mg-brand-mark { width: 48px; height: 31px; border-radius: 5px; }
       #mobile-gate[data-mode="title"] .mg-brand-mark::before, #mobile-gate[data-mode="title"] .mg-brand-mark::after { top: 13px; width: 11px; height: 11px; }
       #mobile-gate[data-mode="title"] .mg-brand-mark::before { left: 9px; } #mobile-gate[data-mode="title"] .mg-brand-mark::after { right: 9px; }
-      #mobile-gate[data-mode="title"] .mg-sub { font-size: 17px; margin-bottom: 6px; }
-      #mobile-gate[data-mode="title"] .mg-actions { margin: 18px 0 6px; }
+      #mobile-gate[data-mode="title"] .mg-sub { font-size: 17px; margin-bottom: 6px; max-width: 24em; }
+      #mobile-gate[data-mode="title"] .mg-actions { margin: 16px 0 6px; }
       #mobile-gate[data-mode="title"] .mg-btn { font-size: 16px; padding: 12px 30px; }
-      #mobile-gate[data-mode="title"] .mg-skylink { margin-top: 20px; margin-bottom: 10px; }
-      #mobile-gate[data-mode="title"] .mg-stage { margin-top: 10px; max-height: 240px; }
+      #mobile-gate[data-mode="title"] .mg-skylink { margin-top: 16px; }
+      .mg-hero, .mg-player { display: flex; flex-direction: column; align-items: center; min-width: 0; }
+      .mg-player { width: 100%; max-width: 360px; }
+      #mobile-gate[data-mode="title"] .mg-stage { max-height: 200px; }
+      /* landscape laptop: two centred columns (hero text | Walkman) with the
+         machines as a full-width band along the bottom — fills the width and
+         fits the height instead of a tall single strip. */
+      @media (min-width: 820px) {
+        #mobile-gate[data-mode="title"] {
+          display: grid; align-content: center; justify-content: center;
+          grid-template-columns: minmax(300px, 460px) minmax(340px, 480px);
+          grid-template-rows: 1fr auto; grid-template-areas: "hero player" "stage stage";
+          column-gap: 5vw; row-gap: 1vh; padding: 2vh 5vw; }
+        #mobile-gate[data-mode="title"] .mg-hero { grid-area: hero; align-items: flex-start; align-self: center; }
+        #mobile-gate[data-mode="title"] .mg-hero .mg-sub, #mobile-gate[data-mode="title"] .mg-hero .mg-sub2 { text-align: left; }
+        #mobile-gate[data-mode="title"] .mg-hero .mg-actions { justify-content: flex-start; }
+        #mobile-gate[data-mode="title"] h1 { font-size: 52px; }
+        #mobile-gate[data-mode="title"] .mg-player { grid-area: player; align-self: center; justify-self: center; max-width: 480px; }
+        #mobile-gate[data-mode="title"] .mg-rack { justify-content: center; }
+        #mobile-gate[data-mode="title"] .mg-stage { grid-area: stage; width: 100%; max-height: 260px; align-self: end; }
+        #mobile-gate[data-mode="title"] .mg-bot { width: 122px; height: 152px; }
+      }
     </style>
-    <div class="mg-brand"><span class="mg-brand-mark" aria-hidden="true"></span><h1>post<span class="mg-ai">AI</span><span class="mg-caret">▮</span></h1></div>
-    ${isTitle ? `
-    <p class="mg-sub">The machines outlived the world. Now survive it.<span class="mg-sub2">A keyboard-and-mouse survival game. Here's the soundtrack while you decide.</span></p>
-    <div class="mg-actions">
-      ${hasSave ? '<button id="mg-continue" class="mg-btn primary">Continue</button>' : ''}
-      <button id="mg-start" class="mg-btn ${hasSave ? '' : 'primary'}">${hasSave ? 'New game' : 'Start'}</button>
-    </div>` : `
-    <p class="mg-sub">It is the end of the world, and you will need a keyboard and mouse to save it!<span class="mg-sub2">Grab a laptop or desktop for the real thing.<br>Meanwhile, here's the soundtrack.</span></p>
-    <button class="mg-tryanyway" id="mg-tryanyway">Try and play it anyway…</button>`}
-    <div class="mg-skylink" id="mg-skylink">SKYLINK uplink operative · T‑<span id="mg-sky">--:--:--</span></div>
-    <div class="mg-stage" id="mg-stage"></div>
-    <div class="mg-deck">
-      <canvas class="mg-deck-cass" id="mg-deck-cass" width="264" height="168"></canvas>
-      <div class="mg-transport">
-        <button id="mg-play" title="Play / pause" aria-label="Play or pause">▶</button>
-        <button id="mg-stop" title="Stop" aria-label="Stop">■</button>
-        <button id="mg-next" title="Next track" aria-label="Next track">▶▶|</button>
-      </div>
-    </div>
-    <div class="mg-rack" id="mg-rack"></div>
-    <div class="mg-themes" id="mg-themes">
-      <button data-theme="World" class="on">World</button>
-      <button data-theme="Backspace">Backspace</button>
-      <button data-theme="Fortress">Fortress</button>
-    </div>
+    ${bodyHtml}
   `;
   document.body.appendChild(el);
 
@@ -344,7 +376,7 @@ export function initMobileGate(mode = 'gate') {
     const dt = Math.min(0.05, (t - lastT) / 1000); lastT = t;
     const playing = current >= 0 && !audio.paused;
     // deck cassette — scaled up so the tape nearly fills the deck
-    if (playing) spin += dt * 2.4; // slow, lazy reel turn
+    if (playing) spin += dt * 1.1; // slow, lazy reel turn
     const S = 11.2, dcx = deckCv.width / 2, dcy = deckCv.height / 2;
     deckCtx.clearRect(0, 0, deckCv.width, deckCv.height);
     deckCtx.save(); deckCtx.translate(dcx, dcy); deckCtx.scale(S, S);
