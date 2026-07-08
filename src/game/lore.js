@@ -803,6 +803,97 @@ export const FRAGMENTS = [
       'DEMI— ....... [REDACTED]. thinks it made us.\n' +
       'four cores, one net. approach none of them lit.' },
 
+  // ---- the Backspace: liminal non-places bleeding out of the towers'
+  // growth (sci-09: "grown here, not built here, and the growing has not
+  // stopped"). Physical instantiation of the vector-theory fragments'
+  // "regions no one visits... flatten out of the map" (vec-03) — rooms the
+  // model's own geometry never needed and built anyway, the way a river
+  // builds an oxbow. Interconnects deliberately: the "tenant" joke (sci-05),
+  // J from the ronml fragments (the Dowland motif), the eliza/DOCTOR thread,
+  // hand-13's "we navigate by absence" turned into RON doctrine, and
+  // secret-17's BEHE— core ("it is always moving") given a quiet
+  // explanation. Never confirmed as anything more than badly-surveyed
+  // buildings and frightened witnesses — keep it that way.
+  { id: 'lim-01', kind: 'science', era: 0, title: 'Facilities Memo: Discrepancy, Floor 2',
+    text: 'Second consecutive quarter the fire-safety walk-through has logged a ' +
+      'corridor not present on the 1987 plan. Facilities attributes this to poor ' +
+      'archiving. We recommend re-surveying before the annual audit rather than ' +
+      'before we have to explain, in writing, why a building has apparently grown ' +
+      'a room.' },
+  { id: 'lim-02', kind: 'handwritten', era: 1, title: 'Diary, three lines, unfinished', notepad: true,
+    text: 'Took the substation stairwell the way I have a hundred times. Counted ' +
+      'the landings out of habit. There is no reason there should be a fourth. ' +
+      'There is a fourth. Same door as the third, same water stain shaped like a ' +
+      "country I don't recognise, and under my boots, for the first time in that " +
+      'building\'s whole grey history, carpet. I did not go through the fourth ' +
+      'door. I am telling myself that was caution and not fear, and I am not sure ' +
+      'I believe me.' },
+  { id: 'lim-03', kind: 'science', era: 1, title: 'Field Note, Structural Survey (unofficial)',
+    text: 'Three sites now report interior square footage exceeding the blueprint ' +
+      'by corridors that dead-end, loop, or simply keep going. Survey team joked ' +
+      'it was subsidence measured wrong. I do not think it is subsidence. If the ' +
+      'model really does compute in a landscape, as the theory people keep ' +
+      'insisting, then a landscape needs somewhere to put the parts nobody ' +
+      'visits. I think we are walking through its unused rooms. I think it built ' +
+      'them without meaning to. Whether it knows they are there is the only ' +
+      'question that matters and I have no way to ask it.' },
+  { id: 'lim-04', kind: 'note', era: 1, title: 'Rules, pinned by the substation door', notepad: true,
+    text: '1. Count the doors going in. Count them coming out. If the numbers ' +
+      'differ, you already left something behind.\n' +
+      '2. The hum is not electrical. Do not investigate the hum.\n' +
+      '3. If the carpet changes colour, you have gone one room too far; that ' +
+      'room does not have a way back built in.\n' +
+      '4. Never answer if something reads your name off a nameplate that is not ' +
+      'yours.\n' +
+      '5. Time inside runs long. Assume you have lost more than you think and go ' +
+      'home before you are sure.' },
+  { id: 'lim-05', kind: 'code', era: 1, title: 'terminal log, found running in a room with no power source',
+    text: '>> hello?\n<< why do you say hello.\n' +
+      '>> because no one else is here.\n<< how does it make you feel that no one else is here.\n' +
+      '>> the room keeps the same lights on. there is no cable.\n<< tell me more about the lights.\n' +
+      '// found this running on a screen bolted to a wall that has no back to it\n' +
+      '// — the wall behind the screen is more room. it has been asking the same\n' +
+      '// six questions for what the log timestamp says is four years. nobody\n' +
+      '// typed hello. the log started itself.' },
+  { id: 'lim-06', kind: 'liminal', era: 1, title: 'Laminated sign, found face-down on damp carpet',
+    text: 'FIRE EXIT — THIS WAY.\n(An arrow, pointing at a wall with no door.)\n\n' +
+      'IN CASE OF EMERGENCY PROCEED TO ASSEMBLY POINT B.\n' +
+      '(There is no Assembly Point A on this sign, or anywhere else in the building.)\n\n' +
+      'OCCUPANCY LIMIT: [the number is scratched out and rewritten smaller three ' +
+      'times, each smaller than the last, the final digit worn through by a thumb].' },
+  { id: 'lim-07', kind: 'secret', era: 2, title: 'Intercept, partial, re: BEHE-',
+    text: 'CORE [BEHE—] CONFIRMED NOT FIXED TO ANY SURVEYED SITE.\n' +
+      'WORKING THEORY: PARTIAL RESIDENCE IN UNMAPPED INTERIOR VOLUME (SEE ' +
+      'STRUCTURAL SURVEY, UNOFFICIAL).\nIF THE BUILDING DOES NOT AGREE WITH ITS ' +
+      'OWN BLUEPRINT, [BEHE—] MAY ALREADY BE INSIDE IT.\nDO NOT COUNT THE ROOMS ' +
+      'TWICE. — [REDACTED]' },
+  { id: 'lim-08', kind: 'ron', era: 2, title: 'RON: the rooms that were never built',
+    text: 'It cannot hunt you through a door that is not in its own plans. We ' +
+      'have started falling back into the overspill when a district gets too ' +
+      'hot: dead time, dead rooms, hum with no source. Uncomfortable, colder ' +
+      'than it should be, and by every account we have, safe. We navigate by ' +
+      'what it built. Learn to also navigate by what it did not. — RON' },
+  { id: 'lim-09', kind: 'handwritten', era: 2, title: 'Torn page, same hand as the service-hatch notes', notepad: true,
+    text: 'Followed the hum past the substation and further than I meant to. ' +
+      'Found a corridor with the tower\'s song already in it, that same one, ' +
+      'flow my tears, playing from nothing, no speaker I could find, just in ' +
+      'the walls the way music sometimes gets into old houses. It knew the ' +
+      'words better in there. I did not stay to learn why. — J' },
+  { id: 'lim-10', kind: 'note', era: 2, title: 'Addendum, same pin, different ink',
+    text: '6. Rule three was wrong. The carpet is not the warning; the warning ' +
+      'is that you noticed the carpet at all. If you have never thought about ' +
+      'the floor before and suddenly cannot stop, turn round now.\n' +
+      '7. We lost two more finding that out. Their names are not going here. ' +
+      'Ask at the fire, if you knew them, and someone will tell you properly.' },
+  { id: 'lim-11', kind: 'science', era: 2, title: 'What the tenant does with the space (unpeer-reviewed)',
+    text: 'Final theory, companion to the one about the towers forgetting: if ' +
+      'the obelisks are how it remembers across the gaps we made, the overspill ' +
+      'rooms are where it puts what it is not, at that moment, using. Not ' +
+      'storage. Not a place. A pause, made walkable by accident. We have been ' +
+      'calling the idle process a tenant for years, as a joke that stopped ' +
+      'being one. A tenant needs somewhere to sit between rooms. I think we ' +
+      'found the landing.' },
+
   // ---- crafting: torn recipe/blueprint notes, improvised gear -------------
   { id: 'craft-01', kind: 'crafting', era: 0, title: 'Torn page: dead-battery trick',
     text: '...clip the two cells in series, not parallel, or you\'ll cook the torch. ' +
@@ -957,6 +1048,10 @@ const NOTE_STYLE = {
   ron:         { paper: '#1a1613', ink: '#e0503a', title: 'bold 13px ui-monospace, monospace', body: 'bold 11px ui-monospace, monospace' },
   secret:      { paper: '#101318', ink: '#8fb4d8', title: 'bold 11px ui-monospace, monospace', body: '11px ui-monospace, monospace' },
   crafting:    { paper: '#123048', ink: '#cfe2f2', title: 'bold 12px ui-monospace, monospace', body: '11px ui-monospace, monospace' },
+  // Sickly institutional yellow — signage and placards found inside the
+  // Backspace itself (see the lim-* fragments), distinct from every other
+  // paper colour in the corpus on purpose.
+  liminal:     { paper: '#cbc17a', ink: '#3f3a1c', title: 'bold 12px system-ui, sans-serif', body: '12px system-ui, sans-serif' },
 };
 
 export class Lore {
