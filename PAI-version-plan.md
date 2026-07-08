@@ -22,7 +22,18 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Always put a texture on a glowing thing.** No glow is ever a flat coloured blob — a grille/panel texture is laid over it (the factory-vent trick). Everything luminous goes through `Renderer.texturedGlow`, which caps the glow with an AI grate texture; if you add a new light, use it rather than a bare `fill`. (David, 2026-07-07.)
 - **Vary texture opacity per tile.** Floors jitter their texture alpha deterministically per tile (`drawFloor`) so a large expanse of one floor reads as worn/varied rather than a flat repeat.
 
-## Where we are (v1.23)
+## Where we are (v1.24)
+
+### v1.24 — desktop title screen (click-to-start)
+
+The mobile gate is now a two-mode component. `initMobileGate(mode)` renders the phone gate as before (`mode='gate'`); `initTitleScreen()` calls it with `mode='title'` for the desktop start screen. `index.html` boots `initTitleScreen()` on desktop instead of importing `main.js` directly, so the game opens on a title card and starts on click.
+
+All in `src/game/mobile-gate.js` unless noted:
+- **Shared shell, different action row.** Title mode reuses everything — the dancing T1/T2/W4, the playable Walkman deck + rack, the World/Backspace/Fortress themes, the SKYLINK clock — and swaps the "you need a keyboard" note + "Try anyway" link for a tagline and a **Continue / New game** button row. `.mg-btn` styling themes off `--accent` so the buttons recolour with the theme.
+- **Continue vs New game.** Both boot via a shared `boot(newGame)`: it stops the frame loop (`running=false`) and the SKYLINK interval, pauses the title audio, `el.remove()`s the screen, and dynamic-imports `main.js`. **New game** first clears the run save (`postai-character`, `postai-lore`, `postai-seed`) — keeping the durable `postai-identity` (name/gender), exactly like the in-game New Game — so `main.js` starts fresh; **Continue** leaves the save so `main.js` restores it. Continue only renders when a save exists (`localStorage.getItem('postai-character')`).
+- **Music stops on entry** (David's call): the game starts its own soundtrack rather than inheriting the title's tape.
+- **Shows every launch** on desktop (no skip toggle). Mobile phones still get the gate (`isMobile()` unchanged).
+- Verified live: desktop reload → title with both buttons (save present), tape plays, Continue → game boots restoring "Adam" with no console errors; gate mode still shows the original copy + "Try anyway". Single planted shadow per robot on a clean load (the earlier "two shadows" report was a stale cached `robots.js` — the `noShadow` guard shipped in v1.23; a fresh load draws one).
 
 ### v1.23 — mobile gate polish
 

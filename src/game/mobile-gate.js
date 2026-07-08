@@ -18,6 +18,11 @@ export function isMobile() {
   return ua || (coarse && narrow);
 }
 
+// The desktop start screen is the same component in 'title' mode: same dancing
+// machines, same playable Walkman, same themes and doomsday clock, but with a
+// Start / Continue action row instead of the mobile "you need a keyboard" note.
+export function initTitleScreen() { return initMobileGate('title'); }
+
 // Colour themes lifted from the three worlds. Each sets the gate background,
 // text accent, and the Walkman deck's body/edge.
 // Backgrounds are kept fairly light so the (dark) machines read against them.
@@ -44,9 +49,15 @@ function mkRobot(type) {
   };
 }
 
-export function initMobileGate() {
+export function initMobileGate(mode = 'gate') {
+  const isTitle = mode === 'title';
+  let hasSave = false;
+  try { hasSave = !!localStorage.getItem('postai-character'); } catch (e) { /* storage blocked */ }
+  let running = true;   // frame loop / clock keep going until we boot the game
+  let skyTimer = null;
   const el = document.createElement('div');
   el.id = 'mobile-gate';
+  if (isTitle) el.dataset.mode = 'title';
   el.innerHTML = `
     <style>
       #mobile-gate { position: fixed; inset: 0; z-index: 10000; overflow: hidden;
@@ -63,6 +74,15 @@ export function initMobileGate() {
       .mg-tryanyway { font-size: 12px; color: var(--accent); opacity: 0.8; text-decoration: underline;
         text-underline-offset: 3px; cursor: pointer; margin: 10px 0; background: none; border: none; font-family: inherit; }
       .mg-tryanyway:active { opacity: 1; }
+      /* title-mode Start / Continue actions */
+      .mg-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin: 8px 0 2px; flex: 0 0 auto; }
+      .mg-btn { font: 700 15px system-ui, sans-serif; letter-spacing: 0.03em; cursor: pointer; font-family: inherit;
+        color: var(--accent); background: rgba(255,255,255,0.07); border: 1.5px solid var(--accent);
+        border-radius: 8px; padding: 10px 24px; transition: transform 0.1s; }
+      .mg-btn.primary { color: #10130d; background: var(--accent); border-color: var(--accent); }
+      .mg-btn:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+      .mg-btn.primary:hover { background: color-mix(in srgb, var(--accent) 88%, white); }
+      .mg-btn:active { transform: scale(0.96); }
       /* theme switch (under the tape rack) */
       .mg-themes { display: flex; gap: 6px; margin-top: 8px; justify-content: center; flex: 0 0 auto; }
       .mg-themes button { font: 600 11px system-ui, sans-serif; letter-spacing: 0.06em; text-transform: uppercase;
@@ -99,8 +119,14 @@ export function initMobileGate() {
       .mg-tape .mg-title { font-size: 10.5px; color: #9aa0aa; font-style: italic; }
     </style>
     <h1>postAI</h1>
+    ${isTitle ? `
+    <p class="mg-sub">The machines outlived the world. Now survive it.<span class="mg-sub2">A keyboard-and-mouse survival game. Here's the soundtrack while you decide.</span></p>
+    <div class="mg-actions">
+      ${hasSave ? '<button id="mg-continue" class="mg-btn primary">Continue</button>' : ''}
+      <button id="mg-start" class="mg-btn ${hasSave ? '' : 'primary'}">${hasSave ? 'New game' : 'Start'}</button>
+    </div>` : `
     <p class="mg-sub">It is the end of the world, and you will need a keyboard and mouse to save it!<span class="mg-sub2">Grab a laptop or desktop for the real thing. Meanwhile, here's the soundtrack.</span></p>
-    <button class="mg-tryanyway" id="mg-tryanyway">Try and play it anyway…</button>
+    <button class="mg-tryanyway" id="mg-tryanyway">Try and play it anyway…</button>`}
     <div class="mg-skylink" id="mg-skylink">SKYLINK uplink operative · T‑<span id="mg-sky">--:--:--</span></div>
     <div class="mg-stage" id="mg-stage"></div>
     <div class="mg-deck">
@@ -127,13 +153,34 @@ export function initMobileGate() {
   };
   el.querySelectorAll('#mg-themes button').forEach((b) => b.addEventListener('click', () => applyTheme(b.dataset.theme)));
 
-  // Escape hatch: if the gate fired by mistake (a touch laptop, say), let them
-  // dismiss it and boot the real game anyway.
-  el.querySelector('#mg-tryanyway').addEventListener('click', () => {
+  // Tear down the screen and hand off to the game. newGame wipes the run save
+  // (keeping the durable name/gender identity, exactly like in-game New Game);
+  // otherwise the game restores whatever save exists. Title music always stops
+  // here — the game starts its own soundtrack.
+  const boot = (newGame) => {
+    running = false;
+    if (skyTimer) clearInterval(skyTimer);
     try { audio.pause(); } catch (e) { /* not yet playing */ }
+    if (newGame) {
+      try {
+        localStorage.removeItem('postai-character');
+        localStorage.removeItem('postai-lore');
+        localStorage.removeItem('postai-seed');
+      } catch (e) { /* storage blocked */ }
+    }
     el.remove();
     import('../main.js');
-  });
+  };
+  if (isTitle) {
+    // Start = new game (wipe save); Continue = resume the existing save.
+    el.querySelector('#mg-start').addEventListener('click', () => boot(true));
+    const cont = el.querySelector('#mg-continue');
+    if (cont) cont.addEventListener('click', () => boot(false));
+  } else {
+    // Escape hatch: if the gate fired by mistake (a touch laptop, say), let them
+    // dismiss it and boot the real game anyway (resuming any save).
+    el.querySelector('#mg-tryanyway').addEventListener('click', () => boot(false));
+  }
 
   // ---- real cassettes in the rack (drawn once) ----
   const rack = el.querySelector('#mg-rack');
@@ -225,6 +272,7 @@ export function initMobileGate() {
   let spin = 0;
   let lastT = performance.now();
   const frame = (t) => {
+    if (!running) return;   // stop drawing once we've booted the game
     const dt = Math.min(0.05, (t - lastT) / 1000); lastT = t;
     const playing = current >= 0 && !audio.paused;
     // deck cassette
@@ -274,5 +322,5 @@ export function initMobileGate() {
     if (s <= 0) { skyBanner.classList.add('imminent'); skyEl.textContent = 'IMMINENT'; } else secs -= 1;
   };
   tickSky();
-  setInterval(tickSky, 1000);
+  skyTimer = setInterval(tickSky, 1000);
 }
