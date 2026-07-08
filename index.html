@@ -76,6 +76,12 @@
   #help .helpTab.active { background: rgba(157,178,132,0.28); color: #e8e0d0; border-color: rgba(157,178,132,0.6); }
   #help .helpPanel { display: none; }
   #help .helpPanel.active { display: block; }
+  #help .settingsRow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  #help .settingsRow input[type="range"] { width: 220px; accent-color: #9db284; }
+  #help .musicChoice label { display: inline-flex; align-items: center; gap: 5px;
+    color: #cfd8c3; font-size: 13px; margin-right: 4px; cursor: pointer; }
+  #help .musicChoice input[type="radio"] { accent-color: #9db284; flex: 0 0 auto; width: 14px; height: 14px; margin: 0; }
+  #help #volumeLabel { color: #9db284; font: 12px ui-monospace, monospace; min-width: 38px; }
   /* Obelisk terminal — a VT220-ish green CRT. */
   #obterminal { display: none; position: fixed; inset: 0; z-index: 20;
     background: rgba(0,0,0,0.72); align-items: center; justify-content: center; }
@@ -229,7 +235,7 @@
     <p>"Vector theory" and the Magnifica Humanitas fragments draw on David's own writing (stunlaw).</p>
     <p>Character and animal art: Kenney (kenney.nl), CC0.</p>
 
-    <div class="foot">v1.08 &middot; github.com/dmberry/postAI</div>
+    <div class="foot">v1.09 &middot; github.com/dmberry/postAI</div>
   </div>
 </div>
 <div id="help">
@@ -242,6 +248,7 @@
       <button class="helpTab" data-panel="survival" type="button">Survival</button>
       <button class="helpTab" data-panel="animals" type="button">Animals</button>
       <button class="helpTab" data-panel="machines" type="button">Machines</button>
+      <button class="helpTab" data-panel="settings" type="button">Settings</button>
     </div>
 
     <div class="helpPanel active" data-panel="controls">
@@ -374,6 +381,23 @@
     <h2>The world</h2>
     <p>A river divides the map; the bridges are the only crossings. Streams can be waded, slowly. Away from the towns the ground gets properly rugged — steep, tall hills and deep hollows, not just gentle rises — and high ground costs stamina to climb. Rubble and rocks can be climbed too, one step up like any other rise, and walked across the top of once you're up there — building walls stay solid, so a town or a house is still a real boundary, not just another slope. Somewhere in the ruins, the story of what happened here is waiting to be found. Sprayed slogans turn up here and there on the walls — some anti-machine, some signed by RON — and abandoned cars sit dead on the roads where the grid failed them.</p>
     </div><!-- /survival (part 2) -->
+
+    <div class="helpPanel" data-panel="settings">
+    <h2>Volume</h2>
+    <p class="settingsRow">
+      <input type="range" id="volumeSlider" min="0" max="100" value="100">
+      <span id="volumeLabel">100%</span>
+    </p>
+
+    <h2>Music</h2>
+    <p class="settingsRow musicChoice">
+      <label><input type="radio" name="musicMode" value="eliza"> "eliza"</label>
+      <label><input type="radio" name="musicMode" value="resonance"> "resonance"</label>
+      <label><input type="radio" name="musicMode" value="synth"> piano bed</label>
+      <label><input type="radio" name="musicMode" value="off"> off</label>
+    </p>
+    <p class="meta">Same as pressing <kbd>M</kbd>, just picked directly. More options land here over time.</p>
+    </div><!-- /settings -->
 
     <p class="meta">Press <kbd>H</kbd> or click anywhere outside this panel to close.</p>
   </div>

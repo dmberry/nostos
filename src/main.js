@@ -47,7 +47,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '1.08';
+const VERSION = '1.09';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -598,7 +598,31 @@ for (const btn of helpEl.querySelectorAll('.helpTab')) {
     for (const b of helpEl.querySelectorAll('.helpTab')) b.classList.toggle('active', b === btn);
     for (const p of helpEl.querySelectorAll('.helpPanel')) p.classList.toggle('active', p.dataset.panel === name);
     helpEl.querySelector('.panel').scrollTop = 0;
+    if (name === 'settings') syncSettingsPanel();
   });
+}
+
+// Settings tab: volume slider and direct music-track choice, both backed by
+// sfx (which persists them itself — see Sound.setVolume/setMusicMode). The
+// panel's inputs are synced to the live state each time the tab is opened,
+// since either can also change elsewhere (M key for music; nothing else
+// touches volume yet, but the pattern's ready for when something does).
+const volumeSlider = document.getElementById('volumeSlider');
+const volumeLabel = document.getElementById('volumeLabel');
+volumeSlider.addEventListener('input', () => {
+  const v = Number(volumeSlider.value) / 100;
+  sfx.setVolume(v);
+  volumeLabel.textContent = `${volumeSlider.value}%`;
+});
+for (const radio of helpEl.querySelectorAll('input[name="musicMode"]')) {
+  radio.addEventListener('change', () => { if (radio.checked) sfx.setMusicMode(radio.value); });
+}
+function syncSettingsPanel() {
+  const pct = Math.round(sfx.volume * 100);
+  volumeSlider.value = pct;
+  volumeLabel.textContent = `${pct}%`;
+  const current = helpEl.querySelector(`input[name="musicMode"][value="${sfx.musicMode}"]`);
+  if (current) current.checked = true;
 }
 
 // Obelisk terminal. With an access chip carried, clicking an obelisk opens a

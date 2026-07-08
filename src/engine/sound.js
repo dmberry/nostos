@@ -35,13 +35,32 @@ function now() {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();
 }
 
+// Settings persisted across sessions — volume and music choice, with room to
+// grow (the Settings tab in the help modal is built to take more controls
+// later without restructuring this). Read/written as one small JSON blob.
+const SETTINGS_KEY = 'postai-settings';
+function loadSettings() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
+    return s && typeof s === 'object' ? s : {};
+  } catch (e) { return {}; }
+}
+function saveSettings(patch) {
+  try {
+    const s = loadSettings();
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...s, ...patch }));
+  } catch (e) { /* storage unavailable */ }
+}
+
 class Sound {
   constructor() {
     // Nothing here may touch AudioContext: construction must be safe in
-    // environments without audio (node, tests, headless).
+    // environments without audio (node, tests, headless). Reading
+    // localStorage is fine though, so settings are known before unlock().
+    const saved = loadSettings();
     this.ctx = null;
     this.master = null;
-    this._muted = false;
+    this._volume = typeof saved.volume === 'number' ? Math.max(0, Math.min(1, saved.volume)) : 1;
     this._last = new Map();          // debounce timestamps by key
     this._ambience = { night: false, dusk: false, wind: 1, robotNear: false };
     this._droneGain = null;
@@ -50,7 +69,10 @@ class Sound {
     this._windGain = null;
     this._cricketGain = null;
     this._musicGain = null;          // synth-piano fade bus: mode and combat tension both ramp this
-    this._musicMode = 'eliza';       // one of MUSIC_MODES — cycled by the M key; starts on the first found tape
+    // One of MUSIC_MODES; cycled by the M key or set directly from the
+    // Settings tab. Defaults to the first found tape unless a previous
+    // session's choice was saved.
+    this._musicMode = MUSIC_MODES.includes(saved.musicMode) ? saved.musicMode : 'eliza';
     this._musicTense = false;        // true while fighting or being hunted
     this._fileTracks = new Map();    // mode -> { el, gain }, one per FILE_TRACKS entry
   }
@@ -74,7 +96,7 @@ class Sound {
       this.ctx = ctx;
 
       this.master = ctx.createGain();
-      this.master.gain.value = this._muted ? 0 : MASTER_GAIN;
+      this.master.gain.value = MASTER_GAIN * this._volume;
       this.master.connect(ctx.destination);
 
       this._noise = this._makeNoise(1, false);
@@ -90,19 +112,22 @@ class Sound {
     }
   }
 
-  setMuted(m) {
-    this._muted = !!m;
+  // Master volume, 0..1. Persisted across sessions (Settings tab). 0 is
+  // effectively mute — no separate mute flag, one continuous control.
+  setVolume(v) {
+    this._volume = Math.max(0, Math.min(1, v));
+    saveSettings({ volume: this._volume });
     try {
       if (!this.ctx) return;
       const t = this.ctx.currentTime;
       this.master.gain.cancelScheduledValues(t);
       this.master.gain.setValueAtTime(this.master.gain.value, t);
-      this.master.gain.linearRampToValueAtTime(this._muted ? 0 : MASTER_GAIN, t + 0.05);
+      this.master.gain.linearRampToValueAtTime(MASTER_GAIN * this._volume, t + 0.05);
     } catch (e) { /* ignore */ }
   }
 
-  get muted() {
-    return this._muted;
+  get volume() {
+    return this._volume;
   }
 
   // ---- one-shot effects ------------------------------------------------
@@ -436,7 +461,17 @@ class Sound {
   // bed, then off, then back to the first track. Returns the new mode so
   // the caller can print what changed.
   toggleMusic() {
-    this._musicMode = MUSIC_MODES[(MUSIC_MODES.indexOf(this._musicMode) + 1) % MUSIC_MODES.length];
+    return this.setMusicMode(MUSIC_MODES[(MUSIC_MODES.indexOf(this._musicMode) + 1) % MUSIC_MODES.length]);
+  }
+
+  // Set the mode directly (Settings tab), rather than stepping through the
+  // cycle — same underlying effect as toggleMusic, just not relative.
+  // Persisted, so the choice survives a reload. Returns the mode set, or
+  // the previous one unchanged if given something that isn't a real mode.
+  setMusicMode(mode) {
+    if (!MUSIC_MODES.includes(mode)) return this._musicMode;
+    this._musicMode = mode;
+    saveSettings({ musicMode: mode });
     const track = this._fileTracks.get(this._musicMode);
     if (track) {
       track.el.currentTime = track.el.currentTime || 0;

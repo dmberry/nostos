@@ -22,7 +22,19 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Always put a texture on a glowing thing.** No glow is ever a flat coloured blob — a grille/panel texture is laid over it (the factory-vent trick). Everything luminous goes through `Renderer.texturedGlow`, which caps the glow with an AI grate texture; if you add a new light, use it rather than a bare `fill`. (David, 2026-07-07.)
 - **Vary texture opacity per tile.** Floors jitter their texture alpha deterministically per tile (`drawFloor`) so a large expanse of one floor reads as worn/varied rather than a flat repeat.
 
-## Where we are (v1.08)
+## Where we are (v1.09)
+
+### v1.09 — a Settings tab
+
+First real settings surface, explicitly requested as infrastructure ("later when we want to give the user some options"), not a one-off.
+
+- **sound.js: volume replaces the unused mute flag.** `_muted`/`setMuted`/`muted` (never actually wired to any UI — dead code) removed outright and replaced with a continuous `_volume` (0..1), `setVolume(v)`, and a `volume` getter; `master.gain` is now `MASTER_GAIN * this._volume` everywhere it used to branch on `_muted`. 0 volume is mute, no separate flag needed.
+- **Settings persistence.** New `postai-settings` localStorage key (`loadSettings`/`saveSettings` module-level helpers, read once in the constructor — safe pre-`unlock()` since it's just JSON, no AudioContext touched). Both `setVolume` and the new `setMusicMode` write through on every change; the constructor seeds `_volume`/`_musicMode` from whatever was saved, falling back to the existing defaults (1.0, `'eliza'`) if nothing's there yet or it doesn't validate against `MUSIC_MODES`.
+- **Direct music selection, not just cycling.** `toggleMusic()` (the M key) is now a one-line wrapper around a new `setMusicMode(mode)`, which does the actual mode-set/play/gain work and is what the Settings tab's radios call directly — picking "resonance" from the panel has the exact same effect as pressing M until you land on it, just not relative.
+- **UI: a Settings tab inside the existing help modal**, reusing the established `.helpTab`/`.helpPanel` tabbed pattern rather than a new modal — a volume `<input type="range">` and four music-mode radios, synced to live `sfx` state via `syncSettingsPanel()` every time the tab is clicked (not just on load, since the M key or a future path could change either value while the tab isn't showing).
+- **Layout bug found and fixed during verification:** the music radios initially rendered with a ~130px gap between each radio and its label text. Root cause: `<input type="radio">` as a flex child with no explicit sizing was stretching to fill available flex space in the `display:flex` `<label>` (radios have no sensible intrinsic flex-basis) — invisible in the DOM but visually reading as a huge gap. Fixed with `flex: 0 0 auto; width: 14px; height: 14px` on `.musicChoice input[type="radio"]`. Caught by checking `getBoundingClientRect()` on the actual input after the first screenshot looked off — per-tool guidance, screenshots aren't reliable for spacing, `preview_inspect`/direct rect checks are.
+
+Verified live: confirmed the settings blob round-trips through real `localStorage` (`{"musicMode":"resonance","volume":0.67}` after interacting with the panel); confirmed the radio-gap bug's actual rendered width (130px) before the fix and the corrected 14px after; screenshotted the final panel to confirm the fix.
 
 ### v1.08 — About box corrections
 
