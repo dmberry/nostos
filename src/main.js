@@ -48,7 +48,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '1.16';
+const VERSION = '1.17';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -416,6 +416,22 @@ try {
       if (Array.isArray(st.pockets)) player.pockets = st.pockets;
       if (st.backpack) player.backpack = st.backpack;
       if (st.walkman !== undefined) player.walkman = st.walkman; // null = tape moved out, respected across reload
+    }
+    // Guard against stale item keys carried over from a save written by an
+    // earlier build — e.g. the pre-v1.15 tape keys (tape_ward / tape_meme),
+    // renamed to tape_1..3 when tapes became data-driven. An orphaned key
+    // resolves to an undefined item def, and the HUD renderer dereferences it
+    // every frame (drawCassette, pocket labels), so a single dead key hard-
+    // crashes the whole render loop before textures even finish loading. Drop
+    // anything the current ITEMS table no longer knows about.
+    const validStack = (s) => (s && ITEMS[s.item]) ? s : null;
+    player.pockets = (Array.isArray(player.pockets) ? player.pockets : []).map(validStack);
+    while (player.pockets.length < 4) player.pockets.push(null);
+    if (player.hands && !ITEMS[player.hands]) player.hands = null;
+    if (player.walkman && !ITEMS[player.walkman.item]) { player.walkman = { item: 'tape_1', qty: 1 }; player.walkmanSide = null; }
+    if (player.backpack) {
+      if (player.backpack.weapon && !ITEMS[player.backpack.weapon]) player.backpack.weapon = null;
+      if (Array.isArray(player.backpack.slots)) player.backpack.slots = player.backpack.slots.map(validStack);
     }
   }
 } catch { /* corrupt save: start fresh */ }

@@ -22,7 +22,17 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Always put a texture on a glowing thing.** No glow is ever a flat coloured blob — a grille/panel texture is laid over it (the factory-vent trick). Everything luminous goes through `Renderer.texturedGlow`, which caps the glow with an AI grate texture; if you add a new light, use it rather than a bare `fill`. (David, 2026-07-07.)
 - **Vary texture opacity per tile.** Floors jitter their texture alpha deterministically per tile (`drawFloor`) so a large expanse of one floor reads as worn/varied rather than a flat repeat.
 
-## Where we are (v1.16)
+## Where we are (v1.17)
+
+### v1.17 — stale-save crash fix (the "broken in Chrome" bug)
+
+- **Symptom.** Returning players saw the whole game render flat and untextured, frozen on the first frame — reported as "broken in Chrome, fine in Safari." It wasn't a browser bug or a Vercel case-sensitivity issue (all texture files 200 on the live host): the render loop was throwing on frame 1, before images finished loading, so nothing ever textured.
+- **Root cause.** The v1.15 tape refactor renamed item keys (`tape_ward`/`tape_meme`/`tape_maieutics` → `tape_1..3`). A save from an earlier build still carried an old key in `player.walkman` (and possibly a pocket). On load `main.js` restores that state verbatim; `ITEMS['tape_ward']` is now `undefined`; `drawDashboard` → `drawCassette` reads `.color` off it every frame → uncaught `TypeError` → `frame()` never reschedules `requestAnimationFrame`. "Fine in Safari" just meant that browser held no pre-refactor save. localStorage is per-browser, so whichever browser had played the old build broke.
+- **Fix (three layers).**
+  1. *Root:* on load, sanitize restored inventory — drop any `{item}` whose key isn't in the current `ITEMS` table (`pockets`, `backpack.weapon`, `backpack.slots`, `hands`); an invalid `walkman` resets to the default `tape_1`. This kills the whole class of orphaned-key crashes, not just the cassette.
+  2. *Defensive:* `drawCassette` guards `(itemDef && itemDef.color)`; the walkman block in `drawDashboard` only runs when `ITEMS[player.walkman.item]` resolves.
+- **Verified** by seeding the exact pre-refactor save (`walkman: tape_ward`, pocket `tape_meme`) into localStorage and reloading: game loads clean, textures present, walkman shows `tape_1`, dead pocket key dropped, zero console errors.
+- **Lesson for next time:** renaming or removing an `ITEMS` key is a save-migration event. Either keep an alias or sanitize on load (now done generically, so future renames are covered).
 
 ### v1.16 — floor lamps, isometric EXIT sign, share card
 

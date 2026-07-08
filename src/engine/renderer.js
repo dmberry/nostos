@@ -2836,7 +2836,7 @@ export class Renderer {
     ctx.strokeStyle = 'rgba(0,0,0,0.5)';
     ctx.lineWidth = 1;
     ctx.strokeRect(-11, -7, 22, 14);
-    ctx.fillStyle = itemDef.color || '#c9a44a'; // label strip
+    ctx.fillStyle = (itemDef && itemDef.color) || '#c9a44a'; // label strip
     ctx.fillRect(-9, -5.5, 18, 3);
     ctx.fillStyle = '#1a1b1f'; // tape window
     ctx.fillRect(-7.5, -1, 15, 6);
@@ -3789,7 +3789,7 @@ export class Renderer {
       ctx.strokeStyle = 'rgba(255,240,180,0.7)'; // bright inner bezel
       ctx.stroke();
       this.uiSlots.push({ x: wmX, y: wy, w: ws, h: ws, kind: 'walkman' });
-      if (player.walkman) {
+      if (player.walkman && ITEMS[player.walkman.item]) {
         const tapeDef = ITEMS[player.walkman.item];
         const side = player.walkmanSide
           ? (player.walkmanSide === 'A' ? tapeDef.sideA : tapeDef.sideB) : null;
