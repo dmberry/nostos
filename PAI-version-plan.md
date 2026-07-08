@@ -22,7 +22,15 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Always put a texture on a glowing thing.** No glow is ever a flat coloured blob — a grille/panel texture is laid over it (the factory-vent trick). Everything luminous goes through `Renderer.texturedGlow`, which caps the glow with an AI grate texture; if you add a new light, use it rather than a bare `fill`. (David, 2026-07-07.)
 - **Vary texture opacity per tile.** Floors jitter their texture alpha deterministically per tile (`drawFloor`) so a large expanse of one floor reads as worn/varied rather than a flat repeat.
 
-## Where we are (v1.24)
+## Where we are (v1.25)
+
+### v1.25 — Walkman transport + gate/title spacing
+
+All in `src/game/mobile-gate.js`:
+- **Transport buttons** in the deck (`.mg-transport`): play/pause (`#mg-play`, glyph flips ▶ ↔ ❚❚ off the audio `play`/`pause` events via `syncTransport`), stop (`#mg-stop`, pause + `currentTime=0`), next (`#mg-next`, `nextTrack`). Stop/next disable until a tape is loaded; play with nothing loaded starts tape 1. Buttons `stopPropagation` so they don't also trigger the deck's click-to-pause.
+- **Tap-to-skip**: clicking a tape card starts it; clicking the card that's already current calls `nextTrack()` (wraps A→B→A). The `ended` handler now just calls `nextTrack` too.
+- **Spacing**: theme switch `margin-top` 8 → 18px. Title mode (`[data-mode="title"]`) gets a bigger logo (40px), larger sub/buttons, and clear air above the SKYLINK clock (20px) and stage, so the desktop window is used rather than everything bunching at the top.
+- Verified live (desktop): transport advances/stops correctly, glyph tracks real play state, clean single tape-load starts on side A; no console errors.
 
 ### v1.24 — desktop title screen (click-to-start)
 

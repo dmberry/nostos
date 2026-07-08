@@ -84,7 +84,7 @@ export function initMobileGate(mode = 'gate') {
       .mg-btn.primary:hover { background: color-mix(in srgb, var(--accent) 88%, white); }
       .mg-btn:active { transform: scale(0.96); }
       /* theme switch (under the tape rack) */
-      .mg-themes { display: flex; gap: 6px; margin-top: 8px; justify-content: center; flex: 0 0 auto; }
+      .mg-themes { display: flex; gap: 6px; margin-top: 18px; justify-content: center; flex: 0 0 auto; }
       .mg-themes button { font: 600 11px system-ui, sans-serif; letter-spacing: 0.06em; text-transform: uppercase;
         color: var(--accent); background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.18);
         border-radius: 5px; padding: 5px 11px; cursor: pointer; }
@@ -106,7 +106,15 @@ export function initMobileGate(mode = 'gate') {
         padding: 9px; margin-bottom: 8px; flex: 0 0 auto; }
       .mg-deck-cass { display: block; width: 100%; height: auto; }
       .mg-nowplaying { text-align: center; font-size: 13px; color: #1c1a10; font-weight: 700; margin-top: 5px; min-height: 16px; letter-spacing: 0.02em; }
-      .mg-hint { text-align: center; font-size: 10px; color: rgba(28,26,16,0.65); margin-top: 1px; }
+      /* transport controls — play/pause, stop, next */
+      .mg-transport { display: flex; gap: 8px; justify-content: center; margin-top: 7px; }
+      .mg-transport button { width: 40px; height: 32px; border-radius: 7px; cursor: pointer;
+        display: flex; align-items: center; justify-content: center; font-size: 14px; line-height: 1;
+        color: #f4ecd2; background: rgba(20,18,8,0.82); border: 1px solid rgba(20,18,8,0.9); font-family: inherit; transition: transform 0.1s; }
+      .mg-transport button:hover { background: rgba(20,18,8,0.95); }
+      .mg-transport button:active { transform: scale(0.92); }
+      .mg-transport button:disabled { opacity: 0.4; cursor: default; }
+      .mg-transport #mg-play { width: 52px; }
       /* tape rack — real cassettes drawn to canvas */
       .mg-rack { display: flex; gap: 12px; overflow-x: auto; width: 100%; padding: 2px 4px 4px; justify-content: safe center;
         flex: 0 0 auto; -webkit-overflow-scrolling: touch; }
@@ -117,6 +125,15 @@ export function initMobileGate(mode = 'gate') {
       .mg-tape.sel canvas { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent); }
       .mg-tape .mg-artist { font-size: 11.5px; font-weight: 700; color: #e8e2d0; margin-top: 5px; }
       .mg-tape .mg-title { font-size: 10.5px; color: #9aa0aa; font-style: italic; }
+      /* title mode has a full desktop window to breathe into — bigger logo,
+         more air between the header, buttons, clock and stage. */
+      #mobile-gate[data-mode="title"] { padding-top: max(28px, env(safe-area-inset-top)); gap: 4px; }
+      #mobile-gate[data-mode="title"] h1 { font-size: 40px; margin: 6px 0 6px; }
+      #mobile-gate[data-mode="title"] .mg-sub { font-size: 17px; margin-bottom: 6px; }
+      #mobile-gate[data-mode="title"] .mg-actions { margin: 18px 0 6px; }
+      #mobile-gate[data-mode="title"] .mg-btn { font-size: 16px; padding: 12px 30px; }
+      #mobile-gate[data-mode="title"] .mg-skylink { margin-top: 20px; margin-bottom: 10px; }
+      #mobile-gate[data-mode="title"] .mg-stage { margin-top: 10px; max-height: 240px; }
     </style>
     <h1>postAI</h1>
     ${isTitle ? `
@@ -132,7 +149,11 @@ export function initMobileGate(mode = 'gate') {
     <div class="mg-deck">
       <canvas class="mg-deck-cass" id="mg-deck-cass" width="280" height="110"></canvas>
       <div class="mg-nowplaying" id="mg-now">— tap a tape below —</div>
-      <div class="mg-hint" id="mg-hint">tap the deck to pause</div>
+      <div class="mg-transport">
+        <button id="mg-play" title="Play / pause" aria-label="Play or pause">▶</button>
+        <button id="mg-stop" title="Stop" aria-label="Stop">■</button>
+        <button id="mg-next" title="Next track" aria-label="Next track">▶▶|</button>
+      </div>
     </div>
     <div class="mg-rack" id="mg-rack"></div>
     <div class="mg-themes" id="mg-themes">
@@ -225,7 +246,9 @@ export function initMobileGate(mode = 'gate') {
   let idx = 0;
   let current = -1;
   const nowEl = el.querySelector('#mg-now');
-  const hintEl = el.querySelector('#mg-hint');
+  const playBtn = el.querySelector('#mg-play');
+  const stopBtn = el.querySelector('#mg-stop');
+  const nextBtn = el.querySelector('#mg-next');
 
   // A readable track name from a filename: drop the extension and any leading
   // track-number prefix ("01-02- ", "02 ", etc.).
@@ -240,15 +263,23 @@ export function initMobileGate(mode = 'gate') {
     nowEl.textContent = `${t.artist} — ${trackName(playlist[idx])} · ${side}`;
   };
 
-  audio.addEventListener('ended', () => {
+  // Reflect play/pause on the button glyph; disable stop/next until a tape's in.
+  const syncTransport = () => {
+    playBtn.textContent = (current >= 0 && !audio.paused) ? '❚❚' : '▶';
+    stopBtn.disabled = current < 0;
+    nextBtn.disabled = current < 0;
+  };
+  // Advance to the next track on the loaded tape, wrapping A → B → A.
+  const nextTrack = () => {
     if (!playlist.length) return;
     idx = (idx + 1) % playlist.length;
     audio.src = playlist[idx];
     audio.play().catch(() => {});
     updateNow();
-  });
-  audio.addEventListener('play', () => { hintEl.textContent = 'tap the deck to pause'; });
-  audio.addEventListener('pause', () => { hintEl.textContent = 'tap the deck to resume'; });
+  };
+  audio.addEventListener('ended', nextTrack);
+  audio.addEventListener('play', syncTransport);
+  audio.addEventListener('pause', syncTransport);
 
   const loadTape = (i) => {
     const t = TAPES[i];
@@ -260,13 +291,34 @@ export function initMobileGate(mode = 'gate') {
     audio.src = playlist[0];
     audio.play().catch(() => {});
     updateNow();
+    syncTransport();
     el.querySelectorAll('.mg-tape').forEach((c, j) => c.classList.toggle('sel', j === i));
   };
-  el.querySelectorAll('.mg-tape').forEach((card) => card.addEventListener('click', () => loadTape(Number(card.dataset.i))));
+  // Tapping a tape starts it; tapping the tape that's already loaded skips to
+  // its next track (the buttons below do the same explicitly).
+  el.querySelectorAll('.mg-tape').forEach((card) => card.addEventListener('click', () => {
+    const i = Number(card.dataset.i);
+    if (i === current) nextTrack(); else loadTape(i);
+  }));
+  // Transport buttons. stopPropagation so they don't also fire the deck's
+  // click-to-pause below.
+  playBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (current < 0) { loadTape(0); return; }   // nothing loaded yet → start tape 1
+    if (audio.paused) audio.play().catch(() => {}); else audio.pause();
+  });
+  stopBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (current < 0) return;
+    audio.pause(); audio.currentTime = 0; syncTransport();
+  });
+  nextBtn.addEventListener('click', (e) => { e.stopPropagation(); nextTrack(); });
+  // The big cassette itself still toggles play/pause.
   el.querySelector('.mg-deck').addEventListener('click', () => {
     if (current < 0) return;
     if (audio.paused) audio.play().catch(() => {}); else audio.pause();
   });
+  syncTransport();   // initial: play shows ▶, stop/next disabled
 
   // ---- animation loop: spinning reels + dancing machines ----
   let spin = 0;
