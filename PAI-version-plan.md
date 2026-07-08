@@ -22,7 +22,11 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Always put a texture on a glowing thing.** No glow is ever a flat coloured blob — a grille/panel texture is laid over it (the factory-vent trick). Everything luminous goes through `Renderer.texturedGlow`, which caps the glow with an AI grate texture; if you add a new light, use it rather than a bare `fill`. (David, 2026-07-07.)
 - **Vary texture opacity per tile.** Floors jitter their texture alpha deterministically per tile (`drawFloor`) so a large expanse of one floor reads as worn/varied rather than a flat repeat.
 
-## Where we are (v1.07)
+## Where we are (v1.08)
+
+### v1.08 — About box corrections
+
+Trivial follow-up, direct corrections to v1.06's About box content: the two music tracks are credited to "meme" by name (was "source and artist not documented" — David supplied the actual attribution: track 1 "eliza", track 2 "resonance"); the Coding line now reads "David and Henrik, vibecoding 2026" (was a longer sentence naming Claude/Anthropic explicitly as an AI pair-programmer — David's call on how to phrase the credit, not mine to second-guess); dropped the "Survival-game structure after Project Zomboid" line from Ideas & influences. Also caught the About box's own version footer, which had been hardcoded to "v1.05" since it was first written — now reads the live VERSION.
 
 ### v1.07 — a second music track
 
