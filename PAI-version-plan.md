@@ -22,7 +22,13 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Always put a texture on a glowing thing.** No glow is ever a flat coloured blob — a grille/panel texture is laid over it (the factory-vent trick). Everything luminous goes through `Renderer.texturedGlow`, which caps the glow with an AI grate texture; if you add a new light, use it rather than a bare `fill`. (David, 2026-07-07.)
 - **Vary texture opacity per tile.** Floors jitter their texture alpha deterministically per tile (`drawFloor`) so a large expanse of one floor reads as worn/varied rather than a flat repeat.
 
-## Where we are (v1.29)
+## Where we are (v1.30)
+
+### v1.30 — wordmark in-game + underscore caret
+
+- **In-game wordmark.** `renderer.js` top-left HUD chip: the plain `postAI` text is now the branding wordmark drawn on canvas — mono `700 15px`, dim "post" (`rgba(207,216,195,0.55)`) + bright "AI" (`#eaf3d6`) with a soft glow (`shadowBlur 7`), version beneath. No blinking caret in-game (per request). Matches the gate/title `.mg-brand`.
+- **Underscore caret.** Gate/title `.mg-caret` glyph `▮` → `_` (still blinks via `mg-blink`).
+- Verified: game boots with the new top-left wordmark, gate/title caret reads `_`, no console errors.
 
 ### v1.29 — title screen laptop layout + slower spools
 

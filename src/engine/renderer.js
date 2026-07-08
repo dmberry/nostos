@@ -3985,14 +3985,24 @@ export class Renderer {
       ctx.fillText(player.message.text, 16, top - 12);
     }
 
-    // Title chip, top-left of screen
-    ctx.font = '12px system-ui, sans-serif';
-    ctx.fillStyle = 'rgba(207,216,195,0.6)';
-    ctx.fillText('postAI', 12, 20);
+    // Title wordmark, top-left — matches the gate/title branding: mono type,
+    // dim "post" + bright glowing "AI" (no blinking caret in-game).
+    ctx.textAlign = 'left';
+    ctx.font = '700 15px ui-monospace, "SF Mono", Menlo, monospace';
+    const bx = 12, by = 22;
+    ctx.fillStyle = 'rgba(207,216,195,0.55)';
+    ctx.fillText('post', bx, by);
+    const postW = ctx.measureText('post').width;
+    ctx.save();
+    ctx.fillStyle = '#eaf3d6';
+    ctx.shadowColor = 'rgba(220,232,200,0.75)';
+    ctx.shadowBlur = 7;
+    ctx.fillText('AI', bx + postW, by);
+    ctx.restore();
     if (hud.version) {
-      ctx.font = '8px system-ui, sans-serif';
+      ctx.font = '8px ui-monospace, Menlo, monospace';
       ctx.fillStyle = 'rgba(207,216,195,0.4)';
-      ctx.fillText(`v${hud.version}`, 12, 30);
+      ctx.fillText(`v${hud.version}`, bx, by + 11);
     }
   }
 

@@ -63,7 +63,7 @@ export function initMobileGate(mode = 'gate') {
   // title lays the same pieces out as two columns (hero text | Walkman) with
   // the dancing machines as a full-width band along the bottom, so it fits a
   // landscape laptop instead of a tall phone strip.
-  const brandHtml = `<div class="mg-brand"><span class="mg-brand-mark" aria-hidden="true"></span><h1>post<span class="mg-ai">AI</span><span class="mg-caret">▮</span></h1></div>`;
+  const brandHtml = `<div class="mg-brand"><span class="mg-brand-mark" aria-hidden="true"></span><h1>post<span class="mg-ai">AI</span><span class="mg-caret">_</span></h1></div>`;
   const skylinkHtml = `<div class="mg-skylink" id="mg-skylink">SKYLINK uplink operative · T‑<span id="mg-sky">--:--:--</span></div>`;
   const stageHtml = `<div class="mg-stage" id="mg-stage"></div>`;
   const deckHtml = `<div class="mg-deck">
