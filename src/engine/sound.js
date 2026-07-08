@@ -66,6 +66,8 @@ class Sound {
     this._brown = null;              // shared brown-noise buffer (wind)
     this._windGain = null;
     this._cricketGain = null;
+    this._cricketSinging = false;    // crickets sing in bouts, not continuously
+    this._cricketTimer = null;
     this._musicGain = null;          // synth-piano fade bus: mode and combat tension both ramp this
     // One of MUSIC_MODES; cycled by the M key or set directly from the
     // Settings tab. Defaults to the sparse synth-piano bed — the found
@@ -110,6 +112,7 @@ class Sound {
       this._buildCrickets();
       this._buildDrone();
       this._applyAmbience(0.1); // snap quickly to whatever was requested
+      this._scheduleCrickets(); // begin the intermittent-bout timer if it's dusk
       this._startMusic();
     } catch (e) {
       this.ctx = null; // audio is optional; never let it take the game down
@@ -260,6 +263,7 @@ class Sound {
       if (robotNear !== undefined) this._ambience.robotNear = !!robotNear;
       if (!this.ctx) return;
       this._applyAmbience(AMBIENCE_FADE);
+      if (dusk !== undefined) this._scheduleCrickets(); // (re)start or stop the bout timer
     } catch (e) { /* ignore */ }
   }
 
@@ -285,10 +289,44 @@ class Sound {
       param.linearRampToValueAtTime(target, t + fade);
     };
     ramp(this._windGain.gain, WIND_GAIN * this._ambience.wind);
-    // Crickets sing only at dusk (late afternoon into early evening), and
-    // fall silent when a machine is near — they're scared of them.
-    const crickets = this._ambience.dusk && !this._ambience.robotNear ? CRICKET_GAIN : 0;
-    ramp(this._cricketGain.gain, crickets);
+    this._applyCricketGain(fade);
+  }
+
+  // The cricket layer's actual gain: audible only at dusk, with no machine
+  // near, AND during an "on" bout (see _scheduleCrickets) — so they come and
+  // go in spells rather than droning the whole evening.
+  _applyCricketGain(fade = AMBIENCE_FADE) {
+    if (!this.ctx || !this._cricketGain) return;
+    const t = this.ctx.currentTime;
+    const on = this._ambience.dusk && !this._ambience.robotNear && this._cricketSinging;
+    const g = this._cricketGain.gain;
+    g.cancelScheduledValues(t);
+    g.setValueAtTime(g.value, t);
+    g.linearRampToValueAtTime(on ? CRICKET_GAIN : 0, t + fade);
+  }
+
+  // Gate the crickets into intermittent bouts: while it's dusk, flip between
+  // short singing spells and longer silences on a self-rescheduling timer, so
+  // the layer is quiet more often than not instead of on the whole time. Stops
+  // (and silences) outside dusk. robotNear is handled by _applyCricketGain, so
+  // the timer keeps its rhythm even while a machine passes.
+  _scheduleCrickets() {
+    if (this._cricketTimer) { clearTimeout(this._cricketTimer); this._cricketTimer = null; }
+    if (!this.ctx || !this._ambience.dusk) {
+      this._cricketSinging = false;
+      this._applyCricketGain();
+      return;
+    }
+    const tick = () => {
+      this._cricketSinging = !this._cricketSinging;
+      this._applyCricketGain();
+      const secs = this._cricketSinging ? 5 + Math.random() * 8 : 12 + Math.random() * 20;
+      this._cricketTimer = setTimeout(tick, secs * 1000);
+    };
+    // Ease in with a short initial silence so dusk doesn't slam the crickets on.
+    this._cricketSinging = false;
+    this._applyCricketGain();
+    this._cricketTimer = setTimeout(tick, (3 + Math.random() * 6) * 1000);
   }
 
   // Quiet mechanical drone: two barely-detuned low sawtooths through a

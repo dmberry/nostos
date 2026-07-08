@@ -22,7 +22,11 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Always put a texture on a glowing thing.** No glow is ever a flat coloured blob — a grille/panel texture is laid over it (the factory-vent trick). Everything luminous goes through `Renderer.texturedGlow`, which caps the glow with an AI grate texture; if you add a new light, use it rather than a bare `fill`. (David, 2026-07-07.)
 - **Vary texture opacity per tile.** Floors jitter their texture alpha deterministically per tile (`drawFloor`) so a large expanse of one floor reads as worn/varied rather than a flat repeat.
 
-## Where we are (v1.19)
+## Where we are (v1.20)
+
+### v1.20 — crickets in bouts
+
+- **Intermittent crickets.** They were a continuous bed for the whole dusk window (16:30–20:00) whenever no machine was near — too constant. Now `sound.js` runs a self-rescheduling `_scheduleCrickets` timer during dusk that flips `_cricketSinging` between short singing spells (5–13s) and longer silences (12–32s); `_applyCricketGain` gates the layer on dusk AND no-robot AND singing. Net effect: crickets come and go in spells and are quiet more than half the evening. Tuning knobs are the two `setTimeout` ranges in `_scheduleCrickets`.
 
 ### v1.19 — sea floor in blocks, more/varied lamps
 
