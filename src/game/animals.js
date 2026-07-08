@@ -50,15 +50,26 @@ const VIPER_STRIKE_DAMAGE = 3;
 const VIPER_STRIKE_COOLDOWN = 0.5;
 const VIPER_VENOM_SECONDS = 6;
 
+// Deer: a test case for a purely placid animal — no power, no tell, no
+// attack. Grazes until the player gets close, then just runs; never turns
+// to fight. Sprite-only (no procedural fallback art, since this is a test
+// of the sprite pipeline on a second species, not a design commitment).
+const DEER_HP = 15;
+const DEER_WANDER_SPEED = 0.9;
+const DEER_FLEE_SPEED = 5.2;
+const DEER_FLEE_RANGE = 6; // notices the player and bolts within this
+
 // Spawn counts and placement.
 const DOG_PACKS = 3;
 const DOG_PACK_SIZE = 3;
 const BOAR_COUNT = 6;
 const VIPER_COUNT = 10;
+const DEER_COUNT = 5;
 const DOG_NEAR_FEATURE = 4;     // grass within this of a road/building
 const PACK_MIN_GAP = 8;         // tiles between pack centres
 const BOAR_MIN_GAP = 4;
 const VIPER_MIN_GAP = 3;
+const DEER_MIN_GAP = 5;
 
 // ---- Spawning -------------------------------------------------------------
 
@@ -189,6 +200,11 @@ export function spawnAnimals(map, seed, avoid) {
     viper.strikeTimer = 0;
     viper.strikeFlash = 0;
     animals.push(viper);
+  }
+
+  // Deer on forest edges, same candidate tiles as boars.
+  for (const [x, y] of pickSpots(boarTiles, DEER_COUNT, DEER_MIN_GAP, rng)) {
+    animals.push(baseAnimal('deer', x, y, DEER_HP, rng));
   }
 
   return animals;
@@ -331,7 +347,21 @@ export function updateAnimals(dt, animals, player, map) {
     if (a.type === 'dog') updateDog(a, dt, player, map, hurtPacks, aggroPacks);
     else if (a.type === 'boar') updateBoar(a, dt, player, map);
     else if (a.type === 'viper') updateViper(a, dt, player, map);
+    else if (a.type === 'deer') updateDeer(a, dt, player, map);
     a.justHurt = false;
+  }
+}
+
+// Placid: grazes (wander), bolts on sight of the player, never fights back.
+function updateDeer(a, dt, player, map) {
+  const d = distTo(a, player);
+  if (d < DEER_FLEE_RANGE) {
+    const away = d > 1e-6
+      ? { x: (a.x - player.x) / d, y: (a.y - player.y) / d }
+      : { x: 1, y: 0 };
+    moveToward(a, a.x + away.x * 2, a.y + away.y * 2, DEER_FLEE_SPEED, dt, map);
+  } else {
+    wander(a, DEER_WANDER_SPEED, dt, map);
   }
 }
 
@@ -475,14 +505,18 @@ function updateViper(a, dt, player, map) {
 // ---- Drawing --------------------------------------------------------------
 
 // Viper is still placeholder art in code: shadow ellipse at the feet,
-// simple shapes at tile scale. Dog and boar now draw real Kenney
-// "Cube Pets" models (see ANIMAL_SPRITE_SETS in engine/textures.js,
-// pre-rendered offline via tools/pet-render.html into 8 screen-facing
-// directions) — boar uses 'hog', the closest match in the pack, there being
-// no literal boar model — falling back to the old procedural shape until
-// the image has loaded. worldToScreen is the projection function from
-// engine/iso.js, passed in so most of this module stays engine-free; the
-// sprite path is the one exception, importing directly from textures.js.
+// simple shapes at tile scale. Dog and boar draw real Kenney "Cube Pets"
+// models (see ANIMAL_SPRITE_SETS in engine/textures.js, pre-rendered
+// offline via tools/pet-render.html into 8 screen-facing directions x
+// idle/walk frames) — boar uses 'hog', the closest match in the pack,
+// there being no literal boar model — falling back to the old procedural
+// shape until the image has loaded. Deer is sprite-only (see
+// drawDeerSprite): a placid test case for the sprite pipeline, so it has
+// no procedural fallback art and simply doesn't draw for the one frame
+// before its images finish loading. worldToScreen is the projection
+// function from engine/iso.js, passed in so most of this module stays
+// engine-free; the sprite path is the one exception, importing directly
+// from textures.js.
 export function drawAnimal(ctx, animal, worldToScreen) {
   if (animal.dead) return;
   const c = worldToScreen(animal.x, animal.y);
@@ -491,20 +525,25 @@ export function drawAnimal(ctx, animal, worldToScreen) {
   } else if (animal.type === 'boar') {
     if (!drawBoarSprite(ctx, animal, c)) drawBoar(ctx, animal, c, worldToScreen);
   } else if (animal.type === 'viper') drawViper(ctx, animal, c);
+  else if (animal.type === 'deer') drawDeerSprite(ctx, animal, c);
 }
 
 // Kenney normalises every Cube Pets model to a similar bounding cube
 // regardless of the real animal's size (confirmed by comparing rendered
 // bee/elephant output at the same camera framing — near-identical), so
 // species can't share one draw scale; each gets its own fudge factor here,
-// eyeballed relative to the dog. Only 'dog' is wired into gameplay so far —
-// the rest are rendered and ready in assets/textures/animals/ for whenever
-// boar/viper substitutes or further species are picked.
+// eyeballed relative to the dog. All values below are half the first pass
+// (dog/hog were found reading too big in-game and halved; the rest of the
+// table was calibrated off that same too-big dog baseline, so halved to
+// match rather than left inconsistent). dog, boar (as hog), and deer are
+// wired into gameplay; the rest are rendered and ready in
+// assets/textures/animals/ for whenever a viper substitute or further
+// species are picked.
 const ANIMAL_SPRITE_SCALE = {
-  dog: 0.21, bee: 0.23, caterpillar: 0.19, chick: 0.23, crab: 0.23, fish: 0.26,
-  bunny: 0.32, beaver: 0.32, cat: 0.36, koala: 0.36, penguin: 0.36, parrot: 0.26,
-  fox: 0.39, monkey: 0.39, pig: 0.48, hog: 0.26, panda: 0.55, deer: 0.58,
-  lion: 0.61, tiger: 0.65, cow: 0.71, polar: 0.71, giraffe: 0.9, elephant: 1.03,
+  dog: 0.21, bee: 0.115, caterpillar: 0.095, chick: 0.115, crab: 0.115, fish: 0.13,
+  bunny: 0.16, beaver: 0.16, cat: 0.18, koala: 0.18, penguin: 0.18, parrot: 0.13,
+  fox: 0.195, monkey: 0.195, pig: 0.24, hog: 0.26, panda: 0.275, deer: 0.29,
+  lion: 0.305, tiger: 0.325, cow: 0.355, polar: 0.355, giraffe: 0.45, elephant: 0.515,
 };
 
 const ANIMAL_COMPASS_DIRS = ['E', 'SE', 'S', 'SW', 'W', 'NW', 'N', 'NE'];
@@ -562,6 +601,26 @@ function drawDogSprite(ctx, a, c) {
     ctx.textAlign = 'left';
   }
   return true;
+}
+
+// Simplest possible sprite draw: shadow + image, no fallback and no tell —
+// deer is a placid test case for the sprite pipeline on a second species,
+// not a design commitment, so it just doesn't draw for the one frame
+// before its images finish loading.
+function drawDeerSprite(ctx, a, c) {
+  const set = ANIMAL_SPRITE_SETS.deer;
+  const dir = facingToCompassDir(a.facing);
+  const sprite = set && pickAnimalFrame(set, dir, a);
+  if (!sprite || !sprite.complete || !sprite.naturalWidth) return;
+  const scale = ANIMAL_SPRITE_SCALE.deer;
+  const dw = sprite.naturalWidth * scale, dh = sprite.naturalHeight * scale;
+
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.beginPath();
+  ctx.ellipse(c.x, c.y, dw * 0.32, dw * 0.14, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.drawImage(sprite, c.x - dw / 2, c.y - dh + dh * 0.16, dw, dh);
 }
 
 function drawDog(ctx, a, c, worldToScreen) {
