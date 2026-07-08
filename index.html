@@ -21,6 +21,32 @@
     font: bold 14px/22px system-ui, sans-serif; text-align: center;
     cursor: pointer; user-select: none;
   }
+  #aboutBtn {
+    position: fixed; top: 10px; left: 100px;
+    width: 24px; height: 24px; border-radius: 12px;
+    background: rgba(207,216,195,0.15); color: #cfd8c3;
+    border: 1px solid rgba(207,216,195,0.4);
+    font: italic bold 13px/22px Georgia, serif; text-align: center;
+    cursor: pointer; user-select: none;
+  }
+  #about {
+    display: none; position: fixed; inset: 0;
+    background: rgba(5,7,4,0.75); z-index: 10;
+  }
+  #about .panel {
+    max-width: 460px; max-height: 82vh; overflow-y: auto;
+    margin: 8vh auto 0; padding: 22px 28px;
+    background: #141a10; border: 1px solid rgba(207,216,195,0.35);
+    border-radius: 6px; color: #cfd8c3;
+    font: 14px/1.55 system-ui, sans-serif;
+  }
+  #about h1 { font-size: 18px; margin: 0 0 4px; }
+  #about .meta { color: #9db284; font-size: 12px; margin: 0 0 16px; }
+  #about h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: #9db284; margin: 16px 0 6px; }
+  #about p { margin: 4px 0; }
+  #about .foot { margin-top: 18px; padding-top: 12px; border-top: 1px solid rgba(207,216,195,0.2);
+    color: #6b7a5e; font-size: 11px; }
   #help {
     display: none; position: fixed; inset: 0;
     background: rgba(5,7,4,0.75); z-index: 10;
@@ -184,6 +210,29 @@
 <canvas id="game"></canvas>
 <div id="hint">Press H for help</div>
 <div id="helpBtn" title="Help (H)">?</div>
+<div id="aboutBtn" title="About">i</div>
+<div id="about">
+  <div class="panel">
+    <h1>postAI</h1>
+    <p class="meta">An isometric survival game &middot; by David and Henrik</p>
+
+    <h2>Coding</h2>
+    <p>David Berry &amp; Henrik, built with Claude (Anthropic) as an AI pair-programmer throughout.</p>
+
+    <h2>Music</h2>
+    <p>Ambient piano bed: synthesised live in-engine (Web Audio) &mdash; no audio file, generated from a bare scale on the fly.</p>
+    <p>Alternate track: a found tape, kept in the build as-is &mdash; source and artist not documented.</p>
+
+    <h2>Ideas &amp; influences</h2>
+    <p>Survival-game structure after Project Zomboid.</p>
+    <p><b>Ubik</b> and its reality-spray, after Philip K. Dick.</p>
+    <p>The console language's name and the older machine intelligence found in the ruins, after Robin Milner's <b>ML</b> and Joseph Weizenbaum's <b>ELIZA</b>/<b>SLIP</b>.</p>
+    <p>"Vector theory" and the Magnifica Humanitas fragments draw on David's own writing (stunlaw).</p>
+    <p>Character and animal art: Kenney (kenney.nl), CC0.</p>
+
+    <div class="foot">v1.05 &middot; github.com/dmberry/postAI</div>
+  </div>
+</div>
 <div id="help">
   <div class="panel">
     <h1>postAI</h1>

@@ -47,7 +47,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '1.05';
+const VERSION = '1.06';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -140,6 +140,39 @@ const obelisks = [];
       }
     }
   }
+  // Group interior tiles by connected board region — one per house/room in
+  // practice, since a doorway gap always breaks the 4-connectivity between
+  // buildings — so no single building can be flooded with every cache in
+  // reach: capped at BOXES_PER_HOUSE below.
+  const BOXES_PER_HOUSE = 5;
+  const houseOf = new Map(); // "x,y" -> house index
+  {
+    const innerSet = new Set(inner.map(([x, y]) => `${x},${y}`));
+    let houseId = 0;
+    for (const [sx, sy] of inner) {
+      const key0 = `${sx},${sy}`;
+      if (houseOf.has(key0)) continue;
+      const stack = [[sx, sy]];
+      houseOf.set(key0, houseId);
+      while (stack.length) {
+        const [cx, cy] = stack.pop();
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nk = `${cx + dx},${cy + dy}`;
+          if (innerSet.has(nk) && !houseOf.has(nk)) {
+            houseOf.set(nk, houseId);
+            stack.push([cx + dx, cy + dy]);
+          }
+        }
+      }
+      houseId++;
+    }
+  }
+  const houseBoxCount = new Map(); // house index -> boxes placed so far
+  const bumpHouse = (x, y) => {
+    const h = houseOf.get(`${x},${y}`);
+    houseBoxCount.set(h, (houseBoxCount.get(h) || 0) + 1);
+  };
+  const houseFull = (x, y) => (houseBoxCount.get(houseOf.get(`${x},${y}`)) || 0) >= BOXES_PER_HOUSE;
   // A hand-picked "welcome kit": the resistance building nearest spawn gets
   // a backpack, a shield, a decent ranged weapon and some food together in
   // one box, so a new run's very first find is worth a detour for. It's the
@@ -149,6 +182,7 @@ const obelisks = [];
   if (inner.length) {
     inner.sort((a, b) => Math.hypot(a[0] - spawn.x, a[1] - spawn.y) - Math.hypot(b[0] - spawn.x, b[1] - spawn.y));
     const [sx, sy] = inner.shift();
+    bumpHouse(sx, sy);
     const starterLoot = [
       { item: 'backpack', qty: 1 },
       { item: 'shield', qty: 1 },
@@ -230,7 +264,14 @@ const obelisks = [];
   // over to roll on the random table.
   const boxCount = Math.max(20, guaranteed.length + 9);
   for (let i = 0; i < boxCount && inner.length; i++) {
-    const [x, y] = inner.splice(Math.floor(rng() * inner.length), 1)[0];
+    // Pick uniformly among tiles whose house hasn't hit BOXES_PER_HOUSE yet;
+    // stop placing early if every remaining house is already full.
+    const eligible = [];
+    for (let k = 0; k < inner.length; k++) if (!houseFull(inner[k][0], inner[k][1])) eligible.push(k);
+    if (!eligible.length) break;
+    const pick = eligible[Math.floor(rng() * eligible.length)];
+    const [x, y] = inner.splice(pick, 1)[0];
+    bumpHouse(x, y);
     const loot = i < guaranteed.length ? guaranteed[i] : rollLoot();
     map.addObject('box', x, y, { loot, opened: false });
   }
@@ -539,6 +580,15 @@ const toggleHelp = (force) => {
 };
 document.getElementById('helpBtn').addEventListener('click', () => toggleHelp(true));
 helpEl.addEventListener('click', (e) => { if (e.target === helpEl) toggleHelp(false); });
+
+// About modal: the i button opens, clicking the backdrop closes.
+const aboutEl = document.getElementById('about');
+const toggleAbout = (force) => {
+  const show = force != null ? force : aboutEl.style.display !== 'block';
+  aboutEl.style.display = show ? 'block' : 'none';
+};
+document.getElementById('aboutBtn').addEventListener('click', () => toggleAbout(true));
+aboutEl.addEventListener('click', (e) => { if (e.target === aboutEl) toggleAbout(false); });
 // Tabbed help: clicking a tab shows its panel(s) and hides the rest. Several
 // panels can share a data-panel name (Survival is split around the machine
 // section), so all matching panels toggle together.
