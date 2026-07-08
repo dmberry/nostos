@@ -22,7 +22,11 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Always put a texture on a glowing thing.** No glow is ever a flat coloured blob — a grille/panel texture is laid over it (the factory-vent trick). Everything luminous goes through `Renderer.texturedGlow`, which caps the glow with an AI grate texture; if you add a new light, use it rather than a bare `fill`. (David, 2026-07-07.)
 - **Vary texture opacity per tile.** Floors jitter their texture alpha deterministically per tile (`drawFloor`) so a large expanse of one floor reads as worn/varied rather than a flat repeat.
 
-## Where we are (v1.10)
+## Where we are (v1.11)
+
+### v1.11 — About box trim
+
+One-line fix: dropped "Ambient piano bed: synthesised live in-engine (Web Audio) — no audio file, generated from a bare scale on the fly." from the About box's Music section (index.html). It described how the synth bed is implemented, not who to credit for anything — out of place in a credits box. The three named tracks stay.
 
 ### v1.10 — car sprite/collision fix, a third music track, slower versioning
 
