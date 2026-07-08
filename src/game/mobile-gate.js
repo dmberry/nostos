@@ -105,9 +105,9 @@ export function initMobileGate(mode = 'gate') {
       .mg-themes button.on { color: #10130d; background: var(--accent); border-color: var(--accent); }
       /* SKYLINK uplink clock */
       .mg-skylink { font: 700 12px ui-monospace, monospace; letter-spacing: 0.1em; text-transform: uppercase;
-        color: #ff5ad0; text-shadow: 0 0 8px rgba(255,90,208,0.6); margin: 0 0 4px;
-        border: 1px solid rgba(255,90,208,0.4); border-radius: 4px; padding: 4px 10px; background: rgba(40,6,30,0.5); }
-      .mg-skylink span { color: #ffd0f2; }
+        color: #5b9dff; text-shadow: 0 0 8px rgba(70,130,255,0.6); margin: 0 0 4px;
+        border: 1px solid rgba(70,130,255,0.4); border-radius: 4px; padding: 4px 10px; background: rgba(8,18,44,0.6); }
+      .mg-skylink span { color: #cfe0ff; }
       .mg-skylink.imminent { animation: mg-alarm 0.8s steps(1) infinite; }
       @keyframes mg-alarm { 0%,50% { opacity: 1; } 51%,100% { opacity: 0.35; } }
       /* dancing machines (canvas, drawn by drawRobot) */

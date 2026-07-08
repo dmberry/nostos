@@ -22,7 +22,11 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Always put a texture on a glowing thing.** No glow is ever a flat coloured blob — a grille/panel texture is laid over it (the factory-vent trick). Everything luminous goes through `Renderer.texturedGlow`, which caps the glow with an AI grate texture; if you add a new light, use it rather than a bare `fill`. (David, 2026-07-07.)
 - **Vary texture opacity per tile.** Floors jitter their texture alpha deterministically per tile (`drawFloor`) so a large expanse of one floor reads as worn/varied rather than a flat repeat.
 
-## Where we are (v1.27)
+## Where we are (v1.28)
+
+### v1.28 — SKYLINK clock recoloured dark blue
+
+`.mg-skylink` on the gate/title: magenta → dark blue (text `#5b9dff`, glow/border `rgba(70,130,255,…)`, backing `rgba(8,18,44,0.6)`, span `#cfe0ff`). Cosmetic only.
 
 ### v1.27 — gate/title branding + label marquee + bigger tape
 
