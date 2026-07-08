@@ -628,7 +628,28 @@ function drawDogSprite(ctx, a, c) {
   ctx.ellipse(c.x, c.y, dw * 0.32, dw * 0.14, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.drawImage(sprite, c.x - dw / 2, c.y - dh + dh * 0.16, dw, dh);
+  // Wolf-grey coat instead of the raw hog-brown dog asset. 'color' blend
+  // (unlike boar's 'multiply') preserves the destination's own luminosity
+  // and only replaces hue/saturation, so it can't crush the sprite to
+  // black the way the boar tint first did — a neutral grey source desaturates
+  // toward grey while keeping the model's own shading. Left at less than
+  // full alpha so a little of the original warm brown undertone still
+  // shows through, then a light 'screen' pass lifts it a touch paler
+  // towards white. Mirrors boar's destination-in mask to keep the sprite's
+  // transparent margin intact.
+  const off = animalTintScratch(sprite.naturalWidth, sprite.naturalHeight);
+  off.ctx.clearRect(0, 0, off.canvas.width, off.canvas.height);
+  off.ctx.drawImage(sprite, 0, 0);
+  off.ctx.globalCompositeOperation = 'color';
+  off.ctx.fillStyle = 'rgba(150,155,160,0.75)';
+  off.ctx.fillRect(0, 0, off.canvas.width, off.canvas.height);
+  off.ctx.globalCompositeOperation = 'screen';
+  off.ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  off.ctx.fillRect(0, 0, off.canvas.width, off.canvas.height);
+  off.ctx.globalCompositeOperation = 'destination-in';
+  off.ctx.drawImage(sprite, 0, 0);
+  off.ctx.globalCompositeOperation = 'source-over';
+  ctx.drawImage(off.canvas, c.x - dw / 2, c.y - dh + dh * 0.16, dw, dh);
 
   if (a.aggro) {
     // Tell: barking, white "!" above the head.
@@ -698,19 +719,20 @@ function drawDog(ctx, a, c, worldToScreen) {
   }
 }
 
-// One reusable offscreen canvas for compositing the boar's always-on black
-// colourize tint and its telegraph-flash tint onto its sprite before
-// drawing — same compositing trick as renderer.js:tintScratch, duplicated
-// locally for the same reason facingToCompassDir is (this module stays out
-// of the renderer/engine).
-let _boarTintCanvas = null;
-function boarTintScratch(w, h) {
-  if (!_boarTintCanvas) _boarTintCanvas = document.createElement('canvas');
-  if (_boarTintCanvas.width !== w || _boarTintCanvas.height !== h) {
-    _boarTintCanvas.width = w;
-    _boarTintCanvas.height = h;
+// One reusable offscreen canvas for compositing colourize tints (boar's
+// black, dog's grey, boar's telegraph-flash) onto a sprite before drawing —
+// same compositing trick as renderer.js:tintScratch, duplicated locally
+// for the same reason facingToCompassDir is (this module stays out of the
+// renderer/engine). Shared by both since only one tint is ever composited
+// at a time within a single draw call.
+let _animalTintCanvas = null;
+function animalTintScratch(w, h) {
+  if (!_animalTintCanvas) _animalTintCanvas = document.createElement('canvas');
+  if (_animalTintCanvas.width !== w || _animalTintCanvas.height !== h) {
+    _animalTintCanvas.width = w;
+    _animalTintCanvas.height = h;
   }
-  return { canvas: _boarTintCanvas, ctx: _boarTintCanvas.getContext('2d') };
+  return { canvas: _animalTintCanvas, ctx: _animalTintCanvas.getContext('2d') };
 }
 
 // Returns false (drawing nothing) if the sprite for this facing hasn't
@@ -735,21 +757,24 @@ function drawBoarSprite(ctx, a, c) {
   ctx.fill();
 
   // hog's stock colouring is the same warm brown as dog, which read as
-  // near-identical creatures at a glance. Always darken the boar towards
-  // black (a 'multiply' pass keeps the model's own shading/highlights
-  // instead of flattening it to a silhouette) so it's a distinct "wild
-  // boar" colour rather than the raw hog asset. Unlike 'source-atop',
-  // 'multiply' isn't confined to the destination's existing alpha — a
-  // fillRect under it darkens the WHOLE canvas rectangle, including the
-  // sprite's transparent margin, turning it into an opaque dark square. So
-  // the multiply fill is followed by a 'destination-in' redraw of the
-  // original sprite, which multiplies the alpha channel back down to the
-  // sprite's own silhouette and restores the transparent margin.
-  const off = boarTintScratch(sprite.naturalWidth, sprite.naturalHeight);
+  // near-identical creatures at a glance. Always darken the boar a shade
+  // towards black (a 'multiply' pass keeps the model's own shading/
+  // highlights instead of flattening it to a silhouette) so it's a
+  // distinct "wild boar" colour rather than the raw hog asset. Kept
+  // deliberately light (low alpha, mid-grey rather than near-black tint
+  // colour) — a first pass at rgba(40,35,32,0.85) crushed it to a near-
+  // solid black shape instead of a tint. Unlike 'source-atop', 'multiply'
+  // isn't confined to the destination's existing alpha — a fillRect under
+  // it darkens the WHOLE canvas rectangle, including the sprite's
+  // transparent margin, turning it into an opaque dark square. So the
+  // multiply fill is followed by a 'destination-in' redraw of the original
+  // sprite, which multiplies the alpha channel back down to the sprite's
+  // own silhouette and restores the transparent margin.
+  const off = animalTintScratch(sprite.naturalWidth, sprite.naturalHeight);
   off.ctx.clearRect(0, 0, off.canvas.width, off.canvas.height);
   off.ctx.drawImage(sprite, 0, 0);
   off.ctx.globalCompositeOperation = 'multiply';
-  off.ctx.fillStyle = 'rgba(40,35,32,0.85)';
+  off.ctx.fillStyle = 'rgba(90,85,80,0.4)';
   off.ctx.fillRect(0, 0, off.canvas.width, off.canvas.height);
   off.ctx.globalCompositeOperation = 'destination-in';
   off.ctx.drawImage(sprite, 0, 0);
