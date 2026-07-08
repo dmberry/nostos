@@ -114,6 +114,50 @@ function scaleRgbaAlpha(rgba, factor) {
   return `rgba(${m[1]},${m[2]},${m[3]},${a.toFixed(3)})`;
 }
 
+// Car sprite anchoring: drawCar used to centre every direction's sprite on
+// its footprint with the same fixed fraction of the full (padded) canvas —
+// fine as long as each direction's actual silhouette sits in the same place
+// within its canvas, which it turns out it doesn't (measured: some
+// directions' visible pixels are offset several percent off-centre from
+// others in the same model). With a random facing that read as rare, faint
+// jitter; once cars started being oriented to match the road they're on
+// (so certain directions show up reliably rather than by chance), it read
+// as the collision box visibly not tracking the sprite's edge. Fixed by
+// measuring each sprite's own non-transparent bounding box once (cached
+// here) and anchoring to that box's centre — and to 72% down *that box*,
+// not the padded canvas — instead of assuming the padding is symmetric.
+const carSpriteAnchorCache = new WeakMap();
+function carSpriteAnchor(spr) {
+  let anchor = carSpriteAnchorCache.get(spr);
+  if (anchor) return anchor;
+  try {
+    const c = document.createElement('canvas');
+    c.width = spr.naturalWidth; c.height = spr.naturalHeight;
+    const octx = c.getContext('2d');
+    octx.drawImage(spr, 0, 0);
+    const data = octx.getImageData(0, 0, c.width, c.height).data;
+    let minX = c.width, maxX = 0, minY = c.height, maxY = 0, found = false;
+    for (let y = 0; y < c.height; y++) {
+      for (let x = 0; x < c.width; x++) {
+        if (data[(y * c.width + x) * 4 + 3] > 10) {
+          found = true;
+          if (x < minX) minX = x; if (x > maxX) maxX = x;
+          if (y < minY) minY = y; if (y > maxY) maxY = y;
+        }
+      }
+    }
+    anchor = found
+      ? { x: (minX + maxX) / 2, y: minY + (maxY - minY) * 0.72 }
+      : { x: spr.naturalWidth / 2, y: spr.naturalHeight * 0.72 };
+  } catch (e) {
+    // Canvas read-back can fail (e.g. a tainted canvas); fall back to the
+    // old symmetric-canvas assumption rather than breaking the draw call.
+    anchor = { x: spr.naturalWidth / 2, y: spr.naturalHeight * 0.72 };
+  }
+  carSpriteAnchorCache.set(spr, anchor);
+  return anchor;
+}
+
 export class Renderer {
   constructor(canvas) {
     this.canvas = canvas;
@@ -2260,7 +2304,10 @@ export class Renderer {
       ctx.fill();
       ctx.restore();
     }
-    const dx = -dw / 2, dy = -dh * 0.72; // wheels sit near the footprint centre
+    // Anchor on this sprite's own measured content, not a fixed fraction of
+    // the padded canvas — see carSpriteAnchor above for why.
+    const anchor = carSpriteAnchor(spr);
+    const dx = -anchor.x * scale, dy = -anchor.y * scale;
     // Every car is composited through the offscreen so it can be weathered:
     // even an intact one gets a faint grime texture dusted over its own pixels
     // (source-atop keeps it inside the silhouette) — it has, after all, sat

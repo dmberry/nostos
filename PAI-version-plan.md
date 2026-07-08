@@ -2,7 +2,7 @@
 
 This file is the shared planning board for the game. **Henrik: add your ideas and suggestions in the section at the bottom (or anywhere) and push — everything here gets read when the next version is planned.**
 
-Versioning: 0.01 increments (v0.32, v0.33, ...). The game is pushed after every sizeable change so the latest build is always on `main`.
+Versioning: 0.01 increments (v0.32, v0.33, ...). Batch multiple small fixes/tweaks into one push rather than bumping per micro-change — version numbers were proliferating too fast (five bumps in one evening at one point). Push once there's a coherent, testable batch, not after every individual edit.
 
 ## Working together without clashing (David + Henrik)
 
@@ -22,7 +22,17 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Always put a texture on a glowing thing.** No glow is ever a flat coloured blob — a grille/panel texture is laid over it (the factory-vent trick). Everything luminous goes through `Renderer.texturedGlow`, which caps the glow with an AI grate texture; if you add a new light, use it rather than a bare `fill`. (David, 2026-07-07.)
 - **Vary texture opacity per tile.** Floors jitter their texture alpha deterministically per tile (`drawFloor`) so a large expanse of one floor reads as worn/varied rather than a flat repeat.
 
-## Where we are (v1.09)
+## Where we are (v1.10)
+
+### v1.10 — car sprite/collision fix, a third music track, slower versioning
+
+First batch under the new "don't bump per micro-fix" policy (see the top of this file) — three unrelated small items landed together instead of three separate pushes.
+
+- **Car sprite anchor fix.** Reported as "edge detection on cars is broken." Root cause, confirmed by measuring: `drawCar` anchored every direction's sprite to a fixed fraction of its own (padded) canvas — `-dw/2, -dh*0.72` — assuming the car's silhouette sits identically within the canvas regardless of facing. It doesn't: sampling the real alpha-channel bounding box of each `model-direction.png` showed the visible content occupies a smaller, inconsistently-positioned region of the canvas (e.g. ambulance content only reaches ~88% of the canvas height, and one direction's centroid sits ~8px off from the other three). This was near-invisible when `carDir` was fully random (v1.04 and earlier); once cars started orienting to match their road (v1.05), the same handful of directions became reliably reused, making the mismatch reproducible rather than a rare fluke. Fixed with `carSpriteAnchor()` (renderer.js) — measures each sprite's real content bounding box once (cached in a `WeakMap` keyed by the `Image`), anchors to that content's own centre and to 72% down *the content*, not the canvas. Self-correcting for any current or future car sprite, no per-direction tuning table needed.
+  - Couldn't get a clean full-scene screenshot to visually confirm (Henrik's concurrent animal-sprite work has a `drawDeerSprite is not defined` error mid-edit, which the shared `renderer.draw()` path hits before reaching cars) — verified instead by calling `drawCar()` in isolation (confirmed no error) and by computing the fix's actual before/after anchor deltas from the measured bounding boxes (every direction shifts, 8-17px depending on model/direction, all in the direction of pulling the visible car toward the collision box rather than away from it).
+- **Third music track.** `assets/audio/slip-theme.mp3` (from `_tmp/meme-slip.mp3`) added as a third `FILE_TRACKS` entry — cycle is now `eliza -> resonance -> slip -> synth -> off`. Settings tab and About box both updated to name and credit all three ("by meme"). No code changes needed beyond the one array entry — confirms the v1.07 generalisation (from one hardcoded track to a `FILE_TRACKS` list) was worth doing.
+- **Persistence double-checked, not actually broken.** Investigated "music setting should be persistent" — the mechanism (from v1.09) was already correct; a `preview_click` tool quirk (clicks not registering on this particular button across a couple of attempts, cause unclear) made it briefly look broken during testing. A direct `.click()` call confirmed the real behaviour: `musicMode`/`volume` both correctly round-trip through a genuine page reload.
+- **Versioning policy change**, per direct request: stop bumping `VERSION` after every individual fix (five bumps in one evening — v1.05 through v1.09 — was too many). Batch a session's fixes into one push. Noted at the top of this file and in the "Working together" section.
 
 ### v1.09 — a Settings tab
 

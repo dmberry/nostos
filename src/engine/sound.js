@@ -18,6 +18,7 @@ import { CHOIR_NOTES, CHOIR_DURATION } from './choir-notes.js';
 const FILE_TRACKS = [
   { mode: 'eliza', src: 'assets/audio/eliza-theme.mp3', label: 'a found tape' },
   { mode: 'resonance', src: 'assets/audio/resonance-theme.mp3', label: 'another found tape' },
+  { mode: 'slip', src: 'assets/audio/slip-theme.mp3', label: 'a third found tape' },
 ];
 const MUSIC_MODES = [...FILE_TRACKS.map((t) => t.mode), 'synth', 'off'];
 
