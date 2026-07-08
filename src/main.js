@@ -8,7 +8,7 @@ import { makeRng } from './game/rng.js';
 import { DayNight } from './game/daynight.js';
 import { Minimap } from './game/minimap.js';
 import { spawnBirds, updateBirds } from './game/birds.js';
-import { spawnRobots, updateRobots, spawnW1s, spawnW3, spawnW4, drawRobot } from './game/robots.js';
+import { spawnRobots, updateRobots, spawnW1s, spawnW3, spawnW4, spawnW5, drawRobot } from './game/robots.js';
 import { resolveBodyOverlaps } from './game/collision.js';
 import { spawnWaterDroids, updateWaterDroids, drawWaterDroid } from './game/waterdroids.js';
 import { Lore, FRAGMENTS } from './game/lore.js';
@@ -47,7 +47,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '1.11';
+const VERSION = '1.12';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -505,7 +505,7 @@ function renderMachineIcon(type) {
   }
   return off.toDataURL('image/png');
 }
-for (const type of ['t1', 't2', 'w1', 'w2', 'w3', 'w4']) {
+for (const type of ['t1', 't2', 't3', 'w1', 'w2', 'w3', 'w4', 'w5']) {
   const img = document.getElementById(`gal-${type}`);
   if (img) img.src = renderMachineIcon(type);
 }
@@ -1241,6 +1241,7 @@ let regrowClock = 0;
 let ronResupplyClock = 0, ronResupplyNext = 90 + Math.random() * 60;
 let wFactoryClock = 0, wFactoryNext = 60 + Math.random() * 60;
 let wFactoryW1Clock = 0, wFactoryW1Next = 100 + Math.random() * 80;
+let wFactoryW5Clock = 0, wFactoryW5Next = 30 + Math.random() * 40;
 let lastW4GameHour = dayNight.totalHours; // ticks a W4 every 30 game-minutes, not real time
 
 // SKYLINK's final purge: once the clock runs out, every obelisk lights up
@@ -1566,6 +1567,22 @@ function update(dt) {
       if (anyDamaged && !w3Active) {
         const drone = spawnW3(map, Math.floor(Math.random() * 0x7fffffff), factoryCx(), factoryCy());
         if (drone) { robots.push(drone); player.say('A repair drone whirs out of the W-factory.'); }
+      }
+    }
+    // A W5 gardener drone: no trigger, no urgency — the factory just keeps
+    // roughly one out in the world at all times, unconditional on anything
+    // else happening. Kill the factory and it stops being replaced, same as
+    // every other machine here, but the ambient forest-regrowth timer in
+    // its own block below keeps ticking regardless — this is a visible
+    // companion to that, not the whole mechanism.
+    wFactoryW5Clock += dt;
+    if (wFactoryW5Clock > wFactoryW5Next) {
+      wFactoryW5Clock = 0;
+      wFactoryW5Next = 30 + Math.random() * 40;
+      const w5Active = robots.some((r) => r.type === 'w5' && !r.dead);
+      if (!w5Active) {
+        const gardener = spawnW5(map, Math.floor(Math.random() * 0x7fffffff), factoryCx(), factoryCy());
+        if (gardener) { robots.push(gardener); player.say('A small drone trundles out of the W-factory, unhurried.'); }
       }
     }
     wFactoryW1Clock += dt;

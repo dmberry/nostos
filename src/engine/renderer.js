@@ -1044,7 +1044,8 @@ export class Renderer {
       const by = p.y0 + (p.y1 - p.y0) * Math.max(0, t - 0.12);
       const head = worldToScreen(cx, cy);
       const tail = worldToScreen(bx, by);
-      const col = p.kind === 'stun' ? '#5fe0ff' : p.kind === 'fuse' ? '#b78bff' : p.kind === 'laser' ? '#ff3b2a' : '#ffe27a';
+      const col = p.kind === 'stun' ? '#5fe0ff' : p.kind === 'fuse' ? '#b78bff'
+        : p.kind === 'laser' ? '#ff3b2a' : p.kind === 'laser_t3' ? '#ff8a1e' : '#ffe27a';
       ctx.strokeStyle = col;
       ctx.lineWidth = 2;
       ctx.lineCap = 'round';

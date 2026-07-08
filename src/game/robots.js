@@ -40,6 +40,39 @@ const T2_HIT_RANGE = 0.9;
 const T2_HIT_DAMAGE = 15;
 const T2_HIT_COOLDOWN = 1.2;
 
+// T3s: rare, one to a handful of towers, and a tactical ambusher rather than
+// a chaser — closer in spirit to a W4 than a T1/T2. It nests beside a tree
+// near its obelisk and stays there, unnoticed, until it actually gets a
+// clear line of sight to the player within range (no blind proximity
+// detection: it has to genuinely see you). Then its twin eyes fire a dual
+// laser volley — orange, not the red every other machine shoots, so it
+// reads instantly as the one that hits far harder — for roughly double a
+// W4 bolt's damage, but on a much longer recovery before it can fire again.
+// Get inside its minimum range and it backs off just enough to keep a shot
+// lined up rather than closing to melee, though point-blank it'll still
+// claw. Losing line of sight for long enough still breaks it off like any
+// other machine — see the generic LOS-giveup handling in updateRobots.
+const T3_HP = 32;
+const T3_PATROL_SPEED = 0.6;      // barely drifts from its nest while dormant
+const T3_PATROL_RANGE = 1.6;      // small: it is meant to stay hidden, not wander
+const T3_NEST_SEARCH_R = 6;       // how far from its obelisk seat it'll look for a tree to nest beside
+const T3_AMBUSH_RANGE = 13;       // detection AND firing range — it must actually see you
+const T3_MIN_RANGE = 3.5;         // backs off if the player closes inside this
+const T3_RETREAT_SPEED = 2.6;
+const T3_RETURN_SPEED = 2.0;      // unhurried trudge home once it gives up
+const T3_FIRE_COOLDOWN = 4.8;     // slow recovery: a heavy, infrequent volley, not a stream
+const T3_LASER_DAMAGE = 18;       // roughly double a W4 bolt (9) for the pair landing together
+const T3_HIT_RANGE = 0.75;        // point-blank fallback: claws, not lasers
+const T3_HIT_DAMAGE = 10;
+const T3_HIT_COOLDOWN = 0.9;
+const T3_BODY = '#123d8a';        // deep, darker blue — still reads at a glance, less garish
+const T3_HEAD = '#081c47';
+const T3_LIMB = '#050f28';
+const T3_EDGE = '#02060f';
+const T3_SCALE = 0.78;            // overall figure size, smaller than the original draft
+const T3_EYE_HOT = '#ff8a1e';     // orange sensor/laser tell — every other hunter's is red
+const T3_EYE_DIM = '#5a3a12';
+
 // W1s: a "revenge squad" the AI releases the instant an obelisk falls (and
 // periodically from the W-factory too). They don't patrol — deployed already
 // hunting, cycling attack/withdraw phases like a real assault wave, and the
@@ -120,6 +153,22 @@ const UBIK_CONFUSE_ATTACK_DAMAGE = 7;
 const UBIK_CONFUSE_ATTACK_COOLDOWN = 0.9;
 const W3_BODY = '#1c3a44';      // dull blue-teal, unmistakably not a hunter
 const W3_HEAD = '#122730';
+
+// W5s: unarmed gardener drones. Never dispatched in response to anything —
+// the factory just fields one whenever there isn't already a live one out,
+// so there's always roughly one somewhere on the map — and it does nothing
+// but wander and, now and then, plant a sapling on open grass nearby. Never
+// aggros, never fights back; the same generic death path scraps it like any
+// other machine if the player decides to.
+const W5_HP = 12;
+const W5_SPEED = 1.1;            // a slow, unhurried drift
+const W5_WANDER_RANGE = 6;       // local patrol radius around its current recentred "home"
+const W5_RECENTER_INTERVAL = 10; // seconds between re-anchoring home to itself — an unbounded slow walk, not a fixed beat
+const W5_PLANT_INTERVAL = 18;    // seconds between planting attempts
+const W5_PLANT_JITTER = 14;
+const W5_PLANT_RANGE = 3;        // how far from itself it'll look for a spot
+const W5_BODY = '#243a1c';       // mossy green, reads as gardener not hunter
+const W5_HEAD = '#16240f';
 
 // Line-of-sight give-up: any hunting machine that can't see the player for
 // this long stands down for a while (LOSE_INTEREST_COOLDOWN), during which
@@ -259,6 +308,27 @@ function seatNear(map, ox, oy, avoid, used, rng, maxR) {
   return candidates[Math.floor(rng() * candidates.length)];
 }
 
+// A free, walkable tile hugging a tree within maxR of (ox, oy) — the T3's
+// "nest" spot. Checks the four tiles orthogonally adjacent to each tree in
+// range and keeps the closest free one; returns null if nothing qualifies,
+// so the caller can fall back to the normal obelisk-ring seat.
+function nearestTreeNest(map, ox, oy, maxR, used) {
+  let best = null, bestD = Infinity;
+  for (const o of map.objects) {
+    if (o.type !== 'tree') continue;
+    const d = Math.hypot(o.x - ox, o.y - oy);
+    if (d > maxR) continue;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const tx = o.x + dx, ty = o.y + dy;
+      if (map.isSolid(tx, ty)) continue;
+      if (map.heightAt && map.heightAt(tx, ty) < 0) continue;
+      if (used.has(`${tx},${ty}`)) continue;
+      if (d < bestD) { bestD = d; best = [tx, ty]; }
+    }
+  }
+  return best;
+}
+
 // One T1 sentry per tower; every second tower also fields a T2 stalker.
 export function spawnRobots(map, seed, obelisks, avoid) {
   const rng = makeRng(seed);
@@ -267,12 +337,21 @@ export function spawnRobots(map, seed, obelisks, avoid) {
 
   obelisks.forEach((ob, i) => {
     const wants = i % 2 === 1 ? ['t1', 't2'] : ['t1'];
+    if (i % 6 === 5) wants.push('t3'); // rare: roughly one tower in six
     for (const type of wants) {
-      const spot = seatNear(map, ob.x, ob.y, avoid, used, rng, SPAWN_MAX_R);
+      let spot = seatNear(map, ob.x, ob.y, avoid, used, rng, SPAWN_MAX_R);
       if (!spot) continue; // tower stands in a dead corner: no machine
+      if (type === 't3') {
+        // Ambush unit: prefers to nest beside a nearby tree over the open
+        // ring every other machine seats in, matching its "hides and waits"
+        // behaviour. Best-effort — falls back to the normal seat if no tree
+        // is close enough.
+        const nest = nearestTreeNest(map, spot[0], spot[1], T3_NEST_SEARCH_R, used);
+        if (nest) spot = nest;
+      }
       used.add(`${spot[0]},${spot[1]}`);
       robots.push(baseRobot(type, spot[0], spot[1],
-        type === 't1' ? T1_HP : T2_HP, rng));
+        type === 't1' ? T1_HP : type === 't3' ? T3_HP : T2_HP, rng));
     }
   });
 
@@ -331,6 +410,19 @@ export function spawnW3(map, seed, fx, fy) {
   const spot = seatNear(map, fx, fy, avoid, used, rng, SPAWN_MAX_R_FALLBACK);
   if (!spot) return null;
   const r = baseRobot('w3', spot[0], spot[1], W3_HP, rng);
+  r.spawnT = FACTORY_SPAWN_T;
+  return r;
+}
+
+// One gardener drone off the factory floor. No target, no urgency — it just
+// starts wandering from wherever it's seated.
+export function spawnW5(map, seed, fx, fy) {
+  const rng = makeRng(seed >>> 0);
+  const used = new Set();
+  const avoid = { x: fx, y: fy, r: 0 };
+  const spot = seatNear(map, fx, fy, avoid, used, rng, SPAWN_MAX_R_FALLBACK);
+  if (!spot) return null;
+  const r = baseRobot('w5', spot[0], spot[1], W5_HP, rng);
   r.spawnT = FACTORY_SPAWN_T;
   return r;
 }
@@ -548,8 +640,8 @@ export function updateRobots(dt, robots, player, map) {
     // Ubik: standing in a brightened patch scrambles a hunter's mind —
     // refreshed continuously while inside so lingering keeps it confused,
     // decaying for a while after it wanders (or staggers) back out. Unarmed
-    // W3 drones and reprogrammed friendlies are unaffected.
-    if (!r.friendly && r.type !== 'w3' && map.ubikPatches && map.ubikPatches.length
+    // W3/W5 drones and reprogrammed friendlies are unaffected.
+    if (!r.friendly && r.type !== 'w3' && r.type !== 'w5' && map.ubikPatches && map.ubikPatches.length
       && map.ubikPatches.some((p) => Math.hypot(p.x - r.x, p.y - r.y) < (p.r || 3))) {
       r.ubikConfusedT = UBIK_CONFUSE_HOLD;
     } else if (r.ubikConfusedT > 0) {
@@ -663,9 +755,11 @@ export function updateRobots(dt, robots, player, map) {
     }
 
     if (r.type === 't1') updateT1(r, dt, player, map);
+    else if (r.type === 't3') updateT3(r, dt, player, map);
     else if (r.type === 'w1') updateW1(r, dt, player, map);
     else if (r.type === 'w3') updateW3(r, dt, map, robots);
     else if (r.type === 'w4') updateW4(r, dt, player, map);
+    else if (r.type === 'w5') updateW5(r, dt, map);
     else updateT2(r, dt, player, map);
   }
   separateRobots(robots, map, dt, player);
@@ -787,6 +881,80 @@ function updateT1(r, dt, player, map) {
     r.noProgressT = 0;
     r.stuck = false;
     patrol(r, T1_PATROL_SPEED, T1_PATROL_RANGE, dt, map);
+  }
+}
+
+// A dual-beam volley from both eyes at once — visually two bolts (orange,
+// not the red every other shooter uses), but resolved as a single hit for
+// roughly double a W4 bolt, same shield/mirror handling as W4's fire.
+function fireT3Lasers(r, player, map, ease) {
+  const perp = { x: -r.facing.y, y: r.facing.x };
+  for (const o of [-0.18, 0.18]) {
+    (map.projectiles ??= []).push({
+      x0: r.x + perp.x * o, y0: r.y + perp.y * o,
+      x1: player.x, y1: player.y, prog: 0, kind: 'laser_t3',
+    });
+  }
+  const block = player.blockRangedShot ? player.blockRangedShot(r.x, r.y) : null;
+  if (block === 'reflect') {
+    r.hp -= 999; r.hurt = true;
+    for (let s = 0; s < 5; s++) (map.sparks ??= []).push({ x: r.x + (s - 2) * 0.15, y: r.y + (s % 2) * 0.2, ttl: 0.35, max: 0.35 });
+    map.projectiles.push({ x0: player.x, y0: player.y, x1: r.x, y1: r.y, prog: 0, kind: 'laser_t3' });
+  } else if (!block) {
+    player.takeDamage(T3_LASER_DAMAGE * ease, 'machine');
+  }
+}
+
+// A tactical ambusher, not a chaser: it nests beside a tree near its tower
+// (see spawnRobots) and stays there — no blind proximity detection like a
+// T1/T2, it has to actually get a clear line of sight before it counts as
+// noticing you at all. Once it has, it holds its ground and fires rather
+// than closing in, backing off only enough to keep a shot lined up if you
+// press it, same shape as a W4 but far heavier per hit and far slower to
+// recover — a single missed dodge costs a lot more than a W4 bolt does.
+function updateT3(r, dt, player, map) {
+  r.attackTimer = Math.max(0, r.attackTimer - dt);
+  const ease = player.threatEase ? player.threatEase() : 1;
+
+  if (r.returning) {
+    moveToward(r, r.home.x, r.home.y, T3_RETURN_SPEED, dt, map);
+    if (Math.hypot(r.home.x - r.x, r.home.y - r.y) < 1) r.returning = false;
+    return;
+  }
+
+  drainBattery(r, r.aggro ? DRAIN_CHASE : DRAIN_PATROL, dt);
+  if (r.drained) return;
+
+  const d = distTo(r, player);
+  const canSee = map.hasLineOfSight(r.x, r.y, player.x, player.y);
+
+  if (!r.aggro) {
+    if (d < T3_AMBUSH_RANGE * ease && canSee) {
+      r.aggro = true;
+    } else {
+      patrol(r, T3_PATROL_SPEED, T3_PATROL_RANGE, dt, map); // barely stirs from its nest
+      return;
+    }
+  }
+
+  if (d > 1e-4) r.facing = { x: (player.x - r.x) / d, y: (player.y - r.y) / d };
+
+  // Camped: unlike a W4 it never chases to open a shot, only nudges back if
+  // you crowd it — and even then it'll claw rather than retreat forever.
+  if (d < T3_MIN_RANGE && d > T3_HIT_RANGE) {
+    const dx = r.x - player.x, dy = r.y - player.y;
+    moveToward(r, r.x + (dx / d) * 2, r.y + (dy / d) * 2, T3_RETREAT_SPEED, dt, map);
+  }
+
+  if (d < T3_HIT_RANGE && r.attackTimer <= 0) {
+    r.attackTimer = T3_HIT_COOLDOWN;
+    player.takeDamage(T3_HIT_DAMAGE * ease, 'machine');
+    return;
+  }
+
+  if (d <= T3_AMBUSH_RANGE * ease && canSee && r.attackTimer <= 0) {
+    r.attackTimer = T3_FIRE_COOLDOWN;
+    fireT3Lasers(r, player, map, ease);
   }
 }
 
@@ -938,6 +1106,37 @@ function updateW3(r, dt, map, robots) {
     }
     r.repairTarget = null;
     r.dead = true;
+  }
+}
+
+// A W5 gardener drone: no destination, no urgency. It drifts on an
+// unbounded slow random walk (patrol() around a "home" that's periodically
+// re-anchored to wherever it currently is, rather than a fixed tower), and
+// every so often plants a sapling on a nearby patch of open grass — reusing
+// the same `grow` field the ambient forest-regrowth timer in main.js uses,
+// so a planted sapling thickens up over the same ~minute. Never aggros,
+// never fights back.
+function updateW5(r, dt, map) {
+  r.aggro = false;
+  drainBattery(r, DRAIN_PATROL, dt);
+  if (r.drained) return;
+  patrol(r, W5_SPEED, W5_WANDER_RANGE, dt, map);
+  r._recenterT = (r._recenterT || 0) - dt;
+  if (r._recenterT <= 0) {
+    r._recenterT = W5_RECENTER_INTERVAL;
+    r.home = { x: r.x, y: r.y };
+  }
+  r._plantT = (r._plantT || W5_PLANT_INTERVAL) - dt;
+  if (r._plantT <= 0) {
+    r._plantT = W5_PLANT_INTERVAL + Math.random() * W5_PLANT_JITTER;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const tx = Math.floor(r.x + (Math.random() - 0.5) * 2 * W5_PLANT_RANGE);
+      const ty = Math.floor(r.y + (Math.random() - 0.5) * 2 * W5_PLANT_RANGE);
+      if (map.floorAt(tx, ty) === 'grass' && !map.objectAt(tx, ty) && (!map.heightAt || map.heightAt(tx, ty) === 0)) {
+        map.addObject('tree', tx, ty, { variant: Math.floor(Math.random() * 3), grow: 0.15 });
+        break;
+      }
+    }
   }
 }
 
@@ -1133,6 +1332,18 @@ function sensorStyle(r) {
   return { fill: r.aggro ? EYE_HOT : EYE_DIM, halo: r.aggro ? 'rgba(255,59,42,0.3)' : null };
 }
 
+// T3's own sensor tell: every special case (drained, stunned, singing,
+// friendly) stays identical to every other machine, but the plain aggro/idle
+// fallback is orange instead of red, so its threat reads as distinct from a
+// T1/T2/W1/W4 at a glance.
+function t3SensorStyle(r) {
+  const s = sensorStyle(r);
+  if (!s) return s;
+  if (s.fill === EYE_HOT) return { fill: T3_EYE_HOT, halo: 'rgba(255,138,30,0.32)' };
+  if (s.fill === EYE_DIM) return { fill: T3_EYE_DIM, halo: null };
+  return s;
+}
+
 // Body plate colour for the current state.
 function bodyTone(base, r) {
   if (r.fused) return FUSED_BODY;
@@ -1201,6 +1412,7 @@ export function drawRobot(ctx, robot, worldToScreen) {
     ? { x: c.x + (Math.random() - 0.5) * 5, y: c.y + (Math.random() - 0.5) * 5 }
     : c;
   if (robot.type === 't1') drawT1(ctx, robot, jc, worldToScreen);
+  else if (robot.type === 't3') drawT3(ctx, robot, jc);
   else drawT2(ctx, robot, jc);
   if (robot.ubikConfusedT > 0) {
     // Tell: violet dizzy dots circling the head, PKD's reality-static
@@ -1303,8 +1515,8 @@ function drawT2(ctx, r, c) {
   ctx.fillRect(-4 + swing, -10, 3, 10);
   ctx.fillRect(1 - swing, -10, 3, 10);
 
-  const bodyBase = r.type === 'w1' ? W1_BODY : r.type === 'w3' ? W3_BODY : r.type === 'w4' ? W4_BODY : T2_BODY;
-  const headBase = r.type === 'w1' ? W1_HEAD : r.type === 'w3' ? W3_HEAD : r.type === 'w4' ? W4_HEAD : T2_HEAD;
+  const bodyBase = r.type === 'w1' ? W1_BODY : r.type === 'w3' ? W3_BODY : r.type === 'w4' ? W4_BODY : r.type === 'w5' ? W5_BODY : T2_BODY;
+  const headBase = r.type === 'w1' ? W1_HEAD : r.type === 'w3' ? W3_HEAD : r.type === 'w4' ? W4_HEAD : r.type === 'w5' ? W5_HEAD : T2_HEAD;
   ctx.fillStyle = bodyTone(bodyBase, r); // blocky torso, roughly player height overall
   ctx.fillRect(-6, -25, 12, 16);
   if (!r.fused) {
@@ -1332,4 +1544,161 @@ function drawT2(ctx, r, c) {
 
   if (r.fused) drawSmoke(ctx, c.x, c.y - 34, r.animT || 0);
   if (r.drained && !r.fused) drawBatteryIcon(ctx, c.x, c.y - 40);
+}
+
+// A stooped, reaching silhouette instead of the T2's upright stalk — a
+// permanent forward hunch reads as a predator crouched to strike rather
+// than a recoloured T2. Eyes glow orange, not the red every other machine
+// uses, so the one that actually fires the hard-hitting ambush volley is
+// unmistakable at a glance.
+function drawT3(ctx, r, c) {
+  // A long, thin shadow — it looms rather than stands square.
+  ctx.fillStyle = 'rgba(0,0,0,0.34)';
+  ctx.beginPath();
+  ctx.ellipse(c.x, c.y, 9 * T3_SCALE, 4 * T3_SCALE, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.save();
+  ctx.translate(c.x, c.y);
+  // A faint tremor riding on animT (which always ticks, unlike walkPhase)
+  // keeps it reading as live machinery even while it's holding still and
+  // watching, rather than a dead, inert sprite.
+  const tremor = r.fused ? 0 : Math.sin((r.animT || 0) * 9) * 0.012;
+  if (r.fused) ctx.rotate(0.16);
+  else if (r.ubikConfusedT > 0) ctx.rotate(performance.now() / 140);
+  else ctx.rotate(0.22 + tremor); // permanent hunch: reads as mid-lunge whether frozen or closing in
+  ctx.scale(T3_SCALE, T3_SCALE);
+
+  // Legs scissor with the walk phase exactly like the T2's — a jagged knee
+  // break rather than a straight limb, and taller than a T2's. Since it
+  // barely moves once camped, this mostly only plays while it repositions.
+  const swing = r.fused ? 0 : Math.sin(r.walkPhase) * 3;
+  ctx.strokeStyle = r.fused ? FUSED_EDGE : T3_LIMB;
+  ctx.lineWidth = 2.2;
+  for (const side of [-1, 1]) {
+    const hipX = side * 3.2;
+    ctx.beginPath();
+    ctx.moveTo(hipX, -13);
+    ctx.lineTo(hipX + swing * side * 0.4, -6);
+    ctx.lineTo(hipX + swing * side, 0);
+    ctx.stroke();
+  }
+
+  // Torso: a narrow, ragged waist breaking out into tall, asymmetric jagged
+  // shoulders — a broken silhouette rather than a smooth chassis block, and
+  // taller than any other machine here so it genuinely looms.
+  ctx.fillStyle = bodyTone(T3_BODY, r);
+  ctx.beginPath();
+  ctx.moveTo(-4, -13);
+  ctx.lineTo(4, -13);
+  ctx.lineTo(6, -23);
+  ctx.lineTo(9, -30);
+  ctx.lineTo(3, -35);
+  ctx.lineTo(-2, -36);
+  ctx.lineTo(-8, -31);
+  ctx.lineTo(-5, -24);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = r.fused ? FUSED_EDGE : T3_EDGE;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  if (!r.fused) {
+    // A riveted-metal texture clipped to the torso silhouette: a diagonal
+    // brushed-steel sheen, a panel seam, and a scatter of rivets — echoes
+    // the fortress ramparts' metal without needing the full wall texture
+    // at this scale. Reuses the torso path already current from the fill.
+    ctx.save();
+    ctx.clip();
+    const sheen = ctx.createLinearGradient(-8, -36, 9, -13);
+    sheen.addColorStop(0, 'rgba(255,255,255,0.04)');
+    sheen.addColorStop(0.42, 'rgba(255,255,255,0.24)');
+    sheen.addColorStop(0.52, 'rgba(255,255,255,0.04)');
+    sheen.addColorStop(1, 'rgba(0,0,0,0.16)');
+    ctx.fillStyle = sheen;
+    ctx.fillRect(-10, -38, 20, 28);
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+    ctx.lineWidth = 0.6;
+    ctx.beginPath();
+    ctx.moveTo(-8, -23);
+    ctx.lineTo(8, -19);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    for (const [rx, ry] of [[-5, -30], [3, -33], [-2, -16], [4, -17]]) {
+      ctx.beginPath();
+      ctx.arc(rx, ry, 0.55, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  if (!r.fused) {
+    // Both arms reach, opposite each other and opposite the legs on the
+    // same phase — a point-blank tell as much as a walk cycle, since these
+    // are what actually swing the claws it falls back on up close.
+    for (const side of [-1, 1]) {
+      const reach = Math.sin(r.walkPhase + Math.PI + (side < 0 ? Math.PI : 0)) * 4;
+      const shoulderX = side * 6, shoulderY = -30;
+      const tipX = side * (11 + reach * 0.3), tipY = -25 + reach * 0.6;
+      ctx.strokeStyle = T3_LIMB;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(shoulderX, shoulderY);
+      ctx.lineTo(tipX, tipY);
+      ctx.stroke();
+
+      // A three-talon claw fanned out from the tip, along the arm's own
+      // direction — what you'd actually feel close on your shoulder.
+      const armAng = Math.atan2(tipY - shoulderY, tipX - shoulderX);
+      ctx.strokeStyle = T3_EDGE;
+      ctx.lineWidth = 1.4;
+      for (const off of [-0.5, 0, 0.5]) {
+        const a = armAng + off;
+        ctx.beginPath();
+        ctx.moveTo(tipX, tipY);
+        ctx.lineTo(tipX + Math.cos(a) * 4, tipY + Math.sin(a) * 4);
+        ctx.stroke();
+      }
+    }
+  }
+
+  // Head: gaunt and elongated, no neck, hunched straight into the shoulders
+  // — a skull shape rather than a boxy sensor head.
+  ctx.fillStyle = r.fused ? FUSED_DARK : T3_HEAD;
+  ctx.beginPath();
+  ctx.ellipse(0.5, -42, 3.4, 6.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Two hollow eye sockets instead of one visor — dark and empty at rest,
+  // glowing orange together the instant it's actually hunting (aggro): the
+  // same tell every other machine gives in red, recoloured so its threat
+  // reads as distinct from a T1/T2/W1/W4 at a glance.
+  const s = t3SensorStyle(r);
+  for (const ex of [-1.4, 1.9]) {
+    ctx.fillStyle = EYE_SOCKET;
+    ctx.beginPath();
+    ctx.arc(ex, -43, 1.4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  if (s) {
+    for (const ex of [-1.4, 1.9]) {
+      if (s.halo) {
+        ctx.fillStyle = s.halo;
+        ctx.beginPath();
+        ctx.arc(ex, -43, 2.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = s.fill;
+      ctx.beginPath();
+      ctx.arc(ex, -43, 1.1, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  drawDesignation(ctx, r, 0, -27); // 'T3' higher on the torso plate, near the chest
+
+  ctx.restore();
+
+  if (r.fused) drawSmoke(ctx, c.x, c.y - 38 * T3_SCALE, r.animT || 0);
+  if (r.drained && !r.fused) drawBatteryIcon(ctx, c.x, c.y - 46 * T3_SCALE);
 }
