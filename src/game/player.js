@@ -378,7 +378,7 @@ export class Player {
       // Any change of tape stops playback — the new one starts stopped and
       // wants a click, same as a real deck after a swap.
       this.walkman = val || null;
-      if (this.walkmanSide) { this.walkmanSide = null; sfx.setMusicMode('off'); }
+      if (this.walkmanSide) { this.walkmanSide = null; sfx.setMusicMode('synth'); } // back to the ambient bed
       return true;
     }
     return false;
@@ -428,7 +428,7 @@ export class Player {
         this.say(`You flip the tape over. Side B — "${def.sideB}".`);
       } else if (this.walkmanSide === 'B') {
         this.walkmanSide = null;
-        sfx.setMusicMode('off');
+        sfx.setMusicMode('synth'); // stopping the tape falls back to the ambient synth bed
         this.say('The walkman clunks to a stop.');
       } else {
         this.walkmanSide = 'A';

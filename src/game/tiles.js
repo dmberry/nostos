@@ -48,6 +48,7 @@ export const OBJECTS = {
   box:     { solid: true, climbable: true, climbHeight: 1 }, // resistance cache — a low crate you can step or jump onto, still searchable from beside it
   car:     { solid: true }, // abandoned wreck littering the roads; scenery only
   wfactory: { solid: true }, // W-unit foundry; periodically fields a W3 repair drone
+  furniture: { solid: true }, // stacked junk cluttering the underworld's rooms; solid, you weave around it
   // --- Adamantine's fortress (southern annex) ---
   // Deliberately NON-climbable, unlike a town wall: the fortress rampart and
   // its inner maze can't be double-jumped, so the hacked doorway is the only

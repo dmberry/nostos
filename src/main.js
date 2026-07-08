@@ -48,7 +48,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '1.13';
+const VERSION = '1.14';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -571,7 +571,7 @@ let uwAmbienceClock = 0, uwAmbienceNext = 8 + Math.random() * 10;
 function enterUnderworld() {
   if (!underworld) {
     underworld = createUnderworldPocket((WORLD_SEED ^ 0x0b1c) >>> 0);
-    uwCreatures = [spawnUnderworldCreature((WORLD_SEED ^ 0x1e57) >>> 0, underworld.spawnX + 4, underworld.spawnY + 4)];
+    uwCreatures = [spawnUnderworldCreature((WORLD_SEED ^ 0x1e57) >>> 0, underworld.creatureX, underworld.creatureY)];
   }
   overworldReturn = { x: player.x, y: player.y };
   map = underworld.map;
@@ -1602,14 +1602,19 @@ function update(dt) {
     for (const p of map.ubikPatches) p.t += dt;
     map.ubikPatches = map.ubikPatches.filter((p) => p.t < (p.portal ? UBIK_PORTAL_LIFE : UBIK_PATCH_LIFE));
     const portals = map.ubikPatches.filter((p) => p.portal);
-    for (const p of portals) p.linkedTo = true; // always usable — the flame-speed tell in renderer.js
     if (player._ubikTeleportCooldown <= 0) {
       for (const p of portals) {
         if (Math.hypot(p.x - player.x, p.y - player.y) > UBIK_TELEPORT_RANGE) continue;
         enterUnderworld();
         player._ubikTeleportCooldown = UBIK_TELEPORT_COOLDOWN;
         sfx.play('zap');
-        break;
+        // Crucial: `map` is now the underworld pocket. Bail out of the rest
+        // of this (overworld) update tick — revealAround, obelisks, the
+        // factory, animals etc. all assume the overworld map and would run
+        // against the wrong one this frame (revealAround in particular reads
+        // map.explored, which the pocket doesn't have). Next frame the
+        // inUnderworld branch at the top takes over cleanly.
+        return;
       }
     }
   }

@@ -1,7 +1,8 @@
 // The underworld: a Ubik tear doesn't just brighten reality any more — walk
 // into one and it tears clean through into a liminal pocket, Backrooms-style:
-// a small, bounded, disposable maze with its own faded-yellow palette and one
-// wrong, lurking thing in it. Generated once (lazily, on first entry) and
+// a block of huge, echoing rooms with furniture stacked around at random,
+// joined only by doorways, its own faded-yellow palette, and one wrong,
+// lurking thing wandering it. Generated once (lazily, on first entry) and
 // kept for the rest of the session rather than regenerated per visit — a
 // deliberate v1 scope cut (see PAI-version-plan.md). Self-contained: main.js
 // calls createUnderworldPocket() once, then updateUnderworldCreatures() and
@@ -12,10 +13,16 @@ import { GameMap } from './map.js';
 import { makeRng } from './rng.js';
 import { ANIMAL_SPRITE_SETS } from '../engine/textures.js';
 
-const UW_SIZE = 26;      // small and bounded — enough to get lost in, not to wander forever
-const UW_CW = 2;         // corridor width
-const UW_PITCH = 3;      // corridor + 1-wide wall
-const UW_WALL_H = 34;
+// The pocket is a block of huge rooms rather than a thin-corridor maze —
+// cavernous, sparse, furniture stacked around at random, rooms joined only
+// by doorways punched in their shared walls. Backrooms proper.
+const UW_GRID = 3;                          // a 3x3 block of rooms
+const UW_ROOM = 13;                         // interior tiles per room side — big and echoing
+const UW_PITCH = UW_ROOM + 1;               // room interior + its one shared wall
+const UW_SIZE = UW_GRID * UW_PITCH + 1;     // + the far outer wall (= 43)
+const UW_DOOR_W = 2;                        // doorway width between adjacent rooms
+const UW_WALL_H = 42;                       // tall walls — you can't see over into the next room
+const UW_FURN_MIN = 4;                      // furniture piles per room, minimum
 
 const LURKER_WANDER_SPEED = 1.0;
 const LURKER_HUNT_SPEED = 2.6;
@@ -25,55 +32,110 @@ const LURKER_HIT_RANGE = 0.6;
 const LURKER_HIT_DAMAGE = 8;
 const LURKER_HIT_COOLDOWN = 1.2;
 
-// ---- maze -------------------------------------------------------------
+// ---- rooms & doors ----------------------------------------------------
 
-// Recursive-backtracker over the whole pocket (same technique as the
-// fortress's labyrinth, src/game/fortress.js:buildMaze, just carved across
-// a full small grid instead of a band). Returns the entrance cell (spawn)
-// and whichever cell the DFS reached deepest before backtracking — a cheap,
-// good-enough proxy for "far from spawn" without a separate BFS pass.
-function carveMaze(map, rng) {
-  const cols = Math.floor((UW_SIZE - 2) / UW_PITCH);
-  const rows = Math.floor((UW_SIZE - 2) / UW_PITCH);
-  const mx0 = 1, my0 = 1;
-  const open = new Set();
+// Lay out the pocket as a GRID x GRID block of big rooms. Every tile starts
+// as wall; each room's interior is cleared to open floor; adjacent rooms are
+// joined by a doorway gap punched in their shared wall. A randomized DFS over
+// the room graph guarantees every room is reachable (a spanning tree), plus a
+// few extra doors so it reads as connected rooms rather than a strict tree.
+// Every doorway sits on the room's central lane, and the central plus (the
+// row and column through each room's centre) is always kept clear of
+// furniture — so whatever else is stacked around, there is always a path from
+// any door to any other, and the exit is always reachable.
+function carveRooms(map, rng) {
   const idx = (x, y) => y * UW_SIZE + x;
-  const carve = (x, y) => { if (map.inBounds(x, y)) open.add(idx(x, y)); };
-  const cellX = (c) => mx0 + c * UW_PITCH, cellY = (r) => my0 + r * UW_PITCH;
-  const carveCell = (c, r) => {
-    const bx = cellX(c), by = cellY(r);
-    for (let dy = 0; dy < UW_CW; dy++) for (let dx = 0; dx < UW_CW; dx++) carve(bx + dx, by + dy);
-  };
-  const carvePassage = (c1, r1, c2, r2) => {
-    if (c1 !== c2) { const gx = cellX(Math.min(c1, c2)) + UW_CW, by = cellY(r1); for (let dy = 0; dy < UW_CW; dy++) carve(gx, by + dy); }
-    else { const gy = cellY(Math.min(r1, r2)) + UW_CW, bx = cellX(c1); for (let dx = 0; dx < UW_CW; dx++) carve(bx + dx, gy); }
-  };
-  const visited = Array.from({ length: rows }, () => new Array(cols).fill(false));
-  const stack = [[0, 0]];
-  visited[0][0] = true; carveCell(0, 0);
-  let deepest = [0, 0], deepestDepth = 1;
+  const wall = new Set();
+  for (let y = 0; y < UW_SIZE; y++) for (let x = 0; x < UW_SIZE; x++) wall.add(idx(x, y));
+  const roomLo = (rc) => rc * UW_PITCH + 1;            // first interior tile of room index rc
+  const roomMid = (rc) => roomLo(rc) + (UW_ROOM >> 1); // its central lane tile
+  const inRoom = (rc, v) => v >= roomLo(rc) && v < roomLo(rc) + UW_ROOM;
+
+  // Clear each room's interior.
+  for (let rr = 0; rr < UW_GRID; rr++) for (let rc = 0; rc < UW_GRID; rc++) {
+    for (let dy = 0; dy < UW_ROOM; dy++) for (let dx = 0; dx < UW_ROOM; dx++) {
+      wall.delete(idx(roomLo(rc) + dx, roomLo(rr) + dy));
+    }
+  }
+
+  // Randomized DFS spanning tree over the GRID x GRID room graph, tracking the
+  // deepest room reached as a cheap "far from spawn" pick for the exit.
   const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  const visited = Array.from({ length: UW_GRID }, () => new Array(UW_GRID).fill(false));
+  const doors = [];
+  const stack = [[0, 0]]; visited[0][0] = true;
+  let deepest = [0, 0], deepestDepth = 1;
   while (stack.length) {
-    const [c, r] = stack[stack.length - 1];
+    const [rc, rr] = stack[stack.length - 1];
     const opts = [];
     for (const [dc, dr] of DIRS) {
-      const nc = c + dc, nr = r + dr;
-      if (nc >= 0 && nc < cols && nr >= 0 && nr < rows && !visited[nr][nc]) opts.push([nc, nr]);
+      const nc = rc + dc, nr = rr + dr;
+      if (nc >= 0 && nc < UW_GRID && nr >= 0 && nr < UW_GRID && !visited[nr][nc]) opts.push([nc, nr, dc, dr]);
     }
     if (!opts.length) { stack.pop(); continue; }
     const [nc, nr] = opts[Math.floor(rng() * opts.length)];
-    visited[nr][nc] = true; carvePassage(c, r, nc, nr); carveCell(nc, nr); stack.push([nc, nr]);
+    visited[nr][nc] = true; doors.push([rc, rr, nc, nr]); stack.push([nc, nr]);
     if (stack.length > deepestDepth) { deepestDepth = stack.length; deepest = [nc, nr]; }
   }
-  for (let y = 0; y < UW_SIZE; y++) {
-    for (let x = 0; x < UW_SIZE; x++) {
-      if (open.has(idx(x, y))) continue;
-      map.addObject('fortwall', x, y, { material: 'liminal', wallH: UW_WALL_H });
+  // A few extra doors for loops.
+  for (let n = 0; n < 3; n++) {
+    const rc = Math.floor(rng() * UW_GRID), rr = Math.floor(rng() * UW_GRID);
+    const [dc, dr] = DIRS[Math.floor(rng() * 4)];
+    const nc = rc + dc, nr = rr + dr;
+    if (nc >= 0 && nc < UW_GRID && nr >= 0 && nr < UW_GRID) doors.push([rc, rr, nc, nr]);
+  }
+  // Punch each door as a UW_DOOR_W gap centred on the shared central lane.
+  for (const [rc, rr, nc, nr] of doors) {
+    if (nc !== rc) {                                   // vertical shared wall
+      const wx = roomLo(Math.max(rc, nc)) - 1, cy = roomMid(rr);
+      for (let k = 0; k < UW_DOOR_W; k++) wall.delete(idx(wx, cy - (UW_DOOR_W >> 1) + k));
+    } else {                                           // horizontal shared wall
+      const wy = roomLo(Math.max(rr, nr)) - 1, cx = roomMid(rc);
+      for (let k = 0; k < UW_DOOR_W; k++) wall.delete(idx(cx - (UW_DOOR_W >> 1) + k, wy));
     }
   }
+
+  // Materialise the walls.
+  for (let y = 0; y < UW_SIZE; y++) for (let x = 0; x < UW_SIZE; x++) {
+    if (wall.has(idx(x, y))) map.addObject('fortwall', x, y, { material: 'liminal', wallH: UW_WALL_H });
+  }
+
+  // The way back out sits right where you arrive — in the spawn room (0,0),
+  // a few tiles off the landing spot so you don't step straight back through
+  // it, and clearly signed EXIT (the renderer draws the sign). You can always
+  // get home from where you came in; exploring deeper is the optional risk.
+  const exitTX = roomLo(0) + 2, exitTY = roomLo(0) + 2;
+
+  // Furniture: clusters stacked around each room, never on the central plus
+  // (so doors always connect), the spawn landing, or the exit.
+  const onPlus = (rc, rr, x, y) => x === roomMid(rc) || y === roomMid(rr);
+  for (let rr = 0; rr < UW_GRID; rr++) for (let rc = 0; rc < UW_GRID; rc++) {
+    const clusters = UW_FURN_MIN + Math.floor(rng() * 4);
+    for (let n = 0; n < clusters; n++) {
+      const ax = roomLo(rc) + Math.floor(rng() * UW_ROOM);
+      const ay = roomLo(rr) + Math.floor(rng() * UW_ROOM);
+      const pile = 1 + Math.floor(rng() * 3);
+      for (let p = 0; p < pile; p++) {
+        const fx = ax + (p === 0 ? 0 : Math.floor(rng() * 3) - 1);
+        const fy = ay + (p === 0 ? 0 : Math.floor(rng() * 3) - 1);
+        if (!inRoom(rc, fx) || !inRoom(rr, fy)) continue;
+        if (onPlus(rc, rr, fx, fy)) continue;
+        if (rc === 0 && rr === 0 && Math.abs(fx - roomMid(0)) <= 2 && Math.abs(fy - roomMid(0)) <= 2) continue;
+        if (Math.abs(fx - exitTX) <= 1 && Math.abs(fy - exitTY) <= 1) continue; // clear round the exit
+        if (map.objectAt(fx, fy)) continue;
+        map.addObject('furniture', fx, fy, {
+          variant: Math.floor(rng() * 3),
+          seed: Math.floor(rng() * 1000),
+          h: 9 + Math.floor(rng() * 15),
+        });
+      }
+    }
+  }
+
   return {
-    spawn: { x: cellX(0) + UW_CW / 2, y: cellY(0) + UW_CW / 2 },
-    exit: { x: cellX(deepest[0]) + UW_CW / 2, y: cellY(deepest[1]) + UW_CW / 2 },
+    spawn: { x: roomMid(0) + 0.5, y: roomMid(0) + 0.5 },
+    exit: { x: exitTX + 0.5, y: exitTY + 0.5 },
+    creature: { x: roomMid(deepest[0]) + 0.5, y: roomMid(deepest[1]) + 0.5 }, // lurking in the farthest room
   };
 }
 
@@ -85,8 +147,12 @@ function carveMaze(map, rng) {
 export function createUnderworldPocket(seed) {
   const map = new GameMap(UW_SIZE, UW_SIZE, 'liminal');
   const rng = makeRng(seed >>> 0);
-  const { spawn, exit } = carveMaze(map, rng);
-  map.ubikPatches = [{ x: exit.x, y: exit.y, r: 1.5, t: 0, portal: true, linkedTo: true }];
+  const { spawn, exit, creature } = carveRooms(map, rng);
+  // t = 3, not 0: the tear render fades a patch IN over its first ~2 seconds
+  // of age, but the underworld's own update loop never ages ubikPatches — so
+  // a t of 0 would leave the exit permanently invisible. Start it past the
+  // fade-in and well short of the (245s) fade-out so it renders fully, always.
+  map.ubikPatches = [{ x: exit.x, y: exit.y, r: 1.5, t: 3, portal: true, linkedTo: true }];
   // Same defensive setup as the overworld map gets in main.js — most of this
   // is lazily created on first use anyway (player.js does `x = x || []`
   // throughout, renderer.js guards with `if (map.x)`), but set up front for
@@ -94,7 +160,15 @@ export function createUnderworldPocket(seed) {
   map.projectiles = [];
   map.bombs = [];
   map.explosions = [];
-  return { map, spawnX: spawn.x, spawnY: spawn.y, exitX: exit.x, exitY: exit.y };
+  // Fog fields, so the pocket is a fully-formed map and any stray overworld
+  // code that reaches it (it shouldn't) reads a valid array rather than
+  // crashing on undefined. Marked all-explored — there is no fog down here.
+  map.explored = new Uint8Array(map.w * map.h).fill(1);
+  map.newlyRevealed = [];
+  return {
+    map, spawnX: spawn.x, spawnY: spawn.y, exitX: exit.x, exitY: exit.y,
+    creatureX: creature.x, creatureY: creature.y,
+  };
 }
 
 // ---- the lurker ---------------------------------------------------------

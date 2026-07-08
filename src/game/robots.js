@@ -889,13 +889,11 @@ function separateRobots(robots, map, dt, player) {
 // it isn't worth draining faster or slower than idling normally would).
 function updateUbikConfused(r, dt, robots, map) {
   r.aggro = false;
-  r._confuseWanderT = (r._confuseWanderT || 0) - dt;
-  if (r._confuseWanderT <= 0 || !r._confuseTarget) {
-    r._confuseWanderT = 0.35 + Math.random() * 0.5;
-    const a = Math.random() * Math.PI * 2;
-    r._confuseTarget = { x: r.x + Math.cos(a) * 1.6, y: r.y + Math.sin(a) * 1.6 };
-  }
-  moveToward(r, r._confuseTarget.x, r._confuseTarget.y, UBIK_CONFUSE_SPEED, dt, map);
+  // Rooted to the spot — it doesn't wander or spin, it stays put and jumps
+  // up and down where it stands (the renderer reads _confuseHopT for the
+  // bounce), reality-static dots spinning over its head. It'll still swing
+  // blindly at any machine that happens to be right next to it.
+  r._confuseHopT = (r._confuseHopT || 0) + dt;
   r._confuseAttackTimer = Math.max(0, (r._confuseAttackTimer || 0) - dt);
   if (r._confuseAttackTimer <= 0) {
     for (const other of robots) {
@@ -1534,11 +1532,12 @@ export function drawRobot(ctx, robot, worldToScreen) {
     ctx.ellipse(c.x, c.y - 14, 16, 18, 0, 0, Math.PI * 2);
     ctx.fill();
   }
-  // Ubik confusion: the whole body juddering in place, on top of whatever
-  // spin/twitch drawT1/drawT2 add themselves — reads as haywire rather than
-  // just tilted.
+  // Ubik confusion: rooted to the spot, jumping straight up and down — a
+  // clean vertical bounce (|sin| so it always springs up from the ground,
+  // never sinks below it) with only a hair of horizontal jitter, reads as a
+  // machine gone haywire on its own axis rather than drifting or spinning.
   const jc = robot.ubikConfusedT > 0
-    ? { x: c.x + (Math.random() - 0.5) * 5, y: c.y + (Math.random() - 0.5) * 5 }
+    ? { x: c.x + (Math.random() - 0.5) * 1.5, y: c.y - Math.abs(Math.sin((robot._confuseHopT || 0) * 9)) * 7 }
     : c;
   if (robot.type === 't1') drawT1(ctx, robot, jc, worldToScreen);
   else if (robot.type === 't3') drawT3(ctx, robot, jc);
@@ -1569,9 +1568,9 @@ function drawT1(ctx, r, c, worldToScreen) {
   ctx.save();
   ctx.translate(c.x, c.y);
   // Tells: a burnt-out wreck slumps hard; a trapped machine lists to one
-  // side, wheels spinning uselessly; a Ubik-confused one spins on the spot.
+  // side, wheels spinning uselessly. (A Ubik-confused one no longer spins —
+  // it bounces on the spot, handled by the hop offset in drawRobot.)
   if (r.fused) ctx.rotate(0.2);
-  else if (r.ubikConfusedT > 0) ctx.rotate(performance.now() / 140);
   else if (r.stuck) ctx.rotate(0.12);
 
   ctx.fillStyle = r.fused ? FUSED_EDGE : T1_WHEEL; // two dark wheels under the chassis
@@ -1634,8 +1633,7 @@ function drawT2(ctx, r, c) {
 
   ctx.save();
   ctx.translate(c.x, c.y);
-  if (r.fused) ctx.rotate(0.14); // slumped wreck
-  else if (r.ubikConfusedT > 0) ctx.rotate(performance.now() / 140); // Ubik: spinning on the spot
+  if (r.fused) ctx.rotate(0.14); // slumped wreck (a Ubik-confused one bounces, not spins — see drawRobot)
 
   // Gait: legs scissor with the walk phase, same scheme as the player.
   // A wreck's legs hang straight.
@@ -1694,8 +1692,7 @@ function drawT3(ctx, r, c) {
   // watching, rather than a dead, inert sprite.
   const tremor = r.fused ? 0 : Math.sin((r.animT || 0) * 9) * 0.012;
   if (r.fused) ctx.rotate(0.16);
-  else if (r.ubikConfusedT > 0) ctx.rotate(performance.now() / 140);
-  else ctx.rotate(tremor); // stands up straight — just the faint live-machine tremor
+  else ctx.rotate(tremor); // stands up straight — just the faint live-machine tremor (Ubik-confused = bounce, not spin)
   ctx.scale(T3_SCALE, T3_SCALE);
 
   // Legs scissor with the walk phase exactly like the T2's — a jagged knee

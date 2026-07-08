@@ -71,9 +71,10 @@ class Sound {
     this._cricketGain = null;
     this._musicGain = null;          // synth-piano fade bus: mode and combat tension both ramp this
     // One of MUSIC_MODES; cycled by the M key or set directly from the
-    // Settings tab. Defaults to the first found tape unless a previous
-    // session's choice was saved.
-    this._musicMode = MUSIC_MODES.includes(saved.musicMode) ? saved.musicMode : 'eliza';
+    // Settings tab. Defaults to the sparse synth-piano bed — the found
+    // tapes are now the player's to start via the walkman, so they're no
+    // longer forced on at boot. A saved session choice still wins.
+    this._musicMode = MUSIC_MODES.includes(saved.musicMode) ? saved.musicMode : 'synth';
     this._musicTense = false;        // true while fighting or being hunted
     this._fileTracks = new Map();    // mode -> { el, gain }, one per FILE_TRACKS entry
   }

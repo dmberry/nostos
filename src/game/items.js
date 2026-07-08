@@ -494,6 +494,7 @@ export const ITEMS = {
     kind: 'tape',
     stack: 1,
     color: '#c9a44a',
+    artist: 'meme',
     sideA: 'resonance',
     sideB: 'slip',
   },

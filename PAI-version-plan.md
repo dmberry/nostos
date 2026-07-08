@@ -22,7 +22,20 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Always put a texture on a glowing thing.** No glow is ever a flat coloured blob — a grille/panel texture is laid over it (the factory-vent trick). Everything luminous goes through `Renderer.texturedGlow`, which caps the glow with an AI grate texture; if you add a new light, use it rather than a bare `fill`. (David, 2026-07-07.)
 - **Vary texture opacity per tile.** Floors jitter their texture alpha deterministically per tile (`drawFloor`) so a large expanse of one floor reads as worn/varied rather than a flat repeat.
 
-## Where we are (v1.13)
+## Where we are (v1.14)
+
+### v1.14 — the Backspace rebuilt, portal-gun split, polish batch
+
+A batch on top of v1.13's underworld, mostly reshaping it and cleaning up the Ubik/music systems.
+
+- **Crash fix (urgent):** stepping into a tear called `enterUnderworld()`, which swaps the module-level `map` to the pocket — but `update()` then kept running the overworld tail on the swapped map, and `revealAround()` hit `map.explored[...]` (which the pocket lacked) → TypeError. Fixed with an immediate `return` after entering, plus defensive fog/projectile fields on the pocket map.
+- **The underworld is now rooms, not a maze.** Rebuilt `underworld.js`'s generator: a 3×3 block of huge rooms (43×43 pocket) joined by doorways punched in shared walls (randomized-DFS spanning tree + a few loop doors), with a central clear "plus" per room guaranteeing traversal. **Furniture** (new `furniture` object type, tiles.js + a `drawFurniture` prism-stack in renderer.js) is scattered in clusters — solid, so you weave around it. Connectivity BFS-verified.
+- **Exit at the start, clearly marked.** The way home is now a tear a few tiles from the spawn point in the first room, signed **EXIT** in fire-exit green (drawn above the tear whenever `hud.underworld`). The lurker moved to the farthest room, so exploring toward it is the optional risk. (Also fixed: the exit tear was invisible — its render fades in over its first ~2s of `age`, but the underworld never ages `ubikPatches`, so its `t` now starts at 3 to render fully and stay put.)
+- **Worn floor texture.** The bare-colour liminal floor now gets procedural wear in `drawFloor` (`drawLiminalWear`): per-tile water-stain blotches, bleached patches, and scuff streaks — deterministic, clipped to the diamond.
+- **Ubik tear no longer looks like the old portal.** Stripped the orange/blue two-tone rims, the pairing/`linkedTo` teleport machinery, and the Portal-game flame homage. A tear is now a dark void with a jagged, broken, flickering violet fracture rim — a raw rip, not a teleporter. That clean-portal aesthetic is reserved for a **portal gun** (a planned separate item — there is no portal gun in the code yet; this just clears the aesthetic for it).
+- **Ubik confusion: bounce, don't spin.** Confused machines now stay rooted to the spot and jump straight up and down (via `_confuseHopT`, read as a vertical offset in `drawRobot`) with the violet reality-static dots — the `rotate()` spin and the wander target are gone.
+- **Music: synth by default, walkman on top.** Fresh sessions boot on the synth bed (`sound.js` default `'synth'`). Starting a tape on the walkman loops that track over it; **stopping the tape (or removing it) drops back to the synth**, not to silence. A saved session choice still wins.
+- **Walkman HUD.** The now-playing artist/track scrolls across a small amber LCD ticker under the deck (`drawWalkmanTicker`), so a long name fits the narrow slot; static when stopped.
 
 ### v1.13 — the underworld, the walkman, machine self-preservation
 

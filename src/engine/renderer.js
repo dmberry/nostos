@@ -375,97 +375,80 @@ export class Renderer {
       // lifts the brightness on top.
       paint(spots, 'overlay', [[0, `rgba(255,240,205,${(0.9 * shimmer).toFixed(3)})`], [0.6, 'rgba(255,235,195,0.5)'], [1, 'rgba(255,235,195,0)']]);
       paint(spots, 'screen', [[0, `rgba(255,246,214,${(0.28 * shimmer).toFixed(3)})`], [0.6, 'rgba(255,240,200,0.12)'], [1, 'rgba(255,240,200,0)']]);
-      // Portals: Portal-style two-tone rims — orange for the odd ones out
-      // (1st, 3rd, ...), blue for the even ones (2nd, 4th, ...) in creation
-      // order, so the common case (exactly two, linked to each other) always
-      // reads as one orange end and one blue end. A third mid-chain portal
-      // just takes whichever colour its position gives it; the active link
-      // is still always oldest<->newest regardless of colour. Drawn as a
-      // tall standing oval (squash-scaled around each centre), not a plain
-      // circle, closer to a real doorway than a puddle of light.
+      // A Ubik tear is NOT a clean sci-fi teleporter (that look is reserved
+      // for the portal gun) — it's a raw rip in reality that drops you into
+      // the underworld. Drawn as a dark, near-black void in a tall standing
+      // oval, ringed by a jagged, broken, flickering violet-white fracture
+      // that jitters like cracked glass rather than glowing evenly. No
+      // colour-coding, no pairing, no chasing flame — every tear looks the
+      // same because every tear goes to the same wrong place.
       if (portals.length) {
         const OVAL_RX = 0.62, OVAL_RY = 1.35;
-        const paintOvals = (list, op, stops) => {
-          if (!list.length) return;
-          ctx.save();
-          ctx.globalCompositeOperation = op;
-          for (const [sx, sy, R, fade] of list) {
-            ctx.save();
-            ctx.translate(sx, sy);
-            ctx.scale(OVAL_RX, OVAL_RY);
-            const g = ctx.createRadialGradient(0, 0, R * 0.1, 0, 0, R);
-            for (const [o, c] of stops) g.addColorStop(o, scaleRgbaAlpha(c, fade));
-            ctx.fillStyle = g;
-            ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.fill();
-            ctx.restore();
-          }
-          ctx.restore();
-        };
-        const orangeSet = portals.filter((_, i) => i % 2 === 0);
-        const blueSet = portals.filter((_, i) => i % 2 === 1);
-        const paintRim = (list, rgb) => {
-          paintOvals(list, 'overlay', [[0, `rgba(${rgb},${(0.85 * shimmer).toFixed(3)})`], [0.55, `rgba(${rgb},0.5)`], [1, `rgba(${rgb},0)`]]);
-          paintOvals(list, 'screen', [[0, `rgba(${rgb},${(0.32 * shimmer).toFixed(3)})`], [0.55, `rgba(${rgb},0.14)`], [1, `rgba(${rgb},0)`]]);
-        };
-        paintRim(orangeSet, '255,140,50');
-        paintRim(blueSet, '70,160,255');
-        // A dark charcoal void right at the core, punched into the middle of
-        // the coloured bloom — reads as an actual tear/hole rather than just
-        // another bright patch, with the corona glowing around its rim.
-        ctx.save();
+        const t = performance.now() / 1000;
         for (const [sx, sy, R, fade] of portals) {
           ctx.save();
           ctx.translate(sx, sy);
           ctx.scale(OVAL_RX, OVAL_RY);
-          const coreR = R * 0.55;
+          // Faint dark-violet outer haze so the tear reads against grass.
+          const haze = ctx.createRadialGradient(0, 0, R * 0.4, 0, 0, R * 1.15);
+          haze.addColorStop(0, `rgba(30,18,44,${(0.5 * fade).toFixed(3)})`);
+          haze.addColorStop(1, 'rgba(30,18,44,0)');
+          ctx.fillStyle = haze;
+          ctx.beginPath(); ctx.arc(0, 0, R * 1.15, 0, Math.PI * 2); ctx.fill();
+          // The void: an almost-black hole, most of the oval.
+          const coreR = R * 0.82;
           const core = ctx.createRadialGradient(0, 0, 0, 0, 0, coreR);
-          core.addColorStop(0, `rgba(8,6,12,${(0.92 * fade).toFixed(3)})`);
-          core.addColorStop(0.7, `rgba(14,10,20,${(0.75 * fade).toFixed(3)})`);
-          core.addColorStop(1, 'rgba(18,13,24,0)');
+          core.addColorStop(0, `rgba(4,3,8,${(0.96 * fade).toFixed(3)})`);
+          core.addColorStop(0.75, `rgba(8,5,14,${(0.9 * fade).toFixed(3)})`);
+          core.addColorStop(1, 'rgba(12,8,20,0)');
           ctx.fillStyle = core;
           ctx.beginPath(); ctx.arc(0, 0, coreR, 0, Math.PI * 2); ctx.fill();
-          ctx.restore();
-        }
-        ctx.restore();
-        // Fiery rim: several flickering, unevenly-lengthed licks chasing
-        // round the oval rather than a few clean uniform arcs — each with
-        // its own speed/phase/radius jitter so they read as flame, not a
-        // spinning logo. Warm orange licks on the orange end, a "cold
-        // flame" cyan-white flicker on the blue end. A linked (usable)
-        // portal burns faster and brighter than a dormant one still
-        // waiting for a partner.
-        const t = performance.now() / 1000;
-        ctx.save();
-        ctx.lineCap = 'round';
-        portals.forEach(([sx, sy, R, fade, p], i) => {
-          const isOrange = i % 2 === 0;
-          const active = !!p.linkedTo;
-          const spin = active ? t * 3.2 : t * 0.8;
-          const rr = R * 0.42;
-          const petals = 6;
-          ctx.save();
-          ctx.translate(sx, sy);
-          ctx.scale(OVAL_RX, OVAL_RY);
-          for (let k = 0; k < petals; k++) {
-            const phase = (k * Math.PI * 2) / petals;
-            const flicker = 0.5 + 0.5 * Math.sin(t * (5 + k * 1.7) + k * 2.1);
-            const a = spin + phase + Math.sin(t * 3 + k) * 0.15;
-            const len = 0.55 + flicker * 0.9;
-            const rJitter = rr * (0.85 + flicker * 0.3);
-            const hue = isOrange
-              ? `255,${Math.round(140 + flicker * 90)},${Math.round(30 + flicker * 60)}`
-              : `${Math.round(120 + flicker * 90)},${Math.round(190 + flicker * 50)},255`;
-            ctx.globalAlpha = fade * (0.35 + flicker * 0.55);
-            ctx.strokeStyle = `rgba(${hue},1)`;
-            ctx.lineWidth = (1.4 + flicker * 1.6) / Math.min(OVAL_RX, OVAL_RY); // keep the stroke visually even under the squash
-            ctx.beginPath();
-            ctx.arc(0, 0, rJitter, a, a + len);
-            ctx.stroke();
+          // The fracture: broken arc segments around the rim, each flickering
+          // and jittering its radius on its own phase, with hard gaps between
+          // — an unstable crack, not a ring. Violet-white, cold.
+          ctx.lineCap = 'round';
+          const segs = 9;
+          for (let k = 0; k < segs; k++) {
+            const flicker = 0.5 + 0.5 * Math.sin(t * (7 + k * 2.3) + k * 1.7);
+            if (flicker < 0.22) continue; // a segment blinks out entirely now and then
+            const base = (k * Math.PI * 2) / segs;
+            const a0 = base + Math.sin(t * 2 + k) * 0.05;
+            const len = 0.22 + flicker * 0.28; // short arcs, real gaps between them
+            const rJit = coreR * (0.98 + Math.sin(t * 9 + k * 3) * 0.06);
+            ctx.globalAlpha = fade * (0.3 + flicker * 0.6);
+            ctx.strokeStyle = `rgba(${Math.round(200 + flicker * 55)},${Math.round(170 + flicker * 50)},255,1)`;
+            ctx.lineWidth = (1.1 + flicker * 1.3) / Math.min(OVAL_RX, OVAL_RY);
+            ctx.beginPath(); ctx.arc(0, 0, rJit, a0, a0 + len); ctx.stroke();
           }
           ctx.globalAlpha = 1;
           ctx.restore();
-        });
-        ctx.restore();
+          // In the underworld, the one tear is the way home — sign it EXIT,
+          // fire-exit green, hovering just above the rip so it's unmistakable
+          // in the clutter.
+          if (hud.underworld) {
+            const sw = 34, sh = 14, sy2 = sy - R * OVAL_RY - 14;
+            ctx.save();
+            ctx.globalAlpha = fade;
+            const glow = ctx.createRadialGradient(sx, sy2 + sh / 2, 2, sx, sy2 + sh / 2, 26);
+            glow.addColorStop(0, 'rgba(60,220,120,0.5)');
+            glow.addColorStop(1, 'rgba(60,220,120,0)');
+            ctx.fillStyle = glow;
+            ctx.fillRect(sx - 26, sy2 + sh / 2 - 26, 52, 52);
+            ctx.fillStyle = 'rgba(8,20,12,0.92)';
+            ctx.fillRect(sx - sw / 2, sy2, sw, sh);
+            ctx.strokeStyle = 'rgba(80,240,140,0.9)';
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(sx - sw / 2 + 0.5, sy2 + 0.5, sw - 1, sh - 1);
+            ctx.fillStyle = '#7dffb0';
+            ctx.font = 'bold 10px system-ui, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('EXIT', sx, sy2 + sh / 2 + 0.5);
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'alphabetic';
+            ctx.restore();
+          }
+        }
       }
     }
 
@@ -1400,6 +1383,11 @@ export class Renderer {
       ctx.fillStyle = shadeHex(def.color, shade);
       ctx.fill();
     }
+    // The underworld floor is bare colour (no texture asset), so grime it up
+    // procedurally: worn, water-stained, scuffed lino — deterministic per tile
+    // so it holds still. A darker discolour blotch on some tiles, a couple of
+    // scuff streaks, and a grid seam, all clipped to the diamond.
+    if (type === 'liminal') this.drawLiminalWear(tx, ty, corners);
     this.diamondPath(corners);
     ctx.strokeStyle = 'rgba(0,0,0,0.07)';
     ctx.lineWidth = 1;
@@ -1419,6 +1407,54 @@ export class Renderer {
   // A handful of small blade strokes per tile so grass reads as textured
   // turf rather than a flat colour fill. Hashed from tile coordinates so
   // the pattern holds still frame to frame instead of shimmering.
+  // Procedural wear for the underworld's bare-colour lino floor: worn patches,
+  // water stains, and scuff streaks, deterministic per tile so it holds still
+  // frame to frame. Clipped to the tile diamond.
+  drawLiminalWear(tx, ty, corners) {
+    const ctx = this.ctx;
+    const cx = (corners[0].x + corners[2].x) / 2;
+    const cy = (corners[0].y + corners[2].y) / 2;
+    ctx.save();
+    this.diamondPath(corners);
+    ctx.clip();
+    // A soft discolour blotch (water stain / grime) on a good share of tiles,
+    // its size and darkness hashed per tile.
+    const stain = tileHash(tx * 5 + 3, ty * 9 + 1);
+    if (stain > 0.35) {
+      const ox = (tileHash(tx * 11 + 7, ty * 3 + 4) - 0.5) * 18;
+      const oy = (tileHash(tx * 2 + 9, ty * 7 + 6) - 0.5) * 9;
+      const r = 9 + stain * 16;
+      const g = ctx.createRadialGradient(cx + ox, cy + oy, 1, cx + ox, cy + oy, r);
+      const dark = 0.05 + stain * 0.14;
+      g.addColorStop(0, `rgba(60,52,26,${dark.toFixed(3)})`);
+      g.addColorStop(1, 'rgba(60,52,26,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(cx - 24, cy - 14, 48, 28);
+    }
+    // A lighter worn/bleached patch on some tiles, offset the other way.
+    if (tileHash(tx * 4 + 8, ty * 6 + 2) > 0.7) {
+      const ox = (tileHash(tx * 3 + 2, ty * 5 + 8) - 0.5) * 14;
+      const g = ctx.createRadialGradient(cx + ox, cy, 1, cx + ox, cy, 11);
+      g.addColorStop(0, 'rgba(214,198,140,0.16)');
+      g.addColorStop(1, 'rgba(214,198,140,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(cx - 24, cy - 14, 48, 28);
+    }
+    // One or two dark scuff streaks on a minority of tiles.
+    const scuff = tileHash(tx * 13 + 5, ty * 11 + 9);
+    if (scuff > 0.6) {
+      ctx.strokeStyle = `rgba(30,26,14,${(0.12 + scuff * 0.16).toFixed(3)})`;
+      ctx.lineWidth = 1.2;
+      const a = scuff * Math.PI;
+      const sx = cx + Math.cos(a) * 10, sy = cy + Math.sin(a) * 5;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(sx - Math.cos(a) * 20, sy - Math.sin(a) * 10);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   drawGrassBlades(tx, ty, corners, color, shade) {
     const ctx = this.ctx;
     const cx = (corners[0].x + corners[2].x) / 2;
@@ -1472,6 +1508,61 @@ export class Renderer {
       case 'gateterm': this.drawGateTerm(obj); break;
       case 'mainframe': this.drawMainframe(obj); break;
       case 'uplink': this.drawUplink(obj); break;
+      case 'furniture': this.drawFurniture(obj); break;
+    }
+  }
+
+  // A pile of stacked junk cluttering an underworld room: one blocky extruded
+  // prism, often with a smaller one perched on top and shoved off-centre, in
+  // muted grey/tan tones — reads as furniture heaped up rather than a clean
+  // crate. Deterministic from obj.variant/seed/h so it holds still.
+  drawFurniture(obj) {
+    const ctx = this.ctx;
+    const H = obj.h || 12;
+    const g = {
+      top: worldToScreen(obj.x, obj.y), right: worldToScreen(obj.x + 1, obj.y),
+      bottom: worldToScreen(obj.x + 1, obj.y + 1), left: worldToScreen(obj.x, obj.y + 1),
+    };
+    const pals = [
+      ['#7a6f5c', '#655a47', '#8c8171'], // dun
+      ['#6d6860', '#565046', '#807a6f'], // grey
+      ['#8a7d60', '#6b6048', '#a2957a'], // tan
+    ];
+    const p = pals[(obj.variant || 0) % pals.length];
+    // Ground shadow over the tile.
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.moveTo(g.top.x, g.top.y); ctx.lineTo(g.right.x, g.right.y);
+    ctx.lineTo(g.bottom.x, g.bottom.y); ctx.lineTo(g.left.x, g.left.y);
+    ctx.closePath(); ctx.fill();
+    // One extruded block; `shrink` pulls the footprint toward its centre so a
+    // stacked block can sit narrower. Returns the raised (top-face) corners.
+    const prism = (base, h, shrink, offX) => {
+      const cx = (base.top.x + base.bottom.x) / 2, cy = (base.top.y + base.bottom.y) / 2;
+      const s = (pt) => ({ x: cx + (pt.x - cx) * shrink + offX, y: cy + (pt.y - cy) * shrink });
+      const b = { top: s(base.top), right: s(base.right), bottom: s(base.bottom), left: s(base.left) };
+      const r = {
+        top: { x: b.top.x, y: b.top.y - h }, right: { x: b.right.x, y: b.right.y - h },
+        bottom: { x: b.bottom.x, y: b.bottom.y - h }, left: { x: b.left.x, y: b.left.y - h },
+      };
+      ctx.fillStyle = p[1]; // SW face
+      ctx.beginPath(); ctx.moveTo(b.left.x, b.left.y); ctx.lineTo(b.bottom.x, b.bottom.y);
+      ctx.lineTo(r.bottom.x, r.bottom.y); ctx.lineTo(r.left.x, r.left.y); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = p[0]; // SE face
+      ctx.beginPath(); ctx.moveTo(b.bottom.x, b.bottom.y); ctx.lineTo(b.right.x, b.right.y);
+      ctx.lineTo(r.right.x, r.right.y); ctx.lineTo(r.bottom.x, r.bottom.y); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = p[2]; // top
+      ctx.beginPath(); ctx.moveTo(r.top.x, r.top.y); ctx.lineTo(r.right.x, r.right.y);
+      ctx.lineTo(r.bottom.x, r.bottom.y); ctx.lineTo(r.left.x, r.left.y); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.32)'; ctx.lineWidth = 1; ctx.stroke();
+      return r;
+    };
+    const top1 = prism(g, H, 0.86, 0);
+    // Two in three piles carry a smaller block shoved off to one side on top.
+    if ((obj.seed || 0) % 3 !== 0) {
+      const off = ((obj.seed || 0) % 5) - 2;
+      const base2 = { top: top1.top, right: top1.right, bottom: top1.bottom, left: top1.left };
+      prism(base2, H * 0.55, 0.6, off * 1.6);
     }
   }
 
@@ -2583,6 +2674,42 @@ export class Renderer {
     }
   }
 
+  // A small amber-on-black LCD window under the walkman that scrolls the
+  // now-playing text across itself (a marquee) so a long "artist — track"
+  // fits the narrow slot. Held still, centred, when the tape isn't playing.
+  drawWalkmanTicker(text, x, y, w, scrolling) {
+    const ctx = this.ctx;
+    const h = 11;
+    ctx.fillStyle = 'rgba(10,12,8,0.9)'; // LCD backing
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x + 1, y + 1, w - 2, h - 2); ctx.clip();
+    ctx.font = '8px system-ui, sans-serif';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = scrolling ? '#e8d27a' : 'rgba(207,216,195,0.55)';
+    const tw = ctx.measureText(text).width;
+    const midY = y + h / 2 + 0.5;
+    if (scrolling && tw > w - 4) {
+      // Scroll right-to-left, looping with a gap; draw a second copy so the
+      // wrap is seamless.
+      const gap = 20;
+      const period = tw + gap;
+      const off = (performance.now() / 26) % period;
+      ctx.textAlign = 'left';
+      ctx.fillText(text, x + w - off, midY);
+      ctx.fillText(text, x + w - off + period, midY);
+    } else {
+      ctx.textAlign = 'center';
+      ctx.fillText(text, x + w / 2, midY);
+    }
+    ctx.restore();
+    ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = 'left';
+  }
+
   drawItemIcon(itemDef, cx, cy, s = 1) {
     const ctx = this.ctx;
     if (!itemDef) return;
@@ -3455,14 +3582,31 @@ export class Renderer {
     // the reels visibly turn, like the real thing through a cracked window.
     {
       const wmX = pocketsX + player.pockets.length * 42 + 10 + (player.backpack ? 92 : 0);
-      // Strap: a worn leather line rising off both shoulders of the slot.
-      ctx.strokeStyle = 'rgba(139,108,60,0.85)';
-      ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.moveTo(wmX + 5, top + 21); ctx.lineTo(wmX - 3, top + 6); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(wmX + 31, top + 21); ctx.lineTo(wmX + 39, top + 6); ctx.stroke();
       this.drawLabel('WALKMAN', wmX, top + 14);
-      this.drawSlot(wmX, top + 20, 36, null, 0);
-      this.uiSlots.push({ x: wmX, y: top + 20, w: 36, h: 36, kind: 'walkman' });
+      // A little walkman deck rather than a plain slot: rounded corners, a
+      // double outline (dark outer, bright inner bezel), and the iconic
+      // sports-walkman yellow behind the cassette window.
+      const wy = top + 20, ws = 36, rr = 8;
+      const roundPath = (x, y, w, h, r) => {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + w, y, x + w, y + h, r);
+        ctx.arcTo(x + w, y + h, x, y + h, r);
+        ctx.arcTo(x, y + h, x, y, r);
+        ctx.arcTo(x, y, x + w, y, r);
+        ctx.closePath();
+      };
+      roundPath(wmX, wy, ws, ws, rr);
+      ctx.fillStyle = '#e6b422'; // walkman yellow
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = 'rgba(20,18,8,0.85)'; // dark outer edge
+      ctx.stroke();
+      roundPath(wmX + 2.5, wy + 2.5, ws - 5, ws - 5, rr - 2.5);
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(255,240,180,0.7)'; // bright inner bezel
+      ctx.stroke();
+      this.uiSlots.push({ x: wmX, y: wy, w: ws, h: ws, kind: 'walkman' });
       if (player.walkman) {
         const tapeDef = ITEMS[player.walkman.item];
         const sideMode = player.walkmanSide
@@ -3473,13 +3617,13 @@ export class Renderer {
         ctx.scale(1.25, 1.25);
         this.drawCassette(tapeDef, spinning ? performance.now() / 300 : 0);
         ctx.restore();
-        ctx.font = '7px system-ui, sans-serif';
-        ctx.fillStyle = spinning ? '#e8d27a' : 'rgba(207,216,195,0.6)';
-        ctx.textAlign = 'center';
-        ctx.fillText(
-          spinning ? `▶ ${player.walkmanSide}: ${sideMode}` : player.walkmanSide ? `${player.walkmanSide} (quiet)` : 'stopped',
-          wmX + 18, top + 66, 44);
-        ctx.textAlign = 'left';
+        // A little LCD "now playing" window under the deck: the artist and
+        // track slide across on a marquee so a long name fits in the narrow
+        // slot. Idle it just shows the tape/side status, held still.
+        const label = spinning
+          ? `${tapeDef.artist || '?'} — ${sideMode}`
+          : player.walkmanSide ? `side ${player.walkmanSide} · paused` : 'stopped';
+        this.drawWalkmanTicker(label, wmX - 2, top + 60, ws + 4, spinning);
       }
     }
 
