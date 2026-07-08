@@ -484,21 +484,42 @@ export const ITEMS = {
     color: '#b8ac82',
     text: 'A water-stained page from an operator’s manual. One block survives: "scan |> nearest — lists the wire, takes the closest. can’t crash blind: hack first for the key. type help at the console for the rest."',
   },
-  // Cassette tapes: play in the walkman, the dedicated dashboard slot on the
-  // carry strap. sideA/sideB name music modes in sound.js's FILE_TRACKS;
-  // clicking the tape while it sits in the walkman cycles side A -> side B
-  // -> stopped. More tapes get seeded into the world later — this first one
-  // is the pair of found recordings the music system already carries.
-  tape_meme: {
-    name: 'a cassette — meme',
-    kind: 'tape',
-    stack: 1,
-    color: '#c9a44a',
-    artist: 'meme',
-    sideA: 'resonance',
-    sideB: 'slip',
-  },
+  // (Cassette tapes are generated from the TAPES manifest below, so a new one
+  // is a single numbered entry — see docs/tapes.md.)
 };
+
+// ---- cassette tapes (data-driven) -----------------------------------------
+// Adding a tape is one entry here: drop its folder under
+// assets/audio/Tape-<artist>-<title>/{A,B}, list the track filenames per side,
+// and give it the next number. The item key is `tape_<num>` (referenced by the
+// walkman starter, the world seeds and the underworld box). Each side's tracks
+// play in order and loop; a single-track side just loops. Mirror of docs/tapes.md.
+export const TAPES = [
+  {
+    num: 1, artist: 'meme', title: 'compilation', dir: 'Tape-meme-compilation', color: '#c9a44a',
+    a: { label: 'resonance', tracks: ['resonance.mp3'] },
+    b: { label: 'eliza · slip', tracks: ['eliza.mp3', 'slip.mp3'] },
+  },
+  {
+    num: 2, artist: 'meme', title: 'maieutics', dir: 'Tape-meme-Maieutics', color: '#9aa45a',
+    a: { label: 'maieutics 1 · 2', tracks: ['maieutics 1.mp3', 'maieutics 2.mp3'] },
+    b: { label: 'maieutics 3', tracks: ['maieutics 3.mp3'] },
+  },
+  {
+    num: 3, artist: 'WARD', title: 'bare stanhope', dir: 'Tape-WARD-bare-stanhope', color: '#b06a4a',
+    a: { label: 'five', tracks: ['01 five.mp3'] },
+    b: { label: 'glock', tracks: ['02 glock.mp3'] },
+  },
+];
+for (const t of TAPES) {
+  const side = (s) => ({ label: s.label, tracks: s.tracks.map((f) => `assets/audio/${t.dir}/${s === t.a ? 'A' : 'B'}/${f}`) });
+  ITEMS[`tape_${t.num}`] = {
+    name: `a cassette — ${t.artist}, ${t.title}`,
+    kind: 'tape', stack: 1, color: t.color || '#c9a44a',
+    artist: t.artist, tapeNum: t.num,
+    sideA: side(t.a), sideB: side(t.b),
+  };
+}
 
 // Each def keeps a self-reference to its own key, so any code holding a
 // resolved item (ITEMS[k]) can still look up which icon to draw for it.

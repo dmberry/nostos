@@ -13,14 +13,11 @@
 
 import { CHOIR_NOTES, CHOIR_DURATION } from './choir-notes.js';
 
-// Alternate real-audio tracks, in cycle order. Add more here freely — the
-// M-key toggle and _setupFileMusic below both just iterate this list.
-const FILE_TRACKS = [
-  { mode: 'eliza', src: 'assets/audio/eliza-theme.mp3', label: 'a found tape' },
-  { mode: 'resonance', src: 'assets/audio/resonance-theme.mp3', label: 'another found tape' },
-  { mode: 'slip', src: 'assets/audio/slip-theme.mp3', label: 'a third found tape' },
-];
-const MUSIC_MODES = [...FILE_TRACKS.map((t) => t.mode), 'synth', 'off'];
+// The background music is just the synth bed, or off — the M key toggles
+// between those two. Found-tape music no longer lives here: tapes are played
+// on the walkman (see playTape/stopTape and player.js), so "only synth unless
+// the player starts a tape" falls out naturally.
+const MUSIC_MODES = ['synth', 'off'];
 
 const MASTER_GAIN = 0.3;
 const PLAY_DEBOUNCE_MS = 70;   // per-name minimum interval for play()
@@ -76,7 +73,13 @@ class Sound {
     // longer forced on at boot. A saved session choice still wins.
     this._musicMode = MUSIC_MODES.includes(saved.musicMode) ? saved.musicMode : 'synth';
     this._musicTense = false;        // true while fighting or being hunted
-    this._fileTracks = new Map();    // mode -> { el, gain }, one per FILE_TRACKS entry
+    // The walkman tape player: one <audio> through its own gain, a playlist,
+    // and a flag. While a tape plays it overrides the synth bed.
+    this._tapeEl = null;
+    this._tapeGain = null;
+    this._tapeList = [];
+    this._tapeIdx = 0;
+    this._tapePlaying = false;
   }
 
   // ---- lifecycle -------------------------------------------------------
@@ -107,7 +110,6 @@ class Sound {
       this._buildCrickets();
       this._buildDrone();
       this._applyAmbience(0.1); // snap quickly to whatever was requested
-      this._setupFileMusic(); // built first so _startMusic's gain pass below covers both busses
       this._startMusic();
     } catch (e) {
       this.ctx = null; // audio is optional; never let it take the game down
@@ -421,7 +423,7 @@ class Sound {
   }
 
   _playPianoNote() {
-    if (!this.ctx || this._musicMode !== 'synth') return;
+    if (!this.ctx || this._musicMode !== 'synth' || this._tapePlaying) return; // a tape overrides the bed
     const scale = this._pianoScale();
     const freq = scale[Math.floor(Math.random() * scale.length)] * (Math.random() < 0.25 ? 0.5 : 1);
     const t = this.ctx.currentTime + 0.05;
@@ -433,52 +435,67 @@ class Sound {
     this._tone({ when: t, dur: dur * 0.35, type: 'sine', freq: freq * 1.5, gain: 0.01, attack: 0.01, bus: this._musicGain });
   }
 
-  // The alternate real-audio tracks (FILE_TRACKS): plain looping <audio>
-  // elements routed through Web Audio (createMediaElementSource) so each
-  // shares the master bus and gets the same tension-ducking treatment as
-  // the synth bed. Built once in unlock(); whichever one is already the
-  // active mode (the default is the first) starts playing immediately, the
-  // rest start the first time the mode is switched onto them — either way
-  // unlock() only ever runs after a user gesture, so browsers'
-  // autoplay-blocking is a non-issue here.
-  _setupFileMusic() {
-    if (this._fileTracks.size || typeof Audio === 'undefined') return;
-    for (const t of FILE_TRACKS) {
-      try {
-        const el = new Audio(t.src);
-        el.loop = true;
-        el.preload = 'auto';
-        const src = this.ctx.createMediaElementSource(el);
-        const gain = this.ctx.createGain();
-        gain.gain.value = 0;
-        src.connect(gain);
-        gain.connect(this.master);
-        this._fileTracks.set(t.mode, { el, gain });
-        if (this._musicMode === t.mode) el.play().catch(() => {});
-      } catch (e) { /* audio must never crash the game */ }
-    }
+  // ---- walkman tape playback --------------------------------------------
+  // A cassette side is a list of track URLs. Played on one <audio> routed
+  // through its own gain into the master bus; a single-track side loops the
+  // element, a multi-track side advances on `ended` and loops at the end.
+  // While a tape plays it overrides the synth bed (see _applyMusicGain).
+  _ensureTapeEl() {
+    if (this._tapeEl || typeof Audio === 'undefined' || !this.ctx) return;
+    try {
+      const el = new Audio();
+      el.preload = 'auto';
+      el.addEventListener('ended', () => {
+        if (!this._tapePlaying || this._tapeList.length <= 1) return;
+        this._tapeIdx = (this._tapeIdx + 1) % this._tapeList.length;
+        el.src = encodeURI(this._tapeList[this._tapeIdx]);
+        el.play().catch(() => {});
+      });
+      const src = this.ctx.createMediaElementSource(el);
+      const gain = this.ctx.createGain();
+      gain.gain.value = 0;
+      src.connect(gain);
+      gain.connect(this.master);
+      this._tapeEl = el;
+      this._tapeGain = gain;
+    } catch (e) { /* audio must never crash the game */ }
   }
 
-  // The M key cycles through every FILE_TRACKS entry, then the synth piano
-  // bed, then off, then back to the first track. Returns the new mode so
-  // the caller can print what changed.
+  playTape(urls) {
+    this.unlock();
+    if (!Array.isArray(urls) || !urls.length) return;
+    this._ensureTapeEl();
+    if (!this._tapeEl) return;
+    this._tapeList = urls.slice();
+    this._tapeIdx = 0;
+    this._tapePlaying = true;
+    this._tapeEl.loop = urls.length === 1; // single track loops itself; a multi-track side loops via `ended`
+    try {
+      this._tapeEl.src = encodeURI(urls[0]);
+      this._tapeEl.currentTime = 0;
+      this._tapeEl.play().catch(() => {});
+    } catch (e) { /* ignore */ }
+    this._applyMusicGain(0.8);
+  }
+
+  stopTape() {
+    this._tapePlaying = false;
+    if (this._tapeEl) { try { this._tapeEl.pause(); } catch (e) { /* ignore */ } }
+    this._applyMusicGain(0.8); // the synth bed fades back up if it's the current mode
+  }
+
+  // The M key toggles the background music (synth <-> off). Tapes are the
+  // walkman's job, so they're not in this cycle. Returns the new mode.
   toggleMusic() {
     return this.setMusicMode(MUSIC_MODES[(MUSIC_MODES.indexOf(this._musicMode) + 1) % MUSIC_MODES.length]);
   }
 
-  // Set the mode directly (Settings tab), rather than stepping through the
-  // cycle — same underlying effect as toggleMusic, just not relative.
-  // Persisted, so the choice survives a reload. Returns the mode set, or
-  // the previous one unchanged if given something that isn't a real mode.
+  // Set the background mode directly (Settings tab). Persisted, so the choice
+  // survives a reload. Ignores anything that isn't a real mode.
   setMusicMode(mode) {
     if (!MUSIC_MODES.includes(mode)) return this._musicMode;
     this._musicMode = mode;
     saveSettings({ musicMode: mode });
-    const track = this._fileTracks.get(this._musicMode);
-    if (track) {
-      track.el.currentTime = track.el.currentTime || 0;
-      track.el.play().catch(() => {}); // ignore a blocked autoplay; gain stays at 0 either way
-    }
     this._applyMusicGain();
     return this._musicMode;
   }
@@ -503,20 +520,17 @@ class Sound {
 
   _applyMusicGain(fade = 2.5) {
     if (!this.ctx) return;
-    for (const [mode, track] of this._fileTracks) {
-      const target = this._musicMode === mode ? 1 : 0;
-      const fg = track.gain.gain;
-      fg.cancelScheduledValues(this.ctx.currentTime);
-      fg.setValueAtTime(fg.value, this.ctx.currentTime);
-      fg.linearRampToValueAtTime(target, this.ctx.currentTime + fade);
-    }
-    if (!this._musicGain) return;
-    const target = this._musicMode === 'synth' ? 1 : 0;
     const t = this.ctx.currentTime;
-    const g = this._musicGain.gain;
-    g.cancelScheduledValues(t);
-    g.setValueAtTime(g.value, t);
-    g.linearRampToValueAtTime(target, t + fade);
+    const ramp = (param, target) => {
+      param.cancelScheduledValues(t);
+      param.setValueAtTime(param.value, t);
+      param.linearRampToValueAtTime(target, t + fade);
+    };
+    // The tape overrides the synth: while a tape plays, the tape bus is up and
+    // the synth bed is down regardless of mode; otherwise the synth follows
+    // the mode.
+    if (this._tapeGain) ramp(this._tapeGain.gain, this._tapePlaying ? 1 : 0);
+    if (this._musicGain) ramp(this._musicGain.gain, (this._musicMode === 'synth' && !this._tapePlaying) ? 1 : 0);
   }
 
   // ---- synthesis helpers -------------------------------------------------

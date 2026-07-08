@@ -49,6 +49,8 @@ export const OBJECTS = {
   car:     { solid: true }, // abandoned wreck littering the roads; scenery only
   wfactory: { solid: true }, // W-unit foundry; periodically fields a W3 repair drone
   furniture: { solid: true }, // stacked junk cluttering the underworld's rooms; solid, you weave around it
+  exitdoor: { solid: true },  // a plain door in the underworld: walk up to it to leave. Solid; you exit on approach
+  lamp: { solid: false },     // a hanging underworld light; drawn scenery, walk beneath it
   // --- Adamantine's fortress (southern annex) ---
   // Deliberately NON-climbable, unlike a town wall: the fortress rampart and
   // its inner maze can't be double-jumped, so the hacked doorway is the only

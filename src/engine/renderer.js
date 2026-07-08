@@ -8,6 +8,15 @@ import { drawWaterDroid } from '../game/waterdroids.js';
 import { drawUnderworldCreature } from '../game/underworld.js';
 import { FLOOR_TEXTURES, WALL_TEXTURES, GRASS_PATCH_TEXTURE, CHARACTER_SPRITE_SETS, CHAR_COMPASS_DIRS, TREE_SHEET, TREE_SPRITES, EDGE_TEXTURE, CAR_SPRITES, CAR_MODEL_KEYS, CAR_DIR_KEYS, CAR_RUIN_TEXTURE, FACTORY_TEXTURE, GRAFFITI_TEXTURES } from './textures.js';
 
+// The underworld floor palette: seven images, loaded here (not via textures.js)
+// so this stays self-contained. map.liminalTex holds a per-tile index into
+// this array (0..6); index 5 is the road, used for corridors. Sentinels 255
+// (open yellow sea) and 250 (baby-blue room) are handled in drawFloor.
+const LIMINAL_TEX = [
+  'floor-boards.png', 'floor-dirt.jpg', 'floor-grass.jpg', 'floor-grassdirt-large.png',
+  'floor-pavingstone.jpg', 'floor-road.jpg', 'floor-secret.jpg',
+].map((file) => { const img = new Image(); img.src = `assets/textures/${file}`; return img; });
+
 // Maps a facing vector to one of 8 pre-rendered screen-compass directions
 // for CHARACTER_SPRITE_SETS (see textures.js) — replaces the old trick of
 // rotating one flat top-down icon, which read wrong for a humanoid with a
@@ -301,7 +310,9 @@ export class Renderer {
         // the whole block up off the ground by its climb height.
         : (map.heightAt ? map.heightAt(d.obj.x, d.obj.y) : 0) * ELEV;
       if (lift) { ctx.save(); ctx.translate(0, -lift); }
-      if (d.edgeRock) this.drawEdgeRock(d.edgeRock[0], d.edgeRock[1]);
+      // In the underworld there's no map edge to face — it's boundless yellow,
+      // so the grey edge-rock cliffs are suppressed (nothing drawn out there).
+      if (d.edgeRock) { if (!hud.underworld) this.drawEdgeRock(d.edgeRock[0], d.edgeRock[1]); }
       else if (d.player) this.drawPlayer(d.player);
       else if (d.animal) { drawAnimal(this.ctx, d.animal, worldToScreen); this.creatureHealthBar(d.animal, player, 44); }
       else if (d.bird) drawBird(this.ctx, d.bird, worldToScreen);
@@ -314,6 +325,9 @@ export class Renderer {
       if (lift) ctx.restore();
     }
 
+    // Underworld ceiling lights: soft pools cast on the floor, mostly steady
+    // with a rare, slow flicker (out of step per light). Drawn in world space.
+    if (hud.underworld) this.drawLampGlows(map);
     // In-flight rounds, in world space.
     if (map.projectiles) this.drawProjectiles(map.projectiles);
     // Fire clouds from detonating bombs.
@@ -422,32 +436,6 @@ export class Renderer {
           }
           ctx.globalAlpha = 1;
           ctx.restore();
-          // In the underworld, the one tear is the way home — sign it EXIT,
-          // fire-exit green, hovering just above the rip so it's unmistakable
-          // in the clutter.
-          if (hud.underworld) {
-            const sw = 34, sh = 14, sy2 = sy - R * OVAL_RY - 14;
-            ctx.save();
-            ctx.globalAlpha = fade;
-            const glow = ctx.createRadialGradient(sx, sy2 + sh / 2, 2, sx, sy2 + sh / 2, 26);
-            glow.addColorStop(0, 'rgba(60,220,120,0.5)');
-            glow.addColorStop(1, 'rgba(60,220,120,0)');
-            ctx.fillStyle = glow;
-            ctx.fillRect(sx - 26, sy2 + sh / 2 - 26, 52, 52);
-            ctx.fillStyle = 'rgba(8,20,12,0.92)';
-            ctx.fillRect(sx - sw / 2, sy2, sw, sh);
-            ctx.strokeStyle = 'rgba(80,240,140,0.9)';
-            ctx.lineWidth = 1.5;
-            ctx.strokeRect(sx - sw / 2 + 0.5, sy2 + 0.5, sw - 1, sh - 1);
-            ctx.fillStyle = '#7dffb0';
-            ctx.font = 'bold 10px system-ui, sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('EXIT', sx, sy2 + sh / 2 + 0.5);
-            ctx.textAlign = 'left';
-            ctx.textBaseline = 'alphabetic';
-            ctx.restore();
-          }
         }
       }
     }
@@ -1351,6 +1339,10 @@ export class Renderer {
       const he = map.heightAt(tx + 1, ty);
       if (he < h) this.skirt(corners[1], corners[2], (h - he) * ELEV, shadeHex(def.color, shade - 0.45));
     }
+    // The underworld floor is its own thing: the open sea is flat yellow +
+    // procedural wear, rooms carry one of the seven photo floors, corridors
+    // are road, and the odd room is baby-blue. Drawn here and returned early.
+    if (type === 'liminal') { this.drawLiminalFloor(map, tx, ty, corners, shade); return; }
     // A sparse scatter of bare dirt patches through grass — a few percent
     // of tiles, deterministic per tile so it holds still frame to frame
     // rather than flickering between the two textures.
@@ -1383,11 +1375,6 @@ export class Renderer {
       ctx.fillStyle = shadeHex(def.color, shade);
       ctx.fill();
     }
-    // The underworld floor is bare colour (no texture asset), so grime it up
-    // procedurally: worn, water-stained, scuffed lino — deterministic per tile
-    // so it holds still. A darker discolour blotch on some tiles, a couple of
-    // scuff streaks, and a grid seam, all clipped to the diamond.
-    if (type === 'liminal') this.drawLiminalWear(tx, ty, corners);
     this.diamondPath(corners);
     ctx.strokeStyle = 'rgba(0,0,0,0.07)';
     ctx.lineWidth = 1;
@@ -1407,6 +1394,85 @@ export class Renderer {
   // A handful of small blade strokes per tile so grass reads as textured
   // turf rather than a flat colour fill. Hashed from tile coordinates so
   // the pattern holds still frame to frame instead of shimmering.
+  // One underworld floor tile: reads its texture index off map.liminalTex.
+  // 255 = the open yellow sea (flat + wear), 250 = a baby-blue room, 0..6 =
+  // one of the seven photo floors (5 = road, laid down corridors).
+  drawLiminalFloor(map, tx, ty, corners, shade) {
+    const ctx = this.ctx;
+    const YELLOW = '#b9a862', BLUE = '#8fb3c9';
+    const t = map.liminalTex ? map.liminalTex[ty * map.w + tx] : 255;
+    if (t <= 6 && LIMINAL_TEX[t] && LIMINAL_TEX[t].complete && LIMINAL_TEX[t].naturalWidth) {
+      // A photo floor: draw it over the yellow base, gently varied per tile.
+      const alpha = 0.62 * (0.9 + 0.2 * tileHash(tx * 3 + 11, ty * 3 + 5));
+      this.drawTexturedQuad(corners, LIMINAL_TEX[t], YELLOW, null, 'multiply', Math.min(0.85, alpha));
+    } else {
+      // The sea (or a not-yet-loaded photo): flat colour + procedural wear.
+      this.diamondPath(corners);
+      ctx.fillStyle = shadeHex(t === 250 ? BLUE : YELLOW, shade); // 250 = baby-blue room
+      ctx.fill();
+      this.drawLiminalWear(tx, ty, corners);
+    }
+    this.diamondPath(corners);
+    ctx.strokeStyle = 'rgba(0,0,0,0.09)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  // A lamp's brightness right now: mostly full on, but each lamp dips into a
+  // brief fast stutter on its own slow clock (a dying fluorescent), so flicker
+  // is rare and out of step across the room. Shared by the fixture and its
+  // floor glow so they flicker together.
+  _lampFlicker(seed) {
+    const now = performance.now() / 1000;
+    const slow = Math.sin(now * 0.7 + seed) * Math.sin(now * 0.13 + seed * 1.7);
+    if (slow > 0.85) return (Math.sin(now * 32 + seed) > 0) ? 0.22 : 0.9; // stutter window
+    return 1;
+  }
+
+  // The soft floor-pool cast by each underworld lamp. Drawn in a pass after the
+  // world objects (the fixtures themselves are drawn as objects, drawLamp), so
+  // the pools read as light rather than as flat discs behind everything.
+  drawLampGlows(map) {
+    const ctx = this.ctx;
+    ctx.save();
+    for (const o of map.objects) {
+      if (o.type !== 'lamp') continue;
+      const s = worldToScreen(o.x + 0.5, o.y + 0.5);
+      const bright = this._lampFlicker(o.seed || 0);
+      const R = 52;
+      const glow = ctx.createRadialGradient(s.x, s.y - 6, 3, s.x, s.y - 6, R);
+      glow.addColorStop(0, `rgba(236,240,214,${(0.2 * bright).toFixed(3)})`);
+      glow.addColorStop(1, 'rgba(236,240,214,0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath(); ctx.arc(s.x, s.y - 6, R, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // A single hanging lamp: a drop-rod from above with a small tube fixture,
+  // glowing at its own flicker brightness. Non-solid — you walk beneath it.
+  drawLamp(obj) {
+    const ctx = this.ctx;
+    const s = worldToScreen(obj.x + 0.5, obj.y + 0.5);
+    const bright = this._lampFlicker(obj.seed || 0);
+    const topY = s.y - 62; // up near the "ceiling"
+    const fixY = s.y - 40;
+    ctx.strokeStyle = 'rgba(30,28,22,0.8)'; // the drop rod
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(s.x, topY); ctx.lineTo(s.x, fixY); ctx.stroke();
+    // A soft halo right at the tube.
+    const halo = ctx.createRadialGradient(s.x, fixY, 1, s.x, fixY, 16);
+    halo.addColorStop(0, `rgba(244,248,224,${(0.55 * bright).toFixed(3)})`);
+    halo.addColorStop(1, 'rgba(244,248,224,0)');
+    ctx.fillStyle = halo;
+    ctx.beginPath(); ctx.arc(s.x, fixY, 16, 0, Math.PI * 2); ctx.fill();
+    // The tube itself: a small horizontal bar in a dark housing.
+    ctx.fillStyle = 'rgba(40,38,30,0.9)';
+    ctx.fillRect(s.x - 11, fixY - 3, 22, 6);
+    ctx.fillStyle = `rgba(248,250,230,${(0.35 + 0.6 * bright).toFixed(3)})`;
+    ctx.fillRect(s.x - 9, fixY - 1.5, 18, 3);
+  }
+
   // Procedural wear for the underworld's bare-colour lino floor: worn patches,
   // water stains, and scuff streaks, deterministic per tile so it holds still
   // frame to frame. Clipped to the tile diamond.
@@ -1509,7 +1575,70 @@ export class Renderer {
       case 'mainframe': this.drawMainframe(obj); break;
       case 'uplink': this.drawUplink(obj); break;
       case 'furniture': this.drawFurniture(obj); break;
+      case 'exitdoor': this.drawExitDoor(obj); break;
+      case 'lamp': this.drawLamp(obj); break;
     }
+  }
+
+  // The way out of the underworld: a plain, mundane interior door standing in
+  // the wall — a pale-cream slab on the two camera-facing faces of the wall
+  // tile, with a dark frame and a knob. No sign, no glow; that it's so
+  // ordinary down here is the unsettling part.
+  drawExitDoor(obj) {
+    const ctx = this.ctx;
+    const H = 34;
+    const g = {
+      top: worldToScreen(obj.x, obj.y), right: worldToScreen(obj.x + 1, obj.y),
+      bottom: worldToScreen(obj.x + 1, obj.y + 1), left: worldToScreen(obj.x, obj.y + 1),
+    };
+    const r = (p) => ({ x: p.x, y: p.y - H });
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath(); ctx.moveTo(g.top.x, g.top.y + 4); ctx.lineTo(g.right.x, g.right.y + 4);
+    ctx.lineTo(g.bottom.x, g.bottom.y + 4); ctx.lineTo(g.left.x, g.left.y + 4); ctx.closePath(); ctx.fill();
+    // Dark door frame: the SW and SE faces, slightly darker than the cream.
+    ctx.fillStyle = '#4a4236';
+    for (const [a, b] of [[g.left, g.bottom], [g.bottom, g.right]]) {
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+      ctx.lineTo(r(b).x, r(b).y); ctx.lineTo(r(a).x, r(a).y);
+      ctx.closePath(); ctx.fill();
+    }
+    // The cream door leaf, inset on each near face.
+    const inset = (a, b, lo, hi, hLo, hHi) => {
+      const l = (t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+      const p0 = l(lo), p1 = l(hi);
+      return [
+        { x: p0.x, y: p0.y - hLo }, { x: p1.x, y: p1.y - hLo },
+        { x: p1.x, y: p1.y - hHi }, { x: p0.x, y: p0.y - hHi },
+      ];
+    };
+    const leaf = inset(g.bottom, g.right, 0.12, 0.88, 2, H - 4); // SE face — the one square-on to the camera
+    ctx.fillStyle = '#dcd0b4';
+    ctx.beginPath(); ctx.moveTo(leaf[0].x, leaf[0].y);
+    for (const p of leaf.slice(1)) ctx.lineTo(p.x, p.y);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(40,34,24,0.6)'; ctx.lineWidth = 1; ctx.stroke();
+    // A recessed panel and a dark knob near the leading edge.
+    ctx.strokeStyle = 'rgba(90,80,58,0.6)';
+    const pin = inset(g.bottom, g.right, 0.28, 0.72, 8, H - 10);
+    ctx.beginPath(); ctx.moveTo(pin[0].x, pin[0].y);
+    for (const p of pin.slice(1)) ctx.lineTo(p.x, p.y); ctx.closePath(); ctx.stroke();
+    const knob = { x: g.bottom.x + (g.right.x - g.bottom.x) * 0.8, y: g.bottom.y + (g.right.y - g.bottom.y) * 0.8 - H / 2 };
+    ctx.fillStyle = '#2a241a';
+    ctx.beginPath(); ctx.arc(knob.x, knob.y, 1.8, 0, Math.PI * 2); ctx.fill();
+    // A lit green EXIT sign mounted above the door — the one clear marker in
+    // all this wrongness.
+    const cxm = (g.bottom.x + g.right.x) / 2, sy = g.bottom.y - H - 12;
+    const glow = ctx.createRadialGradient(cxm, sy + 7, 2, cxm, sy + 7, 24);
+    glow.addColorStop(0, 'rgba(60,220,120,0.5)'); glow.addColorStop(1, 'rgba(60,220,120,0)');
+    ctx.fillStyle = glow; ctx.fillRect(cxm - 24, sy - 17, 48, 48);
+    ctx.fillStyle = 'rgba(8,20,12,0.94)'; ctx.fillRect(cxm - 17, sy, 34, 14);
+    ctx.strokeStyle = 'rgba(80,240,140,0.9)'; ctx.lineWidth = 1.5;
+    ctx.strokeRect(cxm - 16.5, sy + 0.5, 33, 13);
+    ctx.fillStyle = '#7dffb0'; ctx.font = 'bold 10px system-ui, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('EXIT', cxm, sy + 7.5);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   }
 
   // A pile of stacked junk cluttering an underworld room: one blocky extruded
@@ -2340,13 +2469,17 @@ export class Renderer {
     ctx.beginPath();
     ctx.ellipse(c.x, c.y + 1, 13, 6, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = obj.opened ? '#33291a' : '#9a774c'; // SW face (opened = spent, dark)
+    // Yellow supply boxes stand in the underworld; the resistance caches out
+    // in the world keep their crate-brown.
+    const swClosed = obj.yellow ? '#c8a83c' : '#9a774c';
+    const seClosed = obj.yellow ? '#b0902e' : '#805f3b';
+    ctx.fillStyle = obj.opened ? '#33291a' : swClosed; // SW face (opened = spent, dark)
     ctx.beginPath();
     ctx.moveTo(c.x - w, c.y - 3); ctx.lineTo(c.x, c.y + 3);
     ctx.lineTo(c.x, c.y + 3 - h); ctx.lineTo(c.x - w, c.y - 3 - h);
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = obj.opened ? '#271f13' : '#805f3b'; // SE face
+    ctx.fillStyle = obj.opened ? '#271f13' : seClosed; // SE face
     ctx.beginPath();
     ctx.moveTo(c.x + w, c.y - 3); ctx.lineTo(c.x, c.y + 3);
     ctx.lineTo(c.x, c.y + 3 - h); ctx.lineTo(c.x + w, c.y - 3 - h);
@@ -2689,15 +2822,16 @@ export class Renderer {
     ctx.beginPath(); ctx.rect(x + 1, y + 1, w - 2, h - 2); ctx.clip();
     ctx.font = '8px system-ui, sans-serif';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = scrolling ? '#e8d27a' : 'rgba(207,216,195,0.55)';
+    ctx.fillStyle = scrolling ? 'rgba(180,158,96,0.72)' : 'rgba(207,216,195,0.45)'; // dim amber, not bright
     const tw = ctx.measureText(text).width;
     const midY = y + h / 2 + 0.5;
-    if (scrolling && tw > w - 4) {
-      // Scroll right-to-left, looping with a gap; draw a second copy so the
-      // wrap is seamless.
-      const gap = 20;
+    if (scrolling) {
+      // Always scroll while playing, very slowly, looping continuously around
+      // — a wide gap plus a second copy so the wrap is seamless even for a
+      // short title. ~/150 is a gentle drift, not a ticker.
+      const gap = w;
       const period = tw + gap;
-      const off = (performance.now() / 26) % period;
+      const off = (performance.now() / 150) % period;
       ctx.textAlign = 'left';
       ctx.fillText(text, x + w - off, midY);
       ctx.fillText(text, x + w - off + period, midY);
@@ -3609,20 +3743,19 @@ export class Renderer {
       this.uiSlots.push({ x: wmX, y: wy, w: ws, h: ws, kind: 'walkman' });
       if (player.walkman) {
         const tapeDef = ITEMS[player.walkman.item];
-        const sideMode = player.walkmanSide
+        const side = player.walkmanSide
           ? (player.walkmanSide === 'A' ? tapeDef.sideA : tapeDef.sideB) : null;
-        const spinning = sideMode && hud.musicMode === sideMode;
+        const spinning = !!player.walkmanSide; // a tape is playing whenever a side is loaded
         ctx.save();
         ctx.translate(wmX + 18, top + 38);
         ctx.scale(1.25, 1.25);
         this.drawCassette(tapeDef, spinning ? performance.now() / 300 : 0);
         ctx.restore();
         // A little LCD "now playing" window under the deck: the artist and
-        // track slide across on a marquee so a long name fits in the narrow
-        // slot. Idle it just shows the tape/side status, held still.
+        // track scroll slowly across so a long name fits the narrow slot.
         const label = spinning
-          ? `${tapeDef.artist || '?'} — ${sideMode}`
-          : player.walkmanSide ? `side ${player.walkmanSide} · paused` : 'stopped';
+          ? `${tapeDef.artist || '?'} — ${side.label}`
+          : 'stopped';
         this.drawWalkmanTicker(label, wmX - 2, top + 60, ws + 4, spinning);
       }
     }

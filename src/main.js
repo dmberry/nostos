@@ -48,7 +48,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '1.14';
+const VERSION = '1.15';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -110,6 +110,10 @@ const animals = spawnAnimals(map, WORLD_SEED, { x: spawn.x, y: spawn.y, r: 12 })
   // out in the woods — as loose scraps that echo the bound manual in the caches.
   for (let i = 0; i < 4; i++) drop(boards, 'ronml_page', 1);
   for (let i = 0; i < 2; i++) drop(forestGrass, 'ronml_page', 1);
+  // A found cassette left in the ruins for the walkman: meme's "maieutics".
+  // (The player starts with the meme compilation; the WARD tape is down in
+  // the underworld.) More tapes can be seeded here as they're added.
+  drop(boards, 'tape_2', 1); // meme / maieutics
 }
 
 // The AIs control the landscape: black obelisk towers dot the wilds (their
@@ -1373,8 +1377,7 @@ function update(dt) {
   lore.update(dt, player, input);
   if (input.musicTogglePressed()) {
     const mode = sfx.toggleMusic();
-    player.say(mode === 'synth' ? 'Music: the old piano bed.'
-      : mode === 'off' ? 'Music off.' : 'Music: another found tape, played through.');
+    player.say(mode === 'synth' ? 'Music: the piano bed.' : 'Music off.');
   }
   // Rest (B): skips the clock forward 10 game-minutes and restores some
   // health, so long as nothing hostile is close enough to make that a bad
@@ -1530,7 +1533,9 @@ function update(dt) {
     updateUnderworldCreatures(dt, uwCreatures, player, map);
     camera.follow(player.x, player.y, dt);
     if (player._ubikTeleportCooldown > 0) player._ubikTeleportCooldown -= dt;
-    else if (Math.hypot(player.x - underworld.exitX, player.y - underworld.exitY) < UBIK_TELEPORT_RANGE) {
+    // The exit is a plain door set in the wall — approach it (it's solid, so
+    // you stand a tile off) and you step back out into the real world.
+    else if (Math.hypot(player.x - underworld.exitX, player.y - underworld.exitY) < 1.7) {
       exitUnderworld();
       player._ubikTeleportCooldown = UBIK_TELEPORT_COOLDOWN;
       sfx.play('zap');

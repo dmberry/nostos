@@ -22,7 +22,16 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Always put a texture on a glowing thing.** No glow is ever a flat coloured blob — a grille/panel texture is laid over it (the factory-vent trick). Everything luminous goes through `Renderer.texturedGlow`, which caps the glow with an AI grate texture; if you add a new light, use it rather than a bare `fill`. (David, 2026-07-07.)
 - **Vary texture opacity per tile.** Floors jitter their texture alpha deterministically per tile (`drawFloor`) so a large expanse of one floor reads as worn/varied rather than a flat repeat.
 
-## Where we are (v1.14)
+## Where we are (v1.15)
+
+### v1.15 — the underworld at full scale, data-driven tapes, roadmap
+
+- **128×128 underworld.** Regenerated big: `carveWorld` scatters varied-size rooms (10–26) across an open **sea** of worn-yellow floor (grey edge-cliffs suppressed down here so it reads boundless), joined by **road corridors** (L-paths of the road texture punched through walls). `map.liminalTex` holds a per-tile floor-texture index; the renderer (`drawLiminalFloor`, `LIMINAL_TEX`) draws one of **seven photo floors** per room (boards/dirt/grass/grassdirt/pavingstone/road/secret, loaded locally so textures.js is untouched), the sea flat-yellow+wear, and ~12% of rooms **baby-blue** (sentinel 250).
+- **Lamps as objects.** The abstract light array is gone; lamps are real `lamp` objects (non-solid) placed in rooms and the sea, drawn as hanging fixtures (`drawLamp`) with a floor glow (`drawLampGlows`) that flickers rarely and out of step per-lamp (`_lampFlicker`).
+- **Exit is a plain door with a green EXIT sign.** `exitdoor` object in the spawn room's wall (`drawExitDoor`), approached to leave (main.js proximity < 1.7); a lit green EXIT sign hangs above it.
+- **Yellow tape boxes.** The WARD tape now sits in a guaranteed **yellow box** (`box` with `yellow: true`, opened with E) in the first room, plus a sparse scatter of yellow boxes through other rooms holding the odd extra tape.
+- **Data-driven tapes.** Tapes are generated from a `TAPES` manifest in `items.js` (num, artist, title, folder, per-side track lists) into `tape_<num>` items — adding one is a single entry. Documented in `docs/tapes.md`. The walkman marquee is dimmer and scrolls slowly, looping continuously.
+- **`docs/ROADMAP.md`** added — every outstanding item from our sessions (ELIZA-in-terminal, the phone/comms, portal gun, the other three AIs, awareness/escalation, deeper underworld levels, survival-sim depth, save/load, refactors) grouped into five phases.
 
 ### v1.14 — the Backspace rebuilt, portal-gun split, polish batch
 

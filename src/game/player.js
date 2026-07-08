@@ -142,7 +142,7 @@ export class Player {
     // stopped; clicking it cycles side A -> side B -> stopped (equipSlot).
     // The side is deliberately NOT persisted: every session starts with the
     // tape stopped, so the saved music setting isn't fought over on load.
-    this.walkman = { item: 'tape_meme', qty: 1 };
+    this.walkman = { item: 'tape_1', qty: 1 }; // meme / compilation (see items.js TAPES)
     this.walkmanSide = null;                 // 'A', 'B', or null (stopped)
     this.swingTimer = 0;
     this.hurtTimer = 0;   // brief red flash after taking damage
@@ -378,7 +378,7 @@ export class Player {
       // Any change of tape stops playback — the new one starts stopped and
       // wants a click, same as a real deck after a swap.
       this.walkman = val || null;
-      if (this.walkmanSide) { this.walkmanSide = null; sfx.setMusicMode('synth'); } // back to the ambient bed
+      if (this.walkmanSide) { this.walkmanSide = null; sfx.stopTape(); } // back to the ambient bed
       return true;
     }
     return false;
@@ -424,16 +424,16 @@ export class Player {
       const def = ITEMS[this.walkman.item];
       if (this.walkmanSide === 'A') {
         this.walkmanSide = 'B';
-        sfx.setMusicMode(def.sideB);
-        this.say(`You flip the tape over. Side B — "${def.sideB}".`);
+        sfx.playTape(def.sideB.tracks);
+        this.say(`You flip the tape over. Side B — "${def.sideB.label}".`);
       } else if (this.walkmanSide === 'B') {
         this.walkmanSide = null;
-        sfx.setMusicMode('synth'); // stopping the tape falls back to the ambient synth bed
+        sfx.stopTape(); // back to the ambient synth bed
         this.say('The walkman clunks to a stop.');
       } else {
         this.walkmanSide = 'A';
-        sfx.setMusicMode(def.sideA);
-        this.say(`The spools catch and turn. Side A — "${def.sideA}".`);
+        sfx.playTape(def.sideA.tracks);
+        this.say(`The spools catch and turn. Side A — "${def.sideA.label}".`);
       }
       return;
     }

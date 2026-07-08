@@ -13,16 +13,23 @@ import { GameMap } from './map.js';
 import { makeRng } from './rng.js';
 import { ANIMAL_SPRITE_SETS } from '../engine/textures.js';
 
-// The pocket is a block of huge rooms rather than a thin-corridor maze —
-// cavernous, sparse, furniture stacked around at random, rooms joined only
-// by doorways punched in their shared walls. Backrooms proper.
-const UW_GRID = 3;                          // a 3x3 block of rooms
-const UW_ROOM = 13;                         // interior tiles per room side — big and echoing
-const UW_PITCH = UW_ROOM + 1;               // room interior + its one shared wall
-const UW_SIZE = UW_GRID * UW_PITCH + 1;     // + the far outer wall (= 43)
-const UW_DOOR_W = 2;                        // doorway width between adjacent rooms
-const UW_WALL_H = 42;                       // tall walls — you can't see over into the next room
-const UW_FURN_MIN = 4;                      // furniture piles per room, minimum
+// A big 128x128 pocket: rooms of wildly varying size scattered across an open
+// sea of yellow floor, joined by road-textured corridors punched through their
+// walls. Not walled in — the exterior is just endless yellow, so it reads as
+// boundless liminal space rather than one enclosed dungeon. The way home is a
+// plain door set in the first room's wall. One pale thing lurks in the far
+// rooms.
+const UW_SIZE = 128;
+const UW_WALL_H = 40;
+const UW_ROOM_MIN = 10, UW_ROOM_MAX = 26;   // room side length, tiles
+const UW_MAX_ROOMS = 15;
+const UW_MARGIN = 6;
+// Values stored per tile in map.liminalTex; the renderer maps 0..6 to the
+// seven floor images (see renderer.js LIMINAL_TEX), and treats these two
+// sentinels specially.
+const TEX_SEA = 255;   // the open expanse: flat yellow + procedural wear
+const TEX_BLUE = 250;  // a baby-blue room, to break up the yellow now and then
+const TEX_ROAD = 5;    // index of the road image — used for corridors
 
 const LURKER_WANDER_SPEED = 1.0;
 const LURKER_HUNT_SPEED = 2.6;
@@ -32,137 +39,148 @@ const LURKER_HIT_RANGE = 0.6;
 const LURKER_HIT_DAMAGE = 8;
 const LURKER_HIT_COOLDOWN = 1.2;
 
-// ---- rooms & doors ----------------------------------------------------
+// ---- world layout -----------------------------------------------------
 
-// Lay out the pocket as a GRID x GRID block of big rooms. Every tile starts
-// as wall; each room's interior is cleared to open floor; adjacent rooms are
-// joined by a doorway gap punched in their shared wall. A randomized DFS over
-// the room graph guarantees every room is reachable (a spanning tree), plus a
-// few extra doors so it reads as connected rooms rather than a strict tree.
-// Every doorway sits on the room's central lane, and the central plus (the
-// row and column through each room's centre) is always kept clear of
-// furniture — so whatever else is stacked around, there is always a path from
-// any door to any other, and the exit is always reachable.
-function carveRooms(map, rng) {
-  const idx = (x, y) => y * UW_SIZE + x;
+function carveWorld(map, rng) {
+  const W = UW_SIZE;
+  const idx = (x, y) => y * W + x;
+  const tex = new Uint8Array(W * W).fill(TEX_SEA);   // the whole map is open yellow to start
   const wall = new Set();
-  for (let y = 0; y < UW_SIZE; y++) for (let x = 0; x < UW_SIZE; x++) wall.add(idx(x, y));
-  const roomLo = (rc) => rc * UW_PITCH + 1;            // first interior tile of room index rc
-  const roomMid = (rc) => roomLo(rc) + (UW_ROOM >> 1); // its central lane tile
-  const inRoom = (rc, v) => v >= roomLo(rc) && v < roomLo(rc) + UW_ROOM;
+  const roomInterior = new Set();
+  const rooms = [];
 
-  // Clear each room's interior.
-  for (let rr = 0; rr < UW_GRID; rr++) for (let rc = 0; rc < UW_GRID; rc++) {
-    for (let dy = 0; dy < UW_ROOM; dy++) for (let dx = 0; dx < UW_ROOM; dx++) {
-      wall.delete(idx(roomLo(rc) + dx, roomLo(rr) + dy));
+  // Scatter non-overlapping rooms of varying sizes.
+  for (let t = 0; t < 90 && rooms.length < UW_MAX_ROOMS; t++) {
+    const rw = UW_ROOM_MIN + Math.floor(rng() * (UW_ROOM_MAX - UW_ROOM_MIN + 1));
+    const rh = UW_ROOM_MIN + Math.floor(rng() * (UW_ROOM_MAX - UW_ROOM_MIN + 1));
+    const rx = UW_MARGIN + Math.floor(rng() * (W - rw - UW_MARGIN * 2));
+    const ry = UW_MARGIN + Math.floor(rng() * (W - rh - UW_MARGIN * 2));
+    let ok = true;
+    for (const r of rooms) {
+      if (rx < r.x + r.w + 5 && rx + rw + 5 > r.x && ry < r.y + r.h + 5 && ry + rh + 5 > r.y) { ok = false; break; }
+    }
+    if (!ok) continue;
+    rooms.push({
+      x: rx, y: ry, w: rw, h: rh, cx: rx + (rw >> 1), cy: ry + (rh >> 1),
+      blue: rng() < 0.12,
+      texIdx: [0, 1, 2, 3, 4, 6][Math.floor(rng() * 6)], // any of the seven floors but road
+    });
+  }
+
+  // Wall each room's perimeter; floor + texture its interior.
+  for (const r of rooms) {
+    for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) {
+      if (x === r.x || x === r.x + r.w - 1 || y === r.y || y === r.y + r.h - 1) wall.add(idx(x, y));
+      else { roomInterior.add(idx(x, y)); tex[idx(x, y)] = r.blue ? TEX_BLUE : r.texIdx; }
     }
   }
 
-  // Randomized DFS spanning tree over the GRID x GRID room graph, tracking the
-  // deepest room reached as a cheap "far from spawn" pick for the exit.
-  const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-  const visited = Array.from({ length: UW_GRID }, () => new Array(UW_GRID).fill(false));
-  const doors = [];
-  const stack = [[0, 0]]; visited[0][0] = true;
-  let deepest = [0, 0], deepestDepth = 1;
-  while (stack.length) {
-    const [rc, rr] = stack[stack.length - 1];
-    const opts = [];
-    for (const [dc, dr] of DIRS) {
-      const nc = rc + dc, nr = rr + dr;
-      if (nc >= 0 && nc < UW_GRID && nr >= 0 && nr < UW_GRID && !visited[nr][nc]) opts.push([nc, nr, dc, dr]);
-    }
-    if (!opts.length) { stack.pop(); continue; }
-    const [nc, nr] = opts[Math.floor(rng() * opts.length)];
-    visited[nr][nc] = true; doors.push([rc, rr, nc, nr]); stack.push([nc, nr]);
-    if (stack.length > deepestDepth) { deepestDepth = stack.length; deepest = [nc, nr]; }
-  }
-  // A few extra doors for loops.
-  for (let n = 0; n < 3; n++) {
-    const rc = Math.floor(rng() * UW_GRID), rr = Math.floor(rng() * UW_GRID);
-    const [dc, dr] = DIRS[Math.floor(rng() * 4)];
-    const nc = rc + dc, nr = rr + dr;
-    if (nc >= 0 && nc < UW_GRID && nr >= 0 && nr < UW_GRID) doors.push([rc, rr, nc, nr]);
-  }
-  // Punch each door as a UW_DOOR_W gap centred on the shared central lane.
-  for (const [rc, rr, nc, nr] of doors) {
-    if (nc !== rc) {                                   // vertical shared wall
-      const wx = roomLo(Math.max(rc, nc)) - 1, cy = roomMid(rr);
-      for (let k = 0; k < UW_DOOR_W; k++) wall.delete(idx(wx, cy - (UW_DOOR_W >> 1) + k));
-    } else {                                           // horizontal shared wall
-      const wy = roomLo(Math.max(rr, nr)) - 1, cx = roomMid(rc);
-      for (let k = 0; k < UW_DOOR_W; k++) wall.delete(idx(cx - (UW_DOOR_W >> 1) + k, wy));
-    }
-  }
-
-  // Materialise the walls.
-  for (let y = 0; y < UW_SIZE; y++) for (let x = 0; x < UW_SIZE; x++) {
-    if (wall.has(idx(x, y))) map.addObject('fortwall', x, y, { material: 'liminal', wallH: UW_WALL_H });
-  }
-
-  // The way back out sits right where you arrive — in the spawn room (0,0),
-  // a few tiles off the landing spot so you don't step straight back through
-  // it, and clearly signed EXIT (the renderer draws the sign). You can always
-  // get home from where you came in; exploring deeper is the optional risk.
-  const exitTX = roomLo(0) + 2, exitTY = roomLo(0) + 2;
-
-  // Furniture: clusters stacked around each room, never on the central plus
-  // (so doors always connect), the spawn landing, or the exit.
-  const onPlus = (rc, rr, x, y) => x === roomMid(rc) || y === roomMid(rr);
-  for (let rr = 0; rr < UW_GRID; rr++) for (let rc = 0; rc < UW_GRID; rc++) {
-    const clusters = UW_FURN_MIN + Math.floor(rng() * 4);
-    for (let n = 0; n < clusters; n++) {
-      const ax = roomLo(rc) + Math.floor(rng() * UW_ROOM);
-      const ay = roomLo(rr) + Math.floor(rng() * UW_ROOM);
-      const pile = 1 + Math.floor(rng() * 3);
-      for (let p = 0; p < pile; p++) {
-        const fx = ax + (p === 0 ? 0 : Math.floor(rng() * 3) - 1);
-        const fy = ay + (p === 0 ? 0 : Math.floor(rng() * 3) - 1);
-        if (!inRoom(rc, fx) || !inRoom(rr, fy)) continue;
-        if (onPlus(rc, rr, fx, fy)) continue;
-        if (rc === 0 && rr === 0 && Math.abs(fx - roomMid(0)) <= 2 && Math.abs(fy - roomMid(0)) <= 2) continue;
-        if (Math.abs(fx - exitTX) <= 1 && Math.abs(fy - exitTY) <= 1) continue; // clear round the exit
-        if (map.objectAt(fx, fy)) continue;
-        map.addObject('furniture', fx, fy, {
-          variant: Math.floor(rng() * 3),
-          seed: Math.floor(rng() * 1000),
-          h: 9 + Math.floor(rng() * 15),
-        });
+  // Corridors: chain the rooms with L-shaped road lanes, punching door gaps
+  // through the walls at each end. The sea already connects everything, so
+  // these are the readable "corridors" laid over it, not the only route.
+  for (let i = 1; i < rooms.length; i++) {
+    const a = rooms[i - 1], b = rooms[i];
+    let x = a.cx, y = a.cy;
+    const path = [];
+    while (x !== b.cx) { x += Math.sign(b.cx - x); path.push([x, y]); }
+    while (y !== b.cy) { y += Math.sign(b.cy - y); path.push([x, y]); }
+    for (const [px, py] of path) {
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const cx = px + dx, cy = py + dy;
+        if (cx < 1 || cy < 1 || cx >= W - 1 || cy >= W - 1) continue;
+        wall.delete(idx(cx, cy));                                   // punch doorways through walls
+        if (!roomInterior.has(idx(cx, cy))) tex[idx(cx, cy)] = TEX_ROAD; // road across the sea
       }
     }
   }
 
+  // Materialise the walls (skipping any tile a corridor punched open).
+  for (let y = 0; y < W; y++) for (let x = 0; x < W; x++) {
+    if (wall.has(idx(x, y))) map.addObject('fortwall', x, y, { material: 'liminal', wallH: UW_WALL_H });
+  }
+
+  // Furniture stacked around inside rooms (never on a road tile, so corridors
+  // stay clear), scaled to room area.
+  for (const r of rooms) {
+    const clusters = 3 + Math.floor((r.w * r.h) / 55);
+    for (let n = 0; n < clusters; n++) {
+      const ax = r.x + 1 + Math.floor(rng() * (r.w - 2));
+      const ay = r.y + 1 + Math.floor(rng() * (r.h - 2));
+      const pile = 1 + Math.floor(rng() * 3);
+      for (let p = 0; p < pile; p++) {
+        const fx = ax + (p ? Math.floor(rng() * 3) - 1 : 0), fy = ay + (p ? Math.floor(rng() * 3) - 1 : 0);
+        if (fx <= r.x || fx >= r.x + r.w - 1 || fy <= r.y || fy >= r.y + r.h - 1) continue;
+        if (tex[idx(fx, fy)] === TEX_ROAD) continue;
+        if (map.objectAt(fx, fy)) continue;
+        map.addObject('furniture', fx, fy, { variant: Math.floor(rng() * 3), seed: Math.floor(rng() * 1000), h: 9 + Math.floor(rng() * 15) });
+      }
+    }
+  }
+
+  // Lamps: little hanging fixtures, the only light down here — drawn as real
+  // objects (renderer drawLamp), non-solid so you pass beneath them, each
+  // flickering rarely on its own clock. One or two per room, a sparse scatter
+  // through the sea.
+  for (const r of rooms) {
+    const n = 1 + Math.floor(rng() * 2);
+    for (let k = 0; k < n; k++) {
+      const lx = r.x + 2 + Math.floor(rng() * (r.w - 4)), ly = r.y + 2 + Math.floor(rng() * (r.h - 4));
+      if (!map.objectAt(lx, ly)) map.addObject('lamp', lx, ly, { seed: Math.floor(rng() * 997) });
+    }
+  }
+  for (let n = 0; n < 22; n++) {
+    const lx = 4 + Math.floor(rng() * (W - 8)), ly = 4 + Math.floor(rng() * (W - 8));
+    if (tex[ly * W + lx] === TEX_SEA && !map.objectAt(lx, ly)) map.addObject('lamp', lx, ly, { seed: Math.floor(rng() * 997) });
+  }
+
+  const spawn = rooms[0];
+  // A plain door in the spawn room's south wall — the way out. Mundane, which
+  // is exactly what makes it wrong.
+  const exitTX = spawn.cx, exitTY = spawn.y + spawn.h - 1;
+
+  // Yellow supply boxes: one guaranteed in the spawn room, holding the WARD
+  // "bare stanhope" tape, plus a sparse scatter through the other rooms with
+  // the odd extra tape to find. Reuses the resistance-cache box (opened with
+  // E), tinted yellow (renderer drawBox reads obj.yellow).
+  const boxAt = (bx, by, loot) => { if (map.inBounds(bx, by) && !map.objectAt(bx, by)) map.addObject('box', bx, by, { loot, opened: false, yellow: true }); };
+  boxAt(spawn.cx + 2, spawn.cy, [{ item: 'tape_3', qty: 1 }]);
+  for (let i = 1; i < rooms.length; i++) {
+    if (rng() >= 0.35) continue;
+    const r = rooms[i];
+    boxAt(r.x + 2 + Math.floor(rng() * (r.w - 4)), r.y + 2 + Math.floor(rng() * (r.h - 4)),
+      [{ item: `tape_${1 + Math.floor(rng() * 3)}`, qty: 1 }]);
+  }
+
+  // Farthest room from spawn: where the lurker waits.
+  let far = rooms[0], farD = -1;
+  for (const r of rooms) {
+    const d = Math.hypot(r.cx - spawn.cx, r.cy - spawn.cy);
+    if (d > farD) { farD = d; far = r; }
+  }
+
   return {
-    spawn: { x: roomMid(0) + 0.5, y: roomMid(0) + 0.5 },
-    exit: { x: exitTX + 0.5, y: exitTY + 0.5 },
-    creature: { x: roomMid(deepest[0]) + 0.5, y: roomMid(deepest[1]) + 0.5 }, // lurking in the farthest room
+    tex,
+    spawn: { x: spawn.cx + 0.5, y: spawn.cy + 0.5 },
+    exit: { x: exitTX + 0.5, y: exitTY + 0.5, tx: exitTX, ty: exitTY },
+    creature: { x: far.cx + 0.5, y: far.cy + 0.5 },
   };
 }
 
-// Builds the pocket once. The way back up reuses the overworld's own
-// portal-tear rendering (renderer.js reads map.ubikPatches off whichever map
-// is current) — seeded here as a single permanent entry, never aged or
-// culled since the underworld's own update path never runs the overworld's
-// ubikPatches aging loop (see main.js: it early-returns before reaching it).
+// Builds the pocket once, lazily, and keeps it for the session.
 export function createUnderworldPocket(seed) {
   const map = new GameMap(UW_SIZE, UW_SIZE, 'liminal');
   const rng = makeRng(seed >>> 0);
-  const { spawn, exit, creature } = carveRooms(map, rng);
-  // t = 3, not 0: the tear render fades a patch IN over its first ~2 seconds
-  // of age, but the underworld's own update loop never ages ubikPatches — so
-  // a t of 0 would leave the exit permanently invisible. Start it past the
-  // fade-in and well short of the (245s) fade-out so it renders fully, always.
-  map.ubikPatches = [{ x: exit.x, y: exit.y, r: 1.5, t: 3, portal: true, linkedTo: true }];
-  // Same defensive setup as the overworld map gets in main.js — most of this
-  // is lazily created on first use anyway (player.js does `x = x || []`
-  // throughout, renderer.js guards with `if (map.x)`), but set up front for
-  // consistency with how the overworld map starts.
+  const { tex, spawn, exit, creature } = carveWorld(map, rng);
+  map.liminalTex = tex;        // per-tile floor-texture index (renderer reads it)
+  // The exit is a plain door set into the wall (not a Ubik tear): drop the
+  // wall there and stand a door in its place. main.js exits on approach.
+  const w = map.objectAt(exit.tx, exit.ty);
+  if (w) map.removeObject(w);
+  map.addObject('exitdoor', exit.tx, exit.ty, {});
+  // Defensive fields so the pocket is a fully-formed map.
   map.projectiles = [];
   map.bombs = [];
   map.explosions = [];
-  // Fog fields, so the pocket is a fully-formed map and any stray overworld
-  // code that reaches it (it shouldn't) reads a valid array rather than
-  // crashing on undefined. Marked all-explored — there is no fog down here.
   map.explored = new Uint8Array(map.w * map.h).fill(1);
   map.newlyRevealed = [];
   return {
