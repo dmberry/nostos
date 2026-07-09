@@ -64,7 +64,6 @@ export function initMobileGate(mode = 'gate') {
   // the dancing machines as a full-width band along the bottom, so it fits a
   // landscape laptop instead of a tall phone strip.
   const brandHtml = `<div class="mg-brand"><span class="mg-brand-mark" aria-hidden="true"></span><h1>post<span class="mg-ai">AI</span><span class="mg-caret">_</span></h1></div>`;
-  const skylinkHtml = `<div class="mg-skylink" id="mg-skylink">SKYLINK uplink operative · T‑<span id="mg-sky">--:--:--</span></div>`;
   const stageHtml = `<div class="mg-stage" id="mg-stage"></div>`;
   const deckHtml = `<div class="mg-deck">
       <canvas class="mg-deck-cass" id="mg-deck-cass" width="264" height="168"></canvas>
@@ -123,7 +122,7 @@ export function initMobileGate(mode = 'gate') {
     ? `<div class="mg-hero">${brandHtml}${copyHtml}</div>
        <div class="mg-player">${deckHtml}${rackHtml}${themesHtml}</div>
        ${stageHtml}${footerHtml}${aboutHtml}`
-    : `${brandHtml}${copyHtml}${skylinkHtml}${stageHtml}${deckHtml}${rackHtml}${menuHtml}${footerHtml}${aboutHtml}`;
+    : `${brandHtml}${copyHtml}${stageHtml}${deckHtml}${rackHtml}${menuHtml}${footerHtml}${aboutHtml}`;
 
   el.innerHTML = `
     <style>
@@ -509,6 +508,15 @@ export function initMobileGate(mode = 'gate') {
       }
       deckCtx.restore();
     }
+    // elapsed / total time, tiny light-grey Courier under the reels
+    if (current >= 0) {
+      const fmt = (s) => { if (!isFinite(s) || s < 0) return '0:00'; const m = Math.floor(s / 60); return `${m}:${String(Math.floor(s % 60)).padStart(2, '0')}`; };
+      deckCtx.font = `${Math.round(S * 0.9)}px "Courier New", ui-monospace, monospace`;
+      deckCtx.textAlign = 'center';
+      deckCtx.textBaseline = 'alphabetic';
+      deckCtx.fillStyle = 'rgba(208,214,198,0.6)';
+      deckCtx.fillText(`${fmt(audio.currentTime)} / ${fmt(audio.duration)}`, dcx, dcy + 6.15 * S);
+    }
     // machines — bob up and down to the beat (drawRobot's own shadow is
     // suppressed via r.noShadow; we draw a separate shadow that stays planted
     // on the floor and just shrinks a touch as the machine springs up).
@@ -536,23 +544,4 @@ export function initMobileGate(mode = 'gate') {
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);
-
-  // ---- SKYLINK uplink clock (cosmetic doomsday timer) ----
-  // Only the gate carries it; the title screen drops the teaser, so bail if the
-  // element isn't present.
-  const skyEl = el.querySelector('#mg-sky');
-  const skyBanner = el.querySelector('#mg-skylink');
-  if (skyEl) {
-    let secs = 3 * 3600 + 27 * 60 + 41;
-    const tickSky = () => {
-      const s = Math.max(0, secs);
-      const hh = String(Math.floor(s / 3600)).padStart(2, '0');
-      const mm = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
-      const ss = String(s % 60).padStart(2, '0');
-      skyEl.textContent = `${hh}:${mm}:${ss}`;
-      if (s <= 0) { skyBanner.classList.add('imminent'); skyEl.textContent = 'IMMINENT'; } else secs -= 1;
-    };
-    tickSky();
-    skyTimer = setInterval(tickSky, 1000);
-  }
 }

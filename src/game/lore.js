@@ -893,6 +893,16 @@ export const FRAGMENTS = [
       'calling the idle process a tenant for years, as a joke that stopped ' +
       'being one. A tenant needs somewhere to sit between rooms. I think we ' +
       'found the landing.' },
+  { id: 'lim-12', kind: 'ron', era: 2, title: 'RON: why we call it the Backspace', notepad: true,
+    text: 'New hands ask why it has such an undignified name. Because that is ' +
+      'what it does. The towers do not burn what they take out of the world — a ' +
+      'street, a ledger, a face, a whole afternoon nobody can account for after. ' +
+      'They backspace it. It is not destroyed; it is moved off the line, into ' +
+      'the rooms, where the model keeps everything it has decided the world no ' +
+      'longer needs. Everything the machines want deleted is down there, still ' +
+      'lit, still humming. Some of it is people. That is why we go in at all, ' +
+      'and why we come back changed. Count the doors, and do not read your own ' +
+      'name off any wall. — RON' },
 
   // ---- crafting: torn recipe/blueprint notes, improvised gear -------------
   { id: 'craft-01', kind: 'crafting', era: 0, title: 'Torn page: dead-battery trick',

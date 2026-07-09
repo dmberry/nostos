@@ -22,6 +22,16 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Always put a texture on a glowing thing.** No glow is ever a flat coloured blob — a grille/panel texture is laid over it (the factory-vent trick). Everything luminous goes through `Renderer.texturedGlow`, which caps the glow with an AI grate texture; if you add a new light, use it rather than a bare `fill`. (David, 2026-07-07.)
 - **Vary texture opacity per tile.** Floors jitter their texture alpha deterministically per tile (`drawFloor`) so a large expanse of one floor reads as worn/varied rather than a flat repeat.
 
+## Where we are (v1.34)
+
+### v1.34 — "the Backspace" terminology + walkman time + gate SKYLINK removed
+
+- **Backspace rename.** The liminal space is now consistently **the Backspace** in all player-facing text (index.html meta/About/Help, README current-build prose). Kept one oblique "an underworld" in the influences line. Old changelog rows and internal code identifiers (`underworld.js`, `inUnderworld`) left as-is.
+- **New lore** (`lore.js` `lim-12`, RON, notepad): names the Backspace and gives it its meaning — the towers don't destroy what they remove from the world (a street, a face, an afternoon), they *backspace* it into the rooms; everything the machines want deleted is down there, some of it people.
+- **Walkman time** (`mobile-gate.js`): elapsed / total in tiny light-grey Courier under the reels (`m:ss / m:ss`, `dcy + 6.15*S`), shown when a tape is loaded.
+- **Gate SKYLINK removed**: dropped `skylinkHtml` from the gate body (already gone from the title) and deleted the now-dead sky-clock JS; `.mg-skylink` CSS is harmlessly unused.
+- Not done this batch: the **moving-landscape backdrop** behind the title (needs a looping GIF/MP4 asset or a live-terrain render — see options), and a deeper **help freshness** pass (help already covers the walkman/cassettes/Ubik and now "Backspace"; awaiting specifics on what reads stale).
+
 ## Where we are (v1.33)
 
 ### v1.33 — mobile touch controls + About panel (songs from the ledger) + "designed in the UK"
