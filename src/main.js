@@ -48,7 +48,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '1.37';
+const VERSION = '1.38';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -130,10 +130,10 @@ const obelisks = [];
     if ((f !== 'grass' && f !== 'tallgrass') || map.objectAt(x, y)) continue;
     if (Math.hypot(x - spawn.x, y - spawn.y) < 16) continue;
     if (obelisks.some((o) => Math.hypot(o.x - x, o.y - y) < 14)) continue;
-    // OB classes: roughly every third tower is a SIREN — teal-lit, it sings,
-    // and up close its song pulls you toward it (see updateSirens). Guaranteed
-    // spread via the index so a run always has a few.
-    const cls = obelisks.length % 3 === 0 ? 'siren' : undefined;
+    // OB classes: exactly ONE tower in the world is the SIREN — a singular,
+    // teal-lit landmark whose song pulls you in up close (see the obelisk loop
+    // below). The first obelisk placed is it; every other is standard.
+    const cls = obelisks.length === 0 ? 'siren' : undefined;
     map.addObject('obelisk', x, y, { cls });
     obelisks.push({ x, y });
   }
@@ -302,7 +302,7 @@ let wfactory = null;
 {
   const rng = makeRng(WORLD_SEED ^ 0x5a11c0de);
   const FW = 8, FH = 8;               // a big 8x8 industrial structure
-  const FACTORY_HP = 160;             // takes many hits to bring down
+  const FACTORY_HP = 420;             // takes a long, committed assault to bring down
   let guard = 0;
   while (!wfactory && guard++ < 8000) {
     const x = 4 + Math.floor(rng() * (map.w - FW - 8));
@@ -1054,15 +1054,16 @@ function openObTerminal(ob) {
     replHistoryIdx = -1;
     replPrint(
       'SKYLINK NODE TERMINAL  v2.20',
-      'RON-DOS 4.11  (c) Reality Or Nothing',
+      'TIRESIAS 1.0  //  RON-DOS 4.11  (c) Reality Or Nothing',
       '',
       `> node ............ ${ob.code || 'OB-????'}`,
+      `> class ........... ${ob.cls === 'siren' ? 'SIREN' : 'STANDARD'}`,
       `> circuit id ...... ${ob.circuitNum != null ? '#' + ob.circuitNum : 'sealed'}`,
       '> chip ............ ACCEPTED',
       '> shield .......... you are hidden while jacked in',
       '> access .......... GRANTED',
       '',
-      'RON-ML console ready. try: scan   (type help for commands)',
+      'Tiresias online. try: scan   ·   map   ·   help',
       '_',
     );
     obTermInput.value = '';
@@ -1086,7 +1087,7 @@ function openGateTerminal() {
   const keyed = player.hasItem('ai_key');
   replPrint(
     `${fortress.AI_NAME.toUpperCase()} — OUTER GATE TERMINAL`,
-    'RON-DOS 4.11  (c) Reality Or Nothing',
+    'TIRESIAS 1.0  //  RON-DOS 4.11  (c) Reality Or Nothing',
     '',
     `> gate ............ ${fortress.terminal.obj.code}`,
     `> rampart ......... ${fortress.open ? 'OPEN' : fortress.hacked ? 'UNLOCKED' : 'SEALED'}`,

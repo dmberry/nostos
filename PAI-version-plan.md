@@ -22,6 +22,16 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Always put a texture on a glowing thing.** No glow is ever a flat coloured blob — a grille/panel texture is laid over it (the factory-vent trick). Everything luminous goes through `Renderer.texturedGlow`, which caps the glow with an AI grate texture; if you add a new light, use it rather than a bare `fill`. (David, 2026-07-07.)
 - **Vary texture opacity per tile.** Floors jitter their texture alpha deterministically per tile (`drawFloor`) so a large expanse of one floor reads as worn/varied rather than a flat repeat.
 
+## Where we are (v1.38)
+
+### v1.38 — SIREN unique, Tiresias terminal, mobile Play/alpha, bg video, tougher factory
+
+- **One SIREN only.** `main.js` now tags just the first obelisk `cls:'siren'` (`obelisks.length === 0`), not every third — the SIREN is a singular landmark.
+- **Tiresias terminal.** Obelisk + gate consoles now banner as **TIRESIAS 1.0 // RON-DOS 4.11**, and the node banner lists **`> class ... SIREN|STANDARD`**. (The predictive-logic / world-**search** expansion the name invites is a separate piece — it touches the RON-ML language in `ronml.js`; scoped for a focused turn: a `find <thing>` / oracle builtin set over the existing world ctx hooks.)
+- **Mobile Play + alpha.** The gate (game is playable on phones now via touch) leads with a primary **▶ Play (alpha)** button (same `#mg-tryanyway` boot), copy rewritten to say it's an early alpha, and an **"alpha"** tag in the footer.
+- **Background video.** `mobile-gate.js` adds a low-opacity (`0.18`) `.mg-bgvideo` behind the title/gate, `playbackRate 0.5`, gently panning L↔R (`mg-pan` 90s, reduced-motion aware), negative z-index so content sits above. Sources: `.mp4`, `.webm`, then the provided `.mov`. **Caveat:** Chromium/Chrome can't decode the `.mov` (verified `networkState 3`), so it only shows in Safari until an `.mp4`/`.webm` export is dropped in `assets/media/videos/` — then it works everywhere with no code change. Falls back to the themed gradient meanwhile.
+- **W-factory HP 160 → 420** — the foundry is now a real siege, not a quick smash.
+
 ## Where we are (v1.37)
 
 ### v1.37 — OB classes: the SIREN (+ placid animals slowed)
