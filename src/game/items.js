@@ -526,6 +526,55 @@ for (const t of TAPES) {
   };
 }
 
+// ---- the Backspace's deleted objects -----------------------------------
+// The machines don't destroy what they take out of the world, they backspace
+// it (see lore lim-12): the forms they can't watch you use go first. Paper
+// books (read privately, off-camera) and analogue recordings (played on
+// nothing networked) turn up in the Backspace's yellow boxes. Each is a real
+// cover from assets/media; the icon is that cover — a portrait rectangle for a
+// book, a square sleeve for a record. Data-driven so more covers just drop in.
+// [cover file (under assets/media/), title, author/artist]
+export const DELETED_BOOKS = [
+  ['book-covers/Republic.jpg', 'The Republic', 'Plato'],
+  ['book-covers/Nicomachean-Ethics.jpg', 'Nicomachean Ethics', 'Aristotle'],
+  ['book-covers/The-Odyssey.jpg', 'The Odyssey', 'Homer'],
+  ['book-covers/Prince.jpg', 'The Prince', 'Machiavelli'],
+  ['book-covers/Leviathan.jpg', 'Leviathan', 'Thomas Hobbes'],
+  ['book-covers/wealth-of-nations.jpg', 'The Wealth of Nations', 'Adam Smith'],
+  ['book-covers/critique-of-pure-reason.jpg', 'Critique of Pure Reason', 'Immanuel Kant'],
+  ['book-covers/hegel-phenomenology.jpg', 'Phenomenology of Spirit', 'G. W. F. Hegel'],
+  ['book-covers/Zarathustra.jpg', 'Thus Spoke Zarathustra', 'Friedrich Nietzsche'],
+  ['book-covers/capital.jpg', 'Capital', 'Karl Marx'],
+  ['book-covers/War-And-Peace.jpg', 'War and Peace', 'Leo Tolstoy'],
+  ['book-covers/Process-and-Reality.jpg', 'Process and Reality', 'A. N. Whitehead'],
+  ['book-covers/understanding-media.jpg', 'Understanding Media', 'Marshall McLuhan'],
+  ['book-covers/ruleofmetaphor.jpg', 'The Rule of Metaphor', 'Paul Ricoeur'],
+  ['book-covers/Discipline-and-Punish.jpg', 'Discipline and Punish', 'Michel Foucault'],
+  ['book-covers/Anti-Oedipus.jpg', 'Anti-Oedipus', 'Deleuze & Guattari'],
+  ['book-covers/toadtoserfdom.jpg', 'The Road to Serfdom', 'F. A. Hayek'],
+  ['book-covers/capitalism.jpg', 'Capitalism', ''],
+  ['book-covers/Brave-New-World.jpg', 'Brave New World', 'Aldous Huxley'],
+  ['book-covers/Fahrenheit-451.jpg', 'Fahrenheit 451', 'Ray Bradbury'],
+  ['book-covers/postdigital.jpg', 'Postdigital', 'David M. Berry'],
+  ['book-covers/Cover CriticalTheory_Berry.jpg', 'Critical Theory and the Digital', 'David M. Berry'],
+  ['book-covers/Cover - DH .png', 'Digital Humanities', 'David M. Berry'],
+];
+export const DELETED_RECORDS = [
+  ['album-covers/It-Might-Be-Useful-For-Us-To-Know.webp', 'It Might Be Useful For Us To Know', ''],
+];
+DELETED_BOOKS.forEach(([cover, title, author], i) => {
+  ITEMS[`pbook_${i + 1}`] = {
+    name: author ? `${title} — ${author}` : title, short: title,
+    kind: 'paperbook', stack: 1, cover, color: '#6b5a3a', backspace: true,
+  };
+});
+DELETED_RECORDS.forEach(([cover, title, artist], i) => {
+  ITEMS[`record_${i + 1}`] = {
+    name: artist ? `${title} — ${artist}` : title, short: title,
+    kind: 'record', stack: 1, cover, color: '#26242a', backspace: true,
+  };
+});
+
 // Each def keeps a self-reference to its own key, so any code holding a
 // resolved item (ITEMS[k]) can still look up which icon to draw for it.
 // Tools/guns don't stack, but still need stack:1 — stow() falls back to

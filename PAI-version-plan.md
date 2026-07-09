@@ -22,6 +22,17 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Always put a texture on a glowing thing.** No glow is ever a flat coloured blob — a grille/panel texture is laid over it (the factory-vent trick). Everything luminous goes through `Renderer.texturedGlow`, which caps the glow with an AI grate texture; if you add a new light, use it rather than a bare `fill`. (David, 2026-07-07.)
 - **Vary texture opacity per tile.** Floors jitter their texture alpha deterministically per tile (`drawFloor`) so a large expanse of one floor reads as worn/varied rather than a flat repeat.
 
+## Where we are (v1.35)
+
+### v1.35 — deleted objects in the Backspace (books + records with real covers)
+
+The Backspace now holds what the machines removed from the world: paper books and analogue records — the forms they can't watch you use (lim-12). Data-driven off cover art:
+- `items.js`: `DELETED_BOOKS` / `DELETED_RECORDS` manifests (`[coverPath, title, author]`), generating `ITEMS.pbook_N` (kind `paperbook`) and `ITEMS.record_N` (kind `record`) with a `cover` path and `backspace: true`. Covers are the real files under `assets/media/{book-covers,album-covers}` — add a row to seed a new one.
+- `renderer.js`: `coverImg(path)` cache (encodeURI for spaces); `drawItemIcon` draws the cover — a portrait **rectangle** with a page fore-edge for a book, a **square** sleeve with a sliver of vinyl for a record; falls back to a colour block until the image loads.
+- `underworld.js`: sparse yellow boxes (`~50%` of the further rooms) each hold one random book/record — same box as the tapes, different loot.
+- `player.js` `openBox`: a Backspace-flavoured line when the loot is a deleted object ("something backspaced out of the world…").
+- Renamed the extensionless `book-covers/understanding-media` → `.jpg`. Verified: all covers (incl. the spaced `.png` and the `.webp`) render as icons with no failed requests.
+
 ## Where we are (v1.34)
 
 ### v1.34 — "the Backspace" terminology + walkman time + gate SKYLINK removed

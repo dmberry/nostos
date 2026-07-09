@@ -1415,6 +1415,10 @@ export class Player {
         + 'something that shoots, something to eat. Don\'t go out there empty-handed. '
         + 'Learn the towers before you learn to run from them. Good luck." '
         + `Inside: ${drops.map((l) => ITEMS[l.item].name.toLowerCase()).join(', ')}.`);
+    } else if (drops.some((l) => ITEMS[l.item] && ITEMS[l.item].backspace)) {
+      // A deleted object recovered from the Backspace (paper book / vinyl).
+      const names = drops.map((l) => ITEMS[l.item].name).join(', ');
+      this.say(`Inside, something backspaced out of the world: ${names}. A form they couldn't watch you use — so they deleted it, and it fell through to here.`);
     } else {
       this.say(`You prise open the cache: ${drops.map((l) => ITEMS[l.item].name.toLowerCase()).join(', ')}.`);
     }

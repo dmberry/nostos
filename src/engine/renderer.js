@@ -34,6 +34,16 @@ const SEA_BLOCK = 6; // tiles per texture patch
 // normalized fractions of the sprite's own height/width (measured off the art).
 const LAMP_SPRITE = new Image(); LAMP_SPRITE.src = 'assets/textures/liminal-lamp.png';
 
+// Book / record cover images (the Backspace's deleted objects), loaded on
+// demand and cached by path. Paths can contain spaces, so encode them.
+const COVER_CACHE = new Map();
+function coverImg(path) {
+  if (!path) return null;
+  let img = COVER_CACHE.get(path);
+  if (!img) { img = new Image(); img.src = 'assets/media/' + encodeURI(path); COVER_CACHE.set(path, img); }
+  return img;
+}
+
 // Maps a facing vector to one of 8 pre-rendered screen-compass directions
 // for CHARACTER_SPRITE_SETS (see textures.js) — replaces the old trick of
 // rotating one flat top-down icon, which read wrong for a humanoid with a
@@ -3061,6 +3071,35 @@ export class Renderer {
       ctx.globalAlpha = 0.4;
       ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.stroke();
       ctx.globalAlpha = 1;
+      ctx.restore();
+      return;
+    }
+    if (itemDef.kind === 'paperbook' || itemDef.kind === 'record') {
+      // A deleted object recovered from the Backspace: its icon is the real
+      // cover — a portrait rectangle for a book, a square sleeve for a record.
+      const record = itemDef.kind === 'record';
+      const w = record ? 18 : 15, h = record ? 18 : 20;
+      const img = coverImg(itemDef.cover);
+      ctx.fillStyle = 'rgba(0,0,0,0.5)'; // drop-frame so it reads against any slot
+      ctx.fillRect(-w / 2 - 1, -h / 2 - 1, w + 2, h + 2);
+      if (img && img.complete && img.naturalWidth) {
+        ctx.drawImage(img, -w / 2, -h / 2, w, h);
+      } else {
+        ctx.fillStyle = itemDef.color || '#6b5a3a'; // placeholder while the cover loads
+        ctx.fillRect(-w / 2, -h / 2, w, h);
+      }
+      if (record) {
+        // a sliver of black vinyl edging out of the sleeve
+        ctx.fillStyle = '#0c0c0e';
+        ctx.beginPath(); ctx.arc(w / 2 - 2, 0, h / 2 - 1.5, -Math.PI / 2.6, Math.PI / 2.6); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.beginPath(); ctx.arc(w / 2 + h / 2 - 3.5, 0, 1, 0, Math.PI * 2); ctx.fill();
+      } else {
+        ctx.fillStyle = '#e5dcc7'; // page block down the fore-edge
+        ctx.fillRect(w / 2 - 1.5, -h / 2 + 1, 1.5, h - 2);
+      }
+      ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 0.75;
+      ctx.strokeRect(-w / 2, -h / 2, w, h);
       ctx.restore();
       return;
     }

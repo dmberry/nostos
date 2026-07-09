@@ -11,7 +11,7 @@
 
 import { GameMap } from './map.js';
 import { makeRng } from './rng.js';
-import { TAPES } from './items.js';
+import { TAPES, DELETED_BOOKS, DELETED_RECORDS } from './items.js';
 import { ANIMAL_SPRITE_SETS } from '../engine/textures.js';
 
 // A big 128x128 pocket: rooms of wildly varying size scattered across an open
@@ -187,6 +187,31 @@ function carveWorld(map, rng) {
     const r = rooms[i];
     boxAt(r.x + 2 + Math.floor(rng() * (r.w - 4)), r.y + 2 + Math.floor(rng() * (r.h - 4)),
       allNums[Math.floor(rng() * allNums.length)]);
+  }
+
+  // The Backspace's deleted objects: paper books and analogue records the
+  // machines took out of the world, sparse in yellow boxes through the further
+  // rooms (same box, different loot). Books outnumber records, as the covers do.
+  const deletedKeys = [
+    ...DELETED_BOOKS.map((_, i) => `pbook_${i + 1}`),
+    ...DELETED_RECORDS.map((_, i) => `record_${i + 1}`),
+  ];
+  const boxItemAt = (bx, by, key) => {
+    if (map.inBounds(bx, by) && !map.objectAt(bx, by)) {
+      map.addObject('box', bx, by, { loot: [{ item: key, qty: 1 }], opened: false, yellow: true });
+      return true;
+    }
+    return false;
+  };
+  if (deletedKeys.length) {
+    for (let i = 1; i < rooms.length; i++) {
+      if (rng() >= 0.5) continue;
+      const r = rooms[i];
+      const key = deletedKeys[Math.floor(rng() * deletedKeys.length)];
+      for (let tries = 0; tries < 12; tries++) {
+        if (boxItemAt(r.x + 2 + Math.floor(rng() * (r.w - 4)), r.y + 2 + Math.floor(rng() * (r.h - 4)), key)) break;
+      }
+    }
   }
 
   // Farthest room from spawn: where the lurker waits.
