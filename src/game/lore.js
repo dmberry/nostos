@@ -1173,25 +1173,57 @@ export class Lore {
   // pages only in the Backspace, never mixed.
   get _active() { return this.realm === 'backspace' ? this.placedBs : this.placed; }
 
-  // Scatter fragments sparsely across the overworld — indoors and out, on any
-  // walkable ground — with a minimum spacing so they read as rare discoveries
-  // rather than a pile. Deterministic per seed. Backspace-only fragments
-  // (frag.bs) are skipped here — they go on the underworld map (placeBackspace).
+  // The overworld lore is no longer scattered loose across the map (it read as
+  // litter). Instead it's concentrated in two places the resistance actually
+  // kept it: RON's OWN field records (`ron` fragments) live in the HERMES relays
+  // — pull them with `records` at a TOR — and every other recovered document is
+  // packed into the resistance caches, a few to a box, found when you open one.
+  // Lore is built after worldgen, so the boxes already exist here. Backspace-only
+  // fragments (frag.bs) still go on the underworld map (placeBackspace).
   _place(map, seed) {
     const rng = makeRng(((seed ^ 0x105e) >>> 0) || 1);
-    const OK = new Set(['grass', 'tallgrass', 'boards', 'dirt', 'sand', 'road']);
-    const MIN_GAP = 8; // tiles between fragments
-    for (const frag of FRAGMENTS) {
-      if (frag.bs) continue;
-      let placed = false;
-      for (let attempt = 0; attempt < 60 && !placed; attempt++) {
-        const x = Math.floor(rng() * map.w), y = Math.floor(rng() * map.h);
-        if (!OK.has(map.floorAt(x, y)) || map.objectAt(x, y)) continue;
-        if (this.placed.some((p) => Math.hypot(p.x - x, p.y - y) < MIN_GAP)) continue;
-        this.placed.push({ frag, x: x + 0.5, y: y + 0.5, found: false });
-        placed = true;
-      }
+    const overworld = FRAGMENTS.filter((f) => !f.bs);
+    this.torFrags = overworld.filter((f) => f.kind === 'ron').map((f) => f.id); // read at a TOR (`records`)
+    // Deterministically shuffle the recovered documents, then deal them across
+    // the caches already placed on the map (round-robin, so every box holds a
+    // small, varied handful rather than one box holding them all).
+    const docs = overworld.filter((f) => f.kind !== 'ron');
+    for (let i = docs.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [docs[i], docs[j]] = [docs[j], docs[i]]; }
+    const boxes = map.objects.filter((o) => o.type === 'box');
+    if (boxes.length) {
+      docs.forEach((f, i) => { const box = boxes[i % boxes.length]; (box.lore ??= []).push(f.id); });
     }
+    this.placed = []; // nothing hovering out in the world any more
+  }
+
+  // Mark a fragment recovered — pasted into the Scrapbook, scored once, and
+  // (unless quiet) flashed bottom-right. Shared by the Backspace walk-over pickup,
+  // the resistance caches (via player.onFindLore), and the TOR records archive.
+  findFrag(id, player, quiet = false) {
+    if (this.found.has(id)) return false;
+    const frag = FRAGMENTS.find((f) => f.id === id);
+    if (!frag) return false;
+    this.found.add(id);
+    this._persist();
+    if (player && player.addScore) player.addScore(FRAGMENT_SCORE);
+    if (!quiet) {
+      this.flash = { frag, ttl: FLASH_TIME };
+      if (player) player.say(`You recover a fragment: ${frag.title}.`);
+    }
+    return true;
+  }
+
+  // How many of RON's own records a relay still holds (all relays share the set).
+  torRecordsLeft() { return this.torFrags ? this.torFrags.filter((id) => !this.found.has(id)).length : 0; }
+
+  // Pull the next unrecovered RON record into the Scrapbook; returns the fragment
+  // (so the terminal can print it) or null when they're all recovered.
+  dispenseTorRecord(player) {
+    const next = (this.torFrags || []).find((id) => !this.found.has(id));
+    if (!next) return null;
+    const frag = FRAGMENTS.find((f) => f.id === next);
+    this.findFrag(next, player, true);
+    return frag;
   }
 
   // Scatter the Backspace-only fragments across the underworld map. Called on
@@ -1268,16 +1300,14 @@ export class Lore {
       if (this.flash.ttl <= 0 || input.clickPos()) this.flash = null;
     }
 
-    // Walk over an unread fragment to collect it into the Archive.
+    // Walk over an unread fragment to collect it into the Scrapbook. Only the
+    // Backspace still has loose fragments to walk over; the overworld's lore now
+    // lives in the caches and the TOR relays (see _place / findFrag).
     for (const p of this._active) {
-      if (p.found) continue;
+      if (p.found || this.found.has(p.frag.id)) continue;
       if (Math.hypot(p.x - player.x, p.y - player.y) > READ_RANGE) continue;
       p.found = true;
-      this.found.add(p.frag.id);
-      this._persist();
-      if (player.addScore) player.addScore(FRAGMENT_SCORE);
-      this.flash = { frag: p.frag, ttl: FLASH_TIME };
-      player.say(`You find a fragment: ${p.frag.title}.`);
+      this.findFrag(p.frag.id, player);
     }
   }
 

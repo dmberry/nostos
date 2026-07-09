@@ -600,6 +600,9 @@ for (const type of ['t1', 't2', 't3', 'w1', 'w2', 'w3', 'w4', 'w5']) {
 }
 const camera = new Camera(player.x, player.y);
 const lore = new Lore(map, WORLD_SEED);
+// Opening a resistance cache folds any recovered documents packed in it into the
+// Scrapbook (quietly — openBox prints its own one-line summary).
+player.onFindLore = (id) => lore.findFrag(id, player, true);
 
 const dayNight = new DayNight();
 const minimap = new Minimap(map);
@@ -984,8 +987,24 @@ function hermesCtx() {
     print: () => {}, // never reached — HERMES print takes a topic (see printDoc)
     printDoc: (topic) => hermesPrintDoc(topic),
     archive: () => hermesArchive(),
+    records: () => hermesRecords(),
     drive: () => startDrive(),
   };
+}
+
+// `records`: pull the next of RON's own field records held on the relay mesh
+// into your Scrapbook (J). RON kept its writing off the boxes and on its own
+// relays, so this is where that half of the record lives — repeat until the
+// relay has nothing new.
+function hermesRecords() {
+  if (!hermesSpend(HERMES_BATT.archive)) { replPrint('Not enough charge — let the cell recover.'); return; }
+  const frag = lore.dispenseTorRecord(player);
+  if (!frag) { replPrint("RON's records held here are all recovered — nothing new. (Read them in your Scrapbook, J.)"); return; }
+  const left = lore.torRecordsLeft();
+  const wrapped = (frag.text.match(/.{1,74}(\s|$)/g) || [frag.text]).map((s) => s.trim());
+  replPrint(`— ${frag.title} —`, '', ...wrapped,
+    '', `Filed to your Scrapbook (J). ${left} more record${left === 1 ? '' : 's'} on the mesh.`);
+  player.say(`RON record recovered: ${frag.title}. It's in your Scrapbook (N is notes; J is the book).`);
 }
 
 // A HERMES relay runs off its own small solar cell — no grid to draw on. Each
@@ -1021,6 +1040,8 @@ function hermesArchive() {
   const lines = ['HERMES archive — the human record RON kept alive:'];
   for (const k of hermesTopics()) lines.push(`  ${(k + '        ').slice(0, 9)} ${HERMES_DOCS[k].title}`);
   lines.push('read <topic> to open one · print <topic> to keep a copy.');
+  const left = lore.torRecordsLeft();
+  if (left) lines.push(`Also held: ${left} of RON's own field records — type records to pull one into your Scrapbook (J).`);
   replPrint(...lines);
 }
 
@@ -1482,7 +1503,7 @@ obTermEl.addEventListener('click', (e) => { if (e.target === obTermEl) closeObTe
 // verbs, a HERMES relay only RON verbs — no seepage between the two. (sing is
 // secret, so it's in neither list.)
 const OB_COMPLETE = ['scan', 'nearest', 'keys', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'map', 'print', 'unlock', 'eliza', 'notes', 'help', 'let'];
-const HERMES_COMPLETE = ['read', 'print', 'archive', 'drive', 'notes', 'help', 'let'];
+const HERMES_COMPLETE = ['read', 'print', 'archive', 'records', 'drive', 'notes', 'help', 'let'];
 const escapeHtml = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 function ronmlCompletion(value) {
   if (elizaBot) return ''; // no RON-ML hints mid-conversation with the DOCTOR

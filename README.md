@@ -1,6 +1,6 @@
 # postAI
 
-**Version:** 1.52 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
+**Version:** 1.53 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
 
 *(Versioning policy: 0.01 increments from v0.3 onwards.)*
 
@@ -8,7 +8,7 @@ An isometric 2D survival game set in a world devastated by an AI takeover. Civil
 
 Inspired by Project Zomboid: knowledge is the real progression, scarcity drives movement, every fight is optional and risky, and the world tells the story.
 
-## Current build (v1.52)
+## Current build (v1.53)
 
 **The world:** a seeded 128x128 isometric map — a river with two bridges, a ten-building town, a ruined hamlet, forests, tall grass, and roads. Away from the towns the terrain gets properly rugged: steep hills and deep hollows, always climbable one step at a time. Rubble and rocks are low enough to step straight over; a **wall block** is taller, so it takes a **double jump** (press jump again in mid-air) to get on top — once up there you move a little slower for control, can roam the block tops, and just walk off any edge to drop back down and carry on. **Up on a block you're safe from ground attacks** — machines and animals can't reach you, so a block top is high ground to catch your breath (a bomb blast still finds you, and the flying machines to come will too). Building walls still stop you on foot, so a town or house is a real boundary until you deliberately climb it. The forests are drawn with proper hand-drawn tree art — mostly full leafy trees, with the odd small or bare/dead one — and a chopped tree shows a damage bar so you can see how many swings it has left. The map is ringed by impassable dark-gravel rock cliffs at its edge — drawn semi-transparent so you still see yourself if one stands between you and the camera. Streams can be waded; the river can be swum (only your head and shoulders show above the water), slowly and at a cost — both now carry a slow, gently travelling opacity ripple along the watercourse, a cheap stand-in for current without an actual scrolling texture. Day and night cycle, with genuinely dark nights and torches to push them back.
 
@@ -33,6 +33,7 @@ Created by David and Henrik.
 Full technical detail (root causes, exact numbers) lives in [PAI-version-plan.md](PAI-version-plan.md); this is the one-line summary.
 
 | Version | Summary |
+| v1.53 | **Lore, gathered up.** The lore fragments no longer litter the overworld. Recovered documents are now packed into the **resistance caches** — open a box and they fold into your Scrapbook (**J**) — while RON's own field records live on the **HERMES relays**: type **`records`** at a TOR to pull the next one into your Scrapbook. (The Backspace keeps its own scattered fragments.) Title tagline reworded to *"The machines made the world standing reserve."* |
 | v1.52 | **Certificate of Death polish.** Dropped the portrait; whiter, cleaner paper; larger text throughout; the ranking now reads *rank: <grade>*. The **Copy** button moved just above the sheet so it's no longer captured into the copied image (the copy is a clean certificate), and a doubled-rank-text glitch and some crowded bottom lines are fixed. |
 | v1.51 | **Certificate of Death, on paper.** The death (and victory) certificate is now printed on aged paper with a Greek-key meander border and sepia ink — a death-notice for a wanderer who did not make it home, matching the game's look with a light Homeric touch, portrait framed in the corner. **Toppled columns removed** — the marble ruins are standing columns and broken stumps only (the lying-down drums didn't read well against the iso tiles). **Title-deck cassette flip** — tapping a loaded tape flips it to the other side (A ⇄ B) rather than stepping one A-side track at a time; the ▶▶| button still steps track by track, and the in-game walkman already flipped A→B→stop. |
 | v1.50 | **Walkman polish.** The now-playing track name on the title deck is smaller and neater, so it sits inside the label window instead of overflowing it. The desktop title shows **all the cassettes at once** in one centred row (no scroll). **The river mouth is dithered harder** — river and sea now interlock in a stippled band (river fingers into the sea, sea into the river's edge) with no sand plug, and the whole coastline edge is more broken up. Tape-04's `05 Incognito.mp3` filename tidied (stray dash removed). |

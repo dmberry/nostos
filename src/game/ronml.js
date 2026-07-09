@@ -199,6 +199,12 @@ function makeBuiltins(station) {
       arity: 0,
       fn: (_args, ctx) => { ctx.archive(); return { tag: 'unit' }; },
     },
+    // Pull the next of RON's own field records off the relay mesh into your
+    // Scrapbook — the half of the record RON kept on its relays, not in caches.
+    records: {
+      arity: 0,
+      fn: (_args, ctx) => { ctx.records(); return { tag: 'unit' }; },
+    },
     // Override a nearby machine and see through its eyes — RON turning the
     // enemy's own units. You drive it until it leaves the relay's short range
     // or you trip its self-destruct.
@@ -327,7 +333,7 @@ const OB_VERBS = ['scan', 'nearest', 'keys', 'hack', 'crash', 'loop', 'sleep', '
 // Note: HERMES's `print` is added as an override in makeBuiltins (it takes a
 // topic), not tagged here — tagging it would steal the obelisk's own arity-0
 // `print`. `print` is already in OB_VERBS, so ALL_VERBS still covers it.
-const HERMES_VERBS = ['read', 'archive', 'drive'];
+const HERMES_VERBS = ['read', 'archive', 'records', 'drive'];
 // Retired verbs kept only so typing one gives a clean "not a command" instead
 // of a cryptic node error (make/ping were removed when TORs became info-only).
 const RETIRED_VERBS = ['make', 'ping'];
@@ -443,6 +449,7 @@ const HELP_VERBS = [
   ['read t', 'atom -> unit', 'read a document — read ronml / fortress / obelisks / robots / history / destroy', 'HERMES relay only', 'hermes'],
   ['print t', 'atom -> unit', 'print a copy of a document into your notepad (N)', 'HERMES relay only', 'hermes'],
   ['archive', 'unit -> unit', 'list the documents this relay holds', 'HERMES relay only', 'hermes'],
+  ['records', 'unit -> unit', "pull the next of RON's own field records into your Scrapbook (J); repeat until dry", 'HERMES relay only', 'hermes'],
   ['drive', 'unit -> unit', 'override a nearby machine and see through its eyes — drive it till it leaves range', 'HERMES relay only', 'hermes'],
   ['notes', 'unit -> unit', 'open the notepad — browse the pages you\'ve found worth keeping', '', ''],
   ['help', 'unit -> unit', 'this reference, or `help <verb>` for one verb', '', ''],

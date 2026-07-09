@@ -1477,6 +1477,14 @@ export class Player {
     } else {
       this.say(`You prise open the cache: ${drops.map((l) => ITEMS[l.item].name.toLowerCase()).join(', ')}.`);
     }
+    // Recovered documents packed in with the cache — RON's dispersed record,
+    // now concentrated where you actually search. Fold them into the Scrapbook.
+    if (Array.isArray(obj.lore) && obj.lore.length && this.onFindLore) {
+      let n = 0;
+      for (const id of obj.lore) if (this.onFindLore(id)) n++;
+      obj.lore = []; // consumed — a re-stocked box won't re-grant them
+      if (n) this.say(`Tucked in with it: ${n} recovered document${n > 1 ? 's' : ''}, filed to your Scrapbook (J).`);
+    }
   }
 
   // Set fire to the nearest obelisk in range and roughly in front. Five hits
