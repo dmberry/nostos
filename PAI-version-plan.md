@@ -22,6 +22,29 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Always put a texture on a glowing thing.** No glow is ever a flat coloured blob — a grille/panel texture is laid over it (the factory-vent trick). Everything luminous goes through `Renderer.texturedGlow`, which caps the glow with an AI grate texture; if you add a new light, use it rather than a bare `fill`. (David, 2026-07-07.)
 - **Vary texture opacity per tile.** Floors jitter their texture alpha deterministically per tile (`drawFloor`) so a large expanse of one floor reads as worn/varied rather than a flat repeat.
 
+## Planned / next — design notes (not yet built)
+
+### TOR machines — RON resistance stations on the hilltops (big feature)
+Old RON tech, set up **before** the AIs had full control, so they're **janky, half-working legacy systems** — the opposite number to the AIs' obelisks.
+- **Placement:** on the **peaks of hills** (highest `heightAt` tiles), one per notable summit, a handful across the map. Physically a squat, weathered mast/relay (draw it — leaning aerial, patched panels, a dim amber CRT vs the obelisk's cold green), visibly older and cruder than an obelisk.
+- **Terminal:** a **second terminal interface** (reuse the `#obterminal` CRT shell but recoloured **amber**, glitchy — occasional line noise, dropped chars, a slow boot), running the RON side of the language. **No AI key needed** — it's friendly tech.
+- **Odyssey name: HERMES.** The AIs' node OS is **TIRESIAS** (the seer in Hades who tells Odysseus the way home); the RON counter-system is **HERMES** — the messenger/helper god who aids mortals against the gods and, crucially, gives Odysseus **moly**, the herb that makes him immune to Circe's enchantment. So HERMES = RON's counter-enchantment tech; its crafting output can be flavoured as "moly" batches. Nice Tiresias↔Hermes pairing (oracle of the enemy vs helper of the resistance).
+- **Resistance functions (ML verbs on HERMES only):** `make battery` / `make <item>` — manufacture supplies (batteries first; slow, limited runs, sometimes fails = the jank); `read <topic>` / `archive` — pull up lore the RON network still holds (feeds the Scrapbook/notepad); maybe `ping` — reveal nearby obelisks/factory on the map for a while. All gated to the HERMES terminal, unavailable at obelisks.
+- Ties: gives the hills a reason to climb; gives RON a physical presence; a safe crafting/lore hub vs the hostile obelisks.
+
+### Fortress key via a more complex ML program
+Right now the fortress key is a plain `unlock` at the gate. Make obtaining it require a **real multi-step program** — the point where the language earns its keep — e.g. `let k = hack OB-XXXX in crash OB-XXXX k`, or a small pipeline the player has to assemble, with a specific obelisk (or the SIREN) dropping the **fortress key** only when the correct composed expression runs against it. Design the exact program + which node drops it.
+
+### Three SIRENs inside the fortress
+The overworld has exactly one SIREN (a singular landmark). The **fortress** should have **three** SIREN-class towers as an interior hazard cluster — a wall of song to cross. (Kept as a note per request; the `cls:'siren'` + render + lure already support it, just needs fortress placement.)
+
+## Where we are (v1.39)
+
+### v1.39 — background video plays in Chrome, robots un-jam from the factory
+
+- **Universal background video.** Transcoded `postAI-background.mov` (32 MB, QuickTime, Chrome can't decode) → `postAI-background.mp4` (7.2 MB, H.264, `avconvert -p PresetAppleM4V720pHD`, 1280×444). `mobile-gate.js` now serves only the `.mp4`; the `.mov` is dropped from the repo. Verified playing in the Chromium preview (`readyState 4`, 0.5×). To refresh the clip: replace the `.mov` and re-run `avconvert -p PresetAppleM4V720pHD -s in.mov -o out.m4v` then rename to `.mp4`.
+- **Robots no longer stick on the factory.** `robots.js moveToward` gained a wall-follow: when a direct step is blocked (`moved < 0.35·step`) it sidesteps perpendicular to the target, keeping a per-robot preferred side (`r._slide`) so it rounds the corner instead of jittering, flipping side only if that's blocked too. Un-jams bots pinned against the 8×8 factory hull (and any large obstacle).
+
 ## Where we are (v1.38)
 
 ### v1.38 — SIREN unique, Tiresias terminal, mobile Play/alpha, bg video, tougher factory

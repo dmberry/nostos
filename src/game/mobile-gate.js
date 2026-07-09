@@ -111,13 +111,10 @@ export function initMobileGate(mode = 'gate') {
     </div>`;
   const footerHtml = `<div class="mg-madein">alpha · Game designed in the UK · <button class="mg-about-open" id="mg-about-open">About</button></div>`;
   // A looping game-world clip drifting slowly behind everything, low opacity.
-  // It plays at half speed (set in JS) and pans gently left→right (CSS). The
-  // .mov works in Safari; an .mp4/.webm export would be smaller and play
-  // everywhere — swap the source when there's one.
+  // It plays at half speed (set in JS) and pans gently left→right (CSS).
+  // H.264 MP4 — plays in every modern browser (transcoded from the source .mov).
   const videoHtml = `<video class="mg-bgvideo" autoplay muted loop playsinline preload="auto" aria-hidden="true">
       <source src="assets/media/videos/postAI-background.mp4" type="video/mp4">
-      <source src="assets/media/videos/postAI-background.webm" type="video/webm">
-      <source src="assets/media/videos/postAI-background.mov" type="video/quicktime">
     </video>`;
   const copyHtml = isTitle
     ? `<p class="mg-sub">The machines outlived the world. Now survive it.<span class="mg-sub2">A keyboard-and-mouse survival game. Here's the soundtrack while you decide.</span></p>

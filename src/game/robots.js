@@ -543,7 +543,23 @@ function moveToward(r, tx, ty, speed, dt, map) {
   const ox = r.x, oy = r.y;
   moveAxis(r, (dx / len) * step, 0, map);
   moveAxis(r, 0, (dy / len) * step, map);
-  const moved = Math.hypot(r.x - ox, r.y - oy);
+  let moved = Math.hypot(r.x - ox, r.y - oy);
+  // Wall-follow: if the direct path is blocked (a big obstacle like the 8x8
+  // factory), slide along it perpendicular to the target instead of grinding
+  // to a halt. A per-robot preferred side keeps the detour consistent so it
+  // rounds a corner rather than jittering, flipping only if that side is stuck
+  // too — this is what un-jams bots pinned against the factory hull.
+  if (moved < step * 0.35) {
+    const px = -dirY, py = dirX; // unit perpendicular to the target direction
+    if (r._slide === undefined) r._slide = 1;
+    for (const s of [r._slide, -r._slide]) {
+      const bx = r.x, by = r.y;
+      moveAxis(r, px * s * step, 0, map);
+      moveAxis(r, 0, py * s * step, map);
+      const m2 = Math.hypot(r.x - bx, r.y - by);
+      if (m2 > 1e-6) { r._slide = s; moved += m2; break; }
+    }
+  }
   if (moved > 1e-6) {
     r.facing = { x: (r.x - ox) / moved, y: (r.y - oy) / moved };
     r.walkPhase += dt * 10; // T2 legs scissor only while actually moving

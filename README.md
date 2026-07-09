@@ -1,6 +1,6 @@
 # postAI
 
-**Version:** 1.38 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
+**Version:** 1.39 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
 
 *(Versioning policy: 0.01 increments from v0.3 onwards.)*
 
@@ -8,7 +8,7 @@ An isometric 2D survival game set in a world devastated by an AI takeover. Civil
 
 Inspired by Project Zomboid: knowledge is the real progression, scarcity drives movement, every fight is optional and risky, and the world tells the story.
 
-## Current build (v1.38)
+## Current build (v1.39)
 
 **The world:** a seeded 128x128 isometric map — a river with two bridges, a ten-building town, a ruined hamlet, forests, tall grass, and roads. Away from the towns the terrain gets properly rugged: steep hills and deep hollows, always climbable one step at a time. Rubble and rocks are low enough to step straight over; a **wall block** is taller, so it takes a **double jump** (press jump again in mid-air) to get on top — once up there you move a little slower for control, can roam the block tops, and just walk off any edge to drop back down and carry on. **Up on a block you're safe from ground attacks** — machines and animals can't reach you, so a block top is high ground to catch your breath (a bomb blast still finds you, and the flying machines to come will too). Building walls still stop you on foot, so a town or house is a real boundary until you deliberately climb it. The forests are drawn with proper hand-drawn tree art — mostly full leafy trees, with the odd small or bare/dead one — and a chopped tree shows a damage bar so you can see how many swings it has left. The map is ringed by impassable dark-gravel rock cliffs at its edge — drawn semi-transparent so you still see yourself if one stands between you and the camera. Streams can be waded; the river can be swum (only your head and shoulders show above the water), slowly and at a cost — both now carry a slow, gently travelling opacity ripple along the watercourse, a cheap stand-in for current without an actual scrolling texture. Day and night cycle, with genuinely dark nights and torches to push them back.
 
@@ -33,6 +33,7 @@ Created by David and Henrik.
 Full technical detail (root causes, exact numbers) lives in [PAI-version-plan.md](PAI-version-plan.md); this is the one-line summary.
 
 | Version | Summary |
+| v1.39 | **Background video now plays everywhere** — transcoded the source `.mov` to a 7.2 MB H.264 **MP4** (from 32 MB), so the drifting game-world backdrop shows in Chrome, not just Safari. **Robots no longer jam on the factory**: `moveToward` now wall-follows (a perpendicular sidestep with a consistent preferred side) when the direct path is blocked, so bots pinned against the 8×8 hull slide around it. Planning notes added for the **TOR / HERMES** resistance stations, the fortress-key ML program, and three fortress SIRENs. |
 | v1.38 | The **SIREN is now unique** — exactly one tower in the world, not several. The obelisk **terminal is "Tiresias"** and lists the node's **class** (SIREN/STANDARD) on connect. Gate reframed for mobile: a big **▶ Play (alpha)** button and an **"alpha"** note (it's playable on phones now). A slow, low-opacity **game-world video** drifts behind the title/gate (plays in Safari from the `.mov`; add an `.mp4` for Chrome — sources are already wired). **W-factory HP 160 → 420** so it's a real siege. |
 | v1.37 | **OB classes — the SIREN.** Exactly one obelisk is the **SIREN class**: teal-lit, its signal an aquamarine pulse with **song rings** rippling outward instead of the standard red alert. Up close its song **pulls you toward it** — a gentle drift, stronger the nearer you are — and **playing a tape on the walkman drowns it out**, wiring the home-04 Sirens lore into a real mechanic. Placid animals (dog/boar/deer/viper wander) also amble at half speed now, which reads calmer. |
 | v1.36 | An **Odyssey / Ulysses** thread, kept implicit: six new Scrapbook fragments (`home-01`..`06`) plant the long-way-home-to-someone-waiting, the being-**no-one** trick against the one-eyed machines (Cyclops/Outis), the **singing towers** answered by your own tape (Sirens), the light you mustn't sit down in (lotus), and the dog that waited (Argos) — never named as Homer. About box gains the influence line. |
