@@ -1416,12 +1416,12 @@ export class Renderer {
     // procedural wear, rooms carry one of the seven photo floors, corridors
     // are road, and the odd room is baby-blue. Drawn here and returned early.
     if (type === 'liminal') { this.drawLiminalFloor(map, tx, ty, corners, shade); return; }
-    // In-bounds sea: the swimmable water band renders through the exact same
+    // In-bounds sea: the swimmable ocean band renders through the exact same
     // path as the open ocean past the map edge (deep-ocean texture + wine-dark
-    // depth tint + wave highlight), so the shore reads continuously out to sea
-    // with no flat-blue seam where you swim. Freshwater 'stream' tiles keep
-    // their own lighter, textured look below.
-    if (type === 'water') { this.drawSeaTile(tx, ty); return; }
+    // depth tint + wave highlight), so the shore reads continuously out to sea.
+    // Only 'sea' tiles get this — the river ('water') keeps its own flat-blue
+    // look so it never reads as the ocean.
+    if (type === 'sea') { this.drawSeaTile(tx, ty); return; }
     // A sparse scatter of bare dirt patches through grass — a few percent
     // of tiles, deterministic per tile so it holds still frame to frame
     // rather than flickering between the two textures.

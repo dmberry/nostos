@@ -164,29 +164,16 @@ function carveWorld(map, rng) {
     }
     return false;
   };
-  const allNums = TAPES.map((t) => t.num);
-  // The WARD tape (num 3) belongs in the spawn room if it exists; else the first.
-  const spawnTape = allNums.includes(3) ? 3 : allNums[0];
-  boxAt(spawn.cx + 2, spawn.cy, spawnTape);
-  // Guarantee every other tape lands in one of the further rooms.
-  const need = allNums.filter((n) => n !== spawnTape);
-  let ni = 0;
-  for (let i = 1; i < rooms.length && ni < need.length; i++) {
-    if (placeInRoom(rooms[i], need[ni])) ni++;
-  }
-  // Any tape still unplaced (too few usable rooms) goes into the spawn room so
-  // it can never be missing from a run.
-  for (; ni < need.length; ni++) {
-    for (let k = 3; k < spawn.w - 2; k++) {
-      if (boxAt(spawn.x + k, spawn.cy + (k % 2 ? 1 : 2), need[ni])) break;
-    }
-  }
-  // Sparse random extras (doubles) through the further rooms, for texture.
+  // The WARD "bear stanhope" tape is the Backspace's own — it belongs down here
+  // and nowhere else (every other tape is out in the overworld, doubled). It
+  // sits in the spawn room where you land, with a couple of extra copies sparse
+  // through the further rooms so a run can never miss it.
+  const wardNum = TAPES.some((t) => t.num === 3) ? 3 : TAPES[0].num;
+  boxAt(spawn.cx + 2, spawn.cy, wardNum);
   for (let i = 1; i < rooms.length; i++) {
-    if (rng() >= 0.3) continue;
+    if (rng() >= 0.25) continue;
     const r = rooms[i];
-    boxAt(r.x + 2 + Math.floor(rng() * (r.w - 4)), r.y + 2 + Math.floor(rng() * (r.h - 4)),
-      allNums[Math.floor(rng() * allNums.length)]);
+    boxAt(r.x + 2 + Math.floor(rng() * (r.w - 4)), r.y + 2 + Math.floor(rng() * (r.h - 4)), wardNum);
   }
 
   // The Backspace's deleted objects: paper books and analogue records the

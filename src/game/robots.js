@@ -588,6 +588,46 @@ function moveToward(r, tx, ty, speed, dt, map) {
   return moved;
 }
 
+// The map's bridge tiles, found once and cached: the only dry crossings of the
+// river, so a land machine the river cuts off from the player heads for the
+// nearest one instead of grinding against the bank.
+function bridgeTiles(map) {
+  if (!map._bridgeTiles) {
+    const b = [];
+    for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) {
+      if (map.floorAt(x, y) === 'bridge') b.push({ x: x + 0.5, y: y + 0.5 });
+    }
+    map._bridgeTiles = b;
+  }
+  return map._bridgeTiles;
+}
+
+// True if the straight line between two points crosses river or sea water — a
+// land machine can't just walk it, it has to find a bridge.
+function waterBetween(ax, ay, bx, by, map) {
+  const steps = Math.ceil(Math.hypot(bx - ax, by - ay));
+  for (let i = 1; i < steps; i++) {
+    const t = i / steps;
+    const f = map.floorAt(Math.floor(ax + (bx - ax) * t), Math.floor(ay + (by - ay) * t));
+    if (f === 'water' || f === 'sea') return true;
+  }
+  return false;
+}
+
+// Where a chasing machine should actually head: straight at the target unless
+// water is in the way, in which case make for the nearest bridge — and once
+// it's on the bridge, a point just across it — so the machine rounds onto the
+// crossing and over rather than getting pinned on the near bank.
+function chaseTarget(r, px, py, map) {
+  if (!waterBetween(r.x, r.y, px, py, map)) return { x: px, y: py, crossing: false };
+  const bridges = bridgeTiles(map);
+  if (!bridges.length) return { x: px, y: py, crossing: false };
+  let br = null, bd = Infinity;
+  for (const t of bridges) { const d = Math.hypot(t.x - r.x, t.y - r.y); if (d < bd) { bd = d; br = t; } }
+  if (bd < 2.5) return { x: br.x + (px >= br.x ? 3 : -3), y: br.y, crossing: true }; // on the bridge: aim just across
+  return { x: br.x, y: br.y, crossing: true };
+}
+
 // Idle patrol: amble to points near home with pauses in between. The T1
 // obeys its no-climb rule here too, so a trapped one just circles its pit.
 function patrol(r, speed, range, dt, map) {
@@ -963,7 +1003,8 @@ function updateT1(r, dt, player, map) {
 
   if (r.aggro) {
     const expected = Math.min(T1_CHASE_SPEED * dt, d);
-    const moved = moveToward(r, player.x, player.y, T1_CHASE_SPEED, dt, map);
+    const tgt = chaseTarget(r, player.x, player.y, map); // route via a bridge if the river is in the way
+    const moved = moveToward(r, tgt.x, tgt.y, T1_CHASE_SPEED, dt, map);
     // Progress bookkeeping for the stuck tell: a chaser pinned by terrain
     // for a couple of seconds admits it (the renderer shows its confusion).
     if (moved < expected * PROGRESS_FRACTION) r.noProgressT += dt;
@@ -1073,7 +1114,8 @@ function updateT2(r, dt, player, map) {
   if (r.drained) return;
 
   if (r.aggro) {
-    moveToward(r, player.x, player.y, T2_STALK_SPEED, dt, map);
+    const tgt = chaseTarget(r, player.x, player.y, map); // route via a bridge if the river is in the way
+    moveToward(r, tgt.x, tgt.y, T2_STALK_SPEED, dt, map);
     if (d < T2_HIT_RANGE && r.attackTimer <= 0) {
       r.attackTimer = T2_HIT_COOLDOWN;
       player.takeDamage(T2_HIT_DAMAGE * ease, 'machine');
@@ -1129,8 +1171,10 @@ function updateW1(r, dt, player, map) {
 
   r.swarmAngle += r.swarmSpin * dt;
   const standoff = r.w1Phase === 'attack' ? W1_ATTACK_STANDOFF : W1_WITHDRAW_RANGE;
-  const tx = target.x + Math.cos(r.swarmAngle) * standoff;
-  const ty = target.y + Math.sin(r.swarmAngle) * standoff;
+  const route = chaseTarget(r, target.x, target.y, map);
+  let tx, ty;
+  if (route.crossing) { tx = route.x; ty = route.y; } // river in the way: make for the bridge first
+  else { tx = target.x + Math.cos(r.swarmAngle) * standoff; ty = target.y + Math.sin(r.swarmAngle) * standoff; }
   moveToward(r, tx, ty, W1_CHASE_SPEED, dt, map);
 
   // Damage always checks the real, live distance (not distTo, which a Wi-Fi

@@ -514,13 +514,13 @@ export const ITEMS = {
 export const TAPES = [
   {
     num: 1, artist: 'meme', title: 'compilation', dir: 'Tape-01 meme - compilation', color: '#c9a44a',
-    a: { label: 'resonance', tracks: ['resonance.mp3'] },
-    b: { label: 'eliza · slip', tracks: ['eliza.mp3', 'slip.mp3'] },
+    a: { label: 'resonance', tracks: ['01 resonance.mp3'] },
+    b: { label: 'eliza · slip', tracks: ['02 eliza.mp3', '03 slip.mp3'] },
   },
   {
     num: 2, artist: 'meme', title: 'maieutics', dir: 'Tape-02 meme - maieutics', color: '#9aa45a',
-    a: { label: 'maieutics 1 · 2', tracks: ['maieutics 1.mp3', 'maieutics 2.mp3'] },
-    b: { label: 'maieutics 3', tracks: ['maieutics 3.mp3'] },
+    a: { label: 'maieutics 1 · 2', tracks: ['01 maieutics 1.mp3', '02 maieutics 2.mp3'] },
+    b: { label: 'maieutics 3', tracks: ['03 maieutics 3.mp3'] },
   },
   {
     num: 3, artist: 'WARD', title: 'bear stanhope', dir: 'Tape-03 WARD - bear stanhope', color: '#b06a4a',
@@ -529,13 +529,13 @@ export const TAPES = [
   },
   {
     num: 4, artist: 'Meme vs Xan', title: '24 EP', dir: 'Tape-04 Meme vs Xan - 24 EP', color: '#7a8fb0',
-    a: { label: '24 · High', tracks: ['01-01- 24.mp3', '01-02- High.mp3'] },
-    b: { label: 'Release · Världen · Incognito', tracks: ['01-03- Release.mp3', '01-04- Världen.mp3', '01-05- Incognito.mp3'] },
+    a: { label: '24 · High', tracks: ['01 24.mp3', '02 High.mp3'] },
+    b: { label: 'Release · Världen · Incognito', tracks: ['03 Release.mp3', '04 Världen.mp3', '05- Incognito.mp3'] },
   },
   {
     num: 5, artist: '0x0', title: 'Mythologies', dir: 'Tape-05 0x0 - Mythologies', color: '#5a8f9a',
-    a: { label: 'Edge · Core (Overture) · Cloud', tracks: ['01 - ØxØ - Edge.mp3', '02 - ØxØ - Core (Overture).mp3', '03 - ØxØ - Cloud.mp3'] },
-    b: { label: 'Mythologies · Core (Original)', tracks: ['04 - ØxØ - Mythologies.mp3', '05 - ØxØ - Core (Original).mp3'] },
+    a: { label: 'Edge · Core (Overture) · Cloud', tracks: ['01 Edge.mp3', '02 Core (Overture).mp3', '03 Cloud.mp3'] },
+    b: { label: 'Mythologies · Core (Original)', tracks: ['04 Mythologies.mp3', '05 Core (Original).mp3'] },
   },
 ];
 for (const t of TAPES) {

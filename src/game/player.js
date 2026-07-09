@@ -586,7 +586,7 @@ export class Player {
       // costs stamina (handled below).
       const under = map.floorAt(Math.floor(this.x), Math.floor(this.y));
       if (under === 'stream') speed *= 0.55;
-      else if (under === 'water') speed *= 0.45;
+      else if (under === 'water' || under === 'sea') speed *= 0.45;
       // Up on a block top, ease off the pace — the footprint is small and a
       // full walking speed makes edges twitchy to line up. Slower is easier
       // to control up there.
@@ -620,11 +620,12 @@ export class Player {
 
     // Swimming a river is exhausting: it drains stamina fast and chips at
     // health, whether you're moving or treading water. Get across and out.
-    this.swimming = map.floorAt(Math.floor(this.x), Math.floor(this.y)) === 'water';
+    const swimFloor = map.floorAt(Math.floor(this.x), Math.floor(this.y));
+    this.swimming = swimFloor === 'water' || swimFloor === 'sea';
     if (this.swimming) {
       this.stamina = Math.max(0, this.stamina - SWIM_STAMINA_DRAIN * dt);
       this.health = Math.max(0, this.health - SWIM_HEALTH_DRAIN * dt);
-      if (this.health <= 0) { this.die(map, 'the cold river'); return; }
+      if (this.health <= 0) { this.die(map, swimFloor === 'sea' ? 'the cold sea' : 'the cold river'); return; }
     }
 
     // Jump: purely vertical hop; collision footprint is unchanged. A normal
@@ -2146,7 +2147,8 @@ export class Player {
       // through them — a human's edge in the woods, where the machines can't
       // follow. So they never count as a solid corner for the player.
       const soft = def && def.soft;
-      return map.isSolid(tx, ty) && map.floorAt(tx, ty) !== 'water' && !climbable && !soft;
+      const wf = map.floorAt(tx, ty);
+      return map.isSolid(tx, ty) && wf !== 'water' && wf !== 'sea' && !climbable && !soft;
     };
     if (solidCorner(Math.floor(x - RADIUS), Math.floor(y - RADIUS))
       || solidCorner(Math.floor(x + RADIUS), Math.floor(y - RADIUS))

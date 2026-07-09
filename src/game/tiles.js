@@ -8,7 +8,8 @@ export const FLOORS = {
   road:   { color: '#63635e', solid: false },
   boards: { color: '#9c8055', solid: false },
   sand:   { color: '#c2b280', solid: false },
-  water:  { color: '#3a6ea5', solid: true },
+  water:  { color: '#3a6ea5', solid: true },  // the river — flat blue, swum, NOT the sea
+  sea:    { color: '#22304a', solid: true },  // open ocean at the island edge; swum like the river, but drawn by Renderer.drawSeaTile (wine-dark, textured)
   stream: { color: '#4f83b5', solid: false }, // shallow water, wadeable
   bridge: { color: '#8a7048', solid: false },
   tallgrass: { color: '#6f8f3f', solid: false },

@@ -116,10 +116,15 @@ const animals = spawnAnimals(map, WORLD_SEED, { x: spawn.x, y: spawn.y, r: 12 })
   // out in the woods — as loose scraps that echo the bound manual in the caches.
   for (let i = 0; i < 4; i++) drop(boards, 'ronml_page', 1);
   for (let i = 0; i < 2; i++) drop(forestGrass, 'ronml_page', 1);
-  // A found cassette left in the ruins for the walkman: meme's "maieutics".
-  // (The player starts with the meme compilation; the WARD tape is down in
-  // the underworld.) More tapes can be seeded here as they're added.
-  drop(boards, 'tape_2', 1); // meme / maieutics
+  // Cassette tapes for the walkman. Every tape EXCEPT the WARD "bear stanhope"
+  // one is scattered in the overworld ruins, two copies each (one in a building,
+  // one out in the forest) so a lost tape is always recoverable. WARD is the
+  // Backspace's own — it turns up only down there (see underworld.js).
+  for (const t of TAPES) {
+    if (t.num === 3) continue; // WARD: Backspace only
+    drop(boards, `tape_${t.num}`, 1);
+    drop(forestGrass, `tape_${t.num}`, 1);
+  }
 }
 
 // The AIs control the landscape: black obelisk towers dot the wilds (their
@@ -1744,7 +1749,7 @@ let wasDusk = null;
 let wasRobotNear = false;
 let regrowClock = 0;
 let ronResupplyClock = 0, ronResupplyNext = 90 + Math.random() * 60;
-let wFactoryClock = 0, wFactoryNext = 60 + Math.random() * 60;
+let wFactoryClock = 0, wFactoryNext = 6 + Math.random() * 5; // repair-drone dispatch: a short clock so one actually comes while a tower is still damaged/frozen (see below)
 let wFactoryW1Clock = 0, wFactoryW1Next = 100 + Math.random() * 80;
 let wFactoryW5Clock = 0, wFactoryW5Next = 30 + Math.random() * 40;
 let wFactoryGuardClock = 0, wFactoryGuardNext = 40 + Math.random() * 40;
@@ -2109,16 +2114,17 @@ function update(dt) {
     }
   }
 
-  // The W-factory: while any obelisk is damaged but not yet destroyed, it
-  // periodically fields a single W3 to go and mend the nearest one. Only
-  // one W3 is ever out at a time. It also builds W1 hunting waves on its own
-  // clock — not just as a one-off revenge squad when a tower falls — so long
-  // as it isn't already fielding one.
+  // The W-factory: while any obelisk is damaged (OB-gun scorched but standing),
+  // flagged for rebuild, or pinned in a RON-ML loop, it fields a single W3 to go
+  // and mend the nearest one. Only one W3 is ever out at a time. Checked on a
+  // short clock (~6-11s) so a repair drone actually comes out while the tower is
+  // still in that state — the old 60-120s clock almost never lined up with the
+  // brief damaged window, so repair drones were essentially never seen.
   if (factoryLive()) {
     wFactoryClock += dt;
     if (wFactoryClock > wFactoryNext) {
       wFactoryClock = 0;
-      wFactoryNext = 60 + Math.random() * 60;
+      wFactoryNext = 6 + Math.random() * 5;
       const anyDamaged = obeliskObjs.some((o) => (!o.destroyed && o.obDamage > 0) || o.needsRebuild || o.frozen);
       const w3Active = robots.some((r) => r.type === 'w3' && !r.dead);
       if (anyDamaged && !w3Active) {
