@@ -440,7 +440,7 @@ const HELP_VERBS = [
   ['print', 'unit -> unit', 'print a carryable map that drops at your feet', '', 'ob'],
   ['unlock k', 'key -> unit', 'extract a fortress key from the network using a hacked node key', 'needs k from hack', 'ob'],
   ['eliza', 'unit -> unit', 'run ELIZA, the 1966 DOCTOR script — talk to it (also: run eliza); Ctrl+C or quit to leave', '', 'ob'],
-  ['read t', 'atom -> unit', 'read a document — read ronml / fortress / robots / history / destroy / vector', 'HERMES relay only', 'hermes'],
+  ['read t', 'atom -> unit', 'read a document — read ronml / fortress / obelisks / robots / history / destroy', 'HERMES relay only', 'hermes'],
   ['print t', 'atom -> unit', 'print a copy of a document into your notepad (N)', 'HERMES relay only', 'hermes'],
   ['archive', 'unit -> unit', 'list the documents this relay holds', 'HERMES relay only', 'hermes'],
   ['drive', 'unit -> unit', 'override a nearby machine and see through its eyes — drive it till it leaves range', 'HERMES relay only', 'hermes'],

@@ -78,6 +78,10 @@ export const HERMES_DOCS = {
     title: 'Schematic: Adamantine\'s fortress',
     text: 'The first AI sits in a sealed annex on the south edge, walled in stone you cannot climb — the hacked doorway is the only way in. A red uplink mast wires it into the overworld SKYLINK: hammer that mast down and a breach no longer rouses the whole map. The grand door is bolted from within; it opens only when you approach carrying a fortress key (composed at an obelisk: let k = hack OB-XXXX in unlock k). Inside, the maze lights a faint way-out and the mainframe core waits at the far end. Expect the interior thick with garrison.',
   },
+  obelisks: {
+    title: 'Field notes: the obelisk classes',
+    text: 'Not every tower is the same tower. Most are STANDARD nodes — black, humming, a red eye that blinks faster once it has you; they anchor the garrison and hold the SKYLINK web together, and felling them is how you win. Rarer is the SIREN: a single teal-lit tower that does not hunt you — it sings, and the song reaches into the part of a person that wants to stop walking and listen. Get close and it pulls you in step by step; stand in it too long and it has you. RON found the counter by accident — put a tape on, give your own ears something of your own, and the song loses its grip. There is talk of other classes deeper in, in the fortresses, where the towers stand in clusters and the song is a wall, but no one who has read those notes has come back to confirm them.',
+  },
   robots: {
     title: 'Notes on machine technology',
     text: 'Every unit runs on a battery — drain it, or catch a flat one, and the chassis goes inert: reprogram it to fight for you or strip it for scrap. T1 rollers cannot climb, so a hollow traps them. T2 stalkers match your walking pace exactly — break line of sight to shake them. T3 snipers nest by a tree and only notice you on a clear sightline. The W-factory fields W1 revenge squads, a ranged W4 hunter-killer, unarmed W3 menders that raise fallen towers, and a harmless W5 gardener. All need genuine line of sight; all spend effort climbing a slope. A crowbar or heavier bites their armour; a penknife will not.',

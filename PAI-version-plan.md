@@ -40,6 +40,14 @@ Shipped: the key comes from composing `let k = hack OB-XXXX in unlock k` at any 
 ### Three SIRENs inside the fortress
 The overworld has exactly one SIREN (a singular landmark). The **fortress** should have **three** SIREN-class towers as an interior hazard cluster — a wall of song to cross. (Kept as a note per request; the `cls:'siren'` + render + lure already support it, just needs fortress placement.)
 
+## Where we are (v1.46)
+
+### v1.46 — starting Odyssey note, obelisk-class lore, amber cell gauge
+
+- **Starting note (Odyssey/Calypso).** New `note_home` item (kind 'book', `toNotepad:true`) seeded in the player's pocket 0 at construction and on respawn. `Player.learnFromBook` gained a `toNotepad` branch → `player.onReadNote` (main.js) pushes `{title,text}` into `printedDocs` and opens the notebook; the pocket item is consumed. Frames the local AI as CALYPSO (holds you on her island, doesn't want you dead, wants you never to leave). Verified: pocket→read→notebook.
+- **Obelisk-class lore.** New `HERMES_DOCS.obelisks` ("the obelisk classes") — STANDARD vs the teal singing SIREN, the tape counter, a gesture at fortress clusters. Listed by `archive`, read via `read obelisks`.
+- **Cell gauge amber.** `updateHermesBattEl` colours the HERMES battery amber (#e6a53a) at healthy, deep-amber mid, red when low — never green (the AI palette).
+
 ## Where we are (v1.45)
 
 ### v1.45 — TOR = information resource, two separate terminal systems, relay battery, robot-vision drive

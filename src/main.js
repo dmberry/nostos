@@ -795,7 +795,9 @@ function updateHermesBattEl() {
   const n = 10, on = Math.round(f * n);
   const glyphs = '▓'.repeat(on) + '░'.repeat(n - on);
   obTermBattEl.textContent = `CELL ${glyphs} ${Math.round(f * 100)}%`;
-  obTermBattEl.style.color = f < 0.2 ? '#ff6a4a' : f < 0.45 ? '#e0b53a' : '#7ad06a';
+  // Amber to match the HERMES CRT (never green — that's the AI palette); only
+  // when it's really low does it go red as a warning.
+  obTermBattEl.style.color = f < 0.2 ? '#ff6a4a' : f < 0.45 ? '#e0902a' : '#e6a53a';
 }
 const aiosEl = document.getElementById('aios');
 const aiosScreen = document.getElementById('aios-screen');
@@ -1235,6 +1237,16 @@ function closeRonMap() { ronmapEl.style.display = 'none'; }
 ronmapEl.addEventListener('click', (e) => { if (e.target === ronmapEl) closeRonMap(); });
 // Using a held printed map (kind 'map') unfolds the same overlay anywhere.
 player.onReadMap = openRonMap;
+// Reading a note/document (the starting Odyssey note) files it into the notepad
+// and opens it there, so the story is kept, not lost in a toast.
+player.onReadNote = (key) => {
+  const def = ITEMS[key];
+  if (!def) return;
+  if (!printedDocs.some((d) => d.title === (def.title || def.name))) {
+    printedDocs.push({ title: def.title || def.name, text: def.text });
+  }
+  openNotebook();
+};
 
 // The Notepad (`notes`, or press N anywhere): a real paper page you flip
 // through with whatever lore fragments were flagged worth keeping (lore.js,

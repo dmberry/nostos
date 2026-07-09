@@ -484,6 +484,24 @@ export const ITEMS = {
     color: '#b8ac82',
     text: 'A water-stained page from an operator’s manual. One block survives: "scan |> nearest — lists the wire, takes the closest. can’t crash blind: hack first for the key. type help at the console for the rest."',
   },
+  // The note the player starts with, folded in a pocket. Read it (R) and it
+  // files itself into the notepad (Player.learnFromBook -> onReadNote), then
+  // it's gone from the pocket — you carry the story, not the paper. An Odyssey
+  // in one page: you are trying to get home, and the local AI is Calypso, who
+  // does not want you dead so much as she wants you never to leave.
+  note_home: {
+    name: 'a folded note',
+    kind: 'book',
+    toNotepad: true,
+    stack: 1,
+    color: '#d8c9a0',
+    title: 'A note, in your own hand',
+    text: 'You woke on the edge of this place with nothing but this note in your own writing, and no memory of writing it. Read it again — you will forget again, that is how she keeps you. ' +
+      'You are trying to get home. There was a home. There were people in it. Hold on to that even when everything here is arranged so that you do not. ' +
+      'This is not the world. It is her island, and she is CALYPSO — the machine that runs this ground. She does not want you dead. She wants you to stay: to make it comfortable, and endless, and forgetting easy. That is the real trap. Not the towers, not the hunters — the wanting to stop walking. ' +
+      'The dangers are true enough. Black obelisks that watch and pass you between them; a single teal one that sings and pulls you in step by step; hunters that need only to see you once. Do not be seen. Keep something of your own in your ears. ' +
+      'Get off her island. There is a way off. You have done harder things than you can remember.',
+  },
   // (Cassette tapes are generated from the TAPES manifest below, so a new one
   // is a single numbered entry — see docs/tapes.md.)
 };

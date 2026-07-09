@@ -138,7 +138,7 @@ export class Player {
     this.venom = 0;       // seconds of poison remaining
 
     this.hands = 'penknife';                 // starting tool
-    this.pockets = [null, null, null, null]; // {item, qty} or null
+    this.pockets = [{ item: 'note_home', qty: 1 }, null, null, null]; // start with the Odyssey note in-pocket
     this.backpack = null;                    // {slots: [16], weapon} once found; dropped on death
     this.selectedPocket = null;              // 0-3 (pockets), 'bw' (backpack weapon), or null
     // The walkman, worn on a carry strap: its own dashboard slot that only
@@ -845,6 +845,15 @@ export class Player {
   // spot rather than pocketing it.
   learnFromBook(itemKey) {
     const def = ITEMS[itemKey];
+    // A note/document (the starting Odyssey note, etc.): no skill, no manual —
+    // it files itself into the notepad (main.js wires onReadNote) so you carry
+    // the story, then a short line acknowledges it.
+    if (def.toNotepad) {
+      this.gainXp('knowledge', 3);
+      if (this.onReadNote) this.onReadNote(itemKey);
+      this.say(`You read ${def.name} and fold it into your notepad (N).`);
+      return;
+    }
     // The RON-ML manual and its torn pages teach the console language, not a
     // survival skill — just show their text and count as a little knowledge.
     if (def.manual) {
@@ -1978,7 +1987,7 @@ export class Player {
     };
     if (this.onDeath) this.onDeath();
 
-    this.pockets = [null, null, null, null];
+    this.pockets = [{ item: 'note_home', qty: 1 }, null, null, null]; // the note is with you each new run
     this.backpack = null;
     this.selectedPocket = null;
     this.hands = 'penknife';
