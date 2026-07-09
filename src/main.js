@@ -16,6 +16,8 @@ import { ITEMS, TAPES } from './game/items.js';
 import { sfx } from './engine/sound.js';
 import { worldToScreen } from './engine/iso.js';
 import { runRonml } from './game/ronml.js';
+import { createEliza } from './game/eliza.js';
+import { placeTors, HERMES_RECIPES, HERMES_LORE, hermesTopics } from './game/hermes.js';
 import { createFortress } from './game/fortress.js';
 import { createUnderworldPocket, spawnUnderworldCreature, updateUnderworldCreatures } from './game/underworld.js';
 import { CHOIR_NOTES, CHOIR_DURATION } from './engine/choir-notes.js';
@@ -48,7 +50,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '1.42';
+const VERSION = '1.44';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -356,6 +358,12 @@ for (const ob of obeliskObjs) {
   // A hex code name identifying this tower, so the kill record can list it.
   ob.code = 'OB-' + ((ob.x * 4096 + ob.y * 31) & 0xffff).toString(16).toUpperCase().padStart(4, '0');
 }
+// RON's hilltop TOR relays — the friendly HERMES terminals, the counter-system
+// to the AI obelisks. Placed on the summits (see placeTors); their objects live
+// in the map grid, and torObjs holds them for click detection.
+const torPlacements = placeTors(map, makeRng(WORLD_SEED ^ 0x40b1e5), { spawn, count: 4 });
+const torObjs = torPlacements.map((t) => map.objectAt(t.x, t.y)).filter(Boolean);
+
 // One fortress key is coughed up the first time a node is properly crashed
 // (the composed `let k = hack OB in crash OB k` — see crashNode).
 let fortressKeyFromCrash = false;
@@ -658,9 +666,26 @@ function revealAround(px, py) {
 window.__game = { player, map, camera, animals, birds, robots, waterdroids, obelisks, obeliskObjs, wfactory, dayNight, lore, input, renderer, fortress };
 
 function resize() {
-  renderer.resize(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1);
+  // Size to the *visual* viewport, not innerHeight/100vh. On iOS Safari the
+  // layout viewport extends behind the floating bottom toolbar, so a canvas
+  // sized to innerHeight pushes the HUD's slot row off-screen behind the bar.
+  // visualViewport gives the genuinely-visible area, so the dashboard sits just
+  // above the toolbar. We drive the canvas's CSS size explicitly to match.
+  const vv = window.visualViewport;
+  const w = Math.round(vv ? vv.width : window.innerWidth);
+  const h = Math.round(vv ? vv.height : window.innerHeight);
+  const cv = renderer.canvas;
+  if (cv) { cv.style.width = w + 'px'; cv.style.height = h + 'px'; }
+  renderer.resize(w, h, window.devicePixelRatio || 1);
 }
 window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', resize);
+if (window.visualViewport) {
+  // Toolbar show/hide and pinch-zoom change the visible area without a window
+  // resize; keep the canvas fitted to it.
+  window.visualViewport.addEventListener('resize', resize);
+  window.visualViewport.addEventListener('scroll', resize);
+}
 resize();
 
 const STEP = 1 / 60;
@@ -892,10 +917,9 @@ function ronmlCtx() {
         player.say('That key was never hacked from a live node. try: let k = hack OB-XXXX in unlock k');
         return;
       }
-      if (fortressKeyFromCrash || player.hasItem('fortress_key')) {
-        player.say('A fortress key is already yours — one is all the network will give up.');
-        return;
-      }
+      // Always drop a fresh fortress key — the network gives one up every time
+      // the hack composes. Deliberately not a one-time reward: if you lose the
+      // key (death, a fumbled drop) you can hack another and try the door again.
       fortressKeyFromCrash = true;
       map.groundItems.push({ item: 'fortress_key', qty: 1, x: player.x + 0.4, y: player.y + 0.6, keep: true });
       player.say(`The composed hack holds. ${nodeId}'s key turns in the network and a fortress key drops at your feet — a way into ${fortress.AI_NAME}'s fortress.`);
@@ -905,7 +929,97 @@ function ronmlCtx() {
     // but reading a wall of scrollback is another, and browsers don't let a
     // page reserve Tab reliably anyway.
     showNotepad: () => { openNotebook(); },
+    // `eliza` / `run eliza`: load the DOCTOR script as an interactive session
+    // (the terminal takes over routing input to it — see replRun).
+    eliza: () => { startEliza(); },
   };
+}
+
+// The HERMES relay's context: everything the obelisk console has, plus the RON
+// station verbs (make/read/ping). Those hooks are absent from ronmlCtx, so the
+// verbs teach "HERMES relay only" at an obelisk and work here.
+function hermesCtx() {
+  return {
+    ...ronmlCtx(),
+    make: (name) => hermesMake(name),
+    read: (topic) => hermesRead(topic),
+    ping: () => hermesPing(),
+  };
+}
+
+// `make <thing>`: fabricate supplies. Janky legacy tech — a fabrication run
+// takes a beat and sometimes coughs and produces nothing (the pre-collapse
+// jank), so it's help-in-a-pinch, not a printing press. Output drops at your
+// feet as "moly", RON's word for a HERMES run.
+let hermesMakeCooldown = 0; // seconds until the fabricator can run again
+function hermesMake(name) {
+  const recipe = HERMES_RECIPES[name] || (name === '' ? HERMES_RECIPES.battery : null);
+  if (!recipe) {
+    replPrint(`HERMES can't build "${name || '?'}". It makes: ${Object.keys(HERMES_RECIPES).join(', ')}.`);
+    return;
+  }
+  if (hermesMakeCooldown > 0) {
+    replPrint(`The fabricator is still cycling — give it ${Math.ceil(hermesMakeCooldown)}s.`);
+    return;
+  }
+  hermesMakeCooldown = 12 + Math.random() * 8; // slow, limited runs
+  // ~28% chance the old rig fails mid-run.
+  if (Math.random() < 0.28) {
+    replPrint('The fabricator shudders, throws a spark, and produces nothing. Old tech. Try again.');
+    player.say('The HERMES rig coughs and dies mid-run. Nothing.');
+    return;
+  }
+  map.groundItems.push({ item: recipe.item, qty: recipe.qty, x: player.x + 0.4, y: player.y + 0.5 });
+  replPrint(`HERMES runs off ${recipe.label} — a moly run holds. It drops at your feet.`);
+  player.say(`HERMES fabricates ${recipe.label}. Grab it.`);
+}
+
+// `read <topic>`: pull up RON lore the mesh still holds, printed to the console.
+function hermesRead(topic) {
+  if (!topic) {
+    replPrint('read <topic>. HERMES still holds: ' + hermesTopics().join(', ') + '.');
+    return;
+  }
+  const text = HERMES_LORE[topic];
+  if (!text) {
+    replPrint(`Nothing on "${topic}" in the mesh. Try: ${hermesTopics().join(', ')}.`);
+    return;
+  }
+  // Wrap to the console width so a long entry reads as paragraphs, not one line.
+  const words = text.split(' ');
+  let line = '';
+  const out = [];
+  for (const w of words) {
+    if ((line + ' ' + w).trim().length > 62) { out.push(line.trim()); line = w; }
+    else line += ' ' + w;
+  }
+  if (line.trim()) out.push(line.trim());
+  replPrint('', ...out, '');
+}
+
+// `ping`: sweep the AI network — the nearest live obelisks and the factory,
+// with a rough compass bearing and distance. HERMES's read on the enemy.
+function hermesPing() {
+  const bearing = (dx, dy) => {
+    // Screen/world y grows down-south; give an 8-point compass.
+    const a = Math.atan2(dy, dx); // -pi..pi
+    const dirs = ['E', 'SE', 'S', 'SW', 'W', 'NW', 'N', 'NE'];
+    return dirs[(Math.round(a / (Math.PI / 4)) + 8) % 8];
+  };
+  const live = obeliskObjs.filter((o) => !o.destroyed).map((o) => ({
+    label: o.code || 'OB-????',
+    d: Math.hypot(o.x + 0.5 - player.x, o.y + 0.5 - player.y),
+    b: bearing(o.x + 0.5 - player.x, o.y + 0.5 - player.y),
+  })).sort((a, b) => a.d - b.d);
+  const out = ['HERMES sweep — AI network:'];
+  if (!live.length) out.push('  no obelisks left standing. The sky is yours.');
+  for (const o of live.slice(0, 6)) out.push(`  ${o.label}  ${Math.round(o.d)} tiles ${o.b}`);
+  if (live.length > 6) out.push(`  …and ${live.length - 6} more.`);
+  if (factoryLive()) {
+    const fx = factoryCx() - player.x, fy = factoryCy() - player.y;
+    out.push(`  W-FACTORY  ${Math.round(Math.hypot(fx, fy))} tiles ${bearing(fx, fy)}`);
+  }
+  replPrint('', ...out, '');
 }
 
 // The RON-ML `map` command: a green schematic of this AI's territory drawn
@@ -1043,17 +1157,53 @@ window.addEventListener('keydown', (e) => {
   e.stopImmediatePropagation();
 }, true);
 
+// Which terminal is open — an AI obelisk / fortress gate ('ob') runs against
+// ronmlCtx; a RON HERMES relay ('hermes') runs against hermesCtx (adds
+// make/read/ping). Set by the open* functions, reset on close.
+let terminalKind = 'ob';
+
+// ELIZA session: while a bot is live, terminal input is fed to the DOCTOR
+// script instead of the RON-ML evaluator, until Ctrl+C or the terminal closes.
+let elizaBot = null;
+function startEliza() {
+  elizaBot = createEliza();
+  replPrint(
+    '',
+    'ELIZA — DOCTOR script (Weizenbaum, 1966).',
+    'The node loads a human. Talk to it. Type quit, or press Ctrl+C, to leave.',
+    '',
+    `ELIZA: ${elizaBot.greeting()}`,
+  );
+}
+function stopEliza(reason) {
+  if (!elizaBot) return;
+  elizaBot = null;
+  replPrint('', reason || 'ELIZA closes. You are back at the RON-DOS prompt.', '');
+}
+
 function replRun(line) {
   replPrint(`> ${line}`);
-  const result = runRonml(line, ronmlCtx());
-  replPrint(result.text);
   replHistory.push(line);
   replHistoryIdx = replHistory.length;
+  if (elizaBot) {
+    if (/^(quit|exit|bye|goodbye)$/i.test(line)) { stopEliza('ELIZA: Goodbye. It was nice talking to you.'); return; }
+    replPrint(`ELIZA: ${elizaBot.respond(line)}`);
+    return;
+  }
+  // `run eliza` / `run doctor` read as running a legacy program; normalise them
+  // to the `eliza` verb so the language itself handles it (see ronml.js).
+  const prog = line.replace(/^run\s+(eliza|doctor)\s*$/i, 'eliza');
+  const result = runRonml(prog, terminalKind === 'hermes' ? hermesCtx() : ronmlCtx());
+  // If the verb just opened an ELIZA session, its greeting is already printed —
+  // don't also drop the bare "()" unit result underneath it.
+  if (elizaBot) return;
+  replPrint(result.text);
 }
 
 function openObTerminal(ob) {
   if (!player.hasItem('chip')) { openAiOs(ob); return; }
   // Chip present: jack in. Go invisible, then run the connect progress bar.
+  terminalKind = 'ob';
   player.terminalSafe = true;
   obTermEl.style.display = 'flex';
   obTermScreen.parentElement.style.display = 'none';
@@ -1096,6 +1246,7 @@ function openObTerminal(ob) {
 // gate and connect bar. You type `unlock` here (needs an AI key) to hack the
 // grand doorway; it drops a fortress key that then swings the door open.
 function openGateTerminal() {
+  terminalKind = 'ob';
   player.terminalSafe = true;
   obTermEl.style.display = 'flex';
   obTermScreen.parentElement.style.display = 'flex';
@@ -1121,15 +1272,45 @@ function openGateTerminal() {
   obTermGhost.textContent = '';
   obTermInput.focus();
 }
-function closeObTerminal() { obTermEl.style.display = 'none'; obTermGhost.textContent = ''; obTermInput.blur(); player.terminalSafe = false; }
+// A HERMES relay (TOR station on a hilltop): the RON console. No chip, no AI
+// key — friendly tech. Amber CRT (the `.hermes` class recolours the shell),
+// with a short glitchy boot, then the same input runs against hermesCtx.
+function openHermesTerminal(tor) {
+  terminalKind = 'hermes';
+  player.terminalSafe = true;
+  obTermEl.classList.add('hermes');
+  obTermEl.style.display = 'flex';
+  obTermScreen.parentElement.style.display = 'flex';
+  obTermConnect.style.display = 'none';
+  replLog = [];
+  replHistory = [];
+  replHistoryIdx = -1;
+  replPrint(
+    'HERMES RELAY  //  RON FIELD STATION',
+    'HERMES 0.9b  //  RON-DOS 3.02  (c) Reality Or Nothing',
+    '',
+    `> relay ........... ${tor.code || 'TOR-??'}`,
+    '> power ........... solar trickle (degraded)',
+    '> uplink .......... RON mesh — intermittent',
+    '> key ............. none required — this was never theirs',
+    '',
+    'HERMES online. Old, but ours. try: make battery · read moly · ping · help',
+    '_',
+  );
+  obTermInput.value = '';
+  obTermGhost.textContent = '';
+  obTermInput.focus();
+}
+function closeObTerminal() { elizaBot = null; terminalKind = 'ob'; obTermEl.classList.remove('hermes'); obTermEl.style.display = 'none'; obTermGhost.textContent = ''; obTermInput.blur(); player.terminalSafe = false; }
 obTermEl.addEventListener('click', (e) => { if (e.target === obTermEl) closeObTerminal(); });
 // Autocomplete: once you've read the RON-DOS manual (book_ronml), the console
 // suggests the rest of a verb as faded ghost text you can accept with Tab.
 // (sing stays out of the list — it's a secret.) Purely a convenience the book
 // unlocks; you can always type the whole thing by hand.
-const RONML_VERBS = ['scan', 'nearest', 'keys', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'map', 'print', 'unlock', 'notes', 'help', 'let'];
+const RONML_VERBS = ['scan', 'nearest', 'keys', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'map', 'print', 'unlock', 'eliza', 'make', 'read', 'ping', 'notes', 'help', 'let'];
 const escapeHtml = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 function ronmlCompletion(value) {
+  if (elizaBot) return ''; // no RON-ML hints mid-conversation with the DOCTOR
   if (!player.readManuals || !player.readManuals.has('book_ronml')) return '';
   const m = value.match(/([A-Za-z]+)$/); // the alphabetic token at the caret
   if (!m) return '';
@@ -1145,6 +1326,13 @@ function updateGhost() {
 }
 obTermInput.addEventListener('input', updateGhost);
 obTermInput.addEventListener('keydown', (e) => {
+  // Ctrl+C breaks out of an ELIZA session, as on a real terminal — back to the
+  // RON-DOS prompt without closing the whole console.
+  if (e.ctrlKey && (e.key === 'c' || e.key === 'C')) {
+    if (elizaBot) { obTermInput.value = ''; obTermGhost.textContent = ''; stopEliza('^C  —  ELIZA interrupted. Back at the RON-DOS prompt.'); }
+    e.preventDefault(); e.stopPropagation();
+    return;
+  }
   // Tab is a browser-reserved key in a lot of setups (it moves focus off the
   // page before our handler ever sees it, preventDefault or not) — so Right
   // Arrow at the very end of the line also accepts the ghost suggestion, a
@@ -1362,6 +1550,7 @@ function describeAt(tx, ty) {
       if (obj.cls === 'siren') return `A SIREN-class obelisk. Teal-lit, and it sings — the song pulls you in. ${obj.alert > 0.3 ? 'It has you.' : 'Keep a tape ready.'}`;
       return `An AI signal obelisk. Black, humming, ${obj.alert > 0.3 ? 'and it has seen you.' : 'watching.'}`;
     }
+    if (obj.type === 'tor') return `A HERMES relay — old RON field tech, ${obj.code || 'a hilltop station'}. Friendly. Click its amber screen to use it (make, read, ping).`;
     if (obj.type === 'wfactory') return 'The W-factory. It fields repair drones for damaged towers — bring one down for good before it can be mended.';
     if (obj.type === 'box') return obj.opened ? 'An emptied resistance cache.' : 'A resistance cache. Search it (E).';
     if (obj.type === 'tree') return 'A tree. Fell it for wood.';
@@ -1570,6 +1759,19 @@ function update(dt) {
       else player.say('Too far from the obelisk to reach its terminal.');
     }
   }
+  // Click a HERMES relay (TOR) to open its terminal — same picking as an
+  // obelisk (torAt already lift-adjusts the hit rect for the hill it sits on).
+  const torPress = torObjs.length && renderer.torAt ? input.clickPos() : null;
+  if (torPress) {
+    const w = camera.toWorld(torPress.x, torPress.y, renderer.w, renderer.h);
+    const ws = worldToScreen(w.x, w.y);
+    const tr = renderer.torAt(ws.x, ws.y);
+    if (tr) {
+      input.consumeClick();
+      if (Math.hypot(tr.x + 0.5 - player.x, tr.y + 0.5 - player.y) <= OB_TERMINAL_RANGE + 0.7) openHermesTerminal(tr);
+      else player.say('Too far from the HERMES relay to reach it — get up the hill to its screen.');
+    }
+  }
   // Click the fortress gate terminal (kiosk beside the grand doorway) to open
   // its hack console, if you're standing close enough to reach it.
   const gPress = input.clickPos();
@@ -1702,6 +1904,9 @@ function update(dt) {
       }
     }
   }
+
+  // HERMES fabricator recharge (slow, so a station isn't a printing press).
+  if (hermesMakeCooldown > 0) hermesMakeCooldown = Math.max(0, hermesMakeCooldown - dt);
 
   // RON resupply: every couple of minutes, one already-emptied cache gets
   // quietly restocked with a fresh drop of batteries, ammo or shells.

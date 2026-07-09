@@ -16,6 +16,10 @@ const SCRAP_PER_SWORD = 10; // scrap beaten into a robot sword
 const KNOCKBACK_DIST = 0.5; // tiles a melee hit shoves an animal/robot back
 const KNOCKBACK_STUN = 0.4; // seconds it's frozen (no move, no attack) after
 const TREE_HP = 4;        // penknife swings to fell a tree
+// The factory hull only yields to a serious anti-machine tool. A blade lighter
+// than this (penknife, machete, bat, saw...) just rings off the plating — you
+// need a sledgehammer/crowbar/robot-sword, or explosives, or the electro-gun.
+const FACTORY_MIN_TOOL = 4;
 const TREE_CHOP_SPEEDUP = 0.55; // chop cooldown vs a normal swing: faster axe work
 const WOOD_PER_TREE = 2;
 const PICKUP_RANGE = 0.55;
@@ -1325,6 +1329,13 @@ export class Player {
     if (obj.destroyed) { this.say('The factory is already a smoking ruin.'); return; }
     this.swingTimer = tool.swingCooldown || 0.5;
     this.stamina = Math.max(0, this.stamina - (tool.staminaCost ?? 0));
+    // Anything lighter than a proper wrecking tool just clangs off the hull.
+    if ((tool.robotDamage ?? 1) < FACTORY_MIN_TOOL) {
+      sfx.play('swing');
+      obj.shake = 0.12;
+      this.say(`The ${(tool.name || 'weapon').toLowerCase()} clangs uselessly off the factory hull. You need a sledgehammer or crowbar, explosives, or the electro-gun.`);
+      return;
+    }
     sfx.play('chop');
     const cx = obj.x + (obj.fw || 1) / 2, cy = obj.y + (obj.fh || 1) / 2;
     this.sparkAt(map, cx, cy);

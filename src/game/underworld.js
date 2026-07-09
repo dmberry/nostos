@@ -214,6 +214,19 @@ function carveWorld(map, rng) {
     }
   }
 
+  // A couple of RON-DOS manuals deleted into the Backspace: the machines pushed
+  // the operator's documentation down here too. Guarantee one full manual and
+  // one torn page in the further rooms so a player can learn the console from
+  // what was thrown away — a small irony of the place.
+  const manuals = ['book_ronml', 'ronml_page'];
+  for (let m = 0; m < manuals.length; m++) {
+    const r = rooms[Math.min(rooms.length - 1, 1 + m)] || spawn;
+    for (let tries = 0; tries < 16; tries++) {
+      if (boxItemAt(r.x + 2 + Math.floor(rng() * Math.max(1, r.w - 4)),
+                    r.y + 2 + Math.floor(rng() * Math.max(1, r.h - 4)), manuals[m])) break;
+    }
+  }
+
   // Farthest room from spawn: where the lurker waits.
   let far = rooms[0], farD = -1;
   for (const r of rooms) {

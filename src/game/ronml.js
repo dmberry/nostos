@@ -168,6 +168,46 @@ function makeBuiltins() {
       arity: 0,
       fn: (_args, ctx) => { ctx.showNotepad(); return { tag: 'unit' }; },
     },
+    // Loads ELIZA — the 1966 DOCTOR script — into the node as an interactive
+    // program. A verb like any other (`eliza`, or the readable `run eliza`);
+    // the terminal then routes your lines to the doctor until you leave.
+    eliza: {
+      arity: 0,
+      fn: (_args, ctx) => {
+        if (!ctx.eliza) throw new RonmlError('no ELIZA image on this node.');
+        ctx.eliza();
+        return { tag: 'unit' };
+      },
+    },
+    // ---- HERMES station verbs (RON hilltop relays only) ------------------
+    // These call ctx hooks that only a HERMES terminal supplies; at an AI
+    // obelisk the hook is absent and the verb teaches you where it works.
+    make: {
+      arity: 1,
+      fn: ([what], ctx) => {
+        if (!ctx.make) throw new RonmlError('nothing here can build — this is an AI node. Find a HERMES relay on a hilltop: make battery');
+        const name = what && (what.id || (what.tag === 'node' && what.id)) || '';
+        ctx.make(String(name).toLowerCase());
+        return { tag: 'unit' };
+      },
+    },
+    read: {
+      arity: 1,
+      fn: ([topic], ctx) => {
+        if (!ctx.read) throw new RonmlError('no archive on this node. read <topic> works at a HERMES relay.');
+        const name = topic && (topic.id || '') || '';
+        ctx.read(String(name).toLowerCase());
+        return { tag: 'unit' };
+      },
+    },
+    ping: {
+      arity: 0,
+      fn: (_args, ctx) => {
+        if (!ctx.ping) throw new RonmlError('no mesh uplink on this node. ping works at a HERMES relay.');
+        ctx.ping();
+        return { tag: 'unit' };
+      },
+    },
     nearest: {
       arity: 1,
       fn: ([list], ctx) => {
@@ -355,6 +395,10 @@ const HELP_VERBS = [
   ['map', 'unit -> unit', 'show the territory map (obelisks, machines, mainframe)', ''],
   ['print', 'unit -> unit', 'print a carryable map that drops at your feet', ''],
   ['unlock k', 'key -> unit', 'extract a fortress key from the network using a hacked node key', 'needs k from hack'],
+  ['eliza', 'unit -> unit', 'run ELIZA, the 1966 DOCTOR script — talk to it (also: run eliza); Ctrl+C or quit to leave', ''],
+  ['make x', 'atom -> unit', 'fabricate supplies — make battery / arrow / scrap', 'HERMES relay only'],
+  ['read t', 'atom -> unit', 'pull up RON lore — read moly / hermes / ron / vector / eliza', 'HERMES relay only'],
+  ['ping', 'unit -> unit', 'sweep the AI network — nearest obelisks and the factory, with bearings', 'HERMES relay only'],
   ['notes', 'unit -> unit', 'open the notepad — browse the pages you\'ve found worth keeping', ''],
   ['help', 'unit -> unit', 'this reference, or `help <verb>` for one verb', ''],
 ];

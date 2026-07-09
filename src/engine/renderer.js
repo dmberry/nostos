@@ -216,6 +216,7 @@ export class Renderer {
     const ctx = this.ctx;
     this.uiSlots = []; // clickable dashboard/backpack slots, rebuilt each frame
     this.obeliskHits = []; // clickable obelisk towers (world-screen rects), rebuilt each frame
+    this.torHits = []; // clickable HERMES relays (world-screen rects, lift-adjusted), rebuilt each frame
     this.hudPlayer = player; // referenced by drawWfactory for the near-by damage bar
     this.hudMap = map; // referenced by drawPlayer for the Ubik-patch reality-hiccup check
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
@@ -1647,6 +1648,7 @@ export class Renderer {
       case 'rock': this.drawRock(obj.x, obj.y); break;
       case 'rubble': this.drawRubble(obj.x, obj.y); break;
       case 'obelisk': this.drawObelisk(obj); break;
+      case 'tor': this.drawTor(obj); break;
       case 'box': this.drawBox(obj); break;
       case 'car': this.drawCar(obj); break;
       case 'wfactory': this.drawWfactory(obj); break;
@@ -2581,6 +2583,116 @@ export class Renderer {
   // converted via worldToScreen(camera.toWorld(...))), or null.
   obeliskAt(wsx, wsy) {
     for (const h of this.obeliskHits) {
+      if (wsx >= h.x && wsx <= h.x + h.w && wsy >= h.y && wsy <= h.y + h.h) return h.obj;
+    }
+    return null;
+  }
+
+  // A TOR relay: RON's hilltop counter-station to the obelisks. Deliberately
+  // the obelisk's opposite — not a sleek black monolith but a squat, weathered
+  // cabinet under a leaning lattice mast, patched and rust-streaked, with a warm
+  // amber CRT (the HERMES terminal) flickering on its face. Older, cruder,
+  // friendlier. Clicked by proximity in main.js, so no hit-rect needed here.
+  drawTor(obj) {
+    const ctx = this.ctx;
+    const c = worldToScreen(obj.x + 0.5, obj.y + 0.5);
+    const t = performance.now();
+    const gl = obj.glitch || 0;
+    // Shadow.
+    ctx.fillStyle = 'rgba(0,0,0,0.32)';
+    ctx.beginPath(); ctx.ellipse(c.x, c.y, 14, 7, 0, 0, Math.PI * 2); ctx.fill();
+
+    // --- Cabinet: a boxy metal housing, two visible faces + a top. ---
+    const W = 8, HB = 20; // half-width, box height
+    const topY = c.y - HB;
+    ctx.fillStyle = '#6e5a3a'; // SW face (weathered tan-steel)
+    ctx.beginPath();
+    ctx.moveTo(c.x - W, c.y - 3); ctx.lineTo(c.x, c.y + 2);
+    ctx.lineTo(c.x, c.y + 2 - HB); ctx.lineTo(c.x - W, c.y - 3 - HB);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#57492f'; // SE face (shaded)
+    ctx.beginPath();
+    ctx.moveTo(c.x + W, c.y - 3); ctx.lineTo(c.x, c.y + 2);
+    ctx.lineTo(c.x, c.y + 2 - HB); ctx.lineTo(c.x + W, c.y - 3 - HB);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#7d6941'; // top cap
+    ctx.beginPath();
+    ctx.moveTo(c.x - W, c.y - 3 - HB); ctx.lineTo(c.x, c.y + 2 - HB);
+    ctx.lineTo(c.x + W, c.y - 3 - HB); ctx.lineTo(c.x, c.y - 8 - HB);
+    ctx.closePath(); ctx.fill();
+    // Rust streaks down the SW face.
+    ctx.strokeStyle = 'rgba(120,70,35,0.5)'; ctx.lineWidth = 1;
+    for (const rx of [-5, -2, 2]) {
+      ctx.beginPath(); ctx.moveTo(c.x + rx, c.y - 3 - HB + 3); ctx.lineTo(c.x + rx, c.y - 3 - HB * 0.4); ctx.stroke();
+    }
+
+    // --- Leaning lattice mast rising from the cabinet top. ---
+    const lean = 3 + 2 * (gl - 0.5); // each relay leans a little differently
+    const baseX = c.x, baseY = topY - 4;
+    const tipX = c.x + lean, tipY = baseY - 40;
+    ctx.strokeStyle = '#4a4640'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(baseX - 3, baseY); ctx.lineTo(tipX, tipY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(baseX + 3, baseY); ctx.lineTo(tipX, tipY); ctx.stroke();
+    ctx.lineWidth = 1; // lattice rungs + guy wire
+    for (let k = 1; k <= 4; k++) {
+      const f0 = k / 5;
+      const lx = baseX - 3 + (tipX - (baseX - 3)) * f0, rx = baseX + 3 + (tipX - (baseX + 3)) * f0;
+      const yy = baseY + (tipY - baseY) * f0;
+      ctx.beginPath(); ctx.moveTo(lx, yy); ctx.lineTo(rx, yy); ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(60,56,50,0.7)';
+    ctx.beginPath(); ctx.moveTo(tipX, tipY + 6); ctx.lineTo(c.x + W + 2, c.y - 4); ctx.stroke(); // guy wire
+
+    // --- Aerial: a small crossbar + a lopsided dish at the tip. ---
+    ctx.strokeStyle = '#5a5550'; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(tipX - 5, tipY); ctx.lineTo(tipX + 5, tipY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(tipX, tipY); ctx.lineTo(tipX, tipY - 6); ctx.stroke();
+    ctx.fillStyle = '#807a70';
+    ctx.beginPath(); ctx.ellipse(tipX + 4, tipY - 2, 4, 2.6, -0.5, 0, Math.PI * 2); ctx.fill();
+    // A weak red aircraft-warning blink at the very top (occasional).
+    if ((Math.sin(t / 620 + gl * 6) > 0.9)) {
+      ctx.fillStyle = 'rgba(230,90,70,0.85)';
+      ctx.beginPath(); ctx.arc(tipX, tipY - 6, 1.6, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // --- The HERMES CRT on the SW face: warm amber, flickering, glitchy. ---
+    const flick = 0.72 + 0.28 * Math.abs(Math.sin(t / 200 + gl * 3));
+    const scy = topY + 5; // screen top
+    // soft amber bloom
+    const glow = ctx.createRadialGradient(c.x - 3, scy + 4, 0, c.x - 3, scy + 4, 12);
+    glow.addColorStop(0, `rgba(232,150,40,${(0.30 * flick).toFixed(3)})`);
+    glow.addColorStop(1, 'rgba(232,150,40,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(c.x - 3, scy + 4, 12, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#140d04';
+    ctx.fillRect(c.x - 6, scy, 8, 10);
+    ctx.fillStyle = `rgba(226,150,48,${(0.55 * flick).toFixed(3)})`;
+    ctx.fillRect(c.x - 5, scy + 1, 6, 8);
+    // scanlines
+    ctx.strokeStyle = 'rgba(60,32,6,0.6)';
+    for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.moveTo(c.x - 5, scy + 2 + k * 3); ctx.lineTo(c.x + 1, scy + 2 + k * 3); ctx.stroke(); }
+    // occasional glitch: a bright torn line offset sideways
+    if (Math.sin(t / 130 + gl * 10) > 0.86) {
+      const gy = scy + 2 + Math.floor((t / 90 + gl * 5) % 6);
+      ctx.fillStyle = 'rgba(255,196,110,0.85)';
+      ctx.fillRect(c.x - 5 + (Math.sin(t / 40) > 0 ? 1 : -1), gy, 6, 1);
+    }
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.strokeRect(c.x - 6, scy, 8, 10);
+
+    // Clickable region. The relay is drawn lifted up its hill (the caller
+    // translates by -lift before drawObject), so the hit rect is offset up by
+    // that same lift to sit where the mast actually appears on screen. Compared
+    // against worldToScreen(camera.toWorld(click)) in torAt — same space.
+    const lift = (this.hudMap && this.hudMap.heightAt ? this.hudMap.heightAt(obj.x, obj.y) : 0) * ELEV;
+    const PAD = 10;
+    const top = tipY - 8 - lift; // from the aerial tip...
+    const bot = c.y + 2 - lift;  // ...down to the cabinet foot
+    this.torHits.push({ obj, x: c.x - 9 - PAD, y: top - PAD, w: 18 + 2 * PAD, h: (bot - top) + 2 * PAD });
+  }
+
+  // The HERMES relay whose (lift-adjusted) body contains a world-screen point.
+  torAt(wsx, wsy) {
+    for (const h of this.torHits) {
       if (wsx >= h.x && wsx <= h.x + h.w && wsy >= h.y && wsy <= h.y + h.h) return h.obj;
     }
     return null;
@@ -3752,34 +3864,53 @@ export class Renderer {
       for (const t of player.compassTargets()) drawChevron(t.x - player.x, t.y - player.y, t.color);
     }
 
-    // Forcefield: a shimmering green shell around the whole character.
+    // Forcefield: a shimmering green energy shell around the whole character.
     if (player.forcefieldActive && player.forcefieldActive()) {
       const t = performance.now();
       const rr = 25 + Math.sin(t / 260) * 1.8;
-      ctx.save();
-      ctx.fillStyle = 'rgba(80,230,140,0.12)';
-      ctx.strokeStyle = `rgba(120,245,170,${(0.55 + 0.2 * Math.sin(t / 180)).toFixed(3)})`;
-      ctx.lineWidth = 0.6;
-      ctx.beginPath();
-      ctx.ellipse(c.x, by - 12, rr, rr * 1.08, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      ctx.restore();
+      this._drawShieldBubble(c.x, by - 12, rr, rr * 1.08, '120,245,170', t);
     } else if (player.shielded && player.shielded()) {
-      // A carried shield shows a thinner deflector ring (no need to hold it):
+      // A carried shield shows a slimmer deflector shell (no need to hold it):
       // pale blue for the plain shield, brighter cyan for the mirror.
       const t = performance.now();
       const mirror = player.hasItem && player.hasItem('mirror_shield');
-      ctx.save();
-      ctx.strokeStyle = mirror
-        ? `rgba(180,235,245,${(0.45 + 0.18 * Math.sin(t / 200)).toFixed(3)})`
-        : 'rgba(130,175,225,0.4)';
-      ctx.lineWidth = 0.6;
-      ctx.beginPath();
-      ctx.ellipse(c.x, by - 12, 22, 24, 0, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
+      this._drawShieldBubble(c.x, by - 12, 22, 24, mirror ? '180,235,245' : '130,175,225', t);
     }
+  }
+
+  // A curved energy shell for the forcefield / carried shield: a soft radial
+  // glow that fades from a clear core to a bright rim, a slowly travelling
+  // dashed rim (the shimmer), and a short specular arc top-left so it reads as
+  // a 3D bubble rather than a flat traced outline. `rgb` is an "r,g,b" string.
+  _drawShieldBubble(cx, cy, rx, ry, rgb, t) {
+    const ctx = this.ctx;
+    ctx.save();
+    // Shell: clear at the core, building to a glowing rim.
+    const grad = ctx.createRadialGradient(cx, cy, rx * 0.5, cx, cy, rx * 1.04);
+    grad.addColorStop(0, `rgba(${rgb},0)`);
+    grad.addColorStop(0.8, `rgba(${rgb},0.06)`);
+    grad.addColorStop(1, `rgba(${rgb},0.22)`);
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Travelling dashed rim — the "dotted" energy shimmer, rotating slowly.
+    const pulse = 0.5 + 0.22 * Math.sin(t / 200);
+    ctx.strokeStyle = `rgba(${rgb},${pulse.toFixed(3)})`;
+    ctx.lineWidth = 1.1;
+    ctx.setLineDash([2.2, 3.6]);
+    ctx.lineDashOffset = -(t / 90) % 1000;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    // Specular highlight: a short bright, un-dashed arc at the top-left.
+    ctx.setLineDash([]);
+    ctx.strokeStyle = `rgba(255,255,255,${(0.24 * pulse).toFixed(3)})`;
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx * 0.94, ry * 0.94, 0, Math.PI * 1.02, Math.PI * 1.46);
+    ctx.stroke();
+    ctx.restore();
   }
 
   // The held tool/gun/gadget/shield shown in hand, out toward the facing

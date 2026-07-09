@@ -24,7 +24,9 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 
 ## Planned / next — design notes (not yet built)
 
-### TOR machines — RON resistance stations on the hilltops (big feature)
+### TOR machines — RON resistance stations on the hilltops — DONE (v1.44)
+Shipped in v1.44: TOR relays on the summits, amber HERMES terminal, `make`/`read`/`ping` verbs, no AI key. See the v1.44 notes below. Future extensions kept from the original spec: deeper `read` → Scrapbook wiring, a `ping`-reveals-on-map overlay, and "moly" as a carried immunity charge (right now `make` just fabricates supplies). Original design notes retained below for reference.
+
 Old RON tech, set up **before** the AIs had full control, so they're **janky, half-working legacy systems** — the opposite number to the AIs' obelisks.
 - **Placement:** on the **peaks of hills** (highest `heightAt` tiles), one per notable summit, a handful across the map. Physically a squat, weathered mast/relay (draw it — leaning aerial, patched panels, a dim amber CRT vs the obelisk's cold green), visibly older and cruder than an obelisk.
 - **Terminal:** a **second terminal interface** (reuse the `#obterminal` CRT shell but recoloured **amber**, glitchy — occasional line noise, dropped chars, a slow boot), running the RON side of the language. **No AI key needed** — it's friendly tech.
@@ -32,11 +34,32 @@ Old RON tech, set up **before** the AIs had full control, so they're **janky, ha
 - **Resistance functions (ML verbs on HERMES only):** `make battery` / `make <item>` — manufacture supplies (batteries first; slow, limited runs, sometimes fails = the jank); `read <topic>` / `archive` — pull up lore the RON network still holds (feeds the Scrapbook/notepad); maybe `ping` — reveal nearby obelisks/factory on the map for a while. All gated to the HERMES terminal, unavailable at obelisks.
 - Ties: gives the hills a reason to climb; gives RON a physical presence; a safe crafting/lore hub vs the hostile obelisks.
 
-### Fortress key via a more complex ML program
-Right now the fortress key is a plain `unlock` at the gate. Make obtaining it require a **real multi-step program** — the point where the language earns its keep — e.g. `let k = hack OB-XXXX in crash OB-XXXX k`, or a small pipeline the player has to assemble, with a specific obelisk (or the SIREN) dropping the **fortress key** only when the correct composed expression runs against it. Design the exact program + which node drops it.
+### Fortress key via a more complex ML program — DONE (v1.42, drop fixed v1.43)
+Shipped: the key comes from composing `let k = hack OB-XXXX in unlock k` at any live obelisk (v1.42). v1.43 removed the one-time guard, so it drops a fresh key every time it composes (recoverable if lost).
 
 ### Three SIRENs inside the fortress
 The overworld has exactly one SIREN (a singular landmark). The **fortress** should have **three** SIREN-class towers as an interior hazard cluster — a wall of song to cross. (Kept as a note per request; the `cls:'siren'` + render + lure already support it, just needs fortress placement.)
+
+## Where we are (v1.44)
+
+### v1.44 — TOR / HERMES hilltop relays, ELIZA as a first-class verb
+
+- **TOR / HERMES built** (the big deferred feature). New self-contained `src/game/hermes.js`: `placeTors(map, rng, {spawn, count})` scatters ~4 relays on the map's summits (highest `heightAt` tiles, local maxima, spaced ≥20, off-spawn); their objects are type `tor` (registered solid in tiles.js). `renderer.drawTor` draws the opposite of an obelisk — a squat weathered cabinet + a leaning lattice mast + a lopsided dish + a flickering, glitchy **amber CRT**. Clickable via a **lift-adjusted hit rect** (`torHits`/`torAt`): because the mast draws lifted up its hill by `heightAt*ELEV`, the hit rect is offset up by the same lift so screen-picking lines up (verified end-to-end with a synthesized click at h7).
+- **HERMES terminal.** Reuses the `#obterminal` shell with a `.hermes` class that recolours it amber; `openHermesTerminal(tor)` (no chip, no connect bar, glitchy boot banner). A `terminalKind` flag routes `replRun` to `hermesCtx()` (= `ronmlCtx()` + make/read/ping) at a relay, `ronmlCtx()` at an obelisk/gate. Reset on close.
+- **Three RON verbs** (ronml.js builtins, gated by ctx-hook presence so they teach "HERMES relay only" at an obelisk): `make <thing>` — fabricate from `HERMES_RECIPES` (battery/arrow/scrap), a slow ~12–20s cooldown + ~28% failure (the jank), drops at your feet as a "moly run"; `read <topic>` — prints wrapped RON lore from `HERMES_LORE` (moly/hermes/tiresias/ron/vector/eliza), the Odyssey framing made explicit; `ping` — nearest live obelisks + factory with distance and an 8-point bearing. All added to `HELP_VERBS`, `RONML_VERBS` (autocomplete), and the boot banner.
+- **ELIZA promoted to a real verb.** `eliza` is now a RON-ML builtin (calls `ctx.eliza`) rather than a string intercept, so it's genuinely part of the language and shows in `help`/autocomplete. `run eliza` / `run doctor` normalise to it in replRun; the trailing `()` is suppressed when a session opens.
+- Verified live: 4 relays placed on h6–7 summits; a real click opens the amber terminal; `read moly` wraps correctly, `make battery` dropped 2 batteries, `ping` and gating both behave.
+
+## Where we are (v1.43)
+
+### v1.43 — ELIZA in the terminal, fortress-key drop fix, weak-weapon factory gating, mobile HUD (visualViewport), shield reskin, Backspace manuals
+
+- **ELIZA (`eliza`).** New `src/game/eliza.js` — a self-contained reconstruction of Weizenbaum's 1966 DOCTOR script in the spirit of Anthony Hay's faithful port: ranked keyword table, `*`-wildcard decomposition → cycling reassembly, first/second-person reflection on captured groups, a small MEMORY queue, and the classic PRE substitutions. Selection is **fall-through**: all matching keywords, ranked high→low, are tried in turn and the first with a matching decomposition wins (so "am" against "I am X" — which has no "am I" — falls through to the `i` keyword's `* i am *` rule instead of dead-ending). Wired into the RON-DOS terminal in `main.js`: `elizaBot` state, `replRun` routes input to the bot while active, `startEliza`/`stopEliza`, `quit`/`Ctrl+C` (in the keydown handler) exit to the prompt, closing the terminal clears it. `eliza` added to `RONML_VERBS` (autocomplete) and `HELP_VERBS` (help), RON-ML ghost suppressed mid-session. Tested in isolation and over HTTP in the live game.
+- **Fortress-key drop fixed (the real bug).** `ctx.unlock` (main.js) had a one-time guard — `fortressKeyFromCrash` (never reset, not even on death) plus `player.hasItem('fortress_key')` — so once you got a key and lost it, `unlock k` said "already yours" forever and dropped nothing. Removed the guard: `unlock k` now drops a fresh fortress key **every** time it composes correctly (David: "you can drop multiple fortress keys just in case user loses one" + "fortress key isn't being dropped"). Still requires a genuinely-hacked node key (`player.ronmlKeys.has(id)`).
+- **Weak weapons bounce off the factory.** New `FACTORY_MIN_TOOL = 4` in player.js; `hitFactory` now rings off (a `swing` sfx + a teaching message, no hull damage) when `tool.robotDamage < 4`, so only crowbar(5)/sledgehammer(4)/robot-sword(9) — plus bombs and the electro-gun, which use the direct `damageFactory` path and are unaffected — can bring it down. A penknife can no longer grind a 420-HP factory to rubble.
+- **Mobile HUD fixed at the source.** The canvas was sized to `innerHeight`/`100vh`, which on iOS Safari extends behind the floating bottom toolbar, hiding the HUD's slot row. `resize()` now sizes to `window.visualViewport` (width/height) and sets the canvas CSS size explicitly, with `visualViewport` `resize`/`scroll` + `orientationchange` listeners so it re-fits when the toolbar shows/hides. Verified in the preview at 375×812: full slot row (hands · 4 pockets · walkman) visible above the bottom edge.
+- **Shield/forcefield reskin.** New `renderer._drawShieldBubble(cx,cy,rx,ry,rgb,t)` replaces the old flat traced ellipse for both the forcefield and the carried-shield ring: a soft radial-gradient shell (clear core → glowing rim), a slowly **travelling dashed rim** (the "dotted" energy shimmer David asked for), and a short un-dashed specular arc top-left so it reads as a 3D bubble. Green for the forcefield, blue/cyan for plain/mirror shields. Verified visually in the preview.
+- **RON-DOS manuals in the Backspace.** `underworld.js` now force-places one `book_ronml` + one `ronml_page` in the further rooms — you can learn the console from documentation the machines deleted.
 
 ## Where we are (v1.42)
 
@@ -56,8 +79,8 @@ The overworld has exactly one SIREN (a singular landmark). The **fortress** shou
 - **Backspace lag.** `drawLampGlows` built a radial gradient for every lamp in the whole 128×192 pocket each frame; now culled to within 24 tiles of `this.hudPlayer`. (The overworld itself already freezes in the Backspace — `update()` returns early when `inUnderworld`.)
 - **Ubik hints** (overworld lore `tear-01..03`): teach the mechanic — three sprays on one spot, feet still, tears the hole into the Backspace; come back by the same door. Found up top, before you need them.
 
-### NEXT: TOR / HERMES build (deferred, dedicated)
-The hilltop RON stations (amber HERMES terminal, `make`/`read` ML verbs, no AI key) are the next focused build — too big + un-playtestable in the headless preview to bolt onto this bug-fix batch. Full spec already in "Planned / next".
+### NEXT (deferred, dedicated)
+TOR / HERMES shipped in v1.44. Remaining big items on the board: **three SIRENs inside the fortress** (needs a placement hook — the fortress interior is Henrik's `fortress.js`, so coordinate before touching it), a **mobile phone + RON text tips**, and the HERMES follow-ups noted above (Scrapbook-wired `read`, map-reveal `ping`, carried "moly" immunity).
 
 ## Where we are (v1.40)
 

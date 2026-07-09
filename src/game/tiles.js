@@ -45,6 +45,7 @@ export const OBJECTS = {
   rubble:  { solid: true, climbable: true, climbHeight: 1 },
   rock:    { solid: true, climbable: true, climbHeight: 1 },
   obelisk: { solid: true }, // AI signal tower; destructible in a later phase
+  tor: { solid: true }, // RON resistance relay on a hilltop — the friendly HERMES terminal
   box:     { solid: true, climbable: true, climbHeight: 1 }, // resistance cache — a low crate you can step or jump onto, still searchable from beside it
   car:     { solid: true }, // abandoned wreck littering the roads; scenery only
   wfactory: { solid: true }, // W-unit foundry; periodically fields a W3 repair drone

@@ -145,6 +145,15 @@
     background: rgba(80,230,130,0.06); }
   #obterminal-bar { height: 100%; width: 0%; background: rgba(80,230,130,0.55);
     box-shadow: 0 0 8px rgba(80,230,130,0.6); transition: none; }
+  /* HERMES relay: the same shell recoloured warm amber — old RON field tech,
+     not the AIs' cold green. Applied via .hermes on #obterminal. */
+  #obterminal.hermes .crt { background: #140c02;
+    box-shadow: 0 0 0 2px #000, inset 0 0 70px rgba(0,0,0,0.9), inset 0 0 130px rgba(232,150,40,0.09); }
+  #obterminal.hermes #obterminal-screen { color: #e6a53a; text-shadow: 0 0 4px rgba(230,150,40,0.7); }
+  #obterminal.hermes #obterminal-ghost { color: rgba(230,175,90,0.32); text-shadow: 0 0 4px rgba(230,150,40,0.35); }
+  #obterminal.hermes #obterminal-prompt { color: #e6a53a; text-shadow: 0 0 4px rgba(230,150,40,0.7); }
+  #obterminal.hermes #obterminal-input { color: #f4c987; text-shadow: 0 0 4px rgba(230,150,40,0.7); caret-color: #e6a53a; }
+  #obterminal.hermes .crt-hint { color: rgba(230,150,40,0.4); }
   /* RON-ML map readout — a green schematic of the AI's territory. */
   #ronmap { display: none; position: fixed; inset: 0; z-index: 22;
     background: rgba(0,0,0,0.82); align-items: center; justify-content: center; }
@@ -265,7 +274,7 @@
     <p>The shape of it — a long way home across a hostile world to someone still waiting — after Homer's <b>Odyssey</b> and Joyce's <b>Ulysses</b>. The one-eyed machines, the trick of being <b>no one</b>, the song of the towers, the dog that waited: quiet echoes, never spelled out.</p>
     <p>Character and animal art: Kenney (kenney.nl), CC0.</p>
 
-    <div class="foot">Game designed in the UK &middot; v1.42 &middot; github.com/dmberry/postAI</div>
+    <div class="foot">Game designed in the UK &middot; v1.44 &middot; github.com/dmberry/postAI</div>
   </div>
 </div>
 <div id="help">
