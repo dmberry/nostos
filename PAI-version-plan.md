@@ -22,6 +22,21 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Always put a texture on a glowing thing.** No glow is ever a flat coloured blob — a grille/panel texture is laid over it (the factory-vent trick). Everything luminous goes through `Renderer.texturedGlow`, which caps the glow with an AI grate texture; if you add a new light, use it rather than a bare `fill`. (David, 2026-07-07.)
 - **Vary texture opacity per tile.** Floors jitter their texture alpha deterministically per tile (`drawFloor`) so a large expanse of one floor reads as worn/varied rather than a flat repeat.
 
+## Where we are (v1.36)
+
+### v1.36 — the long way home (Odyssey / Ulysses, implicit)
+
+The homeward-quest framing, planted through found documents rather than signposted. Six `lore.js` fragments (`home-01`..`home-06`):
+- **home-01 / home-02** — the pull home to someone still waiting; the one who waits and unpicks her answer each night (Penelope, unnamed).
+- **home-03** — RON: be no one; hand the terminal a name that means nothing, walk out while it bellows that *Nobody* blinded it (Cyclops/Outis — ties to the existing single-sensor-eye machines and the terminal secret-word/`loop` trick).
+- **home-04** — RON: the singing towers; if you must pass one, start your own tape and drown it out (Sirens — ties to the walkman + the towers' "flow my tears" motif). A latent mechanic hook if we ever want the tower-song to actually lure and a playing tape to resist it.
+- **home-05** — the light you must not sit down in (lotus-eaters, tied to the Backspace).
+- **home-06** — the dog by the north bridge that waited past a dog's life (Argos — ties to the feral dogs).
+
+About box gains an "Ideas & influences" line naming Homer's Odyssey and Joyce's Ulysses (the influences ledger is the right place to be explicit; the in-world text stays oblique).
+
+**Future, not heavy-handed:** Circe (reprogramming/`R` turning a machine to your side; or an NPC who changes people), Scylla & Charybdis (the two river bridges as a choice of hazards), Tiresias (the terminal as oracle), Calypso (a comfortable trap that delays you — a Backspace room?), the shroud/loom as a visual motif. Add as fragments/among mechanics only where it lands naturally.
+
 ## Where we are (v1.35)
 
 ### v1.35 — deleted objects in the Backspace (books + records with real covers)

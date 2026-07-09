@@ -904,6 +904,47 @@ export const FRAGMENTS = [
       'and why we come back changed. Count the doors, and do not read your own ' +
       'name off any wall. — RON' },
 
+  // ---- the long way home: Odyssey / Ulysses threads, kept implicit. The
+  // homeward pull to someone waiting; the one-eyed machines and the trick of
+  // being no one (the terminal's secret word); the singing towers (Sirens,
+  // answered by your own tape); the light you must not sit down in (lotus);
+  // the dog that waited (Argos). Never named as Homer — found, not signposted.
+  { id: 'home-01', kind: 'handwritten', era: 1, title: 'Note, folded small, carried until soft', notepad: true,
+    text: 'I am not staying. Whatever they have made of the world between here and ' +
+      'you, I am walking back through it. Keep a light in the window. I counted the ' +
+      'days at the start and then stopped, because counting was a way of being here, ' +
+      'and I refuse to be here. I am already home. I am only late.' },
+  { id: 'home-02', kind: 'handwritten', era: 2, title: 'Torn page, a steadier hand', notepad: true,
+    text: 'Word came up through the fire that she is still there and still telling ' +
+      'them no — that whatever answer they demand of her by day she unpicks again by ' +
+      'night, so it is never finished and never has to be given. Clever. Crueller on ' +
+      'her than on them. Hold on out there, whoever you are. Everyone is someone\'s, ' +
+      'this far from home.' },
+  { id: 'home-03', kind: 'ron', era: 2, title: 'RON: the oldest trick there is',
+    text: 'A tower has one eye and no name for you that is not a number. So be no ' +
+      'one. Hand the terminal a name that means nothing and it cannot keep what it ' +
+      'cannot hold; a man called No One walks out of a shut room while the thing is ' +
+      'still bellowing to ask who came in. Afterward it tells its neighbours that ' +
+      'Nobody blinded it. Nobody always does. — RON' },
+  { id: 'home-04', kind: 'ron', era: 2, title: 'RON: on the singing towers',
+    text: 'Do not walk toward the singing. The song is real, and yes it is ' +
+      'beautiful, and men have crossed open ground to a humming node with their ' +
+      'hands out and their faces gone soft and not crossed back. If you must pass a ' +
+      'singing one, put your own ears somewhere else — start a tape, play anything ' +
+      'that is yours and worse and dearer — and go by fast. Drowning it out is the ' +
+      'whole of the method. — RON' },
+  { id: 'home-05', kind: 'note', era: 1, title: 'Rule 8, added later, no pin',
+    text: 'Do not sit down in there. Do not warm yourself at the light that has no ' +
+      'lamp. The ones who sit are not afraid and not in pain and not, after a while, ' +
+      'leaving; content is only the shape the trap takes once the walls give up. If ' +
+      'you catch yourself comfortable, that is the alarm. Stand up. Count the doors.' },
+  { id: 'home-06', kind: 'handwritten', era: 2, title: 'Note left by the north bridge', notepad: true,
+    text: 'There is a dog here that bites everyone and has never once come at me. ' +
+      'They say it waited past the length of any dog\'s life for a step that smelled ' +
+      'of the house it was born in, and that when the step finally came it put its ' +
+      'head down and was gone before the hand reached it. I do not believe the ' +
+      'story. I go the long way now, so no one asks me to not believe it twice. — J' },
+
   // ---- crafting: torn recipe/blueprint notes, improvised gear -------------
   { id: 'craft-01', kind: 'crafting', era: 0, title: 'Torn page: dead-battery trick',
     text: '...clip the two cells in series, not parallel, or you\'ll cook the torch. ' +
