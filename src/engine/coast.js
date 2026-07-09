@@ -46,7 +46,7 @@ export function stampCoast(map, spawn = null) {
       // a small per-tile jitter (stippled dither right at each band boundary).
       const wave = 1.7 * Math.sin(x * 0.19 + y * 0.11) * Math.cos(y * 0.16 - x * 0.08)
                  + 0.8 * Math.sin(x * 0.07 - y * 0.05);
-      const dp = d + wave + (hash(x, y) - 0.5) * 1.3;
+      const dp = d + wave + (hash(x, y) - 0.5) * 1.9;
       let target = null;
       if (dp < WATER_BAND) target = 'sea';
       else if (dp < WATER_BAND + BEACH_BAND) target = 'sand';
@@ -73,7 +73,9 @@ export function stampCoast(map, spawn = null) {
     }
     return false;
   };
-  for (let pass = 0; pass < 3; pass++) {
+  // Extend the sea into the river mouth over several tiles, stippled and
+  // weakening inward, and clear any sand caught between the two.
+  for (let pass = 0; pass < 5; pass++) {
     const toSea = [];
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
@@ -81,10 +83,22 @@ export function stampCoast(map, spawn = null) {
         if (f !== 'water' && f !== 'sand') continue;
         if (!seaAdj(x, y)) continue;
         if (f === 'sand' && riverAdj(x, y)) { toSea.push([x, y]); continue; } // sand caught at the mouth
-        if (f === 'water' && hash(x * 2 + pass, y * 2 - pass) < 0.6 - pass * 0.12) toSea.push([x, y]);
+        if (f === 'water' && hash(x * 2 + pass * 7, y * 2 - pass * 5) < 0.72 - pass * 0.11) toSea.push([x, y]);
       }
     }
     if (!toSea.length) break;
     for (const [x, y] of toSea) map.setFloor(x, y, 'sea');
   }
+  // Then poke a scatter of river fingers back the other way — sea tiles right
+  // at the river's edge that flip to river water — so the two interlock in a
+  // stippled band rather than meeting on a clean line.
+  const toRiver = [];
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      if (map.floorAt(x, y) !== 'sea') continue;
+      if (!riverAdj(x, y)) continue;
+      if (hash(x * 5 + 1, y * 5 + 3) < 0.4) toRiver.push([x, y]);
+    }
+  }
+  for (const [x, y] of toRiver) map.setFloor(x, y, 'water');
 }

@@ -530,7 +530,7 @@ export const TAPES = [
   {
     num: 4, artist: 'Meme vs Xan', title: '24 EP', dir: 'Tape-04 Meme vs Xan - 24 EP', color: '#7a8fb0',
     a: { label: '24 · High', tracks: ['01 24.mp3', '02 High.mp3'] },
-    b: { label: 'Release · Världen · Incognito', tracks: ['03 Release.mp3', '04 Världen.mp3', '05- Incognito.mp3'] },
+    b: { label: 'Release · Världen · Incognito', tracks: ['03 Release.mp3', '04 Världen.mp3', '05 Incognito.mp3'] },
   },
   {
     num: 5, artist: '0x0', title: 'Mythologies', dir: 'Tape-05 0x0 - Mythologies', color: '#5a8f9a',

@@ -290,7 +290,11 @@ export function initMobileGate(mode = 'gate') {
         #mobile-gate[data-mode="title"] .mg-hero .mg-actions { justify-content: flex-start; }
         #mobile-gate[data-mode="title"] h1 { font-size: 52px; }
         #mobile-gate[data-mode="title"] .mg-player { grid-area: player; align-self: center; justify-self: center; max-width: 480px; }
-        #mobile-gate[data-mode="title"] .mg-rack { justify-content: flex-start; }
+        /* Desktop title has room to show ALL the tapes at once — no scroll:
+           centre them and shrink each a touch so the whole rack fits. */
+        #mobile-gate[data-mode="title"] .mg-rack { justify-content: center; overflow: visible; max-width: none; gap: 9px; }
+        #mobile-gate[data-mode="title"] .mg-tape { width: 84px; }
+        #mobile-gate[data-mode="title"] .mg-tape canvas { width: 84px; height: 55px; }
         #mobile-gate[data-mode="title"] .mg-stage { grid-area: stage; width: 100%; max-height: 260px; align-self: end; }
         #mobile-gate[data-mode="title"] .mg-bot { width: 122px; height: 152px; }
       }
@@ -520,7 +524,7 @@ export function initMobileGate(mode = 'gate') {
       const lx = dcx - 9 * S, ly = dcy - 5.5 * S, lw = 18 * S, lh = 3 * S;
       deckCtx.save();
       deckCtx.beginPath(); deckCtx.rect(lx, ly, lw, lh); deckCtx.clip();
-      deckCtx.font = `700 ${Math.round(lh * 0.56)}px ui-monospace, Menlo, monospace`;
+      deckCtx.font = `600 ${Math.round(lh * 0.4)}px ui-monospace, Menlo, monospace`;
       deckCtx.textBaseline = 'middle';
       deckCtx.fillStyle = 'rgba(18,15,8,0.92)'; // dark ink printed on the coloured label
       const midY = ly + lh / 2 + 0.5;
