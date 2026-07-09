@@ -31,6 +31,8 @@
     opacity: 0.75; pointer-events: none; text-shadow: 0 1px 2px #000;
     text-align: right;
   }
+  /* The compact mobile dashboard is taller (120px) — lift the hint clear of it. */
+  @media (max-width: 560px) { #hint { bottom: 128px; font-size: 11px; } }
   #helpBtn {
     position: fixed; top: 10px; left: 92px;
     width: 24px; height: 24px; border-radius: 12px;
@@ -261,7 +263,7 @@
     <p>The shape of it — a long way home across a hostile world to someone still waiting — after Homer's <b>Odyssey</b> and Joyce's <b>Ulysses</b>. The one-eyed machines, the trick of being <b>no one</b>, the song of the towers, the dog that waited: quiet echoes, never spelled out.</p>
     <p>Character and animal art: Kenney (kenney.nl), CC0.</p>
 
-    <div class="foot">Game designed in the UK &middot; v1.40 &middot; github.com/dmberry/postAI</div>
+    <div class="foot">Game designed in the UK &middot; v1.41 &middot; github.com/dmberry/postAI</div>
   </div>
 </div>
 <div id="help">

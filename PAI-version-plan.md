@@ -38,6 +38,17 @@ Right now the fortress key is a plain `unlock` at the gate. Make obtaining it re
 ### Three SIRENs inside the fortress
 The overworld has exactly one SIREN (a singular landmark). The **fortress** should have **three** SIREN-class towers as an interior hazard cluster — a wall of song to cross. (Kept as a note per request; the `cls:'siren'` + render + lure already support it, just needs fortress placement.)
 
+## Where we are (v1.41)
+
+### v1.41 — mobile HUD, Backspace lag, Ubik hints
+
+- **Mobile HUD.** `renderer.drawDashboard` now branches to `drawDashboardCompact` when `this.w < 560`: a taller (120px) two-row panel — short vitals + Score/countdown on top, then a full-width slot strip (hands, all pockets, backpack, walkman) below — so nothing runs off a ~375px screen or collides with the status text. Same `uiSlots` kinds, so clicks still work. `#hint` lifted to `bottom:128px` on narrow screens. (Interpreted the "one pocket + hamburger" idea as "fit them all in a clean row" so no pocket is lost on mobile; a true hamburger stack can come later.)
+- **Backspace lag.** `drawLampGlows` built a radial gradient for every lamp in the whole 128×192 pocket each frame; now culled to within 24 tiles of `this.hudPlayer`. (The overworld itself already freezes in the Backspace — `update()` returns early when `inUnderworld`.)
+- **Ubik hints** (overworld lore `tear-01..03`): teach the mechanic — three sprays on one spot, feet still, tears the hole into the Backspace; come back by the same door. Found up top, before you need them.
+
+### NEXT: TOR / HERMES build (deferred, dedicated)
+The hilltop RON stations (amber HERMES terminal, `make`/`read` ML verbs, no AI key) are the next focused build — too big + un-playtestable in the headless preview to bolt onto this bug-fix batch. Full spec already in "Planned / next".
+
 ## Where we are (v1.40)
 
 ### v1.40 — SKYLINK-in-Backspace fix, fortress key via ML, Backspace-only lore

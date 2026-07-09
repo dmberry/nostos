@@ -975,6 +975,25 @@ export const FRAGMENTS = [
       'head down and was gone before the hand reached it. I do not believe the ' +
       'story. I go the long way now, so no one asks me to not believe it twice. — J' },
 
+  // ---- the way down: overworld hints that teach the Ubik → tear mechanic
+  // (three sprays on one spot opens the door to the Backspace). Found up here,
+  // so you learn the way in before you need it.
+  { id: 'tear-01', kind: 'ron', era: 2, title: 'RON: the way down', notepad: true,
+    text: 'If you find the can — the little one that sprays the world brighter for ' +
+      'a moment — do not waste it on wonder. Stand on one spot and spray it. Spray ' +
+      'it again without moving. Spray it a third time on the very same ground, and ' +
+      'the third does not brighten: it tears, and the tear holds open. Step through ' +
+      'and you are in the Backspace, where everything they deleted went. Fix the way ' +
+      'back in your mind before you go. — RON' },
+  { id: 'tear-02', kind: 'handwritten', era: 2, title: 'Diary, a torn corner', notepad: true,
+    text: 'Third spray. Always the third, same tile, feet still — the first two are ' +
+      'just the can showing off. The third is a door. I stopped telling people; some ' +
+      'go down and come back up not quite the same. But if you are reading this you ' +
+      'have asked, so: three sprays, one spot. And mind the door you arrive by. It is ' +
+      'the one that gets you out again.' },
+  { id: 'tear-03', kind: 'note', era: 2, title: 'Sprayed under a UBIK tag, dripping',
+    text: 'SAME SPOT × 3 = A HOLE IN THE WORLD.\nGO DOWN FOR WHAT THEY TOOK.\nCOME BACK BY THE SAME DOOR.' },
+
   // ---- crafting: torn recipe/blueprint notes, improvised gear -------------
   { id: 'craft-01', kind: 'crafting', era: 0, title: 'Torn page: dead-battery trick',
     text: '...clip the two cells in series, not parallel, or you\'ll cook the torch. ' +

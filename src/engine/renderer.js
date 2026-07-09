@@ -1480,8 +1480,13 @@ export class Renderer {
   drawLampGlows(map) {
     const ctx = this.ctx;
     ctx.save();
+    // Only the lamps near the camera matter — a radial gradient per lamp across
+    // the whole 128x192 pocket every frame was the Backspace's framerate. Cull
+    // to a generous radius around the player (set in draw as this.hudPlayer).
+    const p = this.hudPlayer, CULL = 24;
     for (const o of map.objects) {
       if (o.type !== 'lamp') continue;
+      if (p && Math.hypot(o.x - p.x, o.y - p.y) > CULL) continue;
       const s = worldToScreen(o.x + 0.5, o.y + 0.5);
       const bright = this._lampFlicker(o.seed || 0);
       const warm = o.warm != null ? o.warm : 0.5;
@@ -3877,7 +3882,74 @@ export class Renderer {
 
   // ---- Dashboard ----------------------------------------------------------
 
+  // Compact dashboard for narrow (phone) screens: short vitals bars on the
+  // left, a compact score/countdown block, then a single right-aligned strip of
+  // the slots that matter — hands, pockets, backpack, walkman — sized to fit so
+  // nothing runs off the edge or collides with the status text (the desktop
+  // layout's fixed x-positions overflow a ~375px screen).
+  drawDashboardCompact(player, hud) {
+    const ctx = this.ctx;
+    const W = this.w;
+    const MDH = 120;
+    const top = this.h - MDH;
+    ctx.fillStyle = 'rgba(12,15,10,0.9)';
+    ctx.fillRect(0, top, W, MDH);
+    ctx.fillStyle = 'rgba(207,216,195,0.25)';
+    ctx.fillRect(0, top, W, 1);
+
+    // --- Top row: vitals (left), score/countdown (right). ---
+    const bx = 10, bw = Math.min(150, Math.round(W * 0.42));
+    this.drawBar(bx, top + 10, bw, 6, player.health / player.maxHealth, '#b0392f', 'HP');
+    this.drawBar(bx, top + 28, bw, 6, player.stamina / player.maxStamina, '#5f8f3e', 'STA');
+    this.drawBar(bx, top + 46, bw, 6, (player.food ?? 100) / (player.maxFood ?? 100), '#c99a3e', 'FOOD');
+    // conditions, small, just right of the bars
+    ctx.font = 'bold 9px system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    const cx = bx + bw + 8;
+    if (player.venom > 0) { ctx.fillStyle = '#b07fd8'; ctx.fillText('POISON', cx, top + 15); }
+    if (player.invisibleToRobots) { ctx.fillStyle = '#4fd8c3'; ctx.fillText(`HID ${Math.ceil((player.wifiPower || 0) / 60)}m`, cx, top + 33); }
+    if (player.food <= 0) { ctx.fillStyle = '#e05548'; ctx.fillText('STARVING', cx, top + 51); }
+    else if (player.food < 25) { ctx.fillStyle = '#d8a04f'; ctx.fillText('HUNGRY', cx, top + 51); }
+    // score + countdown, right-aligned on the top row
+    ctx.textAlign = 'right';
+    ctx.font = 'bold 13px system-ui, sans-serif';
+    ctx.fillStyle = '#e8d27a';
+    ctx.fillText(`Score ${player.score ?? 0}`, W - 12, top + 22);
+    if (hud.timeLabel) {
+      ctx.font = '10px system-ui, sans-serif';
+      ctx.fillStyle = 'rgba(207,216,195,0.8)';
+      ctx.fillText(hud.timeLabel, W - 12, top + 40);
+    }
+    ctx.textAlign = 'left';
+
+    // --- Bottom row: the slot strip, full width — hands, pockets, backpack,
+    // walkman, all visible and reachable. ---
+    const S = 40, P = 34, gap = 6;
+    const sy = top + MDH - 46;
+    let sx = bx;
+    this.drawLabel('HANDS', sx, sy - 5);
+    this.drawSlot(sx, sy, S, player.hands ? ITEMS[player.hands] : null, 0);
+    this.uiSlots.push({ x: sx, y: sy, w: S, h: S, kind: 'hands' });
+    sx += S + gap;
+    for (let i = 0; i < player.pockets.length; i++) {
+      const slot = player.pockets[i];
+      this.drawSlot(sx, sy, P, slot ? ITEMS[slot.item] : null, slot ? slot.qty : 0, player.selectedPocket === i);
+      this.uiSlots.push({ x: sx, y: sy, w: P, h: P, kind: 'pocket', i });
+      sx += P + gap;
+    }
+    if (player.backpack) {
+      this.drawLabel('PACK', sx, sy - 5);
+      this.drawSlot(sx, sy, P, ITEMS.backpack, 0);
+      this.uiSlots.push({ x: sx, y: sy, w: P, h: P, kind: 'packbadge' });
+      sx += P + gap;
+    }
+    this.drawLabel('WALK', sx, sy - 5);
+    this.drawSlot(sx, sy, P, player.walkman ? ITEMS[player.walkman.item] : null, 0, player.walkmanSide != null);
+    this.uiSlots.push({ x: sx, y: sy, w: P, h: P, kind: 'walkman' });
+  }
+
   drawDashboard(player, hud) {
+    if (this.w < 560) { this.drawDashboardCompact(player, hud); return; }
     const ctx = this.ctx;
     const top = this.h - DASH_H;
 
