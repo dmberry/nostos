@@ -7,6 +7,7 @@
 // mock-up. Switchable World / Backspace / Fortress colour themes.
 
 import { TAPES } from './items.js';
+import { VERSION } from '../version.js';
 import { Renderer } from '../engine/renderer.js';
 import { drawRobot } from './robots.js';
 import { worldToScreen } from '../engine/iso.js';
@@ -109,7 +110,7 @@ export function initMobileGate(mode = 'gate') {
         <p class="mg-about-tiny">Game designed in the UK · github.com/dmberry/postAI</p>
       </div>
     </div>`;
-  const footerHtml = `<div class="mg-madein">alpha · Game designed in the UK · <button class="mg-about-open" id="mg-about-open">About</button></div>`;
+  const footerHtml = `<div class="mg-madein">alpha · Game designed in the UK · <button class="mg-about-open" id="mg-about-open">About</button> <span class="mg-ver">v${VERSION}</span></div>`;
   // A looping game-world clip drifting slowly behind everything, low opacity.
   // It plays at half speed (set in JS) and pans gently left→right (CSS).
   // H.264 MP4 — plays in every modern browser (transcoded from the source .mov).
@@ -203,6 +204,7 @@ export function initMobileGate(mode = 'gate') {
         text-align: center; font-size: 10px; letter-spacing: 0.03em; color: rgba(207,216,195,0.42); z-index: 6; pointer-events: none; }
       .mg-about-open { font: inherit; color: rgba(207,216,195,0.7); background: none; border: none; padding: 0;
         text-decoration: underline; text-underline-offset: 2px; cursor: pointer; pointer-events: auto; }
+      .mg-ver { font-size: 9px; color: rgba(207,216,195,0.3); letter-spacing: 0.02em; }
       /* About overlay */
       .mg-about { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center;
         background: rgba(6,9,5,0.72); padding: 20px; -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); }

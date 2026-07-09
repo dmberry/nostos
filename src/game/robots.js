@@ -666,6 +666,7 @@ function updateRecharge(r, dt, map) {
 export function updateRobots(dt, robots, player, map) {
   for (const r of robots) {
     if (r.dead) continue; // external code may set dead directly; nothing runs after
+    if (r.driven) continue; // a HERMES relay is steering this one; its AI is suspended
 
     // Materialising out of the factory: tick down the flicker timer. The bot
     // still moves and fights normally while it fades in.

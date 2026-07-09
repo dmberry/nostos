@@ -17,7 +17,10 @@ import { sfx } from './engine/sound.js';
 import { worldToScreen } from './engine/iso.js';
 import { runRonml } from './game/ronml.js';
 import { createEliza } from './game/eliza.js';
-import { placeTors, HERMES_RECIPES, HERMES_LORE, hermesTopics } from './game/hermes.js';
+import { placeTors, HERMES_DOCS, hermesTopics } from './game/hermes.js';
+import { VERSION } from './version.js';
+import { drawRobotVision } from './game/robotvision.js';
+import { screenDirToWorld } from './engine/iso.js';
 import { createFortress } from './game/fortress.js';
 import { createUnderworldPocket, spawnUnderworldCreature, updateUnderworldCreatures } from './game/underworld.js';
 import { CHOIR_NOTES, CHOIR_DURATION } from './engine/choir-notes.js';
@@ -50,7 +53,6 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '1.44';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -783,6 +785,18 @@ const obTermConnect = document.getElementById('obterminal-connect');
 const obTermBar = document.getElementById('obterminal-bar');
 const obTermInput = document.getElementById('obterminal-input');
 const obTermGhost = document.getElementById('obterminal-ghost');
+const obTermBattEl = document.getElementById('obterminal-batt');
+// The relay's solar-cell gauge in the HERMES terminal — a bar you watch wear
+// down as you use it and creep back up in the sun.
+function updateHermesBattEl() {
+  if (!obTermBattEl) return;
+  if (terminalKind !== 'hermes' || !hermesTor) { obTermBattEl.textContent = ''; return; }
+  const f = hermesTor.battery ?? 1;
+  const n = 10, on = Math.round(f * n);
+  const glyphs = '▓'.repeat(on) + '░'.repeat(n - on);
+  obTermBattEl.textContent = `CELL ${glyphs} ${Math.round(f * 100)}%`;
+  obTermBattEl.style.color = f < 0.2 ? '#ff6a4a' : f < 0.45 ? '#e0b53a' : '#7ad06a';
+}
 const aiosEl = document.getElementById('aios');
 const aiosScreen = document.getElementById('aios-screen');
 const aiosHeader = document.getElementById('aios-header');
@@ -807,6 +821,7 @@ function ronmlCtx() {
   const nearby = (r) => !r.dead && !r.friendly && !r.fused
     && Math.hypot(r.x - player.x, r.y - player.y) <= RONML_ROBOT_RANGE;
   return {
+    station: 'ob', // an AI obelisk (TIRESIAS) — the AI-network verbs live here
     listObelisks: () => obeliskObjs.filter((o) => !o.destroyed).map((o) => o.code),
     distanceToNode: (id) => {
       const o = findObelisk(id);
@@ -935,58 +950,203 @@ function ronmlCtx() {
   };
 }
 
-// The HERMES relay's context: everything the obelisk console has, plus the RON
-// station verbs (make/read/ping). Those hooks are absent from ronmlCtx, so the
-// verbs teach "HERMES relay only" at an obelisk and work here.
+// The HERMES relay's context. Deliberately its OWN small set — it does NOT
+// inherit the obelisk's AI-network verbs, because a TOR is off-grid RON tech
+// that never touches the machines' wire. Just: keep knowledge alive (read/
+// archive), grow or craft what keeps you going (make), plus the neutral notepad.
 function hermesCtx() {
   return {
-    ...ronmlCtx(),
-    make: (name) => hermesMake(name),
+    station: 'hermes',
+    showNotepad: () => { openNotebook(); },
     read: (topic) => hermesRead(topic),
-    ping: () => hermesPing(),
+    print: () => {}, // never reached — HERMES print takes a topic (see printDoc)
+    printDoc: (topic) => hermesPrintDoc(topic),
+    archive: () => hermesArchive(),
+    drive: () => startDrive(),
   };
 }
 
-// `make <thing>`: fabricate supplies. Janky legacy tech — a fabrication run
-// takes a beat and sometimes coughs and produces nothing (the pre-collapse
-// jank), so it's help-in-a-pinch, not a printing press. Output drops at your
-// feet as "moly", RON's word for a HERMES run.
-let hermesMakeCooldown = 0; // seconds until the fabricator can run again
-function hermesMake(name) {
-  const recipe = HERMES_RECIPES[name] || (name === '' ? HERMES_RECIPES.battery : null);
-  if (!recipe) {
-    replPrint(`HERMES can't build "${name || '?'}". It makes: ${Object.keys(HERMES_RECIPES).join(', ')}.`);
-    return;
-  }
-  if (hermesMakeCooldown > 0) {
-    replPrint(`The fabricator is still cycling — give it ${Math.ceil(hermesMakeCooldown)}s.`);
-    return;
-  }
-  hermesMakeCooldown = 12 + Math.random() * 8; // slow, limited runs
-  // ~28% chance the old rig fails mid-run.
-  if (Math.random() < 0.28) {
-    replPrint('The fabricator shudders, throws a spark, and produces nothing. Old tech. Try again.');
-    player.say('The HERMES rig coughs and dies mid-run. Nothing.');
-    return;
-  }
-  map.groundItems.push({ item: recipe.item, qty: recipe.qty, x: player.x + 0.4, y: player.y + 0.5 });
-  replPrint(`HERMES runs off ${recipe.label} — a moly run holds. It drops at your feet.`);
-  player.say(`HERMES fabricates ${recipe.label}. Grab it.`);
+// A HERMES relay runs off its own small solar cell — no grid to draw on. Each
+// command costs a little charge; drive costs a trickle each second. It creeps
+// back up in sunlight. The terminal shows the gauge so you watch it wear down.
+const HERMES_BATT = { read: 0.03, print: 0.06, archive: 0.01, driveStart: 0.05, drivePerSec: 0.02 };
+function hermesBattery() { return hermesTor ? (hermesTor.battery ?? 1) : 0; }
+function hermesSpend(cost) {
+  if (!hermesTor) return true;
+  if ((hermesTor.battery ?? 1) < cost) return false;
+  hermesTor.battery = Math.max(0, (hermesTor.battery ?? 1) - cost);
+  updateHermesBattEl();
+  return true;
 }
 
-// `read <topic>`: pull up RON lore the mesh still holds, printed to the console.
+// Documents the player has printed off a relay, kept in the notepad. {title,text}.
+const printedDocs = [];
+
+// `print <topic>`: run off a physical copy of a document, filed in your notepad
+// (N) so you carry the knowledge away from the relay.
+function hermesPrintDoc(topic) {
+  const doc = HERMES_DOCS[topic];
+  if (!doc) { replPrint(`No document "${topic || '?'}". archive lists what's held.`); return; }
+  if (!hermesSpend(HERMES_BATT.print)) { replPrint('Not enough charge to print — let the cell recover.'); return; }
+  if (!printedDocs.some((d) => d.title === doc.title)) printedDocs.push({ title: doc.title, text: doc.text });
+  replPrint(`The relay chatters and runs off "${doc.title}". Filed in your notepad — press N to read it anywhere.`);
+  player.say(`Printed: ${doc.title}. It's in your notepad (N).`);
+}
+
+// `archive`: list the documents this relay holds, with titles.
+function hermesArchive() {
+  hermesSpend(HERMES_BATT.archive);
+  const lines = ['HERMES archive — the human record RON kept alive:'];
+  for (const k of hermesTopics()) lines.push(`  ${(k + '        ').slice(0, 9)} ${HERMES_DOCS[k].title}`);
+  lines.push('read <topic> to open one · print <topic> to keep a copy.');
+  replPrint(...lines);
+}
+
+// ---- HERMES `drive`: override a nearby machine and see through its eyes ----
+let hermesTor = null;            // the relay whose terminal is currently open
+const DRIVE_RANGE = 16;          // tiles from the relay the link holds for
+let driveState = null;           // { robot, tor, gait, sd } while driving, else null
+const ROBOT_LABELS = { t1: 'T1 ROLLER', t2: 'T2 STALKER', t3: 'T3 SNIPER', w1: 'W1 REVENGER', w2: 'W2 RIVER', w3: 'W3 MENDER', w4: 'W4 HK', w5: 'W5 GARDENER', m6: 'M6 SENTRY' };
+
+// `drive`: take the nearest live machine within the relay's range. Closes the
+// terminal into the robot-vision overlay (see frame()); you steer with the same
+// movement keys, self-destruct with X, or release with Esc.
+function startDrive() {
+  if (!hermesTor) { replPrint('No relay lock — open this at a TOR.'); return; }
+  let best = null, bestD = DRIVE_RANGE;
+  for (const r of robots) {
+    if (r.dead || r.fused || r.friendly) continue;
+    const d = Math.hypot(r.x - (hermesTor.x + 0.5), r.y - (hermesTor.y + 0.5));
+    if (d < bestD) { bestD = d; best = r; }
+  }
+  if (!best) { replPrint(`No machine within ${DRIVE_RANGE} of ${hermesTor.code || 'the relay'}. Wait for one to wander close, then drive.`); return; }
+  if (!hermesSpend(HERMES_BATT.driveStart)) { replPrint('Not enough charge to seize a unit — let the cell recover.'); return; }
+  best.driven = true;          // updateRobots skips a driven unit's own AI
+  best.aggro = false;
+  driveState = { robot: best, tor: hermesTor, gait: (best.type === 't1' || best.type === 'w2') ? 'TREAD' : 'BIPED', sd: -1 };
+  closeObTerminal();           // drop the console; the overlay takes the screen
+  player.terminalSafe = true;  // you're still jacked in at the relay, hidden
+  if (hintEl) hintEl.style.display = 'none';
+  player.say(`HERMES override: you are seeing through ${ROBOT_LABELS[best.type] || best.type.toUpperCase()}. Steer it; X self-destructs, Esc releases.`);
+}
+
+function endDrive(msg) {
+  if (!driveState) return;
+  const r = driveState.robot;
+  if (r) r.driven = false;
+  driveState = null;
+  player.terminalSafe = false;
+  if (hintEl) hintEl.style.display = '';
+  if (msg) player.say(msg);
+}
+
+// Blow the driven unit: a spark burst + radial damage to nearby machines and
+// the factory hull, then the link drops.
+function driveSelfDestruct() {
+  const r = driveState && driveState.robot;
+  if (!r) { endDrive(); return; }
+  const R = 4.5;
+  for (let s = 0; s < 10; s++) player.sparkAt(map, r.x + (Math.random() - 0.5) * 2, r.y + (Math.random() - 0.5) * 2);
+  for (const o of robots) {
+    if (o === r || o.dead || o.fused) continue;
+    if (Math.hypot(o.x - r.x, o.y - r.y) <= R) { o.hp = (o.hp ?? 10) - 20; if (o.hp <= 0) o.dead = true; }
+  }
+  if (factoryLive()) {
+    const fx = factoryCx(), fy = factoryCy();
+    if (Math.hypot(fx - r.x, fy - r.y) <= R + 2 && wfactory) player.damageFactory(wfactory, map, 40);
+  }
+  r.dead = true;
+  sfx.play('treefall');
+  endDrive('The unit blows itself apart. The link goes dark.');
+}
+
+// Per-step drive update: steer the robot, hold the range, run the self-destruct
+// countdown. The overworld is frozen while you're in here (like the terminal).
+function updateDrive(dt) {
+  const r = driveState.robot;
+  // Self-destruct countdown (armed by holding, tripped by tapping X twice).
+  if (driveState.sd >= 0) {
+    driveState.sd -= dt;
+    if (driveState.sd <= 0) { driveSelfDestruct(); return; }
+  }
+  if (input.consumePress('KeyX')) {
+    if (driveState.sd >= 0) { driveState.sd = -1; player.say('Self-destruct aborted.'); }
+    else driveState.sd = 2.0;
+  }
+  if (input.consumePress('Escape')) { endDrive('You let the unit go; it stirs back to its own routines.'); return; }
+
+  const intent = input.moveIntent();
+  if (intent.dx || intent.dy) {
+    const dir = screenDirToWorld(intent.dx, intent.dy);
+    const spd = (r.type === 't2' || r.type === 'w4') ? 3.2 : (r.type === 't1') ? 2.6 : 2.9;
+    const nx = r.x + dir.x * spd * dt, ny = r.y + dir.y * spd * dt;
+    if (!map.isSolid(Math.floor(nx), Math.floor(r.y))) r.x = nx;
+    if (!map.isSolid(Math.floor(r.x), Math.floor(ny))) r.y = ny;
+    const m = Math.hypot(dir.x, dir.y) || 1;
+    r.facing = { x: dir.x / m, y: dir.y / m };
+  }
+  driveState.dist = Math.hypot(r.x - (driveState.tor.x + 0.5), r.y - (driveState.tor.y + 0.5));
+  if (driveState.dist > DRIVE_RANGE) { endDrive('The unit walks out of the relay\'s reach. The link snaps and it comes to, on its own again.'); return; }
+  // Holding the link burns the relay's cell; when it's flat, the link drops.
+  driveState.tor.battery = Math.max(0, (driveState.tor.battery ?? 1) - HERMES_BATT.drivePerSec * dt);
+  driveState.batt = driveState.tor.battery;
+  if (driveState.tor.battery <= 0) { endDrive('The relay\'s cell is flat — the link dies and the unit comes to.'); return; }
+  camera.follow(r.x, r.y, dt);
+}
+
+// Build the robot-vision info and draw the overlay over the just-rendered scene.
+let driveMatCtx = null;
+const HEADING_DIRS = ['E', 'SE', 'S', 'SW', 'W', 'NW', 'N', 'NE'];
+function drawDriveOverlay(now) {
+  const r = driveState.robot;
+  // Camera matrix -> a world-to-pixel projector for the target brackets.
+  if (!driveMatCtx) driveMatCtx = document.createElement('canvas').getContext('2d');
+  driveMatCtx.setTransform(1, 0, 0, 1, 0, 0);
+  camera.applyTransform(driveMatCtx, renderer.w, renderer.h);
+  const m = driveMatCtx.getTransform();
+  // Match the renderer's per-tile elevation lift (heightAt * ELEV, ELEV=16), or
+  // markers on raised ground float below the sprites they should sit on.
+  const project = (wx, wy) => {
+    const s = worldToScreen(wx, wy);
+    const lift = (map.heightAt ? map.heightAt(Math.floor(wx), Math.floor(wy)) : 0) * 16;
+    return { x: m.a * s.x + m.c * (s.y - lift) + m.e, y: m.b * s.x + m.d * (s.y - lift) + m.f };
+  };
+  const ents = [];
+  if (Math.hypot(player.x - r.x, player.y - r.y) < 20) ents.push({ x: player.x, y: player.y, label: 'HUMAN · ALLY', kind: 'human' });
+  for (const o of robots) {
+    if (o === r || o.dead || o.fused) continue;
+    if (Math.hypot(o.x - r.x, o.y - r.y) < 18) ents.push({ x: o.x, y: o.y, label: `${ROBOT_LABELS[o.type] || o.type.toUpperCase()} · HOSTILE`, kind: 'hostile' });
+  }
+  for (const a of animals) {
+    if (a.dead) continue;
+    if (Math.hypot(a.x - r.x, a.y - r.y) < 13) ents.push({ x: a.x, y: a.y, label: 'FAUNA', kind: 'fauna' });
+  }
+  const heading = HEADING_DIRS[(Math.round(Math.atan2(r.facing.y, r.facing.x) / (Math.PI / 4)) + 8) % 8];
+  drawRobotVision(renderer.ctx, {
+    srcCanvas: renderer.canvas, w: renderer.w, h: renderer.h, t: now,
+    robot: r, unitLabel: ROBOT_LABELS[r.type] || r.type.toUpperCase(),
+    relay: driveState.tor.code || 'TOR-??',
+    dist: driveState.dist || 0, maxRange: DRIVE_RANGE, heading, gait: driveState.gait,
+    integrity: r.maxHp ? Math.max(0, r.hp / r.maxHp) : 1,
+    battery: driveState.tor.battery ?? 1,
+    entities: ents, project, selfDestructT: driveState.sd,
+  });
+}
+
+// `read <topic>`: show a document on the terminal (print it to keep a copy).
 function hermesRead(topic) {
   if (!topic) {
-    replPrint('read <topic>. HERMES still holds: ' + hermesTopics().join(', ') + '.');
+    replPrint('read <topic>. archive lists them. Held: ' + hermesTopics().join(', ') + '.');
     return;
   }
-  const text = HERMES_LORE[topic];
-  if (!text) {
-    replPrint(`Nothing on "${topic}" in the mesh. Try: ${hermesTopics().join(', ')}.`);
+  const doc = HERMES_DOCS[topic];
+  if (!doc) {
+    replPrint(`No document "${topic}". Try: ${hermesTopics().join(', ')}.`);
     return;
   }
+  if (!hermesSpend(HERMES_BATT.read)) { replPrint('Not enough charge to pull that up — let the cell recover.'); return; }
   // Wrap to the console width so a long entry reads as paragraphs, not one line.
-  const words = text.split(' ');
+  const words = doc.text.split(' ');
   let line = '';
   const out = [];
   for (const w of words) {
@@ -994,32 +1154,7 @@ function hermesRead(topic) {
     else line += ' ' + w;
   }
   if (line.trim()) out.push(line.trim());
-  replPrint('', ...out, '');
-}
-
-// `ping`: sweep the AI network — the nearest live obelisks and the factory,
-// with a rough compass bearing and distance. HERMES's read on the enemy.
-function hermesPing() {
-  const bearing = (dx, dy) => {
-    // Screen/world y grows down-south; give an 8-point compass.
-    const a = Math.atan2(dy, dx); // -pi..pi
-    const dirs = ['E', 'SE', 'S', 'SW', 'W', 'NW', 'N', 'NE'];
-    return dirs[(Math.round(a / (Math.PI / 4)) + 8) % 8];
-  };
-  const live = obeliskObjs.filter((o) => !o.destroyed).map((o) => ({
-    label: o.code || 'OB-????',
-    d: Math.hypot(o.x + 0.5 - player.x, o.y + 0.5 - player.y),
-    b: bearing(o.x + 0.5 - player.x, o.y + 0.5 - player.y),
-  })).sort((a, b) => a.d - b.d);
-  const out = ['HERMES sweep — AI network:'];
-  if (!live.length) out.push('  no obelisks left standing. The sky is yours.');
-  for (const o of live.slice(0, 6)) out.push(`  ${o.label}  ${Math.round(o.d)} tiles ${o.b}`);
-  if (live.length > 6) out.push(`  …and ${live.length - 6} more.`);
-  if (factoryLive()) {
-    const fx = factoryCx() - player.x, fy = factoryCy() - player.y;
-    out.push(`  W-FACTORY  ${Math.round(Math.hypot(fx, fy))} tiles ${bearing(fx, fy)}`);
-  }
-  replPrint('', ...out, '');
+  replPrint('', `== ${doc.title} ==`, ...out, '(print ' + topic + ' to keep a copy in your notepad)', '');
 }
 
 // The RON-ML `map` command: a green schematic of this AI's territory drawn
@@ -1136,7 +1271,8 @@ function renderNotebookPage() {
 function notebookPrev() { if (notebookIdx > 0) { notebookIdx--; renderNotebookPage(); } }
 function notebookNext() { if (notebookIdx < notebookEntries.length - 1) { notebookIdx++; renderNotebookPage(); } }
 function openNotebook() {
-  notebookEntries = FRAGMENTS.filter((f) => f.notepad && lore.found.has(f.id));
+  // Documents printed off HERMES relays come first, then the scattered pages.
+  notebookEntries = [...printedDocs, ...FRAGMENTS.filter((f) => f.notepad && lore.found.has(f.id))];
   notebookIdx = 0;
   renderNotebookPage();
   notebookEl.style.display = 'flex';
@@ -1277,11 +1413,14 @@ function openGateTerminal() {
 // with a short glitchy boot, then the same input runs against hermesCtx.
 function openHermesTerminal(tor) {
   terminalKind = 'hermes';
+  hermesTor = tor;
+  if (tor.battery == null) tor.battery = 0.55 + Math.random() * 0.4;
   player.terminalSafe = true;
   obTermEl.classList.add('hermes');
   obTermEl.style.display = 'flex';
   obTermScreen.parentElement.style.display = 'flex';
   obTermConnect.style.display = 'none';
+  updateHermesBattEl();
   replLog = [];
   replHistory = [];
   replHistoryIdx = -1;
@@ -1290,11 +1429,11 @@ function openHermesTerminal(tor) {
     'HERMES 0.9b  //  RON-DOS 3.02  (c) Reality Or Nothing',
     '',
     `> relay ........... ${tor.code || 'TOR-??'}`,
-    '> power ........... solar trickle (degraded)',
-    '> uplink .......... RON mesh — intermittent',
-    '> key ............. none required — this was never theirs',
+    '> power ........... own solar cell (watch the gauge)',
+    '> network ......... none — off-grid by design, nothing to detect',
+    '> holdings ........ the human record: RON-ML, schematics, history',
     '',
-    'HERMES online. Old, but ours. try: make battery · read moly · ping · help',
+    'HERMES online. Off the wire, still ours. try: archive · read history · print fortress · drive · help',
     '_',
   );
   obTermInput.value = '';
@@ -1307,7 +1446,11 @@ obTermEl.addEventListener('click', (e) => { if (e.target === obTermEl) closeObTe
 // suggests the rest of a verb as faded ghost text you can accept with Tab.
 // (sing stays out of the list — it's a secret.) Purely a convenience the book
 // unlocks; you can always type the whole thing by hand.
-const RONML_VERBS = ['scan', 'nearest', 'keys', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'map', 'print', 'unlock', 'eliza', 'make', 'read', 'ping', 'notes', 'help', 'let'];
+// Autocomplete is per-system: an obelisk (TIRESIAS) suggests only AI-network
+// verbs, a HERMES relay only RON verbs — no seepage between the two. (sing is
+// secret, so it's in neither list.)
+const OB_COMPLETE = ['scan', 'nearest', 'keys', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'map', 'print', 'unlock', 'eliza', 'notes', 'help', 'let'];
+const HERMES_COMPLETE = ['read', 'print', 'archive', 'drive', 'notes', 'help', 'let'];
 const escapeHtml = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 function ronmlCompletion(value) {
   if (elizaBot) return ''; // no RON-ML hints mid-conversation with the DOCTOR
@@ -1315,7 +1458,8 @@ function ronmlCompletion(value) {
   const m = value.match(/([A-Za-z]+)$/); // the alphabetic token at the caret
   if (!m) return '';
   const tok = m[1];
-  const hit = RONML_VERBS.find((v) => v.length > tok.length && v.startsWith(tok));
+  const verbs = terminalKind === 'hermes' ? HERMES_COMPLETE : OB_COMPLETE;
+  const hit = verbs.find((v) => v.length > tok.length && v.startsWith(tok));
   return hit ? hit.slice(tok.length) : '';
 }
 function updateGhost() {
@@ -1550,7 +1694,7 @@ function describeAt(tx, ty) {
       if (obj.cls === 'siren') return `A SIREN-class obelisk. Teal-lit, and it sings — the song pulls you in. ${obj.alert > 0.3 ? 'It has you.' : 'Keep a tape ready.'}`;
       return `An AI signal obelisk. Black, humming, ${obj.alert > 0.3 ? 'and it has seen you.' : 'watching.'}`;
     }
-    if (obj.type === 'tor') return `A HERMES relay — old RON field tech, ${obj.code || 'a hilltop station'}. Friendly. Click its amber screen to use it (make, read, ping).`;
+    if (obj.type === 'tor') return `A HERMES relay — decentralised RON tech, ${obj.code || 'a hilltop station'}, off the machines' grid. Friendly. Click its amber screen (archive, read, make).`;
     if (obj.type === 'wfactory') return 'The W-factory. It fields repair drones for damaged towers — bring one down for good before it can be mended.';
     if (obj.type === 'box') return obj.opened ? 'An emptied resistance cache.' : 'A resistance cache. Search it (E).';
     if (obj.type === 'tree') return 'A tree. Fell it for wood.';
@@ -1624,6 +1768,11 @@ function update(dt) {
     }
     return; // everything else — movement, AI, other clocks — is frozen while resting
   }
+
+  // Driving a machine from a HERMES relay: you steer the unit and the overworld
+  // holds still around you (you're jacked in at the relay). The robot-vision
+  // overlay is drawn in frame().
+  if (driveState) { updateDrive(dt); return; }
 
   if (input.newGamePressed()) {
     if (window.confirm('Start a new game? This erases your saved progress.')) {
@@ -1905,8 +2054,13 @@ function update(dt) {
     }
   }
 
-  // HERMES fabricator recharge (slow, so a station isn't a printing press).
-  if (hermesMakeCooldown > 0) hermesMakeCooldown = Math.max(0, hermesMakeCooldown - dt);
+  // HERMES relays trickle-charge off their solar cells (slow). Watch the gauge
+  // recover when you're not leaning on a relay.
+  for (const t of torObjs) {
+    if (t.battery == null) t.battery = 1;
+    else if (t.battery < 1) t.battery = Math.min(1, t.battery + 0.006 * dt);
+  }
+  if (terminalKind === 'hermes' && obTermEl.style.display === 'flex') updateHermesBattEl();
 
   // RON resupply: every couple of minutes, one already-emptied cache gets
   // quietly restocked with a fresh drop of batteries, ammo or shells.
@@ -2274,7 +2428,10 @@ function frame(now) {
       ubikFlickerX: player.ubikFlickerX || player.x,
       ubikFlickerY: player.ubikFlickerY || player.y,
       musicMode: sfx.musicMode, // the walkman's reels spin only while its side is what's actually playing
+      driving: !!driveState,    // suppress the normal HUD; the robot-vision overlay takes over
     });
+    // Robot-vision: resample the just-drawn scene as ASCII + a Terminator HUD.
+    if (driveState) drawDriveOverlay(now);
     frameCount += 1;
   }
 

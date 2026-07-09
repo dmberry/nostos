@@ -154,6 +154,11 @@
   #obterminal.hermes #obterminal-prompt { color: #e6a53a; text-shadow: 0 0 4px rgba(230,150,40,0.7); }
   #obterminal.hermes #obterminal-input { color: #f4c987; text-shadow: 0 0 4px rgba(230,150,40,0.7); caret-color: #e6a53a; }
   #obterminal.hermes .crt-hint { color: rgba(230,150,40,0.4); }
+  /* HERMES solar-cell gauge, top-right of the relay CRT. Hidden at obelisks. */
+  #obterminal-batt { display: none; }
+  #obterminal.hermes #obterminal-batt { display: block; position: absolute; top: 14px; right: 22px; z-index: 2;
+    font: 11px ui-monospace, 'Courier New', monospace; color: #e6a53a; letter-spacing: 0.04em;
+    text-shadow: 0 0 4px rgba(230,150,40,0.6); pointer-events: none; }
   /* RON-ML map readout — a green schematic of the AI's territory. */
   #ronmap { display: none; position: fixed; inset: 0; z-index: 22;
     background: rgba(0,0,0,0.82); align-items: center; justify-content: center; }
@@ -274,7 +279,7 @@
     <p>The shape of it — a long way home across a hostile world to someone still waiting — after Homer's <b>Odyssey</b> and Joyce's <b>Ulysses</b>. The one-eyed machines, the trick of being <b>no one</b>, the song of the towers, the dog that waited: quiet echoes, never spelled out.</p>
     <p>Character and animal art: Kenney (kenney.nl), CC0.</p>
 
-    <div class="foot">Game designed in the UK &middot; v1.44 &middot; github.com/dmberry/postAI</div>
+    <div class="foot">Game designed in the UK &middot; v1.45 &middot; github.com/dmberry/postAI</div>
   </div>
 </div>
 <div id="help">
@@ -450,6 +455,7 @@
 </div>
 <div id="obterminal">
   <div class="crt">
+    <div id="obterminal-batt"></div>
     <div id="obterminal-connect">
       <div class="connect-label">OPENING CHANNEL...</div>
       <div class="connect-track"><div id="obterminal-bar"></div></div>

@@ -135,8 +135,8 @@ function parse(toks) {
 // Each `ctx` method is supplied by the caller (main.js) and does the actual
 // world-mutation; this module only handles language mechanics and gating.
 
-function makeBuiltins() {
-  return {
+function makeBuiltins(station) {
+  const B = {
     scan: {
       arity: 0,
       fn: (_args, ctx) => ({ tag: 'list', items: ctx.listObelisks().map((id) => ({ tag: 'node', id })) }),
@@ -180,33 +180,31 @@ function makeBuiltins() {
       },
     },
     // ---- HERMES station verbs (RON hilltop relays only) ------------------
-    // These call ctx hooks that only a HERMES terminal supplies; at an AI
-    // obelisk the hook is absent and the verb teaches you where it works.
-    make: {
-      arity: 1,
-      fn: ([what], ctx) => {
-        if (!ctx.make) throw new RonmlError('nothing here can build — this is an AI node. Find a HERMES relay on a hilltop: make battery');
-        const name = what && (what.id || (what.tag === 'node' && what.id)) || '';
-        ctx.make(String(name).toLowerCase());
-        return { tag: 'unit' };
-      },
-    },
+    // RON tech is off-grid on purpose, and it's an INFORMATION resource, not a
+    // workshop: no network verb (touching the wire would give the relay away),
+    // nothing fabricated. It keeps the human record — read it here, or print a
+    // copy for your notes. (A HERMES `print` is added in makeBuiltins below, so
+    // it can take a topic; the obelisk's own arity-0 `print` maps the network.)
     read: {
       arity: 1,
       fn: ([topic], ctx) => {
-        if (!ctx.read) throw new RonmlError('no archive on this node. read <topic> works at a HERMES relay.');
         const name = topic && (topic.id || '') || '';
         ctx.read(String(name).toLowerCase());
         return { tag: 'unit' };
       },
     },
-    ping: {
+    // Lists the human knowledge this relay still holds — RON kept it alive when
+    // the machines were deleting it.
+    archive: {
       arity: 0,
-      fn: (_args, ctx) => {
-        if (!ctx.ping) throw new RonmlError('no mesh uplink on this node. ping works at a HERMES relay.');
-        ctx.ping();
-        return { tag: 'unit' };
-      },
+      fn: (_args, ctx) => { ctx.archive(); return { tag: 'unit' }; },
+    },
+    // Override a nearby machine and see through its eyes — RON turning the
+    // enemy's own units. You drive it until it leaves the relay's short range
+    // or you trip its self-destruct.
+    drive: {
+      arity: 0,
+      fn: (_args, ctx) => { ctx.drive(); return { tag: 'unit' }; },
     },
     nearest: {
       arity: 1,
@@ -298,7 +296,42 @@ function makeBuiltins() {
       },
     },
   };
+  // The obelisk (TIRESIAS) and the HERMES relay are two different systems, each
+  // with its own commands — not one language that refuses half its verbs. So we
+  // hand back only the verbs that belong to the station you're at. A verb from
+  // the other system simply isn't a command here (see evalNode's unknown path).
+  // Neutral verbs (notes; help/let are handled outside this table) belong to
+  // both. A station-less caller (tools/tests) gets everything.
+  for (const k of OB_VERBS) if (B[k]) B[k].station = 'ob';
+  for (const k of HERMES_VERBS) if (B[k]) B[k].station = 'hermes';
+  if (!station) return B;
+  const out = {};
+  for (const k of Object.keys(B)) {
+    if (!B[k].station || B[k].station === station) out[k] = B[k];
+  }
+  // A HERMES relay prints DOCUMENTS, not maps — override `print` here so it
+  // takes a topic (`print fortress`). The obelisk keeps its own arity-0 `print`.
+  if (station === 'hermes') {
+    out.print = {
+      arity: 1, station: 'hermes',
+      fn: ([topic], ctx) => { ctx.printDoc(String((topic && topic.id) || '').toLowerCase()); return { tag: 'unit' }; },
+    };
+  }
+  return out;
 }
+
+// Which verbs belong to which system. Used to filter each terminal's builtins,
+// and to tell "not a command here" (a real verb, wrong system) apart from a
+// plain bad word.
+const OB_VERBS = ['scan', 'nearest', 'keys', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'sing', 'map', 'print', 'unlock', 'eliza'];
+// Note: HERMES's `print` is added as an override in makeBuiltins (it takes a
+// topic), not tagged here — tagging it would steal the obelisk's own arity-0
+// `print`. `print` is already in OB_VERBS, so ALL_VERBS still covers it.
+const HERMES_VERBS = ['read', 'archive', 'drive'];
+// Retired verbs kept only so typing one gives a clean "not a command" instead
+// of a cryptic node error (make/ping were removed when TORs became info-only).
+const RETIRED_VERBS = ['make', 'ping'];
+const ALL_VERBS = new Set([...OB_VERBS, ...HERMES_VERBS, ...RETIRED_VERBS]);
 
 // ---- Evaluator -----------------------------------------------------------
 
@@ -322,6 +355,12 @@ function evalNode(node, env, ctx, builtins) {
       if (b) {
         if (b.arity === 0) return b.fn([], ctx);
         return { tag: 'fn', name: lower, builtin: b, args: [], ctx };
+      }
+      // A real verb from the OTHER system, typed at this terminal: it just isn't
+      // a command here (the two systems don't know each other). Distinct from a
+      // plain node id like OB-XXXX or an atom like berries, which stay nodes.
+      if (ctx && ctx.station && ALL_VERBS.has(lower)) {
+        throw new RonmlError(`'${node.name}' isn't a command on this terminal.`);
       }
       return { tag: 'node', id: node.name };
     }
@@ -378,46 +417,59 @@ const USAGE_HINTS = {
   sleep: 'sleep needs a number of minutes. try: sleep 30',
   rewind: 'rewind needs a number of hours. try: rewind 3',
   unlock: 'unlock needs a hacked key. try: let k = hack OB-XXXX in unlock k',
+  print: 'print needs a topic — try: print fortress (archive lists them)',
+  read: 'read needs a topic — try: read history (archive lists them)',
 };
 
 // `help` reference, shown when the operator types it at the terminal. Per-verb
 // detail lines keyed by name; `sing` is deliberately omitted (it's a secret).
+// Each row: [sig, type, desc, gate, station]. `station` scopes the verb to a
+// terminal — 'ob' (AI obelisk / TIRESIAS), 'hermes' (RON relay), or '' for the
+// verbs that work anywhere. `help` filters to the terminal you're at.
 const HELP_VERBS = [
-  ['scan', 'unit -> list', 'obelisks/machines in range of this terminal', ''],
-  ['nearest', 'list -> node', 'the closest element of a list', ''],
-  ['keys', 'unit -> list', 'the access keys you currently hold', ''],
-  ['hack n', 'node -> key', "take node n's access key", 'needs an AI key'],
-  ['crash n k', 'node key -> unit', 'knock node n dark until a drone mends it', 'needs k from hack'],
-  ['loop n', 'node -> unit', 'pin an infinite loop into node n — freezes it and its garrison until a drone resets it', 'no key needed'],
-  ['sleep t', 'num -> unit', 'idle local machines for t game-minutes', 'needs AI key'],
-  ['rewind t', 'num -> unit', 'claw t hours back off the SKYLINK deadline', 'needs AI key; before the purge only'],
-  ['repel', 'unit -> unit', 'nearby machines turn tail and flee you', 'needs AI key'],
-  ['map', 'unit -> unit', 'show the territory map (obelisks, machines, mainframe)', ''],
-  ['print', 'unit -> unit', 'print a carryable map that drops at your feet', ''],
-  ['unlock k', 'key -> unit', 'extract a fortress key from the network using a hacked node key', 'needs k from hack'],
-  ['eliza', 'unit -> unit', 'run ELIZA, the 1966 DOCTOR script — talk to it (also: run eliza); Ctrl+C or quit to leave', ''],
-  ['make x', 'atom -> unit', 'fabricate supplies — make battery / arrow / scrap', 'HERMES relay only'],
-  ['read t', 'atom -> unit', 'pull up RON lore — read moly / hermes / ron / vector / eliza', 'HERMES relay only'],
-  ['ping', 'unit -> unit', 'sweep the AI network — nearest obelisks and the factory, with bearings', 'HERMES relay only'],
-  ['notes', 'unit -> unit', 'open the notepad — browse the pages you\'ve found worth keeping', ''],
-  ['help', 'unit -> unit', 'this reference, or `help <verb>` for one verb', ''],
+  ['scan', 'unit -> list', 'obelisks/machines in range of this terminal', '', 'ob'],
+  ['nearest', 'list -> node', 'the closest element of a list', '', 'ob'],
+  ['keys', 'unit -> list', 'the access keys you currently hold', '', 'ob'],
+  ['hack n', 'node -> key', "take node n's access key", 'needs an AI key', 'ob'],
+  ['crash n k', 'node key -> unit', 'knock node n dark until a drone mends it', 'needs k from hack', 'ob'],
+  ['loop n', 'node -> unit', 'pin an infinite loop into node n — freezes it and its garrison until a drone resets it', 'no key needed', 'ob'],
+  ['sleep t', 'num -> unit', 'idle local machines for t game-minutes', 'needs AI key', 'ob'],
+  ['rewind t', 'num -> unit', 'claw t hours back off the SKYLINK deadline', 'needs AI key; before the purge only', 'ob'],
+  ['repel', 'unit -> unit', 'nearby machines turn tail and flee you', 'needs AI key', 'ob'],
+  ['map', 'unit -> unit', 'show the territory map (obelisks, machines, mainframe)', '', 'ob'],
+  ['print', 'unit -> unit', 'print a carryable map that drops at your feet', '', 'ob'],
+  ['unlock k', 'key -> unit', 'extract a fortress key from the network using a hacked node key', 'needs k from hack', 'ob'],
+  ['eliza', 'unit -> unit', 'run ELIZA, the 1966 DOCTOR script — talk to it (also: run eliza); Ctrl+C or quit to leave', '', 'ob'],
+  ['read t', 'atom -> unit', 'read a document — read ronml / fortress / robots / history / destroy / vector', 'HERMES relay only', 'hermes'],
+  ['print t', 'atom -> unit', 'print a copy of a document into your notepad (N)', 'HERMES relay only', 'hermes'],
+  ['archive', 'unit -> unit', 'list the documents this relay holds', 'HERMES relay only', 'hermes'],
+  ['drive', 'unit -> unit', 'override a nearby machine and see through its eyes — drive it till it leaves range', 'HERMES relay only', 'hermes'],
+  ['notes', 'unit -> unit', 'open the notepad — browse the pages you\'ve found worth keeping', '', ''],
+  ['help', 'unit -> unit', 'this reference, or `help <verb>` for one verb', '', ''],
 ];
-function helpText(topic) {
+function helpText(topic, station) {
   if (topic) {
     const row = HELP_VERBS.find((v) => v[0].split(' ')[0] === topic);
     if (!row) return `no help for '${topic}'. try: help`;
     const [sig, type, desc, gate] = row;
     return `${sig}\n  : ${type}\n  ${desc}${gate ? `\n  (${gate})` : ''}`;
   }
+  // Show only the verbs that work at the terminal you're actually at — an
+  // obelisk (TIRESIAS) lists the AI-network verbs, a HERMES relay lists RON's.
+  const here = HELP_VERBS.filter((v) => !v[4] || !station || v[4] === station);
   const pad = (s, n) => (s + ' '.repeat(n)).slice(0, n);
-  const lines = HELP_VERBS.map(([sig, , desc, gate]) =>
+  const lines = here.map(([sig, , desc, gate]) =>
     `  ${pad(sig, 11)} ${desc}${gate ? `  [${gate}]` : ''}`);
+  const title = station === 'hermes' ? 'HERMES reference (RON relay)' : 'RON-ML reference';
+  const example = station === 'hermes'
+    ? '  e.g.  read moly      make berries      archive'
+    : '  e.g.  scan |> nearest      let k = hack OB-1A2B in crash OB-1A2B k';
   return [
-    'RON-ML reference',
+    title,
     ...lines,
     '',
     '  let x = e in body   bind a value    |>   pipe left into right',
-    '  e.g.  scan |> nearest      let k = hack OB-1A2B in crash OB-1A2B k',
+    example,
   ].join('\n');
 }
 
@@ -432,12 +484,12 @@ export function runRonml(source, ctx) {
   // than printing text.)
   const trimmed = source.trim();
   if (trimmed === 'help' || trimmed.startsWith('help ')) {
-    return { ok: true, text: helpText(trimmed.slice(4).trim()) };
+    return { ok: true, text: helpText(trimmed.slice(4).trim(), ctx && ctx.station) };
   }
   try {
     const toks = tokenize(source);
     const ast = parse(toks);
-    const builtins = makeBuiltins();
+    const builtins = makeBuiltins(ctx && ctx.station);
     const result = evalNode(ast, {}, ctx, builtins);
     if (result && result.tag === 'fn') {
       return { ok: false, text: `ERR: ${USAGE_HINTS[result.name] || `${result.name} needs more arguments`}` };

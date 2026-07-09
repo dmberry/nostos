@@ -543,11 +543,14 @@ export class Renderer {
     // thin, distinct from the ordinary day/night veil.
     if (hud.underworld) this.drawUnderworldVeil();
 
-    if (hud.minimap) {
+    // While driving a machine, the robot-vision overlay (drawn by main.js after
+    // this) samples the canvas as ASCII — so suppress the normal HUD here, or it
+    // would be turned into ASCII too. The scene + sprites still render.
+    if (hud.minimap && !hud.driving) {
       this.drawMinimap(map, player, hud.minimap, animals, this.w - MINIMAP_SIZE - 12, 12, MINIMAP_SIZE);
     }
-    if (hud.skylinkActive) this.drawSkylinkBanner(hud.skylinkTimer);
-    this.drawDashboard(player, hud);
+    if (hud.skylinkActive && !hud.driving) this.drawSkylinkBanner(hud.skylinkTimer);
+    if (!hud.driving) this.drawDashboard(player, hud);
     if (hud.showBackpack) this.drawBackpackPanel(player);
     if (hud.lore) hud.lore.drawOverlay(ctx, this.w, this.h);
     if (hud.craftPrompt) {
@@ -2643,16 +2646,36 @@ export class Renderer {
     ctx.strokeStyle = 'rgba(60,56,50,0.7)';
     ctx.beginPath(); ctx.moveTo(tipX, tipY + 6); ctx.lineTo(c.x + W + 2, c.y - 4); ctx.stroke(); // guy wire
 
-    // --- Aerial: a small crossbar + a lopsided dish at the tip. ---
-    ctx.strokeStyle = '#5a5550'; ctx.lineWidth = 1.4;
-    ctx.beginPath(); ctx.moveTo(tipX - 5, tipY); ctx.lineTo(tipX + 5, tipY); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(tipX, tipY); ctx.lineTo(tipX, tipY - 6); ctx.stroke();
-    ctx.fillStyle = '#807a70';
-    ctx.beginPath(); ctx.ellipse(tipX + 4, tipY - 2, 4, 2.6, -0.5, 0, Math.PI * 2); ctx.fill();
-    // A weak red aircraft-warning blink at the very top (occasional).
-    if ((Math.sin(t / 620 + gl * 6) > 0.9)) {
-      ctx.fillStyle = 'rgba(230,90,70,0.85)';
-      ctx.beginPath(); ctx.arc(tipX, tipY - 6, 1.6, 0, Math.PI * 2); ctx.fill();
+    // --- Off-grid, NOT an antenna: a little solar panel + a slow wind vane at
+    // the top, and greenery growing up the frame. Nothing that broadcasts —
+    // this relay is meant to be undetectable (see the HERMES lore). ---
+    // Solar panel: a small tilted dark-blue cell with a grid, propped at the tip.
+    ctx.save();
+    ctx.translate(tipX, tipY - 1); ctx.rotate(-0.35);
+    ctx.fillStyle = '#20304a';
+    ctx.fillRect(-7, -4, 14, 6);
+    ctx.strokeStyle = 'rgba(120,160,210,0.5)'; ctx.lineWidth = 0.7;
+    for (let gx = -5; gx <= 5; gx += 3) { ctx.beginPath(); ctx.moveTo(gx, -4); ctx.lineTo(gx, 2); ctx.stroke(); }
+    ctx.beginPath(); ctx.moveTo(-7, -1); ctx.lineTo(7, -1); ctx.stroke();
+    // a faint sky glint that drifts across the panel
+    ctx.fillStyle = `rgba(180,210,240,${(0.25 + 0.2 * Math.sin(t / 900 + gl * 4)).toFixed(3)})`;
+    ctx.fillRect(-6 + ((t / 300 + gl * 8) % 12), -4, 2, 6);
+    ctx.restore();
+    // Small wind vane on a stub above the panel: three stubby blades, turning slow.
+    const spin = t / 900 + gl * 6;
+    ctx.strokeStyle = '#6a655c'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(tipX + 6, tipY); ctx.lineTo(tipX + 6, tipY - 7); ctx.stroke();
+    ctx.strokeStyle = '#8a8478'; ctx.lineWidth = 1.4;
+    for (let k = 0; k < 3; k++) {
+      const a = spin + k * (Math.PI * 2 / 3);
+      ctx.beginPath(); ctx.moveTo(tipX + 6, tipY - 7);
+      ctx.lineTo(tipX + 6 + Math.cos(a) * 4.5, tipY - 7 + Math.sin(a) * 4.5 * 0.5); ctx.stroke();
+    }
+    // Greenery climbing the frame — leaves at a couple of the lattice joints.
+    ctx.fillStyle = '#3f7a3a';
+    for (const [lx0, ly0] of [[baseX - 2, baseY - 8], [baseX + 3, baseY - 18], [baseX - 1, baseY - 26]]) {
+      ctx.beginPath(); ctx.ellipse(lx0, ly0, 2.4, 1.4, -0.5, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(lx0 + 2, ly0 + 1, 2, 1.2, 0.4, 0, Math.PI * 2); ctx.fill();
     }
 
     // --- The HERMES CRT on the SW face: warm amber, flickering, glitchy. ---

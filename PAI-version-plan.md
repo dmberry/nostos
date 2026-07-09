@@ -40,6 +40,16 @@ Shipped: the key comes from composing `let k = hack OB-XXXX in unlock k` at any 
 ### Three SIRENs inside the fortress
 The overworld has exactly one SIREN (a singular landmark). The **fortress** should have **three** SIREN-class towers as an interior hazard cluster — a wall of song to cross. (Kept as a note per request; the `cls:'siren'` + render + lure already support it, just needs fortress placement.)
 
+## Where we are (v1.45)
+
+### v1.45 — TOR = information resource, two separate terminal systems, relay battery, robot-vision drive
+
+- **Two separate systems, cleanly.** `makeBuiltins(station)` now returns only that station's verbs (OB tagged `station:'ob'`, HERMES `'hermes'`, neutral `notes`/`help`/`let`); a verb from the other system isn't a builtin there and `evalNode` throws a plain `'<verb>' isn't a command on this terminal.` (via `ALL_VERBS`, incl. `RETIRED_VERBS` make/ping for a clean message). No cross-referencing "go to a relay" refusal. Autocomplete split into `OB_COMPLETE` / `HERMES_COMPLETE`; `help` already station-filtered. Fixed the fortress-key-at-a-TOR leak this way.
+- **TOR is info-only.** Removed `make`/recipes entirely (a hilltop growing berries made no sense). `hermes.js` `HERMES_DOCS` = titled documents (ronml, fortress, robots, history, destroy, vector, hermes, eliza). `archive` lists titles; `read <topic>` shows the doc on the terminal; `print <topic>` files `{title,text}` into `printedDocs`, which `openNotebook` prepends to the notepad. HERMES `print` is an arity-1 override added in `makeBuiltins` for `station==='hermes'` (the obelisk keeps its own arity-0 map `print`) — NB: `print` must NOT be in `HERMES_VERBS` or the tag loop would steal the OB print.
+- **Relay solar cell.** Each `tor.battery` (0–1) drains per command (`HERMES_BATT`) and per second while driving; trickle-recharges in the update loop. Live gauge `#obterminal-batt` (amber, hermes-only) updated on spend + each frame while open.
+- **`drive` — robot-vision.** `drive` (HERMES) seizes the nearest live machine within `DRIVE_RANGE` (16) of the relay. Redesigned per feedback: you steer on the **normal isometric view** (camera on the unit, so trees/terrain read) and `robotvision.js drawRobotVision` overlays a **top-right ASCII panel** (a crop around the unit resampled as glyphs) + HULL/LINK/CELL gauges + in-world target brackets + a green RON-OVERRIDE marker. Steer with WASD/touch; **X** self-destruct (radial damage), **Esc** release; leaving range or a flat cell drops the link. `updateRobots` skips a `driven` unit; overworld frozen while driving. `input` now tracks `KeyX`/`Escape`. Projector mirrors the renderer's `heightAt*ELEV` lift so markers sit on the sprites on raised ground.
+- **Version** in tiny type on the gate/title (`src/version.js` single source, imported by main.js + mobile-gate.js).
+
 ## Where we are (v1.44)
 
 ### v1.44 — TOR / HERMES hilltop relays, ELIZA as a first-class verb
