@@ -21,9 +21,11 @@ const REFLECTIONS = {
 const PRE = [
   [/\bdont\b/g, "don't"], [/\bcant\b/g, "can't"], [/\bwont\b/g, "won't"],
   [/\brecollect\b/g, 'remember'], [/\bdreamt\b/g, 'dreamed'],
-  [/\bdreams\b/g, 'dream'], [/\bmaybe\b/g, 'perhaps'], [/\bhow\b/g, 'what'],
-  [/\bwhen\b/g, 'what'], [/\bcertainly\b/g, 'yes'], [/\bmachine\b/g, 'computer'],
+  [/\bdreams\b/g, 'dream'], [/\bmaybe\b/g, 'perhaps'],
+  [/\bcertainly\b/g, 'yes'], [/\bmachine\b/g, 'computer'],
   [/\bcomputers\b/g, 'computer'], [/\bwant\b/g, 'need'], [/\bsame\b/g, 'alike'],
+  [/\beverybody\b/g, 'everyone'], [/\beveryone\b/g, 'everyone'],
+  [/\bnobody\b/g, 'everyone'], [/\bim\b/g, "i'm"],
 ];
 
 // Reflect a captured fragment: swap first/second person so the echo reads back.
@@ -105,6 +107,11 @@ const SCRIPT = [
       'You wish I would tell you you are (2)?',
       'What would it mean if you were (2)?' ] } ] },
   { key: 'are', rank: 0, rules: [
+    { decomp: '* you are *', reasmb: [
+      'Why do you think I am (2)?',
+      'Does it please you to believe I am (2)?',
+      'Perhaps I am (2).',
+      'Do you sometimes wish you were (2)?' ] },
     { decomp: '* are you *', reasmb: [
       'Why are you interested in whether I am (2) or not?',
       "Would you prefer if I weren't (2)?",
@@ -283,10 +290,19 @@ export function createEliza() {
   const memory = [];
   let noneIdx = 0;
 
+  // Which keywords appear in a phrase (used to pick the clause to work on).
+  const hasKeyword = (t) => SCRIPT.some((e) =>
+    new RegExp('\\b' + e.key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(t));
+
   const respond = (raw) => {
-    let text = ' ' + String(raw).toLowerCase().replace(/[^a-z0-9'\s?]/g, ' ') + ' ';
-    for (const [pat, rep] of PRE) text = text.replace(pat, rep);
-    text = text.replace(/\s+/g, ' ').trim();
+    // Lower-case, apply the substitution list, then — as the real DOCTOR does —
+    // break the sentence at punctuation and work on the FIRST clause that holds
+    // a keyword. Punctuation is dropped so it can never leak into a reply.
+    let s = String(raw).toLowerCase().replace(/[^a-z0-9'\s.,;:!?]/g, ' ');
+    for (const [pat, rep] of PRE) s = s.replace(pat, rep);
+    const clauses = s.split(/[.,;:!?]+/).map((c) => c.replace(/\s+/g, ' ').trim()).filter(Boolean);
+    let text = clauses.find(hasKeyword) || clauses[clauses.length - 1] || '';
+    text = text.replace(/[^a-z0-9'\s]/g, ' ').replace(/\s+/g, ' ').trim();
     if (!text) return NONE[(noneIdx++) % NONE.length];
 
     // All keywords that appear, ranked high-to-low (stable by script order for

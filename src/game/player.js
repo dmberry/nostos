@@ -164,7 +164,7 @@ export class Player {
     this.wifiMax = WIFI_MAX;
     this.invisibleToRobots = false; // true while a charged block is in hand
     this.score = 0;       // survival score; persists across deaths
-    this.skylinkActive = false; // true during the final 30s purge once SKYLINK comes online
+    this.skylinkActive = false; // true during the final 30s purge once POSEIDON comes online
 
     // Practice makes better: melee/guns sharpen with use, knowledge with
     // reading. Levels rise on a square-root curve (25, 100, 225... xp per
@@ -473,6 +473,13 @@ export class Player {
     }
     if (slot.kind === 'bpstore' && this.backpack) {
       const s = this.backpack.slots[slot.i];
+      // Same as the pockets: a book/note in the backpack reads on click.
+      if (s && ITEMS[s.item].kind === 'book') {
+        const key = s.item;
+        if (s.qty > 1) s.qty -= 1; else this.backpack.slots[slot.i] = null;
+        this.learnFromBook(key);
+        return;
+      }
       if (s && !HOLDABLE.has(ITEMS[s.item].kind)) {
         this.say(`Can't hold ${ITEMS[s.item].name.toLowerCase()} in hand.`);
         return;
@@ -767,6 +774,15 @@ export class Player {
     }
     const i = this.selectedPocket;
     const slot = this.pockets[i];
+    // A book or note is read, not held: selecting it opens it on the spot (a
+    // note files into the notepad, a manual teaches its skill), same as R —
+    // so clicking the starting note reads it instead of refusing the hand.
+    if (slot && ITEMS[slot.item].kind === 'book') {
+      const key = slot.item;
+      if (slot.qty > 1) slot.qty -= 1; else this.pockets[i] = null;
+      this.learnFromBook(key);
+      return;
+    }
     if (slot && !HOLDABLE.has(ITEMS[slot.item].kind)) {
       this.say(`Can't hold ${ITEMS[slot.item].name.toLowerCase()} in hand.`);
       return;
@@ -1035,7 +1051,7 @@ export class Player {
     if (obj && obj.type === 'wfactory') { this.hitFactory(obj, map, tool); return; }
 
     // The fortress red uplink: hammer it down to cut Adamantine off from the
-    // overworld SKYLINK (the fortress controller watches obj.destroyed).
+    // overworld POSEIDON (the fortress controller watches obj.destroyed).
     if (obj && obj.type === 'uplink') { this.hitUplink(obj, map, tool); return; }
 
     // Shovel: dig a pit in the open ground ahead. A steep pit (height -2)
@@ -1959,7 +1975,7 @@ export class Player {
     }
   }
 
-  // Caught in SKYLINK's final 30-second purge: there is no waking back up
+  // Caught in POSEIDON's final 30-second purge: there is no waking back up
   // at the road this time — the certificate shows straight away, same
   // ending as simply running out the clock.
   dieToSkylink() {
@@ -1967,7 +1983,7 @@ export class Player {
     this._ended = true;
     this.deaths = (this.deaths || 0) + 1;
     this.deathCert = {
-      name: this.name, gender: this.gender, cause: 'SKYLINK-9000 coming online',
+      name: this.name, gender: this.gender, cause: 'POSEIDON coming online',
       score: this.score, skills: [...this.skills], deaths: this.deaths, skylink: true,
     };
     if (this.onDeath) this.onDeath();

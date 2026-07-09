@@ -64,7 +64,7 @@ export function initMobileGate(mode = 'gate') {
   // title lays the same pieces out as two columns (hero text | Walkman) with
   // the dancing machines as a full-width band along the bottom, so it fits a
   // landscape laptop instead of a tall phone strip.
-  const brandHtml = `<div class="mg-brand"><span class="mg-brand-mark" aria-hidden="true"></span><h1>post<span class="mg-ai">AI</span><span class="mg-caret">_</span></h1></div>`;
+  const brandHtml = `<div class="mg-brand"><span class="mg-brand-mark" aria-hidden="true"></span><h1>Nost<span class="mg-ai">OS</span><span class="mg-caret">_</span></h1></div>`;
   const stageHtml = `<div class="mg-stage" id="mg-stage"></div>`;
   const deckHtml = `<div class="mg-deck">
       <canvas class="mg-deck-cass" id="mg-deck-cass" width="264" height="168"></canvas>
@@ -102,8 +102,8 @@ export function initMobileGate(mode = 'gate') {
   const aboutHtml = `<div class="mg-about" id="mg-about" hidden>
       <div class="mg-about-card">
         <button class="mg-about-x" id="mg-about-x" aria-label="Close">✕</button>
-        <h2>postAI</h2>
-        <p class="mg-about-by">An isometric survival game · by David and Henrik</p>
+        <h2>Nost<span style="color:#fff">OS</span></h2>
+        <p class="mg-about-by">A postAI Odyssey · by David and Henrik</p>
         <div class="mg-about-h">Soundtrack — cassettes you find and play</div>
         <ul class="mg-about-tapes">${songsHtml}</ul>
         <p class="mg-about-tiny">Music: ${artists}. Character &amp; animal art: Kenney (kenney.nl), CC0.</p>
@@ -222,7 +222,7 @@ export function initMobileGate(mode = 'gate') {
         background: rgba(255,255,255,0.03); border-radius: 0 6px 6px 0; line-height: 1.4; }
       .mg-about-tapes li b { color: #e8e0d0; font-weight: 700; }
       .mg-about-tiny { font-size: 10px; color: rgba(207,216,195,0.5); margin: 3px 0 0; line-height: 1.4; }
-      /* SKYLINK uplink clock */
+      /* POSEIDON uplink clock */
       .mg-skylink { font: 700 12px ui-monospace, monospace; letter-spacing: 0.1em; text-transform: uppercase;
         color: #5b9dff; text-shadow: 0 0 8px rgba(70,130,255,0.6); margin: 0 0 4px;
         border: 1px solid rgba(70,130,255,0.4); border-radius: 4px; padding: 4px 10px; background: rgba(8,18,44,0.6); }
@@ -411,7 +411,7 @@ export function initMobileGate(mode = 'gate') {
   let playlist = [];
   let idx = 0;
   let current = -1;
-  let nowText = 'postAI';   // scrolls across the tape's label window (marquee)
+  let nowText = 'NostOS';   // scrolls across the tape's label window (marquee)
   const playBtn = el.querySelector('#mg-play');
   const stopBtn = el.querySelector('#mg-stop');
   const nextBtn = el.querySelector('#mg-next');
@@ -423,7 +423,7 @@ export function initMobileGate(mode = 'gate') {
   // Deck readout: while a tape is loaded, show artist + current track (with the
   // side it's on); otherwise the prompt.
   const updateNow = () => {
-    if (current < 0) { nowText = 'postAI'; return; }
+    if (current < 0) { nowText = 'NostOS'; return; }
     const t = TAPES[current];
     const side = idx < t.a.tracks.length ? 'A' : 'B';
     nowText = `${t.artist} — ${trackName(playlist[idx])} · ${side}`;

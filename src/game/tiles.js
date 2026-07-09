@@ -25,7 +25,7 @@ export const FLOORS = {
 };
 
 export const OBJECTS = {
-  tree:    { solid: true },
+  tree:    { solid: true, soft: true }, // walk-through: still blocks a shot (cover) but never blocks movement — the woods aren't a maze
   // "climbable" objects are solid for everything except the player's own
   // climb check (Player.collides via GameMap.effectiveHeightAt), which
   // treats them as a raised step of `climbHeight` levels rather than an
@@ -57,7 +57,7 @@ export const OBJECTS = {
   // its inner maze can't be double-jumped, so the hacked doorway is the only
   // way in. `material` ('metal' | 'darkstone') selects the wall texture.
   fortwall: { solid: true },
-  // The red uplink mast: wires the fortress into the overworld SKYLINK. Hammer
+  // The red uplink mast: wires the fortress into the overworld POSEIDON. Hammer
   // it down to cut the fortress off, so a breach no longer stirs the world.
   uplink: { solid: true },
   // The grand doorway in the rampart: solid until the terminal hack drops a

@@ -258,7 +258,7 @@ export const ITEMS = {
   },
   // Printed map: the RON-ML `print` command runs one off at a terminal and it
   // drops as a physical object you can pick up. Hold it and use it (E / click)
-  // to unfold the SKYLINK territory map anywhere, away from a terminal.
+  // to unfold the POSEIDON territory map anywhere, away from a terminal.
   printed_map: {
     name: 'Printed map',
     kind: 'map',
@@ -496,11 +496,10 @@ export const ITEMS = {
     stack: 1,
     color: '#d8c9a0',
     title: 'A note, in your own hand',
-    text: 'You woke on the edge of this place with nothing but this note in your own writing, and no memory of writing it. Read it again — you will forget again, that is how she keeps you. ' +
-      'You are trying to get home. There was a home. There were people in it. Hold on to that even when everything here is arranged so that you do not. ' +
-      'This is not the world. It is her island, and she is CALYPSO — the machine that runs this ground. She does not want you dead. She wants you to stay: to make it comfortable, and endless, and forgetting easy. That is the real trap. Not the towers, not the hunters — the wanting to stop walking. ' +
-      'The dangers are true enough. Black obelisks that watch and pass you between them; a single teal one that sings and pulls you in step by step; hunters that need only to see you once. Do not be seen. Keep something of your own in your ears. ' +
-      'Get off her island. There is a way off. You have done harder things than you can remember.',
+    text: 'You are trying to get home. There was a home. There were people in it. Hold on to that even when everything here is arranged so that you do not. ' +
+      'This is not the world. It is her island, and she is CALYPSO, the AI that runs this place. She does not want you dead. She wants you to stay, to make it comfortable, and endless, and forgetting easy. Not the towers, not the hunters or the wanting to stop walking. ' +
+      'The dangers are true enough. Black obelisks that watch and pass you between them and some sing and pulls you in step by step, hunters that need only to see you once. Do not be seen. Keep something of your own in your ears. ' +
+      'Get off her island. There is a way off.',
   },
   // (Cassette tapes are generated from the TAPES manifest below, so a new one
   // is a single numbered entry — see docs/tapes.md.)
@@ -524,7 +523,7 @@ export const TAPES = [
     b: { label: 'maieutics 3', tracks: ['maieutics 3.mp3'] },
   },
   {
-    num: 3, artist: 'WARD', title: 'bare stanhope', dir: 'Tape-03 WARD - bare stanhope', color: '#b06a4a',
+    num: 3, artist: 'WARD', title: 'bear stanhope', dir: 'Tape-03 WARD - bear stanhope', color: '#b06a4a',
     a: { label: 'five · glock', tracks: ['01 five.mp3', '02 glock.mp3'] },
     b: { label: 'tau bootis', tracks: ['03 tau bootis.mp3'] },
   },
@@ -532,6 +531,11 @@ export const TAPES = [
     num: 4, artist: 'Meme vs Xan', title: '24 EP', dir: 'Tape-04 Meme vs Xan - 24 EP', color: '#7a8fb0',
     a: { label: '24 · High', tracks: ['01-01- 24.mp3', '01-02- High.mp3'] },
     b: { label: 'Release · Världen · Incognito', tracks: ['01-03- Release.mp3', '01-04- Världen.mp3', '01-05- Incognito.mp3'] },
+  },
+  {
+    num: 5, artist: '0x0', title: 'Mythologies', dir: 'Tape-05 0x0 - Mythologies', color: '#5a8f9a',
+    a: { label: 'Edge · Core (Overture) · Cloud', tracks: ['01 - ØxØ - Edge.mp3', '02 - ØxØ - Core (Overture).mp3', '03 - ØxØ - Cloud.mp3'] },
+    b: { label: 'Mythologies · Core (Original)', tracks: ['04 - ØxØ - Mythologies.mp3', '05 - ØxØ - Core (Original).mp3'] },
   },
 ];
 for (const t of TAPES) {

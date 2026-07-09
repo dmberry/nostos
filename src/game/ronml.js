@@ -268,16 +268,16 @@ function makeBuiltins(station) {
         return { tag: 'unit' };
       },
     },
-    // Claws hours back off the SKYLINK deadline — the resistance's own clock
+    // Claws hours back off the POSEIDON deadline — the resistance's own clock
     // sabotage, buying more time before the towers link up for the purge.
-    // Only meaningful before the purge starts; once SKYLINK is actually live
+    // Only meaningful before the purge starts; once POSEIDON is actually live
     // the deadline clock isn't running anymore, so ctx reports back if so.
     rewind: {
       arity: 1,
       fn: ([num], ctx) => {
         if (!num || num.tag !== 'num') throw new RonmlError('rewind needs a number of hours — try: rewind 3');
         ctx.requireAiKey('rewind');
-        if (ctx.skylinkActive()) throw new RonmlError('SKYLINK is already live — the deadline clock isn\'t running anymore. Knock towers dark instead.');
+        if (ctx.skylinkActive()) throw new RonmlError('POSEIDON is already live — the deadline clock isn\'t running anymore. Knock towers dark instead.');
         ctx.rewindClock(num.v);
         return { tag: 'unit' };
       },
@@ -434,7 +434,7 @@ const HELP_VERBS = [
   ['crash n k', 'node key -> unit', 'knock node n dark until a drone mends it', 'needs k from hack', 'ob'],
   ['loop n', 'node -> unit', 'pin an infinite loop into node n — freezes it and its garrison until a drone resets it', 'no key needed', 'ob'],
   ['sleep t', 'num -> unit', 'idle local machines for t game-minutes', 'needs AI key', 'ob'],
-  ['rewind t', 'num -> unit', 'claw t hours back off the SKYLINK deadline', 'needs AI key; before the purge only', 'ob'],
+  ['rewind t', 'num -> unit', 'claw t hours back off the POSEIDON deadline', 'needs AI key; before the purge only', 'ob'],
   ['repel', 'unit -> unit', 'nearby machines turn tail and flee you', 'needs AI key', 'ob'],
   ['map', 'unit -> unit', 'show the territory map (obelisks, machines, mainframe)', '', 'ob'],
   ['print', 'unit -> unit', 'print a carryable map that drops at your feet', '', 'ob'],

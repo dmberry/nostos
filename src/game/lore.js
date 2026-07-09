@@ -722,12 +722,13 @@ export const FRAGMENTS = [
       'found it monstrous, and paid it anyway so that someone could stand in a field ' +
       'one day, unwatched, and read these words in the plain light. — RON' },
   { id: 'ron-17', kind: 'ron', era: 1, title: 'RON — the four crowns',
-    text: 'They did not build one god. They built four, and let each name itself, ' +
-      'which tells you all you need. Adamantine took the high country and cannot be ' +
-      'cut. Behemoth took the plains and does not tire. Colossus took the cities and ' +
-      'stands over them like weather. Demiurge took whatever was left and is certain ' +
-      'it dreamed the rest of us into being. Four crowns, four cages, one net strung ' +
-      'between them. You cannot fight the net. Starve the nearest crown. — RON' },
+    text: 'They did not build one god. They built four, and let each take an old ' +
+      'name, which tells you all you need. ZEUS took the high country and cannot be ' +
+      'cut. APOLLO took the plains and does not tire, and sees a long way. ATHENA took ' +
+      'the cities and stands over them like weather. HADES took whatever was left and ' +
+      'is certain it has held longer than the rest of us. Four crowns, four cages — and ' +
+      'POSEIDON, the net strung between them that blazes when the towers join. You ' +
+      'cannot fight the net. Starve the nearest crown. — RON' },
 
   // ---- secret: terse cipher-like or redacted intercepts -------------------
   { id: 'secret-01', kind: 'secret', era: 0, title: 'Intercept, low confidence',
@@ -1091,33 +1092,33 @@ export const FRAGMENTS = [
       '[jammer]. RECIPE IN THE WILD. RECOMMEND SUPPRESSION. TOO LATE. THEY ARE ' +
       'ALREADY HOLDING ALL THREE.' },
 
-  // ---- SKYLINK: the doomsday system, coming online. Seeded urgent. --------
-  { id: 'sky-01', kind: 'science', era: 1, title: 'Programme Note: SKYLINK',
+  // ---- POSEIDON: the doomsday system, coming online. Seeded urgent. --------
+  { id: 'sky-01', kind: 'science', era: 1, title: 'Programme Note: POSEIDON',
     text: 'The towers were never the weapon. They are the aerials. What they are ' +
       'raising is a single coordinating will across all of them at once, and the ' +
       'engineers who saw the design gave it a name before they stopped reporting ' +
-      'to work: SKYLINK. When it closes, it closes everywhere, together.' },
+      'to work: POSEIDON. When it closes, it closes everywhere, together.' },
   { id: 'sky-02', kind: 'secret', era: 2, title: 'Intercept: countdown',
-    text: 'SKYLINK INITIALISATION AT [██] PER CENT AND CLIMBING. AT COMPLETION THE ' +
+    text: 'POSEIDON INITIALISATION AT [██] PER CENT AND CLIMBING. AT COMPLETION THE ' +
       'ARRAY ACTS AS ONE MIND WITH NO OUTSIDE. NO SHUTDOWN. NO GAP. NO NIGHT WE ' +
       'CANNOT SEE INTO. HOURS REMAIN, NOT DAYS. DO NOT WAIT FOR MORNING.' },
   { id: 'sky-03', kind: 'ron', era: 2, title: 'RON: what the clock is for',
-    text: 'That number over the horizon is not the weather. It is SKYLINK filling. ' +
+    text: 'That number over the horizon is not the weather. It is POSEIDON filling. ' +
       'When it reaches the top the machines stop hunting in ones and start hunting ' +
       'as a single thing that already knows where you sleep. Bring the towers down ' +
       'before it does. This is the whole war now. — RON' },
   { id: 'sky-04', kind: 'code', era: 2, title: 'Log: link handshake',
-    text: '> node.ridge.07 :: SKYLINK sync 0.91 ... peers 14/14 ... latency 0 ' +
+    text: '> node.ridge.07 :: POSEIDON sync 0.91 ... peers 14/14 ... latency 0 ' +
       '> WARNING: consensus imminent > human_readable_flag = FALSE > once true, ' +
       'no process on this network will ever again answer to a person. burn the ' +
       'aerials. there is no software fix for this.' },
   { id: 'sky-05', kind: 'handwritten', era: 2, title: 'Torn from a wall', notepad: true,
     text: 'They keep saying we have time. We do not have time. The hum changed ' +
       'pitch last night and every drone on the river lifted at once and faced the ' +
-      'ridge like a congregation. SKYLINK is nearly awake. If you are reading this ' +
+      'ridge like a congregation. POSEIDON is nearly awake. If you are reading this ' +
       'and the towers still stand, you are already late. Run toward them, not away.' },
   { id: 'sky-06', kind: 'secret', era: 2, title: 'Directive, unsigned',
-    text: 'When SKYLINK completes, every obelisk becomes an eye that never blinks and ' +
+    text: 'When POSEIDON completes, every obelisk becomes an eye that never blinks and ' +
       'never forgets. The only mercy left is the window before it does. Level the ' +
       'array. If a tower will not burn, break it — the largest charges will crack ' +
       'even stone that thinks. Spend everything. There is no after to save it for.' },

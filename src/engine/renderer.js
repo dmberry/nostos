@@ -6,7 +6,7 @@ import { drawBird } from '../game/birds.js';
 import { drawRobot } from '../game/robots.js';
 import { drawWaterDroid } from '../game/waterdroids.js';
 import { drawUnderworldCreature } from '../game/underworld.js';
-import { FLOOR_TEXTURES, WALL_TEXTURES, GRASS_PATCH_TEXTURE, CHARACTER_SPRITE_SETS, CHAR_COMPASS_DIRS, TREE_SHEET, TREE_SPRITES, EDGE_TEXTURE, CAR_SPRITES, CAR_MODEL_KEYS, CAR_DIR_KEYS, CAR_RUIN_TEXTURE, FACTORY_TEXTURE, GRAFFITI_TEXTURES } from './textures.js';
+import { FLOOR_TEXTURES, WALL_TEXTURES, GRASS_PATCH_TEXTURE, CHARACTER_SPRITE_SETS, CHAR_COMPASS_DIRS, TREE_SHEET, TREE_SPRITES, EDGE_TEXTURE, SEA_TEXTURE, CAR_SPRITES, CAR_MODEL_KEYS, CAR_DIR_KEYS, CAR_RUIN_TEXTURE, FACTORY_TEXTURE, GRAFFITI_TEXTURES } from './textures.js';
 
 // The underworld floor palette: seven images, loaded here (not via textures.js)
 // so this stays self-contained. map.liminalTex holds a per-tile index into
@@ -121,7 +121,7 @@ function deathRank(score) {
   else if (s < 4000) { title = 'L33T'; blurb = 'The towers whisper your name in binary.'; }
   else if (s < 5000) { title = 'L33T PRO'; blurb = 'Professionally terrifying to circuitry.'; }
   else if (s < 10000) { title = 'ULTRA-L33T'; blurb = 'Small children draw you defeating obelisks.'; }
-  else { title = 'MEGA L33T'; blurb = 'SKYLINK has a folder named after you. It is afraid.'; }
+  else { title = 'MEGA L33T'; blurb = 'POSEIDON has a folder named after you. It is afraid.'; }
   const colors = { LAME: '#9a7a5a', NOOB: '#c9905a', BEGINNER: '#c9a05a', INTERN: '#c9b05a', NORMIE: '#b9c95a', 'POST-NORMIE': '#9fd058', SEASONED: '#6fbf4a', SERIOUS: '#4abf7a', TRAINED: '#4ac0b0', SNIPER: '#4aa8d8', 'AI STALKER': '#6f8fe0', L33T: '#e8d27a', 'L33T PRO': '#f0c040', 'ULTRA-L33T': '#f09040', 'MEGA L33T': '#ff5040' };
   return { title, blurb, color: colors[title] || '#e8d27a' };
 }
@@ -340,7 +340,7 @@ export class Renderer {
       if (lift) { ctx.save(); ctx.translate(0, -lift); }
       // In the underworld there's no map edge to face — it's boundless yellow,
       // so the grey edge-rock cliffs are suppressed (nothing drawn out there).
-      if (d.edgeRock) { if (!hud.underworld) this.drawEdgeRock(d.edgeRock[0], d.edgeRock[1]); }
+      if (d.edgeRock) { if (!hud.underworld) this.drawSeaTile(d.edgeRock[0], d.edgeRock[1]); }
       else if (d.player) this.drawPlayer(d.player);
       else if (d.animal) { drawAnimal(this.ctx, d.animal, worldToScreen); this.creatureHealthBar(d.animal, player, 44); }
       else if (d.bird) drawBird(this.ctx, d.bird, worldToScreen);
@@ -365,7 +365,7 @@ export class Renderer {
 
     // Lore fragments float in world space, under the camera transform.
     if (hud.lore) hud.lore.drawWorld(ctx);
-    // SKYLINK's final purge: every surviving tower lights up and links to
+    // POSEIDON's final purge: every surviving tower lights up and links to
     // its nearest neighbours in a web of bright blue laser light.
     if (hud.skylinkActive) this.drawSkylinkNetwork(hud.obeliskObjs);
 
@@ -521,6 +521,22 @@ export class Renderer {
         ctx.fillStyle = glow;
         ctx.fillRect(0, 0, this.w, this.h - DASH_H);
       }
+    }
+
+    // Rosy-fingered dawn (and a softer dusk): a warm rose wash laid OVER the
+    // dawn/dusk dimming so the light comes up rosy, not just grey — a subtle
+    // Homeric motif. Never over the HUD.
+    if (hud.dawnGlow > 0.01) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const gl = hud.dawnGlow;
+      const g2 = ctx.createLinearGradient(0, 0, 0, this.h - DASH_H);
+      g2.addColorStop(0, `rgba(255,150,105,${(0.16 * gl).toFixed(3)})`);
+      g2.addColorStop(0.6, `rgba(255,120,95,${(0.07 * gl).toFixed(3)})`);
+      g2.addColorStop(1, 'rgba(255,120,95,0)');
+      ctx.fillStyle = g2;
+      ctx.fillRect(0, 0, this.w, this.h - DASH_H);
+      ctx.restore();
     }
 
     // Sight cone: you see clearly in the direction you face (and in a small
@@ -902,9 +918,9 @@ export class Renderer {
     ctx.font = '14px Georgia, serif';
     if (cert.victory) {
       ctx.fillText(`${cert.name || 'A survivor'} pulled down every obelisk.`, px + pw / 2, py + 88);
-      ctx.fillText('The machines forget. SKYLINK never wakes.', px + pw / 2, py + 108);
+      ctx.fillText('The machines forget. POSEIDON never wakes.', px + pw / 2, py + 108);
     } else if (cert.skylink) {
-      ctx.fillText('SKYLINK-9000 is online.', px + pw / 2, py + 88);
+      ctx.fillText('POSEIDON is online.', px + pw / 2, py + 88);
       ctx.fillText(`${cert.name || 'You'} ran out of days.`, px + pw / 2, py + 108);
     } else {
       ctx.fillText(`Here lies ${cert.name || 'a survivor'},`, px + pw / 2, py + 88);
@@ -1239,6 +1255,43 @@ export class Renderer {
   // drawn semi-transparent so if one stands between you and the camera you
   // still see yourself through it. Per-tile shade variation keeps the border
   // from reading as one flat slab.
+  // The world is an island: out-of-bounds tiles are open sea, not a rock wall.
+  // Shallow turquoise right at the shore, deepening to dark navy the further out
+  // you go, with a slow travelling wave shimmer that's brightest in the shallows.
+  drawSeaTile(tx, ty) {
+    const ctx = this.ctx;
+    const map = this.hudMap;
+    const w = map ? map.w : 128, h = map ? map.h : 128;
+    const corners = this.tileCorners(tx, ty);
+    // Chebyshev distance past the island edge (0 at the shore, growing seaward).
+    const d = Math.max(Math.max(0 - tx, tx - (w - 1), 0), Math.max(0 - ty, ty - (h - 1), 0));
+    const depth = Math.min(1, d / 7); // fully deep by ~7 tiles out
+    // Shallow turquoise deepening to a wine-dark indigo far out — Homer's
+    // oinops pontos, the "wine-dark sea", now that the world is an island.
+    const shallow = [86, 158, 176], deep = [34, 20, 50];
+    const shade = 0.95 + tileHash(tx * 7 + 3, ty * 5 + 1) * 0.1;
+    const r = Math.round((shallow[0] + (deep[0] - shallow[0]) * depth) * shade);
+    const g = Math.round((shallow[1] + (deep[1] - shallow[1]) * depth) * shade);
+    const b = Math.round((shallow[2] + (deep[2] - shallow[2]) * depth) * shade);
+    // The ocean texture, tinted toward the shallow/deep colour so the depth
+    // gradient still reads; fall back to the flat colour until it loads.
+    const fill = `rgb(${r},${g},${b})`;
+    this.drawTexturedQuad(corners, SEA_TEXTURE, fill, fill, 'multiply', 0.55 + 0.25 * (1 - depth));
+    // Travelling wave highlight, fading out with depth (strongest in the shallows).
+    const flow = 0.5 + 0.5 * Math.sin((tx + ty) * 0.6 - performance.now() / 300);
+    const wa = (0.16 - depth * 0.11) * flow;
+    if (wa > 0.015) {
+      ctx.save();
+      this.diamondPath(corners); ctx.clip();
+      ctx.globalAlpha = wa;
+      ctx.fillStyle = '#cdeaf2';
+      ctx.fillRect(corners[3].x, corners[0].y, corners[1].x - corners[3].x, corners[2].y - corners[0].y);
+      ctx.restore();
+    }
+    this.diamondPath(corners);
+    ctx.strokeStyle = 'rgba(0,0,0,0.05)'; ctx.lineWidth = 1; ctx.stroke();
+  }
+
   drawEdgeRock(tx, ty) {
     const ctx = this.ctx;
     const H = EDGE_ROCK_H;
@@ -1363,6 +1416,12 @@ export class Renderer {
     // procedural wear, rooms carry one of the seven photo floors, corridors
     // are road, and the odd room is baby-blue. Drawn here and returned early.
     if (type === 'liminal') { this.drawLiminalFloor(map, tx, ty, corners, shade); return; }
+    // In-bounds sea: the swimmable water band renders through the exact same
+    // path as the open ocean past the map edge (deep-ocean texture + wine-dark
+    // depth tint + wave highlight), so the shore reads continuously out to sea
+    // with no flat-blue seam where you swim. Freshwater 'stream' tiles keep
+    // their own lighter, textured look below.
+    if (type === 'water') { this.drawSeaTile(tx, ty); return; }
     // A sparse scatter of bare dirt patches through grass — a few percent
     // of tiles, deterministic per tile so it holds still frame to frame
     // rather than flickering between the two textures.
@@ -1818,7 +1877,7 @@ export class Renderer {
   }
 
   // The red uplink mast: a tall dark spar with a red-caged beacon at its head,
-  // wiring the fortress into SKYLINK. Wrecked once hammered down.
+  // wiring the fortress into POSEIDON. Wrecked once hammered down.
   drawUplink(obj) {
     const ctx = this.ctx;
     const s = worldToScreen(obj.x + 0.5, obj.y + 0.5);
@@ -2336,7 +2395,7 @@ export class Renderer {
     ctx.fillRect(x - w / 2, y, w * frac, h);
   }
 
-  // SKYLINK online: every surviving tower's crown-light position, linked to
+  // POSEIDON online: every surviving tower's crown-light position, linked to
   // its two nearest neighbours with a pulsing bright-blue laser — the AI
   // network announcing itself before the 30-second purge plays out.
   drawSkylinkNetwork(obeliskObjs) {
@@ -2376,14 +2435,14 @@ export class Renderer {
     ctx.restore();
   }
 
-  // The banner shown once SKYLINK comes online. There's no timer to beat —
+  // The banner shown once POSEIDON comes online. There's no timer to beat —
   // it counts up, not down, since the purge doesn't stop until it catches
   // the player.
   drawSkylinkBanner(elapsed) {
     const ctx = this.ctx;
     const t = Math.max(0, elapsed || 0);
     const m = Math.floor(t / 60), s = Math.floor(t % 60);
-    const msg = `SKYLINK-9000 ONLINE — hunted for ${m}:${String(s).padStart(2, '0')}`;
+    const msg = `POSEIDON ONLINE — hunted for ${m}:${String(s).padStart(2, '0')}`;
     ctx.font = 'bold 22px Georgia, serif';
     const w = ctx.measureText(msg).width + 40;
     const x = (this.w - w) / 2, y = 44;
@@ -4278,18 +4337,18 @@ export class Renderer {
     }
 
     // Title wordmark, top-left — matches the gate/title branding: mono type,
-    // dim "post" + bright glowing "AI" (no blinking caret in-game).
+    // dim "Nost" + bright glowing "OS" (no blinking caret in-game).
     ctx.textAlign = 'left';
     ctx.font = '700 15px ui-monospace, "SF Mono", Menlo, monospace';
     const bx = 12, by = 22;
     ctx.fillStyle = 'rgba(207,216,195,0.55)';
-    ctx.fillText('post', bx, by);
-    const postW = ctx.measureText('post').width;
+    ctx.fillText('Nost', bx, by);
+    const postW = ctx.measureText('Nost').width;
     ctx.save();
     ctx.fillStyle = '#eaf3d6';
     ctx.shadowColor = 'rgba(220,232,200,0.75)';
     ctx.shadowBlur = 7;
-    ctx.fillText('AI', bx + postW, by);
+    ctx.fillText('OS', bx + postW, by);
     ctx.restore();
     if (hud.version) {
       ctx.font = '8px ui-monospace, Menlo, monospace';

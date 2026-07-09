@@ -564,7 +564,13 @@ function moveToward(r, tx, ty, speed, dt, map) {
   // to a halt. A per-robot preferred side keeps the detour consistent so it
   // rounds a corner rather than jittering, flipping only if that side is stuck
   // too — this is what un-jams bots pinned against the factory hull.
-  if (moved < step * 0.35) {
+  //
+  // But NOT when the target tile itself is solid — a player swimming out to sea
+  // stands on a water tile no land machine can reach, so there is no corner to
+  // round: sliding along the shore just makes the bot skitter left and right
+  // forever. Skip the slide there and let it settle at the waterline instead.
+  const targetReachable = !map.isSolid(Math.floor(tx), Math.floor(ty));
+  if (moved < step * 0.35 && targetReachable) {
     const px = -dirY, py = dirX; // unit perpendicular to the target direction
     if (r._slide === undefined) r._slide = 1;
     for (const s of [r._slide, -r._slide]) {
@@ -1141,7 +1147,7 @@ function updateW1(r, dt, player, map) {
 // with obDamage > 0 (hit by an OB-gun but not yet toppled) and heals it back
 // to zero over a few seconds, then disperses — its job done.
 // A repairable obelisk is damaged-but-standing (hit by an OB-gun), one felled
-// during the SKYLINK purge and flagged `needsRebuild` (the drone raises that
+// during the POSEIDON purge and flagged `needsRebuild` (the drone raises that
 // one from its heap back into a working tower), or one pinned by a RON-ML
 // `loop` hack (frozen — the drone works the loop back out instead).
 function w3Repairable(o) {
@@ -1190,7 +1196,7 @@ function updateW3(r, dt, map, robots) {
   }
   if (!(ob.obDamage > 0) && !ob.frozen) {
     if (ob.destroyed && ob.needsRebuild) {
-      // Raise it: standing and solid again, so the SKYLINK web can relight.
+      // Raise it: standing and solid again, so the POSEIDON web can relight.
       ob.destroyed = false;
       ob.needsRebuild = false;
       map.objectGrid[ob.y * map.w + ob.x] = ob;

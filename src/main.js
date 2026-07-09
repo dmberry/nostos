@@ -21,6 +21,7 @@ import { placeTors, HERMES_DOCS, hermesTopics } from './game/hermes.js';
 import { VERSION } from './version.js';
 import { drawRobotVision } from './game/robotvision.js';
 import { screenDirToWorld } from './engine/iso.js';
+import { stampCoast } from './engine/coast.js';
 import { createFortress } from './game/fortress.js';
 import { createUnderworldPocket, spawnUnderworldCreature, updateUnderworldCreatures } from './game/underworld.js';
 import { CHOIR_NOTES, CHOIR_DURATION } from './engine/choir-notes.js';
@@ -388,7 +389,17 @@ let fortressKeyFromCrash = false;
 // hacking the boundary gate terminal in RON-ML. `mainframe` points at the core
 // so the existing map overlay marks it; `fortress` owns the gate/door logic.
 const fortress = createFortress(map, WORLD_SEED, spawn);
+// The fortress AI is ZEUS (the old fortress.js name was "Adamantine"); override
+// the exposed name so every main.js-side display (gate terminal, unlock message)
+// reads ZEUS. NB: a couple of strings baked inside fortress.js still say the old
+// name until that file (Henrik's) is updated.
+fortress.AI_NAME = 'ZEUS';
 const mainframe = fortress.core; // { x, y } of the core, for the RON-ML map star
+// Ring the island in sea: stamp a dithered sand+water coast into the border
+// tiles now that the towers, relays and fortress are placed (so it leaves them
+// standing). Beyond the outer water band the map edge is still the hard bound,
+// with the open ocean drawn past it.
+stampCoast(map, spawn);
 // The quad's standing patrol: five M6 guards (3 sentinels + 2 marksmen).
 robots.push(...fortress.spawnGuards(spawnM6));
 // "Red starlink": when the fortress breach reaches the world (alarm + uplink
@@ -402,7 +413,7 @@ const worldStir = {
       const w4 = spawnW4(map, Math.floor(Math.random() * 0x7fffffff), factoryCx(), factoryCy());
       if (w4) { robots.push(w4); }
     }
-    player.say('Red light runs the length of the SKYLINK — the whole network knows where you are.');
+    player.say('Red light runs the length of the POSEIDON — the whole network knows where you are.');
   },
   calm() {
     for (const o of obeliskObjs) o.stirred = false;
@@ -881,7 +892,7 @@ function ronmlCtx() {
     skylinkActive: () => !!player.skylinkActive,
     rewindClock: (hours) => {
       dayNight.rewind(Math.max(0, hours));
-      player.say(`The deadline clock stutters and loses ${Math.max(0, hours)} hour${Math.max(0, hours) === 1 ? '' : 's'}. SKYLINK waits a little longer.`);
+      player.say(`The deadline clock stutters and loses ${Math.max(0, hours)} hour${Math.max(0, hours) === 1 ? '' : 's'}. POSEIDON waits a little longer.`);
     },
     repelNearby: () => {
       for (const r of robots) if (nearby(r)) { r.repelledT = REPEL_DURATION; r.aggro = false; }
@@ -1370,7 +1381,7 @@ function openObTerminal(ob) {
     replHistory = [];
     replHistoryIdx = -1;
     replPrint(
-      'SKYLINK NODE TERMINAL  v2.20',
+      'POSEIDON NODE TERMINAL  v2.20',
       'TIRESIAS 1.0  //  RON-DOS 4.11  (c) Reality Or Nothing',
       '',
       `> node ............ ${ob.code || 'OB-????'}`,
@@ -1527,7 +1538,7 @@ obTermInput.addEventListener('keydown', (e) => {
 const AIOS_GLYPHS = '0123456789ABCDEF▒▓█░■▢≡§¤◢◣∴∷';
 let aiosRAF = null;
 function openAiOs(ob) {
-  aiosHeader.textContent = `SKYLINK CORE  //  NODE ${ob.code || '????'}  //  ACCESS DENIED  //  NO KEY`;
+  aiosHeader.textContent = `POSEIDON CORE  //  NODE ${ob.code || '????'}  //  ACCESS DENIED  //  NO KEY`;
   aiosEl.style.display = 'flex';
   player.say('No chip. The obelisk throws up the AI’s own console instead — a wall of moving data you can’t read.');
   const cols = 60, rows = 26;
@@ -1651,16 +1662,16 @@ player.onObeliskDestroyed = (ob) => {
     persist();
     return;
   }
-  // Not the winning blow, but if SKYLINK is already blazing, felling a tower
+  // Not the winning blow, but if POSEIDON is already blazing, felling a tower
   // breaks the laser web and shuts the purge down — a hard-won reprieve. The
   // obelisk is flagged for rebuild; the factory rushes a repair drone to it,
-  // and only once it's raised again (nothing left flagged) does SKYLINK come
+  // and only once it's raised again (nothing left flagged) does POSEIDON come
   // back online (see the activation guard below). Knock towers down faster
   // than they can be rebuilt and you can still win outright during the purge.
   if (player.skylinkActive && ob) {
     player.skylinkActive = false;
     ob.needsRebuild = true;
-    player.say('The tower comes down and the SKYLINK web collapses — dark, for now. A repair drone is already inbound to raise it.');
+    player.say('The tower comes down and the POSEIDON web collapses — dark, for now. A repair drone is already inbound to raise it.');
     if (factoryLive() && !robots.some((r) => r.type === 'w3' && !r.dead)) {
       const drone = spawnW3(map, Math.floor(Math.random() * 0x7fffffff), factoryCx(), factoryCy());
       if (drone) robots.push(drone);
@@ -1735,7 +1746,7 @@ let wFactoryW5Clock = 0, wFactoryW5Next = 30 + Math.random() * 40;
 let wFactoryGuardClock = 0, wFactoryGuardNext = 40 + Math.random() * 40;
 let lastW4GameHour = dayNight.totalHours; // ticks a W4 every 30 game-minutes, not real time
 
-// SKYLINK's final purge: once the clock runs out, every obelisk lights up
+// POSEIDON's final purge: once the clock runs out, every obelisk lights up
 // and the AI throws everything it has left at you, without end — you keep
 // playing until it finally hunts you down (or forever, if you're good).
 const SKYLINK_MAX_W4 = 50; // concurrent cap, so a long purge can't melt the frame rate
@@ -2225,20 +2236,20 @@ function update(dt) {
   // unwinds it when the fortress stands down or the uplink is cut.
   fortress.update(dt, player, robots, worldStir);
   dayNight.update(dt);
-  // Time's up: SKYLINK-9000 comes online. Every obelisk lights up and links
+  // Time's up: POSEIDON comes online. Every obelisk lights up and links
   // to every other in a web of lasers, and the factory throws wave after
   // wave of W4s at you — indefinitely. There's no timer to survive to; it
   // simply doesn't stop, and the run ends only when it finally catches you
   // (see dieToSkylink in player.js).
   // ...but not while a tower it needs is still down and being rebuilt — that
-  // suspension is the player's reprieve, and SKYLINK only (re)lights once the
+  // suspension is the player's reprieve, and POSEIDON only (re)lights once the
   // repair drone has raised every flagged tower back up.
   if (dayNight.hoursLeft() <= 0 && !player.skylinkActive && !player.deathCert && !player._ended
     && !obeliskObjs.some((o) => o.needsRebuild)) {
     player.skylinkActive = true;
     skylinkTimer = 0; // now counts up: seconds survived under the purge
     skylinkW4Clock = 0;
-    player.say('SKYLINK-9000 comes online. Every obelisk blazes and turns on you at once.');
+    player.say('POSEIDON comes online. Every obelisk blazes and turns on you at once.');
     dispatchSkylinkW4s(6); // the opening salvo
   }
   if (player.skylinkActive && !player._ended) {
@@ -2410,6 +2421,7 @@ function frame(now) {
       // Fluorescent-lit down there regardless of the overworld's clock — the
       // underworld veil (below) carries the mood instead of day/night darkness.
       light: inUnderworld ? 1 : dayNight.light(),
+      dawnGlow: inUnderworld ? 0 : dayNight.dawnGlow(),
       timeLabel: dayNight.countdownLabel,
       minimap: (inUnderworld || !showMinimap) ? null : minimap,
       birds: inUnderworld ? [] : birds,
@@ -2429,7 +2441,7 @@ function frame(now) {
       craftWaveGun: player.canCraftWaveGun() && player.hands !== 'wavegun',
       craftChip: player.canCraftChip() && !player.canCraftWaveGun() && !(player.canCraftObGun() && player.hands !== 'obgun'),
       craftSword: player.canCraftSword() && !player.canCraftChip() && !player.canCraftWaveGun() && !(player.canCraftObGun() && player.hands !== 'obgun'),
-      // SKYLINK is an overworld network — its lights/lines must never draw over
+      // POSEIDON is an overworld network — its lights/lines must never draw over
       // the Backspace.
       skylinkActive: player.skylinkActive && !player._ended && !inUnderworld,
       skylinkTimer,

@@ -45,7 +45,7 @@ export const FLOOR_TEXTURES = {
   road: loadDownscaled(T + 'floor-road.jpg'),
   boards: loadDownscaled(T + 'floor-boards.png'),
   bridge: loadDownscaled(T + 'floor-boards.png'),
-  sand: loadDownscaled(T + 'wall-pebbledash.png'),
+  sand: loadDownscaled(T + 'Sand.png'),
   // Adamantine's fortress decks: riveted metal panels for the corridors/maze,
   // paving for the open quad, and a darker panel for the inner sanctum.
   panel: loadDownscaled(T + 'panel-metal-1.jpg'),
@@ -93,6 +93,9 @@ export const GRAFFITI_TEXTURES = [
 // map edge — deliberately NOT the road texture, so the boundary reads as rock
 // rather than another road. See Renderer.drawEdgeRock.
 export const EDGE_TEXTURE = loadDownscaled(T + 'photo-unsorted-2.jpg');
+// Open sea around the island edge — a deep-ocean battlemap, downscaled a little
+// less than the floors so the swell keeps some detail.
+export const SEA_TEXTURE = loadDownscaled(T + 'deep_ocean_battlemap.png', 128);
 
 // Dark riveted-metal texture facing the big W-factory structure.
 export const FACTORY_TEXTURE = loadDownscaled(T + 'decor-train.jpg');

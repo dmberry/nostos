@@ -8,7 +8,7 @@ const DUSK_START = 18;  // ramp down begins (18:00)
 const DUSK_END = 21;    // full night (21:00)
 const NIGHT_FLOOR = 0.16;   // ambient light at deep night
 const NIGHT_THRESHOLD = 0.4; // below this counts as night
-const DEADLINE_DAYS = 1.0;  // 24 hours to defeat the AI before SKYLINK-9000 (more to do now)
+const DEADLINE_DAYS = 1.0;  // 24 hours to defeat the AI before POSEIDON (more to do now)
 
 // Hermite smoothstep: eases 0..1 with zero slope at both ends, so the light
 // curve has no kinks at the ramp boundaries.
@@ -36,7 +36,7 @@ export class DayNight {
   }
 
   // RON-ML `rewind`: the inverse of advance — claws elapsed game *hours*
-  // back out of the clock, pushing the SKYLINK deadline further off.
+  // back out of the clock, pushing the POSEIDON deadline further off.
   // Clamped at `elapsed <= 0` (can't rewind before the run started), which
   // in turn naturally caps hoursLeft() at a full DEADLINE_DAYS*24 — no need
   // for a separate ceiling here.
@@ -67,7 +67,7 @@ export class DayNight {
     return `Day ${this.day} · ${pad(h)}:${pad(m)}`;
   }
 
-  // A countdown to doom: DEADLINE_DAYS days before SKYLINK-9000 comes online,
+  // A countdown to doom: DEADLINE_DAYS days before POSEIDON comes online,
   // counted from the moment the run actually started (elapsed game-hours),
   // not from absolute day-clock hour. `totalHours` starts at `startHour`
   // (09:00 by default, for a daylight start) — using it directly here used
@@ -83,7 +83,7 @@ export class DayNight {
     const h = Math.floor(total);
     const m = Math.floor((total - h) * 60);
     const pad = (n) => String(n).padStart(2, '0');
-    return `${pad(h)}:${pad(m)} to SKYLINK`;
+    return `${pad(h)}:${pad(m)} to POSEIDON`;
   }
 
   // Ambient light 0..1: full through midday, smooth dawn and dusk ramps,
@@ -103,5 +103,14 @@ export class DayNight {
 
   isNight() {
     return this.light() < NIGHT_THRESHOLD;
+  }
+
+  // A warm glow that swells and fades across the dawn and dusk ramps (0 at the
+  // edges, ~1 in the middle) — the renderer lays a faint rose wash over the
+  // world for it. Homer's rhododaktylos eos, rosy-fingered dawn.
+  dawnGlow() {
+    const h = this.hour;
+    const tri = (a, b) => { const t = (h - a) / (b - a); return t < 0 || t > 1 ? 0 : 1 - Math.abs(t - 0.5) * 2; };
+    return Math.max(tri(DAWN_START, DAWN_END), tri(DUSK_START, DUSK_END) * 0.8);
   }
 }
