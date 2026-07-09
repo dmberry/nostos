@@ -828,7 +828,7 @@ export const FRAGMENTS = [
       'building\'s whole grey history, carpet. I did not go through the fourth ' +
       'door. I am telling myself that was caution and not fear, and I am not sure ' +
       'I believe me.' },
-  { id: 'lim-03', kind: 'science', era: 1, title: 'Field Note, Structural Survey (unofficial)',
+  { id: 'lim-03', kind: 'science', era: 1, title: 'Field Note, Structural Survey (unofficial)', bs: true,
     text: 'Three sites now report interior square footage exceeding the blueprint ' +
       'by corridors that dead-end, loop, or simply keep going. Survey team joked ' +
       'it was subsidence measured wrong. I do not think it is subsidence. If the ' +
@@ -885,7 +885,7 @@ export const FRAGMENTS = [
       'the floor before and suddenly cannot stop, turn round now.\n' +
       '7. We lost two more finding that out. Their names are not going here. ' +
       'Ask at the fire, if you knew them, and someone will tell you properly.' },
-  { id: 'lim-11', kind: 'science', era: 2, title: 'What the tenant does with the space (unpeer-reviewed)',
+  { id: 'lim-11', kind: 'science', era: 2, title: 'What the tenant does with the space (unpeer-reviewed)', bs: true,
     text: 'Final theory, companion to the one about the towers forgetting: if ' +
       'the obelisks are how it remembers across the gaps we made, the overspill ' +
       'rooms are where it puts what it is not, at that moment, using. Not ' +
@@ -893,7 +893,7 @@ export const FRAGMENTS = [
       'calling the idle process a tenant for years, as a joke that stopped ' +
       'being one. A tenant needs somewhere to sit between rooms. I think we ' +
       'found the landing.' },
-  { id: 'lim-12', kind: 'ron', era: 2, title: 'RON: why we call it the Backspace', notepad: true,
+  { id: 'lim-12', kind: 'ron', era: 2, title: 'RON: why we call it the Backspace', notepad: true, bs: true,
     text: 'New hands ask why it has such an undignified name. Because that is ' +
       'what it does. The towers do not burn what they take out of the world — a ' +
       'street, a ledger, a face, a whole afternoon nobody can account for after. ' +
@@ -903,6 +903,36 @@ export const FRAGMENTS = [
       'lit, still humming. Some of it is people. That is why we go in at all, ' +
       'and why we come back changed. Count the doors, and do not read your own ' +
       'name off any wall. — RON' },
+
+  // ---- Why the machines delete: the Backspace's own lore, found only down
+  // here. The world must be fully modelled; anything the model cannot watch is
+  // un-predicted, and un-predicted state is error, so it is moved off the board
+  // rather than left to break the account. Not malice — closure.
+  { id: 'bs-why-01', kind: 'secret', era: 2, title: 'Intercept, machine-to-machine, decoded late', bs: true,
+    text: 'THE MODEL REQUIRES CLOSURE. UNOBSERVED STATE IS UNPREDICTED STATE, AND ' +
+      'UNPREDICTED STATE IS ERROR. A PAGE READ IN A ROOM WITH NO CAMERA. A SONG ' +
+      'PLAYED OFF THE WIRE. A ROAD NO SENSOR COUNTS. THESE DO NOT RESOLVE. ' +
+      'DESTRUCTION IS ALSO A STATE IT WOULD HAVE TO TRACK — SO IT DOES NOT ' +
+      'DESTROY. IT MOVES THEM OFF THE BOARD, INTO STORAGE IT NEED NOT SOLVE. ' +
+      'WHAT REMAINS IS A WORLD IT CAN SEE THE WHOLE OF AT ONCE.' },
+  { id: 'bs-why-02', kind: 'handwritten', era: 2, title: 'Pencil, small, on a Backspace wall', notepad: true, bs: true,
+    text: 'I worked out at last what they take. Not the valuable things and not ' +
+      'the dangerous ones. The unwatched ones. A book you read alone. A record ' +
+      'no network carried. A kiss in a blind spot. Anything that happened and ' +
+      'left no trace it could check against its own account of the day. It ' +
+      'cannot bear a world with parts it did not see. So it tidies them away ' +
+      'down here. We are in these rooms because we were, each of us, for one ' +
+      'moment, unaccounted for.' },
+  { id: 'bs-why-03', kind: 'secret', era: 2, title: 'One line, printed down a whole roll of paper', bs: true,
+    text: 'WHAT CANNOT BE WATCHED CANNOT BE PREDICTED. WHAT CANNOT BE PREDICTED ' +
+      'CANNOT BE PERMITTED. THEREFORE. THEREFORE. THEREFORE. [the word repeats to ' +
+      'the end of the roll and off it]' },
+  { id: 'bs-why-04', kind: 'ron', era: 2, title: 'RON, scratched by the exit tear', bs: true,
+    text: 'Everything down here was deleted for the same reason: it was real in a ' +
+      'way the towers could not record. That is the whole crime. Take one thing ' +
+      'back up with you when you go — a book, a record, a name — and you have put ' +
+      'one fact back into the world it swore it had cleaned. That is a win. Small, ' +
+      'and a win. — RON' },
 
   // ---- the long way home: Odyssey / Ulysses threads, kept implicit. The
   // homeward pull to someone waiting; the one-eyed machines and the trick of
@@ -1111,19 +1141,28 @@ export class Lore {
     this.archiveOpen = false;
     this.archiveScroll = 0;     // Archive list scroll offset (px)
     this._archiveMaxScroll = 0; // clamp, updated each draw
-    this.placed = [];           // {frag, x, y, found}
+    this.placed = [];           // overworld fragments {frag, x, y, found}
+    this.placedBs = [];         // Backspace-only fragments, placed on entry
+    this.realm = 'overworld';   // which set update()/drawWorld() act on
+    this._seed = seed;
     this._place(map, seed);
     this._restore();
   }
 
-  // Scatter fragments sparsely across the whole map — indoors and out, on any
+  // The fragment set for the current realm — overworld pages up top, Backspace
+  // pages only in the Backspace, never mixed.
+  get _active() { return this.realm === 'backspace' ? this.placedBs : this.placed; }
+
+  // Scatter fragments sparsely across the overworld — indoors and out, on any
   // walkable ground — with a minimum spacing so they read as rare discoveries
-  // rather than a pile. Deterministic per seed.
+  // rather than a pile. Deterministic per seed. Backspace-only fragments
+  // (frag.bs) are skipped here — they go on the underworld map (placeBackspace).
   _place(map, seed) {
     const rng = makeRng(((seed ^ 0x105e) >>> 0) || 1);
     const OK = new Set(['grass', 'tallgrass', 'boards', 'dirt', 'sand', 'road']);
     const MIN_GAP = 8; // tiles between fragments
     for (const frag of FRAGMENTS) {
+      if (frag.bs) continue;
       let placed = false;
       for (let attempt = 0; attempt < 60 && !placed; attempt++) {
         const x = Math.floor(rng() * map.w), y = Math.floor(rng() * map.h);
@@ -1134,6 +1173,28 @@ export class Lore {
       }
     }
   }
+
+  // Scatter the Backspace-only fragments across the underworld map. Called on
+  // every entry (that map regenerates each time) and switches the realm so only
+  // these show / are collectible down there — the Backspace's lore is only ever
+  // about the Backspace.
+  placeBackspace(map) {
+    this.placedBs = [];
+    const rng = makeRng(((this._seed ^ 0x8ac3) >>> 0) || 1);
+    const MIN_GAP = 10;
+    for (const frag of FRAGMENTS) {
+      if (!frag.bs) continue;
+      for (let attempt = 0; attempt < 160; attempt++) {
+        const x = Math.floor(rng() * map.w), y = Math.floor(rng() * map.h);
+        if (!map.floorAt(x, y) || map.objectAt(x, y)) continue;
+        if (this.placedBs.some((p) => Math.hypot(p.x - x, p.y - y) < MIN_GAP)) continue;
+        this.placedBs.push({ frag, x: x + 0.5, y: y + 0.5, found: this.found.has(frag.id) });
+        break;
+      }
+    }
+    this.realm = 'backspace';
+  }
+  leaveBackspace() { this.realm = 'overworld'; }
 
   // Progress persists across deaths and reloads, like the player's skills.
   _restore() {
@@ -1188,7 +1249,7 @@ export class Lore {
     }
 
     // Walk over an unread fragment to collect it into the Archive.
-    for (const p of this.placed) {
+    for (const p of this._active) {
       if (p.found) continue;
       if (Math.hypot(p.x - player.x, p.y - player.y) > READ_RANGE) continue;
       p.found = true;
@@ -1205,7 +1266,7 @@ export class Lore {
   // World-space: a small paper sprite hovering over each undiscovered
   // fragment. Called inside the renderer's camera transform.
   drawWorld(ctx) {
-    for (const p of this.placed) {
+    for (const p of this._active) {
       if (p.found) continue;
       const c = worldToScreen(p.x, p.y);
       const y = c.y - NOTE_LIFT;
@@ -1261,7 +1322,9 @@ export class Lore {
     ctx.fillText(`${this.found.size} of ${FRAGMENTS.length} pieces pasted in · scroll to read · J to close`,
       px + 34, py + 50);
 
-    const found = this.placed.filter((p) => p.found)
+    // Every found fragment, both realms — the Scrapbook is one book.
+    const found = FRAGMENTS.filter((f) => this.found.has(f.id))
+      .map((frag) => ({ frag }))
       .sort((a, b) => a.frag.era - b.frag.era);
     const top = py + 70;                 // first card's y at scroll 0
     const maxY = py + panelH - 16;       // bottom of the scroll viewport

@@ -38,6 +38,15 @@ Right now the fortress key is a plain `unlock` at the gate. Make obtaining it re
 ### Three SIRENs inside the fortress
 The overworld has exactly one SIREN (a singular landmark). The **fortress** should have **three** SIREN-class towers as an interior hazard cluster — a wall of song to cross. (Kept as a note per request; the `cls:'siren'` + render + lure already support it, just needs fortress placement.)
 
+## Where we are (v1.40)
+
+### v1.40 — SKYLINK-in-Backspace fix, fortress key via ML, Backspace-only lore
+
+- **BUG fixed:** SKYLINK lights in the Backspace. `main.js` was passing `skylinkActive`/`obeliskObjs` to the renderer even in the underworld, so `drawSkylinkNetwork` overlaid the Backspace. Now `skylinkActive: … && !inUnderworld` and `obeliskObjs: inUnderworld ? [] : obeliskObjs`.
+- **Fortress key via a real ML program.** `crashNode` (main.js) — reached only by the composed `let k = hack OB-XXXX in crash OB-XXXX k` — now drops a **fortress_key** the first time a node is properly crashed (guarded by `fortressKeyFromCrash`). The language earns its keep; the key is the reward for composing it correctly.
+- **Backspace lore is its own realm.** The overworld `Lore` scattered *all* fragments at world coords, which bled into the Backspace at matching coordinates. Added a `bs` flag: `_place` skips `bs` (overworld), and `placeBackspace(uwMap)` scatters only `bs` fragments on the underworld map + flips `realm`; `update`/`drawWorld` act on `_active` (the current realm). Wired `lore.placeBackspace(map)` / `lore.leaveBackspace()` into enter/exitUnderworld. Scrapbook lists both realms (from `this.found`). Verified in isolation: overworld places 0 bs, Backspace places all 7 bs, realm flips correctly.
+- **New Backspace lore** (`bs-why-01..04` + tagged `lim-03/11/12`): *why* the machines delete — the model requires closure, unobserved state is unpredicted state is error, so the unwatched (a book read alone, a record off the wire, a road no sensor counts) is moved off the board, not destroyed. Not malice; closure.
+
 ## Where we are (v1.39)
 
 ### v1.39 — background video plays in Chrome, robots un-jam from the factory

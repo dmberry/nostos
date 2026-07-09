@@ -48,7 +48,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '1.39';
+const VERSION = '1.40';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -356,6 +356,9 @@ for (const ob of obeliskObjs) {
   // A hex code name identifying this tower, so the kill record can list it.
   ob.code = 'OB-' + ((ob.x * 4096 + ob.y * 31) & 0xffff).toString(16).toUpperCase().padStart(4, '0');
 }
+// One fortress key is coughed up the first time a node is properly crashed
+// (the composed `let k = hack OB in crash OB k` — see crashNode).
+let fortressKeyFromCrash = false;
 // Every obelisk is assigned one of the eight circuit-board numbers, spread
 // round-robin then shuffled, so destroying towers always guarantees full
 // coverage of 1-8 (rather than random drops that could dupe forever).
@@ -616,6 +619,7 @@ function enterUnderworld() {
   player.y = underworld.spawnY;
   camera.snap(player.x, player.y);
   inUnderworld = true;
+  lore.placeBackspace(map); // only Backspace lore shows down here
   sfx.setDrone(0.8);
   player.say('The tear swallows you. The air in here is wrong — flat, yellow, humming.');
 }
@@ -628,6 +632,7 @@ function exitUnderworld() {
   player.y = overworldReturn.y;
   camera.snap(player.x, player.y);
   inUnderworld = false;
+  lore.leaveBackspace(); // back to the overworld fragment set
   sfx.setDrone(0);
   player.say('You come up through the tear. Ordinary daylight, ordinary weight. You are back.');
 }
@@ -797,7 +802,17 @@ function ronmlCtx() {
         const drone = spawnW3(map, Math.floor(Math.random() * 0x7fffffff), factoryCx(), factoryCy());
         if (drone) robots.push(drone);
       }
-      player.say(`${id} goes dark. A repair drone is already inbound to raise it.`);
+      // A properly-composed crash (`let k = hack OB in crash OB k` — the point
+      // where the language actually earns its keep) is what prises a fortress
+      // key out of the network. Just the once: crash the first node correctly
+      // and the key is yours.
+      if (!fortressKeyFromCrash && !player.hasItem('fortress_key')) {
+        fortressKeyFromCrash = true;
+        map.groundItems.push({ item: 'fortress_key', qty: 1, x: o.x + 0.5, y: o.y + 0.9, keep: true });
+        player.say(`${id} dies and coughs up a fortress key — the composed hack held. A way into ${fortress.AI_NAME}'s fortress lies in the wreck.`);
+      } else {
+        player.say(`${id} goes dark. A repair drone is already inbound to raise it.`);
+      }
     },
     nodeFrozen: (id) => { const o = findObelisk(id); return !!(o && o.frozen); },
     // RON-ML `loop`: the easy hack. No AI key, no hack/crash two-step —
@@ -2005,9 +2020,11 @@ function frame(now) {
       craftWaveGun: player.canCraftWaveGun() && player.hands !== 'wavegun',
       craftChip: player.canCraftChip() && !player.canCraftWaveGun() && !(player.canCraftObGun() && player.hands !== 'obgun'),
       craftSword: player.canCraftSword() && !player.canCraftChip() && !player.canCraftWaveGun() && !(player.canCraftObGun() && player.hands !== 'obgun'),
-      skylinkActive: player.skylinkActive && !player._ended,
+      // SKYLINK is an overworld network — its lights/lines must never draw over
+      // the Backspace.
+      skylinkActive: player.skylinkActive && !player._ended && !inUnderworld,
       skylinkTimer,
-      obeliskObjs,
+      obeliskObjs: inUnderworld ? [] : obeliskObjs,
       paused,
       rest: resting ? { dim: restDim(resting.t) } : null,
       ubikFlicker: player.ubikFlickerT || 0,
