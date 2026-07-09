@@ -22,7 +22,13 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Always put a texture on a glowing thing.** No glow is ever a flat coloured blob — a grille/panel texture is laid over it (the factory-vent trick). Everything luminous goes through `Renderer.texturedGlow`, which caps the glow with an AI grate texture; if you add a new light, use it rather than a bare `fill`. (David, 2026-07-07.)
 - **Vary texture opacity per tile.** Floors jitter their texture alpha deterministically per tile (`drawFloor`) so a large expanse of one floor reads as worn/varied rather than a flat repeat.
 
-## Where we are (v1.30)
+## Where we are (v1.31)
+
+### v1.31 — reel motor lead, title SKYLINK removed, wordmark spacing
+
+- **Reel motor lead.** `drawCassette(itemDef, spin, spinLeft = spin)` now takes a separate left-reel angle (left reel at −4, right/take-up at +4). The gate frame loop keeps two accumulators: `spinR` advances the instant play starts, `spinL` is held for the first 0.22s of each play (rising edge of `playing` resets `playElapsed`), so the right reel visibly leads and the left catches up a beat later — the tell a real Walkman gives. Verified: 120 ms after a fresh start the right leads by ~0.38 rad, settling to ~0.4–0.48 rad.
+- **Title SKYLINK removed.** `bodyHtml` no longer includes `skylinkHtml` in title mode (gate keeps it). The sky-clock JS is guarded with `if (skyEl)` so title mode doesn't touch the missing element.
+- **In-game wordmark spacing.** `#helpBtn`/`#aboutBtn` left 70/100 → 92/122px so the bigger v1.30 top-left wordmark isn't crowded.
 
 ### v1.30 — wordmark in-game + underscore caret
 

@@ -2948,7 +2948,10 @@ export class Renderer {
   // shell, label strip in the tape's own colour, window, and the two reels.
   // `spin` is the reel angle in radians — 0 for a static icon; the walkman
   // deck passes a clock-driven angle so the reels visibly turn during play.
-  drawCassette(itemDef, spin = 0) {
+  // spin drives the right (take-up) reel; spinLeft the left (supply) reel.
+  // They default to the same angle, but a caller can lead the right one — the
+  // motor-driven reel starts a touch before the passive one (see mobile-gate).
+  drawCassette(itemDef, spin = 0, spinLeft = spin) {
     const ctx = this.ctx;
     ctx.fillStyle = '#26282d'; // shell
     ctx.fillRect(-11, -7, 22, 14);
@@ -2959,13 +2962,14 @@ export class Renderer {
     ctx.fillRect(-9, -5.5, 18, 3);
     ctx.fillStyle = '#1a1b1f'; // tape window
     ctx.fillRect(-7.5, -1, 15, 6);
-    for (const rx of [-4, 4]) { // two reels, spokes at the shared spin angle
+    for (const rx of [-4, 4]) { // left reel at -4, right (take-up) at +4
+      const reelSpin = rx < 0 ? spinLeft : spin;
       ctx.fillStyle = '#e8e2d0';
       ctx.beginPath(); ctx.arc(rx, 2, 2.6, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = '#26282d';
       ctx.lineWidth = 0.9;
       for (let k = 0; k < 3; k++) {
-        const a = spin + (k * Math.PI * 2) / 3;
+        const a = reelSpin + (k * Math.PI * 2) / 3;
         ctx.beginPath();
         ctx.moveTo(rx, 2);
         ctx.lineTo(rx + Math.cos(a) * 2.6, 2 + Math.sin(a) * 2.6);

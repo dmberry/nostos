@@ -1,6 +1,6 @@
 # postAI
 
-**Version:** 1.30 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
+**Version:** 1.31 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
 
 *(Versioning policy: 0.01 increments from v0.3 onwards.)*
 
@@ -8,7 +8,7 @@ An isometric 2D survival game set in a world devastated by an AI takeover. Civil
 
 Inspired by Project Zomboid: knowledge is the real progression, scarcity drives movement, every fight is optional and risky, and the world tells the story.
 
-## Current build (v1.30)
+## Current build (v1.31)
 
 **The world:** a seeded 128x128 isometric map — a river with two bridges, a ten-building town, a ruined hamlet, forests, tall grass, and roads. Away from the towns the terrain gets properly rugged: steep hills and deep hollows, always climbable one step at a time. Rubble and rocks are low enough to step straight over; a **wall block** is taller, so it takes a **double jump** (press jump again in mid-air) to get on top — once up there you move a little slower for control, can roam the block tops, and just walk off any edge to drop back down and carry on. **Up on a block you're safe from ground attacks** — machines and animals can't reach you, so a block top is high ground to catch your breath (a bomb blast still finds you, and the flying machines to come will too). Building walls still stop you on foot, so a town or house is a real boundary until you deliberately climb it. The forests are drawn with proper hand-drawn tree art — mostly full leafy trees, with the odd small or bare/dead one — and a chopped tree shows a damage bar so you can see how many swings it has left. The map is ringed by impassable dark-gravel rock cliffs at its edge — drawn semi-transparent so you still see yourself if one stands between you and the camera. Streams can be waded; the river can be swum (only your head and shoulders show above the water), slowly and at a cost — both now carry a slow, gently travelling opacity ripple along the watercourse, a cheap stand-in for current without an actual scrolling texture. Day and night cycle, with genuinely dark nights and torches to push them back.
 
@@ -33,6 +33,7 @@ Created by David and Henrik.
 Full technical detail (root causes, exact numbers) lives in [PAI-version-plan.md](PAI-version-plan.md); this is the one-line summary.
 
 | Version | Summary |
+| v1.31 | Walkman/title polish: when a tape starts, the **right (motor-driven) reel now leads the left (passive) reel** by a beat, the way a real cassette spools up; the **SKYLINK teaser is dropped from the title screen** (kept on the mobile gate); and the in-game top-left wordmark gets a little breathing room from the help/about buttons. |
 | v1.30 | The **postAI wordmark** (dim "post" + bright glowing "AI") now brands the in-game top-left HUD too, replacing the old plain-text chip. The blinking terminal cursor on the gate/title is now an underscore (`_`) rather than a block. |
 | v1.29 | **Title screen relaid for laptops**: on a landscape screen it's now two centred columns — hero text (wordmark, tagline, Continue/New game, SKYLINK) on the left, the Walkman with the full four-tape rack on the right — and the dancing machines run as a full-width band along the bottom, so it fills the width and fits the height instead of overflowing a tall single strip (the tapes were being pushed off-screen). Phones keep the single-column gate. Deck reels also spool more slowly. |
 | v1.28 | SKYLINK clock box on the gate/title recoloured from magenta to **dark blue**. |

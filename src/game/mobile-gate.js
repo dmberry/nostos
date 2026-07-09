@@ -89,7 +89,7 @@ export function initMobileGate(mode = 'gate') {
     : `<p class="mg-sub">It is the end of the world, and you will need a keyboard and mouse to save it!<span class="mg-sub2">Grab a laptop or desktop for the real thing.<br>Meanwhile, here's the soundtrack.</span></p>
        <button class="mg-tryanyway" id="mg-tryanyway">Try and play it anyway…</button>`;
   const bodyHtml = isTitle
-    ? `<div class="mg-hero">${brandHtml}${copyHtml}${skylinkHtml}</div>
+    ? `<div class="mg-hero">${brandHtml}${copyHtml}</div>
        <div class="mg-player">${deckHtml}${rackHtml}${themesHtml}</div>
        ${stageHtml}`
     : `${brandHtml}${copyHtml}${skylinkHtml}${stageHtml}${deckHtml}${rackHtml}${themesHtml}`;
@@ -369,18 +369,28 @@ export function initMobileGate(mode = 'gate') {
   syncTransport();   // initial: play shows ▶, stop/next disabled
 
   // ---- animation loop: spinning reels + dancing machines ----
-  let spin = 0;
+  // Two reel angles: the right reel is the motor-driven take-up spool and turns
+  // the instant play starts; the left is the passive supply spool and only
+  // begins a fraction of a second later, so a starting tape shows the right
+  // reel leading — the little tell a real Walkman gives.
+  let spinR = 0, spinL = 0, playElapsed = 0, wasPlaying = false;
   let lastT = performance.now();
   const frame = (t) => {
     if (!running) return;   // stop drawing once we've booted the game
     const dt = Math.min(0.05, (t - lastT) / 1000); lastT = t;
     const playing = current >= 0 && !audio.paused;
     // deck cassette — scaled up so the tape nearly fills the deck
-    if (playing) spin += dt * 1.1; // slow, lazy reel turn
+    if (playing) {
+      if (!wasPlaying) playElapsed = 0;          // (re)start: right leads, left waits
+      playElapsed += dt;
+      spinR += dt * 1.1;                          // motor reel: turns immediately
+      if (playElapsed > 0.22) spinL += dt * 1.1;  // passive reel: catches up a beat later
+    }
+    wasPlaying = playing;
     const S = 11.2, dcx = deckCv.width / 2, dcy = deckCv.height / 2;
     deckCtx.clearRect(0, 0, deckCv.width, deckCv.height);
     deckCtx.save(); deckCtx.translate(dcx, dcy); deckCtx.scale(S, S);
-    deckRenderer.drawCassette({ color: deckColor }, spin);
+    deckRenderer.drawCassette({ color: deckColor }, spinR, spinL);
     deckCtx.restore();
     // now-playing marquee across the tape's own coloured label strip
     // (drawCassette draws that strip at local x -9..9, y -5.5..-2.5).
@@ -434,17 +444,21 @@ export function initMobileGate(mode = 'gate') {
   requestAnimationFrame(frame);
 
   // ---- SKYLINK uplink clock (cosmetic doomsday timer) ----
+  // Only the gate carries it; the title screen drops the teaser, so bail if the
+  // element isn't present.
   const skyEl = el.querySelector('#mg-sky');
   const skyBanner = el.querySelector('#mg-skylink');
-  let secs = 3 * 3600 + 27 * 60 + 41;
-  const tickSky = () => {
-    const s = Math.max(0, secs);
-    const hh = String(Math.floor(s / 3600)).padStart(2, '0');
-    const mm = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
-    const ss = String(s % 60).padStart(2, '0');
-    skyEl.textContent = `${hh}:${mm}:${ss}`;
-    if (s <= 0) { skyBanner.classList.add('imminent'); skyEl.textContent = 'IMMINENT'; } else secs -= 1;
-  };
-  tickSky();
-  skyTimer = setInterval(tickSky, 1000);
+  if (skyEl) {
+    let secs = 3 * 3600 + 27 * 60 + 41;
+    const tickSky = () => {
+      const s = Math.max(0, secs);
+      const hh = String(Math.floor(s / 3600)).padStart(2, '0');
+      const mm = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
+      const ss = String(s % 60).padStart(2, '0');
+      skyEl.textContent = `${hh}:${mm}:${ss}`;
+      if (s <= 0) { skyBanner.classList.add('imminent'); skyEl.textContent = 'IMMINENT'; } else secs -= 1;
+    };
+    tickSky();
+    skyTimer = setInterval(tickSky, 1000);
+  }
 }
