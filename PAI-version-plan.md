@@ -22,7 +22,11 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Always put a texture on a glowing thing.** No glow is ever a flat coloured blob — a grille/panel texture is laid over it (the factory-vent trick). Everything luminous goes through `Renderer.texturedGlow`, which caps the glow with an AI grate texture; if you add a new light, use it rather than a bare `fill`. (David, 2026-07-07.)
 - **Vary texture opacity per tile.** Floors jitter their texture alpha deterministically per tile (`drawFloor`) so a large expanse of one floor reads as worn/varied rather than a flat repeat.
 
-## Where we are (v1.31)
+## Where we are (v1.32)
+
+### v1.32 — theme switch in a hamburger on the mobile gate
+
+The gate's theme row was still being clipped by phone browser chrome at the bottom of the viewport. Moved it into a fixed top-right hamburger (`.mg-menu` → `#mg-menu-btn` toggles `#mg-menu-pop`, which wraps the same `#mg-themes` buttons stacked vertically). Closes on a theme pick or an outside tap. `bodyHtml` uses `menuHtml` for the gate and keeps `themesHtml` inline for the title (desktop has room). Frees the bottom so the tape rack is fully visible (rack bottom 798 → 772). Verified: popover toggles, theme applies + closes, no console errors.
 
 ### v1.31 — reel motor lead, title SKYLINK removed, wordmark spacing
 

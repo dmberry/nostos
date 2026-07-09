@@ -80,6 +80,13 @@ export function initMobileGate(mode = 'gate') {
       <button data-theme="Backspace">Backspace</button>
       <button data-theme="Fortress">Fortress</button>
     </div>`;
+  // On the phone gate the vertical space is tight, so the theme switch lives
+  // behind a hamburger (fixed, top-right) instead of a row at the bottom that
+  // gets clipped by the browser chrome. The title (desktop) keeps it inline.
+  const menuHtml = `<div class="mg-menu">
+      <button class="mg-menu-btn" id="mg-menu-btn" aria-label="Theme menu" aria-expanded="false">☰</button>
+      <div class="mg-menu-pop" id="mg-menu-pop" hidden><div class="mg-menu-label">Theme</div>${themesHtml}</div>
+    </div>`;
   const copyHtml = isTitle
     ? `<p class="mg-sub">The machines outlived the world. Now survive it.<span class="mg-sub2">A keyboard-and-mouse survival game. Here's the soundtrack while you decide.</span></p>
        <div class="mg-actions">
@@ -92,7 +99,7 @@ export function initMobileGate(mode = 'gate') {
     ? `<div class="mg-hero">${brandHtml}${copyHtml}</div>
        <div class="mg-player">${deckHtml}${rackHtml}${themesHtml}</div>
        ${stageHtml}`
-    : `${brandHtml}${copyHtml}${skylinkHtml}${stageHtml}${deckHtml}${rackHtml}${themesHtml}`;
+    : `${brandHtml}${copyHtml}${skylinkHtml}${stageHtml}${deckHtml}${rackHtml}${menuHtml}`;
 
   el.innerHTML = `
     <style>
@@ -139,6 +146,19 @@ export function initMobileGate(mode = 'gate') {
         color: var(--accent); background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.18);
         border-radius: 5px; padding: 5px 11px; cursor: pointer; }
       .mg-themes button.on { color: #10130d; background: var(--accent); border-color: var(--accent); }
+      /* hamburger theme menu (mobile gate only) */
+      .mg-menu { position: fixed; top: max(10px, env(safe-area-inset-top)); right: max(10px, env(safe-area-inset-right)); z-index: 20; }
+      .mg-menu-btn { width: 42px; height: 42px; border-radius: 10px; font-size: 19px; line-height: 1; cursor: pointer;
+        color: var(--accent); background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.22); font-family: inherit; }
+      .mg-menu-btn:active { transform: scale(0.94); }
+      .mg-menu-pop { position: absolute; top: 48px; right: 0; min-width: 150px; padding: 8px;
+        background: rgba(18,22,14,0.97); border: 1px solid rgba(255,255,255,0.18); border-radius: 11px;
+        box-shadow: 0 10px 26px rgba(0,0,0,0.55); }
+      .mg-menu-pop[hidden] { display: none; }
+      .mg-menu-label { font: 700 10px system-ui, sans-serif; text-transform: uppercase; letter-spacing: 0.08em;
+        color: var(--accent); opacity: 0.75; margin: 2px 4px 7px; }
+      .mg-menu .mg-themes { flex-direction: column; gap: 6px; margin-top: 0; }
+      .mg-menu .mg-themes button { width: 100%; text-align: center; }
       /* SKYLINK uplink clock */
       .mg-skylink { font: 700 12px ui-monospace, monospace; letter-spacing: 0.1em; text-transform: uppercase;
         color: #5b9dff; text-shadow: 0 0 8px rgba(70,130,255,0.6); margin: 0 0 4px;
@@ -220,7 +240,23 @@ export function initMobileGate(mode = 'gate') {
     }
     el.querySelectorAll('#mg-themes button').forEach((b) => b.classList.toggle('on', b.dataset.theme === name));
   };
-  el.querySelectorAll('#mg-themes button').forEach((b) => b.addEventListener('click', () => applyTheme(b.dataset.theme)));
+  // Hamburger menu (gate only): toggle the theme popover; close on a pick or an
+  // outside tap.
+  const menuBtn = el.querySelector('#mg-menu-btn');
+  const menuPop = el.querySelector('#mg-menu-pop');
+  const closeMenu = () => { if (menuPop) { menuPop.hidden = true; menuBtn.setAttribute('aria-expanded', 'false'); } };
+  if (menuBtn) {
+    menuBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const open = menuPop.hidden;
+      menuPop.hidden = !open;
+      menuBtn.setAttribute('aria-expanded', String(open));
+    });
+    el.addEventListener('click', (e) => {
+      if (!menuPop.hidden && !menuPop.contains(e.target) && e.target !== menuBtn) closeMenu();
+    });
+  }
+  el.querySelectorAll('#mg-themes button').forEach((b) => b.addEventListener('click', () => { applyTheme(b.dataset.theme); closeMenu(); }));
 
   // Tear down the screen and hand off to the game. newGame wipes the run save
   // (keeping the durable name/gender identity, exactly like in-game New Game);
