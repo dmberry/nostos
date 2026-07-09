@@ -890,7 +890,7 @@ export class Renderer {
     const ctx = this.ctx;
     ctx.fillStyle = 'rgba(4,6,3,0.85)';
     ctx.fillRect(0, 0, this.w, this.h);
-    const pw = Math.min(460, this.w - 60), ph = 340;
+    const pw = Math.min(496, this.w - 48), ph = 390;
     const px = Math.round((this.w - pw) / 2), py = Math.round((this.h - ph) / 2);
     this._certBounds = { x: px, y: py, w: pw, h: ph }; // for the S-to-share capture
     const cx = px + pw / 2;
@@ -908,10 +908,12 @@ export class Renderer {
       ctx.drawImage(PAPER_TEXTURE, px, py, pw, ph);
       ctx.restore();
     }
-    // Aged vignette: the paper darkens and foxes toward the edges.
-    const vg = ctx.createRadialGradient(cx, py + ph * 0.45, ph * 0.2, cx, py + ph * 0.5, ph * 0.8);
-    vg.addColorStop(0, 'rgba(255,250,236,0)');
-    vg.addColorStop(1, 'rgba(120,96,58,0.3)');
+    // Bleach the sheet toward white (a paler, cleaner paper) while keeping the
+    // grain, then only a soft vignette so the edges still fox a little.
+    ctx.fillStyle = 'rgba(252,251,247,0.52)'; ctx.fillRect(px, py, pw, ph);
+    const vg = ctx.createRadialGradient(cx, py + ph * 0.45, ph * 0.28, cx, py + ph * 0.5, ph * 0.85);
+    vg.addColorStop(0, 'rgba(255,255,253,0)');
+    vg.addColorStop(1, 'rgba(150,132,98,0.15)');
     ctx.fillStyle = vg; ctx.fillRect(px, py, pw, ph);
     // A printed certificate border: a dark rule with a finer inner rule.
     ctx.strokeStyle = 'rgba(90,68,40,0.85)'; ctx.lineWidth = 2.5;
@@ -925,89 +927,85 @@ export class Renderer {
 
     // Title, engraved.
     ctx.textAlign = 'center';
-    ctx.font = 'bold 23px Georgia, serif';
+    ctx.font = 'bold 27px Georgia, serif';
     ctx.fillStyle = isVictory ? '#2f5d2a' : '#7d241a';
-    ctx.fillText(isVictory ? 'THE TOWERS ARE DOWN' : 'CERTIFICATE OF DEATH', cx, py + 44);
+    ctx.fillText(isVictory ? 'THE TOWERS ARE DOWN' : 'CERTIFICATE OF DEATH', cx, py + 50);
     // Greek-key meander under the title.
-    this.meanderBand(px + 40, py + 56, pw - 80, carved);
+    this.meanderBand(px + 40, py + 64, pw - 80, carved);
 
     // Epitaph, in the language of a grave stele.
-    ctx.fillStyle = INK; ctx.font = '15px Georgia, serif';
+    ctx.fillStyle = INK; ctx.font = '18px Georgia, serif';
     if (isVictory) {
-      ctx.fillText(`${cert.name || 'A wanderer'} pulled down every tower and turned for home.`, cx, py + 98);
-      ctx.font = 'italic 14px Georgia, serif'; ctx.fillStyle = FAINT;
-      ctx.fillText('The machines forget. POSEIDON never wakes.', cx, py + 120);
+      ctx.fillText(`${cert.name || 'A wanderer'} pulled down every tower and turned for home.`, cx, py + 112);
+      ctx.font = 'italic 17px Georgia, serif'; ctx.fillStyle = FAINT;
+      ctx.fillText('The machines forget. POSEIDON never wakes.', cx, py + 140);
     } else if (cert.skylink) {
-      ctx.fillText(`Here lies ${cert.name || 'a wanderer'},`, cx, py + 98);
-      ctx.fillText('lost the day POSEIDON woke and the sea rose.', cx, py + 120);
+      ctx.fillText(`Here lies ${cert.name || 'a wanderer'},`, cx, py + 112);
+      ctx.fillText('lost the day POSEIDON woke and the sea rose.', cx, py + 140);
     } else {
-      ctx.fillText(`Here lies ${cert.name || 'a wanderer'},`, cx, py + 98);
-      ctx.fillText(`taken by ${cert.cause}, far from home.`, cx, py + 120);
+      ctx.fillText(`Here lies ${cert.name || 'a wanderer'},`, cx, py + 112);
+      ctx.fillText(`taken by ${cert.cause}, far from home.`, cx, py + 140);
     }
 
     // Ledger rows.
     const rank = deathRank(cert.score);
     ctx.textAlign = 'left';
-    ctx.font = '13px Georgia, serif';
-    const lx = px + 54;
-    const valX = lx + 150;
-    const valMaxW = px + pw - 44 - valX;
-    let y = py + 158;
+    ctx.font = '16px Georgia, serif';
+    const lx = px + 58;
+    const valX = lx + 172;
+    const valMaxW = px + pw - 48 - valX;
+    let y = py + 190;
     const row = (label, val) => {
+      ctx.font = '16px Georgia, serif';
       ctx.fillStyle = FAINT; ctx.fillText(label, lx, y);
       ctx.fillStyle = VAL;
       const lines = this._wrapText(ctx, String(val), valMaxW);
-      for (const l of lines) { ctx.fillText(l, valX, y); y += 18; }
-      y += 8;
+      for (const l of lines) { ctx.fillText(l, valX, y); y += 22; }
+      y += 10;
     };
     row('Final score', cert.score);
     row('Skills mastered', cert.skills.length ? cert.skills.join(', ') : 'none');
     row('Deaths so far', cert.deaths);
 
-    // Rank, carved: a dark engraved outline so even a pale rank reads on marble,
-    // filled with its own colour.
-    ctx.textAlign = 'center';
-    ctx.font = 'bold 30px Georgia, serif';
-    ctx.lineJoin = 'round'; ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(38,32,20,0.55)';
-    ctx.strokeText(rank.title, cx, py + ph - 60);
+    // Rank, carved, with a small "rank:" label so it reads as a grade. The
+    // label + engraved title are centred together as one group.
+    const ry = py + ph - 92;
+    ctx.textAlign = 'left';
+    const pfx = 'rank:  ';
+    ctx.font = 'italic 18px Georgia, serif';
+    const pfxW = ctx.measureText(pfx).width;
+    ctx.font = 'bold 36px Georgia, serif';
+    const rankW = ctx.measureText(rank.title).width;
+    const startX = cx - (pfxW + rankW) / 2;
+    ctx.font = 'italic 18px Georgia, serif'; ctx.fillStyle = FAINT;
+    ctx.fillText(pfx, startX, ry - 2);
+    ctx.font = 'bold 36px Georgia, serif';
+    ctx.lineJoin = 'round'; ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(38,32,20,0.55)';
+    ctx.strokeText(rank.title, startX + pfxW, ry);
     ctx.fillStyle = rank.color;
-    ctx.fillText(rank.title, cx, py + ph - 60);
-    ctx.font = 'italic 13px Georgia, serif';
+    ctx.fillText(rank.title, startX + pfxW, ry);
+    ctx.textAlign = 'center';
+    ctx.font = 'italic 15px Georgia, serif';
     ctx.fillStyle = FAINT;
-    ctx.fillText(rank.blurb, cx, py + ph - 22);
-    ctx.font = '10px system-ui, sans-serif';
+    ctx.fillText(rank.blurb, cx, py + ph - 52);
+    ctx.font = '11.5px system-ui, sans-serif';
     ctx.fillStyle = 'rgba(44,39,31,0.5)';
-    ctx.fillText('S or Copy to copy as an image · click elsewhere to carry on', cx, py + ph - 8);
+    ctx.fillText('S or Copy to copy as an image · click elsewhere to carry on', cx, py + ph - 26);
     ctx.textAlign = 'left';
 
-    // A small portrait of who this was — framed in dark stone, bottom-left.
-    const portraitSet = CHARACTER_SPRITE_SETS[cert.gender || 'm'];
-    const portrait = portraitSet && portraitSet.idle && portraitSet.idle.S;
-    if (portrait && portrait.complete && portrait.naturalWidth) {
-      const ps = 54;
-      const pptx = px + 24, ppty = py + ph - ps - 16;
-      ctx.save();
-      ctx.fillStyle = 'rgba(40,34,24,0.5)';
-      ctx.fillRect(pptx - 4, ppty - 4, ps + 8, ps + 8);
-      ctx.strokeStyle = 'rgba(58,50,36,0.8)'; ctx.lineWidth = 1.5;
-      ctx.strokeRect(pptx - 4, ppty - 4, ps + 8, ps + 8);
-      ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(portrait, pptx, ppty, ps, ps);
-      ctx.restore();
-    }
-
-    // Copy-to-clipboard button, engraved dark-on-marble.
-    const btnW = 70, btnH = 20;
-    const btnX = px + pw - btnW - 18, btnY = py + 64;
+    // Copy-to-clipboard button, drawn ABOVE the sheet (outside _certBounds) so
+    // it is never captured into the copied image.
+    const btnW = 74, btnH = 24;
+    const btnX = px + pw - btnW, btnY = py - btnH - 8;
     this._certCopyBtn = { x: btnX, y: btnY, w: btnW, h: btnH };
-    ctx.fillStyle = 'rgba(60,52,38,0.16)';
+    ctx.fillStyle = 'rgba(226,220,204,0.92)';
     ctx.fillRect(btnX, btnY, btnW, btnH);
-    ctx.strokeStyle = 'rgba(60,52,38,0.7)'; ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(30,26,18,0.6)'; ctx.lineWidth = 1;
     ctx.strokeRect(btnX + 0.5, btnY + 0.5, btnW - 1, btnH - 1);
-    ctx.fillStyle = '#3a3226';
-    ctx.font = 'bold 11px system-ui, sans-serif';
+    ctx.fillStyle = '#2e2617';
+    ctx.font = 'bold 12px system-ui, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('Copy', btnX + btnW / 2, btnY + 14);
+    ctx.fillText('Copy', btnX + btnW / 2, btnY + 16);
     ctx.textAlign = 'left';
   }
 
