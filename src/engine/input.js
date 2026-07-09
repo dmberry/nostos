@@ -78,6 +78,48 @@ export class Input {
       this.wheel += e.deltaY;
       e.preventDefault();
     }, { passive: false });
+
+    // ---- Touch controls (phones) ----
+    // Hold anywhere and the player walks toward that point (and faces it); a
+    // quick, still tap acts in that direction instead — swing/open/attack. Just
+    // enough to move around and try the game without a keyboard.
+    this.touchVec = null;        // screen-space move direction while a finger is down
+    this._touchStart = null;     // where/whether the current touch began (tap vs drag)
+    const touchXY = (e) => { const t = e.changedTouches[0]; return { x: t.clientX, y: t.clientY }; };
+    const setFromTouch = (p) => {
+      this.mouseX = p.x; this.mouseY = p.y;    // aim faces the touch point
+      const r = mouseTarget.getBoundingClientRect
+        ? mouseTarget.getBoundingClientRect()
+        : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      const dx = p.x - cx, dy = p.y - cy, len = Math.hypot(dx, dy) || 1;
+      // Dead zone near the centre so a tap right on the player doesn't jitter.
+      this.touchVec = len < 26 ? null : { dx: dx / len, dy: dy / len };
+    };
+    mouseTarget.addEventListener('touchstart', (e) => {
+      const p = touchXY(e);
+      this._touchStart = { x: p.x, y: p.y };
+      setFromTouch(p);
+      this.mouseHeld = true;
+      e.preventDefault();
+    }, { passive: false });
+    mouseTarget.addEventListener('touchmove', (e) => {
+      setFromTouch(touchXY(e));
+      e.preventDefault();
+    }, { passive: false });
+    mouseTarget.addEventListener('touchend', (e) => {
+      const p = touchXY(e);
+      const s = this._touchStart;
+      const moved = s ? Math.hypot(p.x - s.x, p.y - s.y) : 999;
+      // A quick, still tap is an action (a drag/hold was just movement, so it
+      // shouldn't also swing).
+      if (moved < 16) { this.mouseX = p.x; this.mouseY = p.y; this.mousePressed = true; }
+      this.touchVec = null;
+      this.mouseHeld = false;
+      this.upAt = { x: p.x, y: p.y };
+      this._touchStart = null;
+      e.preventDefault();
+    }, { passive: false });
   }
 
   isDown(code) {
@@ -93,8 +135,10 @@ export class Input {
     return false;
   }
 
-  // Screen-space movement intent from WASD/arrows: each axis in [-1, 1].
+  // Screen-space movement intent from WASD/arrows (or a held touch): each
+  // axis in [-1, 1].
   moveIntent() {
+    if (this.touchVec) return { dx: this.touchVec.dx, dy: this.touchVec.dy };
     let dx = 0, dy = 0;
     if (this.isDown('KeyA') || this.isDown('ArrowLeft')) dx -= 1;
     if (this.isDown('KeyD') || this.isDown('ArrowRight')) dx += 1;

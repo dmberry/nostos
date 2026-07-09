@@ -12,7 +12,7 @@ import { spawnRobots, updateRobots, spawnW1s, spawnW3, spawnW4, spawnW5, spawnM6
 import { resolveBodyOverlaps } from './game/collision.js';
 import { spawnWaterDroids, updateWaterDroids, drawWaterDroid } from './game/waterdroids.js';
 import { Lore, FRAGMENTS } from './game/lore.js';
-import { ITEMS } from './game/items.js';
+import { ITEMS, TAPES } from './game/items.js';
 import { sfx } from './engine/sound.js';
 import { worldToScreen } from './engine/iso.js';
 import { runRonml } from './game/ronml.js';
@@ -48,7 +48,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '1.32';
+const VERSION = '1.33';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -678,8 +678,22 @@ helpEl.addEventListener('click', (e) => { if (e.target === helpEl) toggleHelp(fa
 
 // About modal: the i button opens, clicking the backdrop closes.
 const aboutEl = document.getElementById('about');
+// Build the About soundtrack list from the tape ledger (so it never drifts from
+// what's actually in the game). Done lazily on first open — guaranteed the DOM
+// and TAPES are both ready by then.
+const populateAboutTapes = () => {
+  const ul = document.getElementById('aboutTapes');
+  if (!ul || ul.childElementCount) return;
+  const cleanTrack = (f) => f.replace(/\.mp3$/i, '').replace(/^\d+[-.\s]*\d*[-.\s]*/, '').trim();
+  ul.innerHTML = TAPES.map((t) => {
+    const a = t.a.tracks.map(cleanTrack).join(', ');
+    const b = t.b.tracks.map(cleanTrack).join(', ');
+    return `<li><b>${t.artist} &mdash; <i>${t.title}</i></b><br>A: ${a} &nbsp;&middot;&nbsp; B: ${b}</li>`;
+  }).join('');
+};
 const toggleAbout = (force) => {
   const show = force != null ? force : aboutEl.style.display !== 'block';
+  if (show) populateAboutTapes();
   aboutEl.style.display = show ? 'block' : 'none';
 };
 document.getElementById('aboutBtn').addEventListener('click', () => toggleAbout(true));
@@ -1172,6 +1186,11 @@ aiosEl.addEventListener('click', (e) => { if (e.target === aiosEl) closeAiOs(); 
 // The control hint is only for new players: fade it out after two minutes
 // of play so it stops cluttering the screen once the controls have sunk in.
 const hintEl = document.getElementById('hint');
+// On a touch device (someone trying it from the gate) spell out the tap
+// controls instead of the keyboard hint.
+if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) {
+  hintEl.textContent = 'Hold to move · tap to act';
+}
 const HINT_LIFETIME = 120; // seconds of played time
 let playTime = 0;
 

@@ -22,7 +22,13 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Always put a texture on a glowing thing.** No glow is ever a flat coloured blob — a grille/panel texture is laid over it (the factory-vent trick). Everything luminous goes through `Renderer.texturedGlow`, which caps the glow with an AI grate texture; if you add a new light, use it rather than a bare `fill`. (David, 2026-07-07.)
 - **Vary texture opacity per tile.** Floors jitter their texture alpha deterministically per tile (`drawFloor`) so a large expanse of one floor reads as worn/varied rather than a flat repeat.
 
-## Where we are (v1.32)
+## Where we are (v1.33)
+
+### v1.33 — mobile touch controls + About panel (songs from the ledger) + "designed in the UK"
+
+- **Touch controls** (`src/engine/input.js`). Added `touchstart/move/end` on the canvas: holding sets `this.touchVec` = normalised direction from viewport centre to the finger (with a 26px dead zone) and points `mouseX/Y` at the finger so the player faces it; `moveIntent()` returns `touchVec` when present. A quick, still tap (moved < 16px) sets `mousePressed` for one action (swing/open/attack) in the faced direction; a hold/drag just moves. Desktop mouse untouched (touch events only fire on touch devices). Verified in isolation: holding up-right → move vector toward the touch; tap → `moveIntent` zero + `usePressed()` true. The gate's "▶ Try it here — tap to move" boots the game as before; `main.js` sets the `#hint` to "Hold to move · tap to act" on a coarse pointer.
+- **About panel on gate/title** (`mobile-gate.js`). New `#mg-about` overlay opened from a bottom footer link and from the gate hamburger. Soundtrack list is generated from `TAPES` (`songsHtml`), so it always matches the game. Tiny credits + "Game designed in the UK". Footer `.mg-madein` ("Game designed in the UK · About") on both modes.
+- **In-game About from the ledger** (`index.html` + `main.js`). The hardcoded tape `<ul>` became `#aboutTapes`, populated by `populateAboutTapes()` from `TAPES` on first open (lazy — DOM + TAPES guaranteed ready). About foot gains "Game designed in the UK". Note: verified by fresh-import + manual DOM run (`#aboutTapes` → 4 correct items) and by the identical gate About rendering; the preview tab's cached ES module blocked a live in-game confirmation, but a real fresh load populates it.
 
 ### v1.32 — theme switch in a hamburger on the mobile gate
 

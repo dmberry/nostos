@@ -83,23 +83,47 @@ export function initMobileGate(mode = 'gate') {
   // On the phone gate the vertical space is tight, so the theme switch lives
   // behind a hamburger (fixed, top-right) instead of a row at the bottom that
   // gets clipped by the browser chrome. The title (desktop) keeps it inline.
+  // The hamburger also carries an About entry.
   const menuHtml = `<div class="mg-menu">
-      <button class="mg-menu-btn" id="mg-menu-btn" aria-label="Theme menu" aria-expanded="false">☰</button>
-      <div class="mg-menu-pop" id="mg-menu-pop" hidden><div class="mg-menu-label">Theme</div>${themesHtml}</div>
+      <button class="mg-menu-btn" id="mg-menu-btn" aria-label="Menu" aria-expanded="false">☰</button>
+      <div class="mg-menu-pop" id="mg-menu-pop" hidden>
+        <div class="mg-menu-label">Theme</div>${themesHtml}
+        <button class="mg-menu-about" id="mg-menu-about">About</button>
+      </div>
     </div>`;
+  // Soundtrack list, built straight from the tape ledger so it can't drift.
+  const cleanTrack = (f) => f.replace(/\.mp3$/i, '').replace(/^\d+[-.\s]*\d*[-.\s]*/, '').trim();
+  const songsHtml = TAPES.map((t) => {
+    const a = t.a.tracks.map(cleanTrack).join(', ');
+    const b = t.b.tracks.map(cleanTrack).join(', ');
+    return `<li><b>${t.artist} — <i>${t.title}</i></b><br>A: ${a} &nbsp;·&nbsp; B: ${b}</li>`;
+  }).join('');
+  const artists = [...new Set(TAPES.map((t) => t.artist))].join(', ');
+  const aboutHtml = `<div class="mg-about" id="mg-about" hidden>
+      <div class="mg-about-card">
+        <button class="mg-about-x" id="mg-about-x" aria-label="Close">✕</button>
+        <h2>postAI</h2>
+        <p class="mg-about-by">An isometric survival game · by David and Henrik</p>
+        <div class="mg-about-h">Soundtrack — cassettes you find and play</div>
+        <ul class="mg-about-tapes">${songsHtml}</ul>
+        <p class="mg-about-tiny">Music: ${artists}. Character &amp; animal art: Kenney (kenney.nl), CC0.</p>
+        <p class="mg-about-tiny">Game designed in the UK · github.com/dmberry/postAI</p>
+      </div>
+    </div>`;
+  const footerHtml = `<div class="mg-madein">Game designed in the UK · <button class="mg-about-open" id="mg-about-open">About</button></div>`;
   const copyHtml = isTitle
     ? `<p class="mg-sub">The machines outlived the world. Now survive it.<span class="mg-sub2">A keyboard-and-mouse survival game. Here's the soundtrack while you decide.</span></p>
        <div class="mg-actions">
          ${hasSave ? '<button id="mg-continue" class="mg-btn primary">Continue</button>' : ''}
          <button id="mg-start" class="mg-btn ${hasSave ? '' : 'primary'}">${hasSave ? 'New game' : 'Start'}</button>
        </div>`
-    : `<p class="mg-sub">It is the end of the world, and you will need a keyboard and mouse to save it!<span class="mg-sub2">Grab a laptop or desktop for the real thing.<br>Meanwhile, here's the soundtrack.</span></p>
-       <button class="mg-tryanyway" id="mg-tryanyway">Try and play it anyway…</button>`;
+    : `<p class="mg-sub">It is the end of the world, and you will need a keyboard and mouse for the full game.<span class="mg-sub2">Grab a laptop or desktop for the real thing — or tap below to try moving around here.<br>Meanwhile, here's the soundtrack.</span></p>
+       <button class="mg-tryanyway" id="mg-tryanyway">▶ Try it here — tap to move</button>`;
   const bodyHtml = isTitle
     ? `<div class="mg-hero">${brandHtml}${copyHtml}</div>
        <div class="mg-player">${deckHtml}${rackHtml}${themesHtml}</div>
-       ${stageHtml}`
-    : `${brandHtml}${copyHtml}${skylinkHtml}${stageHtml}${deckHtml}${rackHtml}${menuHtml}`;
+       ${stageHtml}${footerHtml}${aboutHtml}`
+    : `${brandHtml}${copyHtml}${skylinkHtml}${stageHtml}${deckHtml}${rackHtml}${menuHtml}${footerHtml}${aboutHtml}`;
 
   el.innerHTML = `
     <style>
@@ -159,6 +183,31 @@ export function initMobileGate(mode = 'gate') {
         color: var(--accent); opacity: 0.75; margin: 2px 4px 7px; }
       .mg-menu .mg-themes { flex-direction: column; gap: 6px; margin-top: 0; }
       .mg-menu .mg-themes button { width: 100%; text-align: center; }
+      .mg-menu-about { width: 100%; margin-top: 8px; padding: 8px 11px; cursor: pointer; font: 700 12px system-ui, sans-serif;
+        letter-spacing: 0.04em; color: var(--accent); background: rgba(255,255,255,0.06);
+        border: 1px solid rgba(255,255,255,0.18); border-radius: 6px; }
+      /* "designed in the UK" footer + About link (both modes) */
+      .mg-madein { position: fixed; left: 0; right: 0; bottom: max(5px, env(safe-area-inset-bottom));
+        text-align: center; font-size: 10px; letter-spacing: 0.03em; color: rgba(207,216,195,0.42); z-index: 6; pointer-events: none; }
+      .mg-about-open { font: inherit; color: rgba(207,216,195,0.7); background: none; border: none; padding: 0;
+        text-decoration: underline; text-underline-offset: 2px; cursor: pointer; pointer-events: auto; }
+      /* About overlay */
+      .mg-about { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center;
+        background: rgba(6,9,5,0.72); padding: 20px; -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); }
+      .mg-about[hidden] { display: none; }
+      .mg-about-card { position: relative; width: min(460px, 92vw); max-height: 84vh; overflow-y: auto;
+        background: #14180e; border: 1px solid rgba(255,255,255,0.16); border-radius: 14px; padding: 20px 20px 16px;
+        box-shadow: 0 16px 40px rgba(0,0,0,0.6); color: #cfd8c3; }
+      .mg-about-x { position: absolute; top: 10px; right: 12px; width: 30px; height: 30px; border-radius: 8px;
+        font-size: 14px; cursor: pointer; color: #cfd8c3; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.18); }
+      .mg-about-card h2 { font: 800 22px ui-monospace, Menlo, monospace; margin: 0 0 2px; color: #f2ecda; }
+      .mg-about-by { font-size: 12px; color: #9db284; margin: 0 0 14px; }
+      .mg-about-h { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); margin: 0 0 6px; }
+      .mg-about-tapes { list-style: none; margin: 0 0 12px; padding: 0; }
+      .mg-about-tapes li { font-size: 12px; margin: 0 0 8px; padding: 6px 10px; border-left: 2px solid rgba(157,178,132,0.5);
+        background: rgba(255,255,255,0.03); border-radius: 0 6px 6px 0; line-height: 1.4; }
+      .mg-about-tapes li b { color: #e8e0d0; font-weight: 700; }
+      .mg-about-tiny { font-size: 10px; color: rgba(207,216,195,0.5); margin: 3px 0 0; line-height: 1.4; }
       /* SKYLINK uplink clock */
       .mg-skylink { font: 700 12px ui-monospace, monospace; letter-spacing: 0.1em; text-transform: uppercase;
         color: #5b9dff; text-shadow: 0 0 8px rgba(70,130,255,0.6); margin: 0 0 4px;
@@ -257,6 +306,15 @@ export function initMobileGate(mode = 'gate') {
     });
   }
   el.querySelectorAll('#mg-themes button').forEach((b) => b.addEventListener('click', () => { applyTheme(b.dataset.theme); closeMenu(); }));
+
+  // ---- About overlay ----
+  const about = el.querySelector('#mg-about');
+  const openAbout = () => { about.hidden = false; closeMenu(); };
+  const closeAbout = () => { about.hidden = true; };
+  el.querySelector('#mg-about-open')?.addEventListener('click', (e) => { e.stopPropagation(); openAbout(); });
+  el.querySelector('#mg-menu-about')?.addEventListener('click', (e) => { e.stopPropagation(); openAbout(); });
+  el.querySelector('#mg-about-x')?.addEventListener('click', closeAbout);
+  about?.addEventListener('click', (e) => { if (e.target === about) closeAbout(); });
 
   // Tear down the screen and hand off to the game. newGame wipes the run save
   // (keeping the durable name/gender identity, exactly like in-game New Game);
