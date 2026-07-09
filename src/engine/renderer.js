@@ -2484,6 +2484,29 @@ export class Renderer {
         ctx.fillStyle = `rgba(180,180,190,${(0.35 * (1 - phase) * (0.4 + burn)).toFixed(3)})`;
         ctx.beginPath(); ctx.ellipse(wx, wy, wr, wr * 0.7, 0, 0, Math.PI * 2); ctx.fill();
       }
+    } else if (obj.cls === 'siren' && !obj.destroyed) {
+      // SIREN class: it doesn't alarm red — it sings. A slow aquamarine pulse
+      // at the signal, brighter when it has you (alert), and expanding rings
+      // rippling outward like sound made visible.
+      const now = performance.now();
+      const pulse = 0.5 + 0.5 * Math.sin(now / 520);
+      const a = Math.min(1, 0.4 + 0.35 * pulse + Math.min(1, alert) * 0.3);
+      const glow = ctx.createRadialGradient(c.x, ly, 0, c.x, ly, 17);
+      glow.addColorStop(0, `rgba(47, 230, 208, ${(0.5 * a).toFixed(3)})`);
+      glow.addColorStop(1, 'rgba(47, 230, 208, 0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath(); ctx.arc(c.x, ly, 17, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = `rgba(150, 245, 230, ${a.toFixed(3)})`;
+      ctx.beginPath(); ctx.arc(c.x, ly, 3, 0, Math.PI * 2); ctx.fill();
+      // song rings (faster / brighter when it has sensed you)
+      const speed = 1500 - Math.min(1, alert) * 700;
+      ctx.lineWidth = 1.2;
+      for (let i = 0; i < 3; i++) {
+        const ph = ((now / speed) + i / 3) % 1;
+        const rr = 4 + ph * 24;
+        ctx.strokeStyle = `rgba(47, 230, 208, ${(0.4 * (1 - ph)).toFixed(3)})`;
+        ctx.beginPath(); ctx.ellipse(c.x, ly, rr, rr * 0.6, 0, 0, Math.PI * 2); ctx.stroke();
+      }
     } else if (alert > 0.3) {
       // Fast alarm blink, bright and saturated, with a glow halo.
       const blink = 0.5 + 0.5 * Math.abs(Math.sin(performance.now() / 130));

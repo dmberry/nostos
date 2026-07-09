@@ -22,6 +22,17 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 - **Always put a texture on a glowing thing.** No glow is ever a flat coloured blob — a grille/panel texture is laid over it (the factory-vent trick). Everything luminous goes through `Renderer.texturedGlow`, which caps the glow with an AI grate texture; if you add a new light, use it rather than a bare `fill`. (David, 2026-07-07.)
 - **Vary texture opacity per tile.** Floors jitter their texture alpha deterministically per tile (`drawFloor`) so a large expanse of one floor reads as worn/varied rather than a flat repeat.
 
+## Where we are (v1.37)
+
+### v1.37 — OB classes: the SIREN (+ placid animals slowed)
+
+First **obelisk class**. `map.addObject('obelisk', x, y, { cls })` — `main.js` tags roughly every third tower `cls: 'siren'` (index `% 3`, guaranteed spread over the 12).
+- **Render** (`renderer.js drawObelisk`): a `cls === 'siren'` branch replaces the red rest/alarm light with an **aquamarine** (`#2fe6d0`) signal + halo and three expanding **song rings** (faster/brighter with `alert`). Body stays dark so it still reads as an obelisk. Verified side-by-side vs standard.
+- **Lure** (`main.js` obelisk loop): within `SONG_RANGE = 7`, if no tape is playing (`player.walkmanSide == null`), drift the player toward the tower via `moveAxis`, strength `0.95 * (1 − d/range)` t/s (stronger up close, well under walk speed so you can still leave). Playing a tape breaks it. Once-only lines on the song taking hold / letting go (`player._underSong`); inspect text is siren-aware. Ties the walkman to survival (home-04).
+- Placid animal wander speeds halved (dog 1.2→0.6, boar 1.0→0.5, deer 0.9→0.45, viper 0.3→0.15); chase/flee/charge unchanged.
+
+**Future OB classes** (scaffolding is just `cls` + a render branch + optional behaviour): e.g. a warden that buffs nearby machines, a jammer that blanks your compass/minimap near it, a decoy. Add as they earn their place.
+
 ## Where we are (v1.36)
 
 ### v1.36 — the long way home (Odyssey / Ulysses, implicit)

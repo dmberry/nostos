@@ -48,7 +48,7 @@ function loadOrCreateSeed() {
   return seed;
 }
 const WORLD_SEED = loadOrCreateSeed();
-const VERSION = '1.36';
+const VERSION = '1.37';
 
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
@@ -130,7 +130,11 @@ const obelisks = [];
     if ((f !== 'grass' && f !== 'tallgrass') || map.objectAt(x, y)) continue;
     if (Math.hypot(x - spawn.x, y - spawn.y) < 16) continue;
     if (obelisks.some((o) => Math.hypot(o.x - x, o.y - y) < 14)) continue;
-    map.addObject('obelisk', x, y);
+    // OB classes: roughly every third tower is a SIREN — teal-lit, it sings,
+    // and up close its song pulls you toward it (see updateSirens). Guaranteed
+    // spread via the index so a run always has a few.
+    const cls = obelisks.length % 3 === 0 ? 'siren' : undefined;
+    map.addObject('obelisk', x, y, { cls });
     obelisks.push({ x, y });
   }
 
@@ -1330,7 +1334,10 @@ function describeAt(tx, ty) {
       const mat = obj.material === 'brick' ? 'Red-brick wall' : 'Stone wall';
       return `${mat}, ${ages[Math.min(5, obj.decay || 0)]}.`;
     }
-    if (obj.type === 'obelisk') return `An AI signal obelisk. Black, humming, ${obj.alert > 0.3 ? 'and it has seen you.' : 'watching.'}`;
+    if (obj.type === 'obelisk') {
+      if (obj.cls === 'siren') return `A SIREN-class obelisk. Teal-lit, and it sings — the song pulls you in. ${obj.alert > 0.3 ? 'It has you.' : 'Keep a tape ready.'}`;
+      return `An AI signal obelisk. Black, humming, ${obj.alert > 0.3 ? 'and it has seen you.' : 'watching.'}`;
+    }
     if (obj.type === 'wfactory') return 'The W-factory. It fields repair drones for damaged towers — bring one down for good before it can be mended.';
     if (obj.type === 'box') return obj.opened ? 'An emptied resistance cache.' : 'A resistance cache. Search it (E).';
     if (obj.type === 'tree') return 'A tree. Fell it for wood.';
@@ -1897,6 +1904,7 @@ function update(dt) {
   // Obelisks sense a human close by: their light deepens toward blood-red
   // and holds, and nearby non-aggro robots get nudged to sweep near the
   // tower — a report of closeness, never an exact position.
+  let sirenPull = false, sirenResisted = false; // for the once-only song messages
   for (const ob of obeliskObjs) {
     if (ob.burning > 0) ob.burning -= dt; // OB-gun flame timer, ticked for the renderer
     if (ob.frozen) ob.frozenT = (ob.frozenT || 0) + dt; // CPU-burn age for the renderer's smoke ramp
@@ -1906,6 +1914,24 @@ function update(dt) {
       ob.alert = Math.min(1, ob.alert + dt * 1.5);
     } else {
       ob.alert = Math.max(0, ob.alert - dt * 0.4);
+    }
+    // SIREN class: within range its song pulls you toward it — a gentle drift
+    // that's stronger the closer you are. Playing a tape on the walkman drowns
+    // it out (your own dearer noise), so the pull only bites when nothing's
+    // playing. (home-04 lore, made mechanic.)
+    if (ob.cls === 'siren' && player.health > 0) {
+      const SONG_RANGE = 7;
+      if (d < SONG_RANGE) {
+        if (player.walkmanSide == null) {
+          const strength = 0.95 * (1 - d / SONG_RANGE); // tiles/sec at the edge → up close
+          const inv = 1 / (d || 1);
+          player.moveAxis((ob.x + 0.5 - player.x) * inv * strength * dt, 0, map);
+          player.moveAxis(0, (ob.y + 0.5 - player.y) * inv * strength * dt, map);
+          sirenPull = true;
+        } else {
+          sirenResisted = true;
+        }
+      }
     }
     // Occasional blink, independent of alert: a short bright flash, then a
     // random quiet spell before the next one. Alert makes it flicker faster.
@@ -1931,6 +1957,14 @@ function update(dt) {
         }
       }
     }
+  }
+  // Once-only lines as the song takes hold and as it lets go.
+  if (sirenPull && !player._underSong) {
+    player._underSong = true;
+    player.say('A song rises from a teal-lit tower, and your feet begin to turn toward it. Start a tape to drown it out.');
+  } else if (!sirenPull && player._underSong) {
+    player._underSong = false;
+    player.say(sirenResisted ? 'Your own noise drowns the song out.' : 'The song thins behind you and lets go.');
   }
 }
 
