@@ -248,8 +248,12 @@ export function initMobileGate(mode = 'gate') {
       .mg-transport button:disabled { opacity: 0.4; cursor: default; }
       .mg-transport #mg-play { width: 52px; }
       /* tape rack — real cassettes drawn to canvas */
-      .mg-rack { display: flex; gap: 12px; overflow-x: auto; width: 100%; padding: 2px 4px 4px; justify-content: safe center;
-        flex: 0 0 auto; -webkit-overflow-scrolling: touch; }
+      /* Same width as the deck and centred under it, so the cassette strip
+         lines up with the Walkman. The tapes now overflow that width (5 of
+         them), so start at the first tape and scroll right rather than centring
+         the row and clipping both ends. */
+      .mg-rack { display: flex; gap: 12px; overflow-x: auto; width: 100%; max-width: min(320px, 88vw); margin: 0 auto;
+        padding: 2px 4px 4px; justify-content: flex-start; flex: 0 0 auto; -webkit-overflow-scrolling: touch; }
       .mg-tape { flex: 0 0 auto; width: 100px; cursor: pointer; text-align: center; transition: transform 0.12s; }
       .mg-tape:active { transform: scale(0.95); }
       .mg-tape canvas { display: block; width: 100px; height: 65px; border-radius: 6px;
@@ -286,7 +290,7 @@ export function initMobileGate(mode = 'gate') {
         #mobile-gate[data-mode="title"] .mg-hero .mg-actions { justify-content: flex-start; }
         #mobile-gate[data-mode="title"] h1 { font-size: 52px; }
         #mobile-gate[data-mode="title"] .mg-player { grid-area: player; align-self: center; justify-self: center; max-width: 480px; }
-        #mobile-gate[data-mode="title"] .mg-rack { justify-content: center; }
+        #mobile-gate[data-mode="title"] .mg-rack { justify-content: flex-start; }
         #mobile-gate[data-mode="title"] .mg-stage { grid-area: stage; width: 100%; max-height: 260px; align-self: end; }
         #mobile-gate[data-mode="title"] .mg-bot { width: 122px; height: 152px; }
       }

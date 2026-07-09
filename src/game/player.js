@@ -370,6 +370,8 @@ export class Player {
     if (slot.kind === 'pocket') return this.pockets[slot.i] || null;
     if (slot.kind === 'bpstore') return this.backpack ? (this.backpack.slots[slot.i] || null) : null;
     if (slot.kind === 'walkman') return this.walkman || null;
+    // 'packbadge' is a drop-onto-the-backpack target only, never a source: you
+    // don't drag the bag itself, so it reads as empty.
     return null;
   }
 
@@ -378,6 +380,16 @@ export class Player {
     if (slot.kind === 'bw') { if (!this.backpack) return false; this.backpack.weapon = val ? val.item : null; return true; }
     if (slot.kind === 'pocket') { this.pockets[slot.i] = val; return true; }
     if (slot.kind === 'bpstore') { if (!this.backpack) return false; this.backpack.slots[slot.i] = val; return true; }
+    // Dropping onto the backpack badge (the bag icon on the dashboard) stows the
+    // item into the first free storage slot — the natural "put it in the bag"
+    // gesture, and how you get a pocket item into the pack without opening it.
+    if (slot.kind === 'packbadge') {
+      if (!this.backpack || !val) return false;
+      const free = this.backpack.slots.findIndex((s) => !s);
+      if (free < 0) return false; // pack full: refuse (moveItem leaves the source alone)
+      this.backpack.slots[free] = val;
+      return true;
+    }
     if (slot.kind === 'walkman') {
       // Any change of tape stops playback — the new one starts stopped and
       // wants a click, same as a real deck after a swap.
@@ -407,7 +419,13 @@ export class Player {
       this.say('Only a cassette fits the walkman.');
       return;
     }
-    this.setSlot(to, a);
+    // Place into the target FIRST and only clear the source if that succeeded —
+    // otherwise a target that can't take the item (a full backpack, a badge with
+    // no room) would delete it. Never move an item into nowhere.
+    if (!this.setSlot(to, a)) {
+      this.say(to.kind === 'packbadge' ? 'The backpack is full.' : "That won't go there.");
+      return;
+    }
     this.setSlot(from, b || null);
     this.say(`Moved ${ITEMS[a.item].name.toLowerCase()}.`);
   }
@@ -2122,8 +2140,13 @@ export class Player {
     // them. Water is passable (the player swims).
     const solidCorner = (tx, ty) => {
       const obj = map.objectAt ? map.objectAt(tx, ty) : null;
-      const climbable = obj && OBJECTS[obj.type] && OBJECTS[obj.type].climbable;
-      return map.isSolid(tx, ty) && map.floorAt(tx, ty) !== 'water' && !climbable;
+      const def = obj && OBJECTS[obj.type];
+      const climbable = def && def.climbable;
+      // `soft` objects (trees) block robots and shots, but the player pushes
+      // through them — a human's edge in the woods, where the machines can't
+      // follow. So they never count as a solid corner for the player.
+      const soft = def && def.soft;
+      return map.isSolid(tx, ty) && map.floorAt(tx, ty) !== 'water' && !climbable && !soft;
     };
     if (solidCorner(Math.floor(x - RADIUS), Math.floor(y - RADIUS))
       || solidCorner(Math.floor(x + RADIUS), Math.floor(y - RADIUS))

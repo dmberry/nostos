@@ -100,6 +100,10 @@ export const SEA_TEXTURE = loadDownscaled(T + 'deep_ocean_battlemap.png', 128);
 // Dark riveted-metal texture facing the big W-factory structure.
 export const FACTORY_TEXTURE = loadDownscaled(T + 'decor-train.jpg');
 
+// White marble with grey veining — the ruined columns strewn across the island
+// (Renderer.drawColumn). One shared source, clipped into each shaft/drum.
+export const MARBLE_TEXTURE = loadDownscaled(T + 'WhiteMarble_COLOR.jpg', 96);
+
 // Abandoned cars: real 3/4-view sprites (assets/textures/cars/) instead of the
 // old procedural hull. Several models/colours, each in the four iso-diagonal
 // facings so a street of wrecks points every which way. A car object carries

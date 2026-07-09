@@ -95,10 +95,7 @@ export class GameMap {
     const f = FLOORS[this.floor[y * this.w + x]];
     if (f && f.solid) return true;
     const o = this.objectGrid[y * this.w + x];
-    // `soft` objects (trees) are cover you can push through: they still block a
-    // shot (blocksShot below reads .solid), but never block movement, so the
-    // woods stop feeling like a wall you have to thread.
-    return !!(o && OBJECTS[o.type].solid && !OBJECTS[o.type].soft);
+    return !!(o && OBJECTS[o.type].solid);
   }
 
   // Whether a solid *object* — wall, tree, rock, wreck, obelisk, cache, car,

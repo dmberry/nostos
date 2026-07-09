@@ -22,6 +22,7 @@ import { VERSION } from './version.js';
 import { drawRobotVision } from './game/robotvision.js';
 import { screenDirToWorld } from './engine/iso.js';
 import { stampCoast } from './engine/coast.js';
+import { placeRuins } from './game/ruins.js';
 import { createFortress } from './game/fortress.js';
 import { createUnderworldPocket, spawnUnderworldCreature, updateUnderworldCreatures } from './game/underworld.js';
 import { CHOIR_NOTES, CHOIR_DURATION } from './engine/choir-notes.js';
@@ -400,6 +401,9 @@ const mainframe = fortress.core; // { x, y } of the core, for the RON-ML map sta
 // standing). Beyond the outer water band the map edge is still the hard bound,
 // with the open ocean drawn past it.
 stampCoast(map, spawn);
+// Ruined marble columns: a few groves of fallen temple columns strewn across
+// the island, after the coast so none land in the sea.
+placeRuins(map, makeRng(WORLD_SEED ^ 0x2c01dd), { spawn, clusters: 4 });
 // The quad's standing patrol: five M6 guards (3 sentinels + 2 marksmen).
 robots.push(...fortress.spawnGuards(spawnM6));
 // "Red starlink": when the fortress breach reaches the world (alarm + uplink
@@ -1897,7 +1901,12 @@ function update(dt) {
     const modalClick = input.clickPos();
     const outside = (r) => !r || modalClick.x < r.x || modalClick.x > r.x + r.w
       || modalClick.y < r.y || modalClick.y > r.y + r.h;
-    if (modalClick) {
+    // A press that lands on a dashboard/backpack slot must NOT be treated as an
+    // outside-click that closes the panel — otherwise you can never grab a
+    // pocket item to drag it into the open backpack. Let the slot handler below
+    // take it (start a drag) and keep the panel open.
+    const onSlot = modalClick && renderer.slotAt && renderer.slotAt(modalClick.x, modalClick.y);
+    if (modalClick && !onSlot) {
       if (showBackpack && outside(renderer._backpackRect)) { input.consumeClick(); showBackpack = false; }
       else if (showSkills && outside(renderer._skillsRect)) { input.consumeClick(); showSkills = false; }
       else if (showWeapons && outside(renderer._weaponsRect)) { input.consumeClick(); showWeapons = false; }

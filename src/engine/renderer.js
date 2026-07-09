@@ -6,7 +6,7 @@ import { drawBird } from '../game/birds.js';
 import { drawRobot } from '../game/robots.js';
 import { drawWaterDroid } from '../game/waterdroids.js';
 import { drawUnderworldCreature } from '../game/underworld.js';
-import { FLOOR_TEXTURES, WALL_TEXTURES, GRASS_PATCH_TEXTURE, CHARACTER_SPRITE_SETS, CHAR_COMPASS_DIRS, TREE_SHEET, TREE_SPRITES, EDGE_TEXTURE, SEA_TEXTURE, CAR_SPRITES, CAR_MODEL_KEYS, CAR_DIR_KEYS, CAR_RUIN_TEXTURE, FACTORY_TEXTURE, GRAFFITI_TEXTURES } from './textures.js';
+import { FLOOR_TEXTURES, WALL_TEXTURES, GRASS_PATCH_TEXTURE, CHARACTER_SPRITE_SETS, CHAR_COMPASS_DIRS, TREE_SHEET, TREE_SPRITES, EDGE_TEXTURE, SEA_TEXTURE, CAR_SPRITES, CAR_MODEL_KEYS, CAR_DIR_KEYS, CAR_RUIN_TEXTURE, FACTORY_TEXTURE, MARBLE_TEXTURE, GRAFFITI_TEXTURES } from './textures.js';
 
 // The underworld floor palette: seven images, loaded here (not via textures.js)
 // so this stays self-contained. map.liminalTex holds a per-tile index into
@@ -1701,12 +1701,121 @@ export class Renderer {
     ctx.fill();
   }
 
+  // Ruined marble columns — Odyssey set-dressing scattered across the island
+  // (see game/ruins.js). Three looks: a tall standing column with a capital, a
+  // snapped-off stump (variant 1), and a toppled column lying in the grass with
+  // a fallen capital block (type 'colfall'). Drawn as iso cylinders — a
+  // horizontal shading gradient for roundness, the marble photo clipped in for
+  // veining, plus flute lines and a soft ground shadow. Deterministic per tile.
+  drawColumn(obj) {
+    const ctx = this.ctx;
+    const map = this.hudMap;
+    const s = worldToScreen(obj.x + 0.5, obj.y + 0.5);
+    const h = (map && map.heightAt) ? map.heightAt(obj.x, obj.y) : 0;
+    const by = s.y - h * ELEV;            // ground-contact point, lifted for terrain
+    const hh = tileHash(obj.x * 3 + 1, obj.y * 3 + 7);
+    const LIGHT = '#efece4', MID = '#d8d3c8', DARK = '#b3ad9f', EDGE = '#8f897b';
+    const tex = MARBLE_TEXTURE;
+    const marbleOK = tex && tex.complete && tex.naturalWidth;
+
+    // Soft ground shadow.
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    ctx.beginPath(); ctx.ellipse(s.x, by + 2, 15, 6, 0, 0, Math.PI * 2); ctx.fill();
+
+    if (obj.type === 'colfall') {
+      // Toppled: a long drum lying along one iso diagonal, with drum-segment
+      // lines and a fallen capital block at one end. Orientation from obj.rot.
+      const along = (obj.rot % 2 === 0) ? { x: 22, y: 11 } : { x: -22, y: 11 };
+      const th = 9; // half-thickness
+      const ax = s.x - along.x, ay = by - 7 - along.y;
+      const bx = s.x + along.x, byy = by - 7 + along.y;
+      const g = ctx.createLinearGradient(0, by - 7 - th, 0, by - 7 + th);
+      g.addColorStop(0, LIGHT); g.addColorStop(0.5, MID); g.addColorStop(1, DARK);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(ax, ay - th); ctx.lineTo(bx, byy - th);
+      ctx.lineTo(bx, byy + th); ctx.lineTo(ax, ay + th); ctx.closePath(); ctx.fill();
+      // drum end faces
+      ctx.fillStyle = EDGE; ctx.beginPath(); ctx.ellipse(ax, ay, 5, th, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#6f6a5e'; ctx.beginPath(); ctx.ellipse(ax, ay, 3.4, th - 2, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = MID; ctx.beginPath(); ctx.ellipse(bx, byy, 5, th, 0, 0, Math.PI * 2); ctx.fill();
+      // segment lines
+      ctx.strokeStyle = 'rgba(120,114,100,0.5)'; ctx.lineWidth = 1;
+      for (const t of [0.34, 0.67]) {
+        const lx = ax + (bx - ax) * t, ly = ay + (byy - ay) * t;
+        ctx.beginPath(); ctx.moveTo(lx, ly - th + 1); ctx.lineTo(lx, ly + th - 1); ctx.stroke();
+      }
+      // fallen capital block near the high end
+      const kx = ax - 6, ky = ay - 3;
+      ctx.fillStyle = MID; ctx.fillRect(kx - 7, ky - 6, 14, 10);
+      ctx.fillStyle = LIGHT; ctx.fillRect(kx - 7, ky - 6, 14, 3);
+      ctx.strokeStyle = EDGE; ctx.strokeRect(kx - 7, ky - 6, 14, 10);
+      return;
+    }
+
+    // Standing column: tall (variant 0) or a broken stump (variant 1).
+    const broken = (obj.variant || 0) === 1;
+    const H = broken ? 44 + hh * 12 : 92 + hh * 16;
+    const rw = broken ? 12 : 11;
+    const topY = by - H;
+
+    // Plinth: a base ellipse + a short square block.
+    ctx.fillStyle = DARK;
+    ctx.beginPath(); ctx.ellipse(s.x, by, rw + 4, 6, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = MID; ctx.fillRect(s.x - rw - 3, by - 6, (rw + 3) * 2, 6);
+
+    // Shaft body: a cylindrical horizontal gradient for roundness, capped by a
+    // top and bottom rim ellipse, with the marble photo clipped in for veining.
+    const grad = ctx.createLinearGradient(s.x - rw, 0, s.x + rw, 0);
+    grad.addColorStop(0, DARK); grad.addColorStop(0.35, LIGHT);
+    grad.addColorStop(0.62, MID); grad.addColorStop(1, EDGE);
+    ctx.fillStyle = grad;
+    ctx.fillRect(s.x - rw, topY, rw * 2, H);
+    ctx.beginPath(); ctx.ellipse(s.x, by, rw, 4, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(s.x, topY, rw, 4, 0, 0, Math.PI * 2); ctx.fill();
+    if (marbleOK) {
+      ctx.save();
+      ctx.beginPath(); ctx.rect(s.x - rw, topY, rw * 2, H); ctx.clip();
+      ctx.globalAlpha = 0.5;
+      const r = Math.max(rw * 2, H);
+      ctx.drawImage(tex, s.x - r / 2, topY, r, r);
+      ctx.restore();
+    }
+    // Flute grooves.
+    ctx.strokeStyle = 'rgba(120,114,100,0.35)'; ctx.lineWidth = 1;
+    for (const fx of [-0.55, -0.18, 0.18, 0.55]) {
+      const x = s.x + fx * rw;
+      ctx.beginPath(); ctx.moveTo(x, topY + 6); ctx.lineTo(x, by - 6); ctx.stroke();
+    }
+
+    if (broken) {
+      // Jagged break: a rough dark cross-section on top.
+      ctx.fillStyle = EDGE; ctx.beginPath(); ctx.ellipse(s.x, topY, rw, 4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#6f6a5e';
+      ctx.beginPath();
+      ctx.moveTo(s.x - rw, topY); ctx.lineTo(s.x - rw * 0.3, topY - 5);
+      ctx.lineTo(s.x + rw * 0.2, topY + 2); ctx.lineTo(s.x + rw, topY - 3);
+      ctx.lineTo(s.x + rw, topY); ctx.closePath(); ctx.fill();
+    } else {
+      // Capital: an echinus flare + a square abacus slab, lit on top.
+      ctx.fillStyle = MID;
+      ctx.beginPath();
+      ctx.moveTo(s.x - rw, topY + 2); ctx.lineTo(s.x - rw - 5, topY - 5);
+      ctx.lineTo(s.x + rw + 5, topY - 5); ctx.lineTo(s.x + rw, topY + 2);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = LIGHT; ctx.fillRect(s.x - rw - 7, topY - 11, (rw + 7) * 2, 7);
+      ctx.strokeStyle = EDGE; ctx.lineWidth = 1; ctx.strokeRect(s.x - rw - 7, topY - 11, (rw + 7) * 2, 7);
+    }
+  }
+
   drawObject(obj) {
     switch (obj.type) {
       case 'wall':
         this.drawWall(obj);
         break;
       case 'tree': this.drawTree(obj); break;
+      case 'column': this.drawColumn(obj); break;
+      case 'colfall': this.drawColumn(obj); break;
       case 'rock': this.drawRock(obj.x, obj.y); break;
       case 'rubble': this.drawRubble(obj.x, obj.y); break;
       case 'obelisk': this.drawObelisk(obj); break;
