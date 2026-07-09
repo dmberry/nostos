@@ -468,11 +468,23 @@ export function initMobileGate(mode = 'gate') {
     syncTransport();
     el.querySelectorAll('.mg-tape').forEach((c, j) => c.classList.toggle('sel', j === i));
   };
-  // Tapping a tape starts it; tapping the tape that's already loaded skips to
-  // its next track (the buttons below do the same explicitly).
+  // Tapping a tape starts it on side A; tapping the tape that's already loaded
+  // FLIPS the cassette to the other side (A ⇄ B), like turning a real tape over
+  // — so a second tap gets you straight to the B-side rather than clicking
+  // through every A-side track. The ▶▶| button still steps track by track.
+  const flipSide = () => {
+    const t = TAPES[current];
+    const aLen = t.a.tracks.length;
+    const onA = idx < aLen;
+    idx = onA ? aLen : 0;                 // first B-side track, or back to first A-side track
+    if (idx >= playlist.length) idx = 0;  // (empty B-side: stay on A)
+    audio.src = playlist[idx];
+    audio.play().catch(() => {});
+    updateNow();
+  };
   el.querySelectorAll('.mg-tape').forEach((card) => card.addEventListener('click', () => {
     const i = Number(card.dataset.i);
-    if (i === current) nextTrack(); else loadTape(i);
+    if (i === current) flipSide(); else loadTape(i);
   }));
   // Transport buttons. stopPropagation so they don't also fire the deck's
   // click-to-pause below.

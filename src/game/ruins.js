@@ -37,10 +37,11 @@ export function placeRuins(map, rng, opts = {}) {
       const x = cx + Math.round((rng() - 0.5) * 5);
       const y = cy + Math.round((rng() - 0.5) * 5);
       if (!buildable(map, x, y)) continue;
-      const standing = rng() < 0.6;
-      const type = standing ? 'column' : 'colfall';
-      const variant = standing ? (rng() < 0.62 ? 0 : 1) : 0; // 0 tall, 1 broken stump
-      map.addObject(type, x, y, { variant, rot: Math.floor(rng() * 2) });
+      // Standing columns only — a mix of whole columns (with a capital) and
+      // snapped-off stumps. (The toppled/drum variant was cut: it didn't read
+      // well against the iso tiles.)
+      const variant = rng() < 0.62 ? 0 : 1; // 0 tall, 1 broken stump
+      map.addObject('column', x, y, { variant, rot: Math.floor(rng() * 2) });
       put++;
     }
     if (put >= 2) centres.push({ x: cx, y: cy });

@@ -104,6 +104,10 @@ export const FACTORY_TEXTURE = loadDownscaled(T + 'decor-train.jpg');
 // (Renderer.drawColumn). One shared source, clipped into each shaft/drum.
 export const MARBLE_TEXTURE = loadDownscaled(T + 'WhiteMarble_COLOR.jpg', 96);
 
+// Aged paper for the Certificate of Death (Renderer.drawDeathCert). Kept large
+// so it fills the panel without the fine grain blurring out.
+export const PAPER_TEXTURE = loadDownscaled(T + 'paper.jpg', 512);
+
 // Abandoned cars: real 3/4-view sprites (assets/textures/cars/) instead of the
 // old procedural hull. Several models/colours, each in the four iso-diagonal
 // facings so a street of wrecks points every which way. A car object carries
