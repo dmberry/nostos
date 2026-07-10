@@ -1244,7 +1244,22 @@ function updateW1(r, dt, player, map) {
 // one from its heap back into a working tower), or one pinned by a RON-ML
 // `loop` hack (frozen — the drone works the loop back out instead).
 function w3Repairable(o) {
-  return o.type === 'obelisk' && ((!o.destroyed && o.obDamage > 0) || (o.destroyed && o.needsRebuild) || o.frozen);
+  // Damaged-but-standing, frozen by a `loop` hack, OR fully toppled — the drone
+  // raises even a completely destroyed tower back up (so felling obelisks is a
+  // race against the repair crew until you bring the W-factory down).
+  return o.type === 'obelisk' && (o.destroyed || o.obDamage > 0 || o.frozen);
+}
+
+// Nothing to mend right now: the drone doesn't vanish — it drifts off on a slow
+// wander (re-anchoring its patrol home as it goes), still scanning for fresh
+// damage each frame at the top of updateW3, so it peels away the instant a
+// tower takes a hit somewhere.
+function w3Wander(r, dt, map) {
+  drainBattery(r, DRAIN_PATROL, dt);
+  if (r.drained) return;
+  patrol(r, W3_SPEED * 0.6, 8, dt, map);
+  r._recenterT = (r._recenterT || 0) - dt;
+  if (r._recenterT <= 0) { r._recenterT = 3.5; r.home = { x: r.x, y: r.y }; }
 }
 function updateW3(r, dt, map, robots) {
   r.aggro = false;
@@ -1257,7 +1272,7 @@ function updateW3(r, dt, map, robots) {
     }
     r.repairTarget = best;
   }
-  if (!r.repairTarget) { r.dead = true; return; } // nothing left to mend: stand down
+  if (!r.repairTarget) { w3Wander(r, dt, map); return; } // nothing to mend: wander, looking
   const ob = r.repairTarget;
   const d = Math.hypot(ob.x + 0.5 - r.x, ob.y + 0.5 - r.y);
   drainBattery(r, DRAIN_PATROL, dt);
@@ -1282,20 +1297,19 @@ function updateW3(r, dt, map, robots) {
   // A felled tower starts its rebuild from full damage; a merely-scorched one
   // from wherever its obDamage sits. Either way, healing obDamage to zero
   // finishes the job.
-  if (ob.destroyed && ob.needsRebuild && !(ob.obDamage > 0)) ob.obDamage = 5;
+  if (ob.destroyed && !(ob.obDamage > 0)) ob.obDamage = 5; // any felled tower rebuilds from full
   if (ob.obDamage > 0) {
     ob.obDamage = Math.max(0, ob.obDamage - W3_REPAIR_RATE * dt);
     ob.burning = 0;
   }
   if (!(ob.obDamage > 0) && !ob.frozen) {
-    if (ob.destroyed && ob.needsRebuild) {
+    if (ob.destroyed) {
       // Raise it: standing and solid again, so the POSEIDON web can relight.
       ob.destroyed = false;
       ob.needsRebuild = false;
       map.objectGrid[ob.y * map.w + ob.x] = ob;
     }
-    r.repairTarget = null;
-    r.dead = true;
+    r.repairTarget = null; // job done — next frame it finds the next tower, or wanders
   }
 }
 

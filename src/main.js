@@ -646,7 +646,7 @@ function renderMachineIcon(type) {
   }
   return off.toDataURL('image/png');
 }
-for (const type of ['t1', 't2', 't3', 'w1', 'w2', 'w3', 'w4', 'w5']) {
+for (const type of ['t1', 't2', 't3', 'w1', 'w2', 'w3', 'w4', 'w5', 'm4', 'm5', 'm6']) {
   const img = document.getElementById(`gal-${type}`);
   if (img) img.src = renderMachineIcon(type);
 }
@@ -2280,9 +2280,11 @@ function update(dt) {
     if (wFactoryClock > wFactoryNext) {
       wFactoryClock = 0;
       wFactoryNext = 6 + Math.random() * 5;
-      const anyDamaged = obeliskObjs.some((o) => (!o.destroyed && o.obDamage > 0) || o.needsRebuild || o.frozen);
+      // Anything the crew can mend, now including fully-toppled towers — the
+      // factory sends a drone to raise them again until you bring it down.
+      const anyRepairable = obeliskObjs.some((o) => o.destroyed || o.obDamage > 0 || o.frozen);
       const w3Active = robots.some((r) => r.type === 'w3' && !r.dead);
-      if (anyDamaged && !w3Active) {
+      if (anyRepairable && !w3Active) {
         const drone = spawnW3(map, Math.floor(Math.random() * 0x7fffffff), factoryCx(), factoryCy());
         if (drone) { robots.push(drone); player.say('A repair drone whirs out of the W-factory.'); }
       }

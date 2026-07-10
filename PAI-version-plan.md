@@ -48,6 +48,14 @@ keeps only the latest status, plus the conventions, art notes, and forward plan
 above and below. (The old blow-by-blow "Where we are (v1.06 … v1.54)" log was
 pruned; the README table is the record now.)
 
+### v1.60 — tree slow, W3 rebuilds/wanders, M-class in the help gallery
+
+- **Trees slow you.** Standing on a walk-through tree tile cuts your speed to 0.75x (`Player.update`, alongside the stream/water wading slows).
+- **W3 rebuilds fully-toppled obelisks.** `w3Repairable` now matches any `destroyed` tower (not just purge-`needsRebuild` ones), and the factory dispatches a drone for them — so felling towers is a RACE until you bring the W-factory down. `updateW3` raises any destroyed tower back into the grid.
+- **W3 wanders instead of vanishing.** Finished (or nothing to mend) → it no longer `dead=true`s; new `w3Wander` drifts it on a slow re-centred patrol, still scanning each frame, so it peels off the instant a tower is hit. (One live W3 at a time is still the dispatch gate, so no pile-up.)
+- **Help machine gallery shows the fortress M-class** (M4 report drone / M5 sniper / M6 pack), rendered through their real `drawRobot`, plus a fortress write-up paragraph in the Machines help.
+- *Balance note:* a roaming W3 rebuilds any felled tower even after the factory dies, so the obelisk win now needs the factory down AND the drone cleared — dial back to purge-only if too punishing.
+
 ### v1.59 — kill the island AI: power-down + fireworks level-up
 
 - **The mainframe core is killable.** `Player.hitCore`/`damageCore` (heavy kit only, `FACTORY_MIN_TOOL`; 250hp). Melee for now — bombs/electro-gun/OB-gun still TODO.

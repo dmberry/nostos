@@ -610,6 +610,9 @@ export class Player {
       const under = map.floorAt(Math.floor(this.x), Math.floor(this.y));
       if (under === 'stream') speed *= 0.55;
       else if (under === 'water' || under === 'sea') speed *= 0.45;
+      // Pushing through a walk-through tree's foliage slows you a little.
+      const objHere = map.objectAt ? map.objectAt(Math.floor(this.x), Math.floor(this.y)) : null;
+      if (objHere && objHere.type === 'tree') speed *= 0.75;
       // Up on a block top, ease off the pace — the footprint is small and a
       // full walking speed makes edges twitchy to line up. Slower is easier
       // to control up there.
