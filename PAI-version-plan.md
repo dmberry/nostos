@@ -48,6 +48,17 @@ keeps only the latest status, plus the conventions, art notes, and forward plan
 above and below. (The old blow-by-blow "Where we are (v1.06 … v1.54)" log was
 pruned; the README table is the record now.)
 
+### v1.69 — slot hover tooltips + map-item icons
+
+- **Hover tooltips on every HUD slot** (`hoverSlotTip` in main.js, passed as
+  the hud `detail` when no right-click detail/drag is active): names the item
+  (+ ×qty for stacks) via the existing drawDetail renderer; the backpack badge
+  says "press I to open". Wrapped in try/catch — a tooltip must never be able
+  to kill the HUD assembly.
+- **Icons for `fortress_map_fragment` and `fortress_map`** in drawItemIcon —
+  the "little blue square" on the grass was a fragment falling through to the
+  bare colour-swatch default.
+
 ### v1.68 — floating marble fix (double elevation lift)
 
 - `drawColumn` and `drawMarbleBlock` both applied their own `heightAt * ELEV`

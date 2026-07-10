@@ -4143,6 +4143,32 @@ export class Renderer {
         ctx.moveTo(-4, -4); ctx.lineTo(3, -4); ctx.moveTo(-4, -1); ctx.lineTo(4, -1); ctx.moveTo(-4, 2); ctx.lineTo(1, 2);
         ctx.stroke();
         break;
+      case 'fortress_map_fragment':
+        // A torn quarter of the ZEUS survey: ragged parchment scrap with a
+        // sliver of route on it — no more anonymous blue squares.
+        ctx.fillStyle = itemDef.color;
+        ctx.beginPath();
+        ctx.moveTo(-7, -5); ctx.lineTo(5, -6); ctx.lineTo(7, 1); ctx.lineTo(3, 3);
+        ctx.lineTo(4, 6); ctx.lineTo(-5, 5); ctx.lineTo(-7, 2);
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = 'rgba(35,55,70,0.6)'; ctx.lineWidth = 1; ctx.stroke();
+        ctx.strokeStyle = 'rgba(226,88,58,0.9)';
+        ctx.beginPath(); ctx.moveTo(-4, 2); ctx.lineTo(0, -2); ctx.lineTo(4, -1); ctx.stroke();
+        break;
+      case 'fortress_map':
+        // The assembled survey: a pale blueprint sheet, maze lines, the core
+        // marked red at the far end.
+        ctx.fillStyle = itemDef.color;
+        ctx.fillRect(-8, -6, 16, 12);
+        ctx.strokeStyle = 'rgba(30,50,70,0.7)'; ctx.lineWidth = 1;
+        ctx.strokeRect(-8, -6, 16, 12);
+        ctx.beginPath();
+        ctx.moveTo(-6, -3); ctx.lineTo(2, -3); ctx.moveTo(6, -3); ctx.lineTo(6, 1);
+        ctx.moveTo(-6, 0); ctx.lineTo(-2, 0); ctx.moveTo(1, 0); ctx.lineTo(6, 0);
+        ctx.moveTo(-6, 3); ctx.lineTo(3, 3);
+        ctx.stroke();
+        ctx.fillStyle = '#e0402f'; ctx.beginPath(); ctx.arc(6, 4, 1.4, 0, Math.PI * 2); ctx.fill();
+        break;
       case 'printed_map':
         // A folded paper map: parchment rectangle with fold creases and a
         // little green route marking.

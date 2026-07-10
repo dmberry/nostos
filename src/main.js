@@ -1840,6 +1840,22 @@ function groundLifetime(item) {
 }
 
 let detail = null;   // right-click inspection tooltip {text, x, y, ttl}
+// Hovering a HUD slot (pockets, hands, backpack panel, walkman) names what's
+// in it, reusing the right-click tooltip's renderer. Right-click detail and
+// an in-progress drag both win over the hover.
+function hoverSlotTip() {
+  try {
+  if (drag || !renderer.slotAt) return null;
+  const hs = renderer.slotAt(input.mouseX, input.mouseY);
+  if (!hs) return null;
+  if (hs.kind === 'packbadge') return player.backpack ? { text: 'Backpack — press I to open', x: input.mouseX, y: input.mouseY } : null;
+  const held = player.getSlot(hs);
+  if (!held || !ITEMS[held.item]) return null;
+  const def = ITEMS[held.item];
+  const qty = held.qty > 1 ? ` \u00d7${held.qty}` : '';
+  return { text: def.name + qty, x: input.mouseX, y: input.mouseY };
+  } catch { return null; } // a tooltip must never be able to kill the HUD
+}
 let drag = null;     // in-progress pointer drag {from: slotDescriptor}
 const PROJECTILE_SPEED = 16; // tiles/sec for gun tracers
 
@@ -2668,7 +2684,7 @@ function frame(now) {
       lore,
       torch: player.pockets.some((s) => s && s.item === 'torch'),
       showBackpack,
-      detail,
+      detail: detail || hoverSlotTip(),
       drag: drag ? { ...drag, mx: input.mouseX, my: input.mouseY } : null,
       deathCert: player.deathCert,
       aiVictory: player.aiVictory,
