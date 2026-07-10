@@ -825,6 +825,10 @@ const aboutEl = document.getElementById('about');
 // what's actually in the game). Done lazily on first open — guaranteed the DOM
 // and TAPES are both ready by then.
 const populateAboutTapes = () => {
+  // Keep the About-panel footer version in lockstep with version.js — it used to
+  // be a hardcoded string and drifted (stuck at v1.63 through several releases).
+  const av = document.getElementById('aboutVer');
+  if (av) av.textContent = VERSION;
   const ul = document.getElementById('aboutTapes');
   if (!ul || ul.childElementCount) return;
   const cleanTrack = (f) => f.replace(/\.mp3$/i, '').replace(/^\d+[-.\s]*\d*[-.\s]*/, '').trim();
