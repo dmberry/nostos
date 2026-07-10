@@ -1,6 +1,7 @@
 import { Renderer } from './engine/renderer.js';
 import { Camera } from './engine/camera.js';
 import { Input } from './engine/input.js';
+import * as systems from './engine/systems.js';
 import { buildWorld } from './game/worldgen.js';
 import { spawnAnimals, updateAnimals } from './game/animals.js';
 import { Player } from './game/player.js';
@@ -690,6 +691,19 @@ for (const type of ['t1', 't2', 't3', 'w1', 'w2', 'w3', 'w4', 'w5', 'm4', 'm5', 
 }
 const camera = new Camera(player.x, player.y);
 const lore = new Lore(map, WORLD_SEED);
+// Stage 0 of the systems-registry refactor (docs/refactor-registry.md): `lore`
+// is the first feature to attach as a {update, drawWorld, drawScreen} system
+// instead of being hardcoded into the hub. Registered here via a thin adapter,
+// so lore.js (owned, isolated) stays untouched and the change is reversible.
+// New Game reloads the page (fullReset -> location.reload), so the registry
+// rebuilds from scratch and this can't leave a stale lore behind.
+systems.register({
+  name: 'lore',
+  order: 50,
+  update: (w) => lore.update(w.dt, w.player, w.input),
+  drawWorld: (g) => lore.drawWorld(g),
+  drawScreen: (g, w) => lore.drawOverlay(g, w.w, w.h),
+});
 // Opening a resistance cache folds any recovered documents packed in it into the
 // Scrapbook (quietly — openBox prints its own one-line summary).
 player.onFindLore = (id) => lore.findFrag(id, player, true);
@@ -2121,7 +2135,9 @@ function update(dt) {
   }
   if (input.zoomTogglePressed()) camera.toggleZoom();
   if (input.minimapTogglePressed()) { showMinimap = !showMinimap; player.say(showMinimap ? 'Minimap on.' : 'Minimap off.'); }
-  lore.update(dt, player, input);
+  // Registered systems tick here (Stage 0: lore only). The world-contract bag
+  // carries everything a system might read; each reads only what it needs.
+  systems.runUpdate({ dt, player, input, map, camera, robots, animals, birds, dayNight, worldStir, fortress });
   if (input.musicTogglePressed()) {
     const mode = sfx.toggleMusic();
     player.say(mode === 'synth' ? 'Music: the piano bed.' : 'Music off.');

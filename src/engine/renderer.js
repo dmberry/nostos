@@ -1,4 +1,5 @@
 import { worldToScreen, screenToWorld, TILE_W } from './iso.js';
+import { runDrawWorld, runDrawScreen } from './systems.js';
 import { FLOORS } from '../game/tiles.js';
 import { ITEMS, WEAPON_ORDER } from '../game/items.js';
 import { drawAnimal } from '../game/animals.js';
@@ -364,8 +365,10 @@ export class Renderer {
     // Sparks where a weapon just landed on a robot.
     if (map.sparks) this.drawSparks(map.sparks);
 
-    // Lore fragments float in world space, under the camera transform.
-    if (hud.lore) hud.lore.drawWorld(ctx);
+    // World-space registered systems draw here, under the camera transform,
+    // BEFORE restore (Stage 0: lore's floating fragments). Depth-sorted actors
+    // are NOT here — they stay in the sort above. See docs/refactor-registry.md.
+    runDrawWorld(ctx, { w: this.w, h: this.h, map, player });
     // POSEIDON's final purge: every surviving tower lights up and links to
     // its nearest neighbours in a web of bright blue laser light.
     if (hud.skylinkActive) this.drawSkylinkNetwork(hud.obeliskObjs);
@@ -569,7 +572,7 @@ export class Renderer {
     if (hud.skylinkActive && !hud.driving) this.drawSkylinkBanner(hud.skylinkTimer);
     if (!hud.driving) this.drawDashboard(player, hud);
     if (hud.showBackpack) this.drawBackpackPanel(player);
-    if (hud.lore) hud.lore.drawOverlay(ctx, this.w, this.h);
+    runDrawScreen(ctx, { w: this.w, h: this.h, map, player });
     if (hud.craftPrompt) {
       const msg = hud.craftWaveGun
         ? 'You have all eight circuit boards — press C to build a wave gun'
