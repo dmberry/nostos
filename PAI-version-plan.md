@@ -48,6 +48,19 @@ keeps only the latest status, plus the conventions, art notes, and forward plan
 above and below. (The old blow-by-blow "Where we are (v1.06 … v1.54)" log was
 pruned; the README table is the record now.)
 
+### v1.64 — fortress key pockets itself + terminal feedback
+
+- **`unlock` pockets the fortress key** (`player.stow`), ground-drop only as a
+  full-pockets fallback. Root cause of the "key never dropped" report: the drop
+  at (player+0.4,+0.6) beside the tower could land hidden behind the obelisk
+  sprite or on its blocked tile, and the only success feedback was `player.say`
+  — the HUD line the terminal modal covers. Now: `keydrop` chime (new sfx —
+  soft ascending major arpeggio), confirmation replPrinted into the console,
+  and the failure branch replPrints too.
+- **`help` is case-insensitive** (`Help`, `HELP`, `Help hack`) — normalised in
+  the exec path like `run eliza`.
+- `sfx` added to the `window.__game` debug handle.
+
 ### v1.63 — the lotus-eaters' grove
 
 - **A hidden grove** in the south-west wilds (`worldgen.plantLotusGrove`): a tallgrass clearing ringed by forest, ~19 `lotus` plants clustered toward the edges, ~8 `lotus_fruit` ground items among them. `map.lotusGrove = {x,y,r}` gives the pull-back its centre. One per island (island-agnostic hook, ready for the archipelago).

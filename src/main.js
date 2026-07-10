@@ -748,7 +748,7 @@ function revealAround(px, py) {
 }
 
 // Debug handle for inspecting live state from the console.
-window.__game = { player, map, camera, animals, birds, robots, waterdroids, obelisks, obeliskObjs, wfactory, dayNight, lore, input, renderer, fortress };
+window.__game = { player, map, camera, animals, birds, robots, waterdroids, obelisks, obeliskObjs, wfactory, dayNight, lore, input, renderer, fortress, sfx };
 
 function resize() {
   // Size to the *visual* viewport, not innerHeight/100vh. On iOS Safari the
@@ -1014,15 +1014,29 @@ function ronmlCtx() {
       // composing `let k = hack OB-XXXX in unlock k` correctly. Carry the
       // fortress key to the fortress door and it opens on approach (fortress.js).
       if (!player.ronmlKeys.has(nodeId)) {
+        replPrint('ERR: that key was never hacked from a live node. try: let k = hack OB-XXXX in unlock k');
         player.say('That key was never hacked from a live node. try: let k = hack OB-XXXX in unlock k');
         return;
       }
-      // Always drop a fresh fortress key — the network gives one up every time
+      // Always yield a fresh fortress key — the network gives one up every time
       // the hack composes. Deliberately not a one-time reward: if you lose the
       // key (death, a fumbled drop) you can hack another and try the door again.
+      // The key goes STRAIGHT INTO A POCKET: the old ground drop beside the
+      // tower was easy to lose (hidden behind the obelisk sprite, or landing on
+      // its blocked tile) and read as "nothing happened". Pockets full → fall
+      // back to the ground drop so the key is never simply swallowed. Feedback
+      // prints INTO the terminal too — player.say is hidden behind the modal.
       fortressKeyFromCrash = true;
-      map.groundItems.push({ item: 'fortress_key', qty: 1, x: player.x + 0.4, y: player.y + 0.6, keep: true });
-      player.say(`The composed hack holds. ${nodeId}'s key turns in the network and a fortress key drops at your feet — a way into ${fortress.AI_NAME}'s fortress.`);
+      sfx.play('keydrop');
+      const stored = player.stow('fortress_key', 1);
+      if (stored > 0) {
+        replPrint(`OK: ${nodeId}'s key turns in the network. A fortress key slides from the slot — pocketed.`);
+        player.say(`The composed hack holds. A fortress key slides from the ${nodeId} slot straight into your pocket — a way into ${fortress.AI_NAME}'s fortress.`);
+      } else {
+        map.groundItems.push({ item: 'fortress_key', qty: 1, x: player.x + 0.4, y: player.y + 0.6, keep: true });
+        replPrint('OK: fortress key dispensed — no pocket room, it drops at your feet.');
+        player.say(`No room in your pockets — the fortress key drops at your feet. A way into ${fortress.AI_NAME}'s fortress.`);
+      }
     },
     // `notes`: opens the browsable notebook (see openNotebook below) rather
     // than dumping text into the console — Tab-to-autocomplete is one thing,
@@ -1509,9 +1523,12 @@ function replRun(line) {
     replPrint(`ELIZA: ${elizaBot.respond(line)}`);
     return;
   }
+  // `Help` / `HELP` / `Help hack` should all work — the console shouldn't be
+  // fussy about case on its own help command (verbs are all lowercase anyway).
+  const relaxed = /^\s*help(\s+\S+)?\s*$/i.test(line) ? line.trim().toLowerCase() : line;
   // `run eliza` / `run doctor` read as running a legacy program; normalise them
   // to the `eliza` verb so the language itself handles it (see ronml.js).
-  const prog = line.replace(/^run\s+(eliza|doctor)\s*$/i, 'eliza');
+  const prog = relaxed.replace(/^run\s+(eliza|doctor)\s*$/i, 'eliza');
   const result = runRonml(prog, terminalKind === 'hermes' ? hermesCtx() : ronmlCtx());
   // If the verb just opened an ELIZA session, its greeting is already printed —
   // don't also drop the bare "()" unit result underneath it.
