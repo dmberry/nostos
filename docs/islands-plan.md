@@ -66,16 +66,21 @@ What we already have going for us:
   switching pattern is wrong.
 - **The fortress proves an AI seat can be a module.**
   `createFortress(map, seed, spawn)` returns a controller with its own
-  `update(dt, ...)`. An island's AI crown follows the same pattern.
-- **The crown-kill loop already exists, island-agnostic (v1.59).** The
+  `update(dt, ...)`. An island's AI daemon follows the same pattern.
+- **The daemon-kill loop already exists, island-agnostic (v1.59).** The
   mainframe core is destructible (`Player.hitCore`/`damageCore`, heavy kit,
   250hp); felling it fires `Player.onCoreDefeated`, which powers down every
   non-friendly machine on *this island's* robots set, clears the alert, and
   sets the fortress inert — written deliberately so APOLLO/ATHENA/HADES reuse
-  the hook unchanged on their own robots arrays. A `crownsDown` tally counts
-  felled crowns and the victory modal already speaks the campaign's language
-  ("<AI> SILENCED — Crown N of 4"). Stage 3 islands get their endgame loop
-  for free; the campaign tracker (§7) just persists `crownsDown`.
+  the hook unchanged on their own robots arrays. A tally counts felled
+  daemons and the victory modal already speaks the campaign's language
+  ("<AI> SILENCED — Daemon N of 4 terminated"). Stage 3 islands get their
+  endgame loop for free; the campaign tracker (§7) just persists the tally.
+  *(Terminology decided 2026-07-10: the four AIs are **Daemons**, not
+  "Crowns" — Homer's `daimōn` (divine power at work) braided with the Unix
+  daemon, whose termination is literal systems parlance. v1.59 shipped as
+  `crownsDown` / "Crown N of 4"; a parallel session is renaming the code to
+  match — `daemonsDown` etc.)*
 - **Save model is already island-friendly.** World state is never saved; the
   world regenerates deterministically from a persisted seed, and only
   character/identity/lore persist (main.js `SAVE_KEY` block). Per-island
@@ -218,10 +223,11 @@ alongside the character save:
 { currentIsland: 'calypso', aisDown: ['ZEUS'], boat: {exists, hull, island} }
 ```
 
-`aisDown` is the persisted form of v1.59's runtime `crownsDown` tally (store
-which crowns fell, not just the count). Reload = regenerate `currentIsland`
-from seed, restore campaign facts. Fallen AIs stay fallen across islands
-(their crown spawns pre-wrecked, `core.defeated`, machines powered down). Everything
+`aisDown` is the persisted form of v1.59's runtime daemons-down tally
+(`crownsDown` at v1.59, being renamed `daemonsDown`; store which daemons
+fell, not just the count). Reload = regenerate `currentIsland` from seed,
+restore campaign facts. Fallen AIs stay fallen across islands (their daemon
+spawns pre-wrecked, `core.defeated`, machines powered down). Everything
 else (obelisks, loot) regenerates as it already does today; the ROADMAP's
 "full world save/load" item is unchanged and orthogonal.
 
@@ -254,8 +260,9 @@ fortress-map work, landed as v1.58; the core-kill endgame landed as v1.59.)
 ## 9. Build order summary
 
 1. ~~Land the in-flight fortress work~~ — **DONE**: v1.58 (M4/M5/M6 roster +
-   fortress map), v1.59 (core kill, island power-down, crownsDown, victory
-   modal — island-agnostic by design). The ZEUS rename is also done
+   fortress map), v1.59 (core kill, island power-down, daemons-down tally,
+   victory modal — island-agnostic by design; Crown→Daemon rename in a
+   parallel session). The ZEUS rename is also done
    (`AI_NAME = 'ZEUS'`, `AI_ROSTER` in fortress.js; no Adamantine remains).
 2. **Stage 0** — world contract; port Backspace; wrap CALYPSO. One session,
    quiet window. No visible change. **Now unblocked**, subject to the
@@ -303,3 +310,13 @@ fortress-map work, landed as v1.58; the core-kill endgame landed as v1.59.)
    touches the Backspace plumbing; ATHENA generalises the M6 pack/guard
    logic (Henrik's territory). ITHACA comes first regardless and is small
    enough for either.
+7. **Terminology: the four AIs are DAEMONS, not "Crowns"** (David,
+   2026-07-10). "Crown" isn't Homeric (Homer's kings hold sceptres and sit
+   thrones; the stephanos is later); *daimōn* is — divine power at work,
+   shading between "a god" and the force a god exerts — and it braids with
+   the Unix daemon, whose killing is literal systems parlance. Use "Daemon"
+   in UI ("<AI> SILENCED — Daemon N of 4 terminated"), code (`daemonsDown`),
+   and lore; a HERMES archive entry (`read daemons`) on the double etymology
+   is a natural lore addition. Flavour line available whichever surface
+   wants it: Homer's epithet for the gods is *athanatoi*, the Deathless —
+   "One of the Deathless is dead."
