@@ -1012,7 +1012,7 @@ export class Renderer {
   }
 
   // The AI-defeated celebration: a fireworks level-up modal. Time-based particle
-  // bursts over a dimmed backdrop, with the crown tally and score.
+  // bursts over a dimmed backdrop, with the daemon tally and score.
   drawAiVictory(v) {
     const ctx = this.ctx, W = this.w, H = this.h;
     ctx.fillStyle = 'rgba(6,8,14,0.82)';
@@ -1050,7 +1050,7 @@ export class Renderer {
     ctx.fillStyle = '#ffd23b'; ctx.font = 'bold 46px system-ui, sans-serif';
     ctx.fillText(`${(v.ai || 'AI').toUpperCase()} SILENCED`, cx, y0);
     ctx.fillStyle = '#e6eaf0'; ctx.font = 'bold 22px system-ui, sans-serif';
-    ctx.fillText(`Crown ${v.crown} of ${v.crowns} felled`, cx, y0 + 42);
+    ctx.fillText(`Daemon ${v.daemon} of ${v.daemons} felled`, cx, y0 + 42);
     ctx.fillStyle = '#9fb0c0'; ctx.font = '16px system-ui, sans-serif';
     ctx.fillText(`${v.powered} machines powered down across the island`, cx, y0 + 74);
     ctx.fillStyle = '#7fe0a0'; ctx.font = 'bold 30px system-ui, sans-serif';

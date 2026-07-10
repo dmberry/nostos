@@ -1,4 +1,4 @@
-// ZEUS's fortress — one of the four AI crowns (ZEUS, APOLLO, ATHENA, HADES;
+// ZEUS's fortress — one of the four AI daemons (ZEUS, APOLLO, ATHENA, HADES;
 // POSEIDON is the net strung between them). ZEUS "took the high country and
 // cannot be cut" — hence the sealed fortress. The overworld is ringed by an
 // impassable boundary; the fortress is a sealed ANNEX grown onto the south edge
@@ -15,7 +15,7 @@ import { makeRng } from './rng.js';
 
 export const AI_NAME = 'ZEUS';
 
-// The four AI crowns, for lore and the map legend. Only ZEUS is built so far.
+// The four AI daemons, for lore and the map legend. Only ZEUS is built so far.
 export const AI_ROSTER = ['ZEUS', 'APOLLO', 'ATHENA', 'HADES'];
 
 const ANNEX_H = 64;        // rows of fortress grown below the overworld

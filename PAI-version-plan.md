@@ -48,6 +48,14 @@ keeps only the latest status, plus the conventions, art notes, and forward plan
 above and below. (The old blow-by-blow "Where we are (v1.06 … v1.54)" log was
 pruned; the README table is the record now.)
 
+### v1.61 — lore rename: the four AIs are "daemons", not "crowns"
+
+- **Terminology change.** The four island AIs (ZEUS/APOLLO/ATHENA/HADES) are now **daemons**, not "crowns" — seeding the ancient-Greek register. The old word δαίμων is a spirit set over a place that moves it without showing its face, which fits the AI-over-the-island conceit better than a monarchic "crown".
+- **Code.** `main.js` `crownsDown`→`daemonsDown`; victory payload keys `crown`/`crowns`→`daemon`/`daemons` (producer + `renderer.drawAiVictory` consumer kept in sync). Modal now reads "**Daemon N of 4 felled**".
+- **Lore.** RON entry `ron-17` retitled "the four daemons" and rewritten to plant the gloss explicitly ("the old word for such a power was daemon: not a devil but a spirit set over a place…"), closing on "Starve the nearest daemon."
+- **Left alone:** the geometric "crown-light" of an obelisk (top-light) in `renderer.js` — different sense. `docs/islands-plan.md` (other session) still uses `crownsDown`/`aisDown`; flagged for the Archipelago tracker work.
+- Verified: lore/fortress/main modules parse clean, no console errors, roster intact.
+
 ### v1.60 — tree slow, W3 rebuilds/wanders, M-class in the help gallery
 
 - **Trees slow you.** Standing on a walk-through tree tile cuts your speed to 0.75x (`Player.update`, alongside the stream/water wading slows).

@@ -395,7 +395,7 @@ let fortressKeyFromCrash = false;
   obeliskObjs.forEach((ob, i) => { ob.circuitNum = nums[i]; });
 }
 
-// ZEUS's fortress — one of the four AI crowns. Grown as a sealed annex onto the
+// ZEUS's fortress — one of the four AI daemons. Grown as a sealed annex onto the
 // south edge of the map (all overworld spawning above has already happened on
 // the 128x128 grid, so the annex stays clean). Reached only by hacking the
 // boundary gate terminal in RON-ML. `mainframe` points at the core so the
@@ -473,13 +473,13 @@ player.onCoreDefeated = () => {
   }
   worldStir.calm();        // clear the red POSEIDON alert
   player.addScore(500);
-  crownsDown += 1;
+  daemonsDown += 1;
   // The celebration: a dismissable level-up modal. It does NOT end the run —
-  // you sail on to the next crown.
-  player.aiVictory = { ai, powered, score: player.score, crown: crownsDown, crowns: 4 };
+  // you sail on to the next daemon.
+  player.aiVictory = { ai, powered, score: player.score, daemon: daemonsDown, daemons: 4 };
   player.say(`${ai} is dead. Every machine on the island powers down where it stands.`);
 };
-let crownsDown = 0; // how many island AIs felled this run (for the Archipelago tally)
+let daemonsDown = 0; // how many island AIs felled this run (for the Archipelago tally)
 
 // Character persona and learned skills persist across sessions and deaths.
 const SAVE_KEY = 'postai-character';
@@ -2005,7 +2005,7 @@ function update(dt) {
 
   // AI-defeated celebration: a level-up modal (fireworks + score). Freezes the
   // world behind it until dismissed; then the run carries on (you don't win the
-  // game by felling one crown — you sail for the next).
+  // game by felling one daemon — you sail for the next).
   if (player.aiVictory) {
     if (input.clickPos() || input.consumeUp() || input.consumePress('Space') || input.consumePress('Enter')) {
       input.consumeClick();

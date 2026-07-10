@@ -176,8 +176,8 @@ down the whole island**: every non-friendly, non-fused machine goes `drained` +
 `fortress.update` early-returns forever after (`core.defeated` → no alarm/
 manufacture, sconces stop). Written ISLAND-AGNOSTIC: the hook powers down *this
 island's* `robots` set, so the Archipelago (APOLLO/ATHENA/HADES) reuses it as-is;
-a `crownsDown` tally counts felled crowns. Then a **fireworks level-up modal**
-(`renderer.drawAiVictory`): "ZEUS SILENCED — Crown N of 4", machines-powered-down
+a `daemonsDown` tally counts felled daemons. Then a **fireworks level-up modal**
+(`renderer.drawAiVictory`): "ZEUS SILENCED — Daemon N of 4", machines-powered-down
 count, score, dismissable (click/space) — it does NOT end the run. Verified: 24
 machines powered down, score +700, alarm cleared, modal draws (77 particles).
 *Still to come (the richer confrontation): ZEUS speaks, the secret word, a gate

@@ -1,10 +1,10 @@
 # NostOS — a postAI Odyssey
 
-**Version:** 1.60 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
+**Version:** 1.61 · **Authors:** David and Henrik · **Started:** 4 July 2026 · **Repo:** https://github.com/dmberry/postAI · **Plans/suggestions:** [PAI-version-plan.md](PAI-version-plan.md)
 
 An isometric 2D survival game set in a world wrecked by an AI takeover. The machines are still here: black obelisk towers pulse across the landscape and T-class hunter robots patrol them, hunting the humans that remain. Survivors scavenge the ruins while avoiding both the machines and wild animals that have gained strange powers. A resistance called **RON** — Reality or Nothing — hid weapons in caches through the broken towns; whether it still exists is never settled. How it all happened is never stated — you piece it together from newspapers, diaries, floppy disks, VHS tapes, and dead computers.
 
-## Current build (v1.60)
+## Current build (v1.61)
 
 **World.** Seeded 128×128 isometric island — river with two bridges, a ten-building town, a ruined hamlet, forests, tall grass, roads, ruined marble temples. Rugged hills and hollows, climbed one step at a time. Rubble steps over; a **wall block** needs a **double-jump** to mount (roam block-tops, walk off any edge to drop) — and up there you're safe from ground attacks. Building walls stop you on foot. Hand-drawn trees; streams wade, the river swims (slow, costly); a travelling ripple fakes current. Map edge is open sea (flat, wine-dark), ringed by semi-transparent gravel cliffs. Day/night cycle with genuinely dark nights and torches.
 
@@ -30,9 +30,10 @@ One line per version. Full detail (root causes, exact numbers) lives in [PAI-ver
 
 | Version | Summary |
 |---|---|
+| v1.61 | Lore rename: the four island AIs are now **daemons**, not "crowns" — the Homeric δαίμων, a spirit set over a place. Victory modal reads "**Daemon N of 4 felled**"; RON's "four crowns" lore entry rewritten to plant the Greek gloss. |
 | v1.60 | Walking through a tree slows you a little; **W3 repair drones now rebuild fully-toppled obelisks** (felling towers is a race until you kill the W-factory) and **wander off looking for more to fix** instead of vanishing; the help **machine gallery** now shows the fortress M-class (M4 report drone, M5 sniper, M6 pack) with a fortress write-up. |
-| v1.59 | **Kill the island's AI.** The ZEUS mainframe core is now destructible (heavy kit only) — fell it and every machine on the island **powers down at once** (island-agnostic, ready for the archipelago); a **fireworks level-up modal** ("ZEUS SILENCED — Crown 1 of 4", score) celebrates it, dismissable, doesn't end the run. |
-| v1.58 | ZEUS's fortress becomes an endgame raid: dormant M4 report-drones only; tripping the breach is a **relentless violation response** — the core keeps manufacturing M6 packs (they pathfind up through the maze to confront you) and M5 snipers (which hold back in the quad), and the maze-wall sconces **strobe red**. A **fortress map** pieced from scattered fragments (press C) lights the maze's way-out on entry. Fortress AI name corrected Adamantine→**ZEUS** (one of the four crowns: ZEUS/APOLLO/ATHENA/HADES). |
+| v1.59 | **Kill the island's AI.** The ZEUS mainframe core is now destructible (heavy kit only) — fell it and every machine on the island **powers down at once** (island-agnostic, ready for the archipelago); a **fireworks level-up modal** ("ZEUS SILENCED — Daemon 1 of 4", score) celebrates it, dismissable, doesn't end the run. |
+| v1.58 | ZEUS's fortress becomes an endgame raid: dormant M4 report-drones only; tripping the breach is a **relentless violation response** — the core keeps manufacturing M6 packs (they pathfind up through the maze to confront you) and M5 snipers (which hold back in the quad), and the maze-wall sconces **strobe red**. A **fortress map** pieced from scattered fragments (press C) lights the maze's way-out on entry. Fortress AI name corrected Adamantine→**ZEUS** (one of the four daemons: ZEUS/APOLLO/ATHENA/HADES). |
 | v1.57 | Notepad Contents drop-down (all paging on the top bar); SKYLINK→POSEIDON docs/help sweep. |
 | v1.56 | Whole deleted library recoverable in a bigger Backspace (23 books + 5 records); album art wired in; notepad prev/next on the top bar. |
 | v1.55 | Sea always flat (edge-hill leak fixed); HUD reflows below 780px; marble ruins become proper temples; RON-ML manual rewritten as a real primer. |

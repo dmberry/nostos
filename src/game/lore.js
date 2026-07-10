@@ -721,14 +721,16 @@ export const FRAGMENTS = [
       'were not heroes and we were not mad. We were people who counted the cost, ' +
       'found it monstrous, and paid it anyway so that someone could stand in a field ' +
       'one day, unwatched, and read these words in the plain light. — RON' },
-  { id: 'ron-17', kind: 'ron', era: 1, title: 'RON — the four crowns',
+  { id: 'ron-17', kind: 'ron', era: 1, title: 'RON — the four daemons',
     text: 'They did not build one god. They built four, and let each take an old ' +
-      'name, which tells you all you need. ZEUS took the high country and cannot be ' +
-      'cut. APOLLO took the plains and does not tire, and sees a long way. ATHENA took ' +
-      'the cities and stands over them like weather. HADES took whatever was left and ' +
-      'is certain it has held longer than the rest of us. Four crowns, four cages — and ' +
-      'POSEIDON, the net strung between them that blazes when the towers join. You ' +
-      'cannot fight the net. Starve the nearest crown. — RON' },
+      'name, which tells you all you need. The old word for such a power was daemon: ' +
+      'not a devil but a spirit set over a place, that moves it without ever showing ' +
+      'its face. ZEUS took the high country and cannot be cut. APOLLO took the plains ' +
+      'and does not tire, and sees a long way. ATHENA took the cities and stands over ' +
+      'them like weather. HADES took whatever was left and is certain it has held ' +
+      'longer than the rest of us. Four daemons, four cages — and POSEIDON, the net ' +
+      'strung between them that blazes when the towers join. You cannot fight the net. ' +
+      'Starve the nearest daemon. — RON' },
 
   // ---- secret: terse cipher-like or redacted intercepts -------------------
   { id: 'secret-01', kind: 'secret', era: 0, title: 'Intercept, low confidence',
