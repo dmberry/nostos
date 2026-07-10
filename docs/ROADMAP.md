@@ -43,12 +43,14 @@ map, not a schedule.
 - **The portal gun** (a separate item from the Ubik tear): the clean sci-fi
   paired-portal teleporter, a deliberate homage. The Ubik tear was restyled to
   clear this aesthetic; the item itself is unbuilt.
-- **The other three AIs**: the first fortress (its core still named *Adamantine*
-  in `fortress.js`, pending a rename to **ZEUS** to match the Odyssey naming) is
-  in, with Henrik's M6 guards. Build the other three crowns — **APOLLO**,
-  **ATHENA**, **HADES** — as their own annexes/fortresses, plus the deeper
-  fortress content (mainframe raid, multiple internal factories, M5/M6 elite
-  guards, breach escalation).
+- **The other three AIs — now as ISLANDS, not annexes**: full design and staged
+  build plan in [docs/islands-plan.md](islands-plan.md) — the archipelago
+  (APOLLO / ATHENA / HADES islands + ITHACA home island), boat crafting, sea
+  crossings, and the Stage-0 world-contract refactor that enables parallel
+  island builds. The first fortress (core still named *Adamantine* in
+  `fortress.js`, pending the **ZEUS** rename) stays on CALYPSO's island; the
+  deeper fortress content (mainframe raid, internal factories, M5/M6 elite
+  guards, breach escalation) continues there independently.
 - **Awareness meter + escalation event** (Henrik): chain raven-sightings and
   obelisk-proximity into a rising "AI awareness"; crossing a threshold flips
   the game into a short, brutal, retry-friendly escalation (fast converging
