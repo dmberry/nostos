@@ -590,6 +590,34 @@ export class Renderer {
     }
     if (hud.showSkills) this.drawSkillModal(player);
     if (hud.showWeapons) this.drawWeaponChart(player);
+    // GHOST PASS: a wall, column, tower, or the factory standing just
+    // south/east of the player paints clean over the sprite — the character
+    // simply vanished behind any building. If something tall is in that
+    // window, re-draw the player faintly OVER it: you always know where you
+    // are, and the wall still reads as being in front.
+    {
+      const pfx2 = Math.floor(player.x), pfy2 = Math.floor(player.y);
+      const NEAR_TALL = new Set(['wall', 'column', 'marbleblock']);
+      const BIG_TALL = new Set(['obelisk', 'wfactory', 'mainframe', 'uplink']);
+      let occluded = false;
+      for (let dy = 0; dy <= 4 && !occluded; dy++) {
+        for (let dx = 0; dx <= 4; dx++) {
+          if (!dx && !dy) continue;
+          const o = map.objectAt ? map.objectAt(pfx2 + dx, pfy2 + dy) : null;
+          if (!o) continue;
+          if ((dx + dy <= 2 && NEAR_TALL.has(o.type)) || BIG_TALL.has(o.type)) { occluded = true; break; }
+        }
+      }
+      if (occluded && !hud.underworld) {
+        const lift2 = (map.effectiveHeightAt ? map.effectiveHeightAt(pfx2, pfy2)
+          : map.heightAt ? map.heightAt(pfx2, pfy2) : 0) * ELEV;
+        ctx.save();
+        if (lift2) ctx.translate(0, -lift2);
+        ctx.globalAlpha = 0.28;
+        this.drawPlayer(player);
+        ctx.restore();
+      }
+    }
     if (hud.touchControls) this.drawTouchControls(hud);
     if (hud.toast) this.drawToast(hud.toast);
     if (hud.detail) this.drawDetail(hud.detail);

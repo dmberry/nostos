@@ -235,6 +235,8 @@ const HUNTER_WANDER_SPEED = 1.8;
 const HUNTER_WANDER_RANGE = 6;
 
 const STUCK_AFTER = 2;          // seconds of no progress while aggroed
+const STUCK_GIVE_UP = 7;        // pinned this long, the chase is abandoned...
+const STUCK_SULK = 12;          // ...and it won't re-acquire for this long
 const PROGRESS_FRACTION = 0.25; // moved less than this share of a full step counts as no progress
 const SPAWN_MIN_R = 1.5;        // robots seat this far from their tower...
 const SPAWN_MAX_R = 4;          // ...to about this far, expanding if crowded
@@ -1082,6 +1084,15 @@ function updateT1(r, dt, player, map) {
     if (moved < expected * PROGRESS_FRACTION) r.noProgressT += dt;
     else r.noProgressT = 0;
     r.stuck = r.noProgressT > STUCK_AFTER;
+    // Pinned long enough, it writes the chase off as a bad job: back to the
+    // patrol (its home tower) with a long sulk before it will re-acquire —
+    // no more machines buzzing at an obstacle until the end of time.
+    if (r.noProgressT > STUCK_GIVE_UP) {
+      r.aggro = false;
+      r.stuck = false;
+      r.noProgressT = 0;
+      r.loseInterestT = STUCK_SULK;
+    }
 
     if (d < T1_HIT_RANGE && r.attackTimer <= 0) {
       r.attackTimer = T1_HIT_COOLDOWN;

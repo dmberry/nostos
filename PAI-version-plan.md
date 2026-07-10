@@ -48,6 +48,19 @@ keeps only the latest status, plus the conventions, art notes, and forward plan
 above and below. (The old blow-by-blow "Where we are (v1.06 … v1.54)" log was
 pruned; the README table is the record now.)
 
+### v1.84 — occlusion ghost + stuck machines give up
+
+- **Ghost pass** (renderer, after the drawables loop): if a tall object sits
+  in the player's SE window (walls/columns/marble within 2 tiles, obelisk/
+  factory/core/uplink within 4), the player re-draws at 0.28 alpha OVER it.
+  Verified: drawPlayer once per frame in the open, twice when occluded.
+- **Stuck give-up**: T1 noProgressT > STUCK_GIVE_UP (7s) → aggro dropped,
+  stuck cleared, loseInterestT = STUCK_SULK (12s) — it wanders back to its
+  patrol instead of buzzing at the obstacle. Verified live: pinned T1
+  disengaged at ~6s of no progress.
+- **Books audit** (no code change): all 23 paperbooks + 5 records confirmed
+  present in a generated Backspace; the v1.56 guarantee holds.
+
 ### v1.83 — structures clang: factory 0.5x, core 0.55x, uplink 0.9x
 
 - hitFactory / hitCore / hitUplink played the wooden 'chop'; all three now
