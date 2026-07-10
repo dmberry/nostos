@@ -1936,86 +1936,86 @@ function drawT2(ctx, r, c) {
   if (r.drained && !r.fused) drawBatteryIcon(ctx, c.x, c.y - 40);
 }
 
-// A stooped, reaching silhouette instead of the T2's upright stalk — a
-// permanent forward hunch reads as a predator crouched to strike rather
-// than a recoloured T2. Eyes glow orange, not the red every other machine
-// uses, so the one that actually fires the hard-hitting ambush volley is
-// unmistakable at a glance.
+// The T3 ambusher: a wheeled T2 with laser eyes — same family silhouette
+// as the stalker, planted on the T1's undercarriage, with a pair of orange
+// emitters for a face so the machine that fires the twin-laser volley is
+// unmistakable at a glance (orange, never the red of the other machines).
 function drawT3(ctx, r, c) {
-  // A long, thin shadow — it looms rather than stands square.
+  // The ambush sniper, rebuilt as a WHEELED T2 with laser eyes: the T2's
+  // upright blocky silhouette planted on a T1-style wheeled chassis (it
+  // repositions, it never walks), and a pair of always-lit orange laser
+  // eyes — the machine whose whole identity is the twin-laser volley wears
+  // its weapon on its face. Keeps the live-machine tremor, the riveted
+  // sheen, and every state tell (aggro flare, stun flicker, fused slump).
   if (!r.noShadow) {
-    ctx.fillStyle = 'rgba(0,0,0,0.34)';
+    ctx.fillStyle = 'rgba(0,0,0,0.32)';
     ctx.beginPath();
-    ctx.ellipse(c.x, c.y, 9 * T3_SCALE, 4 * T3_SCALE, 0, 0, Math.PI * 2);
+    ctx.ellipse(c.x, c.y, 11 * T3_SCALE, 5 * T3_SCALE, 0, 0, Math.PI * 2);
     ctx.fill();
   }
 
   ctx.save();
   ctx.translate(c.x, c.y);
-  // A faint tremor riding on animT (which always ticks, unlike walkPhase)
-  // keeps it reading as live machinery even while it's holding still and
-  // watching, rather than a dead, inert sprite.
   const tremor = r.fused ? 0 : Math.sin((r.animT || 0) * 9) * 0.012;
   if (r.fused) ctx.rotate(0.16);
-  else ctx.rotate(tremor); // stands up straight — just the faint live-machine tremor (Ubik-confused = bounce, not spin)
+  else ctx.rotate(tremor);
   ctx.scale(T3_SCALE, T3_SCALE);
 
-  // Legs scissor with the walk phase exactly like the T2's — a jagged knee
-  // break rather than a straight limb, and taller than a T2's. Since it
-  // barely moves once camped, this mostly only plays while it repositions.
-  const swing = r.fused ? 0 : Math.sin(r.walkPhase) * 3;
-  ctx.strokeStyle = r.fused ? FUSED_EDGE : T3_LIMB;
-  ctx.lineWidth = 2.2;
-  for (const side of [-1, 1]) {
-    const hipX = side * 3.2;
+  // Wheeled base: two dark wheels with pale hubs under a low chassis skirt —
+  // the T1's undercarriage carrying the T2's body.
+  ctx.fillStyle = r.fused ? FUSED_EDGE : T3_LIMB;
+  for (const wx of [-6, 6]) {
     ctx.beginPath();
-    ctx.moveTo(hipX, -13);
-    ctx.lineTo(hipX + swing * side * 0.4, -6);
-    ctx.lineTo(hipX + swing * side, 0);
-    ctx.stroke();
+    ctx.arc(wx, -3, 4.5, 0, Math.PI * 2);
+    ctx.fill();
   }
-
-  // Torso: a narrow, ragged waist breaking out into tall, asymmetric jagged
-  // shoulders — a broken silhouette rather than a smooth chassis block, and
-  // taller than any other machine here so it genuinely looms.
-  ctx.fillStyle = bodyTone(T3_BODY, r);
+  if (!r.fused) {
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    for (const wx of [-6, 6]) {
+      ctx.beginPath();
+      ctx.arc(wx, -3, 1.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.fillStyle = bodyTone(T3_BODY, r); // chassis skirt
   ctx.beginPath();
-  ctx.moveTo(-4, -13);
-  ctx.lineTo(4, -13);
-  ctx.lineTo(6, -23);
-  ctx.lineTo(9, -30);
-  ctx.lineTo(3, -35);
-  ctx.lineTo(-2, -36);
-  ctx.lineTo(-8, -31);
-  ctx.lineTo(-5, -24);
+  ctx.moveTo(-9, -6);
+  ctx.lineTo(9, -6);
+  ctx.lineTo(7, -12);
+  ctx.lineTo(-7, -12);
   ctx.closePath();
   ctx.fill();
+
+  // Torso: the T2's blocky trunk, a shade taller so the sniper still reads
+  // as the bigger machine at a glance.
+  ctx.fillStyle = bodyTone(T3_BODY, r);
+  ctx.fillRect(-7, -30, 14, 18);
   ctx.strokeStyle = r.fused ? FUSED_EDGE : T3_EDGE;
   ctx.lineWidth = 1;
-  ctx.stroke();
+  ctx.strokeRect(-7, -30, 14, 18);
 
   if (!r.fused) {
-    // A riveted-metal texture clipped to the torso silhouette: a diagonal
-    // brushed-steel sheen, a panel seam, and a scatter of rivets — echoes
-    // the fortress ramparts' metal without needing the full wall texture
-    // at this scale. Reuses the torso path already current from the fill.
+    // Riveted brushed-steel sheen clipped to the trunk (kept from the old
+    // draw — it earns its keep at this scale).
     ctx.save();
+    ctx.beginPath();
+    ctx.rect(-7, -30, 14, 18);
     ctx.clip();
-    const sheen = ctx.createLinearGradient(-8, -36, 9, -13);
-    sheen.addColorStop(0, 'rgba(255,255,255,0.04)');
-    sheen.addColorStop(0.42, 'rgba(255,255,255,0.24)');
-    sheen.addColorStop(0.52, 'rgba(255,255,255,0.04)');
+    const sheen = ctx.createLinearGradient(-7, -30, 7, -12);
+    sheen.addColorStop(0, 'rgba(255,255,255,0.05)');
+    sheen.addColorStop(0.42, 'rgba(255,255,255,0.22)');
+    sheen.addColorStop(0.52, 'rgba(255,255,255,0.05)');
     sheen.addColorStop(1, 'rgba(0,0,0,0.16)');
     ctx.fillStyle = sheen;
-    ctx.fillRect(-10, -38, 20, 28);
+    ctx.fillRect(-8, -31, 16, 20);
     ctx.strokeStyle = 'rgba(0,0,0,0.3)';
     ctx.lineWidth = 0.6;
     ctx.beginPath();
-    ctx.moveTo(-8, -23);
-    ctx.lineTo(8, -19);
+    ctx.moveTo(-7, -18);
+    ctx.lineTo(7, -16);
     ctx.stroke();
     ctx.fillStyle = 'rgba(255,255,255,0.4)';
-    for (const [rx, ry] of [[-5, -30], [3, -33], [-2, -16], [4, -17]]) {
+    for (const [rx, ry] of [[-4, -27], [4, -26], [-3, -15], [5, -20]]) {
       ctx.beginPath();
       ctx.arc(rx, ry, 0.55, 0, Math.PI * 2);
       ctx.fill();
@@ -2024,72 +2024,78 @@ function drawT3(ctx, r, c) {
   }
 
   if (!r.fused) {
-    // Both arms reach, opposite each other and opposite the legs on the
-    // same phase — a point-blank tell as much as a walk cycle, since these
-    // are what actually swing the claws it falls back on up close.
+    // Short claw arms off the shoulders — the point-blank tell survives the
+    // redesign: two angled struts, each ending in a two-talon pinch, with a
+    // slow reach riding the tremor clock.
+    const reach = Math.sin((r.animT || 0) * 1.6) * 1.2;
     for (const side of [-1, 1]) {
-      const reach = Math.sin(r.walkPhase + Math.PI + (side < 0 ? Math.PI : 0)) * 4;
-      const shoulderX = side * 6, shoulderY = -30;
-      const tipX = side * (11 + reach * 0.3), tipY = -25 + reach * 0.6;
+      const sx = side * 7, sy = -26;
+      const tipX = side * (11.5 + reach), tipY = -20;
       ctx.strokeStyle = T3_LIMB;
-      ctx.lineWidth = 2.5;
+      ctx.lineWidth = 2.4;
       ctx.beginPath();
-      ctx.moveTo(shoulderX, shoulderY);
+      ctx.moveTo(sx, sy);
       ctx.lineTo(tipX, tipY);
       ctx.stroke();
-
-      // A three-talon claw fanned out from the tip, along the arm's own
-      // direction — what you'd actually feel close on your shoulder.
-      const armAng = Math.atan2(tipY - shoulderY, tipX - shoulderX);
       ctx.strokeStyle = T3_EDGE;
-      ctx.lineWidth = 1.4;
-      for (const off of [-0.5, 0, 0.5]) {
-        const a = armAng + off;
+      ctx.lineWidth = 1.3;
+      for (const off of [-0.45, 0.45]) {
+        const a = Math.atan2(tipY - sy, tipX - sx) + off;
         ctx.beginPath();
         ctx.moveTo(tipX, tipY);
-        ctx.lineTo(tipX + Math.cos(a) * 4, tipY + Math.sin(a) * 4);
+        ctx.lineTo(tipX + Math.cos(a) * 3.6, tipY + Math.sin(a) * 3.6);
         ctx.stroke();
       }
     }
   }
 
-  // Head: gaunt and elongated, no neck, hunched straight into the shoulders
-  // — a skull shape rather than a boxy sensor head.
+  // Head: the T2's sensor block, one size up.
   ctx.fillStyle = r.fused ? FUSED_DARK : T3_HEAD;
-  ctx.beginPath();
-  ctx.ellipse(0.5, -42, 3.4, 6.5, 0, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.fillRect(-5, -39, 10, 9);
+  ctx.strokeStyle = r.fused ? FUSED_EDGE : T3_EDGE;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(-5, -39, 10, 9);
 
-  // Two hollow eye sockets instead of one visor — dark and empty at rest,
-  // glowing orange together the instant it's actually hunting (aggro): the
-  // same tell every other machine gives in red, recoloured so its threat
-  // reads as distinct from a T1/T2/W1/W4 at a glance.
+  // LASER EYES: a pair of round orange emitters, always faintly lit — this
+  // is the machine that shoots from its face, and it should look like it.
+  // t3SensorStyle flares them (and adds the halo) the instant it hunts;
+  // fused/drained states go dark through the same path as everyone else.
   const s = t3SensorStyle(r);
-  for (const ex of [-1.4, 1.9]) {
-    ctx.fillStyle = EYE_SOCKET;
+  for (const ex of [-2.4, 2.4]) {
+    ctx.fillStyle = EYE_SOCKET; // emitter housing
     ctx.beginPath();
-    ctx.arc(ex, -43, 1.4, 0, Math.PI * 2);
+    ctx.arc(ex, -34.5, 1.9, 0, Math.PI * 2);
     ctx.fill();
   }
   if (s) {
-    for (const ex of [-1.4, 1.9]) {
+    for (const ex of [-2.4, 2.4]) {
       if (s.halo) {
         ctx.fillStyle = s.halo;
         ctx.beginPath();
-        ctx.arc(ex, -43, 2.8, 0, Math.PI * 2);
+        ctx.arc(ex, -34.5, 3.6, 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.fillStyle = s.fill;
       ctx.beginPath();
-      ctx.arc(ex, -43, 1.1, 0, Math.PI * 2);
+      ctx.arc(ex, -34.5, 1.4, 0, Math.PI * 2);
       ctx.fill();
+    }
+    // Hunting: a thin charge-line joins the two emitters — the twin lasers
+    // converging, the last thing you see before the volley.
+    if (s.halo && !r.fused && !r.drained) {
+      ctx.strokeStyle = s.fill;
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(-2.4, -34.5);
+      ctx.lineTo(2.4, -34.5);
+      ctx.stroke();
     }
   }
 
-  drawDesignation(ctx, r, 0, -27); // 'T3' higher on the torso plate, near the chest
+  drawDesignation(ctx, r, 0, -21); // 'T3' on the trunk plate
 
   ctx.restore();
 
-  if (r.fused) drawSmoke(ctx, c.x, c.y - 38 * T3_SCALE, r.animT || 0);
-  if (r.drained && !r.fused) drawBatteryIcon(ctx, c.x, c.y - 46 * T3_SCALE);
+  if (r.fused) drawSmoke(ctx, c.x, c.y - 34 * T3_SCALE, r.animT || 0);
+  if (r.drained && !r.fused) drawBatteryIcon(ctx, c.x, c.y - 43 * T3_SCALE);
 }

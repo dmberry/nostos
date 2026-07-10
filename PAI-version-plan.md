@@ -48,6 +48,18 @@ keeps only the latest status, plus the conventions, art notes, and forward plan
 above and below. (The old blow-by-blow "Where we are (v1.06 … v1.54)" log was
 pruned; the README table is the record now.)
 
+### v1.75 — T3 redrawn: wheeled T2 with laser eyes
+
+- Full drawT3 rewrite per David's brief ("wheeled version of T2 with laser
+  eyes"): T1-style wheels + hubs under a chassis skirt, T2-proportioned trunk
+  (14x18, one size up) with the riveted brushed-steel sheen kept from the old
+  draw, short two-talon claw arms riding the tremor clock, T2-style head
+  block, and twin round orange emitters — always faintly lit (its identity),
+  flaring via t3SensorStyle with a charge-line joining them while hunting.
+  All state tells preserved (fused slump/smoke, drained battery, stun
+  flicker, designation plate). Verified in headless Chrome beside a T1 and
+  T2 — family resemblance lands, idle + aggro states both correct.
+
 ### v1.74 — HOTFIX: TDZ crash at module load (black screen after title)
 
 - v1.72 seeded `large_stone` drops beside the anvil drops (~line 94), ABOVE
