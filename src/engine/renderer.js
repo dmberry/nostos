@@ -3242,20 +3242,22 @@ export class Renderer {
     for (let i = 0; i < n; i++) {
       const a = (obj.sway || 0) + i * 2.4;
       const c = worldToScreen(obj.x + 0.5 + Math.cos(a) * 0.22, obj.y + 0.5 + Math.sin(a) * 0.22);
-      const tall = k === 3 ? 8 : 5;
-      ctx.strokeStyle = '#5d7a40'; ctx.lineWidth = 1.4;
+      // Tiny on purpose — ground-cover, not shrubbery; the lotus (drawLotus)
+      // stays the only full-size flower so the grove keeps its presence.
+      const tall = k === 3 ? 5 : 3;
+      ctx.strokeStyle = '#5d7a40'; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(c.x, c.y + 1); ctx.lineTo(c.x, c.y - tall); ctx.stroke();
-      const by = c.y - tall - 1.5;
+      const by = c.y - tall - 1;
       ctx.fillStyle = p.petal;
       for (let j = 0; j < 5; j++) {
         const pa = (j / 5) * Math.PI * 2 + a;
-        ctx.beginPath(); ctx.ellipse(c.x + Math.cos(pa) * 2.2, by + Math.sin(pa) * 1.5, 2.0, 1.2, pa, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(c.x + Math.cos(pa) * 1.4, by + Math.sin(pa) * 0.95, 1.25, 0.75, pa, 0, Math.PI * 2); ctx.fill();
       }
       ctx.fillStyle = p.heart;
-      ctx.beginPath(); ctx.arc(c.x, by, k === 3 ? 1.8 : 1.2, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(c.x, by, k === 3 ? 1.1 : 0.75, 0, Math.PI * 2); ctx.fill();
       if (k === 3) {
-        ctx.strokeStyle = '#c9762b'; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.arc(c.x, by, 1.9, 0, Math.PI * 2); ctx.stroke();
+        ctx.strokeStyle = '#c9762b'; ctx.lineWidth = 0.8;
+        ctx.beginPath(); ctx.arc(c.x, by, 1.2, 0, Math.PI * 2); ctx.stroke();
       }
     }
   }
@@ -4039,6 +4041,19 @@ export class Renderer {
         ctx.beginPath(); ctx.ellipse(0, -6, 5, 2, 0, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = 'rgba(0,0,0,0.25)';
         ctx.fillRect(-5, -1, 10, 4); // label band
+        break;
+      case 'lotus_fruit':
+        // A plump pale fig-like fruit, cream-gold like the grove's blooms.
+        ctx.fillStyle = itemDef.color;
+        ctx.beginPath(); ctx.ellipse(0, 2, 6, 7, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.35)';
+        ctx.beginPath(); ctx.ellipse(-2, -1, 2.2, 3, 0.5, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#caa85e'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(0, -5); ctx.quadraticCurveTo(0.6, 2, 0, 9); ctx.stroke();
+        ctx.strokeStyle = '#6a8a44'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(0, -5); ctx.lineTo(3, -9); ctx.stroke();
+        ctx.fillStyle = '#7ba04f';
+        ctx.beginPath(); ctx.ellipse(4.5, -8.5, 3, 1.6, -0.5, 0, Math.PI * 2); ctx.fill();
         break;
       case 'berries':
         ctx.fillStyle = itemDef.color;

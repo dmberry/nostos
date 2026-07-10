@@ -48,6 +48,15 @@ keeps only the latest status, plus the conventions, art notes, and forward plan
 above and below. (The old blow-by-blow "Where we are (v1.06 … v1.54)" log was
 pruned; the README table is the record now.)
 
+### v1.67 — tiny flowers, lotus-fruit icon, gardener gardens visibly
+
+- `drawFlower` shrunk ~40%: stems 3px (daffodil 5), petals 1.25×0.75 —
+  ground-cover, not shrubbery. drawLotus untouched (the grove stays special).
+- `lotus_fruit` case added to `drawItemIcon`: plump cream-gold fig, sheen,
+  segment line, stalk + leaf.
+- `W5_PLANT_RANGE` 3 → 1: the gardener drone plants saplings in the tiles
+  right beside itself, so the planting is visibly its doing.
+
 ### v1.66 — wildflowers, lotus fix, sweeping maze, patient fireworks
 
 - **Lotus fruit fix (the reported "lotus does nothing")**: grove fruit was

@@ -216,7 +216,7 @@ const W5_WANDER_RANGE = 6;       // local patrol radius around its current recen
 const W5_RECENTER_INTERVAL = 10; // seconds between re-anchoring home to itself — an unbounded slow walk, not a fixed beat
 const W5_PLANT_INTERVAL = 18;    // seconds between planting attempts
 const W5_PLANT_JITTER = 14;
-const W5_PLANT_RANGE = 3;        // how far from itself it'll look for a spot
+const W5_PLANT_RANGE = 1;        // plants right beside itself — you see the gardener garden
 const W5_BODY = '#243a1c';       // mossy green, reads as gardener not hunter
 const W5_HEAD = '#16240f';
 
