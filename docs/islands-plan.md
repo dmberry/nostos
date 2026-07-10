@@ -8,7 +8,9 @@ using tools**. Each island is laid out differently according to its god's/AI's
 character.
 
 **Status: design APPROVED (David, 2026-07-10) — §10 decisions are settled
-except island owners. Nothing here is built yet.** Stage 0 is the gating
+except island owners. No island code exists yet, but the prerequisites have
+landed** (v1.58 guard roster + fortress map; v1.59 island-agnostic core-kill
+endgame — see §2 and §9) **and Stage 0 is unblocked.** Stage 0 is the gating
 refactor; Stages 3+ are designed to be built by parallel sessions without
 file contention. Read "Working rules for parallel sessions" before touching
 anything.
@@ -65,6 +67,15 @@ What we already have going for us:
 - **The fortress proves an AI seat can be a module.**
   `createFortress(map, seed, spawn)` returns a controller with its own
   `update(dt, ...)`. An island's AI crown follows the same pattern.
+- **The crown-kill loop already exists, island-agnostic (v1.59).** The
+  mainframe core is destructible (`Player.hitCore`/`damageCore`, heavy kit,
+  250hp); felling it fires `Player.onCoreDefeated`, which powers down every
+  non-friendly machine on *this island's* robots set, clears the alert, and
+  sets the fortress inert — written deliberately so APOLLO/ATHENA/HADES reuse
+  the hook unchanged on their own robots arrays. A `crownsDown` tally counts
+  felled crowns and the victory modal already speaks the campaign's language
+  ("<AI> SILENCED — Crown N of 4"). Stage 3 islands get their endgame loop
+  for free; the campaign tracker (§7) just persists `crownsDown`.
 - **Save model is already island-friendly.** World state is never saved; the
   world regenerates deterministically from a persisted seed, and only
   character/identity/lore persist (main.js `SAVE_KEY` block). Per-island
@@ -207,8 +218,10 @@ alongside the character save:
 { currentIsland: 'calypso', aisDown: ['ZEUS'], boat: {exists, hull, island} }
 ```
 
-Reload = regenerate `currentIsland` from seed, restore campaign facts. Fallen
-AIs stay fallen across islands (their crown spawns pre-wrecked). Everything
+`aisDown` is the persisted form of v1.59's runtime `crownsDown` tally (store
+which crowns fell, not just the count). Reload = regenerate `currentIsland`
+from seed, restore campaign facts. Fallen AIs stay fallen across islands
+(their crown spawns pre-wrecked, `core.defeated`, machines powered down). Everything
 else (obelisks, loot) regenerates as it already does today; the ROADMAP's
 "full world save/load" item is unchanged and orthogonal.
 
@@ -233,23 +246,30 @@ biggish change; **browser-verify, not just headless** — a headless-passing
 change can still throw on the first live frame (the `drawObelisk` freeze).
 Log every suggestion into PAI-version-plan.md as it arrives.
 
-**Sequencing constraint:** Stage 0 must not start while the M4/M5/M6 +
-fortress-map work (uncommitted in the tree as of 2026-07-10) is unlanded.
-Land that first.
+**Sequencing constraint:** Stage 0 must not start while another session has
+main.js / robots.js / fortress.js open with uncommitted changes — check
+`git status` and coordinate first. (The original blocker, the M4/M5/M6 +
+fortress-map work, landed as v1.58; the core-kill endgame landed as v1.59.)
 
 ## 9. Build order summary
 
-1. **Land the in-flight fortress work** (verify live, commit, push).
+1. ~~Land the in-flight fortress work~~ — **DONE**: v1.58 (M4/M5/M6 roster +
+   fortress map), v1.59 (core kill, island power-down, crownsDown, victory
+   modal — island-agnostic by design). The ZEUS rename is also done
+   (`AI_NAME = 'ZEUS'`, `AI_ROSTER` in fortress.js; no Adamantine remains).
 2. **Stage 0** — world contract; port Backspace; wrap CALYPSO. One session,
-   quiet window. No visible change.
+   quiet window. No visible change. **Now unblocked**, subject to the
+   coordination check above.
 3. **Stage 1** — boat + cheap crossing + stub islet. Proves travel round-trip
    and campaign save.
 4. **Stage 2** — islandkit extraction, seed-diff verified.
 5. **Stage 3** — ITHACA first (small, proves the contract), then APOLLO /
-   ATHENA / HADES in parallel, one owner each.
-6. **Later, orthogonal** — real open-sea crossing map; ZEUS rename in
-   fortress.js (`AI_NAME`), which Stage 0c makes CALYPSO-local anyway;
-   fortress Stages 3b-3/3b-4/4 continue on CALYPSO independently.
+   ATHENA / HADES in parallel, one owner each. Each island wires
+   `Player.onCoreDefeated` to its own robots set (see §2) — the endgame loop
+   is already built.
+6. **Later, orthogonal** — real open-sea crossing map; remaining CALYPSO
+   fortress work continues independently (3b-3 core factories, 3b-4 stealth
+   pass, ranged weapons vs the core — currently melee-only per v1.59).
 
 ## 10. Decisions (David, 2026-07-10)
 
