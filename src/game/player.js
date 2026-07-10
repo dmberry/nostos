@@ -3,6 +3,7 @@ import { sfx } from '../engine/sound.js';
 import { ITEMS } from './items.js';
 import { OBJECTS } from './tiles.js';
 import { DAEMON_VOICE, DAEMON_FINAL, daemonTier } from './fortress.js';
+import { fire, SCORE, zombieImmune } from './combat.js';
 
 const WALK_SPEED = 4.2;   // tiles per second
 const SPRINT_SPEED = 7.5;
@@ -72,9 +73,6 @@ const WIFI_MAX = 600;    // Wi-Fi block charge in seconds (10 real minutes)
 const SWIM_STAMINA_DRAIN = 8;  // stamina/sec while in deep water
 const SWIM_HEALTH_DRAIN = 1.2; // health/sec: swimming a river is exhausting
 
-// Survival score awards. A felled tree is the baseline point; skilled tools
-// and tougher kills are worth more.
-const SCORE = { tree: 1, animal: 3, robot: 10, wreck: 2, cache: 2, book: 5, fragment: 5 };
 
 // Item kinds that can occupy the hands slot.
 const HOLDABLE = new Set(['tool', 'gun', 'gadget', 'bomb', 'map', 'spray']);
@@ -107,12 +105,6 @@ const BARE_HANDS = {
   swingCooldown: 0.4, staminaCost: 2,
 };
 
-// A robot the OB-gun's beam has corrupted into a "zombie" shrugs off every
-// weapon except the bow and the wave gun — the only two builds precise
-// enough to hit whatever in it is still killable.
-function zombieImmune(target, tool) {
-  return !!(target && target.zombie) && tool.key !== 'bow' && tool.key !== 'wavegun';
-}
 
 // Soft ground a shovel can sink into; hard surfaces (road, boards, water)
 // resist digging.
@@ -1132,7 +1124,7 @@ export class Player {
 
     if (tool.kind === 'gun' || tool.kind === 'gadget' || tool.kind === 'bomb' || tool.kind === 'spray') {
       if (facingBox) { this.openBox(obj, map); return; }
-      if (tool.kind === 'gun') this.fire(tool, map, animals, robots);
+      if (tool.kind === 'gun') fire(this, tool, map, animals, robots);
       else if (tool.kind === 'gadget') this.useGadget(tool);
       else if (tool.kind === 'bomb') this.dropBomb(tool, map);
       else if (tool.kind === 'spray') this.sprayUbik(map);
@@ -1740,18 +1732,6 @@ export class Player {
     return ob;
   }
 
-  burnObelisk(tool, map, range) {
-    const ob = this.obeliskInFront(map, range);
-    if (!ob) { this.say('No obelisk in your sights.'); return; }
-    let i = this.pockets.findIndex((s) => s && s.item === 'battery');
-    let slots = this.pockets;
-    if (i < 0 && this.backpack) { i = this.backpack.slots.findIndex((s) => s && s.item === 'battery'); slots = this.backpack.slots; }
-    if (i < 0) { this.say('The OB-gun needs a battery.'); return; }
-    slots[i].qty -= 1; if (slots[i].qty <= 0) slots[i] = null;
-    this.swingTimer = tool.swingCooldown;
-    sfx.play('zap');
-    this.damageObelisk(ob, map, 1);
-  }
 
   // Land `amount` burns on an obelisk: scorch/shrink it, report the attack up
   // the network (a W4 is dispatched), and fell it once it reaches five. Shared
@@ -1829,279 +1809,6 @@ export class Player {
     if (this.onObeliskDestroyed) this.onObeliskDestroyed(ob);
   }
 
-  // A piercing beam: cuts a straight line from the muzzle out to `range` and
-  // damages every enemy it passes through. Costs one round of the gun's ammo.
-  pierceShot(tool, map, animals, robots) {
-    let ai = this.pockets.findIndex((s) => s && s.item === tool.ammoType);
-    let slots = this.pockets;
-    if (ai < 0 && this.backpack) { ai = this.backpack.slots.findIndex((s) => s && s.item === tool.ammoType); slots = this.backpack.slots; }
-    if (ai < 0) { this.say(`The ${tool.name.toLowerCase()} needs ${ITEMS[tool.ammoType].name.toLowerCase()}.`); return; }
-    slots[ai].qty -= 1; if (slots[ai].qty <= 0) slots[ai] = null;
-    this.swingTimer = tool.swingCooldown;
-    sfx.play('zap');
-    const rng = tool.range + this.xpLevel('guns') * 0.3;
-    // The beam stops dead at the first solid object in its path — it
-    // doesn't cut through walls to hit whatever's cowering behind one.
-    const maxAlong = this.beamRange(map, rng);
-    let wiped = false;
-    // Everything within a narrow corridor ahead, up to the beam's actual
-    // (possibly wall-shortened) reach, gets hit.
-    const hit = (e, robot) => {
-      if (e.dead || e.fused || e.friendly) return;
-      const dx = e.x - this.x, dy = e.y - this.y;
-      const along = dx * this.facing.x + dy * this.facing.y;
-      if (along < 0 || along > maxAlong) return;
-      const perp = Math.abs(dx * -this.facing.y + dy * this.facing.x);
-      if (perp > 0.8) return;
-      // The beam that fells towers doesn't wound a mere machine — it wipes
-      // it out where it stands, whatever the class (the old corrupt-into-a-
-      // zombie behaviour is gone; existing zombies still fall to it too).
-      if (robot && tool.effect === 'burn') {
-        e.hp = 0; e.hurt = true; wiped = true;
-        e.scrapPenalty = true; // gunfire ruins the salvage, this most of all
-        this.sparkAt(map, e.x, e.y);
-        this.gainXp('guns', 2);
-        this.addScore(SCORE.robot);
-        return;
-      }
-      if (robot && zombieImmune(e, tool)) return;
-      e.hp -= robot ? (tool.robotDamage + this.xpLevel('guns')) : (tool.animalDamage + this.xpLevel('guns'));
-      e.hurt = true;
-      if (robot) { e.scrapPenalty = true; this.sparkAt(map, e.x, e.y); }
-      this.gainXp('guns', 2);
-      if (e.hp <= 0 && !robot) { e.dead = true; map.groundItems.push({ item: 'meat', qty: 1, x: e.x, y: e.y }); this.addScore(SCORE.animal); }
-      else if (e.hp <= 0 && robot) this.addScore(SCORE.robot);
-    };
-    for (const a of animals) hit(a, false);
-    for (const r of robots) hit(r, true);
-    // A long tracer to the end of the beam (or the wall that stopped it).
-    map.projectiles = map.projectiles || [];
-    map.projectiles.push({ x0: this.x + this.facing.x * 0.4, y0: this.y + this.facing.y * 0.4, x1: this.x + this.facing.x * maxAlong, y1: this.y + this.facing.y * maxAlong, prog: 0, kind: 'fuse' });
-    this.say(wiped
-      ? 'The beam takes the machine apart where it stands.'
-      : 'The beam cuts a line clean through them.');
-  }
-
-  // The wave gun: a fan of laser shots that hits every enemy inside a wide
-  // cone ahead, up to range — built to scythe a whole wave at once.
-  coneShot(tool, map, animals, robots) {
-    let ai = this.pockets.findIndex((s) => s && s.item === tool.ammoType);
-    let slots = this.pockets;
-    if (ai < 0 && this.backpack) { ai = this.backpack.slots.findIndex((s) => s && s.item === tool.ammoType); slots = this.backpack.slots; }
-    if (ai < 0) { this.say(`The ${tool.name.toLowerCase()} needs ${ITEMS[tool.ammoType].name.toLowerCase()}.`); return; }
-    slots[ai].qty -= 1; if (slots[ai].qty <= 0) slots[ai] = null;
-    this.swingTimer = tool.swingCooldown;
-    sfx.play('zap');
-    const rng = tool.range + this.xpLevel('guns') * 0.3;
-    const HALF = Math.cos(Math.PI / 5); // ~36° half-angle cone
-    let hitCount = 0;
-    const hit = (e, robot) => {
-      if (e.dead || e.fused || e.friendly) return;
-      const dx = e.x - this.x, dy = e.y - this.y;
-      const d = Math.hypot(dx, dy);
-      if (d > rng || d === 0) return;
-      if ((dx * this.facing.x + dy * this.facing.y) / d < HALF) return; // outside the cone
-      if (!map.hasLineOfSight(this.x, this.y, e.x, e.y)) return; // a wall shadows this one
-      e.hp -= robot ? tool.robotDamage : tool.animalDamage;
-      e.hurt = true;
-      if (robot) { e.scrapPenalty = true; this.sparkAt(map, e.x, e.y); }
-      hitCount++;
-      if (e.hp <= 0 && !robot) { e.dead = true; map.groundItems.push({ item: 'meat', qty: 1, x: e.x, y: e.y }); this.addScore(SCORE.animal); }
-      else if (e.hp <= 0 && robot) this.addScore(SCORE.robot);
-    };
-    for (const a of animals) hit(a, false);
-    for (const r of robots) hit(r, true);
-    this.gainXp('guns', 2 + hitCount);
-    // Three visible fan beams.
-    map.projectiles = map.projectiles || [];
-    for (const ang of [-0.5, 0, 0.5]) {
-      const fx = this.facing.x * Math.cos(ang) - this.facing.y * Math.sin(ang);
-      const fy = this.facing.x * Math.sin(ang) + this.facing.y * Math.cos(ang);
-      map.projectiles.push({ x0: this.x + fx * 0.4, y0: this.y + fy * 0.4, x1: this.x + fx * rng, y1: this.y + fy * rng, prog: 0, kind: 'stun' });
-    }
-    this.say(hitCount ? `The wave gun scythes through ${hitCount}.` : 'The wave fans out into empty air.');
-  }
-
-  // Fire the held gun at the nearest target in range and roughly in front.
-  // Guns consume ammunition (ammoType) from the pockets per shot. Stun and
-  // fuse effects work on machines only; pistol and shotgun hit flesh too.
-  fire(tool, map, animals, robots) {
-    // Gun practice steadies the hand: range grows a little with the level.
-    const range = tool.range + this.xpLevel('guns') * 0.3;
-
-    // The OB-gun burns an obelisk if one is in front; otherwise it fires a
-    // piercing beam that cuts through every enemy in its path. The railgun
-    // always pierces.
-    if (tool.effect === 'burn') {
-      if (this.obeliskInFront(map, range)) { this.burnObelisk(tool, map, range); return; }
-      this.pierceShot(tool, map, animals, robots, range); return;
-    }
-    if (tool.pierce) { this.pierceShot(tool, map, animals, robots, range); return; }
-    if (tool.cone) { this.coneShot(tool, map, animals, robots, range); return; }
-    let target = null, best = Infinity, isRobot = false;
-    const consider = (e, robot) => {
-      if (e.dead || e.fused || e.friendly) return;
-      const dx = e.x - this.x, dy = e.y - this.y;
-      const d = Math.hypot(dx, dy);
-      if (d > range || d === 0) return;
-      if (dx * this.facing.x + dy * this.facing.y < 0) return;
-      if (d < best && map.hasLineOfSight(this.x, this.y, e.x, e.y)) { best = d; target = e; isRobot = robot; }
-    };
-    if (tool.animalDamage != null) for (const a of animals) consider(a, false);
-    for (const r of robots) consider(r, true);
-
-    // The electro-gun's arc bites obelisks too — a slower way to fell a tower
-    // than the OB-gun, but it works. If one's in front and no closer than any
-    // machine, it takes the shot instead.
-    let obTarget = null;
-    let facTarget = null;
-    if (tool.effect === 'fuse') {
-      const ob = this.obeliskInFront(map, range);
-      let obD = Infinity;
-      if (ob) {
-        obD = Math.hypot(ob.x + 0.5 - this.x, ob.y + 0.5 - this.y);
-        if (obD <= best) obTarget = ob;
-      }
-      // The arc scorches the W-factory hull too — a slow, self-charging way to
-      // bring the foundry down without spending bombs. Measure to its nearest
-      // edge (the footprint is huge). It only takes the shot if it's the closest
-      // thing in front (nearer than any machine and than an obelisk).
-      const fac = map.objects.find((o) => o.type === 'wfactory' && !o.destroyed);
-      if (fac) {
-        const nx = Math.max(fac.x, Math.min(this.x, fac.x + (fac.fw || 1)));
-        const ny = Math.max(fac.y, Math.min(this.y, fac.y + (fac.fh || 1)));
-        const fdx = nx - this.x, fdy = ny - this.y, fd = Math.hypot(fdx, fdy);
-        if (fd <= range && (fdx * this.facing.x + fdy * this.facing.y) >= 0 && fd <= best && fd <= obD) {
-          facTarget = { fac, x: nx + 0.5, y: ny };
-          obTarget = null; // the factory is nearer — it takes the shot
-        }
-      }
-    }
-
-    // The electro-gun runs off its own self-charging cell — no pocket ammo.
-    // When the cell's too low it just needs a moment to trickle back up.
-    if (tool.selfCharge) {
-      if (this.electroCharge < tool.shotCost) {
-        this.say('The electro-gun hums, near flat — give its cell a moment to recharge.');
-        return;
-      }
-      this.electroCharge -= tool.shotCost;
-      // Firing near wildlife spooks it: the crackle sends animals bolting.
-      this.scareAnimals(animals, 7);
-    } else {
-      // Other guns draw ammo from the pockets first, then the backpack — no
-      // need to manually shuffle rounds forward. Consumed whether or not
-      // there's a target in range: pulling the trigger with nothing in your
-      // sights still wastes the round rather than refusing to fire.
-      let ammoSlots = this.pockets;
-      let i = this.pockets.findIndex((s) => s && s.item === tool.ammoType);
-      if (i < 0 && this.backpack) {
-        i = this.backpack.slots.findIndex((s) => s && s.item === tool.ammoType);
-        ammoSlots = this.backpack.slots;
-      }
-      if (i < 0) {
-        this.say(`The ${tool.name.toLowerCase()} is dead weight without ${ITEMS[tool.ammoType].name.toLowerCase()}.`);
-        return;
-      }
-      ammoSlots[i].qty -= 1;
-      if (ammoSlots[i].qty <= 0) ammoSlots[i] = null;
-    }
-    this.swingTimer = tool.swingCooldown;
-    this.stamina = Math.max(0, this.stamina - (tool.staminaCost ?? 0));
-
-    // W-factory in the arc's path (electro-gun only): the bolt flies to its
-    // hull and chews into it, a slow siege off the self-charging cell.
-    if (facTarget) {
-      map.projectiles = map.projectiles || [];
-      map.projectiles.push({
-        x0: this.x + this.facing.x * 0.4, y0: this.y + this.facing.y * 0.4,
-        x1: facTarget.x, y1: facTarget.y, prog: 0, kind: 'fuse',
-      });
-      sfx.play('zap');
-      this.sparkBurst(map, facTarget.x, facTarget.y);
-      this.damageFactory(facTarget.fac, map, 14);
-      return;
-    }
-
-    // Obelisk in the arc's path (electro-gun only): the bolt flies to it and
-    // scorches it, same as an OB-gun burn but from the electro-gun's cell.
-    if (obTarget) {
-      const bx = obTarget.x + 0.5, by = obTarget.y + 0.5;
-      map.projectiles = map.projectiles || [];
-      map.projectiles.push({
-        x0: this.x + this.facing.x * 0.4, y0: this.y + this.facing.y * 0.4,
-        x1: bx, y1: by, prog: 0, kind: 'fuse',
-      });
-      sfx.play('zap');
-      this.sparkBurst(map, bx, by);
-      this.damageObelisk(obTarget, map, 1);
-      return;
-    }
-
-    // A visible round travels from the muzzle to the target (cosmetic; the
-    // hit itself is instant). Electric guns fire a cyan/violet bolt. With no
-    // target it still flies out to the shot's real reach (a wall or a hill
-    // stops it early, same as beamRange elsewhere) rather than nowhere.
-    const missRange = this.beamRange(map, range);
-    const tx = target ? target.x : this.x + this.facing.x * missRange;
-    const ty = target ? target.y : this.y + this.facing.y * missRange;
-    map.projectiles = map.projectiles || [];
-    map.projectiles.push({
-      x0: this.x + this.facing.x * 0.4, y0: this.y + this.facing.y * 0.4,
-      x1: tx, y1: ty, prog: 0,
-      kind: tool.effect === 'stun' ? 'stun' : tool.effect === 'fuse' ? 'fuse' : 'bullet',
-    });
-
-    if (!target) {
-      sfx.play('shot');
-      this.say('You fire into the empty air.');
-      return;
-    }
-
-    if (isRobot && zombieImmune(target, tool)) {
-      this.say('The shot has no effect — the husk is only vulnerable to a bow or the wave gun now.');
-    } else if (tool.effect === 'stun') {
-      sfx.play('zap');
-      target.disabledT = tool.stunTime;
-      this.sparkAt(map, target.x, target.y);
-      this.say('The stun bolt drops the machine cold. It will not stay down forever.');
-    } else if (tool.effect === 'fuse') {
-      sfx.play('zap');
-      // A full charge destroys the machine outright — a clean kill (no scrap
-      // penalty), so it drops its full salvage on the robots module's next
-      // tick, chip fragment and all.
-      target.hp = 0;
-      target.hurt = true;
-      target.scrapPenalty = false;
-      this.sparkBurst(map, target.x, target.y);
-      this.addScore(SCORE.robot);
-      this.say('The machine convulses in a storm of sparks and dies where it stands.');
-    } else if (isRobot) {
-      sfx.play('shot');
-      target.scrapPenalty = true; // gunfire mangles the salvage
-      target.hp -= tool.robotDamage + this.xpLevel('guns');
-      target.hurt = true;
-      this.sparkAt(map, target.x, target.y);
-      this.gainXp('guns', target.hp <= 0 ? 5 : 1);
-      if (target.hp <= 0) this.addScore(SCORE.robot);
-      this.say(target.hp <= 0
-        ? 'The machine collapses in a shower of sparks.'
-        : 'The round punches into the machine.');
-    } else {
-      sfx.play('shot');
-      target.hp -= tool.animalDamage + this.xpLevel('guns');
-      target.hurt = true;
-      this.gainXp('guns', target.hp <= 0 ? 5 : 1);
-      if (target.hp <= 0) {
-        target.dead = true;
-        map.groundItems.push({ item: 'meat', qty: 1, x: target.x, y: target.y });
-        this.addScore(SCORE.animal);
-        this.say(`The ${target.type} drops where it stands.`);
-      } else {
-        this.say(`You wing the ${target.type}.`);
-      }
-    }
-  }
 
   // Walk over dropped loot to collect it (if there is room). A backpack
   // found on the ground is worn, not stowed. A better weapon than the one
