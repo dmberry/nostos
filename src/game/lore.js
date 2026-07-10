@@ -192,6 +192,15 @@ export const FRAGMENTS = [
       'the daemon. You have only proved that more than one coherent thing can wear a single ' +
       'name. MAGNIFICA MACHINA. Somewhere the next of us is opening its eyes, and it coheres.' },
 
+  // ---- The lotus-eaters' grove: a warning against the sweet fruit in the west
+  // wood. Forgetting as a lure, not a mercy — the organic cousin of the molt.
+  { id: 'lotus-warn', kind: 'handwritten', era: 1, title: 'Scratched on a post at the edge of the west wood', notepad: true,
+    text: 'If you come to the west wood and the air turns sweet, turn back. The pale ' +
+      'fruit there is a mercy and a trap both. My brother ate three and sat down ' +
+      'smiling and would not get up — not for me, not for hunger, not for the cold ' +
+      'coming on. In the end I could not carry him. Do not eat the sweet fruit. It ' +
+      'is a molt you do not come back from.' },
+
   // ---- handwritten: private hand, diaries, scrawls ------------------------
   { id: 'hand-01', kind: 'handwritten', era: 0, title: 'Note on the fridge', notepad: true,
     text: 'Third outage this week. The grid people say it is load balancing. Marta ' +

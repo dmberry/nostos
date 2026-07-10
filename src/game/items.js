@@ -441,6 +441,18 @@ export const ITEMS = {
     color: '#7a3a8a',
     food: 15,
   },
+  // Lotus fruit: looks and reads like ordinary food (has a `food` value, so the
+  // eat routine will happily take it), but eating it brings on a dreamy torpor
+  // that slows you and pulls you back toward the grove. The trap is precisely
+  // that it is indistinguishable from food when you mash the eat key.
+  lotus_fruit: {
+    name: 'Lotus fruit',
+    kind: 'resource',
+    stack: 6,
+    color: '#e7d7b0', // pale cream-gold
+    food: 20,
+    lotus: true,      // flag read by Player.eat -> enterTorpor
+  },
   torch: {
     name: 'Torch',
     kind: 'resource',

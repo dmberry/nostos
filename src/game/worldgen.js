@@ -47,6 +47,7 @@ export function buildWorld(seed) {
 
   plantForests(map, rng, keepClear);
   layMeadows(map, rng, keepClear);
+  plantLotusGrove(map, rng, keepClear);
   scatterLoners(map, rng, keepClear);
   scatterWrecks(map, rng);
   paintGraffiti(map, rng);
@@ -526,6 +527,40 @@ function layMeadows(map, rng, keepClear) {
         if (map.floorAt(x, y) !== 'grass' || inKeepClear(x, y, keepClear)) continue;
         const d = Math.hypot(x - cx, y - cy);
         if (d <= r * (0.75 + 0.35 * rng())) map.setFloor(x, y, 'tallgrass');
+      }
+    }
+  }
+}
+
+// The lotus-eaters' grove: a single hidden clearing deep in the south-west
+// wilds, ringed by the forest so you stumble into it. A soft overgrown floor,
+// a cluster of pale lotus plants, and — scattered among them — lotus fruit that
+// reads exactly like food. Eat one by accident (the eat key takes the first
+// edible thing in your pockets) and a dreamy torpor pulls you back here. One
+// grove per island; `map.lotusGrove` gives the pull-back its centre.
+function plantLotusGrove(map, rng, keepClear) {
+  // Seat it inside the south-west wilds forest region, nudged a little.
+  const cx = 15 + Math.floor((rng() - 0.5) * 4);
+  const cy = 104 + Math.floor((rng() - 0.5) * 4);
+  const r = 4.5;
+  map.lotusGrove = { x: cx + 0.5, y: cy + 0.5, r };
+  let fruit = 0;
+  for (let y = Math.floor(cy - r) - 1; y <= Math.ceil(cy + r) + 1; y++) {
+    for (let x = Math.floor(cx - r) - 1; x <= Math.ceil(cx + r) + 1; x++) {
+      if (map.floorAt(x, y) !== 'grass' || inKeepClear(x, y, keepClear)) continue;
+      const d = Math.hypot(x - cx, y - cy);
+      if (d > r * (0.75 + 0.3 * rng())) continue;
+      // A soft, overgrown floor for the whole clearing.
+      map.setFloor(x, y, 'tallgrass');
+      if (map.objectAt(x, y)) continue;
+      // Clear the middle so you can stand in it; plant lotus toward the edges,
+      // and let a little fruit lie among the plants and on the open ground.
+      const rl = rng();
+      if (d > r * 0.35 && rl < 0.5) {
+        map.addObject('lotus', x, y, { variant: Math.floor(rng() * 3) });
+        if (rng() < 0.4 && fruit < 8) { map.groundItems.push({ item: 'lotus_fruit', qty: 1, x: x + 0.5, y: y + 0.5 }); fruit++; }
+      } else if (rl < 0.14 && fruit < 8) {
+        map.groundItems.push({ item: 'lotus_fruit', qty: 1, x: x + 0.5, y: y + 0.5 }); fruit++;
       }
     }
   }

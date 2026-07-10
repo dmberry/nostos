@@ -38,6 +38,14 @@ const FOOD_SPRINT_MULT = 1.5; // sprinting burns food faster
 const STARVE_DRAIN = 0.8;     // health per second at zero food
 const HUNGRY_AT = 25;         // stamina recovers slowly below this
 
+// Lotus torpor: eating lotus fruit dazes you — slowed, and pulled back toward
+// the grove, so you must fight to leave (the lotus-eaters of Odyssey IX).
+const TORPOR_TIME = 9;        // seconds of daze added per fruit eaten
+const TORPOR_MAX = 22;        // stacking cap, so a fistful doesn't strand you forever
+const TORPOR_SLOW = 0.5;      // movement multiplier while dazed
+const TORPOR_PULL = 0.7;      // tiles/sec drift back toward the grove centre
+const TORPOR_FOOD_DRAIN = 2;  // extra food/sec while dazed — you forget to look after yourself
+
 const JUMP_VZ = 3.8;      // initial jump velocity (world units/s)
 const GRAVITY = 12;
 const JUMP_COST = 3;      // stamina
@@ -154,6 +162,7 @@ export class Player {
     this.hurtTimer = 0;   // brief red flash after taking damage
     this.message = null;  // {text, ttl} transient HUD line
     this.daemonVoice = null;  // {text, ttl, tier, ai} — the core speaking as you break it
+    this.torpor = 0;          // seconds of lotus daze remaining
 
     this.name = 'Adam';
     this.gender = 'm';    // 'm' | 'f' | 'u'
@@ -591,6 +600,26 @@ export class Player {
       this.health = Math.min(this.maxHealth, this.health + HEALTH_REGEN * dt);
     }
 
+    // Lotus torpor: the daze bleeds off slowly, drains you while it lasts, and
+    // drags you back toward the grove — the pull you have to fight to walk out
+    // (Odyssey IX: the men who would not leave). The grip loosens in the last
+    // few seconds so you are never stranded for good.
+    if (this.torpor > 0) {
+      this.torpor = Math.max(0, this.torpor - dt);
+      this.food = Math.max(0, this.food - TORPOR_FOOD_DRAIN * dt);
+      const grove = map.lotusGrove;
+      if (grove) {
+        const gx = grove.x - this.x, gy = grove.y - this.y;
+        const d = Math.hypot(gx, gy);
+        if (d > 1.2) {
+          const ease = Math.min(1, this.torpor / 3);   // full pull, then let go
+          const step = TORPOR_PULL * ease * dt;
+          this.moveAxis((gx / d) * step, 0, map);
+          this.moveAxis(0, (gy / d) * step, map);
+        }
+      }
+    }
+
     const intent = input.moveIntent();
     this.moving = intent.dx !== 0 || intent.dy !== 0;
     const wantSprint = input.sprinting() && this.moving;
@@ -619,6 +648,8 @@ export class Player {
       // Pushing through a walk-through tree's foliage slows you a little.
       const objHere = map.objectAt ? map.objectAt(Math.floor(this.x), Math.floor(this.y)) : null;
       if (objHere && objHere.type === 'tree') speed *= 0.75;
+      // Lotus daze: heavy limbs. Fighting the pull out of the grove is slow work.
+      if (this.torpor > 0) speed *= TORPOR_SLOW;
       // Up on a block top, ease off the pace — the footprint is small and a
       // full walking speed makes edges twitchy to line up. Slower is easier
       // to control up there.
@@ -993,6 +1024,11 @@ export class Player {
           this.venom = 0;
           this.health = Math.min(this.maxHealth, this.health + 5);
           this.say('You eat the berries. The right ones: the venom fades.');
+        } else if (def.lotus) {
+          // The trap. No warning until it is already in you: a dreamy line, and
+          // the torpor takes hold in update (slow + pull back to the grove).
+          this.torpor = Math.min(TORPOR_MAX, this.torpor + TORPOR_TIME);
+          this.say('The fruit is sweeter than anything you remember. You forget, for a moment, why you were in such a hurry.');
         } else {
           this.say(`You eat the ${def.name.toLowerCase()}.`);
         }

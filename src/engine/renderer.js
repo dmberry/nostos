@@ -592,6 +592,7 @@ export class Renderer {
     if (hud.showWeapons) this.drawWeaponChart(player);
     if (hud.detail) this.drawDetail(hud.detail);
     if (hud.drag) this.drawDragGhost(hud.drag, player);
+    if (player.torpor > 0) this.drawTorporHaze(player.torpor);
     if (hud.rest) this.drawRestOverlay(hud.rest.dim);
     if (hud.deathCert) this.drawDeathCert(hud.deathCert);
     if (hud.aiVictory) this.drawAiVictory(hud.aiVictory);
@@ -667,6 +668,23 @@ export class Renderer {
     ctx.font = '12px system-ui, sans-serif';
     ctx.fillText('time is passing', this.w / 2, playH / 2 + 22);
     ctx.restore();
+  }
+
+  // Lotus torpor: a warm golden wash and a soft vignette closing in — the
+  // dreamy tunnel-vision of the lotus-eaters. Eases off in the last few seconds
+  // as the daze lets go. Play-area only; the dashboard stays clear.
+  drawTorporHaze(t) {
+    const ctx = this.ctx;
+    const playH = this.h - DASH_H;
+    const amt = Math.min(1, t / 3);
+    const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 900);
+    ctx.fillStyle = `rgba(196,150,70,${(0.13 * amt + 0.05 * amt * pulse).toFixed(3)})`;
+    ctx.fillRect(0, 0, this.w, playH);
+    const g = ctx.createRadialGradient(this.w / 2, playH / 2, playH * 0.25, this.w / 2, playH / 2, playH * 0.72);
+    g.addColorStop(0, 'rgba(0,0,0,0)');
+    g.addColorStop(1, `rgba(20,14,6,${(0.5 * amt).toFixed(3)})`);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, this.w, playH);
   }
 
   // A flat sepia-yellow wash plus an uneven fluorescent flicker (two
@@ -1994,6 +2012,7 @@ export class Renderer {
         this.drawWall(obj);
         break;
       case 'tree': this.drawTree(obj); break;
+      case 'lotus': this.drawLotus(obj); break;
       case 'column': this.drawColumn(obj); break;
       case 'colfall': this.drawColumn(obj); break;
       case 'marbleblock': this.drawMarbleBlock(obj); break;
@@ -3172,6 +3191,31 @@ export class Renderer {
       ctx.lineTo(c.x, c.y - 9 - h);
       ctx.stroke();
     }
+  }
+
+  // A lotus plant: broad low pads and a pale cream-gold bloom. Deliberately
+  // NOT luminous (no glow, so the "texture every glow" rule doesn't apply) —
+  // it should read as an innocent flower, not a hazard, until you eat one.
+  drawLotus(obj) {
+    const ctx = this.ctx;
+    const c = worldToScreen(obj.x + 0.5, obj.y + 0.5);
+    const v = obj.variant || 0;
+    ctx.fillStyle = 'rgba(0,0,0,0.16)';
+    ctx.beginPath(); ctx.ellipse(c.x, c.y + 2, 11, 5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#4f6f3a';
+    for (const [ox, oy, rx] of [[-6, 0, 7], [6, 1, 6], [0, -2, 7]]) {
+      ctx.beginPath(); ctx.ellipse(c.x + ox, c.y + oy, rx, rx * 0.45, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.strokeStyle = '#6a8a44'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(c.x, c.y - 9 - v); ctx.stroke();
+    const by = c.y - 11 - v;
+    ctx.fillStyle = '#e7d7b0';
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + v;
+      ctx.beginPath(); ctx.ellipse(c.x + Math.cos(a) * 3.4, by + Math.sin(a) * 2.2, 3.2, 1.8, a, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.fillStyle = '#f4ead0'; ctx.beginPath(); ctx.arc(c.x, by, 2.4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#caa85e'; ctx.beginPath(); ctx.arc(c.x, by, 1.1, 0, Math.PI * 2); ctx.fill();
   }
 
   drawRock(tx, ty) {

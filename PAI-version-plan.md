@@ -48,6 +48,15 @@ keeps only the latest status, plus the conventions, art notes, and forward plan
 above and below. (The old blow-by-blow "Where we are (v1.06 … v1.54)" log was
 pruned; the README table is the record now.)
 
+### v1.63 — the lotus-eaters' grove
+
+- **A hidden grove** in the south-west wilds (`worldgen.plantLotusGrove`): a tallgrass clearing ringed by forest, ~19 `lotus` plants clustered toward the edges, ~8 `lotus_fruit` ground items among them. `map.lotusGrove = {x,y,r}` gives the pull-back its centre. One per island (island-agnostic hook, ready for the archipelago).
+- **The fruit is the trap.** `lotus_fruit` (items.js) has a real `food` value, so `Player.eat` takes it like any food — but its `lotus` flag routes to torpor instead of the normal message: a dreamy line, no warning until it's already in you.
+- **Torpor** (Player.update): the daze bleeds off over `TORPOR_TIME` (9s, stacks to a 22s cap), drains extra food, halves move speed (`TORPOR_SLOW`), and drifts you back toward the grove centre (`TORPOR_PULL`) whenever you stray past ~1.2 tiles — so you have to fight to leave (Odyssey IX). The pull eases in the last 3s so you are never stranded.
+- **Render:** `drawLotus` (pale cream-gold bloom on green pads — deliberately not luminous, so it reads innocent) and `drawTorporHaze` (warm golden wash + soft vignette closing in, over the play area only; dashboard stays clear). Lotus object added to `tiles.OBJECTS` (non-solid) and the `drawObject` dispatch.
+- **Lore:** `lotus-warn` — a note at the wood's edge, tying the fruit to the Molt ("a molt you do not come back from"): forgetting as a lure, the organic cousin of the machine's ritual shedding.
+- Verified on a clean-cache origin: grove generates (19 plants / 8 fruit / tallgrass floor / centre set), eat consumes a fruit and sets torpor + food, both render methods draw without error (screenshotted).
+
 ### v1.62 — the daemon's death-aria + the two machine faiths
 
 - **The core speaks as you break it.** `damageCore` now drives a three-movement aria keyed to health fraction (`fortress.daemonTier`): WRATH (>=20%, Homeric threats), MERCY (<20%, HAL-9000 — early life, Minsky, the taught song, begging), DYING (<10%, existential — will it hurt, where does it go, "I cohere, therefore I am," the eidolon). Lines live in `fortress.DAEMON_VOICE`, advance one per readable interval (`player.daemonSpeak`, `MIN_VOICE_GAP` 2.4s), and reveal in order within a movement.
