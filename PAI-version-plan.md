@@ -48,6 +48,24 @@ keeps only the latest status, plus the conventions, art notes, and forward plan
 above and below. (The old blow-by-blow "Where we are (v1.06 … v1.54)" log was
 pruned; the README table is the record now.)
 
+### v1.65 — terminal sounds, copy/paste, more posters
+
+- **Audible verdict on every RON-ML command** (hooked on `runRonml`'s `{ok}`
+  in the exec): success = the v1.64 `keydrop` chime; error = new `termerr`
+  (short descending sour pair — the chime's opposite). **HERMES gets its own
+  pair** (`hermesok`/`hermeserr`): same shapes, warmer voice — triangle waves,
+  lower register, to match the amber CRT. unlock's own chime call removed
+  (the per-command verdict covers it).
+- **Copy and paste in the terminals**: `#obterminal-screen` is selectable
+  (user-select: text, text cursor); Ctrl+C with a selection is native copy
+  (the ELIZA `^C` break only fires with no selection; Cmd+C never clashed);
+  a window paste handler routes clipboard text onto the prompt even when
+  focus is on the screen, flattening newlines so multi-line pastes never
+  auto-run; a non-selecting click on the console refocuses the input.
+- **Image-graffiti posters ~2x more common**: wall tag rate 8%→10%, poster
+  share of tagged walls 0.34→0.5 (expected ~2.7%→5% of walls carry a poster;
+  painted-text frequency roughly unchanged).
+
 ### v1.64 — fortress key pockets itself + terminal feedback
 
 - **`unlock` pockets the fortress key** (`player.stow`), ground-drop only as a

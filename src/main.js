@@ -1027,7 +1027,7 @@ function ronmlCtx() {
       // back to the ground drop so the key is never simply swallowed. Feedback
       // prints INTO the terminal too — player.say is hidden behind the modal.
       fortressKeyFromCrash = true;
-      sfx.play('keydrop');
+      // (No sfx here — the exec's per-command verdict chime covers success.)
       const stored = player.stow('fortress_key', 1);
       if (stored > 0) {
         replPrint(`OK: ${nodeId}'s key turns in the network. A fortress key slides from the slot — pocketed.`);
@@ -1530,6 +1530,11 @@ function replRun(line) {
   // to the `eliza` verb so the language itself handles it (see ronml.js).
   const prog = relaxed.replace(/^run\s+(eliza|doctor)\s*$/i, 'eliza');
   const result = runRonml(prog, terminalKind === 'hermes' ? hermesCtx() : ronmlCtx());
+  // Audible verdict on every command: the keydrop chime doubles as the RON-ML
+  // success sound, errors get its descending opposite — and HERMES speaks the
+  // same pair in a warmer, lower voice (it's a different machine; sound.js).
+  if (terminalKind === 'hermes') sfx.play(result.ok ? 'hermesok' : 'hermeserr');
+  else sfx.play(result.ok ? 'keydrop' : 'termerr');
   // If the verb just opened an ELIZA session, its greeting is already printed —
   // don't also drop the bare "()" unit result underneath it.
   if (elizaBot) return;
@@ -1671,8 +1676,13 @@ function updateGhost() {
 obTermInput.addEventListener('input', updateGhost);
 obTermInput.addEventListener('keydown', (e) => {
   // Ctrl+C breaks out of an ELIZA session, as on a real terminal — back to the
-  // RON-DOS prompt without closing the whole console.
+  // RON-DOS prompt without closing the whole console. But if text is selected
+  // anywhere, Ctrl+C means COPY — let the browser have it (matters on
+  // Windows/Linux, where copy is Ctrl+C; Mac's Cmd+C never hits this branch).
   if (e.ctrlKey && (e.key === 'c' || e.key === 'C')) {
+    const screenSel = String(window.getSelection() || '');
+    const inputSel = obTermInput.selectionStart !== obTermInput.selectionEnd;
+    if (screenSel || inputSel) return; // native copy
     if (elizaBot) { obTermInput.value = ''; obTermGhost.textContent = ''; stopEliza('^C  —  ELIZA interrupted. Back at the RON-DOS prompt.'); }
     e.preventDefault(); e.stopPropagation();
     return;
@@ -1709,6 +1719,27 @@ obTermInput.addEventListener('keydown', (e) => {
     e.preventDefault();
   }
   e.stopPropagation();
+});
+
+// Copy and paste, like a real terminal. The screen is selectable (CSS
+// user-select), so select + Cmd/Ctrl+C copies natively. Pasting lands on the
+// prompt from anywhere in the console — even with focus on the screen —
+// with newlines flattened to spaces so a multi-line paste never auto-runs.
+window.addEventListener('paste', (e) => {
+  if (obTermEl.style.display === 'none') return;
+  if (document.activeElement === obTermInput) return; // native paste already lands in the input
+  const text = (e.clipboardData || window.clipboardData)?.getData('text') || '';
+  if (!text) return;
+  obTermInput.value += text.replace(/\s+$/, '').replace(/\n+/g, ' ');
+  obTermInput.focus();
+  updateGhost();
+  e.preventDefault();
+});
+// A click on the console that ISN'T a text selection puts the caret back on
+// the prompt, so you can select-to-copy without losing your typing flow.
+obTermEl.addEventListener('mouseup', () => {
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed) obTermInput.focus();
 });
 
 // The AI's own console (no chip): a wall of restless, unreadable data.

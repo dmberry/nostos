@@ -215,6 +215,19 @@ class Sound {
           this._tone({ when: t + 0.18, dur: 0.24, type: 'sine', freq: 1319 * v, gain: 0.13, attack: 0.005 });
           this._tone({ when: t + 0.2, dur: 0.12, type: 'triangle', freq: 2637 * v, gain: 0.04, attack: 0.002 });
           break;
+        case 'termerr': // the chime's opposite: a short descending sour pair — wrong, but politely
+          this._tone({ when: t, dur: 0.1, type: 'sine', freq: 622 * v, gain: 0.14, attack: 0.005 });
+          this._tone({ when: t + 0.1, dur: 0.2, type: 'sine', freq: 466 * v, end: 440 * v, gain: 0.13, attack: 0.005 });
+          break;
+        case 'hermesok': // HERMES success: same rising shape, warmer voice — triangle, lower register
+          this._tone({ when: t, dur: 0.11, type: 'triangle', freq: 523 * v, gain: 0.16, attack: 0.008 });
+          this._tone({ when: t + 0.1, dur: 0.11, type: 'triangle', freq: 659 * v, gain: 0.16, attack: 0.008 });
+          this._tone({ when: t + 0.2, dur: 0.26, type: 'triangle', freq: 1047 * v, gain: 0.13, attack: 0.008 });
+          break;
+        case 'hermeserr': // HERMES failure: warm low descend, more sigh than buzzer
+          this._tone({ when: t, dur: 0.12, type: 'triangle', freq: 440 * v, gain: 0.15, attack: 0.008 });
+          this._tone({ when: t + 0.12, dur: 0.24, type: 'triangle', freq: 330 * v, end: 311 * v, gain: 0.13, attack: 0.008 });
+          break;
         default:
           break; // unknown names are ignored silently
       }

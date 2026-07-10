@@ -703,15 +703,17 @@ function paintGraffiti(map, rng) {
   const pick = (list) => list[Math.floor(rng() * list.length)];
   for (const obj of map.objects) {
     if (obj.type !== 'wall') continue;
-    if (rng() < 0.92) continue; // sparse: a mark here and there, not every wall
+    if (rng() < 0.90) continue; // sparse: a mark here and there, not every wall
     // Roughly two in five tagged walls carry the mark on the south-west (left)
     // face instead of the default south-east — both faces are visible in the
     // iso view, so this just spreads the graffiti around (Renderer reads the flag).
     if (rng() < 0.4) obj.graffitiFace = 'sw';
-    // A minority of tagged walls carry an actual weathered poster/mural photo
+    // Half the tagged walls carry an actual weathered poster/mural photo
     // instead of painted text — an older, different register (see
     // Renderer.drawGraffitiPoster). Mutually exclusive with the text tags.
-    if (rng() < 0.34) { obj.graffitiImage = Math.floor(rng() * GRAFFITI_IMAGE_COUNT); continue; }
+    // (Was a 0.34 share of 8% of walls — the posters read well and were too
+    // rare, so both odds were raised; painted text stays roughly as common.)
+    if (rng() < 0.5) { obj.graffitiImage = Math.floor(rng() * GRAFFITI_IMAGE_COUNT); continue; }
     const r = rng();
     if (r < 0.29) {
       obj.graffiti = pick(GRAFFITI_GENERIC);
