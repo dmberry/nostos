@@ -101,7 +101,7 @@ export const ITEMS = {
   arrow: {
     name: 'Arrows',
     kind: 'resource',
-    stack: 30, // holds a full cache pickup (24, since v0.60's ammo doubling) in one pocket
+    stack: 64, // holds a full cache pickup (24, since v0.60's ammo doubling) in one pocket
     color: '#c9b48a',
   },
   // A cool late-game find: an energy lance that punches clean through
@@ -159,7 +159,7 @@ export const ITEMS = {
   scrap: {
     name: 'Scrap',
     kind: 'resource',
-    stack: 10,
+    stack: 64,
     color: '#7a7f88',
   },
   // Timed bombs: use (E) while holding one to drop it ticking. It goes off
@@ -322,7 +322,7 @@ export const ITEMS = {
   circuit: {
     name: 'Circuit board',
     kind: 'resource',
-    stack: 10,
+    stack: 64,
     color: '#3f8f5f',
   },
   // Built from 8 numbered circuit boards (collected from destroyed obelisks).
@@ -390,7 +390,7 @@ export const ITEMS = {
   battery: {
     name: 'Battery',
     kind: 'resource',
-    stack: 6,
+    stack: 64,
     color: '#d8c94f',
   },
   // Found rarely, worn once found (see Player.backpack): 16 more general
@@ -405,19 +405,19 @@ export const ITEMS = {
   ammo: {
     name: 'Ammo (9mm)',
     kind: 'resource',
-    stack: 12,
+    stack: 64,
     color: '#8f8a6a',
   },
   shells: {
     name: 'Shotgun shells',
     kind: 'resource',
-    stack: 8,
+    stack: 64,
     color: '#a5493a',
   },
   wood: {
     name: 'Wood',
     kind: 'resource',
-    stack: 10,
+    stack: 64,
     color: '#8a6437',
   },
   meat: {

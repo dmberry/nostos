@@ -48,6 +48,23 @@ keeps only the latest status, plus the conventions, art notes, and forward plan
 above and below. (The old blow-by-blow "Where we are (v1.06 … v1.54)" log was
 pruned; the README table is the record now.)
 
+### v1.70 — drunken lotus walk, mobile HUD touch, 64-stacks, new domains
+
+- **Lotus torpor reworked**: the grove drag (TORPOR_PULL) is gone; instead the
+  walk direction rolls under you — two out-of-phase sines + a re-seeding lurch
+  bias, scaled by TORPOR_SWAY and easing out over the last 3s. Verified
+  headless: same input walks a visibly different, shorter path under torpor.
+- **Mobile HUD**: input.uiHitTest (wired from main.js) — a touch landing on
+  the dashboard band, any slot, or the open backpack panel never becomes
+  movement; the tap still lands so the existing one-click equip path fires.
+  The pack badge now TOGGLES the panel (no I key on phones). equipSlot's
+  backpack branch moves non-holdables/stacks to the first free pocket.
+- **Compact HUD**: vitals stack shifted down 6px (labels were kissing the
+  band's boundary line).
+- **Stacks to 64**: arrow, scrap, circuit, battery, ammo, shells, wood.
+- **Domains**: hosted at https://nostos-ai.vercel.app; repo renamed
+  dmberry/postAI → dmberry/nostos (old URLs redirect).
+
 ### v1.69 — slot hover tooltips + map-item icons
 
 - **Hover tooltips on every HUD slot** (`hoverSlotTip` in main.js, passed as

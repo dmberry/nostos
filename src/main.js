@@ -748,6 +748,15 @@ function revealAround(px, py) {
 }
 
 // Debug handle for inspecting live state from the console.
+// Touches that land on the HUD are UI, never movement (input.js touch path).
+input.uiHitTest = (x, y) => {
+  if (renderer.slotAt && renderer.slotAt(x, y)) return true;
+  if (renderer.hudTop != null && y >= renderer.hudTop) return true;
+  const bp = renderer._backpackRect;
+  if (showBackpack && bp && x >= bp.x && x <= bp.x + bp.w && y >= bp.y && y <= bp.y + bp.h) return true;
+  return false;
+};
+
 window.__game = { player, map, camera, animals, birds, robots, waterdroids, obelisks, obeliskObjs, wfactory, dayNight, lore, input, renderer, fortress, sfx };
 
 function resize() {
@@ -2161,7 +2170,7 @@ function update(dt) {
     const slot = renderer.slotAt(press.x, press.y);
     if (slot) {
       input.consumeClick();
-      if (slot.kind === 'packbadge') showBackpack = true; // click the badge to open the full panel
+      if (slot.kind === 'packbadge') showBackpack = !showBackpack; // tap the badge to open — and again to close (mobile has no I key)
       else if (player.getSlot(slot)) drag = { from: slot };
       else player.equipSlot(slot); // empty hands slot: stow whatever's held
     }

@@ -99,11 +99,17 @@ export class Input {
     mouseTarget.addEventListener('touchstart', (e) => {
       const p = touchXY(e);
       this._touchStart = { x: p.x, y: p.y };
+      // A touch that lands on the HUD (dashboard band, a slot, an open panel —
+      // main.js supplies the hit test) is UI, not movement: it must select,
+      // never walk the character toward the bottom of the screen.
+      this._touchUI = !!(this.uiHitTest && this.uiHitTest(p.x, p.y));
+      if (this._touchUI) { this.mouseX = p.x; this.mouseY = p.y; e.preventDefault(); return; }
       setFromTouch(p);
       this.mouseHeld = true;
       e.preventDefault();
     }, { passive: false });
     mouseTarget.addEventListener('touchmove', (e) => {
+      if (this._touchUI) { e.preventDefault(); return; }
       setFromTouch(touchXY(e));
       e.preventDefault();
     }, { passive: false });
@@ -112,12 +118,14 @@ export class Input {
       const s = this._touchStart;
       const moved = s ? Math.hypot(p.x - s.x, p.y - s.y) : 999;
       // A quick, still tap is an action (a drag/hold was just movement, so it
-      // shouldn't also swing).
-      if (moved < 16) { this.mouseX = p.x; this.mouseY = p.y; this.mousePressed = true; }
+      // shouldn't also swing). A UI touch always lands its tap, so a slot
+      // press + release resolves to the one-click equip/swap in main.js.
+      if (this._touchUI || moved < 16) { this.mouseX = p.x; this.mouseY = p.y; this.mousePressed = true; }
       this.touchVec = null;
       this.mouseHeld = false;
       this.upAt = { x: p.x, y: p.y };
       this._touchStart = null;
+      this._touchUI = false;
       e.preventDefault();
     }, { passive: false });
   }

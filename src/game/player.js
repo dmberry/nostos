@@ -38,12 +38,13 @@ const FOOD_SPRINT_MULT = 1.5; // sprinting burns food faster
 const STARVE_DRAIN = 0.8;     // health per second at zero food
 const HUNGRY_AT = 25;         // stamina recovers slowly below this
 
-// Lotus torpor: eating lotus fruit dazes you — slowed, and pulled back toward
-// the grove, so you must fight to leave (the lotus-eaters of Odyssey IX).
+// Lotus torpor: eating lotus fruit dazes you — slowed, with a drunken roll in
+// your step: your heading sways and lurches, so walking a straight line out of
+// the grove takes real correcting (the lotus-eaters of Odyssey IX).
 const TORPOR_TIME = 9;        // seconds of daze added per fruit eaten
 const TORPOR_MAX = 22;        // stacking cap, so a fistful doesn't strand you forever
 const TORPOR_SLOW = 0.5;      // movement multiplier while dazed
-const TORPOR_PULL = 0.7;      // tiles/sec drift back toward the grove centre
+const TORPOR_SWAY = 1.0;      // radians of peak heading roll while dazed (scaled by ease)
 const TORPOR_FOOD_DRAIN = 2;  // extra food/sec while dazed — you forget to look after yourself
 
 const JUMP_VZ = 3.8;      // initial jump velocity (world units/s)
@@ -532,11 +533,16 @@ export class Player {
         this.learnFromBook(key);
         return;
       }
-      if (s && !HOLDABLE.has(ITEMS[s.item].kind)) {
-        this.say(`Can't hold ${ITEMS[s.item].name.toLowerCase()} in hand.`);
+      if (s && (!HOLDABLE.has(ITEMS[s.item].kind) || s.qty > 1)) {
+        // Not a hand item (or a whole stack): one tap moves it to the first
+        // free pocket instead — the mobile-friendly swap out of the pack.
+        const free = this.pockets.findIndex((ps) => !ps);
+        if (free < 0) { this.say('Pockets are full.'); return; }
+        this.pockets[free] = s;
+        this.backpack.slots[slot.i] = null;
+        this.say(`Moved ${ITEMS[s.item].name.toLowerCase()} to a pocket.`);
         return;
       }
-      if (s && s.qty > 1) { this.say('Too many to take in hand.'); return; }
       const held = this.hands;
       this.hands = s ? s.item : null;
       this.backpack.slots[slot.i] = held ? { item: held, qty: 1 } : null;
@@ -600,23 +606,20 @@ export class Player {
       this.health = Math.min(this.maxHealth, this.health + HEALTH_REGEN * dt);
     }
 
-    // Lotus torpor: the daze bleeds off slowly, drains you while it lasts, and
-    // drags you back toward the grove — the pull you have to fight to walk out
-    // (Odyssey IX: the men who would not leave). The grip loosens in the last
-    // few seconds so you are never stranded for good.
+    // Lotus torpor: the daze bleeds off slowly, drains you while it lasts,
+    // and rolls the ground under your feet — you walk drunk, not dragged
+    // (Odyssey IX by way of the taverna). The sway loosens in the last few
+    // seconds so the walk home is recoverable.
     if (this.torpor > 0) {
       this.torpor = Math.max(0, this.torpor - dt);
       this.food = Math.max(0, this.food - TORPOR_FOOD_DRAIN * dt);
-      const grove = map.lotusGrove;
-      if (grove) {
-        const gx = grove.x - this.x, gy = grove.y - this.y;
-        const d = Math.hypot(gx, gy);
-        if (d > 1.2) {
-          const ease = Math.min(1, this.torpor / 3);   // full pull, then let go
-          const step = TORPOR_PULL * ease * dt;
-          this.moveAxis((gx / d) * step, 0, map);
-          this.moveAxis(0, (gy / d) * step, map);
-        }
+      // The woozy clock: two slow sines out of phase make the roll, and every
+      // second or so the lean re-seeds so the stagger never metronomes.
+      this._woozyT = (this._woozyT || 0) + dt;
+      this._woozyLurchT = (this._woozyLurchT || 0) - dt;
+      if (this._woozyLurchT <= 0) {
+        this._woozyLurchT = 1 + Math.random() * 1.2;
+        this._woozyBias = (Math.random() - 0.5) * 1.6;
       }
     }
 
@@ -657,8 +660,21 @@ export class Player {
       const hBefore = map.heightAt ? map.heightAt(Math.floor(this.x), Math.floor(this.y)) : 0;
       if (this.z === 0 && effBefore > hBefore) speed *= BLOCK_WALK_MULT;
       this.distanceTraveled += speed * dt;
-      this.moveAxis(dir.x * speed * dt, 0, map);
-      this.moveAxis(0, dir.y * speed * dt, map);
+      // Lotus daze: the direction you MEAN to walk rolls side to side under
+      // you — a drunken heading sway you steer against, easing off as the
+      // daze does.
+      let mdx = dir.x, mdy = dir.y;
+      if (this.torpor > 0) {
+        const ease = Math.min(1, this.torpor / 3);
+        const sway = (Math.sin(this._woozyT * 2.1) * 0.55
+          + Math.sin(this._woozyT * 0.9 + 1.7) * 0.3
+          + (this._woozyBias || 0) * 0.35) * TORPOR_SWAY * ease;
+        const cs = Math.cos(sway), sn = Math.sin(sway);
+        mdx = dir.x * cs - dir.y * sn;
+        mdy = dir.x * sn + dir.y * cs;
+      }
+      this.moveAxis(mdx * speed * dt, 0, map);
+      this.moveAxis(0, mdy * speed * dt, map);
       const effAfter = map.effectiveHeightAt ? map.effectiveHeightAt(Math.floor(this.x), Math.floor(this.y)) : 0;
       const hAfter = map.heightAt ? map.heightAt(Math.floor(this.x), Math.floor(this.y)) : 0;
       if (hAfter > hBefore) this.stamina = Math.max(0, this.stamina - CLIMB_COST);
@@ -1026,7 +1042,7 @@ export class Player {
           this.say('You eat the berries. The right ones: the venom fades.');
         } else if (def.lotus) {
           // The trap. No warning until it is already in you: a dreamy line, and
-          // the torpor takes hold in update (slow + pull back to the grove).
+          // the torpor takes hold in update (slow + the drunken heading sway).
           this.torpor = Math.min(TORPOR_MAX, this.torpor + TORPOR_TIME);
           this.say('The fruit is sweeter than anything you remember. You forget, for a moment, why you were in such a hurry.');
         } else {

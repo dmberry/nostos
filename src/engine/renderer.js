@@ -4542,6 +4542,7 @@ export class Renderer {
     const W = this.w;
     const MDH = 120;
     const top = this.h - MDH;
+    this.hudTop = top; // input.uiHitTest reads this (see desktop variant)
     ctx.fillStyle = 'rgba(12,15,10,0.9)';
     ctx.fillRect(0, top, W, MDH);
     ctx.fillStyle = 'rgba(207,216,195,0.25)';
@@ -4549,17 +4550,17 @@ export class Renderer {
 
     // --- Top row: vitals (left), score/countdown (right). ---
     const bx = 10, bw = Math.min(150, Math.round(W * 0.42));
-    this.drawBar(bx, top + 10, bw, 6, player.health / player.maxHealth, '#b0392f', 'HP');
-    this.drawBar(bx, top + 28, bw, 6, player.stamina / player.maxStamina, '#5f8f3e', 'STA');
-    this.drawBar(bx, top + 46, bw, 6, (player.food ?? 100) / (player.maxFood ?? 100), '#c99a3e', 'FOOD');
+    this.drawBar(bx, top + 16, bw, 6, player.health / player.maxHealth, '#b0392f', 'HP');
+    this.drawBar(bx, top + 34, bw, 6, player.stamina / player.maxStamina, '#5f8f3e', 'STA');
+    this.drawBar(bx, top + 52, bw, 6, (player.food ?? 100) / (player.maxFood ?? 100), '#c99a3e', 'FOOD');
     // conditions, small, just right of the bars
     ctx.font = 'bold 9px system-ui, sans-serif';
     ctx.textAlign = 'left';
     const cx = bx + bw + 8;
-    if (player.venom > 0) { ctx.fillStyle = '#b07fd8'; ctx.fillText('POISON', cx, top + 15); }
-    if (player.invisibleToRobots) { ctx.fillStyle = '#4fd8c3'; ctx.fillText(`HID ${Math.ceil((player.wifiPower || 0) / 60)}m`, cx, top + 33); }
-    if (player.food <= 0) { ctx.fillStyle = '#e05548'; ctx.fillText('STARVING', cx, top + 51); }
-    else if (player.food < 25) { ctx.fillStyle = '#d8a04f'; ctx.fillText('HUNGRY', cx, top + 51); }
+    if (player.venom > 0) { ctx.fillStyle = '#b07fd8'; ctx.fillText('POISON', cx, top + 21); }
+    if (player.invisibleToRobots) { ctx.fillStyle = '#4fd8c3'; ctx.fillText(`HID ${Math.ceil((player.wifiPower || 0) / 60)}m`, cx, top + 39); }
+    if (player.food <= 0) { ctx.fillStyle = '#e05548'; ctx.fillText('STARVING', cx, top + 57); }
+    else if (player.food < 25) { ctx.fillStyle = '#d8a04f'; ctx.fillText('HUNGRY', cx, top + 57); }
     // score + countdown, right-aligned on the top row
     ctx.textAlign = 'right';
     ctx.font = 'bold 13px system-ui, sans-serif';
@@ -4612,6 +4613,7 @@ export class Renderer {
     if (this.w < 780) { this.drawDashboardCompact(player, hud); return; }
     const ctx = this.ctx;
     const top = this.h - DASH_H;
+    this.hudTop = top; // input.uiHitTest: touches below this line are UI, not movement
 
     ctx.fillStyle = 'rgba(12,15,10,0.88)';
     ctx.fillRect(0, top, this.w, DASH_H);
