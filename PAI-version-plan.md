@@ -48,6 +48,15 @@ keeps only the latest status, plus the conventions, art notes, and forward plan
 above and below. (The old blow-by-blow "Where we are (v1.06 … v1.54)" log was
 pruned; the README table is the record now.)
 
+### v1.58 — ZEUS fortress: violation-response guards, fortress map, red alert
+
+- **Guard roster reworked** (robots.js). **M4** unarmed report-drones are the only dormant-fortress presence (1-2; their spotting you is what raises the alarm — sneak past them). **M5** snipers hang back and plink a low-power orange `laser_m5`. **M6** pack robots attack in waves of 3-5 (attack/withdraw; a lone one waits at the pack edge until `M6_PACK_MIN` gather).
+- **Violation response.** Tripping the breach: the core throws a full first wave then keeps **manufacturing** reinforcements every `PRODUCE_INTERVAL` (6s) up to `GUARD_CAP` (12). Guards **pathfind through the maze** (new BFS `guardNextWaypoint` + cached `pursueMaze`) to confront you, relentless — an aggro'd M5/M6 is exempt from the `ACTIVE_RANGE` CPU-cull and the short LOS give-up, hunting on a longer `FORTRESS_FORGET` (20s-no-glimpse) timer so it threads the whole maze but a truly-escaped player still shakes it (→ alarm stands down). **M5 snipers hold back in the quad** (path to a muster post, camp, fire on a sightline); **M6 packs** run the corridors to melee.
+- **Maze red alert.** While alarmed, the maze-wall sconces switch from their slow cyan/amber glow to a fast **red strobe** (`fortress.update` sets `map.fortressAlarm`; the renderer reads it in `drawFortWall`).
+- **Fortress map from fragments.** Five `fortress_map_fragment` scattered wide (ruins/woods/meadows, 7 placed) → press **C** to piece a `fortress_map`; carry it into the maze and the green way-out trail lights **on entry** (no map = thread it blind). Replaces the old "lights on solving it".
+- **AI name fix.** The fortress core/terminal/messages read "Adamantine" (stale `fortress.js` constant); corrected at source to **ZEUS** — one of the four crowns (ZEUS/APOLLO/ATHENA/HADES; POSEIDON is the net between them), with the main.js override removed and every comment swept.
+- *Open nits for a later balance pass:* the M6 pile-on is very lethal; M5 sightlines from the quad depend on where you are.
+
 ### v1.57 — notepad Contents drop-down, footer nav removed, docs/help SKYLINK→POSEIDON sweep
 - Notepad footer prev/next removed; all nav on the top bar (‹ ›, counter) plus a new
   `#ronnotebook-jump` Contents `<select>` grouped by section (optgroup), value = page

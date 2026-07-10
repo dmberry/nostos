@@ -46,7 +46,7 @@ export const FLOOR_TEXTURES = {
   boards: loadDownscaled(T + 'floor-boards.png'),
   bridge: loadDownscaled(T + 'floor-boards.png'),
   sand: loadDownscaled(T + 'Sand.png'),
-  // Adamantine's fortress decks: riveted metal panels for the corridors/maze,
+  // ZEUS's fortress decks: riveted metal panels for the corridors/maze,
   // paving for the open quad, and a darker panel for the inner sanctum.
   panel: loadDownscaled(T + 'panel-metal-1.jpg'),
   quad: loadDownscaled(T + 'floor-pavingstone.jpg'),
@@ -65,7 +65,7 @@ export const WALL_TEXTURES = {
   // Fortress ramparts (riveted metal) and the inner charcoal maze (dark stone).
   metal: loadDownscaled(T + 'panel-metal-2.jpg'),
   darkstone: loadDownscaled(T + 'wall-darkstone-alt.png'),
-  // Adamantine's inner maze: darker "AI" wall designs, mixed for variety —
+  // ZEUS's inner maze: darker "AI" wall designs, mixed for variety —
   // riveted panels, an iron grate, and a louvred vent.
   aiwall: loadDownscaled(T + 'AI-texture/metal_06.jpg'),
   aigrate: loadDownscaled(T + 'AI-texture/grating_10.jpg'),

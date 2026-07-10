@@ -115,12 +115,55 @@ code, fully isolated. **Recommendation: reuse `robots.js`.**
    tiles behind, guards lethal (test player killed), no console errors. Note: went
    straight to vision-based acquisition here, so 3b-2 is just the report
    timer/alarm orchestration in fortress.update.
-2. **3b-2 Detection + alarm** — vision cone, ALERT/REPORTING states, report timer,
-   fortress `alarm` flag, HUD banner. *Verify: seen → timer → alarm; fast kill →
-   stays silent; break LOS → stand down.*
-3. **3b-3 Core factories** — dormant foundries that wake on alarm and pump
-   escalating M6 waves; destructible to stop them. *Verify: alarm → waves; kill a
-   factory → its waves stop.*
+2. **3b-2 Detection + alarm — DONE (2026-07-08).** Vision cone landed in 3b-1;
+   this added the orchestration in `fortress.update(dt, player, robots, world)`:
+   report timer (guard `aggro` → +dt; unwatched → decays; `REPORT_DELAY` 3.5s →
+   alarm), `STANDDOWN_DELAY` 90s quiet → stands back down, and "red starlink" —
+   the **red uplink** mast (new `uplink` object east of the core, hammerable via
+   `player.hitUplink`, 90hp) gates the world-stir: on alarm with the uplink
+   intact, `worldStir.stir()` flares every overworld obelisk red (`obj.stirred`
+   forces the alert glow; HUD untouched) and the W-factory sends a W4 to the
+   doorway; cutting the uplink (or standing down) calls `worldStir.calm()`.
+   Guards are `hardened` — `player.read` refuses to reprogram them. Verified by
+   direct-call: alarm trips at ~3.5s, 12/12 obelisks stir, W4 dispatched, stand-
+   down + uplink-cut both calm the world, re-alarm works; uplink + core render
+   correctly (loop-timing tests unreliable under headless rAF throttling, so the
+   alarm timing was checked by stepping `fortress.update` directly).
+2b. **Roster revision — DONE (2026-07-09).** Reworked the guard classes to
+   David's spec: **M4** light report drone (unarmed — its `aggro` just drives the
+   alarm; hovers at keep-range, orbits to hold LOS), now the ONLY dormant-fortress
+   presence (1-2, replacing the 5-guard standing patrol); **M5** sniper (was
+   `m6r`) — camps at long range, low-power BRIGHT ORANGE `laser_m5`, never charges,
+   scurries back if crowded; **M6** pack — waves of 3-5 with a `M6_PACK_MIN` gate
+   (a lone one holds at `withdraw` range until the pack forms, then W1-style
+   attack/withdraw). Alarm now watches `m4/m5/m6`; on report it calls
+   `worldStir.spawnWave()` — the core pours out an M6 pack (3-5, deployed hunting)
+   + 1-2 M5 snipers. Orange `laser_m5` added to the projectile palette. Verified
+   on fresh modules (preview browser was holding a stale module cache): M4 deals 0
+   damage / fires nothing / keeps distance; M5 emits only `laser_m5`; M6 solo holds
+   `withdraw` while a pack of 3 reaches `attack`.
+
+2c. **Violation response — DONE (2026-07-09).** The breach is now a relentless,
+   escalating security response instead of a single wave:
+   - **Maze pathfinding.** New BFS pathfinder (`guardNextWaypoint` + cached
+     `pursueMaze` in robots.js): when an M5/M6 has no clear line to you it threads
+     the corridors toward you instead of bumping walls. It keeps the LOS-giveup
+     clock at zero while a route exists, so it won't quit mid-corridor; only a
+     genuinely unreachable player (you've left the fortress) lets the give-up run.
+   - **Relentless.** An aggro'd M5/M6 is exempt from the `ACTIVE_RANGE` CPU cull,
+     so the whole pack keeps closing from anywhere in the fortress (they spawn at
+     the core, ~45 tiles from a player mid-maze — otherwise they'd freeze).
+   - **Sustained manufacture.** While alarmed the core keeps producing: a big
+     first wave (`spawnWave(4,2)`), then reinforcements every `PRODUCE_INTERVAL`
+     (6s) up to `GUARD_CAP` (12 live M5/M6). Verified: pack 6 → 11 over 20s;
+     guards path 38.6 → 0.3 tiles and land melee (182 dmg/30s on a still target).
+   - *Open nits:* M5 snipers trail the M6 pack in the single-file maze funnel and
+     rarely get a sightline until the open quad (firing itself verified); the
+     pile-on damage is lethal and will want a balance pass.
+
+3. **3b-3 Core factories** — give the manufacture a physical, destructible source
+   (foundries in the sanctum) that shields the core until all are down, so there's
+   a way to stop the waves. (Production loop + waves already live, from the core.)
 4. **3b-4 Stealth pass** — Wi-Fi block jams M6 vision; electro-gun/bow one-shot
    confirmed; night vision falloff; balance. *Verify: a clean ghost run is
    possible, and a loud run is punishing but survivable.*
@@ -152,10 +195,17 @@ Then **Stage 4** — the core confrontation (Adamantine speaks; break it → "1 
    longer reaches the world (obelisks return to normal, no W4). The guards and
    core factories are the fortress's own and still respond locally.
 
-## 9. The maze way-out (done, 2026-07-08)
+## 9. The maze way-out + the fortress map (done; map-gated 2026-07-09)
 
-Solve the maze (break through into the quad) and the floor lights a green,
-textured, flowing trail along the solution path so you can retrace your way back
-out without re-solving it. Shortest-path BFS over the maze's open tiles computed
-at build time (`map.mazeGuide`), lit on first quad entry (`map.mazeGuideLit`),
-drawn as per-tile floor studs in `drawFloor`. Green so it never reads as danger.
+A green, textured, flowing trail of floor-studs along the maze's solution path
+(shortest-path BFS over the open tiles at build time → `map.mazeGuide`; drawn as
+per-tile studs in `drawFloor`; green so it never reads as danger).
+
+**Now gated on the fortress map (David, 2026-07-09).** The trail is no longer lit
+by solving the maze — it lights the moment you ENTER the maze *carrying the
+assembled fortress map* (`fortress.update`: `hasItem('fortress_map')` + inside
+the maze band → `map.mazeGuideLit`). No map = thread it blind. The map is a
+hard craft: **five `fortress_map_fragment`** scattered wide across the world
+(ruins/woods/meadows, seven placed) → press **C** to piece them into a
+`fortress_map` (`Player.canCraftFortressMap`/`craftFortressMap`, verified). So the
+guide is a reward for exploring the whole map, not for grinding the maze.

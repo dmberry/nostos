@@ -13,7 +13,7 @@ export const FLOORS = {
   stream: { color: '#4f83b5', solid: false }, // shallow water, wadeable
   bridge: { color: '#8a7048', solid: false },
   tallgrass: { color: '#6f8f3f', solid: false },
-  // Adamantine's fortress (the map's southern annex): a cold metal-panel deck
+  // ZEUS's fortress (the map's southern annex): a cold metal-panel deck
   // for the corridors and maze, a paved quadrangle for the open killing-ground,
   // and a dark charcoal deck for the inner sanctum. All walkable.
   panel:  { color: '#3c4045', solid: false },
@@ -56,7 +56,7 @@ export const OBJECTS = {
   furniture: { solid: true }, // stacked junk cluttering the underworld's rooms; solid, you weave around it
   exitdoor: { solid: true },  // a plain door in the underworld: walk up to it to leave. Solid; you exit on approach
   lamp: { solid: false },     // a standing underworld floor lamp; drawn scenery, walk past it
-  // --- Adamantine's fortress (southern annex) ---
+  // --- ZEUS's fortress (southern annex) ---
   // Deliberately NON-climbable, unlike a town wall: the fortress rampart and
   // its inner maze can't be double-jumped, so the hacked doorway is the only
   // way in. `material` ('metal' | 'darkstone') selects the wall texture.
@@ -70,6 +70,6 @@ export const OBJECTS = {
   // The console kiosk beside the doorway: walk up and click to open its RON-ML
   // hack. A low pillar you bump into, not climb.
   gateterm: { solid: true },
-  // Adamantine's mainframe core: the multi-tile structure at the far end.
+  // ZEUS's mainframe core: the multi-tile structure at the far end.
   mainframe: { solid: true },
 };

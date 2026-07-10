@@ -352,10 +352,26 @@ export const ITEMS = {
   },
   // Spat out by the fortress gate terminal once you hack it with RON-ML. Its
   // bolts throw the grand doorway in the southern rampart open — the only way
-  // into Adamantine's fortress. A one-way trophy; carried, not held.
+  // into ZEUS's fortress. A one-way trophy; carried, not held.
   fortress_key: {
     name: 'fortress key',
     kind: 'key',
+    stack: 1,
+    color: '#7fe0ff',
+  },
+  // Torn quarters of a fortress survey the resistance made before ZEUS sealed
+  // the maze. Scattered hard across the world; collect the set and press C to
+  // piece them into a fortress map. Carrying the map, the maze lights its own
+  // solution the moment you step in (see fortress.update).
+  fortress_map_fragment: {
+    name: 'fortress-map fragment',
+    kind: 'material',
+    stack: 8,
+    color: '#8fb7c9',
+  },
+  fortress_map: {
+    name: 'fortress map',
+    kind: 'key', // carried, inert — passively lights the maze on entry (fortress.update)
     stack: 1,
     color: '#7fe0ff',
   },

@@ -218,6 +218,7 @@ export class Renderer {
     this.obeliskHits = []; // clickable obelisk towers (world-screen rects), rebuilt each frame
     this.torHits = []; // clickable HERMES relays (world-screen rects, lift-adjusted), rebuilt each frame
     this.hudPlayer = player; // referenced by drawWfactory for the near-by damage bar
+    this._fortressAlarm = map.fortressAlarm; // maze sconces pulse red while the breach alarm holds
     this.hudMap = map; // referenced by drawPlayer for the Ubik-patch reality-hiccup check
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.fillStyle = '#0b0e0a';
@@ -1114,7 +1115,8 @@ export class Renderer {
       const head = worldToScreen(cx, cy);
       const tail = worldToScreen(bx, by);
       const col = p.kind === 'stun' ? '#5fe0ff' : p.kind === 'fuse' ? '#b78bff'
-        : p.kind === 'laser' ? '#ff3b2a' : p.kind === 'laser_t3' ? '#ff8a1e' : '#ffe27a';
+        : p.kind === 'laser' ? '#ff3b2a' : p.kind === 'laser_t3' ? '#ff8a1e'
+        : p.kind === 'laser_m5' ? '#ff9a2e' : '#ffe27a';
       ctx.strokeStyle = col;
       ctx.lineWidth = 2;
       ctx.lineCap = 'round';
@@ -2084,7 +2086,7 @@ export class Renderer {
     this.texturedGlow(s.x, s.y - H + 2, 4.5, 5.5, `rgba(255,42,32,${(0.5 + 0.45 * pulse).toFixed(3)})`, 12, 0.5, 'aigrate');
   }
 
-  // --- Adamantine's fortress (southern annex) ------------------------------
+  // --- ZEUS's fortress (southern annex) ------------------------------
   // A single fortress-rampart block: a tall, non-climbable extruded metal
   // prism. Pylons (flanking the doorway) stand taller and carry a red beacon.
   // CONVENTION: every glowing fixture in the game goes through here so it's
@@ -2152,8 +2154,15 @@ export class Renderer {
     // Sconce light on the wall's front (SE) face, glowing slowly on its own
     // phase (~5.6s cycle) so a run of maze walls shimmers gently out of sync.
     if (obj.light) {
-      const hue = obj.lightHue === 'amber' ? [255, 176, 64] : [95, 214, 255];
-      const pulse = 0.28 + 0.6 * (0.5 + 0.5 * Math.sin(performance.now() / 900 + (obj.lightPhase || 0)));
+      // On intruder alert the whole maze switches to a hard, fast RED pulse
+      // (mostly in sync — a klaxon strobe); otherwise each sconce glows slowly
+      // on its own cyan/amber phase.
+      const alarm = this._fortressAlarm;
+      const hue = alarm ? [255, 45, 35] : obj.lightHue === 'amber' ? [255, 176, 64] : [95, 214, 255];
+      const period = alarm ? 230 : 900;
+      const phase = alarm ? (obj.lightPhase || 0) * 0.25 : (obj.lightPhase || 0);
+      const swing = alarm ? 0.75 : 0.6;
+      const pulse = (alarm ? 0.2 : 0.28) + swing * (0.5 + 0.5 * Math.sin(performance.now() / period + phase));
       const fx = (g.bottom.x + g.right.x + r.right.x + r.bottom.x) / 4;
       const fy = (g.bottom.y + g.right.y + r.right.y + r.bottom.y) / 4 - 3;
       const col = `rgba(${hue[0]},${hue[1]},${hue[2]},${pulse.toFixed(3)})`;
@@ -2201,7 +2210,7 @@ export class Renderer {
     ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 1; ctx.strokeRect(s.x - 7, s.y - H, 14, H);
   }
 
-  // Adamantine's mainframe core: a tall, near-black metal monolith with a
+  // ZEUS's mainframe core: a tall, near-black metal monolith with a
   // vertical slit of magenta light burning up its front face. Goes cold and
   // grey once defeated. A damage bar floats over it when hurt and you're near.
   drawMainframe(obj) {
@@ -2229,7 +2238,7 @@ export class Renderer {
     const labelC = worldToScreen(cx, obj.y + fh);
     ctx.font = 'bold 14px system-ui, sans-serif'; ctx.textAlign = 'center';
     ctx.fillStyle = dead ? '#6a6a72' : '#e0a8e6';
-    ctx.fillText((obj.ai || 'ADAMANTINE').toUpperCase(), labelC.x, labelC.y - H * 0.62);
+    ctx.fillText((obj.ai || 'ZEUS').toUpperCase(), labelC.x, labelC.y - H * 0.62);
     ctx.textAlign = 'left';
     const p = this.hudPlayer;
     if (!dead && obj.hp != null && obj.maxHp && obj.hp < obj.maxHp && p && Math.hypot(p.x - cx, p.y - cy) < 16) {

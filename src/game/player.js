@@ -12,6 +12,7 @@ const WOUNDED_SPRINT_DRAIN = 2.5; // wounded sprinting burns stamina this much f
 const RADIUS = 0.28;      // collision radius in tiles
 const REACH = 0.9;        // how far ahead the player can use a tool
 const CHIP_FRAGMENTS_PER_CHIP = 8; // fragments shed by machines to craft one chip
+const FORTRESS_MAP_FRAGMENTS = 5; // scattered map quarters pieced into a fortress map
 const SCRAP_PER_SWORD = 10; // scrap beaten into a robot sword
 const KNOCKBACK_DIST = 0.5; // tiles a melee hit shoves an animal/robot back
 const KNOCKBACK_STUN = 0.4; // seconds it's frozen (no move, no attack) after
@@ -265,6 +266,28 @@ export class Player {
     }
     sfx.play('zap');
     this.say('Eight fragments lock together into a working access chip.');
+    return true;
+  }
+
+  // Piece the scattered fortress-map fragments into a whole fortress map.
+  canCraftFortressMap() {
+    return !this.hasItem('fortress_map') && this.countItem('fortress_map_fragment') >= FORTRESS_MAP_FRAGMENTS;
+  }
+
+  craftFortressMap() {
+    if (!this.canCraftFortressMap()) {
+      this.say(`You need ${FORTRESS_MAP_FRAGMENTS} fortress-map fragments; you have ${this.countItem('fortress_map_fragment')}.`);
+      return false;
+    }
+    for (let n = 0; n < FORTRESS_MAP_FRAGMENTS; n++) this.removeItem('fortress_map_fragment');
+    const stored = this.stow('fortress_map', 1);
+    if (stored <= 0) {
+      this.say('No room to piece the map together — free a slot first.');
+      for (let n = 0; n < FORTRESS_MAP_FRAGMENTS; n++) this.stow('fortress_map_fragment', 1);
+      return false;
+    }
+    sfx.play('zap');
+    this.say('The fragments align into a whole fortress map — the maze laid bare. Carry it in and the way will light.');
     return true;
   }
 
@@ -1098,7 +1121,7 @@ export class Player {
     // drops an AI key.
     if (obj && obj.type === 'wfactory') { this.hitFactory(obj, map, tool); return; }
 
-    // The fortress red uplink: hammer it down to cut Adamantine off from the
+    // The fortress red uplink: hammer it down to cut ZEUS off from the
     // overworld POSEIDON (the fortress controller watches obj.destroyed).
     if (obj && obj.type === 'uplink') { this.hitUplink(obj, map, tool); return; }
 

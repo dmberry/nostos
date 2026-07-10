@@ -8,7 +8,7 @@ import { makeRng } from './game/rng.js';
 import { DayNight } from './game/daynight.js';
 import { Minimap } from './game/minimap.js';
 import { spawnBirds, updateBirds } from './game/birds.js';
-import { spawnRobots, updateRobots, spawnW1s, spawnW3, spawnW4, spawnW5, spawnM6, spawnGuard, drawRobot } from './game/robots.js';
+import { spawnRobots, updateRobots, spawnW1s, spawnW3, spawnW4, spawnW5, spawnM4, spawnM5, spawnM6, spawnGuard, drawRobot } from './game/robots.js';
 import { resolveBodyOverlaps } from './game/collision.js';
 import { spawnWaterDroids, updateWaterDroids, drawWaterDroid } from './game/waterdroids.js';
 import { Lore, FRAGMENTS } from './game/lore.js';
@@ -115,6 +115,12 @@ const animals = spawnAnimals(map, WORLD_SEED, { x: spawn.x, y: spawn.y, r: 12 })
   // Torn pages of the RON-ML manual, scattered — mostly in the ruins, a couple
   // out in the woods — as loose scraps that echo the bound manual in the caches.
   for (let i = 0; i < 4; i++) drop(boards, 'ronml_page', 1);
+  // Fortress-map fragments: quarters of a ZEUS-era survey, scattered hard and
+  // WIDE (ruins, woods, meadows) so assembling the set (5, press C) means really
+  // exploring. Seven placed, a little slack against an unlucky drop.
+  for (let i = 0; i < 3; i++) drop(boards, 'fortress_map_fragment', 1);
+  for (let i = 0; i < 2; i++) drop(forestGrass, 'fortress_map_fragment', 1);
+  for (let i = 0; i < 2; i++) drop(tallgrass, 'fortress_map_fragment', 1);
   for (let i = 0; i < 2; i++) drop(forestGrass, 'ronml_page', 1);
   // Cassette tapes for the walkman. Every tape EXCEPT the WARD "bear stanhope"
   // one is scattered in the overworld ruins, two copies each (one in a building,
@@ -389,17 +395,13 @@ let fortressKeyFromCrash = false;
   obeliskObjs.forEach((ob, i) => { ob.circuitNum = nums[i]; });
 }
 
-// Adamantine's fortress — the first of the four AIs. Grown as a sealed annex
-// onto the south edge of the map (all overworld spawning above has already
-// happened on the 128x128 grid, so the annex stays clean). Reached only by
-// hacking the boundary gate terminal in RON-ML. `mainframe` points at the core
-// so the existing map overlay marks it; `fortress` owns the gate/door logic.
+// ZEUS's fortress — one of the four AI crowns. Grown as a sealed annex onto the
+// south edge of the map (all overworld spawning above has already happened on
+// the 128x128 grid, so the annex stays clean). Reached only by hacking the
+// boundary gate terminal in RON-ML. `mainframe` points at the core so the
+// existing map overlay marks it; `fortress` owns the gate/door logic. (fortress.js
+// now names the AI ZEUS at source, so no override is needed here.)
 const fortress = createFortress(map, WORLD_SEED, spawn);
-// The fortress AI is ZEUS (the old fortress.js name was "Adamantine"); override
-// the exposed name so every main.js-side display (gate terminal, unlock message)
-// reads ZEUS. NB: a couple of strings baked inside fortress.js still say the old
-// name until that file (Henrik's) is updated.
-fortress.AI_NAME = 'ZEUS';
 const mainframe = fortress.core; // { x, y } of the core, for the RON-ML map star
 // Ring the island in sea: stamp a dithered sand+water coast into the border
 // tiles now that the towers, relays and fortress are placed (so it leaves them
@@ -409,8 +411,10 @@ stampCoast(map, spawn);
 // Ruined marble columns: a few groves of fallen temple columns strewn across
 // the island, after the coast so none land in the sea.
 placeRuins(map, makeRng(WORLD_SEED ^ 0x2c01dd), { spawn, clusters: 4 });
-// The quad's standing patrol: five M6 guards (3 sentinels + 2 marksmen).
-robots.push(...fortress.spawnGuards(spawnM6));
+// The dormant fortress's only garrison: one or two light M4 report drones on
+// the quad. Sneak past them; if one holds you in sight the breach reports and
+// the core spits out its M6 pack + M5 snipers (worldStir.spawnWave below).
+robots.push(...fortress.spawnGuards(spawnM4));
 // "Red starlink": when the fortress breach reaches the world (alarm + uplink
 // intact), every overworld obelisk flares red (its `stirred` flag forces the
 // alert glow, HUD untouched) and the W-factory throws a W4 toward the doorway.
@@ -426,6 +430,28 @@ const worldStir = {
   },
   calm() {
     for (const o of obeliskObjs) o.stirred = false;
+  },
+  // The core manufactures and dispatches guards, seated on the sanctum by the
+  // core, deployed already hunting — they pathfind up through the maze to the
+  // intruder. Called with a big count on the first breach, then trickled as
+  // reinforcements while the alarm holds (a relentless violation response).
+  spawnWave(m6n = 4, m5n = 2) {
+    const cx = fortress.core.x, cy = fortress.core.y;
+    for (let i = 0; i < m6n; i++) {
+      const g = spawnM6(map, Math.floor(Math.random() * 0x7fffffff), cx, cy);
+      if (g) { g.aggro = true; robots.push(g); }
+    }
+    const posts = fortress.quad.muster;
+    for (let i = 0; i < m5n; i++) {
+      const s = spawnM5(map, Math.floor(Math.random() * 0x7fffffff), cx, cy);
+      if (s) {
+        s.aggro = true;
+        // Assign the sniper a post out on the quad to hold back at, so it snipes
+        // from the open killing-ground rather than chasing into the maze.
+        s.holdPos = posts.length ? posts[Math.floor(Math.random() * posts.length)] : { x: cx, y: fortress.quad.top + 2 };
+        robots.push(s);
+      }
+    }
   },
 };
 
@@ -1243,7 +1269,7 @@ function openRonMap() {
     g.fillStyle = '#e0b53a';
     g.beginPath(); g.moveTo(x, y - 6); g.lineTo(x + 6, y); g.lineTo(x, y + 6); g.lineTo(x - 6, y); g.closePath(); g.fill();
   }
-  // Adamantine's fortress: the grand doorway (cyan) you hack in through the
+  // ZEUS's fortress: the grand doorway (cyan) you hack in through the
   // boundary, and the mainframe core (magenta star) deep inside it.
   {
     const m = fortress.markers();
@@ -1911,6 +1937,7 @@ function update(dt) {
     else if (player.canCraftObGun()) player.craftObGun(map);
     else if (player.canCraftChip()) player.craftChip();
     else if (player.canCraftSword()) player.craftSword();
+    else if (player.canCraftFortressMap()) player.craftFortressMap();
   }
   if (input.zoomTogglePressed()) camera.toggleZoom();
   if (input.minimapTogglePressed()) { showMinimap = !showMinimap; player.say(showMinimap ? 'Minimap on.' : 'Minimap off.'); }
@@ -2543,7 +2570,7 @@ function frame(now) {
       deathCert: player.deathCert,
       showSkills,
       showWeapons,
-      craftPrompt: (player.canCraftObGun() && player.hands !== 'obgun') || (player.canCraftWaveGun() && player.hands !== 'wavegun') || player.canCraftChip() || player.canCraftSword(),
+      craftPrompt: (player.canCraftObGun() && player.hands !== 'obgun') || (player.canCraftWaveGun() && player.hands !== 'wavegun') || player.canCraftChip() || player.canCraftSword() || player.canCraftFortressMap(),
       craftWaveGun: player.canCraftWaveGun() && player.hands !== 'wavegun',
       craftChip: player.canCraftChip() && !player.canCraftWaveGun() && !(player.canCraftObGun() && player.hands !== 'obgun'),
       craftSword: player.canCraftSword() && !player.canCraftChip() && !player.canCraftWaveGun() && !(player.canCraftObGun() && player.hands !== 'obgun'),
