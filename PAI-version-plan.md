@@ -48,6 +48,17 @@ keeps only the latest status, plus the conventions, art notes, and forward plan
 above and below. (The old blow-by-blow "Where we are (v1.06 … v1.54)" log was
 pruned; the README table is the record now.)
 
+### v1.79 — clang, temple healing, spaced backpacks
+
+- **'clang' sfx** (two detuned triangle partials + a tick of highpass noise,
+  quiet): melee hits on machines play it instead of 'chop'; animals keep the
+  thud.
+- **Temple healing aura**: placeRuins' grove centres persist as `map.temples`;
+  within TEMPLE_HEAL_R (7 tiles) HEALTH_REGEN runs at TEMPLE_HEAL_MULT (3x),
+  one-time flavour line per visit. Verified headless: near-regen exactly 3x.
+- **Backpack spacing**: 4 forest backpacks by rejection sampling, min 18
+  tiles apart.
+
 ### v1.78 — touch drag-and-drop with slip guard
 
 - UI touches now behave exactly like the mouse: the press fires at touchstart
