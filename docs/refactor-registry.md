@@ -4,6 +4,22 @@ Branch: `refactor/systems-registry`. Status: **Stage 0 (vertical slice) — for 
 Nothing here is on `main`. This is an isolated worktree so the daily push can
 continue undisturbed; a bad pass is `git worktree remove`, not a revert.
 
+## Tests
+
+Committed, repeatable unit tests now back the extractable pieces (the live
+boot-checks were catching wiring but were one-shot and uncommitted):
+
+```
+node --test test/*.test.js
+```
+
+Zero dependencies — Node's built-in runner and `node:assert`, no package.json,
+no framework, in keeping with the repo's no-build setup. `test/systems.test.js`
+covers the registry (register / order / dispatch / replace / clear); the
+`combat.js` extraction is tested against a stub player + fake map, so firing is
+checked with no browser or canvas (`test/combat.test.js`). The UI overlays draw
+to a canvas and stay on boot-check. **Run this after each further refactor step.**
+
 ## Why
 
 `main.js update(dt)` and the renderer's `draw` are god-functions. Every feature
