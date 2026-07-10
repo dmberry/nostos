@@ -143,9 +143,21 @@ can't, we find out having touched ~5 lines, not the whole codebase.
   `stir`/`calm`), so it's not a system. The skylink web draw is renderer-coupled
   (a renderer method gated by `hud` state), not a self-contained module, so it
   stays in the renderer for now.
-- **Stage 2.** The ROADMAP file-size split, now expressed as systems: renderer
-  HUD/modals → `ui.js`; player weapon-fire (`fire`/`pierceShot`/`coneShot`/
-  `burnObelisk`) → `combat.js`.
+- **Stage 2 — the ROADMAP file-size split (in progress).** Note this is a plain
+  module extraction, not registry work: weapon-fire and HUD-draw are event- and
+  render-driven, not per-frame systems, so they move to their own files but do
+  not `register()`.
+  - **`combat.js` (done).** `fire`/`pierceShot`/`coneShot`/`burnObelisk` moved out
+    of `player.js` (2,422 → 2,128 lines). They take `player` as their first
+    argument instead of `this`; everything they call back into stays a Player
+    method, and `combat.js` imports nothing from `player.js`, so there is **no
+    import cycle**. The two combat primitives that were shared between melee and
+    ranged code, the `SCORE` table and `zombieImmune`, moved to `combat.js` too
+    (both `player.js` and `combat.js` import them from there), which is what
+    breaks the would-be cycle. Verified live: firing spends ammo, spawns the
+    tracer, lands damage, and prints the right line.
+  - **`ui.js` (pending).** Renderer HUD/modals. More coupled than weapon-fire (the
+    draw methods lean on `this.ctx` and call each other), so its own pass.
 - **Stage 3.** `robots.js`: update-functions become systems; draw stays in the
   depth-sort (per the boundary above).
 - **Stage 4.** Self-registration is the pattern from Stage 0 on, so each migrated
