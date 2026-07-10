@@ -48,6 +48,13 @@ keeps only the latest status, plus the conventions, art notes, and forward plan
 above and below. (The old blow-by-blow "Where we are (v1.06 … v1.54)" log was
 pruned; the README table is the record now.)
 
+### v1.81 — per-hull clangs
+
+- `sfx.play` accepts opts; the 'clang' recipe scales frequency by opts.pitch
+  and ring duration by 1/sqrt(pitch) (big low plates ring longer). CLANG_PITCH
+  table in player.js: t1 1.5 / m4,w2 1.3 / w3,w5 1.15 / t2,m5 1 / t3,w1,m6
+  0.85 / w4 0.65. Verified headless across the pitch range.
+
 ### v1.80 — smaller terminal type, dry snakes
 
 - Terminal font 15px → 13px across all four synced faces (screen, ghost,

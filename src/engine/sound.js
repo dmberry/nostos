@@ -139,10 +139,13 @@ class Sound {
 
   // ---- one-shot effects ------------------------------------------------
 
-  play(name) {
+  play(name, opts = {}) {
     try {
       if (!this.ctx) return;
       if (this._debounced('fx:' + name, PLAY_DEBOUNCE_MS)) return;
+      // Optional per-call shaping (currently used by 'clang': different hulls
+      // ring at different pitches). Recipes that don't read it are unchanged.
+      const pf = opts.pitch || 1;
       // Small random pitch and timing jitter keeps repeats from grating.
       const t = this.ctx.currentTime + Math.random() * 0.01;
       const v = 1 + (Math.random() * 2 - 1) * VARIATION;
@@ -209,10 +212,12 @@ class Sound {
           this._tone({ when: t, dur: 0.25, type: 'square', freq: 1600 * v, end: 180, gain: 0.2, attack: 0.002, filter: 'bandpass', filterFreq: 1500 });
           this._noiseBurst({ when: t, dur: 0.18, gain: 0.2, attack: 0.002, filter: 'highpass', freq: 3000 });
           break;
-        case 'clang': // blade on machine hull: a quiet metal ring, two detuned partials
-          this._tone({ when: t, dur: 0.16, type: 'triangle', freq: 1180 * v, end: 1120 * v, gain: 0.1, attack: 0.001 });
-          this._tone({ when: t, dur: 0.22, type: 'triangle', freq: 1780 * v, end: 1690 * v, gain: 0.06, attack: 0.001 });
-          this._noiseBurst({ when: t, dur: 0.03, gain: 0.1, attack: 0.001, filter: 'highpass', freq: 2500 });
+        case 'clang': // blade on machine hull: a quiet metal ring, two detuned partials.
+          // pitch (opts.pitch) sizes the hull: a T1 rings tinny, a W4 deep —
+          // and big low plates ring a touch longer, little ones shorter.
+          this._tone({ when: t, dur: 0.16 / Math.sqrt(pf), type: 'triangle', freq: 1180 * v * pf, end: 1120 * v * pf, gain: 0.1, attack: 0.001 });
+          this._tone({ when: t, dur: 0.22 / Math.sqrt(pf), type: 'triangle', freq: 1780 * v * pf, end: 1690 * v * pf, gain: 0.06, attack: 0.001 });
+          this._noiseBurst({ when: t, dur: 0.03, gain: 0.1, attack: 0.001, filter: 'highpass', freq: 2500 * pf });
           break;
         case 'laser': // a robot bolt: quick descending pew — quiet, but you learn it fast
           this._tone({ when: t, dur: 0.12, type: 'square', freq: 1900 * v, end: 650, gain: 0.09, attack: 0.002, filter: 'bandpass', filterFreq: 1600 });

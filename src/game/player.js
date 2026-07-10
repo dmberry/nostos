@@ -15,6 +15,15 @@ const REACH = 0.9;        // how far ahead the player can use a tool
 const CHIP_FRAGMENTS_PER_CHIP = 8; // fragments shed by machines to craft one chip
 const FORTRESS_MAP_FRAGMENTS = 5; // scattered map quarters pieced into a fortress map
 const SCRAP_PER_SWORD = 10; // scrap beaten into a robot sword
+// How each machine's hull rings under a blade (sfx 'clang' pitch factor):
+// small and thin rings high and short, heavy plate rings low and long.
+const CLANG_PITCH = {
+  t1: 1.5, m4: 1.3, w2: 1.3,          // small, tinny
+  w3: 1.15, w5: 1.15,                  // light drones
+  t2: 1, m5: 1,                        // the standard biped ring
+  t3: 0.85, w1: 0.85, m6: 0.85,        // heavier chassis
+  w4: 0.65,                            // the furnace plate
+};
 const TEMPLE_HEAL_R = 7;      // tiles from a temple-grove centre that count as inside it
 const TEMPLE_HEAL_MULT = 3;   // health regen multiplier among the old stones
 const KNOCKBACK_DIST = 0.5; // tiles a melee hit shoves an animal/robot back
@@ -1176,7 +1185,10 @@ export class Player {
     if (target) {
       this.swingTimer = tool.swingCooldown;
       this.stamina -= tool.staminaCost;
-      sfx.play(isRobot ? 'clang' : 'chop'); // metal answers in metal
+      // Metal answers in metal — and different hulls ring differently: the
+      // T1's thin wedge is tinny, the W4's furnace plate is deep and long.
+      if (isRobot) sfx.play('clang', { pitch: CLANG_PITCH[target.type] || 1 });
+      else sfx.play('chop');
       // A practised swordarm hits harder.
       const bonus = this.xpLevel('melee');
       target.hp -= (isRobot ? (tool.robotDamage ?? 1) : (tool.animalDamage ?? 3)) + bonus;
