@@ -48,6 +48,20 @@ keeps only the latest status, plus the conventions, art notes, and forward plan
 above and below. (The old blow-by-blow "Where we are (v1.06 … v1.54)" log was
 pruned; the README table is the record now.)
 
+### v1.82 — detour commitment (the column jitter)
+
+- moveToward's wall-follow used to take one perpendicular sidestep per
+  blocked frame while STILL applying the direct pull every frame — around a
+  1-tile obstacle (column) the two fought, oscillating the machine in place
+  (David's screenshot: T1 vibrating behind a marble column).
+- Fix: on block, commit to the chosen side for 0.45s (`r._detourT`); while
+  committed, the direct pull is suppressed entirely and only the slide runs;
+  a 1.2-tile look-ahead probe ends the commitment the instant the line to
+  the target opens; a jammed committed side flips ONCE and recommits.
+- Verified headless on a reconstruction of the screenshot: direction flips
+  in 5s dropped to 1 (the genuine turn), and the T1 rounds the column to
+  within 0.58 tiles of the player.
+
 ### v1.81 — per-hull clangs
 
 - `sfx.play` accepts opts; the 'clang' recipe scales frequency by opts.pitch

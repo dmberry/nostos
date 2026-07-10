@@ -601,6 +601,28 @@ function moveToward(r, tx, ty, speed, dt, map) {
   }
   const step = Math.min(speed * dt, len);
   const ox = r.x, oy = r.y;
+  // Committed detour: while rounding an obstacle, keep sliding the chosen way
+  // and DON'T also pull toward the blocked line — that pull/slide tug-of-war
+  // is what made a blocked machine jitter in place (worst pinned behind a
+  // single marble column). The commitment ends the moment the line opens.
+  if ((r._detourT || 0) > 0) {
+    r._detourT -= dt;
+    const clearAhead = !map.isSolid(Math.floor(r.x + dirX * 1.2), Math.floor(r.y + dirY * 1.2));
+    if (clearAhead) {
+      r._detourT = 0; // path open again: fall through to the direct move below
+    } else {
+      const sSign = r._slide || 1;
+      moveAxis(r, -dirY * sSign * step, 0, map);
+      moveAxis(r, 0, dirX * sSign * step, map);
+      const movedD = Math.hypot(r.x - ox, r.y - oy);
+      if (movedD < step * 0.35) { r._slide = -sSign; r._detourT = 0.45; } // this side jammed too: flip ONCE and recommit
+      if (movedD > 1e-6) {
+        r.facing = { x: (r.x - ox) / movedD, y: (r.y - oy) / movedD };
+        r.walkPhase += dt * 10;
+      }
+      return movedD;
+    }
+  }
   moveAxis(r, (dx / len) * step, 0, map);
   moveAxis(r, 0, (dy / len) * step, map);
   let moved = Math.hypot(r.x - ox, r.y - oy);
@@ -623,7 +645,7 @@ function moveToward(r, tx, ty, speed, dt, map) {
       moveAxis(r, px * s * step, 0, map);
       moveAxis(r, 0, py * s * step, map);
       const m2 = Math.hypot(r.x - bx, r.y - by);
-      if (m2 > 1e-6) { r._slide = s; moved += m2; break; }
+      if (m2 > 1e-6) { r._slide = s; r._detourT = 0.45; moved += m2; break; } // commit: no direct pull until the line opens
     }
   }
   if (moved > 1e-6) {
