@@ -755,6 +755,14 @@ function revealAround(px, py) {
 }
 
 // Debug handle for inspecting live state from the console.
+// The walkman announces what it's playing as a quiet toast — artist, album,
+// side — since the compact HUD has no room for the desktop deck's marquee.
+player.onTapeToast = (def, side) => {
+  if (!side) { toast = { text: `${def.short} — stopped`, ttl: 2.5 }; return; }
+  const sideDef = side === 'A' ? def.sideA : def.sideB;
+  toast = { text: `\u25b6 ${def.short} \u00b7 side ${side}: ${sideDef.label}`, ttl: 4 };
+};
+
 // Touches that land on the HUD are UI, never movement (input.js touch path).
 input.uiHitTest = (x, y) => {
   if (renderer.slotAt && renderer.slotAt(x, y)) return true;
@@ -1855,6 +1863,7 @@ function groundLifetime(item) {
   return GROUND_LIFETIME_DEFAULT;
 }
 
+let toast = null;    // now-playing liner notes {text, ttl}, above the dashboard
 let detail = null;   // right-click inspection tooltip {text, x, y, ttl}
 // Hovering a HUD slot (pockets, hands, backpack panel, walkman) names what's
 // in it, reusing the right-click tooltip's renderer. Right-click detail and
@@ -2146,6 +2155,7 @@ function update(dt) {
     detail = { text: describeAt(Math.floor(w.x), Math.floor(w.y)), x: right.x, y: right.y, ttl: 6 };
   }
   if (detail) { detail.ttl -= dt; if (detail.ttl <= 0) detail = null; }
+  if (toast) { toast.ttl -= dt; if (toast.ttl <= 0) toast = null; }
 
   // Click away from an open canvas panel (backpack/skills/armoury) closes
   // it, same as the help modal's backdrop-click dismissal — these are drawn
@@ -2701,6 +2711,7 @@ function frame(now) {
       torch: player.pockets.some((s) => s && s.item === 'torch'),
       showBackpack,
       detail: detail || hoverSlotTip(),
+      toast,
       drag: drag ? { ...drag, mx: input.mouseX, my: input.mouseY } : null,
       deathCert: player.deathCert,
       aiVictory: player.aiVictory,

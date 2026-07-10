@@ -590,6 +590,7 @@ export class Renderer {
     }
     if (hud.showSkills) this.drawSkillModal(player);
     if (hud.showWeapons) this.drawWeaponChart(player);
+    if (hud.toast) this.drawToast(hud.toast);
     if (hud.detail) this.drawDetail(hud.detail);
     if (hud.drag) this.drawDragGhost(hud.drag, player);
     if (player.torpor > 0) this.drawTorporHaze(player.torpor);
@@ -831,6 +832,23 @@ export class Renderer {
         ctx.fillText(line, px + 30, y); y += 16;
       }
     }
+  }
+
+  // A quiet now-playing toast, centred just above the dashboard: artist,
+  // album, side label. Fades out over its last second. Subtle by design —
+  // it's liner notes, not an announcement.
+  drawToast(t) {
+    const ctx = this.ctx;
+    const alpha = Math.min(1, t.ttl) * 0.85;
+    ctx.font = '11px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    const y = (this.hudTop != null ? this.hudTop : this.h - 100) - 10;
+    ctx.fillStyle = `rgba(10,12,9,${(alpha * 0.6).toFixed(3)})`;
+    const w = ctx.measureText(t.text).width + 16;
+    ctx.fillRect(this.w / 2 - w / 2, y - 13, w, 18);
+    ctx.fillStyle = `rgba(222,214,192,${alpha.toFixed(3)})`;
+    ctx.fillText(t.text, this.w / 2, y);
+    ctx.textAlign = 'left';
   }
 
   // Right-click inspection tooltip, near the cursor.
@@ -4626,8 +4644,25 @@ export class Renderer {
       this.uiSlots.push({ x: sx, y: sy, w: P, h: P, kind: 'packbadge' });
       sx += P + gap;
     }
+    // The walkman is a deck, not another pocket — give it breathing room from
+    // the pack badge, and draw the REAL cassette (reels turning during play)
+    // rather than a frozen item icon.
+    sx += 12;
     this.drawLabel('WALK', sx, sy - 5);
-    this.drawSlot(sx, sy, P, player.walkman ? ITEMS[player.walkman.item] : null, 0, player.walkmanSide != null);
+    this.drawSlot(sx, sy, P, null, 0, player.walkmanSide != null);
+    if (player.walkman) {
+      const def = ITEMS[player.walkman.item];
+      const playing = player.walkmanSide != null;
+      const spin = playing ? (performance.now() / 1000) * 5 : 0;
+      const ctx2 = this.ctx;
+      ctx2.save();
+      ctx2.translate(sx + P / 2, sy + P / 2);
+      const sc = P / 30;
+      ctx2.scale(sc, sc);
+      // right (take-up) reel leads the supply reel, as on the title deck
+      this.drawCassette(def, spin, playing ? spin - 0.5 : 0);
+      ctx2.restore();
+    }
     this.uiSlots.push({ x: sx, y: sy, w: P, h: P, kind: 'walkman' });
   }
 

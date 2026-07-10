@@ -48,6 +48,19 @@ keeps only the latest status, plus the conventions, art notes, and forward plan
 above and below. (The old blow-by-blow "Where we are (v1.06 … v1.54)" log was
 pruned; the README table is the record now.)
 
+### v1.73 — mobile walkman: live reels, spacing, now-playing toast
+
+- **Compact HUD cassette animates**: the walkman slot drew a frozen item icon;
+  it now calls `drawCassette(def, spin, spinLeft)` (the deck's own painter)
+  with a clock-driven spin while `walkmanSide` is set — take-up reel leads,
+  as on the title deck.
+- **+12px gap** between the pack badge and the deck.
+- **Now-playing toast**: `player.onTapeToast(def, side)` fires from the
+  walkman branch of equipSlot; main.js builds `▶ artist — album · side X: label`
+  (def.short; "stopped" variant on stop), 4s ttl; renderer.drawToast draws it
+  centred just above the dashboard, dim, fading over its last second — liner
+  notes, not an announcement. Drawn on desktop too (harmless there).
+
 ### v1.72 — Kittler & McLuhan, the large stone, two anvils
 
 - **Lore: `med-01` (Kittler)** — lecture notes: MEDIA DETERMINE OUR SITUATION

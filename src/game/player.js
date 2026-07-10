@@ -493,6 +493,8 @@ export class Player {
         sfx.playTape(def.sideA.tracks);
         this.say(`The spools catch and turn. Side A — "${def.sideA.label}".`);
       }
+      // Liner notes for the HUD toast (main.js): artist, album, side label.
+      if (this.onTapeToast) this.onTapeToast(def, this.walkmanSide);
       return;
     }
     const held = this.getSlot(slot);
