@@ -48,6 +48,21 @@ keeps only the latest status, plus the conventions, art notes, and forward plan
 above and below. (The old blow-by-blow "Where we are (v1.06 … v1.54)" log was
 pruned; the README table is the record now.)
 
+### v1.78 — touch drag-and-drop with slip guard
+
+- UI touches now behave exactly like the mouse: the press fires at touchstart
+  (main.js starts the drag from the slot immediately), touchmove feeds the
+  drag ghost via mouseX/Y, and the release lands as upAt — so slot-to-slot
+  moveItem, tape-onto-walkman swaps, and drag-off-to-ground dropSlot all run
+  through the one existing code path. `input.uiDragActive()` keeps main.js
+  from cancelling a live touch drag (mouseHeld is false on touch).
+- **Slip guard** (mouse AND touch): drag origin stored on the drag; a release
+  off-slot within 22px of the origin resolves as the intended click
+  (equip / manage-mode move), never a ground drop.
+- Taps unchanged: same-slot release still equips (panel closed) or moves
+  (manage mode). Verified on the emulated phone with synthetic multitouch:
+  pocket→world ground drop, pocket→walkman tape insert, 17px slip = no drop.
+
 ### v1.77 — mobile RUN + JUMP buttons, real multitouch
 
 - **input.js rewritten for multitouch**: touches tracked by identifier and

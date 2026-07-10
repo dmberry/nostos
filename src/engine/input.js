@@ -111,11 +111,17 @@ export class Input {
         if (btn === 'run') { this._runTouchId = t.identifier; this._touchRun = true; continue; }
         if (btn === 'jump') { this._touchJump = true; continue; } // one-shot
         if (this.uiHitTest && this.uiHitTest(p.x, p.y)) {
-          // HUD touch: selects, never walks. Tap resolves on touchend.
+          // HUD touch: selects or DRAGS, never walks. The press fires now
+          // (main.js starts the drag from the slot immediately, exactly like
+          // a mousedown), the finger position feeds the drag ghost through
+          // touchmove, and the release lands as upAt — so slot-to-slot moves,
+          // tape swaps into the walkman, and drag-off-to-drop all work by
+          // the same code path the mouse uses.
           this._uiTouchId = t.identifier;
           this._touchStart = { x: p.x, y: p.y };
           this._touchUI = true;
           this.mouseX = p.x; this.mouseY = p.y;
+          this.mousePressed = true;
           continue;
         }
         if (this._moveTouchId == null) { // first free world finger drives movement
@@ -131,6 +137,7 @@ export class Input {
     mouseTarget.addEventListener('touchmove', (e) => {
       for (const t of e.changedTouches) {
         if (t.identifier === this._moveTouchId) setFromTouch({ x: t.clientX, y: t.clientY });
+        else if (t.identifier === this._uiTouchId) { this.mouseX = t.clientX; this.mouseY = t.clientY; } // drag ghost follows
       }
       e.preventDefault();
     }, { passive: false });
@@ -139,12 +146,12 @@ export class Input {
         const p = { x: t.clientX, y: t.clientY };
         if (t.identifier === this._runTouchId) { this._runTouchId = null; this._touchRun = false; continue; }
         if (t.identifier === this._uiTouchId) {
-          // A HUD tap always lands, so slot press + release resolves to the
-          // one-click equip/swap (or manage-mode move) in main.js.
+          // The press already fired at touchstart; the release is just upAt,
+          // which main.js resolves as click (same slot), move (other slot),
+          // or drop-to-ground (off-slot, beyond the slip guard).
           this._uiTouchId = null;
           this._touchUI = false;
           this.mouseX = p.x; this.mouseY = p.y;
-          this.mousePressed = true;
           this.upAt = { x: p.x, y: p.y };
           continue;
         }
@@ -188,6 +195,12 @@ export class Input {
     if (this.isDown('KeyW') || this.isDown('ArrowUp')) dy -= 1;
     if (this.isDown('KeyS') || this.isDown('ArrowDown')) dy += 1;
     return { dx, dy };
+  }
+
+  // True while a finger that started on a HUD slot is still down — main.js
+  // must not cancel an in-progress drag just because the mouse isn't held.
+  uiDragActive() {
+    return this._uiTouchId != null;
   }
 
   sprinting() {

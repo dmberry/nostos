@@ -2228,7 +2228,7 @@ function update(dt) {
     if (slot) {
       input.consumeClick();
       if (slot.kind === 'packbadge') showBackpack = !showBackpack; // tap the badge to open — and again to close (mobile has no I key)
-      else if (player.getSlot(slot)) drag = { from: slot };
+      else if (player.getSlot(slot)) drag = { from: slot, sx: press.x, sy: press.y }; // origin kept for the slip guard on release
       else player.equipSlot(slot); // empty hands slot: stow whatever's held
     }
   }
@@ -2281,6 +2281,12 @@ function update(dt) {
       else player.equipSlot(drag.from); // released on the source: treat as a click
     } else if (target) {
       player.moveItem(drag.from, target);
+    } else if (Math.hypot(up.x - (drag.sx ?? up.x), up.y - (drag.sy ?? up.y)) < 22) {
+      // Slipped just off the slot's edge without really dragging (easy to do
+      // with a thumb): treat it as the click it was meant to be, never as a
+      // throw-it-on-the-ground.
+      if (showBackpack) smartMoveSlot(drag.from);
+      else player.equipSlot(drag.from);
     } else {
       // Released away from any slot — pocket, hands, or (with the backpack
       // panel open) backpack storage — drag it off to drop it on the ground.
@@ -2290,8 +2296,8 @@ function update(dt) {
       player.dropSlot(drag.from, map);
     }
     drag = null;
-  } else if (!input.mouseHeld) {
-    drag = null; // released outside any slot: cancel the drag
+  } else if (!input.mouseHeld && !(input.uiDragActive && input.uiDragActive())) {
+    drag = null; // released outside any slot: cancel the drag (but never while a touch drag is live)
   }
 
   // The underworld runs its own much smaller update: the player, the one
