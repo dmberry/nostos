@@ -74,7 +74,7 @@ What we already have going for us:
   sets the fortress inert — written deliberately so APOLLO/ATHENA/HADES reuse
   the hook unchanged on their own robots arrays. A tally counts felled
   daemons and the victory modal already speaks the campaign's language
-  ("<AI> SILENCED — Daemon N of 4 terminated"). Stage 3 islands get their
+  ("<AI> SILENCED — Daemon N of 4 felled"). Stage 3 islands get their
   endgame loop for free; the campaign tracker (§7) just persists the tally.
   *(Terminology decided 2026-07-10: the four AIs are **Daemons**, not
   "Crowns" — Homer's `daimōn` (divine power at work) braided with the Unix
@@ -315,7 +315,7 @@ fortress-map work, landed as v1.58; the core-kill endgame landed as v1.59.)
    thrones; the stephanos is later); *daimōn* is — divine power at work,
    shading between "a god" and the force a god exerts — and it braids with
    the Unix daemon, whose killing is literal systems parlance. Use "Daemon"
-   in UI ("<AI> SILENCED — Daemon N of 4 terminated"), code (`daemonsDown`),
+   in UI ("<AI> SILENCED — Daemon N of 4 felled"), code (`daemonsDown`),
    and lore; a HERMES archive entry (`read daemons`) on the double etymology
    is a natural lore addition. Flavour line available whichever surface
    wants it: Homer's epithet for the gods is *athanatoi*, the Deathless —
