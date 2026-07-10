@@ -107,7 +107,7 @@ export function initMobileGate(mode = 'gate') {
         <div class="mg-about-h">Soundtrack — cassettes you find and play</div>
         <ul class="mg-about-tapes">${songsHtml}</ul>
         <p class="mg-about-tiny">Music: ${artists}. Character &amp; animal art: Kenney (kenney.nl), CC0.</p>
-        <p class="mg-about-tiny">Game designed in the UK · github.com/dmberry/postAI</p>
+        <p class="mg-about-tiny">Game designed in the UK · github.com/dmberry/nostos</p>
       </div>
     </div>`;
   const footerHtml = `<div class="mg-madein">alpha · Game designed in the UK · <button class="mg-about-open" id="mg-about-open">About</button> <span class="mg-ver">v${VERSION}</span></div>`;
