@@ -1882,8 +1882,10 @@ export class Renderer {
     const ctx = this.ctx;
     const map = this.hudMap;
     const s = worldToScreen(obj.x + 0.5, obj.y + 0.5);
-    const h = (map && map.heightAt) ? map.heightAt(obj.x, obj.y) : 0;
-    const by = s.y - h * ELEV;            // ground-contact point, lifted for terrain
+    // Ground-contact at the tile surface: terrain lift is applied ONCE by the
+    // drawables dispatch (ctx.translate of heightAt*ELEV) — lifting again here
+    // floated columns/blocks clean off hillside tiles.
+    const by = s.y;
     const hh = tileHash(obj.x * 3 + 1, obj.y * 3 + 7);
     const LIGHT = '#efece4', MID = '#d8d3c8', DARK = '#b3ad9f', EDGE = '#8f897b';
     const tex = MARBLE_TEXTURE;
@@ -1985,8 +1987,6 @@ export class Renderer {
   // light/mid/dark faces the same way the columns and walls are textured.
   drawMarbleBlock(obj) {
     const ctx = this.ctx;
-    const map = this.hudMap;
-    const h = (map && map.heightAt) ? map.heightAt(obj.x, obj.y) : 0;
     const hh = tileHash(obj.x * 3 + 2, obj.y * 3 + 5);
     const BH = 20 + hh * 12; // block height, px
     const LIGHT = '#efece4', MID = '#d8d3c8', DARK = '#b3ad9f', EDGE = '#8f897b';
@@ -1995,7 +1995,9 @@ export class Renderer {
     // Inset footprint: lerp each tile corner toward the tile centre so the block
     // reads as an object standing on the tile, not a floor-filling wall.
     const k = 0.8;
-    const base = this.tileCorners(obj.x, obj.y, h * ELEV)
+    // No lift here: the drawables dispatch already translates by the tile's
+    // heightAt*ELEV — passing it again floated the block a full step per level.
+    const base = this.tileCorners(obj.x, obj.y)
       .map((p) => ({ x: c.x + (p.x - c.x) * k, y: c.y + (p.y - c.y) * k }));
     const topq = base.map((p) => ({ x: p.x, y: p.y - BH }));
     const [b0, b1, b2, b3] = base;

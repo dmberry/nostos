@@ -48,6 +48,16 @@ keeps only the latest status, plus the conventions, art notes, and forward plan
 above and below. (The old blow-by-blow "Where we are (v1.06 … v1.54)" log was
 pruned; the README table is the record now.)
 
+### v1.68 — floating marble fix (double elevation lift)
+
+- `drawColumn` and `drawMarbleBlock` both applied their own `heightAt * ELEV`
+  lift, but the drawables dispatch (renderer ~line 340) already
+  `ctx.translate`s every object by exactly that — so marble on elevated tiles
+  was lifted twice and floated h·16px off the ground (David's screenshot:
+  an 80px hover on an h=5 knoll). Internal lifts removed; the dispatch
+  translate is the single source of terrain lift for objects. Verified by
+  planting a block + column on an h=5 tile live: both grounded.
+
 ### v1.67 — tiny flowers, lotus-fruit icon, gardener gardens visibly
 
 - `drawFlower` shrunk ~40%: stems 3px (daffodil 5), petals 1.25×0.75 —
