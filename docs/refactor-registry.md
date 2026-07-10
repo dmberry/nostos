@@ -156,8 +156,22 @@ can't, we find out having touched ~5 lines, not the whole codebase.
     (both `player.js` and `combat.js` import them from there), which is what
     breaks the would-be cycle. Verified live: firing spends ammo, spawns the
     tracer, lands damage, and prints the right line.
-  - **`ui.js` (pending).** Renderer HUD/modals. More coupled than weapon-fire (the
-    draw methods lean on `this.ctx` and call each other), so its own pass.
+  - **`ui.js` (foundation done, mixin pattern).** Renderer HUD/modals are far more
+    entangled than weapon-fire: ~20 methods scattered across the 4,984-line file,
+    calling each other and a shared `drawItemIcon` (~600 lines) that world/actor
+    draws also use, so a `this`→`renderer` rewrite would be large and risky.
+    Instead the methods move **verbatim** to `ui.js` and are mixed onto the
+    prototype: `Object.assign(Renderer.prototype, uiMethods)`. `this` stays the
+    renderer, so every call site and every `this.drawItemIcon` reach-back is
+    unchanged, and the split is physical (readability), not a decoupling. First
+    slice landed: the four self-contained screen overlays (`drawRestOverlay`,
+    `drawTorporHaze`, `drawUnderworldVeil`, `drawPausedOverlay`) plus `DASH_H`
+    (the dashboard height, relocated to `ui.js`; renderer imports it back, no
+    cycle). Verified live: the methods are functions on `Renderer.prototype` and
+    draw without error. Remaining (same pattern, now low-risk): the modals
+    (`drawSkillModal`, `drawWeaponChart`, `drawDeathCert`, `drawDaemonVoice`,
+    `drawAiVictory`, `drawDetail`, `drawToast`) and the dashboard/inventory
+    cluster; `drawItemIcon` stays in the renderer (shared with world draws).
 - **Stage 3.** `robots.js`: update-functions become systems; draw stays in the
   depth-sort (per the boundary above).
 - **Stage 4.** Self-registration is the pattern from Stage 0 on, so each migrated
