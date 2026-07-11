@@ -156,6 +156,7 @@ const M4_CONE_DOT = -0.25;      // a wide ~105°-either-side scout cone
 const M4_PATROL_SPEED = 1.5;
 const M4_KEEP_RANGE = 7;        // once it has you, it hovers about here, keeping sight while it reports
 const M4_FLEE_SPEED = 3.4;
+const M4_SEARCH_TIME = 9;       // loses sight -> investigates your last-seen tile this long before giving up
 const FORTRESS_FORGET = 20;    // seconds since an M5/M6 last GLIMPSED you before it gives up the hunt
 const M6_BODY = '#232833';      // gunmetal blue-black armour
 const M6_HEAD = '#141821';
@@ -862,7 +863,7 @@ export function updateRobots(dt, robots, player, map) {
     // An aggro'd fortress guard (M5/M6) keeps thinking however far off it is, so
     // a violation response relentlessly threads the whole maze to reach you
     // rather than freezing beyond the CPU cull range like ordinary machines.
-    const relentless = (r.type === 'm5' || r.type === 'm6') && r.aggro;
+    const relentless = (r.type === 'm5' || r.type === 'm6' || r.type === 'm4') && r.aggro;
     if (!r.friendly && r.type !== 'w3' && !relentless && !nearPlayer(r, player)) continue;
 
     // Stunned: frozen in place, battery preserved. Only the timer and the
@@ -951,9 +952,10 @@ export function updateRobots(dt, robots, player, map) {
     }
 
     // Losing line of sight for long enough breaks off the hunt regardless
-    // of type or distance; see LOS_GIVEUP_AFTER above. Fortress M5/M6 are exempt
-    // — they hunt relentlessly on the longer FORTRESS_FORGET timer (updateGuard).
-    if (r.aggro && r.type !== 'w3' && r.type !== 'm5' && r.type !== 'm6') {
+    // of type or distance; see LOS_GIVEUP_AFTER above. Fortress M4/M5/M6 are
+    // exempt — they keep looking on their own longer timers (updateGuard): M5/M6
+    // on FORTRESS_FORGET, M4 by investigating your last-seen tile (M4_SEARCH_TIME).
+    if (r.aggro && r.type !== 'w3' && r.type !== 'm5' && r.type !== 'm6' && r.type !== 'm4') {
       const canSee = map.hasLineOfSight(r.x, r.y, player.x, player.y);
       r.losLostT = canSee ? 0 : (r.losLostT || 0) + dt;
       if (r.losLostT > LOS_GIVEUP_AFTER) {
@@ -1538,6 +1540,20 @@ function updateGuard(r, dt, player, map, robots) {
     if (r.seenT > FORTRESS_FORGET) { r.aggro = false; r.returning = true; r.seenT = 0; return; }
   }
 
+  // M4 keeps looking: while it can see you it stamps the last-seen tile; when it
+  // loses you it heads there and sweeps, giving up only after M4_SEARCH_TIME
+  // seconds of finding nothing. Its aggro (and so the fortress report clock)
+  // stays live through the search, so ducking behind cover no longer switches
+  // the hunt off — you have to actually relocate.
+  if (r.type === 'm4') {
+    const saw = !player.invisibleToRobots && map.hasLineOfSight(r.x, r.y, player.x, player.y);
+    if (saw) { r.seenX = player.x; r.seenY = player.y; r.m4SearchT = 0; }
+    else {
+      r.m4SearchT = (r.m4SearchT || 0) + dt;
+      if (r.m4SearchT > M4_SEARCH_TIME) { r.aggro = false; r.returning = true; r.m4SearchT = 0; return; }
+    }
+  }
+
   const d = distTo(r, player);
   if (d > 1e-4) r.facing = { x: (player.x - r.x) / d, y: (player.y - r.y) / d }; // face you while engaged
   if (r.type === 'm4') updateM4(r, dt, player, map, d);
@@ -1549,6 +1565,17 @@ function updateGuard(r, dt, player, map, robots) {
 // reports (its `aggro` is what the fortress's report clock reads); it never
 // strikes. Orbits to keep line of sight, backs off if you rush it.
 function updateM4(r, dt, player, map, d) {
+  // Blind (no line of sight): it doesn't magically know where you are — it makes
+  // for the tile it last saw you on and sweeps there. The give-up timer lives in
+  // updateGuard; here it just walks the search.
+  const canSee = !player.invisibleToRobots && map.hasLineOfSight(r.x, r.y, player.x, player.y);
+  if (!canSee) {
+    if (r.seenX != null && Math.hypot(r.seenX - r.x, r.seenY - r.y) > 1) {
+      moveToward(r, r.seenX, r.seenY, M4_FLEE_SPEED, dt, map);
+    }
+    return;
+  }
+  // In sight: hold at a wary distance and orbit to keep the line open.
   if (d > M4_KEEP_RANGE + 1) {
     moveToward(r, player.x, player.y, M4_FLEE_SPEED, dt, map);
   } else if (d < M4_KEEP_RANGE - 1 && d > 1e-4) {
