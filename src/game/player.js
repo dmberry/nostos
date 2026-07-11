@@ -1864,7 +1864,16 @@ export class Player {
         continue;
       }
       const stored = this.stow(gi.item, gi.qty);
-      if (stored <= 0) continue;
+      if (stored <= 0) {
+        // Nothing fit: with no backpack to overflow into, the pockets are full.
+        // Nudge the player to go find a backpack — but only a couple of times,
+        // so it never nags. (The hint counter persists for the run.)
+        if (!this.backpack && (this._backpackHints || 0) < 2) {
+          this._backpackHints = (this._backpackHints || 0) + 1;
+          this.say('Your pockets are full. A backpack would carry far more — go find one.');
+        }
+        continue;
+      }
       gi.qty -= stored;
       this.discoverWeapon(gi.item);
       // A recovered book or album leaves a page in the Scrapbook (cover +

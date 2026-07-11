@@ -558,7 +558,10 @@ export class Renderer {
       this.drawMinimap(map, player, hud.minimap, animals, this.w - MINIMAP_SIZE - 12, 12, MINIMAP_SIZE);
     }
     if (hud.skylinkActive && !hud.driving) this.drawSkylinkBanner(hud.skylinkTimer);
-    if (!hud.driving) this.drawDashboard(player, hud);
+    if (!hud.driving) {
+      this.drawDashboard(player, hud);
+      this.drawHudOverlay(player, hud); // wordmark, message line, daemon voice — both layouts
+    }
     if (hud.showBackpack) this.drawBackpackPanel(player);
     runDrawScreen(ctx, { w: this.w, h: this.h, map, player });
     if (hud.craftPrompt) {
@@ -4214,10 +4217,11 @@ export class Renderer {
   drawDashboard(player, hud) {
     // The full desktop dashboard uses fixed x-positions that only stop colliding
     // once there's room for the whole left slot-strip (bars → hands → pockets →
-    // pack → walkman, ending ~620px) AND the right-aligned status block (name +
-    // deadline + score + rank, ~180px). Below that the walkman runs into the
-    // status text — so hand anything narrower to the reflowing compact layout.
-    if (this.w < 780) { this.drawDashboardCompact(player, hud); return; }
+    // pack → walkman, ending ~600px) AND the right-aligned status block (name +
+    // deadline + score + rank, ~180px). Below ~800 the walkman starts running
+    // into the status text — so hand anything narrower to the reflowing compact
+    // layout, with a little margin so the handover happens before it looks tight.
+    if (this.w < 810) { this.drawDashboardCompact(player, hud); return; }
     const ctx = this.ctx;
     const top = this.h - DASH_H;
     this.hudTop = top; // input.uiHitTest: touches below this line are UI, not movement
@@ -4384,17 +4388,30 @@ export class Renderer {
     ctx.fillStyle = rank.color;
     ctx.fillText(rank.title, this.w - 16, line); line += 16;
     ctx.textAlign = 'left';
+  }
 
-    // Transient message line above the panel
+  // HUD elements that must show whichever dashboard variant is up (desktop or
+  // compact): the transient message line, the daemon's dying voice, and the
+  // title wordmark + version stamp. These used to live inside drawDashboard
+  // AFTER its early-return to the compact layout, so on a narrow window they
+  // silently vanished — the "wordmark goes missing when small" bug, and with
+  // it every say() message and the whole death-aria. Drawn here, after the
+  // dashboard has set this.hudTop, they render at any width.
+  drawHudOverlay(player, hud) {
+    const ctx = this.ctx;
+    const top = this.hudTop != null ? this.hudTop : this.h - DASH_H;
+
+    // Transient message line above the panel (say() output — narration, hints).
     if (player.message) {
+      ctx.textAlign = 'left';
       ctx.font = '13px system-ui, sans-serif';
       ctx.fillStyle = `rgba(232,224,208,${Math.min(1, player.message.ttl)})`;
       ctx.fillText(player.message.text, 16, top - 12);
     }
 
     // The daemon's voice — the core speaking as you break it. Its own caption
-    // band, distinct from the player's message line: centred in the upper third,
-    // on a dark scrim, with a speaker tag and a tier colour (wrath gold, mercy
+    // band, centred in the upper third (screen-relative, not tied to the
+    // dashboard), with a speaker tag and a tier colour (wrath gold, mercy
     // amber, dying cyan) so the register reads before the words do.
     if (player.daemonVoice) this.drawDaemonVoice(player.daemonVoice);
 
