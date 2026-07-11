@@ -8,7 +8,7 @@ import { drawBird } from '../game/birds.js';
 import { drawRobot } from '../game/robots.js';
 import { drawWaterDroid } from '../game/waterdroids.js';
 import { drawUnderworldCreature } from '../game/underworld.js';
-import { FLOOR_TEXTURES, WALL_TEXTURES, GRASS_PATCH_TEXTURE, CHARACTER_SPRITE_SETS, CHAR_COMPASS_DIRS, TREE_SHEET, TREE_SPRITES, EDGE_TEXTURE, SEA_TEXTURE, CAR_SPRITES, CAR_MODEL_KEYS, CAR_DIR_KEYS, CAR_RUIN_TEXTURE, FACTORY_TEXTURE, MARBLE_TEXTURE, PAPER_TEXTURE, GRAFFITI_TEXTURES } from './textures.js';
+import { FLOOR_TEXTURES, WALL_TEXTURES, GRASS_PATCH_TEXTURE, ROCK_TEXTURES, CHARACTER_SPRITE_SETS, CHAR_COMPASS_DIRS, TREE_SHEET, TREE_SPRITES, EDGE_TEXTURE, SEA_TEXTURE, CAR_SPRITES, CAR_MODEL_KEYS, CAR_DIR_KEYS, CAR_RUIN_TEXTURE, FACTORY_TEXTURE, MARBLE_TEXTURE, PAPER_TEXTURE, GRAFFITI_TEXTURES } from './textures.js';
 
 // The underworld floor palette: seven images, loaded here (not via textures.js)
 // so this stays self-contained. map.liminalTex holds a per-tile index into
@@ -2831,17 +2831,49 @@ export class Renderer {
   drawRock(tx, ty) {
     const ctx = this.ctx;
     const c = worldToScreen(tx + 0.5, ty + 0.5);
+    // Ground-contact shadow.
     ctx.fillStyle = 'rgba(0,0,0,0.2)';
     ctx.beginPath();
     ctx.ellipse(c.x, c.y + 1, 13, 6, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = ROCK_COLOR;
+
+    // The rock's dome, faced with a real boulder photo (mossy granite) clipped
+    // to the ellipse. A per-tile seed picks the variant and nudges which slice
+    // of the photo shows, so a cluster of rocks doesn't read as clones. Falls
+    // back to the old flat grey fill until the texture has loaded.
+    const rx = 12, ry = 9, cy = c.y - 5;
+    const seed = ((tx * 73856093) ^ (ty * 19349663)) >>> 0;
+    const tex = ROCK_TEXTURES && ROCK_TEXTURES.length
+      ? ROCK_TEXTURES[seed % ROCK_TEXTURES.length] : null;
+    ctx.save();
     ctx.beginPath();
-    ctx.ellipse(c.x, c.y - 5, 12, 9, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.ellipse(c.x, cy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.clip();
+    if (tex && tex.complete && tex.naturalWidth) {
+      const jx = (seed % 5) - 2, jy = ((seed >> 3) % 5) - 2;
+      ctx.drawImage(tex, c.x - rx - 3 + jx, cy - ry - 4 + jy, rx * 2 + 6, ry * 2 + 8);
+      // Form shading: a top-light and a base-shadow so the disc reads as a dome.
+      const g = ctx.createLinearGradient(0, cy - ry, 0, cy + ry);
+      g.addColorStop(0, 'rgba(255,255,255,0.16)');
+      g.addColorStop(0.5, 'rgba(0,0,0,0)');
+      g.addColorStop(1, 'rgba(0,0,0,0.4)');
+      ctx.fillStyle = g;
+      ctx.fillRect(c.x - rx, cy - ry, rx * 2, ry * 2);
+    } else {
+      ctx.fillStyle = ROCK_COLOR;
+      ctx.fillRect(c.x - rx, cy - ry, rx * 2, ry * 2);
+    }
+    ctx.restore();
+
+    // A soft rim to seat the dome against the ground, and a small top highlight.
+    ctx.strokeStyle = 'rgba(0,0,0,0.22)';
+    ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.ellipse(c.x - 4, c.y - 8, 5, 3, 0, 0, Math.PI * 2);
+    ctx.ellipse(c.x, cy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+    ctx.beginPath();
+    ctx.ellipse(c.x - 4, cy - 3, 4.5, 2.6, 0, 0, Math.PI * 2);
     ctx.fill();
   }
 
