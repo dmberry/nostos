@@ -4402,8 +4402,13 @@ export class Renderer {
     ctx.shadowBlur = 7;
     ctx.fillText('OS', bx + postW, by);
     ctx.restore();
-    // (The tiny version stamp that sat here was retired — the gate/title
-    // still shows it; in-game it was just clutter.)
+    // Version stamp under the wordmark — so you can always read which build
+    // you're playing without opening a menu. Kept small and dim.
+    if (hud.version) {
+      ctx.font = '9px ui-monospace, "SF Mono", Menlo, monospace';
+      ctx.fillStyle = 'rgba(207,216,195,0.4)';
+      ctx.fillText('v' + hud.version, bx, by + 11);
+    }
   }
 
   drawLabel(text, x, y) {
