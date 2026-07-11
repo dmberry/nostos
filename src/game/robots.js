@@ -1,5 +1,6 @@
 import { makeRng } from './rng.js';
 import { sfx } from '../engine/sound.js';
+import { OBJECTS } from './tiles.js';
 
 // Hunter robots: the machines the towers send after the last humans. Two
 // classes, each with a signature limitation the player can learn. T1s are
@@ -182,6 +183,18 @@ const ACTIVE_RANGE_SQ = ACTIVE_RANGE * ACTIVE_RANGE;
 function nearPlayer(e, player) {
   const dx = e.x - player.x, dy = e.y - player.y;
   return dx * dx + dy * dy <= ACTIVE_RANGE_SQ;
+}
+
+// A player perched on a low crate/rock sits ~1 tile out of melee reach: the
+// solid object stops a robot closing the last step. Crates are not meant to be
+// safe (unlike a tall wall-block you double-jump onto), so a robot facing a
+// player standing on a low climbable (climbHeight <= 1) gets a small reach bonus
+// to strike up onto it. Tall walls give no bonus — those stay a genuine perch.
+function reachBonus(player, map) {
+  if (!map.objectAt) return 0;
+  const o = map.objectAt(Math.floor(player.x), Math.floor(player.y));
+  const def = o && OBJECTS[o.type];
+  return (def && def.climbable && (def.climbHeight || 0) <= 1) ? 0.6 : 0;
 }
 
 // W3s: unarmed repair drones fielded by the W-factory. They walk straight to
@@ -1096,7 +1109,7 @@ function updateT1(r, dt, player, map) {
       r.loseInterestT = STUCK_SULK;
     }
 
-    if (d < T1_HIT_RANGE && r.attackTimer <= 0) {
+    if (d < T1_HIT_RANGE + reachBonus(player, map) && r.attackTimer <= 0) {
       r.attackTimer = T1_HIT_COOLDOWN;
       player.takeDamage(T1_HIT_DAMAGE * ease, 'machine');
     }
@@ -1170,7 +1183,7 @@ function updateT3(r, dt, player, map) {
     moveToward(r, r.x + (dx / d) * 2, r.y + (dy / d) * 2, T3_RETREAT_SPEED, dt, map);
   }
 
-  if (d < T3_HIT_RANGE && r.attackTimer <= 0) {
+  if (d < T3_HIT_RANGE + reachBonus(player, map) && r.attackTimer <= 0) {
     r.attackTimer = T3_HIT_COOLDOWN;
     player.takeDamage(T3_HIT_DAMAGE * ease, 'machine');
     return;
@@ -1202,7 +1215,7 @@ function updateT2(r, dt, player, map) {
   if (r.aggro) {
     const tgt = chaseTarget(r, player.x, player.y, map); // route via a bridge if the river is in the way
     moveToward(r, tgt.x, tgt.y, T2_STALK_SPEED, dt, map);
-    if (d < T2_HIT_RANGE && r.attackTimer <= 0) {
+    if (d < T2_HIT_RANGE + reachBonus(player, map) && r.attackTimer <= 0) {
       r.attackTimer = T2_HIT_COOLDOWN;
       player.takeDamage(T2_HIT_DAMAGE * ease, 'machine');
     }
@@ -1267,7 +1280,7 @@ function updateW1(r, dt, player, map) {
   // block forces to Infinity) — triangulation gets the squad close, but a hit
   // still requires the machine to actually be standing next to you.
   const realD = Math.hypot(player.x - r.x, player.y - r.y);
-  if (r.w1Phase === 'attack' && realD < W1_HIT_RANGE && r.attackTimer <= 0) {
+  if (r.w1Phase === 'attack' && realD < W1_HIT_RANGE + reachBonus(player, map) && r.attackTimer <= 0) {
     r.attackTimer = W1_HIT_COOLDOWN;
     player.takeDamage(W1_HIT_DAMAGE * ease, 'machine');
   }
@@ -1649,7 +1662,7 @@ function updateM6Pack(r, dt, player, map, robots, ease) {
   moveToward(r, player.x + Math.cos(r.swarmAngle) * standoff, player.y + Math.sin(r.swarmAngle) * standoff, M6_CHASE_SPEED, dt, map);
 
   const realD = Math.hypot(player.x - r.x, player.y - r.y);
-  if (r.m6Phase === 'attack' && realD < M6_HIT_RANGE && r.attackTimer <= 0) {
+  if (r.m6Phase === 'attack' && realD < M6_HIT_RANGE + reachBonus(player, map) && r.attackTimer <= 0) {
     r.attackTimer = M6_HIT_COOLDOWN;
     player.takeDamage(M6_HIT_DAMAGE * ease, 'machine');
   }

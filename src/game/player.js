@@ -1929,7 +1929,11 @@ export class Player {
     const m = this.map;
     if (!m || !m.effectiveHeightAt || !m.heightAt || this.z > 0) return false;
     const fx = Math.floor(this.x), fy = Math.floor(this.y);
-    return m.effectiveHeightAt(fx, fy) > m.heightAt(fx, fy);
+    // Only a TALL block is a real safe perch — a wall you double-jump onto
+    // (climbHeight 2.5). A low crate or rock (climbHeight 1) lifts you but not
+    // out of a machine's reach: robots strike up onto it (see reachBonus in
+    // robots.js), so a loot box is no longer an invincibility pedestal.
+    return m.effectiveHeightAt(fx, fy) - m.heightAt(fx, fy) >= 2;
   }
 
   takeDamage(amount, source) {
