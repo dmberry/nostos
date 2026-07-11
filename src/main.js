@@ -9,7 +9,7 @@ import { makeRng } from './game/rng.js';
 import { DayNight } from './game/daynight.js';
 import { Minimap } from './game/minimap.js';
 import { spawnBirds, updateBirds } from './game/birds.js';
-import { spawnRobots, updateRobots, spawnW1s, spawnW3, spawnW4, spawnW5, spawnM4, spawnM5, spawnM6, spawnGuard, drawRobot } from './game/robots.js';
+import { spawnRobots, registerRobotsSystem, spawnW1s, spawnW3, spawnW4, spawnW5, spawnM4, spawnM5, spawnM6, spawnGuard, drawRobot } from './game/robots.js';
 import { resolveBodyOverlaps } from './game/collision.js';
 import { spawnWaterDroids, updateWaterDroids, drawWaterDroid } from './game/waterdroids.js';
 import { Lore, FRAGMENTS } from './game/lore.js';
@@ -376,6 +376,7 @@ const factoryCx = () => wfactory.x + (wfactory.fw || 1) / 2;
 const factoryCy = () => wfactory.y + (wfactory.fh || 1) + 1.5;
 
 const robots = spawnRobots(map, WORLD_SEED, obelisks, { x: spawn.x, y: spawn.y, r: 14 });
+registerRobotsSystem(); // robots' AI ticks via systems.runUpdate (order 30); see robots.js
 // A couple of gardener drones already out wandering the world at the start, at
 // random spots away from the remote factory, so you actually come across one
 // early instead of it only ever spawning at the (distant) factory. The factory
@@ -2573,10 +2574,13 @@ function update(dt) {
   if (saveClock >= 8) { saveClock = 0; persist(); }
   updateAnimals(dt, animals, player, map);
   updateBirds(dt, birds, animals, player, map);
-  updateRobots(dt, robots, player, map);
+  // (Robots' AI now ticks inside systems.runUpdate below — order 30, before
+  //  fortress at 35, which reads this-frame robot aggro. See robots.js.)
   // Choir light-flash sync: while the piece plays, each singing machine's red
   // light pulses to the notes of its assigned vocal part, so the row of them
-  // blinks out of step like a choir. (r.choirFlash is read by sensorStyle.)
+  // blinks out of step like a choir. (r.choirFlash is read by sensorStyle; it
+  // reads robots from just before this frame's tick, but a one-frame lag on an
+  // audio-synced light flicker is imperceptible.)
   const choirT = sfx.choirElapsed();
   if (choirT >= 0) {
     let nearestSinger = Infinity;
@@ -2593,16 +2597,21 @@ function update(dt) {
     const vol = nearestSinger === Infinity ? 0 : Math.max(0.05, Math.min(1, 1 - (nearestSinger - 6) / 16));
     sfx.setChoirVolume(vol);
   }
-  resolveBodyOverlaps(player, animals, robots);
   map.updateShakes(dt);
-  // Registered systems tick here, sorted by `order`: dayNight (20), fortress
-  // (35), lore (80). This is the normal-play update point — below the paused/
-  // resting/driving gates, which keep their own explicit ticks (the hub keeps
-  // the gates). The world-contract bag carries everything a system might read.
+  // Registered systems tick here, sorted by `order`: dayNight (20), robots (30),
+  // fortress (35), lore (80). This is the normal-play update point — below the
+  // paused/resting/driving gates, which keep their own explicit ticks (the hub
+  // keeps the gates). The world-contract bag carries everything a system reads.
+  //   robots: every machine's AI + separation (draw stays in the renderer sort).
   //   fortress: swings the doorway, lights the maze way-out, runs the breach
   //   alarm — on alarm (uplink intact) `stir` flares the obelisks red and sends
-  //   a W4, `calm` unwinds it. dayNight: advances the day/night clock.
+  //   a W4, `calm` unwinds it. dayNight: advances the day/night clock. robots
+  //   ticks before fortress so fortress sees this-frame aggro (see robots.js).
   systems.runUpdate({ dt, player, input, map, camera, robots, animals, birds, dayNight, worldStir, fortress });
+  // Push the player out of any machine/animal body he ended the tick overlapping.
+  // Must run after everyone has moved — robots now move inside runUpdate above,
+  // so this sits just below it (separate() nudges both bodies; see collision.js).
+  resolveBodyOverlaps(player, animals, robots);
   // Time's up: POSEIDON comes online. Every obelisk lights up and links
   // to every other in a web of lasers, and the factory throws wave after
   // wave of W4s at you — indefinitely. There's no timer to survive to; it

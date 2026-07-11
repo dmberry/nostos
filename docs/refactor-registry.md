@@ -24,10 +24,22 @@ the title deck), `drawMinimap` (reads fog/world state), `_wrapText` (helper,
 reached via `this` from the ui modals), and the actor overlays `creatureHealthBar`
 / `playerShieldBar` (drawn over world entities inside the depth sort).
 
-**Next:** Stage 3 — `robots.js`. Its per-frame AI-update functions become
-registered systems; the draw stays in the renderer's depth-sort (per the boundary
-below). Rebase onto latest `main` first; run the test suite after. See the
-migration plan below.
+**Stage 3 — `robots.js` ✓.** `updateRobots` is now a registered system
+(`registerRobotsSystem()` in robots.js, called once from main.js setup) at
+**order 30** — deliberately just before fortress (35), NOT the nominal actors
+band (40-59), because fortress reads this-frame robot `aggro` for its breach
+timer (the ordering Stage 1 protected). The hardcoded `updateRobots(...)` hub
+call is gone; the draw (`drawRobot`) stays in the renderer's depth-sort.
+`resolveBodyOverlaps` moved to just after `runUpdate` so its "run after everyone
+has moved" invariant still holds now that robots move inside `runUpdate`. 19
+tests pass (4 new in `test/robots.test.js`); verified live — a forced-aggro T2
+chased the player 2.45 tiles, and a robot slammed onto the player was separated
+to exactly the 0.58-tile minimum, no console errors.
+
+**Next:** Stage 4 — `clear()` on in-place island swap, and wiring the islands
+world-contract onto the same `world` bag (see the migration plan below). This is
+the last stage; self-registration means each migrated feature already owns its
+`register()`. Rebase onto latest `main` first; run the test suite after.
 
 ## Tests
 
@@ -42,8 +54,11 @@ Zero dependencies — Node's built-in runner and `node:assert`, no package.json,
 no framework, in keeping with the repo's no-build setup. `test/systems.test.js`
 covers the registry (register / order / dispatch / replace / clear); the
 `combat.js` extraction is tested against a stub player + fake map, so firing is
-checked with no browser or canvas (`test/combat.test.js`). The UI overlays draw
+checked with no browser or canvas (`test/combat.test.js`); `test/robots.test.js`
+pins the Stage 3 ordering (robots registers at order 30, ticking between
+dayNight and fortress) and that the world-bag adapter runs. The UI overlays draw
 to a canvas and stay on boot-check. **Run this after each further refactor step.**
+(19 tests at Stage 3.)
 
 ## Why
 
@@ -220,8 +235,14 @@ can't, we find out having touched ~5 lines, not the whole codebase.
     `_wrapText`, `creatureHealthBar`, and `playerShieldBar` stay in the renderer
     (shared with world/actor draws or the depth sort). ui.js is now the whole
     screen-space HUD; renderer.js is world-draw + depth-sort + `drawItemIcon`.
-- **Stage 3.** `robots.js`: update-functions become systems; draw stays in the
-  depth-sort (per the boundary above).
+- **Stage 3 (done).** `robots.js`: `updateRobots` is a registered system
+  (`registerRobotsSystem()`, order 30) instead of a hardcoded hub call; the draw
+  (`drawRobot`) stays in the depth-sort (per the boundary above). Order 30 (not
+  the actors band 40-59) keeps robots ticking before fortress (35), which reads
+  this-frame aggro — the one hard ordering constraint. `resolveBodyOverlaps`
+  moved to just after `runUpdate` to preserve its "after everyone moved"
+  invariant; the choir light-sync stays put (its one-frame-stale flash is
+  cosmetic). Verified live + `test/robots.test.js`.
 - **Stage 4.** Self-registration is the pattern from Stage 0 on, so each migrated
   feature already owns its `register()` — no separate "move it into features"
   step. Remaining: `clear()` on in-place island swap, and wiring the islands
@@ -263,3 +284,18 @@ can't, we find out having touched ~5 lines, not the whole codebase.
   stale `drawStatusChips` doc-comment (the chips were removed in v1.87) that had
   fused onto `drawHudOverlay` was trimmed in passing. Verified: 15 tests green +
   live in-browser, no console errors.
+- **2026-07-11.** Stage 3: `robots.js` migrated to a registered system. Chose
+  **order 30** (before fortress's 35) over the nominal actors band (40-59). The
+  band table would run fortress before robots, but fortress consumes this-frame
+  robot `aggro` for its breach-report timer — the exact ordering Stage 1 was
+  careful to protect — so the frame-position constraint overrides the band, as
+  the ordering decision anticipated it might. Second call: since robots now moves
+  inside `runUpdate` (which sits after the old `updateRobots` point),
+  `resolveBodyOverlaps` was relocated to just after `runUpdate` to keep its
+  documented "run after everyone has moved" invariant; the choir light-flash
+  sync was left before `runUpdate` because a one-frame-stale flash is purely
+  cosmetic. robots.js has no owning object, so it exposes `registerRobotsSystem()`
+  called once from main.js setup (the analogue of `createFortress()`), rather
+  than the constructor self-registration daynight/fortress use. Verified: 19
+  tests + live (aggro chase closes distance; player-on-robot resolves to the
+  0.58 min-separation), no console errors.

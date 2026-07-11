@@ -1,6 +1,7 @@
 import { makeRng } from './rng.js';
 import { sfx } from '../engine/sound.js';
 import { OBJECTS } from './tiles.js';
+import { register } from '../engine/systems.js';
 
 // Hunter robots: the machines the towers send after the last humans. Two
 // classes, each with a signature limitation the player can learn. T1s are
@@ -991,6 +992,23 @@ export function updateRobots(dt, robots, player, map) {
     else updateT2(r, dt, player, map);
   }
   separateRobots(robots, map, dt, player);
+}
+
+// Robots update as a registered system (docs/refactor-registry.md): the hub no
+// longer calls updateRobots() directly, it ticks via systems.runUpdate(). order
+// 30 puts robots just before fortress (35), NOT in the nominal actors band
+// (40-59), because fortress reads this-frame robot `aggro` to drive its breach-
+// report timer — Stage 1 protected that "fortress sees this-frame robots"
+// ordering, so robots must tick first. The draw stays in the renderer's
+// depth-sort (drawRobot), outside the registry, per the boundary in the doc.
+// Called once from main.js setup (robots.js has no owning object to self-
+// register in, the way daynight/fortress do from their constructor/factory).
+export function registerRobotsSystem() {
+  register({
+    name: 'robots',
+    order: 30,
+    update: (w) => updateRobots(w.dt, w.robots, w.player, w.map),
+  });
 }
 
 // No two live machines may occupy (near enough) the same tile: after every
