@@ -707,6 +707,16 @@ export class Player {
       if (this.z === 0 && this.vz === 0 && effAfter < effBefore) {
         this.z = (effBefore - effAfter) * 0.5;
         this.doubleJumped = false;
+      } else if ((this.z > 0 || this.vz !== 0) && effAfter > effBefore) {
+        // Inverse of the drop-off above: jumping or climbing ONTO a taller
+        // tile (a crate, or a wall via the double jump). The terrain lift the
+        // renderer applies (effectiveHeightAt * ELEV) jumps up by the whole
+        // block height the instant your tile flips onto the block; bleed that
+        // same height back out of the jump `z` so the sprite's total lift
+        // stays continuous instead of popping up a block-height in one frame
+        // (the "jumpy on blocks" glitch). Clamp at 0 — if the ledge was grabbed
+        // before you rose to its height, you just settle onto it with no dip.
+        this.z = Math.max(0, this.z - (effAfter - effBefore) * 0.5);
       }
       this.walkPhase += dt * (this.sprinting ? 13 : 9);
       // Footstep on each stride, voiced by the surface underfoot.

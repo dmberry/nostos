@@ -287,7 +287,17 @@ export class Renderer {
     const pfx = Math.floor(player.x), pfy = Math.floor(player.y);
     const climbRaise = (map.effectiveHeightAt && map.heightAt)
       ? map.effectiveHeightAt(pfx, pfy) - map.heightAt(pfx, pfy) : 0;
-    drawables.push({ depth: player.x + player.y + climbRaise, player });
+    // Mid-jump, add the jump height too (player.z is in half-level units: 0.5 z
+    // = one height level, so z*2 = levels, matching climbRaise's units). Without
+    // it the sort depth snaps from 0 (in the air) to +climbHeight (landed) in
+    // the single frame your tile flips onto a block, popping the block from
+    // in-front-of to behind the player — the "overlapping blocks" glitch. With
+    // it the bias climbs smoothly with the jump and, as player.z bleeds into the
+    // terrain lift on landing (see Player.update), hands off continuously to
+    // climbRaise. Sort depth then tracks the sprite's true elevation (the same
+    // effectiveHeight lift the dispatch applies), so draw order matches height.
+    const jumpRaise = player.z ? player.z * 2 : 0;
+    drawables.push({ depth: player.x + player.y + climbRaise + jumpRaise, player });
     // Edge rocks sort by their tile depth like anything else, so a south/east
     // block in front of the player draws after (and, being semi-transparent,
     // lets the player show through it) while a north/west block behind draws
