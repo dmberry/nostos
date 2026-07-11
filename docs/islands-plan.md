@@ -8,9 +8,13 @@ using tools**. Each island is laid out differently according to its god's/AI's
 character.
 
 **Status: design APPROVED (David, 2026-07-10) — §10 decisions are settled
-except island owners. Stage 0 IN PROGRESS: 0a (the `currentWorld` wrap) + 0b
-(the Backspace ported to a World) landed 2026-07-11** (see §3); only 0c (CALYPSO
-extraction) remains.
+except island owners. Stage 0 COMPLETE: 0a (the `currentWorld` wrap, 2026-07-11)
++ 0b (the Backspace ported to a World, 2026-07-11) + 0c (`src/islands/calypso.js`
+via `createIsland`, 2026-07-12) all landed and verified** (see §3). **Next: Stage 1**
+(boat + crossing) and **Stage 3** (the sibling islands), both building on
+`createIsland`. See also `islands-odyssey-revision.md` (R1–R5): the World contract
+should gain `obColor`/`obAlertColor`, and the fortress becomes a parameterised
+module (COORDINATE with Henrik).
 **Prerequisites all landed** (v1.58 guard roster + fortress map; v1.59
 island-agnostic daemon-kill endgame; v1.61 Crown→Daemon rename; v1.62
 death-aria + testament — see §2 and §9). Stage 0 is the gating
@@ -156,12 +160,23 @@ Work items, in order, each leaving the game playable:
    overworld, lurker, veil, no minimap), lurker ticks, EXIT out (overworld
    resumed at the exact return position, entities back), 26 tests, no console
    errors.
-3. **0c — wrap the current island as `src/islands/calypso.js`.** Move the
-   world-assembly block out of main.js (the buildWorld call, spawns, fortress/
-   factory/obelisk wiring, loot seeding at ~line 100–450) into
-   `createIsland(seed)` returning a World. main.js boot becomes: make player,
-   `switchWorld(createIsland(WORLD_SEED), player)`. *Verify: seed-identical
-   world, full run, fortress alarm still works, POSEIDON countdown still runs.*
+3. **0c — wrap the current island as `src/islands/calypso.js`. ✓ DONE (2026-07-12).**
+   The whole overworld construction (buildWorld + spawns + loot + obelisks +
+   W-factory + `createFortress` + coast + ruins + guards + birds, ~380 lines)
+   moved **verbatim** (WORLD_SEED→seed only) into `createIsland(seed) → World`;
+   main.js boot is now `const calypso = registerWorld(createIsland(WORLD_SEED))`
+   then a destructure that aliases the World's arrays + controllers by name, so
+   the ~60 runtime sites are unchanged. Controllers (`fortress`, `wfactory`,
+   `mainframe`, `torObjs`) are attached as named World fields. **Stayed** in
+   main.js (player/lore-coupled or runtime): `player`, save/load, `lore`,
+   `worldStir`, `onCoreDefeated`, the factory helpers, `registerRobotsSystem()`,
+   `fortressKeyFromCrash`. main.js 2,866 → 2,494 lines. Verified: **seed-identical**
+   (fingerprint of obelisk codes/circuit, object/loot/box/tree counts, fortress
+   core, animals/waterdroids/obelisks matched byte-for-byte pre vs post at a fixed
+   seed), 26 tests, live run (robots chase, fortress + factory controllers aliased
+   and live, renderer draws all classes, no console errors). Safety checks that
+   made the player-after-`createIsland` reorder sound: the construction is
+   player-independent and the `Player` constructor consumes no RNG.
 
 Stage 0 is also the natural moment to take the ROADMAP's file-size refactor
 partially: whatever main.js sheds here should not come back.
@@ -287,13 +302,13 @@ fortress-map work, landed as v1.58; the core-kill endgame landed as v1.59.)
    victory modal — island-agnostic by design; Crown→Daemon rename in a
    parallel session). The ZEUS rename is also done
    (`AI_NAME = 'ZEUS'`, `AI_ROSTER` in fortress.js; no Adamantine remains).
-2. **Stage 0** — world contract; port Backspace; wrap CALYPSO. One session,
-   quiet window. No visible change. **0a + 0b done (2026-07-11):** `world.js` +
-   `currentWorld` wrap of the overworld arrays; the Backspace is a World and
-   `inUnderworld` + `switchWorld` are in. **Next: 0c** — extract
-   `src/islands/calypso.js` (move the boot construction block into
-   `createIsland(seed) → World`; the boot becomes
-   `switchWorld(null, createIsland(WORLD_SEED), player)`).
+2. **Stage 0 — DONE (2026-07-11/12).** World contract; port Backspace; wrap
+   CALYPSO, no visible change. **0a** `world.js` + `currentWorld` wrap of the
+   overworld arrays; **0b** the Backspace is a World, `inUnderworld` gone,
+   `switchWorld` in; **0c** `src/islands/calypso.js` (`createIsland(seed) → World`,
+   the ~380-line boot construction moved verbatim, seed-identical). main.js boot
+   is now `const calypso = registerWorld(createIsland(WORLD_SEED))` + aliasing
+   destructure. All verified + on `main`.
 3. **Stage 1** — boat + cheap crossing + stub islet. Proves travel round-trip
    and campaign save.
 4. **Stage 2** — islandkit extraction, seed-diff verified.
