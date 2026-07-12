@@ -532,6 +532,8 @@ try {
   const identity = JSON.parse(localStorage.getItem(IDENTITY_KEY) || 'null');
   if (identity) player.setPersona(identity.name || player.name, identity.gender || player.gender);
 } catch { /* corrupt: keep the default persona */ }
+// The AI-key backup survives death (its own durable key, not the run save).
+try { if (localStorage.getItem('postai-aikey-backup')) player.aikeyBackedUp = true; } catch { /* ignore */ }
 let hadExistingSave = false;
 try {
   const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
@@ -943,8 +945,16 @@ function syncSettingsPanel() {
 // the AI's own OS: alive with data, and unusable. See docs/ob-terminal-language.md
 // for the language design.
 const OB_TERMINAL_RANGE = 4.5;
-const RONML_ROBOT_RANGE = 20;   // sleep/repel/sing reach this far from the player
-const REPEL_DURATION = 60;      // seconds `repel`-ed machines flee for
+const RONML_ROBOT_RANGE = 20;   // sing reaches this far from the player
+const RONML_SOFT_RANGE = 12;    // sleep/repel reach: nerfed shorter now they're keyless (Type 2)
+const RONML_SLEEP_CAP = 20;     // sleep idles for at most this many game-minutes (nerf)
+const RONML_REWIND_CAP = 2;     // rewind claws at most this many hours per call (nerf)
+const REPEL_DURATION = 30;      // seconds `repel`-ed machines flee for (nerfed from 60)
+// Persistent RON-ML session: bare top-level `let`/`copy` bindings live here for
+// the length of one terminal visit (reset on open/close), so the fortress
+// program can be typed line by line. `terminalOb` is the node you're jacked into.
+let replSession = {};
+let terminalOb = null;
 const SING_DURATION = 4.5;      // seconds the choir lines up before powering down
 const obTermEl = document.getElementById('obterminal');
 const obTermScreen = document.getElementById('obterminal-screen');
@@ -989,9 +999,21 @@ function ronmlCtx() {
   const findObelisk = (id) => currentWorld.obeliskObjs.find((o) => o.code === id && !o.destroyed);
   const nearby = (r) => !r.dead && !r.friendly && !r.fused
     && Math.hypot(r.x - player.x, r.y - player.y) <= RONML_ROBOT_RANGE;
+  const softNearby = (r) => !r.dead && !r.friendly && !r.fused
+    && Math.hypot(r.x - player.x, r.y - player.y) <= RONML_SOFT_RANGE;
   return {
     station: 'ob', // an AI obelisk (TIRESIAS) — the AI-network verbs live here
     hasManual: !!(player.readManuals && player.readManuals.has('book_ronml')), // helpText hints at the manual until it's read
+    session: replSession, // persistent top-level bindings for this terminal visit
+    bindSession: (name, val) => { replSession[name] = val; },
+    hasAiKey: () => player.hasItem('ai_key'),
+    currentNode: () => (terminalOb ? terminalOb.code : null),
+    printKey: () => {
+      if (!player.hasItem('ai_key')) { replPrint('ERR: no AI key to copy — you are not holding one.'); return; }
+      map.groundItems.push({ item: 'ai_key', qty: 1, x: player.x + 0.4, y: player.y + 0.6, keep: true });
+      replPrint('OK: the console stamps a fresh AI key — it drops at your feet.');
+      player.say('The terminal stamps a copy of the AI key. It clatters to the floor at your feet, a spare against losing the first.');
+    },
     listObelisks: () => currentWorld.obeliskObjs.filter((o) => !o.destroyed).map((o) => o.code),
     distanceToNode: (id) => {
       const o = findObelisk(id);
@@ -1041,19 +1063,24 @@ function ronmlCtx() {
       }
       player.say(`${id} pins itself in a loop that never returns. Its light flares white-hot${count ? ' and its garrison seizes up mid-stride' : ''} — only a repair drone can talk it down now.`);
     },
+    // Nerfed now they need no AI key (Type 2): tighter reach (RONML_SOFT_RANGE)
+    // and capped effect, so easy access doesn't make them board-wiping.
     sleepNearby: (mins) => {
-      const secs = Math.max(1, mins);
-      for (const r of currentWorld.robots) if (nearby(r)) r.disabledT = Math.max(r.disabledT || 0, secs);
-      player.say('The local machines idle. The yard goes quiet for a spell.');
+      const secs = Math.max(1, Math.min(mins, RONML_SLEEP_CAP));
+      let n = 0;
+      for (const r of currentWorld.robots) if (softNearby(r)) { r.disabledT = Math.max(r.disabledT || 0, secs); n++; }
+      player.say(n ? 'The nearest machines idle where they stand. A pocket of quiet, and not for long.' : 'Nothing close enough to idle.');
     },
     skylinkActive: () => !!player.skylinkActive,
     rewindClock: (hours) => {
-      dayNight.rewind(Math.max(0, hours));
-      player.say(`The deadline clock stutters and loses ${Math.max(0, hours)} hour${Math.max(0, hours) === 1 ? '' : 's'}. POSEIDON waits a little longer.`);
+      const h = Math.max(0, Math.min(hours, RONML_REWIND_CAP));
+      dayNight.rewind(h);
+      player.say(`The deadline clock stutters and loses ${h} hour${h === 1 ? '' : 's'}. POSEIDON waits a little longer.`);
     },
     repelNearby: () => {
-      for (const r of currentWorld.robots) if (nearby(r)) { r.repelledT = REPEL_DURATION; r.aggro = false; }
-      player.say('Targeting flips. Anything nearby turns tail and runs.');
+      let n = 0;
+      for (const r of currentWorld.robots) if (softNearby(r)) { r.repelledT = REPEL_DURATION; r.aggro = false; n++; }
+      player.say(n ? 'Targeting flips. The nearest machines turn tail and run.' : 'Nothing close enough to turn.');
     },
     sing: () => {
       const eligible = (r) => !r.dead && !r.drained && !r.friendly && !r.fused;
@@ -1142,6 +1169,7 @@ function hermesCtx() {
   return {
     station: 'hermes',
     hasManual: !!(player.readManuals && player.readManuals.has('book_ronml')),
+    session: replSession, // persistent bindings work at relays too (copy/let)
     showNotepad: () => { openNotebook(); },
     read: (topic) => hermesRead(topic),
     print: () => {}, // never reached — HERMES print takes a topic (see printDoc)
@@ -1149,7 +1177,30 @@ function hermesCtx() {
     archive: () => hermesArchive(),
     records: () => hermesRecords(),
     drive: () => startDrive(),
+    backup: () => hermesBackupKey(),
+    restore: () => hermesRestoreKey(),
   };
+}
+
+// RON's relays keep a copy of your AI key off the AI's own hardware, so a bad
+// death doesn't cost you the whole endgame path. The backup lives in its own
+// durable key (like identity), so fullReset() on death does NOT wipe it — that
+// is the whole point. `restore` mints a fresh key when you've lost it.
+const AIKEY_BACKUP_KEY = 'postai-aikey-backup';
+function hermesBackupKey() {
+  if (!player.hasItem('ai_key')) { replPrint('ERR: no AI key in hand to back up. (a wrecked W-factory drops one.)'); return; }
+  if (!hermesSpend(HERMES_BATT.print)) { replPrint('Not enough charge — let the cell recover.'); return; }
+  player.aikeyBackedUp = true;
+  try { localStorage.setItem(AIKEY_BACKUP_KEY, '1'); } catch { /* storage full/blocked: keep the in-memory flag */ }
+  replPrint('OK: AI key copied to the relay mesh. RON holds it now — lose the original and you can restore it at any relay.');
+  player.say('The relay copies your AI key onto the mesh. RON has it now; you can pull it back from any relay if you lose the one in your hand.');
+}
+function hermesRestoreKey() {
+  if (!player.aikeyBackedUp) { replPrint('ERR: nothing on the mesh to restore. back one up first: backup aikey'); return; }
+  if (player.hasItem('ai_key')) { replPrint('You already hold an AI key — nothing to restore.'); return; }
+  const stored = player.stow('ai_key', 1);
+  if (stored > 0) { replPrint('OK: AI key restored from the mesh — pocketed.'); player.say('The relay stamps your backed-up AI key back into being. It sits in your pocket again.'); }
+  else { map.groundItems.push({ item: 'ai_key', qty: 1, x: player.x + 0.4, y: player.y + 0.6, keep: true }); replPrint('OK: AI key restored — no pocket room, it drops at your feet.'); }
 }
 
 // `records`: pull the next of RON's own field records held on the relay mesh
@@ -1631,6 +1682,8 @@ function openObTerminal(ob) {
   if (!player.hasItem('chip')) { openAiOs(ob); return; }
   // Chip present: jack in. Go invisible, then run the connect progress bar.
   terminalKind = 'ob';
+  terminalOb = ob;          // `name` reads this; the console shows its code
+  replSession = {};         // fresh top-level bindings for this visit
   player.terminalSafe = true;
   obTermEl.style.display = 'flex';
   obTermScreen.parentElement.style.display = 'none';
@@ -1670,10 +1723,13 @@ function openObTerminal(ob) {
 }
 
 // The fortress gate terminal reuses the same RON-ML console, minus the chip
-// gate and connect bar. You type `unlock` here (needs an AI key) to hack the
-// grand doorway; it drops a fortress key that then swings the door open.
+// gate and connect bar. You compose the unlock program here (copy aikey /
+// hack / decrypt / unlock k d) to hack the grand doorway; it drops a fortress
+// key that then swings the door open.
 function openGateTerminal() {
   terminalKind = 'ob';
+  terminalOb = fortress.terminal.obj; // `name` here reads the gate node's code
+  replSession = {};
   player.terminalSafe = true;
   obTermEl.style.display = 'flex';
   obTermScreen.parentElement.style.display = 'flex';
@@ -1705,6 +1761,8 @@ function openGateTerminal() {
 function openHermesTerminal(tor) {
   terminalKind = 'hermes';
   hermesTor = tor;
+  terminalOb = null;
+  replSession = {};
   if (tor.battery == null) tor.battery = 0.55 + Math.random() * 0.4;
   player.terminalSafe = true;
   obTermEl.classList.add('hermes');
@@ -1731,7 +1789,7 @@ function openHermesTerminal(tor) {
   obTermGhost.textContent = '';
   obTermInput.focus();
 }
-function closeObTerminal() { elizaBot = null; terminalKind = 'ob'; obTermEl.classList.remove('hermes'); obTermEl.style.display = 'none'; obTermGhost.textContent = ''; obTermInput.blur(); player.terminalSafe = false; }
+function closeObTerminal() { elizaBot = null; terminalKind = 'ob'; terminalOb = null; replSession = {}; obTermEl.classList.remove('hermes'); obTermEl.style.display = 'none'; obTermGhost.textContent = ''; obTermInput.blur(); player.terminalSafe = false; }
 obTermEl.addEventListener('click', (e) => { if (e.target === obTermEl) closeObTerminal(); });
 // Autocomplete: once you've read the RON-DOS manual (book_ronml), the console
 // suggests the rest of a verb as faded ghost text you can accept with Tab.
@@ -1740,8 +1798,8 @@ obTermEl.addEventListener('click', (e) => { if (e.target === obTermEl) closeObTe
 // Autocomplete is per-system: an obelisk (TIRESIAS) suggests only AI-network
 // verbs, a HERMES relay only RON verbs — no seepage between the two. (sing is
 // secret, so it's in neither list.)
-const OB_COMPLETE = ['scan', 'nearest', 'keys', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'map', 'print', 'unlock', 'eliza', 'notes', 'help', 'let'];
-const HERMES_COMPLETE = ['read', 'print', 'archive', 'records', 'drive', 'notes', 'help', 'let'];
+const OB_COMPLETE = ['scan', 'nearest', 'keys', 'name', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'map', 'print', 'copy', 'decrypt', 'unlock', 'eliza', 'notes', 'help', 'let'];
+const HERMES_COMPLETE = ['read', 'print', 'archive', 'records', 'drive', 'backup', 'restore', 'notes', 'help', 'let'];
 const escapeHtml = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 function ronmlCompletion(value) {
   if (elizaBot) return ''; // no RON-ML hints mid-conversation with the DOCTOR

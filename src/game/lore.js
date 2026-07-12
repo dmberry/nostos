@@ -697,6 +697,13 @@ export const FRAGMENTS = [
       '// then crash with it. put your obelisk\'s code where it says node.' },
   { id: 'ronml-04', kind: 'code', era: 1, title: 'chalked on a wall, half-rubbed-out', notepad: true,
     text: 'repel\n\n// flips them. they run from you instead of at you.\n// buys a minute, no more.' },
+  { id: 'ronml-07', kind: 'code', era: 2, title: 'folded card, water-warped, in a dead operator\'s coat', notepad: true,
+    text: 'copy aikey\nlet k = hack OB-XXXX\nlet d = decrypt aikey\nunlock k d\n\n' +
+      "// the gate won't take the key raw. copy it off your hand first so the\n" +
+      '// console can hold it, then decrypt — the AI encrypts its own masters,\n' +
+      "// force of habit — then unlock with the node's key and the clean one\n" +
+      "// together. put the obelisk you're stood under where it says OB.\n" +
+      '// burned three keys learning that. — M' },
   { id: 'ronml-05', kind: 'code', era: 2, title: 'torn page, barely legible', notepad: true,
     text: '...the old operators had a word buried in the console for when it was\n' +
       'already over. never saw it used. never saw it written down whole. one line\n' +

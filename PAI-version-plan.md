@@ -48,6 +48,41 @@ keeps only the latest status, plus the conventions, art notes, and forward plan
 above and below. (The old blow-by-blow "Where we are (v1.06 … v1.54)" log was
 pruned; the README table is the record now.)
 
+### v1.88 — RON-ML terminal overhaul (gating now tracks power)
+
+**Handoff for the other session (read before you touch the terminal or the AI key):**
+the whole RON-ML gating model changed. Full spec: [docs/ob-terminal-language.md §9](docs/ob-terminal-language.md).
+Files touched: `src/game/ronml.js`, `src/main.js`, `src/game/player.js`,
+`src/game/lore.js`, `src/game/hermes.js`, `index.html`, `README.md`,
+`src/version.js`, this file. **Rebased onto the islands refactor** — my ctx
+effect loops use `currentWorld.robots`/`currentWorld.obeliskObjs` to match 0a/0b.
+
+What changed:
+- **RON console is amber** (RON's own OS, like HERMES; green was the AI's). CSS
+  base recoloured in `index.html`; `.hermes` class now carries only the relay
+  battery gauge. The magenta `#aios` (no-chip AI OS) is untouched.
+- **Two tiers.** *Type 2* (access chip + language, NO AI key): `scan`, `nearest`,
+  `keys`, `name` (new — reads current node), `hack`, `crash`, `loop`, `sleep`,
+  `repel`, `rewind`. The three board verbs are **nerfed** — reach 20→12
+  (`RONML_SOFT_RANGE`), sleep capped 20 min, rewind 2 h, repel 60→30 s.
+  *Type 1* (needs the AI key, decrypted): `unlock` only.
+- **Persistent top-level `let`.** The REPL carries a session env (`replSession`
+  in main.js, passed as `ctx.session`, reset on terminal open/close). A bare
+  `let x = e` (no `in`) binds for the visit — parser has a new `TopLet` node;
+  evaluator writes into the base env; echoes `val x = …`.
+- **Fortress key = a ritual**, not a one-liner: `copy aikey` (binds the held AI
+  key into the session, new ctx `hasAiKey`/`bindSession`), `decrypt aikey`,
+  `unlock k d` (now arity-2: hacked node key + decrypted AI-key token). The
+  recipe is **found lore** (`ronml-07` in lore.js `FRAGMENTS`, random), not `help`.
+- **AI key robustness:** `print aikey` stamps a spare (OB `print` is now arity-1:
+  `print map` / `print aikey`); ai_key already never decays; new HERMES
+  `backup`/`restore aikey` persist a copy in a durable key (`postai-aikey-backup`)
+  that survives death/fullReset; pickup toast teaches `copy aikey`.
+- **Watch-outs:** OB `print` changed from bare (=map) to `print map`; `unlock` is
+  arity-2 now (any code calling it as `unlock k` hits the teaching error).
+  Verified headless (evaluator harness: full fortress program, persistent let,
+  backup/restore, refusals). Open tuning: the nerf numbers are conservative.
+
 ### v1.87 — visual + shield pass: textured rocks/rubble/crates, shields block melee, marble climbable, forcefield hotkey, HUD fixes
 
 - **Rock/rubble textures** (`renderer.js` + `textures.js` + assets): swapped the photo-crops (leafy edges) for centre-clips of David's purpose-shot surfaces — small-rock, mossyrock, smallrock2 (`rock-surface-{1,2,3}.jpg`). `drawRock`/`drawRubble` now STRETCH one texture over the whole silhouette (rubble unions its chunk-ellipses into a single clip) at full strength with only light diagonal shading, so the stone reads instead of a washed-out blob.
@@ -78,7 +113,6 @@ pruned; the README table is the record now.)
 - **Loot crate no longer safe** (`robots.js` + `player.js`): a perched player was untouchable — the solid crate held melee robots ~1 tile out (past 0.6–0.9 reach) and `onBlockTop()` gave blanket damage immunity. Split by height: `reachBonus()` gives a robot +0.6 reach to strike a player on a low climbable (climbHeight ≤ 1: box/rock/rubble), 0 on a tall wall; `onBlockTop()` now only counts elevation ≥ 2 as a safe perch. So a crate lifts you but isn't a fortress; a double-jump wall-block still is. Verified: T1 lands 24 dmg on a box, 0 on a wall.
 - **Version stamp restored** (`renderer.js`): it had been retired as clutter; `hud.version` was still passed, just not drawn. Back small/dim under the wordmark so the build is always readable.
 - **Under the hood — the systems-registry refactor landed on main.** Features self-register as `{update, drawWorld, drawScreen}` (dayNight/fortress/lore), ranged weapon-fire extracted to `combat.js` (player.js −294 lines), renderer HUD/modals mixed in from `ui.js`, plus a zero-dep `node --test` suite (registry + combat, 15 tests). See `docs/refactor-registry.md`.
-
 ### v1.84 — occlusion ghost + stuck machines give up
 
 - **Ghost pass** (renderer, after the drawables loop): if a tall object sits

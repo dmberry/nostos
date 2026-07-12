@@ -1911,6 +1911,8 @@ export class Player {
       sfx.play('pickup');
       this.say(gi.item === 'wifiblock'
         ? 'You find a Wi-Fi block — hold it and the machines cannot see you.'
+        : gi.item === 'ai_key'
+        ? 'AI key. Jack into an obelisk and type  copy aikey  — then you can print spares, or back it up at a HERMES relay, and never lose it.'
         : `+${stored} ${ITEMS[gi.item].name.toLowerCase()}`);
     }
     map.groundItems = map.groundItems.filter((gi) => gi.qty > 0);
