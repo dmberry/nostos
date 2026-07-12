@@ -198,9 +198,11 @@ Sliced 1a/1b/1c so each lands playable:
   in player.js gated on **12 wood** + a cutting tool in hand (`treeDamage >= 2`,
   the axe/saw class) + standing at the sea's edge; wired into the **C** chain and
   the craft prompt (lowest priority, so it never shadows a weapon/tool craft) in
-  main.js; `Renderer.drawBoat` draws the beached hull in the iso plane. A crafted
-  boat is *placed at the shore* (nearest walkable land tile 8-adjacent to a `sea`
-  tile, never under the player), not pocketed. One boat at a time
+  main.js; `Renderer.drawBoat` draws the beached hull in the iso plane, with
+  wood-grain textures (`BOAT_TEXTURES`, `assets/textures/boat-wood-1.jpg`/`-2.jpg`)
+  stretched over the hull faces and deck. A crafted boat is *placed at the shore*
+  (nearest walkable land tile 8-adjacent to a `sea` tile, never under the player),
+  not pocketed. One boat at a time
   (`player.boatBuilt`; 1c persists it as campaign state). Covered by
   `test/boat.test.js` (6 tests: gates, wood spend, sea-edge placement, solidity,
   the never-under-player + one-boat guards) and live browser-verified. **Not yet

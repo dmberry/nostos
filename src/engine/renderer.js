@@ -8,7 +8,7 @@ import { drawBird } from '../game/birds.js';
 import { drawRobot } from '../game/robots.js';
 import { drawWaterDroid } from '../game/waterdroids.js';
 import { drawUnderworldCreature } from '../game/underworld.js';
-import { FLOOR_TEXTURES, WALL_TEXTURES, GRASS_PATCH_TEXTURE, ROCK_TEXTURES, BOX_TEXTURES, CHARACTER_SPRITE_SETS, CHAR_COMPASS_DIRS, TREE_SHEET, TREE_SPRITES, EDGE_TEXTURE, SEA_TEXTURE, CAR_SPRITES, CAR_MODEL_KEYS, CAR_DIR_KEYS, CAR_RUIN_TEXTURE, FACTORY_TEXTURE, MARBLE_TEXTURE, PAPER_TEXTURE, GRAFFITI_TEXTURES } from './textures.js';
+import { FLOOR_TEXTURES, WALL_TEXTURES, GRASS_PATCH_TEXTURE, ROCK_TEXTURES, BOX_TEXTURES, BOAT_TEXTURES, CHARACTER_SPRITE_SETS, CHAR_COMPASS_DIRS, TREE_SHEET, TREE_SPRITES, EDGE_TEXTURE, SEA_TEXTURE, CAR_SPRITES, CAR_MODEL_KEYS, CAR_DIR_KEYS, CAR_RUIN_TEXTURE, FACTORY_TEXTURE, MARBLE_TEXTURE, PAPER_TEXTURE, GRAFFITI_TEXTURES } from './textures.js';
 
 // The underworld floor palette: seven images, loaded here (not via textures.js)
 // so this stays self-contained. map.liminalTex holds a per-tile index into
@@ -1566,13 +1566,17 @@ export class Renderer {
     const cx = obj.x + 0.5, cy = obj.y + 0.5;
     const wob = obj.shake ? Math.sin(obj.shake * 40) * obj.shake * 4 : 0;
     // Hull extremities: a touch longer than one tile, pointed fore and aft,
-    // beamier amidships.
+    // beamier amidships. Each is a parallelogram vertex (stern = stbd+port-bow),
+    // so any three feed drawTexturedQuad directly to warp the grain over a face.
     const bow   = worldToScreen(cx, cy - 0.9);
     const stern = worldToScreen(cx, cy + 0.9);
     const port  = worldToScreen(cx - 0.55, cy);
     const stbd  = worldToScreen(cx + 0.55, cy);
     const c = worldToScreen(cx, cy);
-    const HULL = 11; // deck sits this many px above the waterline outline
+    const HULL = 11;                          // deck sits this many px above the waterline
+    const up = (p) => ({ x: p.x, y: p.y - HULL }); // a point raised to deck level
+    const hull = BOAT_TEXTURES && BOAT_TEXTURES[0]; // darker figured grain: sides + deck
+    const inner = BOAT_TEXTURES && BOAT_TEXTURES[1]; // lighter grain: interior boards
     ctx.save();
     ctx.translate(wob, 0);
     // Soft ground shadow.
@@ -1586,45 +1590,41 @@ export class Renderer {
     ctx.ellipse(c.x, c.y, 30, 15, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
-    const lens = (dy) => {
-      ctx.beginPath();
-      ctx.moveTo(bow.x, bow.y + dy);
-      ctx.lineTo(stbd.x, stbd.y + dy);
-      ctx.lineTo(stern.x, stern.y + dy);
-      ctx.lineTo(port.x, port.y + dy);
-      ctx.closePath();
-    };
-    // Dark hull side (the band from waterline up to the deck).
-    lens(0);
-    ctx.fillStyle = '#3f2a17';
-    ctx.fill();
-    // Deck rim, lifted by HULL — the top edge of the hull.
-    lens(-HULL);
-    const grad = ctx.createLinearGradient(bow.x, bow.y - HULL, stern.x, stern.y - HULL);
-    grad.addColorStop(0, '#946a3c');
-    grad.addColorStop(1, '#7a5636');
-    ctx.fillStyle = grad;
-    ctx.fill();
-    ctx.strokeStyle = '#5a3d22';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    // Cockpit: an inset well so the boat reads as open, not a slab.
-    const ibow = worldToScreen(cx, cy - 0.5), istern = worldToScreen(cx, cy + 0.5);
-    const iport = worldToScreen(cx - 0.3, cy), istbd = worldToScreen(cx + 0.3, cy);
+    // Dark waterline lens underneath, so any seam between the hull faces reads
+    // as shadow rather than background.
     ctx.beginPath();
-    ctx.moveTo(ibow.x, ibow.y - HULL);
-    ctx.lineTo(istbd.x, istbd.y - HULL);
-    ctx.lineTo(istern.x, istern.y - HULL);
-    ctx.lineTo(iport.x, iport.y - HULL);
-    ctx.closePath();
-    ctx.fillStyle = '#5a3d22';
+    ctx.moveTo(bow.x, bow.y); ctx.lineTo(stbd.x, stbd.y);
+    ctx.lineTo(stern.x, stern.y); ctx.lineTo(port.x, port.y); ctx.closePath();
+    ctx.fillStyle = '#241608';
     ctx.fill();
+    // The two camera-facing hull sides (they meet at the near stern vertex),
+    // grain stretched down each from the gunwale to the waterline. The SW face
+    // is turned away from the light, so it's tinted darker than the SE.
+    this.drawTexturedQuad([up(port), up(stern), stern, port], hull, '#4a3120', 'rgba(18,11,5,0.5)', 'multiply', 0.95);
+    this.drawTexturedQuad([up(stbd), up(stern), stern, stbd], hull, '#5c3f26', 'rgba(26,16,7,0.34)', 'multiply', 0.95);
+    // Deck / gunwale: the grain stretched across the whole top lens.
+    this.drawTexturedQuad([up(bow), up(stbd), up(stern), up(port)], hull, '#7a5636', null, null, 0.95);
+    ctx.beginPath();
+    ctx.moveTo(up(bow).x, up(bow).y); ctx.lineTo(up(stbd).x, up(stbd).y);
+    ctx.lineTo(up(stern).x, up(stern).y); ctx.lineTo(up(port).x, up(port).y); ctx.closePath();
+    ctx.strokeStyle = '#3f2a17';
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+    // Cockpit: an inset well of lighter interior boards so the boat reads as
+    // open, not a slab. A faint shadow at its forward lip gives it depth.
+    const ibow = up(worldToScreen(cx, cy - 0.5)), istern = up(worldToScreen(cx, cy + 0.5));
+    const iport = up(worldToScreen(cx - 0.3, cy)), istbd = up(worldToScreen(cx + 0.3, cy));
+    this.drawTexturedQuad([ibow, istbd, istern, iport], inner, '#6b4a2b', 'rgba(28,18,9,0.28)', 'multiply', 0.95);
+    ctx.strokeStyle = 'rgba(20,12,6,0.5)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(iport.x, iport.y); ctx.lineTo(ibow.x, ibow.y); ctx.lineTo(istbd.x, istbd.y);
+    ctx.stroke();
     // A thwart (seat plank) across the beam.
-    ctx.strokeStyle = '#946a3c';
+    ctx.strokeStyle = '#8a6437';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(iport.x, iport.y - HULL);
-    ctx.lineTo(istbd.x, istbd.y - HULL);
+    ctx.moveTo(iport.x, iport.y); ctx.lineTo(istbd.x, istbd.y);
     ctx.stroke();
     ctx.restore();
   }

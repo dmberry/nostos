@@ -25,8 +25,10 @@ The world-contract refactor (`docs/islands-plan.md`) is on `main`: Stage 0 done
 craftable, shore-placed boat.** Hub-file touches, all surgical/append-only:
 `items.js` (new `boat` item, kind 'vehicle'), `tiles.js` (`boat` in `OBJECTS`,
 solid), `player.js` (`canCraftBoat`/`craftBoat`/`_findLaunchTile` — 12 wood + a
-cutting tool at the sea's edge), `renderer.js` (`drawBoat` + one craft-prompt
-branch), `main.js` (boat added to the **C** craft chain, lowest priority). New
+cutting tool at the sea's edge), `renderer.js`/`textures.js` (`drawBoat` stretches
+wood-grain textures — new `assets/textures/boat-wood-1.jpg`/`-2.jpg`,
+`BOAT_TEXTURES` — over the hull faces and deck, plus one craft-prompt branch),
+`main.js` (boat added to the **C** craft chain, lowest priority). New
 `test/boat.test.js` (6 tests; suite now 32 green). No VERSION bump yet — the boat
 isn't boardable until 1b (departure + crossing), so the bump waits for end of
 Stage 1. Next: 1b, then 1c (campaign save). Fetch before touching those five

@@ -76,6 +76,14 @@ export const BOX_TEXTURES = [
   loadDownscaled(T + 'box-wood-2.jpg', 64),
 ];
 
+// Wood grain for the crafted boat (Renderer.drawBoat), stretched over the hull
+// faces. [0] is the darker, figured grain used for the hull sides and deck;
+// [1] the lighter, finer grain for the interior boards.
+export const BOAT_TEXTURES = [
+  loadDownscaled(T + 'boat-wood-1.jpg', 96),
+  loadDownscaled(T + 'boat-wood-2.jpg', 96),
+];
+
 // Keyed by the wall object's `material` field (tiles.js/worldgen.js).
 export const WALL_TEXTURES = {
   stone: loadDownscaled(T + 'wall-stone.jpg'),
