@@ -2471,9 +2471,12 @@ export class Renderer {
       for (const [ox, oy] of [[-3, -2], [3, 0], [0, 1]]) ctx.fillRect(c.x + ox, c.y + oy - 4, 2, 2);
       return;
     }
-    // Damage lowers and scorches the tower as it's burned down.
+    // Damage lowers and scorches the tower as it's burned down. The panopticon
+    // EYE (cls 'eye') stands taller and broader than the lesser towers — the one
+    // great sensor the island watches through.
     const dmg = obj.obDamage || 0;
-    const H = Math.round(96 * (1 - dmg * 0.13)), W = 9;
+    const isEye = obj.cls === 'eye';
+    const H = Math.round(96 * (isEye ? 1.7 : 1) * (1 - dmg * 0.13)), W = isEye ? 14 : 9;
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
     ctx.beginPath();
     ctx.ellipse(c.x, c.y, 15, 7, 0, 0, Math.PI * 2);

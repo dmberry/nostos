@@ -74,19 +74,24 @@ export function createPolyphemus(seed) {
     drop(boards, 'backpack', 1);
   }
 
-  // The AI network: ember obelisks garrisoned by hunter robots, and a W-factory.
+  // The AI network is one great EYE and a thin ring of lesser towers — the
+  // panopticon in a single sensor (islands-plan §6). The first tower placed is
+  // THE eye (cls 'eye'): it watches by line of sight across the island (main.js's
+  // obelisk loop), and while it can see you the whole island turns your way. Break
+  // its line (behind ruins, forest, the fortress) to slip its gaze; blind it
+  // (crash/destroy it) to put the eye out. The rest are ordinary ember towers.
   const obelisks = [];
   {
     const rng = makeRng((IS ^ 0x0b31) >>> 0);
     let guard = 0;
-    while (obelisks.length < 12 && guard++ < 5000) {
+    while (obelisks.length < 6 && guard++ < 5000) {
       const x = 4 + Math.floor(rng() * (map.w - 8));
       const y = 4 + Math.floor(rng() * (map.h - 8));
       const f = map.floorAt(x, y);
       if ((f !== 'grass' && f !== 'tallgrass') || map.objectAt(x, y)) continue;
       if (Math.hypot(x - spawn.x, y - spawn.y) < 16) continue;
       if (obelisks.some((o) => Math.hypot(o.x - x, o.y - y) < 14)) continue;
-      map.addObject('obelisk', x, y, {});
+      map.addObject('obelisk', x, y, obelisks.length === 0 ? { cls: 'eye' } : {});
       obelisks.push({ x, y });
     }
     // Resistance caches: a handful of guaranteed anti-machine gear in interior

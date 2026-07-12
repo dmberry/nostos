@@ -382,9 +382,13 @@ fortress-map work, landed as v1.58; the core-kill endgame landed as v1.59.)
    POLYPHEMUS (robots/factory/purge tick) and repoints back to CALYPSO. A **heading
    chart** (islands-plan §10.1) replaces the single-route crossing: boarding opens a
    destination picker of known islands (OGYGIA / AEGILIA / ITHACA), and the boot
-   restore + save resume you on whichever island you were on. **Still pending on
-   POLYPHEMUS:** the signature **single-eye LOS / panopticon + "Nobody" gambit**
-   (slice 3), and — per revision §4 — this must land *before* R3 softens Calypso.
+   restore + save resume you on whichever island you were on. **POLYPHEMUS panopticon DONE (v1.101):** one dominant **eye** (cls 'eye', +5
+   lesser ember towers) that detects by **line of sight across a huge range** — in
+   its line the whole island turns on you (worldStir + aggro), break the line
+   behind cover/terrain to slip its gaze, and **blind it** (crash/destroy it) to put
+   the eye out. The eye renders taller/broader as the single great sensor. **Still
+   pending:** the **"Nobody" identity-evasion gambit** (a follow-up), and — per
+   revision §4 — R3 (softening Calypso) still comes after this.
    **Then:** **CIRCE** (transformation debuffs + the moly counter) and **HELIOS**
    (the forbidden solar herd). Each wires `Player.onCoreDefeated` to its own robots set
    (see §2) — the endgame loop is already built. **Known gaps:** the "N:NN to

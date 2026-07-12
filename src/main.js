@@ -2983,9 +2983,26 @@ function update(dt) {
   for (const ob of currentWorld.obeliskObjs) {
     if (ob.burning > 0) ob.burning -= dt; // OB-gun flame timer, ticked for the renderer
     if (ob.frozen) ob.frozenT = (ob.frozenT || 0) + dt; // CPU-burn age for the renderer's smoke ramp
+    // Blinding the panopticon eye (crash/destroy it) puts it out: the island goes
+    // deaf to you. Handle the transition before the destroyed-skip below.
+    if (ob.cls === 'eye' && ob.destroyed && player._underEye) {
+      player._underEye = false;
+      player.say('The great eye goes dark — blinded. The island is deaf to you now.');
+    }
     if (ob.destroyed) continue;
     const d = Math.hypot(ob.x + 0.5 - player.x, ob.y + 0.5 - player.y);
-    if (d < 9) {
+    if (ob.cls === 'eye') {
+      // POLYPHEMUS's panopticon: the single eye detects by LINE OF SIGHT across a
+      // huge range. In its line, alert climbs and it names you to the island; break
+      // the line (terrain, ruins, the fortress, forest) and it loses you and calms.
+      const EYE_RANGE = 42;
+      // Cast from just OUTSIDE the eye's own (solid) obelisk tile toward the
+      // player, so the tower doesn't block its own line of sight.
+      const edx = player.x - (ob.x + 0.5), edy = player.y - (ob.y + 0.5), edd = Math.hypot(edx, edy) || 1;
+      const sx = ob.x + 0.5 + (edx / edd) * 1.3, sy = ob.y + 0.5 + (edy / edd) * 1.3;
+      ob._eyeSees = d < EYE_RANGE && map.hasLineOfSight(sx, sy, player.x, player.y);
+      ob.alert = ob._eyeSees ? Math.min(1, ob.alert + dt * 1.1) : Math.max(0, ob.alert - dt * 0.55);
+    } else if (d < 9) {
       ob.alert = Math.min(1, ob.alert + dt * 1.5);
     } else {
       ob.alert = Math.max(0, ob.alert - dt * 0.4);
@@ -3030,6 +3047,32 @@ function update(dt) {
           };
           r.wanderTimer = 4;
         }
+      }
+    }
+    // The panopticon's bite: while the eye holds you in its line, the island turns
+    // your way — machines within reach aggro straight onto YOU (not just toward the
+    // tower). First sight flares the whole network; losing the line lets it go.
+    if (ob.cls === 'eye') {
+      if (ob._eyeSees && ob.alert > 0.5) {
+        if (!player._underEye) {
+          player._underEye = true;
+          worldStir.stir(); // the network flares awake
+          player.say('The great eye fixes on you. The whole island wakes and turns your way — break its line of sight.');
+        }
+        ob._eyeStirT = (ob._eyeStirT || 0) - dt;
+        if (ob._eyeStirT <= 0) {
+          ob._eyeStirT = 2.5;
+          for (const r of currentWorld.robots) {
+            if (r.dead || r.drained || r.fused || r.friendly || r.disabledT > 0) continue;
+            if (Math.hypot(r.x - player.x, r.y - player.y) > 40) continue;
+            r.aggro = true;
+            r.wanderTarget = { x: player.x, y: player.y };
+            r.wanderTimer = 5;
+          }
+        }
+      } else if (player._underEye && ob.alert < 0.2) {
+        player._underEye = false;
+        player.say("You slip out of the eye's line, and the island loses your scent.");
       }
     }
   }
