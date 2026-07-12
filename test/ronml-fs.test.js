@@ -176,3 +176,11 @@ test('drives calls ctx.drives (the listing)', () => {
   assert.ok(r.ok, r.text);
   assert.equal(called, true);
 });
+
+test('retire calls ctx.retire (R3 guard stand-down)', () => {
+  let called = false;
+  const ctx = { station: 'ob', session: {}, retire: () => { called = true; } };
+  const r = runRonml('retire', ctx);
+  assert.ok(r.ok, r.text);
+  assert.equal(called, true);
+});

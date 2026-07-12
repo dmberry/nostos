@@ -313,6 +313,16 @@ function makeBuiltins(station) {
         return { tag: 'file', name: r.out };
       },
     },
+    // `retire` (R3): with the hermes card, stand the fortress guards down — they
+    // become gardeners instead of hunters. The refunction-by-command payoff.
+    retire: {
+      arity: 0,
+      fn: (_args, ctx) => {
+        if (!ctx.retire) throw new RonmlError('nothing to retire from this terminal.');
+        ctx.retire();
+        return { tag: 'unit' };
+      },
+    },
     // ---- HERMES station verbs (RON hilltop relays only) ------------------
     // RON tech is off-grid on purpose: no network verb (touching the wire would
     // give the relay away). It is the human record — read it, print a copy — AND
@@ -504,7 +514,7 @@ function makeBuiltins(station) {
 // `copy`, `cd`, `ls` are deliberately NOT listed here — they are neutral (work at
 // both an obelisk and a HERMES relay), like `notes`. A verb tagged for one station
 // is refused at the other; the file verbs must move files at either terminal.
-const OB_VERBS = ['scan', 'nearest', 'keys', 'name', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'sing', 'map', 'print', 'decrypt', 'unlock', 'eliza'];
+const OB_VERBS = ['scan', 'nearest', 'keys', 'name', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'sing', 'map', 'print', 'decrypt', 'unlock', 'eliza', 'retire'];
 // Note: HERMES's `print` is added as an override in makeBuiltins (it takes a
 // topic), not tagged here — tagging it would steal the obelisk's own arity-0
 // `print`. `print` is already in OB_VERBS, so ALL_VERBS still covers it.
@@ -650,6 +660,7 @@ const HELP_VERBS = [
   ['decrypt k', 'key -> key', 'open the sealed AI key so unlock can use it', 'hold an AI key', 'ob'],
   ['unlock k d', 'key key -> unit', 'legacy — the fortress gate opens to a Trojan card now (refunction your AI key)', 'superseded', 'ob'],
   ['eliza', 'file -> file', 'eliza <file> runs the DOCTOR transform on a file; bare `eliza` (or run eliza) opens the DOCTOR to talk to — quit to leave', '', 'ob'],
+  ['retire', 'unit -> unit', "stand the fortress guards down — they become gardeners (needs the hermes card)", 'hermes card', 'ob'],
   ['read t', 'atom -> unit', 'read a document — read ronml / fortress / obelisks / robots / history / destroy', 'HERMES relay only', 'hermes'],
   ['print t', 'atom -> unit', 'print a copy of a document into your notepad (N)', 'HERMES relay only', 'hermes'],
   ['archive', 'unit -> unit', 'list the documents this relay holds', 'HERMES relay only', 'hermes'],

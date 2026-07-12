@@ -989,6 +989,31 @@ function ronmlCtx() {
     // `eliza <file>`: the DOCTOR transform (bare `eliza` opens the chat — that is
     // intercepted in replRun, not routed through the language).
     elizaTransform: (name) => elizaTransformFile(name),
+    // `retire` (R3): with the hermes card in hand (Zeus's command aboard), stand
+    // CALYPSO's guards down — they lay down arms and become w5 gardeners, planting
+    // where they hunted. The escape-chain payoff: you refunction the fortress by
+    // command rather than raze it. (updateW5 self-inits, so a retype is clean.)
+    retire: () => {
+      if (!player.hasItem('hermes_card')) {
+        replPrint('ERR: the guards answer only to a command they cannot refuse. Forge the hermes card first (it carries zeus-lightning.ml).');
+        return;
+      }
+      let n = 0;
+      for (const r of currentWorld.robots) {
+        if (r.dead || r.fused) continue;
+        if (r.type === 'm4' || r.type === 'm5' || r.type === 'm6') {
+          r.type = 'w5'; r.hardened = false; r.aggro = false; r.hurt = false;
+          r._plantT = Math.random() * 6; // stagger their first planting
+          n++;
+        }
+      }
+      if (n) {
+        replPrint(`OK: zeus-lightning fires across the muster. ${n} of ${fortress.AI_NAME}'s guards lay down their arms and take up planting — lotus and sapling where they hunted.`);
+        player.say(`${fortress.AI_NAME}'s guards go still, then kneel to the earth. By the god's command they are gardeners now, planting where they hunted.`);
+      } else {
+        replPrint('No guards left to retire — the muster is quiet.');
+      }
+    },
   };
 }
 
@@ -1655,7 +1680,7 @@ obTermEl.addEventListener('click', (e) => { if (e.target === obTermEl) closeObTe
 // Autocomplete is per-system: an obelisk (TIRESIAS) suggests only AI-network
 // verbs, a HERMES relay only RON verbs — no seepage between the two. (sing is
 // secret, so it's in neither list.)
-const OB_COMPLETE = ['scan', 'nearest', 'keys', 'name', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'map', 'print', 'copy', 'cd', 'ls', 'drives', 'decrypt', 'unlock', 'eliza', 'notes', 'help', 'let'];
+const OB_COMPLETE = ['scan', 'nearest', 'keys', 'name', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'map', 'print', 'copy', 'cd', 'ls', 'drives', 'decrypt', 'unlock', 'eliza', 'retire', 'notes', 'help', 'let'];
 const HERMES_COMPLETE = ['read', 'print', 'archive', 'records', 'drive', 'drives', 'backup', 'restore', 'forge', 'copy', 'cd', 'ls', 'notes', 'help', 'let'];
 const escapeHtml = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 function ronmlCompletion(value) {
