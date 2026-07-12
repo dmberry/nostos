@@ -288,6 +288,26 @@ export function createFortress(map, seed, spawn, opts = {}) {
     }
   }
 
+  // CALYPSO's own console: a kiosk on the sanctum deck, on the north (approach)
+  // face of the core so a raider reaching the sanctum walks straight onto it.
+  // Reusing the 'gateterm' object type (same kiosk art, no renderer change); the
+  // proximity/click dispatch in main.js is what decides it opens HER terminal.
+  let coreTerm = null;
+  {
+    const cand = [
+      [Math.round(coreCx), coreY - 2],
+      [coreX - 2, coreY + 1],
+      [coreX + CORE + 1, coreY + CORE - 1],
+      [Math.round(coreCx), coreY + CORE + 1],
+    ];
+    for (const [ctx2, cty2] of cand) {
+      if (map.inBounds(ctx2, cty2) && !map.objectAt(ctx2, cty2)) {
+        coreTerm = map.addObject('gateterm', ctx2, cty2, { code: 'CORE-CAL' });
+        break;
+      }
+    }
+  }
+
   // The labyrinth: a full-width band between the doorway and the sanctum. Its
   // entrance/exit column is aligned to the doorway/core so the raid runs on a
   // straight north-south axis, but the only route through is the maze solution.
@@ -329,6 +349,9 @@ export function createFortress(map, seed, spawn, opts = {}) {
   const nearTerminal = (px, py, r = 1.9) =>
     Math.hypot(px - (termX + 0.5), py - (termY + 0.5)) <= r;
 
+  const nearCoreTerminal = (px, py, r = 1.9) =>
+    !!coreTerm && Math.hypot(px - (coreTerm.x + 0.5), py - (coreTerm.y + 0.5)) <= r;
+
   const openDoor = () => {
     if (state.open) return;
     for (const d of doors) if (d) map.removeObject(d); // seam tiles fall back to walkable panel
@@ -342,6 +365,7 @@ export function createFortress(map, seed, spawn, opts = {}) {
     seamY,
     door: { x0: doorX0, x1: doorX0 + DOOR_W - 1, y: seamY, cx: doorX0 + DOOR_W / 2 },
     terminal: { x: termX, y: termY, obj: terminal },
+    coreTerminal: coreTerm ? { x: coreTerm.x, y: coreTerm.y, obj: coreTerm } : null, // CALYPSO's sanctum console
     core: { obj: core, x: coreCx, y: coreCy, tx: coreX, ty: coreY, fw: CORE, fh: CORE },
     quad: { top: quadTop, bottom: quadBottom, muster }, // the guard courtyard + muster points
     uplink: uplinkObj,
@@ -352,6 +376,7 @@ export function createFortress(map, seed, spawn, opts = {}) {
     get open() { return state.open; },
 
     nearTerminal,
+    nearCoreTerminal,
 
     // The dormant patrol: just one or two light M4 report drones on the quad's
     // muster points. Nothing else garrisons the fortress while it's sealed —

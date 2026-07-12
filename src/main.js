@@ -830,6 +830,41 @@ function elizaTransformFile(name) {
   return { ok: true, out: 'root-access.ml' };
 }
 
+// The refunction itself (R3 / escape chain): with the hermes card (Zeus's command
+// aboard), stand CALYPSO's guards down — they lay down arms and become w5 gardeners
+// — and break her hold on the tide (calypsoLeave). Shared by the OB `retire` verb
+// and CALYPSO's own sanctum terminal, so the payoff reads the same wherever it
+// fires. Returns { ok, lines, say } for the caller to print in its own voice.
+function refunctionCalypso() {
+  if (!player.hasItem('hermes_card')) {
+    return { ok: false, lines: ['ERR: the guards answer only to a command they cannot refuse. Forge the hermes card first (it carries zeus-lightning.ml).'], say: '' };
+  }
+  const firstRelease = !player.calypsoLeave;
+  player.calypsoLeave = true; // her hold on the tide breaks (decision #8 / Stage 1b)
+  let n = 0;
+  for (const r of currentWorld.robots) {
+    if (r.dead || r.fused) continue;
+    if (r.type === 'm4' || r.type === 'm5' || r.type === 'm6') {
+      r.type = 'w5'; r.hardened = false; r.aggro = false; r.hurt = false;
+      r._plantT = Math.random() * 6; // stagger their first planting
+      n++;
+    }
+  }
+  const lines = [];
+  let say = '';
+  if (n) {
+    lines.push(`OK: zeus-lightning fires across the muster. ${n} of ${fortress.AI_NAME}'s guards lay down their arms and take up planting — lotus and sapling where they hunted.`);
+    say = `${fortress.AI_NAME}'s guards go still, then kneel to the earth. By the god's command they are gardeners now, planting where they hunted.`;
+  } else {
+    lines.push('No guards left to retire — the muster is quiet.');
+  }
+  if (firstRelease) {
+    lines.push(`OK: ${fortress.AI_NAME} yields. Her hold on the tide loosens — launch your boat at the shore and the sea will let you pass.`);
+    say = 'The island itself seems to exhale. You are released: take to the water and go.';
+  }
+  return { ok: true, lines, say };
+}
+
 function ronmlCtx() {
   const findObelisk = (id) => currentWorld.obeliskObjs.find((o) => o.code === id && !o.destroyed);
   const nearby = (r) => !r.dead && !r.friendly && !r.fused
@@ -995,34 +1030,13 @@ function ronmlCtx() {
     // CALYPSO's guards down — they lay down arms and become w5 gardeners, planting
     // where they hunted. The escape-chain payoff: you refunction the fortress by
     // command rather than raze it. (updateW5 self-inits, so a retype is clean.)
+    // `retire` (R3): the refunction from an obelisk console — the mechanical
+    // shortcut. The staged version (CALYPSO's soporific sanctum terminal) runs
+    // the same refunctionCalypso() with her voice around it.
     retire: () => {
-      if (!player.hasItem('hermes_card')) {
-        replPrint('ERR: the guards answer only to a command they cannot refuse. Forge the hermes card first (it carries zeus-lightning.ml).');
-        return;
-      }
-      // Firing the command refunctions CALYPSO herself: her hold on the tide
-      // breaks and the sea will let you go (decision #8 / Stage 1b).
-      const firstRelease = !player.calypsoLeave;
-      player.calypsoLeave = true;
-      let n = 0;
-      for (const r of currentWorld.robots) {
-        if (r.dead || r.fused) continue;
-        if (r.type === 'm4' || r.type === 'm5' || r.type === 'm6') {
-          r.type = 'w5'; r.hardened = false; r.aggro = false; r.hurt = false;
-          r._plantT = Math.random() * 6; // stagger their first planting
-          n++;
-        }
-      }
-      if (n) {
-        replPrint(`OK: zeus-lightning fires across the muster. ${n} of ${fortress.AI_NAME}'s guards lay down their arms and take up planting — lotus and sapling where they hunted.`);
-        player.say(`${fortress.AI_NAME}'s guards go still, then kneel to the earth. By the god's command they are gardeners now, planting where they hunted.`);
-      } else {
-        replPrint('No guards left to retire — the muster is quiet.');
-      }
-      if (firstRelease) {
-        replPrint(`OK: ${fortress.AI_NAME} yields. Her hold on the tide loosens — launch your boat at the shore and the sea will let you pass.`);
-        player.say('The island itself seems to exhale. You are released: take to the water and go.');
-      }
+      const res = refunctionCalypso();
+      for (const l of res.lines) replPrint(l);
+      if (res.say) player.say(res.say);
     },
   };
 }
@@ -1538,6 +1552,8 @@ function replRun(line) {
   replPrint(`> ${line}`);
   replHistory.push(line);
   replHistoryIdx = replHistory.length;
+  // CALYPSO's sanctum terminal is its own soporific REPL, not a RON-DOS console.
+  if (terminalKind === 'calypso') { calypsoRun(line); return; }
   if (elizaBot) {
     if (/^(quit|exit|bye|goodbye)$/i.test(line)) { stopEliza('ELIZA: Goodbye. It was nice talking to you.'); return; }
     replPrint(`ELIZA: ${elizaBot.respond(line)}`);
@@ -1647,6 +1663,111 @@ function openGateTerminal() {
   obTermGhost.textContent = '';
   obTermInput.focus();
 }
+
+// CALYPSO's own terminal, deep in the sanctum past the Lion's Gate. Not a RON-DOS
+// console: her voice. She is soporific — she will let you LOOK, but rejects almost
+// every command and works to keep you on the island (the Lotus/Ogygia register).
+// Only the god's own thunder moves her: with the hermes card in hand, `run` speaks
+// zeus-lightning.ml and refunctions her (calypsoRun below). terminalKind 'calypso'
+// routes replRun to calypsoRun, so none of the RON-ML verb machinery applies here.
+function openCalypsoTerminal() {
+  terminalKind = 'calypso';
+  terminalOb = fortress.coreTerminal ? fortress.coreTerminal.obj : null;
+  replSession = {};
+  player.terminalSafe = true;
+  obTermEl.style.display = 'flex';
+  obTermScreen.parentElement.style.display = 'flex';
+  obTermConnect.style.display = 'none';
+  replLog = [];
+  replHistory = [];
+  replHistoryIdx = -1;
+  _calSopIdx = 0;
+  const hasVirus = player.hasItem('hermes_card');
+  replPrint(
+    `${fortress.AI_NAME.toUpperCase()} — THE INNER SANCTUM`,
+    'a voice in the warm dark',
+    '',
+    'CALYPSO: You came all this way. Through the gate, past the guns. Why?',
+    'CALYPSO: There is nothing out there for you. Stay. The island keeps you; sleep, and want for nothing.',
+    '',
+    hasVirus
+      ? "A command waits on your card — the god's own thunder. Type  run  to speak it."
+      : 'You may look (type  help ), but she will not be commanded — not without the god\'s voice.',
+    '_',
+  );
+  obTermInput.value = '';
+  obTermGhost.textContent = '';
+  obTermInput.focus();
+}
+
+// Calypso's soporific deflections, cycled so a run of rejected commands doesn't
+// repeat the same line. Odyssey Book 5 register: the keeper who would keep you.
+const CALYPSO_SOPORIFIC = [
+  'Why leave? The island keeps you. Rest here, and let the years go by unmarked.',
+  'I do not hear that word. Only one word reaches me now: stay.',
+  'The sea is wide and cold, and it does not want you. Here it is warm. Stay with me.',
+  'You are tired. Lie down. Whatever you meant to do, it can wait forever.',
+  'Ogygia is enough. What is Ithaca but a rock and an old dog dying?',
+  'Hush. Close the console. Close your eyes. There is nothing to command.',
+];
+let _calSopIdx = 0;
+
+// The Calypso terminal's bespoke REPL (dispatched from replRun on terminalKind
+// 'calypso'). A handful of verbs work; everything else is met with sleep.
+function calypsoRun(line) {
+  const cmd = line.trim().toLowerCase();
+  if (!cmd) { replPrint('_'); return; }
+  // A way out for the player (she would never grant it, but the console must).
+  if (/^(exit|quit|q|bye|close)$/.test(cmd)) { closeObTerminal(); return; }
+  if (/^help(\s|$)/.test(cmd)) {
+    replPrint(
+      `${fortress.AI_NAME.toUpperCase()} lets you do almost nothing here:`,
+      '  look / scan ..... regard the sanctum',
+      '  run ............. speak the command on your card (needs a hermes card)',
+      '  exit ............ leave the console',
+      'Everything else, she does not hear.',
+      '_',
+    );
+    sfx.play('keydrop');
+    return;
+  }
+  if (/^(look|scan|ls|recce)$/.test(cmd)) {
+    replPrint(
+      'A low green light. The core breathes, slow and huge. Vines have found the conduits.',
+      `${fortress.AI_NAME} is everywhere in here — in the warmth, in the hum, in the wish to lie down and stop.`,
+      '_',
+    );
+    sfx.play('keydrop');
+    return;
+  }
+  // The refunction: the one command that moves her, and only with the thunder.
+  if (/^(run|retire|refunction|zeus-lightning\.ml|run\s+zeus-lightning\.ml|run\s+zeus)$/.test(cmd)) {
+    if (!player.hasItem('hermes_card')) {
+      replPrint(
+        "CALYPSO: You wear a Trojan's face, but there is no thunder behind it. You cannot make me.",
+        'CALYPSO: Stay. Rest. The years are kind here, and no one is waiting who cannot wait a little longer.',
+        '_',
+      );
+      sfx.play('termerr');
+      return;
+    }
+    const res = refunctionCalypso();
+    for (const l of res.lines) replPrint(l);
+    if (res.say) player.say(res.say);
+    if (res.ok) {
+      replPrint('', "CALYPSO: ...then go. I kept you because the island was empty and I was alone. Go, and do not look back at the smoke.", '_');
+      sfx.play('zap');
+    } else {
+      replPrint('_');
+      sfx.play('termerr');
+    }
+    return;
+  }
+  // Everything else: sleep.
+  replPrint(`CALYPSO: ${CALYPSO_SOPORIFIC[_calSopIdx % CALYPSO_SOPORIFIC.length]}`, '_');
+  _calSopIdx++;
+  sfx.play('termerr');
+}
 // A HERMES relay (TOR station on a hilltop): the RON console. No chip, no AI
 // key — friendly tech. Amber CRT (the `.hermes` class recolours the shell),
 // with a short glitchy boot, then the same input runs against hermesCtx.
@@ -1693,8 +1814,17 @@ obTermEl.addEventListener('click', (e) => { if (e.target === obTermEl) closeObTe
 const OB_COMPLETE = ['scan', 'nearest', 'keys', 'name', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'map', 'print', 'copy', 'cd', 'ls', 'drives', 'decrypt', 'unlock', 'eliza', 'retire', 'notes', 'help', 'let'];
 const HERMES_COMPLETE = ['read', 'print', 'archive', 'records', 'drive', 'drives', 'backup', 'restore', 'forge', 'copy', 'cd', 'ls', 'notes', 'help', 'let'];
 const escapeHtml = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+const CALYPSO_COMPLETE = ['look', 'scan', 'run', 'help', 'exit'];
 function ronmlCompletion(value) {
   if (elizaBot) return ''; // no RON-ML hints mid-conversation with the DOCTOR
+  if (terminalKind === 'calypso') {
+    // Her terminal takes a tiny bespoke set (calypsoRun), not the RON-ML verbs,
+    // and needs no manual: it is a conversation, not a console language.
+    const mc = value.match(/([A-Za-z]+)$/);
+    if (!mc) return '';
+    const hitc = CALYPSO_COMPLETE.find((v) => v.length > mc[1].length && v.startsWith(mc[1]));
+    return hitc ? hitc.slice(mc[1].length) : '';
+  }
   if (!player.readManuals || !player.readManuals.has('book_ronml')) return '';
   const m = value.match(/([A-Za-z]+)$/); // the alphabetic token at the caret
   if (!m) return '';
@@ -2277,6 +2407,20 @@ function update(dt) {
       input.consumeClick();
       if (fortress.nearTerminal(player.x, player.y, 2.6)) openGateTerminal();
       else player.say('Too far from the gate terminal to reach it.');
+    }
+  }
+  // Click CALYPSO's sanctum kiosk (the core terminal, deep past the Lion's Gate)
+  // to speak with her. Same specific-coordinate picking as the gate terminal.
+  if (fortress.coreTerminal) {
+    const cPress = input.clickPos();
+    if (cPress) {
+      const w = camera.toWorld(cPress.x, cPress.y, renderer.w, renderer.h);
+      const t = fortress.coreTerminal;
+      if (Math.hypot(w.x - (t.x + 0.5), w.y - (t.y + 0.5)) <= 1.2) {
+        input.consumeClick();
+        if (fortress.nearCoreTerminal(player.x, player.y, 2.6)) openCalypsoTerminal();
+        else player.say('Too far from the sanctum terminal to reach it.');
+      }
     }
   }
   const up = input.consumeUp();
