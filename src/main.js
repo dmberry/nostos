@@ -689,13 +689,11 @@ function fsCopyFile(name, destRaw) {
   return { ok: false, msg: `can't write to ${destRaw}.` };
 }
 
-// Refunction the card one state on: consume the old item, grant the next. If
-// there's no room for the new card, put the old one back and refuse (never eat
-// the card). The card's file list comes from the new item's def (items.js).
+// Refunction the card one state on. An IN-PLACE swap (player.swapItem): the card
+// keeps its exact slot/hand, so it works even when the pack is full or the key is
+// held in hand — the old remove-then-restow failed there, and could eat the card.
 function fsRefunctionCard(fromKey, toKey) {
-  if (!player.removeItem(fromKey)) return false;
-  if (player.stow(toKey, 1) <= 0) { player.stow(fromKey, 1); return false; }
-  return true;
+  return player.swapItem(fromKey, toKey);
 }
 
 // `eliza <file>` — the DOCTOR transform (S2 of the Calypso escape chain). ELIZA

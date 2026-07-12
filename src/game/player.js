@@ -273,6 +273,28 @@ export class Player {
     return false;
   }
 
+  // Swap one held item for another IN PLACE — same hand, pocket, or backpack
+  // spot. Used to refunction the AI card through its states (ai_key ->
+  // trojan_key -> hermes_card): the card is one physical object, so its new
+  // state must take the exact place of the old. Never remove-then-restow — that
+  // fails, and can LOSE the card, when the key is in hand or the pack is full.
+  // (A qty>1 stack decrements and stows the new one; restores itself if full.)
+  swapItem(fromKey, toKey) {
+    if (this.hands === fromKey) { this.hands = toKey; return true; }
+    const doSlot = (arr, i) => {
+      if (arr[i].qty > 1) { arr[i].qty -= 1; if (this.stow(toKey, 1) > 0) return true; arr[i].qty += 1; return false; }
+      arr[i] = { item: toKey, qty: 1 }; return true;
+    };
+    let i = this.pockets.findIndex((s) => s && s.item === fromKey);
+    if (i >= 0) return doSlot(this.pockets, i);
+    if (this.backpack) {
+      if (this.backpack.weapon === fromKey) { this.backpack.weapon = toKey; return true; }
+      i = this.backpack.slots.findIndex((s) => s && s.item === fromKey);
+      if (i >= 0) return doSlot(this.backpack.slots, i);
+    }
+    return false;
+  }
+
   // Total count of a named item across hand, pockets, and backpack.
   countItem(key) {
     let n = 0;
