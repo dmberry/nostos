@@ -118,6 +118,13 @@ Line references are approximate — firm against the text.
 
 ## 8. To build (new subsystem over existing RON-ML primitives)
 
+**Build status (2026-07-12): Layer A is BUILT** (branch `gameplay`, unpushed — commits
+`e7fc056`, `c5d4ff9`, `0f76040`). The whole terminal hack `ai_key → trojan_key →
+hermes_card` runs at the obelisk + HERMES consoles, with autocopy/reprint recovery; 48
+unit tests; live-verified card state machine. Everything below is now implemented except
+where noted. **Layer B (§ Sequencing) is still deferred.**
+
+
 **Exists:** `copy`(key) / `decrypt` / `unlock` / `backup` / `restore` / `eliza`(DOCTOR) /
 `print aikey`.
 
