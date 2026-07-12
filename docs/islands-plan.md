@@ -337,9 +337,13 @@ fortress-map work, landed as v1.58; the core-kill endgame landed as v1.59.)
    sails you to a stub islet World (src/islands/islet.js) and back, via a
    deferred world-switch (boardBoat sets a pending crossing, update() switches at
    the frame top). Departure is now travel, not a victory cert; the terminal win
-   moves to the true endgame (Ithaca / all four AIs). Autosave is guarded to
-   CALYPSO only (no per-world save yet). **1c (campaign save: persist which island
-   you're on) next.**
+   moves to the true endgame (Ithaca / all four AIs). **1c (campaign save) DONE
+   (v1.96)** — the save records `world.currentIsland`, and boot resumes you there
+   (CALYPSO is the live world; the islet is regenerated + switched to at the saved
+   position, done last in module-eval so no earlier init runs against the wrong
+   map). Autosave now allows CALYPSO + islet, still never the transient Backspace.
+   The fuller campaign blob (`aisDown`, boat hull/state per §7) lands with Stage
+   3's real islands.
 4. **Stage 2** — islandkit extraction, seed-diff verified.
 5. **Stage 3** — ITHACA first (small, proves the contract), then APOLLO /
    ATHENA / HADES in parallel, one owner each. Each island wires

@@ -176,6 +176,10 @@ try {
 // The AI-key backup survives death (its own durable key, not the run save).
 try { if (localStorage.getItem('postai-aikey-backup')) player.aikeyBackedUp = true; } catch { /* ignore */ }
 let hadExistingSave = false;
+// Stage 1c: which island the save left the player on, and where. Applied at the
+// very end of boot (after all init + the world machinery), since resuming onto a
+// non-overworld island means a goToWorld() the rest of module-eval must not see.
+let _bootIsland = 'calypso', _bootPos = null;
 try {
   const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
   if (saved) {
@@ -200,6 +204,7 @@ try {
       if (st.backpack) player.backpack = st.backpack;
       if (st.walkman !== undefined) player.walkman = st.walkman; // null = tape moved out, respected across reload
       if (st.calypsoLeave) player.calypsoLeave = true; // sticky: refunctioning Calypso persists across reload
+      if (typeof st.x === 'number') _bootPos = { x: st.x, y: st.y }; // the saved position, for the island resume below
     }
     // Guard against stale item keys carried over from a save written by an
     // earlier build — e.g. the pre-v1.15 tape keys (tape_ward / tape_meme),
@@ -238,6 +243,7 @@ try {
       }
       if (typeof wsv.daemonsDown === 'number') daemonsDown = wsv.daemonsDown;
       if (wsv.fortress && fortress && fortress.restore) fortress.restore(wsv.fortress);
+      if (wsv.currentIsland) _bootIsland = wsv.currentIsland; // Stage 1c: resume on the island you saved on
     }
   }
 } catch { /* corrupt save: start fresh */ }
@@ -271,6 +277,7 @@ function buildSaveBlob() {
       calypsoLeave: player.calypsoLeave, // Calypso refunctioned: the sea will let you go
     },
     world: {
+      currentIsland: currentWorld.id, // Stage 1c: which island you're on, so a voyage survives reload
       obDown: calypso.obeliskObjs.filter((o) => o.destroyed).map((o) => o.code),
       factoryDestroyed: !!(wfactory && wfactory.destroyed),
       // Looted caches, keyed by tile — the world regenerates them full otherwise.
@@ -282,11 +289,12 @@ function buildSaveBlob() {
 }
 const persist = () => {
   if (resettingGame) return;
-  // Only the overworld is savable: buildSaveBlob captures CALYPSO's world and the
-  // player's position with no record of which world you're on, so saving off it
-  // (the islet, the Backspace) would drop you back onto CALYPSO at foreign
-  // coordinates on Continue. Per-world campaign save is Stage 1c.
-  if (currentWorld !== calypso) return;
+  // Savable worlds are the islands you can be on across a reload: CALYPSO and the
+  // islet (Stage 1c — buildSaveBlob records world.currentIsland, and the boot
+  // restore resumes you there). The Backspace is a transient pocket you always
+  // exit by its door, so it is never saved: doing so would drop you back onto
+  // CALYPSO at the pocket's coordinates on Continue.
+  if (currentWorld !== calypso && currentWorld.id !== 'islet') return;
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(buildSaveBlob()));
     localStorage.setItem(IDENTITY_KEY, JSON.stringify({ name: player.name, gender: player.gender }));
@@ -3024,5 +3032,18 @@ function frame(now) {
     fpsClock -= 1;
   }
   requestAnimationFrame(frame);
+}
+// Stage 1c: resume on the island the save left you on. CALYPSO is already the live
+// world; for the islet, regenerate it and switch there at the saved position. Done
+// last — after every other init — so no earlier module-eval runs against the islet
+// map. onEnter's arrival line is suppressed here: a reload is a resume, not a fresh
+// landfall.
+if (_bootIsland === 'islet') {
+  ensureIslet();
+  const arrival = islet.onEnter;
+  islet.onEnter = () => {};
+  goToWorld(islet);
+  islet.onEnter = arrival;
+  if (_bootPos && typeof _bootPos.x === 'number') { player.x = _bootPos.x; player.y = _bootPos.y; camera.snap(player.x, player.y); }
 }
 requestAnimationFrame(frame);
