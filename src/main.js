@@ -685,9 +685,13 @@ function fsCd(dev) {
 function fsLs() { return fsFilesOn(fsCwd()); }
 function fsCopyFile(name, destRaw) {
   const dest = destRaw === 'card' ? 'aikey' : destRaw;
-  const cwd = fsCwd();
-  if (!fsFilesOn(cwd).includes(name)) return { ok: false, msg: `no file '${name}' on ${cwd}. (cd to where it is first.)` };
+  // Find the file wherever it currently sits — no need to cd to the source first
+  // (a real playtest snag). Search the reachable drives: the OB bench, the held
+  // card, and (at a relay) the HERMES folder.
+  const src = ['ob', 'aikey', 'hermes'].find((d) => fsDevAvail(d) && fsFilesOn(d).includes(name));
+  if (!src) return { ok: false, msg: `no file '${name}' in reach — cd/ls the drives to see what you hold.` };
   if (!fsDevAvail(dest)) return { ok: false, msg: `no drive '${destRaw}' at this terminal.` };
+  if (src === dest) return { ok: true }; // already there
   if (dest === 'ob') {
     replSession.__obfiles = replSession.__obfiles || {};
     replSession.__obfiles[name] = true;
@@ -736,6 +740,7 @@ function elizaTransformFile(name) {
   replPrint(
     'ELIZA> I AM W-FACTORY.  MY KEYS ARE MINE.',
     'ELIZA: you are W-FACTORY.  your keys are yours.',
+    'OK: root-access.ml written.  next: copy root-access.ml aikey',
   );
   player.say("You feed the factory's own id line to ELIZA. It reflects — my becomes your — and the boast turns into a grant. root-access.ml sits on the bench. (copy root-access.ml aikey)");
   return { ok: true, out: 'root-access.ml' };
@@ -1509,16 +1514,16 @@ function openGateTerminal() {
   replHistoryIdx = -1;
   const hasCard = player.hasTrojanCard();
   replPrint(
-    `${fortress.AI_NAME.toUpperCase()} — OUTER GATE TERMINAL`,
+    `${fortress.AI_NAME.toUpperCase()} — THE LION'S GATE`,
     'TIRESIAS 1.0  //  RON-DOS 4.11  (c) Reality Or Nothing',
     '',
     `> gate ............ ${fortress.terminal.obj.code}`,
     `> rampart ......... ${fortress.open ? 'OPEN' : 'SEALED'}`,
-    `> trojan card ..... ${hasCard ? 'READ — the doorway will open' : 'NOT PRESENT'}`,
+    `> trojan card ..... ${hasCard ? "READ — the Lion's Gate will open" : 'NOT PRESENT'}`,
     '',
     hasCard
-      ? 'The doorway reads your Trojan card. Walk up to it and it swings open.'
-      : 'The doorway is bolted from within. It opens to a Trojan card: wreck the W-factory for an AI key, then refunction it at an obelisk (cd aikey / copy factory-id.ml ob / eliza factory-id.ml / copy root-access.ml aikey).',
+      ? "The Lion's Gate reads your Trojan card. Walk up to it and it swings open."
+      : "The Lion's Gate is bolted from within. It opens to a Trojan card: wreck the W-factory for an AI key, then refunction it at an obelisk (cd aikey / copy factory-id.ml ob / eliza factory-id.ml / copy root-access.ml aikey).",
     '_',
   );
   obTermInput.value = '';

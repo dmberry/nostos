@@ -381,7 +381,7 @@ export function createFortress(map, seed, spawn, opts = {}) {
       }
       state.hacked = true;
       for (const d of doors) if (d) d.hacked = true; // lock beacons turn green
-      return { ok: true, msg: `Bolts disengage across the rampart. Bring a Trojan card up to the doorway and it opens.` };
+      return { ok: true, msg: `Bolts disengage across the rampart. Bring a Trojan card up to the Lion's Gate and it opens.` };
     },
 
     // Per-frame: once you carry the key up to the doorway, it swings open.
@@ -396,7 +396,7 @@ export function createFortress(map, seed, spawn, opts = {}) {
       if (!state.open && player.hasTrojanCard && player.hasTrojanCard()) {
         if (Math.abs(player.y - seamY) <= 2.5 && player.x >= doorX0 - 1.5 && player.x <= doorX0 + DOOR_W + 0.5) {
           openDoor();
-          player.say(`The Trojan card reads at the gate. ${aiName}'s doorway grinds open.`);
+          player.say(`The Trojan card reads at the Lion's Gate. ${aiName}'s rampart grinds open.`);
           if (!state.announced) { state.announced = true; player.addScore?.(40); }
         }
       }
