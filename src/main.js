@@ -29,6 +29,7 @@ import { createUnderworldPocket, spawnUnderworldCreature, updateUnderworldCreatu
 import { createWorld, registerWorld, switchWorld } from './game/world.js';
 import { createIsland } from './islands/calypso.js';
 import { createIthaca } from './islands/ithaca.js';
+import { createPolyphemus } from './islands/polyphemus.js';
 import { CHOIR_NOTES, CHOIR_DURATION } from './engine/choir-notes.js';
 
 // Note onsets split into four pitch registers, so each singing machine can be
@@ -299,7 +300,7 @@ const persist = () => {
   // restore resumes you there). The Backspace is a transient pocket you always
   // exit by its door, so it is never saved: doing so would drop you back onto
   // CALYPSO at the pocket's coordinates on Continue.
-  if (currentWorld !== calypso && currentWorld.id !== 'ithaca') return;
+  if (!currentWorld.combat && currentWorld.id !== 'ithaca') return;
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(buildSaveBlob()));
     localStorage.setItem(IDENTITY_KEY, JSON.stringify({ name: player.name, gender: player.gender }));
@@ -523,11 +524,9 @@ function goToWorld(target) {
 
 function enterBackspace() { ensureBackspace(); goToWorld(backspace); }
 
-// ITHACA — home, the island you sail to off Ogygia (islands-plan §6, Stage 3).
-// Built lazily the first time you sail, from the campaign seed, and registered as
-// a World like the Backspace. The greek ship carries you between it and CALYPSO.
-// onEnter is the homecoming: with all four AIs fallen it is the ending; before
-// that it is a landfall, not yet home, with Argos waiting on the shore.
+// The islands you sail between (islands-plan §6). Each far island is built lazily
+// the first time you steer for it, from the campaign seed, and registered like the
+// Backspace. The greek ship carries you between them via the heading chart below.
 let ithaca = null;
 function ensureIthaca() {
   if (ithaca) return;
@@ -550,22 +549,57 @@ function ensureIthaca() {
     }
   };
 }
+let polyphemus = null;
+function ensurePolyphemus() {
+  if (polyphemus) return;
+  polyphemus = registerWorld(createPolyphemus(WORLD_SEED));
+  polyphemus.onEnter = () => {
+    player.say("The ship grounds on the Cyclopes' shore. Somewhere inland a single vast eye turns, and the land goes taut with knowing you are here. This is POLYPHEMUS.");
+  };
+}
+// Resolve an island id to its (lazily-built) World.
+function worldById(id) {
+  if (id === 'calypso') return calypso;
+  if (id === 'ithaca') { ensureIthaca(); return ithaca; }
+  if (id === 'polyphemus') { ensurePolyphemus(); return polyphemus; }
+  return null;
+}
+
+// The heading chart (islands-plan §10.1): boarding the ship opens a chart of the
+// islands you know of; you pick where to steer. Every island but the one you are
+// on is offered. (Danger-gated, not locked — you may sail early into a slaughter.)
+const CROSSINGS = [
+  { id: 'calypso', place: 'OGYGIA', desc: "Calypso's island, where you were kept." },
+  { id: 'polyphemus', place: 'AEGILIA', desc: 'The Land of the Cyclopes. A single eye watches.' },
+  { id: 'ithaca', place: 'ITHACA', desc: 'Home — if the sea will let you.' },
+];
+const headingEl = document.getElementById('heading');
+const headingListEl = document.getElementById('heading-list');
+document.getElementById('heading-cancel').addEventListener('click', () => { headingEl.style.display = 'none'; });
+headingEl.addEventListener('click', (e) => { if (e.target === headingEl) headingEl.style.display = 'none'; });
+function openHeadingChart() {
+  headingListEl.innerHTML = '';
+  for (const c of CROSSINGS) {
+    if (c.id === currentWorld.id) continue;
+    const btn = document.createElement('button');
+    btn.innerHTML = `<span class="place">${c.place}</span><span class="desc">${c.desc}</span>`;
+    btn.addEventListener('click', () => {
+      headingEl.style.display = 'none';
+      player.say('You set your heading and pull for open water.');
+      pendingCrossing = c.id; // performed at the next frame top (see update())
+    });
+    headingListEl.appendChild(btn);
+  }
+  headingEl.style.display = 'flex';
+}
 
 // A boat crossing switches worlds, which must happen at a clean frame boundary
 // (boarding is requested from inside player.update; switching mid-tick and then
 // running the rest of an overworld frame against the wrong map is the drawObelisk-
-// freeze class of bug). So boardBoat sets pendingCrossing and update() performs
-// the switch at its top. null = nothing queued.
+// freeze class of bug). onDepart opens the chart; the chosen id sits in
+// pendingCrossing and update() performs the switch at its top. null = nothing queued.
 let pendingCrossing = null;
-player.onDepart = (pl, boat) => {
-  if (currentWorld === calypso) {
-    pl.say('You put your back to the oar and pull for open water. Ogygia falls away behind the swell.');
-    pendingCrossing = 'ithaca';
-  } else {
-    pl.say('You shove the ship off the sand and turn her prow back toward Ogygia.');
-    pendingCrossing = 'calypso';
-  }
-};
+player.onDepart = () => { openHeadingChart(); };
 
 // Fog of war: the minimap only shows where you have been.
 map.explored = new Uint8Array(map.w * map.h);
@@ -2277,9 +2311,8 @@ function update(dt) {
   if (pendingCrossing) {
     const target = pendingCrossing;
     pendingCrossing = null;
-    if (target === 'ithaca') { ensureIthaca(); goToWorld(ithaca); }
-    else goToWorld(calypso);
-    sfx.play('zap');
+    const dest = worldById(target);
+    if (dest) { goToWorld(dest); sfx.play('zap'); }
     return;
   }
 
@@ -3070,12 +3103,14 @@ function frame(now) {
 // last — after every other init — so no earlier module-eval runs against the wrong
 // map. onEnter (the homecoming/arrival beat) is suppressed here: a reload is a
 // resume, not a fresh landfall.
-if (_bootIsland === 'ithaca') {
-  ensureIthaca();
-  const arrival = ithaca.onEnter;
-  ithaca.onEnter = () => {};
-  goToWorld(ithaca);
-  ithaca.onEnter = arrival;
-  if (_bootPos && typeof _bootPos.x === 'number') { player.x = _bootPos.x; player.y = _bootPos.y; camera.snap(player.x, player.y); }
+if (_bootIsland && _bootIsland !== 'calypso') {
+  const dest = worldById(_bootIsland);
+  if (dest) {
+    const arrival = dest.onEnter;
+    dest.onEnter = () => {};   // a reload is a resume, not a fresh arrival/homecoming
+    goToWorld(dest);
+    dest.onEnter = arrival;
+    if (_bootPos && typeof _bootPos.x === 'number') { player.x = _bootPos.x; player.y = _bootPos.y; camera.snap(player.x, player.y); }
+  }
 }
 requestAnimationFrame(frame);

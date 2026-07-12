@@ -75,6 +75,29 @@
   #about ul.tapes li i { color: #b7c2a8; font-style: italic; }
   #about .foot { margin-top: 18px; padding-top: 12px; border-top: 1px solid rgba(207,216,195,0.2);
     color: #6b7a5e; font-size: 11px; }
+  #heading {
+    display: none; position: fixed; inset: 0;
+    background: rgba(5,7,4,0.8); z-index: 24;
+  }
+  #heading .panel {
+    max-width: 420px; margin: 14vh auto 0; padding: 22px 26px;
+    background: #101610; border: 1px solid rgba(207,216,195,0.35);
+    border-radius: 6px; color: #cfd8c3; font: 14px/1.5 system-ui, sans-serif;
+  }
+  #heading h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em;
+    color: #9db284; margin: 0 0 4px; }
+  #heading .sub { color: #7f8f72; font-size: 12px; margin: 0 0 16px; }
+  #heading-list { display: flex; flex-direction: column; gap: 8px; }
+  #heading-list button {
+    display: block; width: 100%; text-align: left; cursor: pointer;
+    padding: 10px 14px; border-radius: 5px; color: #e8e0d0;
+    background: rgba(207,216,195,0.06); border: 1px solid rgba(207,216,195,0.25);
+    font: 14px system-ui, sans-serif; }
+  #heading-list button:hover { background: rgba(157,178,132,0.16); border-color: rgba(157,178,132,0.6); }
+  #heading-list button .place { font-weight: 600; }
+  #heading-list button .desc { display: block; color: #9db284; font-size: 12px; margin-top: 2px; }
+  #heading .cancel { margin-top: 14px; color: #6b7a5e; font-size: 12px; cursor: pointer; text-align: center; }
+  #heading .cancel:hover { color: #9db284; }
   #help {
     display: none; position: fixed; inset: 0;
     background: rgba(5,7,4,0.75); z-index: 10;
@@ -319,6 +342,14 @@
     <p>Character and animal art: Kenney (kenney.nl), CC0.</p>
 
     <div class="foot">Game designed in the UK &middot; v<span id="aboutVer"></span> &middot; github.com/dmberry/nostos</div>
+  </div>
+</div>
+<div id="heading">
+  <div class="panel">
+    <h2>Set a heading</h2>
+    <p class="sub">You put out from the shore. Where do you steer?</p>
+    <div id="heading-list"></div>
+    <div class="cancel" id="heading-cancel">Stay ashore</div>
   </div>
 </div>
 <div id="help">

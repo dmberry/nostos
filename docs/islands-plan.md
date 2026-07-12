@@ -370,12 +370,23 @@ fortress-map work, landed as v1.58; the core-kill endgame landed as v1.59.)
    guard in animals.js so it never routs, aggros, or bites). The greek ship now
    sails CALYPSO↔ITHACA (it replaced the stub islet, now deleted). `onEnter` is
    the homecoming: with all four AIs fallen (`daemonsDown >= 4`) it is the ending
-   (a victory certificate); before that it is a landfall, not yet home. **Next:**
-   **POLYPHEMUS** (the panopticon island — ember OBs, the single-eye LOS / "Nobody"
-   gambit; it is the full kill-raid template's proper home, and per the revision
-   §4 it must land *before* R3 softens Calypso into the depart-mode tutorial),
-   then **CIRCE** (transformation debuffs + the moly counter) and **HELIOS** (the
-   forbidden solar herd). Each wires `Player.onCoreDefeated` to its own robots set
+   (a victory certificate); before that it is a landfall, not yet home.
+   **POLYPHEMUS island DONE (v1.98)** — `src/islands/polyphemus.js`: a second
+   *martial* island (ember OBs `#4e1410`/`#ff2a20`, a POLYPHEMUS fortress in kill
+   mode, robots, factory, coast, lean loot, a return ship). This required first
+   **generalizing the combat loop** (v1.98's prior commit): the loop keyed on
+   `currentWorld === calypso` and reached its controllers through const aliases, so
+   only CALYPSO could be martial; now a `combat` world flag drives the branch and
+   the controller aliases (`fortress`/`wfactory`/`robots`/… ) are `let` and
+   repointed to the current island on every switch — verified the full loop runs on
+   POLYPHEMUS (robots/factory/purge tick) and repoints back to CALYPSO. A **heading
+   chart** (islands-plan §10.1) replaces the single-route crossing: boarding opens a
+   destination picker of known islands (OGYGIA / AEGILIA / ITHACA), and the boot
+   restore + save resume you on whichever island you were on. **Still pending on
+   POLYPHEMUS:** the signature **single-eye LOS / panopticon + "Nobody" gambit**
+   (slice 3), and — per revision §4 — this must land *before* R3 softens Calypso.
+   **Then:** **CIRCE** (transformation debuffs + the moly counter) and **HELIOS**
+   (the forbidden solar herd). Each wires `Player.onCoreDefeated` to its own robots set
    (see §2) — the endgame loop is already built. **Known gaps:** the "N:NN to
    POSEIDON" HUD countdown still shows
    on ITHACA (it is CALYPSO-local — needs the per-island countdown from §6); no
