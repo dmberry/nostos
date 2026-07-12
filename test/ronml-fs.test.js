@@ -99,3 +99,28 @@ test('a hyphen-only identifier is still a node (OB-XXXX unaffected)', () => {
   assert.ok(r.ok, r.text);
   assert.equal(r.text, 'OB-BB05');
 });
+
+// ---- S2: the ELIZA transform (eliza <file>) --------------------------------
+
+test('eliza <file> runs the transform via ctx and returns the output file', () => {
+  let called = null;
+  const ctx = { station: 'ob', session: {}, elizaTransform: (n) => { called = n; return { ok: true, out: 'root-access.ml' }; } };
+  const r = runRonml('eliza factory-id.ml', ctx);
+  assert.ok(r.ok, r.text);
+  assert.equal(called, 'factory-id.ml');
+  assert.equal(r.text, 'root-access.ml');
+});
+
+test('eliza needs a file, not a bare word (bare eliza is a REPL mode, tested live)', () => {
+  const ctx = { station: 'ob', session: {}, elizaTransform: () => ({ ok: true, out: 'x' }) };
+  const r = runRonml('eliza banana', ctx);
+  assert.ok(!r.ok);
+  assert.match(r.text, /needs a file/);
+});
+
+test('eliza transform failure surfaces the ctx message', () => {
+  const ctx = { station: 'ob', session: {}, elizaTransform: () => ({ ok: false, msg: 'no factory-id.ml on the ob bench — copy it here first' }) };
+  const r = runRonml('eliza factory-id.ml', ctx);
+  assert.ok(!r.ok);
+  assert.match(r.text, /ob bench/);
+});

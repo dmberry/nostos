@@ -364,6 +364,26 @@ export const ITEMS = {
     // hermes_card (+zeus-lightning.ml). See docs/calypso-escape-chain.md.
     files: ['access-ai-code.ml', 'factory-id.ml'],
   },
+  // The AI key refunctioned (Benjamin) once root-access.ml is written onto it:
+  // a Trojan card that opens the Lion's Gate. Same physical object as ai_key,
+  // one step on. hasAiKeyFamily() keeps it counting as the AI key.
+  trojan_key: {
+    name: 'Trojan key',
+    kind: 'key',
+    stack: 1,
+    color: '#b5892e',
+    files: ['access-ai-code.ml', 'factory-id.ml', 'root-access.ml'],
+  },
+  // The Trojan card armed with Zeus's command (zeus-lightning.ml, forged at
+  // HERMES): the herald that gets you obeyed at Calypso's terminal. The card's
+  // final state.
+  hermes_card: {
+    name: 'Hermes card',
+    kind: 'key',
+    stack: 1,
+    color: '#a9e0ff',
+    files: ['access-ai-code.ml', 'factory-id.ml', 'root-access.ml', 'zeus-lightning.ml'],
+  },
   // Spat out by the fortress gate terminal once you hack it with RON-ML. Its
   // bolts throw the grand doorway in the southern rampart open — the only way
   // into ZEUS's fortress. A one-way trophy; carried, not held.

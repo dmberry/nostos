@@ -252,6 +252,14 @@ export class Player {
     return false;
   }
 
+  // The AI card is one physical object refunctioned through three states —
+  // ai_key -> trojan_key -> hermes_card (the Calypso escape chain). Anything
+  // that asks "do you hold the AI key" accepts the whole family, so refunctioning
+  // the card never strips its base authority (copy aikey / backup still work).
+  hasAiKeyFamily() {
+    return this.hasItem('ai_key') || this.hasItem('trojan_key') || this.hasItem('hermes_card');
+  }
+
   // Remove one of a named item from wherever it is. Returns whether it went.
   removeItem(key) {
     if (this.hands === key) { this.hands = null; return true; }

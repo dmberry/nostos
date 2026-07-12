@@ -284,15 +284,23 @@ function makeBuiltins(station) {
       arity: 0,
       fn: (_args, ctx) => { ctx.showNotepad(); return { tag: 'unit' }; },
     },
-    // Loads ELIZA — the 1966 DOCTOR script — into the node as an interactive
-    // program. A verb like any other (`eliza`, or the readable `run eliza`);
-    // the terminal then routes your lines to the doctor until you leave.
+    // ELIZA has two faces. Bare `eliza` / `run eliza` opens the 1966 DOCTOR as
+    // an interactive chat — that is intercepted in the REPL (main.js), not here,
+    // since it is a mode, not a value. `eliza <file>` is the TRANSFORM: feed a
+    // file through the DOCTOR's reflection and get a new file back. On the
+    // factory's id line (`I am W-FACTORY, my keys are mine`) the my->your
+    // reflection turns the boast into a grant — root-access.ml. (Calypso escape
+    // chain, docs/calypso-escape-chain.md.)
     eliza: {
-      arity: 0,
-      fn: (_args, ctx) => {
-        if (!ctx.eliza) throw new RonmlError('no ELIZA image on this node.');
-        ctx.eliza();
-        return { tag: 'unit' };
+      arity: 1,
+      fn: ([file], ctx) => {
+        if (!file || file.tag !== 'file') {
+          throw new RonmlError('eliza needs a file to transform — try: eliza factory-id.ml  (or `eliza` alone to talk to the DOCTOR)');
+        }
+        if (!ctx.elizaTransform) throw new RonmlError('no ELIZA image on this node.');
+        const r = ctx.elizaTransform(file.name);
+        if (!r || !r.ok) throw new RonmlError((r && r.msg) || `ELIZA can do nothing with ${file.name}.`);
+        return { tag: 'file', name: r.out };
       },
     },
     // ---- HERMES station verbs (RON hilltop relays only) ------------------
@@ -580,6 +588,7 @@ const USAGE_HINTS = {
   rewind: 'rewind needs a number of hours. try: rewind 3',
   copy: 'copy a key (copy aikey) or a file to a device (copy factory-id.ml ob)',
   cd: 'cd needs a device. try: cd aikey  ·  cd ob',
+  eliza: 'eliza <file> transforms a file (eliza factory-id.ml); bare `eliza` opens the DOCTOR',
   decrypt: 'decrypt needs the AI key. try: copy aikey  then  decrypt aikey',
   unlock: 'unlock needs a hacked node key and the decrypted AI key. try: copy aikey / let k = hack OB-XXXX / let d = decrypt aikey / unlock k d',
   print: 'print needs a topic — at an obelisk: print map  or  print aikey; at a relay: print <document>',
@@ -612,7 +621,7 @@ const HELP_VERBS = [
   ['ls', 'unit -> list', 'list the files on the current drive', '', ''],
   ['decrypt k', 'key -> key', 'open the sealed AI key so unlock can use it', 'hold an AI key', 'ob'],
   ['unlock k d', 'key key -> unit', 'drop a fortress key: a hacked node key k + the decrypted AI key d', 'needs both', 'ob'],
-  ['eliza', 'unit -> unit', 'run ELIZA, the 1966 DOCTOR script — talk to it (also: run eliza); Ctrl+C or quit to leave', '', 'ob'],
+  ['eliza', 'file -> file', 'eliza <file> runs the DOCTOR transform on a file; bare `eliza` (or run eliza) opens the DOCTOR to talk to — quit to leave', '', 'ob'],
   ['read t', 'atom -> unit', 'read a document — read ronml / fortress / obelisks / robots / history / destroy', 'HERMES relay only', 'hermes'],
   ['print t', 'atom -> unit', 'print a copy of a document into your notepad (N)', 'HERMES relay only', 'hermes'],
   ['archive', 'unit -> unit', 'list the documents this relay holds', 'HERMES relay only', 'hermes'],

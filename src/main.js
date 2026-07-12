@@ -668,11 +668,54 @@ function fsCopyFile(name, destRaw) {
     replSession.__obfiles[name] = true;
     return { ok: true };
   }
-  // Writing to the card is how it is refunctioned — wired in S3 (root-access.ml
-  // -> trojan_key) and S4 (zeus-lightning.ml -> hermes_card). Until then the
-  // card's storage is sealed to arbitrary files.
-  if (dest === 'aikey') return { ok: false, msg: "the card's storage is sealed — it only takes a valid credential." };
+  // Writing to the card is how it is refunctioned. The card carries no per-slot
+  // data — its state IS which item you hold — so a valid credential swaps the
+  // held item to the next state (its file list grows with it). Anything else is
+  // refused: the card's storage only takes the credential that advances it.
+  if (dest === 'aikey') {
+    if (name === 'root-access.ml' && player.hasItem('ai_key')) {
+      if (!fsRefunctionCard('ai_key', 'trojan_key')) return { ok: false, msg: 'no room to refunction the card.' };
+      player.say("root-access.ml burns into the AI key and rewrites it. The card is a Trojan now — it will open the Lion's Gate.");
+      return { ok: true, msg: 'card refunctioned: AI key -> Trojan key' };
+    }
+    if (name === 'zeus-lightning.ml' && player.hasItem('trojan_key')) {
+      if (!fsRefunctionCard('trojan_key', 'hermes_card')) return { ok: false, msg: 'no room to refunction the card.' };
+      player.say("zeus-lightning.ml settles onto the Trojan card. It is a hermes card now — it carries the god's command to Calypso.");
+      return { ok: true, msg: 'card refunctioned: Trojan key -> hermes card' };
+    }
+    return { ok: false, msg: "the card's storage is sealed — it takes root-access.ml (on the AI key) or zeus-lightning.ml (on the Trojan)." };
+  }
   return { ok: false, msg: `can't write to ${destRaw}.` };
+}
+
+// Refunction the card one state on: consume the old item, grant the next. If
+// there's no room for the new card, put the old one back and refuse (never eat
+// the card). The card's file list comes from the new item's def (items.js).
+function fsRefunctionCard(fromKey, toKey) {
+  if (!player.removeItem(fromKey)) return false;
+  if (player.stow(toKey, 1) <= 0) { player.stow(fromKey, 1); return false; }
+  return true;
+}
+
+// `eliza <file>` — the DOCTOR transform (S2 of the Calypso escape chain). ELIZA
+// reflects a line back at you (my->your, I->you). Fed the factory's own id line,
+// that reflection turns the machine's boast into a grant: root-access.ml. The
+// file must be on the OB scratch bench (copy factory-id.ml ob first); the output
+// lands on the same bench. Returns {ok, out} / {ok:false, msg} to the builtin.
+function elizaTransformFile(name) {
+  const ob = replSession.__obfiles || {};
+  if (!ob[name]) return { ok: false, msg: `no ${name} on the ob bench — copy it here first: copy ${name} ob` };
+  if (name !== 'factory-id.ml') {
+    replPrint(`ELIZA: and what does ${name} have to do with how you feel?`);
+    return { ok: false, msg: `ELIZA reflects ${name} back at you, and nothing changes.` };
+  }
+  replSession.__obfiles['root-access.ml'] = true;
+  replPrint(
+    'ELIZA> I AM W-FACTORY.  MY KEYS ARE MINE.',
+    'ELIZA: you are W-FACTORY.  your keys are yours.',
+  );
+  player.say("You feed the factory's own id line to ELIZA. It reflects — my becomes your — and the boast turns into a grant. root-access.ml sits on the bench. (copy root-access.ml aikey)");
+  return { ok: true, out: 'root-access.ml' };
 }
 
 function ronmlCtx() {
@@ -687,10 +730,10 @@ function ronmlCtx() {
     session: replSession, // persistent top-level bindings for this terminal visit
     bindSession: (name, val) => { replSession[name] = val; },
     cd: fsCd, ls: fsLs, copyFile: fsCopyFile, // RON-DOS drives (cd/ls/copy files)
-    hasAiKey: () => player.hasItem('ai_key'),
+    hasAiKey: () => player.hasAiKeyFamily(), // ai_key / trojan_key / hermes_card all count
     currentNode: () => (terminalOb ? terminalOb.code : null),
     printKey: () => {
-      if (!player.hasItem('ai_key')) { replPrint('ERR: no AI key to copy — you are not holding one.'); return; }
+      if (!player.hasAiKeyFamily()) { replPrint('ERR: no AI key to copy — you are not holding one.'); return; }
       map.groundItems.push({ item: 'ai_key', qty: 1, x: player.x + 0.4, y: player.y + 0.6, keep: true });
       replPrint('OK: the console stamps a fresh AI key — it drops at your feet.');
       player.say('The terminal stamps a copy of the AI key. It clatters to the floor at your feet, a spare against losing the first.');
@@ -836,9 +879,9 @@ function ronmlCtx() {
     // but reading a wall of scrollback is another, and browsers don't let a
     // page reserve Tab reliably anyway.
     showNotepad: () => { openNotebook(); },
-    // `eliza` / `run eliza`: load the DOCTOR script as an interactive session
-    // (the terminal takes over routing input to it — see replRun).
-    eliza: () => { startEliza(); },
+    // `eliza <file>`: the DOCTOR transform (bare `eliza` opens the chat — that is
+    // intercepted in replRun, not routed through the language).
+    elizaTransform: (name) => elizaTransformFile(name),
   };
 }
 
@@ -870,7 +913,7 @@ function hermesCtx() {
 // is the whole point. `restore` mints a fresh key when you've lost it.
 const AIKEY_BACKUP_KEY = 'postai-aikey-backup';
 function hermesBackupKey() {
-  if (!player.hasItem('ai_key')) { replPrint('ERR: no AI key in hand to back up. (a wrecked W-factory drops one.)'); return; }
+  if (!player.hasAiKeyFamily()) { replPrint('ERR: no AI key in hand to back up. (a wrecked W-factory drops one.)'); return; }
   if (!hermesSpend(HERMES_BATT.print)) { replPrint('Not enough charge — let the cell recover.'); return; }
   player.aikeyBackedUp = true;
   try { localStorage.setItem(AIKEY_BACKUP_KEY, '1'); } catch { /* storage full/blocked: keep the in-memory flag */ }
@@ -879,7 +922,7 @@ function hermesBackupKey() {
 }
 function hermesRestoreKey() {
   if (!player.aikeyBackedUp) { replPrint('ERR: nothing on the mesh to restore. back one up first: backup aikey'); return; }
-  if (player.hasItem('ai_key')) { replPrint('You already hold an AI key — nothing to restore.'); return; }
+  if (player.hasAiKeyFamily()) { replPrint('You already hold an AI key — nothing to restore.'); return; }
   const stored = player.stow('ai_key', 1);
   if (stored > 0) { replPrint('OK: AI key restored from the mesh — pocketed.'); player.say('The relay stamps your backed-up AI key back into being. It sits in your pocket again.'); }
   else { map.groundItems.push({ item: 'ai_key', qty: 1, x: player.x + 0.4, y: player.y + 0.6, keep: true }); replPrint('OK: AI key restored — no pocket room, it drops at your feet.'); }
@@ -1342,13 +1385,14 @@ function replRun(line) {
     replPrint(`ELIZA: ${elizaBot.respond(line)}`);
     return;
   }
+  // Bare `eliza` / `run eliza` / `doctor` open the DOCTOR — an interactive mode,
+  // not a value verb — so intercept them here (like help). `eliza <file>` is the
+  // transform and goes through the language (the arity-1 eliza builtin, ronml.js).
+  if (/^\s*(run\s+)?(eliza|doctor)\s*$/i.test(line)) { startEliza(); sfx.play('keydrop'); return; }
   // `Help` / `HELP` / `Help hack` should all work — the console shouldn't be
   // fussy about case on its own help command (verbs are all lowercase anyway).
   const relaxed = /^\s*help(\s+\S+)?\s*$/i.test(line) ? line.trim().toLowerCase() : line;
-  // `run eliza` / `run doctor` read as running a legacy program; normalise them
-  // to the `eliza` verb so the language itself handles it (see ronml.js).
-  const prog = relaxed.replace(/^run\s+(eliza|doctor)\s*$/i, 'eliza');
-  const result = runRonml(prog, terminalKind === 'hermes' ? hermesCtx() : ronmlCtx());
+  const result = runRonml(relaxed, terminalKind === 'hermes' ? hermesCtx() : ronmlCtx());
   // Audible verdict on every command: the keydrop chime doubles as the RON-ML
   // success sound, errors get its descending opposite — and HERMES speaks the
   // same pair in a warmer, lower voice (it's a different machine; sound.js).
