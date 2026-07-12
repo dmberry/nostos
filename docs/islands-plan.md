@@ -196,7 +196,8 @@ Sliced 1a/1b/1c so each lands playable:
   you walk up to — and so `isSolid`/`blocksShot` never dereference an
   unregistered type); `canCraftBoat(map)`/`craftBoat(map)`/`_findLaunchTile(map)`
   in player.js gated on **12 wood** + a cutting tool in hand (`treeDamage >= 2`,
-  the axe/saw class) + standing at the sea's edge; wired into the **C** chain and
+  the axe/saw class) + standing within ~2 tiles of the sea's edge (radius
+  tightened 2026-07-12; wood stacks to 64, so 12 fits one pocket); wired into the **C** chain and
   the craft prompt (lowest priority, so it never shadows a weapon/tool craft) in
   main.js; `Renderer.drawBoat` draws the beached hull in the iso plane, with
   wood-grain textures (`BOAT_TEXTURES`, `assets/textures/boat-wood-1.jpg`/`-2.jpg`)
@@ -209,6 +210,8 @@ Sliced 1a/1b/1c so each lands playable:
   boardable — that is 1b.**
 - **1b — departure + the cheap crossing** (swim/sail past the shelf, heading
   chart, timed stamina/hull events) → `switchWorld` arrival on a stub islet.
+  A successful crossing off CALYPSO requires **Calypso's leave** (§10 #8) —
+  without it POSEIDON's storms wreck you back onto the beach.
 - **1c — the `postai-campaign` save blob** (`currentIsland`, `boat {exists, hull,
   island}`) so a reload resumes on the right island; replaces the 1a
   `player.boatBuilt` session flag.
@@ -382,3 +385,17 @@ fortress-map work, landed as v1.58; the core-kill endgame landed as v1.59.)
    is a natural lore addition. Flavour line available whichever surface
    wants it: Homer's epithet for the gods is *athanatoi*, the Deathless —
    "One of the Deathless is dead."
+8. **Departure gate: Calypso's leave** (David, 2026-07-12). You cannot just
+   build a boat and sail off CALYPSO. Leaving the first island requires
+   *something obtained from Calypso herself* — her leave: a token/charm against
+   the sea, earned from a CALYPSO objective (which one is TBD). Without it,
+   **POSEIDON's storms turn every departure back**: the crossing always ends in
+   a storm-wreck, washing you ashore half-drowned on the CALYPSO beach, again
+   and again, no matter the boat or how well you sail. This is Homer exactly —
+   Calypso keeps Odysseus until the gods *compel* her to speed him on his way
+   with timber and provisions; the island's own quest is the key to leaving it.
+   It also stops the boat trivialising the campaign and refines decision #4
+   (open sailing) — sailing is open *once you can leave CALYPSO at all*.
+   Mechanically: a `calypsoLeave` campaign flag (in the §7 save blob) gates a
+   successful crossing; unset, the crossing sequence reuses the ITHACA
+   turn-back storm (#5) and returns you to the beach. Build this with Stage 1b.

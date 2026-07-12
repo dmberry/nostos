@@ -18,7 +18,7 @@ const FORTRESS_MAP_FRAGMENTS = 5; // scattered map quarters pieced into a fortre
 const SCRAP_PER_SWORD = 10; // scrap beaten into a robot sword
 const WOOD_PER_BOAT = 12;   // wood felled and lashed into a boat (Player.craftBoat)
 const BOAT_HULL = 100;      // a beached boat's starting hull HP (Stage 1b spends it crossing)
-const BOAT_LAUNCH_RADIUS = 4; // how close to the sea's edge you must stand to launch
+const BOAT_LAUNCH_RADIUS = 2; // must be right at the sea's edge to launch (within ~2 tiles of the shore)
 // How each machine's hull rings under a blade (sfx 'clang' pitch factor):
 // small and thin rings high and short, heavy plate rings low and long.
 const CLANG_PITCH = {
