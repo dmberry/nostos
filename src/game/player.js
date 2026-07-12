@@ -450,6 +450,12 @@ export class Player {
   boardBoat(map, boat) {
     if (this._ended || this.deathCert) return;
     if (boat && boat.seaworthy) {
+      // The crossing switches worlds, which is a main.js concern (goToWorld, and
+      // it must defer to a clean frame boundary), so hand off to the wired hook:
+      // it sails you to the next island rather than ending the run. The victory
+      // certificate below is the standalone fallback (no crossing wired — unit
+      // tests), preserved so a seaworthy launch always at least resolves.
+      if (this.onDepart) { this.onDepart(this, boat); return; }
       this._ended = true;
       this.deathCert = {
         name: this.name, gender: this.gender,

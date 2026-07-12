@@ -332,8 +332,14 @@ fortress-map work, landed as v1.58; the core-kill endgame landed as v1.59.)
    is now `const calypso = registerWorld(createIsland(WORLD_SEED))` + aliasing
    destructure. All verified + on `main`.
 3. **Stage 1** — boat + cheap crossing + stub islet. Proves travel round-trip
-   and campaign save. **1a (craftable shore-placed boat) DONE 2026-07-12**; 1b
-   (departure + crossing) and 1c (campaign save) next.
+   and campaign save. **1a (craftable shore-placed boat) DONE 2026-07-12**;
+   **1b (departure + crossing) DONE (v1.95)** — boarding a seaworthy greek ship
+   sails you to a stub islet World (src/islands/islet.js) and back, via a
+   deferred world-switch (boardBoat sets a pending crossing, update() switches at
+   the frame top). Departure is now travel, not a victory cert; the terminal win
+   moves to the true endgame (Ithaca / all four AIs). Autosave is guarded to
+   CALYPSO only (no per-world save yet). **1c (campaign save: persist which island
+   you're on) next.**
 4. **Stage 2** — islandkit extraction, seed-diff verified.
 5. **Stage 3** — ITHACA first (small, proves the contract), then APOLLO /
    ATHENA / HADES in parallel, one owner each. Each island wires

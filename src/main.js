@@ -28,6 +28,7 @@ import { createFortress, DAEMON_BOOK_ID, DAEMON_BOOK_TITLE } from './game/fortre
 import { createUnderworldPocket, spawnUnderworldCreature, updateUnderworldCreatures } from './game/underworld.js';
 import { createWorld, registerWorld, switchWorld } from './game/world.js';
 import { createIsland } from './islands/calypso.js';
+import { createIslet } from './islands/islet.js';
 import { CHOIR_NOTES, CHOIR_DURATION } from './engine/choir-notes.js';
 
 // Note onsets split into four pitch registers, so each singing machine can be
@@ -70,6 +71,10 @@ const input = new Input(window, canvas);
 const calypso = registerWorld(createIsland(WORLD_SEED));
 let map = calypso.map;
 const overworldMap = map; // stable handle: `map` gets reassigned to the underworld pocket and back
+// currentWorld is the world the player is on now; calypso is the stable overworld
+// handle. Declared here (not lower) so persist()'s "only save on calypso" guard is
+// safe when an eval-time persist() fires during boot, before the old site.
+let currentWorld = calypso;
 const { spawn, robots, animals, birds, waterdroids, obelisks, obeliskObjs, fortress, wfactory, mainframe, torObjs } = calypso;
 const player = new Player(spawn.x, spawn.y);
 player.map = map; // for death drops when damage comes from animals (kept in sync on underworld enter/exit)
@@ -277,6 +282,11 @@ function buildSaveBlob() {
 }
 const persist = () => {
   if (resettingGame) return;
+  // Only the overworld is savable: buildSaveBlob captures CALYPSO's world and the
+  // player's position with no record of which world you're on, so saving off it
+  // (the islet, the Backspace) would drop you back onto CALYPSO at foreign
+  // coordinates on Continue. Per-world campaign save is Stage 1c.
+  if (currentWorld !== calypso) return;
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(buildSaveBlob()));
     localStorage.setItem(IDENTITY_KEY, JSON.stringify({ name: player.name, gender: player.gender }));
@@ -425,8 +435,6 @@ player.onFindLore = (id) => lore.findFrag(id, player, true);
 const dayNight = new DayNight();
 const minimap = new Minimap(map);
 let showMinimap = true; // toggled with the ] key
-// currentWorld is the world the player is on now; calypso is the stable overworld handle.
-let currentWorld = calypso;
 let lastObjectCount = map.objects.length;
 
 // Audio unlocks on the first user gesture (browser requirement).
@@ -491,6 +499,35 @@ function goToWorld(target) {
 }
 
 function enterBackspace() { ensureBackspace(); goToWorld(backspace); }
+
+// The islet — the first landfall off Ogygia (islands-plan §4, the Stage-3 crossing
+// stub). Built lazily the first time you sail, from the campaign seed, and
+// registered as a World like the Backspace. The greek ship carries you between the
+// two; a proper Stage-3 island replaces this stub later.
+let islet = null;
+function ensureIslet() {
+  if (islet) return;
+  islet = registerWorld(createIslet(WORLD_SEED));
+  islet.onEnter = () => {
+    player.say('Your ship grinds onto a strange shore — a small island, low and quiet. Not home, but off Ogygia at last. Your ship is beached behind you; board it to sail on.');
+  };
+}
+
+// A boat crossing switches worlds, which must happen at a clean frame boundary
+// (boarding is requested from inside player.update; switching mid-tick and then
+// running the rest of an overworld frame against the wrong map is the drawObelisk-
+// freeze class of bug). So boardBoat sets pendingCrossing and update() performs
+// the switch at its top. null = nothing queued.
+let pendingCrossing = null;
+player.onDepart = (pl, boat) => {
+  if (currentWorld === calypso) {
+    pl.say('You put your back to the oar and pull for open water. Ogygia falls away behind the swell.');
+    pendingCrossing = 'islet';
+  } else {
+    pl.say('You shove the ship off the sand and turn her prow back toward Ogygia.');
+    pendingCrossing = 'calypso';
+  }
+};
 
 // Fog of war: the minimap only shows where you have been.
 map.explored = new Uint8Array(map.w * map.h);
@@ -2194,6 +2231,19 @@ function update(dt) {
   // freezes while paused. Help/backpack/skills/weapons and unpausing itself
   // still work above this line.
   if (paused) return;
+
+  // A queued boat crossing (islands-plan §4): perform the deferred world switch
+  // here, at a clean frame boundary, then bail — it was requested from inside
+  // player.update (boarding a ship), and the rest of this tick assumes the world
+  // we are leaving.
+  if (pendingCrossing) {
+    const target = pendingCrossing;
+    pendingCrossing = null;
+    if (target === 'islet') { ensureIslet(); goToWorld(islet); }
+    else goToWorld(calypso);
+    sfx.play('zap');
+    return;
+  }
 
   // Resting (from B): the world holds still while the character lies down, the
   // screen dims, and the clock visibly spins faster (REST_CLOCK_MULT) so you
