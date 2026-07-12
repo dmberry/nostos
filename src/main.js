@@ -858,10 +858,19 @@ function refunctionCalypso() {
   } else {
     lines.push('No guards left to retire — the muster is quiet.');
   }
+  // Her shipwright's recipe (Stage 1d) unlocks the greek-ship craft. Grant it
+  // whenever it is missing — NOT only on the first release — so a save that
+  // refunctioned her before the recipe existed (pre-v1.92, calypsoLeave already
+  // set) and a golden axe that was lost both stay recoverable rather than
+  // soft-locking the departure.
+  const needsRecipe = !player.hasItem('golden_axe');
+  if (needsRecipe) player.stow('golden_axe', 1);
   if (firstRelease) {
-    player.stow('golden_axe', 1); // her shipwright's recipe (Stage 1d): unlocks the greek-ship craft
     lines.push(`OK: ${fortress.AI_NAME} yields. She presses her shipwright's recipe — the golden axe — into your hand. Build a proper ship (wood, oar, rope, sail) and the sea will let you pass.`);
     say = 'The island itself seems to exhale. Calypso gives up her recipe, the golden axe. Build a sea-worthy ship, oar and rope and sail, and go.';
+  } else if (needsRecipe) {
+    lines.push(`OK: ${fortress.AI_NAME} presses the golden axe — her shipwright's recipe — back into your hand. Build a proper ship (wood, oar, rope, sail) and go.`);
+    say = 'Calypso gives up her recipe again, the golden axe. Build a sea-worthy ship and go.';
   }
   return { ok: true, lines, say };
 }
