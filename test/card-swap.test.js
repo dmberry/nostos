@@ -36,6 +36,20 @@ test('swapItem: card IN HAND with pockets full — swaps in place, nothing lost'
   assert.equal(p.hasItem('trojan_key'), true);
 });
 
+test('swapItem: the HERMES-side final refunction (trojan->hermes) in hand, full — safe too', () => {
+  // copy zeus-lightning.ml card at a relay runs the SAME fsRefunctionCard path,
+  // so the "no room / lost card" failure can't happen there either.
+  const p = stub({
+    hands: 'trojan_key',
+    pockets: [{ item: 'scrap', qty: 1 }, { item: 'scrap', qty: 1 }, { item: 'scrap', qty: 1 }, { item: 'scrap', qty: 1 }],
+  });
+  assert.equal(p.swapItem('trojan_key', 'hermes_card'), true);
+  assert.equal(p.hands, 'hermes_card');
+  assert.ok(p.pockets.every((s) => s && s.item === 'scrap'));
+  assert.equal(p.hasItem('trojan_key'), false);
+  assert.equal(p.hasItem('hermes_card'), true);
+});
+
 test('swapItem: card in a POCKET — swaps that slot in place', () => {
   const p = stub({ pockets: [{ item: 'ai_key', qty: 1 }, { item: 'scrap', qty: 1 }, null, null] });
   assert.equal(p.swapItem('ai_key', 'trojan_key'), true);
