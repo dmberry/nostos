@@ -345,10 +345,22 @@ fortress-map work, landed as v1.58; the core-kill endgame landed as v1.59.)
    The fuller campaign blob (`aisDown`, boat hull/state per §7) lands with Stage
    3's real islands.
 4. **Stage 2** — islandkit extraction, seed-diff verified.
-5. **Stage 3** — ITHACA first (small, proves the contract), then APOLLO /
-   ATHENA / HADES in parallel, one owner each. Each island wires
-   `Player.onCoreDefeated` to its own robots set (see §2) — the endgame loop
-   is already built.
+5. **Stage 3** — **ITHACA DONE (v1.97)** — the first real island that is not
+   CALYPSO, and the proof of the World contract. `src/islands/ithaca.js`
+   (`createIthaca`) builds a machine-free island from the `buildWorld` base with
+   the whole AI layer left off (no obelisks / factory / fortress / robots),
+   ticks its own wildlife through the World `update()` hook (the slim off-overworld
+   loop doesn't), and seats **Argos** — a tame dog (`spawnTameDog` + a `tame`
+   guard in animals.js so it never routs, aggros, or bites). The greek ship now
+   sails CALYPSO↔ITHACA (it replaced the stub islet, now deleted). `onEnter` is
+   the homecoming: with all four AIs fallen (`daemonsDown >= 4`) it is the ending
+   (a victory certificate); before that it is a landfall, not yet home. **Next:**
+   APOLLO / ATHENA / HADES in parallel, one owner each; each wires
+   `Player.onCoreDefeated` to its own robots set (see §2) — the endgame loop is
+   already built. **Known gaps:** the "N:NN to POSEIDON" HUD countdown still shows
+   on ITHACA (it is CALYPSO-local — needs the per-island countdown from §6); no
+   marked "home" building or the Argos-recognition beat yet; ITHACA reuses the
+   full 128² base rather than being genuinely small.
 6. **Later, orthogonal** — real open-sea crossing map; remaining CALYPSO
    fortress work continues independently (3b-3 core factories, 3b-4 stealth
    pass, ranged weapons vs the core — currently melee-only per v1.59).

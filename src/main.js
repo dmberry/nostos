@@ -28,7 +28,7 @@ import { createFortress, DAEMON_BOOK_ID, DAEMON_BOOK_TITLE } from './game/fortre
 import { createUnderworldPocket, spawnUnderworldCreature, updateUnderworldCreatures } from './game/underworld.js';
 import { createWorld, registerWorld, switchWorld } from './game/world.js';
 import { createIsland } from './islands/calypso.js';
-import { createIslet } from './islands/islet.js';
+import { createIthaca } from './islands/ithaca.js';
 import { CHOIR_NOTES, CHOIR_DURATION } from './engine/choir-notes.js';
 
 // Note onsets split into four pitch registers, so each singing machine can be
@@ -289,12 +289,12 @@ function buildSaveBlob() {
 }
 const persist = () => {
   if (resettingGame) return;
-  // Savable worlds are the islands you can be on across a reload: CALYPSO and the
-  // islet (Stage 1c — buildSaveBlob records world.currentIsland, and the boot
+  // Savable worlds are the islands you can be on across a reload: CALYPSO and
+  // ITHACA (Stage 1c — buildSaveBlob records world.currentIsland, and the boot
   // restore resumes you there). The Backspace is a transient pocket you always
   // exit by its door, so it is never saved: doing so would drop you back onto
   // CALYPSO at the pocket's coordinates on Continue.
-  if (currentWorld !== calypso && currentWorld.id !== 'islet') return;
+  if (currentWorld !== calypso && currentWorld.id !== 'ithaca') return;
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(buildSaveBlob()));
     localStorage.setItem(IDENTITY_KEY, JSON.stringify({ name: player.name, gender: player.gender }));
@@ -508,16 +508,31 @@ function goToWorld(target) {
 
 function enterBackspace() { ensureBackspace(); goToWorld(backspace); }
 
-// The islet — the first landfall off Ogygia (islands-plan §4, the Stage-3 crossing
-// stub). Built lazily the first time you sail, from the campaign seed, and
-// registered as a World like the Backspace. The greek ship carries you between the
-// two; a proper Stage-3 island replaces this stub later.
-let islet = null;
-function ensureIslet() {
-  if (islet) return;
-  islet = registerWorld(createIslet(WORLD_SEED));
-  islet.onEnter = () => {
-    player.say('Your ship grinds onto a strange shore — a small island, low and quiet. Not home, but off Ogygia at last. Your ship is beached behind you; board it to sail on.');
+// ITHACA — home, the island you sail to off Ogygia (islands-plan §6, Stage 3).
+// Built lazily the first time you sail, from the campaign seed, and registered as
+// a World like the Backspace. The greek ship carries you between it and CALYPSO.
+// onEnter is the homecoming: with all four AIs fallen it is the ending; before
+// that it is a landfall, not yet home, with Argos waiting on the shore.
+let ithaca = null;
+function ensureIthaca() {
+  if (ithaca) return;
+  ithaca = registerWorld(createIthaca(WORLD_SEED));
+  ithaca.onEnter = () => {
+    if (daemonsDown >= 4) {
+      // The true nostos: the war is won and you have come home.
+      player.say('The keel grinds up the Ithacan sand. Argos lifts his grey head, and knows you. The machines are all fallen, the sea is quiet, and you are home. This is the end of the road, and the beginning of the rest of it.');
+      if (!player._ended && !player.deathCert) {
+        player._ended = true;
+        player.deathCert = {
+          name: player.name, gender: player.gender,
+          cause: 'you came home to Ithaca', score: player.score,
+          skills: [...player.skills], deaths: player.deaths || 0,
+          victory: true, escaped: true, homecoming: true,
+        };
+      }
+    } else {
+      player.say("You beach the ship on Ithaca and step ashore. Argos lifts his head and knows you — but the machines still hold the sea, and this is landfall, not yet home. Fell the rest of them, then come back for good.");
+    }
   };
 }
 
@@ -530,7 +545,7 @@ let pendingCrossing = null;
 player.onDepart = (pl, boat) => {
   if (currentWorld === calypso) {
     pl.say('You put your back to the oar and pull for open water. Ogygia falls away behind the swell.');
-    pendingCrossing = 'islet';
+    pendingCrossing = 'ithaca';
   } else {
     pl.say('You shove the ship off the sand and turn her prow back toward Ogygia.');
     pendingCrossing = 'calypso';
@@ -2247,7 +2262,7 @@ function update(dt) {
   if (pendingCrossing) {
     const target = pendingCrossing;
     pendingCrossing = null;
-    if (target === 'islet') { ensureIslet(); goToWorld(islet); }
+    if (target === 'ithaca') { ensureIthaca(); goToWorld(ithaca); }
     else goToWorld(calypso);
     sfx.play('zap');
     return;
@@ -3034,16 +3049,16 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 // Stage 1c: resume on the island the save left you on. CALYPSO is already the live
-// world; for the islet, regenerate it and switch there at the saved position. Done
-// last — after every other init — so no earlier module-eval runs against the islet
-// map. onEnter's arrival line is suppressed here: a reload is a resume, not a fresh
-// landfall.
-if (_bootIsland === 'islet') {
-  ensureIslet();
-  const arrival = islet.onEnter;
-  islet.onEnter = () => {};
-  goToWorld(islet);
-  islet.onEnter = arrival;
+// world; for ITHACA, regenerate it and switch there at the saved position. Done
+// last — after every other init — so no earlier module-eval runs against the wrong
+// map. onEnter (the homecoming/arrival beat) is suppressed here: a reload is a
+// resume, not a fresh landfall.
+if (_bootIsland === 'ithaca') {
+  ensureIthaca();
+  const arrival = ithaca.onEnter;
+  ithaca.onEnter = () => {};
+  goToWorld(ithaca);
+  ithaca.onEnter = arrival;
   if (_bootPos && typeof _bootPos.x === 'number') { player.x = _bootPos.x; player.y = _bootPos.y; camera.snap(player.x, player.y); }
 }
 requestAnimationFrame(frame);

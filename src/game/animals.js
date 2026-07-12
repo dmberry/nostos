@@ -101,6 +101,21 @@ function baseAnimal(type, x, y, hp, rng) {
   };
 }
 
+// A single tame dog — Argos, the loyal one waiting on Ithaca. Not part of a
+// pack, never provoked (see the `tame` guards in updateAnimals/updateDog): it
+// just mills about near where it waits. Deterministic from the given seed.
+export function spawnTameDog(map, x, y, seed = 1) {
+  const rng = makeRng((seed >>> 0) || 1);
+  const dog = baseAnimal('dog', x, y, DOG_HP, rng);
+  dog.tame = true;
+  dog.aggro = false;
+  dog.fleeTimer = 0;
+  dog.biteTimer = 0;
+  dog.packId = -1;
+  dog.packIndex = 0;
+  return dog;
+}
+
 // True if there is a road/boards floor or a wall/rubble object nearby, i.e.
 // the tile is "near buildings or roads" for dog placement.
 function nearFeature(map, x, y) {
@@ -326,6 +341,7 @@ export function updateAnimals(dt, animals, player, map) {
   const aggroPacks = new Set();
   for (const a of animals) {
     if (a.dead || a.type !== 'dog') continue;
+    if (a.tame) continue; // Argos and other tame dogs are never provoked
     if (a.justHurt) hurtPacks.add(a.packId);
     const crowded = distTo(a, player) < DOG_ANNOY_RANGE;
     a.annoyT = crowded ? Math.min(DOG_ANNOY_TIME, (a.annoyT || 0) + dt) : Math.max(0, (a.annoyT || 0) - dt * 2);
@@ -412,6 +428,10 @@ function updateDeer(a, dt, player, map) {
 
 function updateDog(a, dt, player, map, hurtPacks, aggroPacks) {
   a.biteTimer = Math.max(0, a.biteTimer - dt);
+
+  // A tame dog (Argos) is loyal: it never routs, aggros, or bites — it only
+  // mills about near where it waits for you to come home.
+  if (a.tame) { wander(a, DOG_WANDER_SPEED, dt, map); return; }
 
   // Signature weakness: hurt one dog and the whole pack routs for a while.
   if (hurtPacks.has(a.packId)) {
