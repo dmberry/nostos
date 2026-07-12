@@ -200,6 +200,7 @@ export class Renderer {
     this.uiSlots = []; // clickable dashboard/backpack slots, rebuilt each frame
     this.obeliskHits = []; // clickable obelisk towers (world-screen rects), rebuilt each frame
     this.torHits = []; // clickable HERMES relays (world-screen rects, lift-adjusted), rebuilt each frame
+    this.coreTermHit = null; // CALYPSO's terminal screen on the core's SE face (screen-space centre), rebuilt each frame
     this.hudPlayer = player; // referenced by drawWfactory for the near-by damage bar
     this._fortressAlarm = map.fortressAlarm; // maze sconces pulse red while the breach alarm holds
     this.hudMap = map; // referenced by drawPlayer for the Ubik-patch reality-hiccup check
@@ -1991,6 +1992,29 @@ export class Renderer {
     const glow = dead ? 'rgba(120,120,130,0.22)' : `rgba(214,90,220,${(0.45 + 0.5 * pulse).toFixed(3)})`;
     const fb = { x: (g.bottom.x + g.right.x) / 2, y: (g.bottom.y + g.right.y) / 2 };
     this.texturedGlow(fb.x, fb.y - H / 2, 6.5, H * 0.32, glow, dead ? 0 : 18, 0.85);
+    // CALYPSO's sanctum terminal (obj.hasTerminal): a glowing screen set INTO the
+    // core's SE face, drawn as an isometric panel on that face (bilinear-inset
+    // within the [g.bottom, g.right, r.right, r.bottom] quad). Its screen-space
+    // centre is recorded for the click-to-open in main.js.
+    if (obj.hasTerminal && !dead) {
+      const A = g.bottom, B = g.right, C = r.right, D = r.bottom; // SE-face corners
+      const face = (u, v) => ({
+        x: A.x * (1 - u) * (1 - v) + B.x * u * (1 - v) + D.x * (1 - u) * v + C.x * u * v,
+        y: A.y * (1 - u) * (1 - v) + B.y * u * (1 - v) + D.y * (1 - u) * v + C.y * u * v,
+      });
+      const q = [face(0.30, 0.28), face(0.70, 0.28), face(0.70, 0.70), face(0.30, 0.70)];
+      const tp = 0.5 + 0.5 * Math.sin(performance.now() / 300);
+      const scx = (q[0].x + q[1].x + q[2].x + q[3].x) / 4, scy = (q[0].y + q[1].y + q[2].y + q[3].y) / 4;
+      ctx.save();
+      ctx.shadowColor = 'rgba(120,150,255,0.9)'; ctx.shadowBlur = 16;
+      ctx.beginPath(); ctx.moveTo(q[0].x, q[0].y); for (let i = 1; i < 4; i++) ctx.lineTo(q[i].x, q[i].y); ctx.closePath();
+      ctx.fillStyle = `rgba(120,150,255,${(0.5 + 0.35 * tp).toFixed(3)})`;
+      ctx.fill();
+      ctx.restore();
+      ctx.beginPath(); ctx.moveTo(q[0].x, q[0].y); for (let i = 1; i < 4; i++) ctx.lineTo(q[i].x, q[i].y); ctx.closePath();
+      ctx.strokeStyle = 'rgba(205,218,255,0.75)'; ctx.lineWidth = 1.5; ctx.stroke();
+      this.coreTermHit = { obj, x: scx, y: scy, r: Math.max(16, Math.hypot(q[1].x - q[0].x, q[1].y - q[0].y) * 0.7) };
+    }
     const labelC = worldToScreen(cx, obj.y + fh);
     ctx.font = 'bold 14px system-ui, sans-serif'; ctx.textAlign = 'center';
     ctx.fillStyle = dead ? '#6a6a72' : '#e0a8e6';

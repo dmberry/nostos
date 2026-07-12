@@ -1851,6 +1851,7 @@ function calypsoRun(line) {
       `${fortress.AI_NAME.toUpperCase()} lets you do almost nothing here:`,
       '  look / scan ..... regard the sanctum',
       '  run ............. speak the command on your card (needs a hermes card)',
+      '  open ............ fold the maze into a straight corridor out to the gate',
       '  exit ............ leave the console',
       'Everything else, she does not hear.',
       '_',
@@ -1887,6 +1888,17 @@ function calypsoRun(line) {
     } else {
       replPrint('_');
       sfx.play('termerr');
+    }
+    return;
+  }
+  // A fast way out: fold the labyrinth back into a straight corridor to the gate.
+  if (/^(open|open\s+maze|open\s+exit|escape)$/.test(cmd)) {
+    if (fortress.openMaze && fortress.openMaze()) {
+      replPrint("OK: the labyrinth folds back. A straight corridor runs from here to the Lion's Gate — walk out and go.", '_');
+      player.say('The maze walls fold back. A clear path runs straight to the gate.');
+      sfx.play('zap');
+    } else {
+      replPrint('The way out already stands open.', '_');
     }
     return;
   }
@@ -2549,17 +2561,18 @@ function update(dt) {
       else player.say('Too far from the gate terminal to reach it.');
     }
   }
-  // Click CALYPSO's sanctum kiosk (the core terminal, deep past the Lion's Gate)
-  // to speak with her. Same specific-coordinate picking as the gate terminal.
+  // Click CALYPSO's terminal — the glowing screen on the core's SE face — to speak
+  // with her. You must be standing at the core (nearCoreTerminal); a click that
+  // ground-projects onto the core's footprint (its tall SE face maps to a tile
+  // just SE of it, right where you stand) then opens her console.
   if (fortress.coreTerminal) {
     const cPress = input.clickPos();
-    if (cPress) {
+    if (cPress && fortress.nearCoreTerminal(player.x, player.y)) {
       const w = camera.toWorld(cPress.x, cPress.y, renderer.w, renderer.h);
-      const t = fortress.coreTerminal;
-      if (Math.hypot(w.x - (t.x + 0.5), w.y - (t.y + 0.5)) <= 1.2) {
+      const t = fortress.coreTerminal; // the core centre
+      if (Math.hypot(w.x - t.x, w.y - t.y) <= fortress.core.fw + 3) {
         input.consumeClick();
-        if (fortress.nearCoreTerminal(player.x, player.y, 2.6)) openCalypsoTerminal();
-        else player.say('Too far from the sanctum terminal to reach it.');
+        openCalypsoTerminal();
       }
     }
   }
