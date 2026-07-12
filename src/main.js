@@ -78,8 +78,6 @@ const factoryLive = () => wfactory && !wfactory.destroyed;
 const factoryCx = () => wfactory.x + (wfactory.fw || 1) / 2;
 const factoryCy = () => wfactory.y + (wfactory.fh || 1) + 1.5;
 registerRobotsSystem(); // robots' AI ticks via systems.runUpdate (order 30); see robots.js
-// One fortress key is coughed up the first time a node is properly crashed (see crashNode).
-let fortressKeyFromCrash = false;
 // "Red starlink": when the fortress breach reaches the world (alarm + uplink
 // intact), every overworld obelisk flares red (its `stirred` flag forces the
 // alert glow, HUD untouched) and the W-factory throws a W4 toward the doorway.
@@ -213,6 +211,22 @@ try {
       if (player.backpack.weapon && !ITEMS[player.backpack.weapon]) player.backpack.weapon = null;
       if (Array.isArray(player.backpack.slots)) player.backpack.slots = player.backpack.slots.map(validStack);
     }
+    // Re-apply saved world progress onto the freshly-regenerated world. The world
+    // itself comes back deterministically from the seed; we only stored the
+    // mutations (felled obelisks, factory, daemon tally, fortress state). Written
+    // by persist() below. This is why a Continue now resumes the world, not just you.
+    if (saved.world) {
+      const wsv = saved.world;
+      if (Array.isArray(wsv.obDown)) {
+        const down = new Set(wsv.obDown);
+        for (const o of calypso.obeliskObjs) {
+          if (down.has(o.code)) { o.destroyed = true; map.objectGrid[o.y * map.w + o.x] = null; }
+        }
+      }
+      if (wsv.factoryDestroyed && wfactory) wfactory.destroyed = true;
+      if (typeof wsv.daemonsDown === 'number') daemonsDown = wsv.daemonsDown;
+      if (wsv.fortress && fortress && fortress.restore) fortress.restore(wsv.fortress);
+    }
   }
 } catch { /* corrupt save: start fresh */ }
 // Set just before New Game reloads, so the beforeunload/visibilitychange
@@ -240,6 +254,16 @@ const persist = () => {
         health: player.health, stamina: player.stamina, food: player.food, venom: player.venom,
         wifiPower: player.wifiPower, x: player.x, y: player.y, hands: player.hands,
         pockets: player.pockets, backpack: player.backpack, walkman: player.walkman,
+      },
+      // World progress. The world regenerates from the seed on load, so we save
+      // only the MUTATIONS and re-apply them (see the restore block above): which
+      // obelisks are felled, the factory wrecked, the daemon tally, and the
+      // fortress's own state (doors/core/uplink, via fortress.serialize()).
+      world: {
+        obDown: calypso.obeliskObjs.filter((o) => o.destroyed).map((o) => o.code),
+        factoryDestroyed: !!(wfactory && wfactory.destroyed),
+        daemonsDown,
+        fortress: (fortress && fortress.serialize) ? fortress.serialize() : null,
       },
     }));
     localStorage.setItem(IDENTITY_KEY, JSON.stringify({ name: player.name, gender: player.gender }));
@@ -862,25 +886,13 @@ function ronmlCtx() {
         player.say('That key was never hacked from a live node. try: let k = hack OB-XXXX in unlock k');
         return;
       }
-      // Always yield a fresh fortress key — the network gives one up every time
-      // the hack composes. Deliberately not a one-time reward: if you lose the
-      // key (death, a fumbled drop) you can hack another and try the door again.
-      // The key goes STRAIGHT INTO A POCKET: the old ground drop beside the
-      // tower was easy to lose (hidden behind the obelisk sprite, or landing on
-      // its blocked tile) and read as "nothing happened". Pockets full → fall
-      // back to the ground drop so the key is never simply swallowed. Feedback
-      // prints INTO the terminal too — player.say is hidden behind the modal.
-      fortressKeyFromCrash = true;
-      // (No sfx here — the exec's per-command verdict chime covers success.)
-      const stored = player.stow('fortress_key', 1);
-      if (stored > 0) {
-        replPrint(`OK: ${nodeId}'s key turns in the network. A fortress key slides from the slot — pocketed.`);
-        player.say(`The composed hack holds. A fortress key slides from the ${nodeId} slot straight into your pocket — a way into ${fortress.AI_NAME}'s fortress.`);
-      } else {
-        map.groundItems.push({ item: 'fortress_key', qty: 1, x: player.x + 0.4, y: player.y + 0.6, keep: true });
-        replPrint('OK: fortress key dispensed — no pocket room, it drops at your feet.');
-        player.say(`No room in your pockets — the fortress key drops at your feet. A way into ${fortress.AI_NAME}'s fortress.`);
-      }
+      // The composed hack still resolves, but the fortress gate no longer takes a
+      // hacked key — the fortress_key is retired. The Lion's Gate opens to a
+      // TROJAN CARD now: refunction your AI key (cd aikey / copy factory-id.ml ob /
+      // eliza factory-id.ml / copy root-access.ml aikey) and walk the card to the
+      // doorway. This verb is kept only to redirect anyone trying the old flow.
+      replPrint(`OK: ${nodeId}'s key turns — but ${fortress.AI_NAME}'s gate opens to a Trojan card now, not a hacked key. Refunction your AI key first.`);
+      player.say(`The network unlock still composes, but the gate has changed: it reads a Trojan card, not a fortress key.`);
     },
     // `notes`: opens the browsable notebook (see openNotebook below) rather
     // than dumping text into the console — Tab-to-autocomplete is one thing,
@@ -1495,18 +1507,18 @@ function openGateTerminal() {
   replLog = [];
   replHistory = [];
   replHistoryIdx = -1;
-  const hasFortKey = player.hasItem('fortress_key');
+  const hasCard = player.hasTrojanCard();
   replPrint(
     `${fortress.AI_NAME.toUpperCase()} — OUTER GATE TERMINAL`,
     'TIRESIAS 1.0  //  RON-DOS 4.11  (c) Reality Or Nothing',
     '',
     `> gate ............ ${fortress.terminal.obj.code}`,
     `> rampart ......... ${fortress.open ? 'OPEN' : 'SEALED'}`,
-    `> fortress key .... ${hasFortKey ? 'HELD — carry it to the door' : 'NOT HELD'}`,
+    `> trojan card ..... ${hasCard ? 'READ — the doorway will open' : 'NOT PRESENT'}`,
     '',
-    hasFortKey
-      ? 'The doorway is bolted from within. Bring the fortress key up to it and it swings open.'
-      : 'The doorway is bolted from within. Get a fortress key first: at any obelisk, let k = hack OB-XXXX in unlock k.',
+    hasCard
+      ? 'The doorway reads your Trojan card. Walk up to it and it swings open.'
+      : 'The doorway is bolted from within. It opens to a Trojan card: wreck the W-factory for an AI key, then refunction it at an obelisk (cd aikey / copy factory-id.ml ob / eliza factory-id.ml / copy root-access.ml aikey).',
     '_',
   );
   obTermInput.value = '';

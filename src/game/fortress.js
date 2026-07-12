@@ -381,8 +381,7 @@ export function createFortress(map, seed, spawn, opts = {}) {
       }
       state.hacked = true;
       for (const d of doors) if (d) d.hacked = true; // lock beacons turn green
-      map.groundItems.push({ item: 'fortress_key', qty: 1, x: termX + 0.5, y: termY + 0.9, keep: true });
-      return { ok: true, msg: `Bolts disengage across the rampart. A fortress key clatters out of the ${terminal.code} slot.` };
+      return { ok: true, msg: `Bolts disengage across the rampart. Bring a Trojan card up to the doorway and it opens.` };
     },
 
     // Per-frame: once you carry the key up to the doorway, it swings open.
@@ -391,10 +390,13 @@ export function createFortress(map, seed, spawn, opts = {}) {
       // maze sconces stop strobing. (The island power-down itself is handled by
       // main.js's onCoreDefeated hook, kept island-agnostic there.)
       if (core.defeated) { state.alarm = false; map.fortressAlarm = false; return; }
-      if (!state.open && player.hasItem('fortress_key')) {
+      // The Lion's Gate opens to a Trojan card (its factory-id.ml + root-access.ml
+      // read at the gate) — the escape-chain hack IS the way in now; the old
+      // fortress_key is retired. Bare ai_key won't do it; refunction it first.
+      if (!state.open && player.hasTrojanCard && player.hasTrojanCard()) {
         if (Math.abs(player.y - seamY) <= 2.5 && player.x >= doorX0 - 1.5 && player.x <= doorX0 + DOOR_W + 0.5) {
           openDoor();
-          player.say(`The fortress key turns. ${aiName}'s doorway grinds open.`);
+          player.say(`The Trojan card reads at the gate. ${aiName}'s doorway grinds open.`);
           if (!state.announced) { state.announced = true; player.addScore?.(40); }
         }
       }
@@ -452,6 +454,28 @@ export function createFortress(map, seed, spawn, opts = {}) {
         }
       }
       map.fortressAlarm = state.alarm; // renderer: maze sconces strobe red while alarmed
+    },
+
+    // Save/restore the fortress's mutable state so a loaded game resumes the
+    // raid mid-progress — doors, core health/defeat, uplink — not just the world
+    // around it. Transient timers and the alarm are not persisted: the alarm
+    // re-trips if a guard still sees you. (Save/load, main.js's persist/restore.)
+    serialize() {
+      return {
+        hacked: state.hacked,
+        open: state.open,
+        coreHp: core.hp,
+        coreDefeated: !!core.defeated,
+        uplinkDown: !!(uplinkObj && uplinkObj.destroyed),
+      };
+    },
+    restore(snap) {
+      if (!snap) return;
+      if (snap.hacked) { state.hacked = true; for (const d of doors) if (d) d.hacked = true; }
+      if (snap.open) openDoor(); // removes the door objects + sets state.open
+      if (typeof snap.coreHp === 'number') core.hp = snap.coreHp;
+      if (snap.coreDefeated) core.defeated = true;
+      if (snap.uplinkDown && uplinkObj) { uplinkObj.destroyed = true; state.uplinkAlive = false; }
     },
 
     // Markers for the RON-ML `map` overlay.

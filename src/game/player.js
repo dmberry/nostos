@@ -260,6 +260,13 @@ export class Player {
     return this.hasItem('ai_key') || this.hasItem('trojan_key') || this.hasItem('hermes_card');
   }
 
+  // The refunctioned card — a Trojan key or the Hermes card — carries the
+  // Lion's-Gate credential (factory-id.ml + root-access.ml); a bare ai_key does
+  // not. This is what opens the fortress gate now (fortress_key is retired).
+  hasTrojanCard() {
+    return this.hasItem('trojan_key') || this.hasItem('hermes_card');
+  }
+
   // Remove one of a named item from wherever it is. Returns whether it went.
   removeItem(key) {
     if (this.hands === key) { this.hands = null; return true; }

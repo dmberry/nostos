@@ -637,7 +637,7 @@ const HELP_VERBS = [
   ['cd d', 'device -> unit', 'change drive: cd aikey · cd ob · cd hermes', '', ''],
   ['ls', 'unit -> list', 'list the files on the current drive', '', ''],
   ['decrypt k', 'key -> key', 'open the sealed AI key so unlock can use it', 'hold an AI key', 'ob'],
-  ['unlock k d', 'key key -> unit', 'drop a fortress key: a hacked node key k + the decrypted AI key d', 'needs both', 'ob'],
+  ['unlock k d', 'key key -> unit', 'legacy — the fortress gate opens to a Trojan card now (refunction your AI key)', 'superseded', 'ob'],
   ['eliza', 'file -> file', 'eliza <file> runs the DOCTOR transform on a file; bare `eliza` (or run eliza) opens the DOCTOR to talk to — quit to leave', '', 'ob'],
   ['read t', 'atom -> unit', 'read a document — read ronml / fortress / obelisks / robots / history / destroy', 'HERMES relay only', 'hermes'],
   ['print t', 'atom -> unit', 'print a copy of a document into your notepad (N)', 'HERMES relay only', 'hermes'],
