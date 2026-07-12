@@ -157,3 +157,22 @@ test('read accepts a file value (readme.md), not just a topic', () => {
   assert.ok(r.ok, r.text);
   assert.equal(readArg, 'readme.md');
 });
+
+// ---- Card naming: forgiving cd + the drives listing -------------------------
+
+test('cd echoes the drive label (so you can see the card state)', () => {
+  let arg = null;
+  const ctx = { station: 'ob', session: {}, cd: (n) => { arg = n; return { ok: true, label: 'card (Trojan key)' }; } };
+  const r = runRonml('cd trojan', ctx); // a synonym for the card
+  assert.ok(r.ok, r.text);
+  assert.equal(arg, 'trojan');
+  assert.match(r.text, /Trojan key/);
+});
+
+test('drives calls ctx.drives (the listing)', () => {
+  let called = false;
+  const ctx = { station: 'ob', session: {}, drives: () => { called = true; } };
+  const r = runRonml('drives', ctx);
+  assert.ok(r.ok, r.text);
+  assert.equal(called, true);
+});

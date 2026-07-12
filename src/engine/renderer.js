@@ -3851,11 +3851,13 @@ export class Renderer {
         break;
       }
       case 'ai_key':
+      case 'trojan_key':
+      case 'hermes_card':
       case 'fortress_key': {
         // A digital access card, not a mechanical key — the AI's locks are
-        // electronic. Rounded card in the item's colour (AI key gold, fortress
-        // key ice-blue), with a dark data stripe, a gold chip contact pad with
-        // traces, and a corner lanyard hole.
+        // electronic. Rounded card in the item's colour (AI key gold, Trojan
+        // tarnished-gold, Hermes sky-blue, fortress key ice-blue), with a dark
+        // data stripe, a gold chip contact pad with traces, and a lanyard hole.
         const col = itemDef.color;
         ctx.fillStyle = col;
         if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(-8, -6.5, 16, 13, 2.5); ctx.fill(); }

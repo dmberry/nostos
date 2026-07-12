@@ -721,15 +721,40 @@ function fsFilesOn(dev) {
 function fsCwd() {
   return replSession.__cwd || (fsCardItem() ? 'aikey' : (terminalKind === 'hermes' ? 'hermes' : 'ob'));
 }
+// The card is one drive whatever its state, so accept forgiving synonyms — the
+// display name (drives / cd) tells you which state it's actually in. ('hermes'
+// stays the RELAY, not the card, to avoid clashing with a Hermes card.)
+function fsNormDev(d) {
+  d = String(d || '').toLowerCase();
+  if (['card', 'aikey', 'ai_key', 'trojan', 'trojan_key', 'aicard', 'key'].includes(d)) return 'aikey';
+  return d;
+}
+function fsDriveLabel(d) {
+  if (d === 'aikey') { const c = fsCardItem(); return c ? `card (${ITEMS[c].name})` : 'card (none in hand)'; }
+  if (d === 'ob') return 'ob (node bench)';
+  if (d === 'hermes') return 'hermes (relay folder)';
+  return d;
+}
+// `drives`: list what's attached here, so you can always SEE the card's current
+// name/state (the big playtest gap). Prints, returns nothing.
+function fsDrives() {
+  const out = ['drives here:'];
+  if (terminalKind !== 'hermes') out.push('  ob      the node bench (scratch)');
+  const c = fsCardItem();
+  out.push(`  card    ${c ? ITEMS[c].name : 'no card in hand'}${c ? `  ·  ${fsFilesOn('aikey').length} files` : ''}`);
+  if (terminalKind === 'hermes') out.push('  hermes  the relay folder');
+  out.push('use:  cd <drive>  ·  ls  ·  copy <file> <drive>');
+  for (const l of out) replPrint(l);
+}
 function fsCd(dev) {
-  const d = dev === 'card' ? 'aikey' : dev;
-  if (!fsDevAvail(d)) return { ok: false, msg: `no drive '${dev}' at this terminal.` };
+  const d = fsNormDev(dev);
+  if (!fsDevAvail(d)) return { ok: false, msg: `no drive '${dev}' here — try: drives (to list them)` };
   replSession.__cwd = d;
-  return { ok: true };
+  return { ok: true, label: fsDriveLabel(d) };
 }
 function fsLs() { return fsFilesOn(fsCwd()); }
 function fsCopyFile(name, destRaw) {
-  const dest = destRaw === 'card' ? 'aikey' : destRaw;
+  const dest = fsNormDev(destRaw);
   // Find the file wherever it currently sits — no need to cd to the source first
   // (a real playtest snag). Search the reachable drives: the OB bench, the held
   // card, and (at a relay) the HERMES folder.
@@ -802,7 +827,7 @@ function ronmlCtx() {
     hasManual: !!(player.readManuals && player.readManuals.has('book_ronml')), // helpText hints at the manual until it's read
     session: replSession, // persistent top-level bindings for this terminal visit
     bindSession: (name, val) => { replSession[name] = val; },
-    cd: fsCd, ls: fsLs, copyFile: fsCopyFile, // RON-DOS drives (cd/ls/copy files)
+    cd: fsCd, ls: fsLs, copyFile: fsCopyFile, drives: fsDrives, // RON-DOS drives (cd/ls/copy files)
     hasAiKey: () => player.hasAiKeyFamily(), // ai_key / trojan_key / hermes_card all count
     currentNode: () => (terminalOb ? terminalOb.code : null),
     printKey: () => {
@@ -964,7 +989,7 @@ function hermesCtx() {
     station: 'hermes',
     hasManual: !!(player.readManuals && player.readManuals.has('book_ronml')),
     session: replSession, // persistent bindings work at relays too (copy/let)
-    cd: fsCd, ls: fsLs, copyFile: fsCopyFile, // RON-DOS drives also work at a relay
+    cd: fsCd, ls: fsLs, copyFile: fsCopyFile, drives: fsDrives, // RON-DOS drives also work at a relay
     showNotepad: () => { openNotebook(); },
     read: (topic) => hermesRead(topic),
     print: () => {}, // never reached — HERMES print takes a topic (see printDoc)
@@ -1618,8 +1643,8 @@ obTermEl.addEventListener('click', (e) => { if (e.target === obTermEl) closeObTe
 // Autocomplete is per-system: an obelisk (TIRESIAS) suggests only AI-network
 // verbs, a HERMES relay only RON verbs — no seepage between the two. (sing is
 // secret, so it's in neither list.)
-const OB_COMPLETE = ['scan', 'nearest', 'keys', 'name', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'map', 'print', 'copy', 'cd', 'ls', 'decrypt', 'unlock', 'eliza', 'notes', 'help', 'let'];
-const HERMES_COMPLETE = ['read', 'print', 'archive', 'records', 'drive', 'backup', 'restore', 'forge', 'copy', 'cd', 'ls', 'notes', 'help', 'let'];
+const OB_COMPLETE = ['scan', 'nearest', 'keys', 'name', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'map', 'print', 'copy', 'cd', 'ls', 'drives', 'decrypt', 'unlock', 'eliza', 'notes', 'help', 'let'];
+const HERMES_COMPLETE = ['read', 'print', 'archive', 'records', 'drive', 'drives', 'backup', 'restore', 'forge', 'copy', 'cd', 'ls', 'notes', 'help', 'let'];
 const escapeHtml = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 function ronmlCompletion(value) {
   if (elizaBot) return ''; // no RON-ML hints mid-conversation with the DOCTOR

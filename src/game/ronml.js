@@ -242,10 +242,20 @@ function makeBuiltins(station) {
       arity: 1,
       fn: ([dev], ctx) => {
         const name = (dev && (dev.id || dev.name)) ? String(dev.id || dev.name).toLowerCase() : '';
-        if (!name) throw new RonmlError('cd needs a device — try: cd aikey  ·  cd ob');
+        if (!name) throw new RonmlError('cd needs a drive — try: cd card  ·  cd ob  (drives lists them)');
         if (!ctx.cd) throw new RonmlError('no drives at this terminal.');
         const r = ctx.cd(name);
-        if (!r || !r.ok) throw new RonmlError((r && r.msg) || `no device '${name}' here.`);
+        if (!r || !r.ok) throw new RonmlError((r && r.msg) || `no drive '${name}' here — try: drives`);
+        return r.label ? { tag: 'node', id: `» ${r.label}` } : { tag: 'unit' }; // echo which drive + card state
+      },
+    },
+    // `drives`: list the drives attached here (ob / card / hermes) and, crucially,
+    // the card's CURRENT name — so you can always tell what state it's in.
+    drives: {
+      arity: 0,
+      fn: (_args, ctx) => {
+        if (!ctx.drives) throw new RonmlError('no drives at this terminal.');
+        ctx.drives();
         return { tag: 'unit' };
       },
     },
@@ -634,7 +644,8 @@ const HELP_VERBS = [
   ['print t', 'atom -> unit', 'print map (a carryable map) or print aikey (a spare AI key)', '', 'ob'],
   ['copy k', 'key -> key', 'copy the AI key you hold into the session as `aikey`', 'hold an AI key', ''],
   ['copy f d', 'file device -> file', 'copy a file onto a device — copy factory-id.ml ob', '', ''],
-  ['cd d', 'device -> unit', 'change drive: cd aikey · cd ob · cd hermes', '', ''],
+  ['cd d', 'device -> node', 'change drive (cd card · cd ob · cd hermes) — echoes which, and the card state', '', ''],
+  ['drives', 'unit -> unit', "list the drives here and the card's current name (AI key / Trojan / Hermes)", '', ''],
   ['ls', 'unit -> list', 'list the files on the current drive', '', ''],
   ['decrypt k', 'key -> key', 'open the sealed AI key so unlock can use it', 'hold an AI key', 'ob'],
   ['unlock k d', 'key key -> unit', 'legacy — the fortress gate opens to a Trojan card now (refunction your AI key)', 'superseded', 'ob'],
