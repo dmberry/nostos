@@ -1828,6 +1828,7 @@ function update(dt) {
     else if (player.canCraftChip()) player.craftChip();
     else if (player.canCraftSword()) player.craftSword();
     else if (player.canCraftFortressMap()) player.craftFortressMap();
+    else if (player.canCraftBoat(map)) player.craftBoat(map);
   }
   if (input.zoomTogglePressed()) camera.toggleZoom();
   if (input.minimapTogglePressed()) { showMinimap = !showMinimap; player.say(showMinimap ? 'Minimap on.' : 'Minimap off.'); }
@@ -2518,10 +2519,13 @@ function frame(now) {
       aiVictory: player.aiVictory,
       showSkills,
       showWeapons,
-      craftPrompt: (player.canCraftObGun() && player.hands !== 'obgun') || (player.canCraftWaveGun() && player.hands !== 'wavegun') || player.canCraftChip() || player.canCraftSword() || player.canCraftFortressMap(),
+      craftPrompt: (player.canCraftObGun() && player.hands !== 'obgun') || (player.canCraftWaveGun() && player.hands !== 'wavegun') || player.canCraftChip() || player.canCraftSword() || player.canCraftFortressMap() || player.canCraftBoat(map),
       craftWaveGun: player.canCraftWaveGun() && player.hands !== 'wavegun',
       craftChip: player.canCraftChip() && !player.canCraftWaveGun() && !(player.canCraftObGun() && player.hands !== 'obgun'),
       craftSword: player.canCraftSword() && !player.canCraftChip() && !player.canCraftWaveGun() && !(player.canCraftObGun() && player.hands !== 'obgun'),
+      // Lowest craft priority (see the C chain): the boat prompt shows only when
+      // no weapon/tool/map craft is pending, so it never contradicts what C does.
+      craftBoat: player.canCraftBoat(map) && !player.canCraftChip() && !player.canCraftSword() && !player.canCraftWaveGun() && !player.canCraftFortressMap() && !(player.canCraftObGun() && player.hands !== 'obgun'),
       // POSEIDON is an overworld network — its lights/lines must never draw over
       // the Backspace.
       skylinkActive: player.skylinkActive && !player._ended && currentWorld === calypso,

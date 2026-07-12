@@ -17,6 +17,21 @@ We're both pushing to `main`, so a few conventions keep merges painless:
 4. **One person owns the VERSION bump per push.** We collided on "v0.39" once (both used it); whoever pushes second takes the next number. Bump `VERSION` in `main.js` and the README header together.
 5. A bigger refactor (a formal systems registry so features attach as `{update, draw}` modules with zero hub edits) would remove most remaining friction, but it's risky to land while both of us are pushing daily — park it until there's a quiet window, then one of us does it in a single focused pass.
 
+## Islands archipelago — refactor + Stage 1 (David's session)
+
+The world-contract refactor (`docs/islands-plan.md`) is on `main`: Stage 0 done
+(0a `currentWorld` wrap, 0b Backspace-as-World, 0c `src/islands/calypso.js` via
+`createIsland`), all seed-identical and verified. **Stage 1a (2026-07-12): a
+craftable, shore-placed boat.** Hub-file touches, all surgical/append-only:
+`items.js` (new `boat` item, kind 'vehicle'), `tiles.js` (`boat` in `OBJECTS`,
+solid), `player.js` (`canCraftBoat`/`craftBoat`/`_findLaunchTile` — 12 wood + a
+cutting tool at the sea's edge), `renderer.js` (`drawBoat` + one craft-prompt
+branch), `main.js` (boat added to the **C** craft chain, lowest priority). New
+`test/boat.test.js` (6 tests; suite now 32 green). No VERSION bump yet — the boat
+isn't boardable until 1b (departure + crossing), so the bump waits for end of
+Stage 1. Next: 1b, then 1c (campaign save). Fetch before touching those five
+files; the boat additions are localized but they are in the shared hubs.
+
 ## Art conventions
 
 - **Always put a texture on a glowing thing.** No glow is ever a flat coloured blob — a grille/panel texture is laid over it (the factory-vent trick). Everything luminous goes through `Renderer.texturedGlow`, which caps the glow with an AI grate texture; if you add a new light, use it rather than a bare `fill`. (David, 2026-07-07.)

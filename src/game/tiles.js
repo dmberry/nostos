@@ -54,6 +54,10 @@ export const OBJECTS = {
   tor: { solid: true }, // RON resistance relay on a hilltop — the friendly HERMES terminal
   box:     { solid: true, climbable: true, climbHeight: 1 }, // resistance cache — a low crate you can step or jump onto, still searchable from beside it
   car:     { solid: true }, // abandoned wreck littering the roads; scenery only
+  // A boat crafted at the shore (Player.craftBoat): a solid wooden hull you walk
+  // up to and, from Stage 1b, board to cross POSEIDON's sea. Placed on a beach
+  // tile at the water's edge, never pocketed.
+  boat:    { solid: true },
   wfactory: { solid: true }, // W-unit foundry; periodically fields a W3 repair drone
   furniture: { solid: true }, // stacked junk cluttering the underworld's rooms; solid, you weave around it
   exitdoor: { solid: true },  // a plain door in the underworld: walk up to it to leave. Solid; you exit on approach

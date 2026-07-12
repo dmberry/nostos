@@ -578,11 +578,13 @@ export class Renderer {
           ? 'You have eight chip fragments — press C to assemble an access chip'
           : hud.craftSword
             ? 'You have ten scrap — press C to forge a robot sword'
-            : 'You hold a stun-gun, electro-gun and Wi-Fi block — press C to build an OB-gun';
+            : hud.craftBoat
+              ? 'You have the wood and a cutting tool — press C to build a boat'
+              : 'You hold a stun-gun, electro-gun and Wi-Fi block — press C to build an OB-gun';
       ctx.font = 'bold 13px system-ui, sans-serif';
       const w = ctx.measureText(msg).width + 24;
       const x = (this.w - w) / 2, y = this.h - DASH_H - 40;
-      ctx.fillStyle = hud.craftWaveGun ? 'rgba(64,224,208,0.92)' : hud.craftChip ? 'rgba(106,208,160,0.92)' : hud.craftSword ? 'rgba(184,192,200,0.92)' : 'rgba(224,100,47,0.9)';
+      ctx.fillStyle = hud.craftWaveGun ? 'rgba(64,224,208,0.92)' : hud.craftChip ? 'rgba(106,208,160,0.92)' : hud.craftSword ? 'rgba(184,192,200,0.92)' : hud.craftBoat ? 'rgba(138,100,55,0.92)' : 'rgba(224,100,47,0.9)';
       ctx.fillRect(x, y, w, 26);
       ctx.fillStyle = '#fff';
       ctx.textAlign = 'center';
@@ -1551,7 +1553,80 @@ export class Renderer {
       case 'furniture': this.drawFurniture(obj); break;
       case 'exitdoor': this.drawExitDoor(obj); break;
       case 'lamp': this.drawLamp(obj); break;
+      case 'boat': this.drawBoat(obj); break;
     }
+  }
+
+  // A boat beached at the shore: a small wooden hull with a pointed bow and
+  // stern, its extremities projected through worldToScreen so it sits flat in
+  // the iso plane on the beach tile. obj.hull is spent crossing in Stage 1b;
+  // here the boat is purely a placed object you walk up to and board.
+  drawBoat(obj) {
+    const ctx = this.ctx;
+    const cx = obj.x + 0.5, cy = obj.y + 0.5;
+    const wob = obj.shake ? Math.sin(obj.shake * 40) * obj.shake * 4 : 0;
+    // Hull extremities: a touch longer than one tile, pointed fore and aft,
+    // beamier amidships.
+    const bow   = worldToScreen(cx, cy - 0.9);
+    const stern = worldToScreen(cx, cy + 0.9);
+    const port  = worldToScreen(cx - 0.55, cy);
+    const stbd  = worldToScreen(cx + 0.55, cy);
+    const c = worldToScreen(cx, cy);
+    const HULL = 11; // deck sits this many px above the waterline outline
+    ctx.save();
+    ctx.translate(wob, 0);
+    // Soft ground shadow.
+    ctx.save();
+    ctx.translate(0, 5);
+    const sh = ctx.createRadialGradient(c.x, c.y, 6, c.x, c.y, 30);
+    sh.addColorStop(0, 'rgba(0,0,0,0.30)');
+    sh.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = sh;
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y, 30, 15, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    const lens = (dy) => {
+      ctx.beginPath();
+      ctx.moveTo(bow.x, bow.y + dy);
+      ctx.lineTo(stbd.x, stbd.y + dy);
+      ctx.lineTo(stern.x, stern.y + dy);
+      ctx.lineTo(port.x, port.y + dy);
+      ctx.closePath();
+    };
+    // Dark hull side (the band from waterline up to the deck).
+    lens(0);
+    ctx.fillStyle = '#3f2a17';
+    ctx.fill();
+    // Deck rim, lifted by HULL — the top edge of the hull.
+    lens(-HULL);
+    const grad = ctx.createLinearGradient(bow.x, bow.y - HULL, stern.x, stern.y - HULL);
+    grad.addColorStop(0, '#946a3c');
+    grad.addColorStop(1, '#7a5636');
+    ctx.fillStyle = grad;
+    ctx.fill();
+    ctx.strokeStyle = '#5a3d22';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    // Cockpit: an inset well so the boat reads as open, not a slab.
+    const ibow = worldToScreen(cx, cy - 0.5), istern = worldToScreen(cx, cy + 0.5);
+    const iport = worldToScreen(cx - 0.3, cy), istbd = worldToScreen(cx + 0.3, cy);
+    ctx.beginPath();
+    ctx.moveTo(ibow.x, ibow.y - HULL);
+    ctx.lineTo(istbd.x, istbd.y - HULL);
+    ctx.lineTo(istern.x, istern.y - HULL);
+    ctx.lineTo(iport.x, iport.y - HULL);
+    ctx.closePath();
+    ctx.fillStyle = '#5a3d22';
+    ctx.fill();
+    // A thwart (seat plank) across the beam.
+    ctx.strokeStyle = '#946a3c';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(iport.x, iport.y - HULL);
+    ctx.lineTo(istbd.x, istbd.y - HULL);
+    ctx.stroke();
+    ctx.restore();
   }
 
   // The way out of the underworld: a plain, mundane interior door standing in

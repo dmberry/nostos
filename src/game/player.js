@@ -16,6 +16,9 @@ const REACH = 0.9;        // how far ahead the player can use a tool
 const CHIP_FRAGMENTS_PER_CHIP = 8; // fragments shed by machines to craft one chip
 const FORTRESS_MAP_FRAGMENTS = 5; // scattered map quarters pieced into a fortress map
 const SCRAP_PER_SWORD = 10; // scrap beaten into a robot sword
+const WOOD_PER_BOAT = 12;   // wood felled and lashed into a boat (Player.craftBoat)
+const BOAT_HULL = 100;      // a beached boat's starting hull HP (Stage 1b spends it crossing)
+const BOAT_LAUNCH_RADIUS = 4; // how close to the sea's edge you must stand to launch
 // How each machine's hull rings under a blade (sfx 'clang' pitch factor):
 // small and thin rings high and short, heavy plate rings low and long.
 const CLANG_PITCH = {
@@ -166,6 +169,7 @@ export class Player {
     this.venom = 0;       // seconds of poison remaining
 
     this.hands = 'penknife';                 // starting tool
+    this.boatBuilt = false;                  // one boat at a time; a session flag (Stage 1c persists it as campaign state)
     this.pockets = [{ item: 'note_home', qty: 1 }, null, null, null]; // start with the Odyssey note in-pocket
     this.backpack = null;                    // {slots: [16], weapon} once found; dropped on death
     this.selectedPocket = null;              // 0-3 (pockets), 'bw' (backpack weapon), or null
@@ -334,6 +338,69 @@ export class Player {
     sfx.play('zap');
     this.say('You beat ten scrap into a robot sword. It bites the machines hard.');
     return true;
+  }
+
+  // A boat: 12 wood lashed together with a real cutting tool (axe/saw class —
+  // anything that bites wood, treeDamage >= 2) in hand, built standing at the
+  // water's edge. Not pocketed: craftBoat beaches it as a world object you
+  // board (Stage 1b). One boat at a time (this.boatBuilt); Stage 1c persists it.
+  canCraftBoat(map) {
+    if (this.boatBuilt) return false;
+    if (this.countItem('wood') < WOOD_PER_BOAT) return false;
+    if ((ITEMS[this.hands]?.treeDamage ?? 0) < 2) return false;
+    return !!this._findLaunchTile(map);
+  }
+
+  craftBoat(map) {
+    if (this.boatBuilt) { this.say('Your boat is already beached at the shore.'); return false; }
+    if (this.countItem('wood') < WOOD_PER_BOAT) {
+      this.say(`You need ${WOOD_PER_BOAT} wood to build a boat; you have ${this.countItem('wood')}.`);
+      return false;
+    }
+    if ((ITEMS[this.hands]?.treeDamage ?? 0) < 2) {
+      this.say('You need a proper cutting tool in hand — a saw or a good blade — to fell and shape the timber.');
+      return false;
+    }
+    const tile = this._findLaunchTile(map);
+    if (!tile) { this.say("You must be at the water's edge to launch a boat."); return false; }
+    const boat = map.addObject('boat', tile.x, tile.y, { hull: BOAT_HULL, maxHull: BOAT_HULL });
+    if (!boat) { this.say('No room at the shore to set the boat down.'); return false; }
+    for (let n = 0; n < WOOD_PER_BOAT; n++) this.removeItem('wood');
+    this.boatBuilt = true;
+    sfx.play('zap');
+    this.say("You lash the timber into a boat, beached at the water's edge. Board it to cross the sea.");
+    return true;
+  }
+
+  // The nearest walkable land tile at the sea's edge (8-adjacent to an open-sea
+  // tile), within BOAT_LAUNCH_RADIUS of the player and clear of objects — where
+  // a crafted boat is beached. Excludes the player's own tile so building never
+  // traps you inside the hull. Returns {x, y} or null (not at the shore).
+  _findLaunchTile(map) {
+    if (!map) return null;
+    const px = Math.floor(this.x), py = Math.floor(this.y);
+    const seaAdjacent = (x, y) => {
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        if (!dx && !dy) continue;
+        if (map.floorAt(x + dx, y + dy) === 'sea') return true;
+      }
+      return false;
+    };
+    let best = null, bestD = Infinity;
+    const R = BOAT_LAUNCH_RADIUS;
+    for (let y = py - R; y <= py + R; y++) {
+      for (let x = px - R; x <= px + R; x++) {
+        if (!map.inBounds(x, y)) continue;
+        if (x === px && y === py) continue;         // never under the player
+        const f = map.floorAt(x, y);
+        if (f === 'sea' || f === 'water') continue;  // must be land, not water
+        if (map.objectAt(x, y)) continue;            // tile must be free
+        if (!seaAdjacent(x, y)) continue;            // right at the sea's edge
+        const d = (x - px) * (x - px) + (y - py) * (y - py);
+        if (d < bestD) { bestD = d; best = { x, y }; }
+      }
+    }
+    return best;
   }
 
   // Eight distinct numbered circuit boards (from destroyed obelisks) build a

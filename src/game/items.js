@@ -265,6 +265,16 @@ export const ITEMS = {
     stack: 1,
     color: '#d8cfa8',
   },
+  // A boat crafted from 12 wood with a cutting tool in hand (Player.craftBoat,
+  // press C at the shore). Not a pocket item: crafting places it as a world
+  // object on the beach (OBJECTS.boat) that you board to cross the sea. This
+  // entry names and colours the vehicle kind for any icon/future use.
+  boat: {
+    name: 'Boat',
+    kind: 'vehicle',
+    stack: 1,
+    color: '#8a6437',
+  },
   // Electro-compass: click it (in hand, pocket, or pack) to arm it — once
   // armed and carried, your facing chevron becomes a cluster of homing
   // pointers, one per notable thing nearby, colour-coded (see

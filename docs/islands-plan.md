@@ -10,9 +10,10 @@ character.
 **Status: design APPROVED (David, 2026-07-10) — §10 decisions are settled
 except island owners. Stage 0 COMPLETE: 0a (the `currentWorld` wrap, 2026-07-11)
 + 0b (the Backspace ported to a World, 2026-07-11) + 0c (`src/islands/calypso.js`
-via `createIsland`, 2026-07-12) all landed and verified** (see §3). **Next: Stage 1**
-(boat + crossing) and **Stage 3** (the sibling islands), both building on
-`createIsland`. See also `islands-odyssey-revision.md` (R1–R5): the World contract
+via `createIsland`, 2026-07-12) all landed and verified** (see §3). **Stage 1a**
+(the craftable, shore-placed boat, 2026-07-12) is also landed (see §4); **next:
+Stage 1b** (departure + crossing) and **Stage 3** (the sibling islands), both
+building on `createIsland`. See also `islands-odyssey-revision.md` (R1–R5): the World contract
 should gain `obColor`/`obAlertColor`, and the fortress becomes a parameterised
 module (COORDINATE with Henrik).
 **Prerequisites all landed** (v1.58 guard roster + fortress map; v1.59
@@ -187,12 +188,28 @@ partially: whatever main.js sheds here should not come back.
 crossing first**; a real open-sea map can replace it later without touching
 the islands (it just becomes another World).
 
-- **Boat item + crafting** — follow the `craftFortressMap`/`craftSword`
-  pattern exactly: `boat` in items.js (kind 'vehicle', stack 1),
-  `canCraftBoat()`/`craftBoat()` in player.js gated on wood (proposed **12**)
-  plus a real tool in hand (axe/saw class), wired into the **C** craft chain
-  and the craft prompt in main.js. A crafted boat is *placed at the shore*
-  (nearest water-adjacent tile), not pocketed: it's a world object you board.
+Sliced 1a/1b/1c so each lands playable:
+
+- **1a — boat item + crafting. ✓ DONE (2026-07-12).** Follows the
+  `craftFortressMap`/`craftSword` pattern: `boat` in items.js (kind 'vehicle',
+  stack 1) + `boat` in tiles.js `OBJECTS` (solid, so the beached hull is a thing
+  you walk up to — and so `isSolid`/`blocksShot` never dereference an
+  unregistered type); `canCraftBoat(map)`/`craftBoat(map)`/`_findLaunchTile(map)`
+  in player.js gated on **12 wood** + a cutting tool in hand (`treeDamage >= 2`,
+  the axe/saw class) + standing at the sea's edge; wired into the **C** chain and
+  the craft prompt (lowest priority, so it never shadows a weapon/tool craft) in
+  main.js; `Renderer.drawBoat` draws the beached hull in the iso plane. A crafted
+  boat is *placed at the shore* (nearest walkable land tile 8-adjacent to a `sea`
+  tile, never under the player), not pocketed. One boat at a time
+  (`player.boatBuilt`; 1c persists it as campaign state). Covered by
+  `test/boat.test.js` (6 tests: gates, wood spend, sea-edge placement, solidity,
+  the never-under-player + one-boat guards) and live browser-verified. **Not yet
+  boardable — that is 1b.**
+- **1b — departure + the cheap crossing** (swim/sail past the shelf, heading
+  chart, timed stamina/hull events) → `switchWorld` arrival on a stub islet.
+- **1c — the `postai-campaign` save blob** (`currentIsland`, `boat {exists, hull,
+  island}`) so a reload resumes on the right island; replaces the 1a
+  `player.boatBuilt` session flag.
 - **Departure** — swim or sail past the shelf edge (beyond the ~4 swimmable
   coast tiles). On foot/swimming this opens the crossing in swim mode; in the
   boat, boat mode.
@@ -310,7 +327,8 @@ fortress-map work, landed as v1.58; the core-kill endgame landed as v1.59.)
    is now `const calypso = registerWorld(createIsland(WORLD_SEED))` + aliasing
    destructure. All verified + on `main`.
 3. **Stage 1** — boat + cheap crossing + stub islet. Proves travel round-trip
-   and campaign save.
+   and campaign save. **1a (craftable shore-placed boat) DONE 2026-07-12**; 1b
+   (departure + crossing) and 1c (campaign save) next.
 4. **Stage 2** — islandkit extraction, seed-diff verified.
 5. **Stage 3** — ITHACA first (small, proves the contract), then APOLLO /
    ATHENA / HADES in parallel, one owner each. Each island wires
