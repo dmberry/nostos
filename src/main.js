@@ -2622,6 +2622,7 @@ function frame(now) {
   if (now - lastRenderTime >= MIN_RENDER_MS) {
     lastRenderTime = now;
     const amb = currentWorld.ambience;
+    renderer.obColor = currentWorld.obColor; renderer.obAlertColor = currentWorld.obAlertColor; // R1: per-island OB eye hue
     renderer.draw(camera, map, player, currentWorld.animals, {
       fps,
       version: VERSION,

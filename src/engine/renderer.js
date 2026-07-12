@@ -180,6 +180,10 @@ export class Renderer {
     this.ctx = canvas.getContext('2d');
     this.w = 0;
     this.h = 0;
+    // Per-island obelisk colour (R1), set each frame from currentWorld by main.js.
+    // Defaults reproduce today's red so nothing changes until a world overrides.
+    this.obColor = '#ff281e';
+    this.obAlertColor = '#ff001e';
     this.dpr = 1;
   }
 
@@ -2383,6 +2387,15 @@ export class Renderer {
 
   // AI signal tower: a tall narrow black monolith with a slow-pulsing red
   // light near the crown. Destructible in a later phase.
+  // The obelisk eye/glow colour at a given alert (0..1), interpolated between the
+  // current world's rest and alert hues (R1). Returns [r,g,b].
+  _obColorAt(alert) {
+    const hex = (h) => { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+    const t = Math.min(1, Math.max(0, alert));
+    const c0 = hex(this.obColor || '#ff281e'), c1 = hex(this.obAlertColor || '#ff001e');
+    return c0.map((v, i) => Math.round(v + (c1[i] - v) * t));
+  }
+
   drawObelisk(obj) {
     const ctx = this.ctx;
     const c = worldToScreen(obj.x + 0.5, obj.y + 0.5);
@@ -2491,14 +2504,15 @@ export class Renderer {
       // Fast alarm blink, bright and saturated, with a glow halo.
       const blink = 0.5 + 0.5 * Math.abs(Math.sin(performance.now() / 130));
       const a = Math.min(1, 0.55 + alert * 0.45) * blink;
+      const [oer, oeg, oeb] = this._obColorAt(alert); // per-island eye hue (R1)
       const glow = ctx.createRadialGradient(c.x, ly, 0, c.x, ly, 16);
-      glow.addColorStop(0, `rgba(255, 30, 20, ${0.5 * a})`);
-      glow.addColorStop(1, 'rgba(255, 30, 20, 0)');
+      glow.addColorStop(0, `rgba(${oer}, ${oeg}, ${oeb}, ${0.5 * a})`);
+      glow.addColorStop(1, `rgba(${oer}, ${oeg}, ${oeb}, 0)`);
       ctx.fillStyle = glow;
       ctx.beginPath();
       ctx.arc(c.x, ly, 16, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = `rgba(255, ${Math.round(40 * (1 - alert))}, 30, ${a})`;
+      ctx.fillStyle = `rgba(${oer}, ${oeg}, ${oeb}, ${a})`;
       ctx.beginPath();
       ctx.arc(c.x, ly, 3.4, 0, Math.PI * 2);
       ctx.fill();

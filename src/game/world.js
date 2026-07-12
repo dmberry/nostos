@@ -32,6 +32,12 @@ export function createWorld(id, opts = {}) {
     creatures:   opts.creatures   ?? [],  // Backspace-style lurkers (0b) / per-island oddities
     controllers: opts.controllers ?? [],  // fortress / factory / obelisk-network (wired in 0c)
 
+    // Per-island obelisk colour (R1). The OB eye/glow and minimap dots read these
+    // off the current world; the defaults reproduce today's red so any world that
+    // doesn't set them looks exactly as before.
+    obColor:      opts.obColor      ?? '#ff281e',  // eye at rest
+    obAlertColor: opts.obAlertColor ?? '#ff001e',  // eye fully alert
+
     // Where the player arrives. Normal worlds remember where you left them
     // (returnPos, set on exit); the Backspace opts out so you always land at its
     // door. spawn is the fallback / first-arrival point.

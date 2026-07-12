@@ -1,5 +1,6 @@
-// ZEUS's fortress — one of the four AI daemons (ZEUS, APOLLO, ATHENA, HADES;
-// POSEIDON is the net strung between them). ZEUS "took the high country and
+// The daemon fortress — a reusable per-island module (createFortress opts, R2).
+// One of the four Odyssey daemons (CALYPSO, POLYPHEMUS, CIRCE, HELIOS; POSEIDON
+// is the net strung between them). The daemon "took the high country and
 // cannot be cut" — hence the sealed fortress. The overworld is ringed by an
 // impassable boundary; the fortress is a sealed ANNEX grown onto the south edge
 // of that boundary, so it costs the overworld no space and can be as large as
@@ -14,10 +15,15 @@
 import { makeRng } from './rng.js';
 import { register } from '../engine/systems.js';
 
+// Legacy default name — the backward-compatible fallback for createFortress's
+// `aiName` when no opts are passed. Island one is CALYPSO now (calypso.js passes
+// aiName: 'CALYPSO'); the martial islands will pass their own from the roster.
 export const AI_NAME = 'ZEUS';
 
-// The four AI daemons, for lore and the map legend. Only ZEUS is built so far.
-export const AI_ROSTER = ['ZEUS', 'APOLLO', 'ATHENA', 'HADES'];
+// The four daemon-islands of the Odyssey, for lore and the map legend (POSEIDON
+// is the net strung between them, not a felled daemon). Only island one is built
+// so far. (R1 rename — was ZEUS / APOLLO / ATHENA / HADES.)
+export const AI_ROSTER = ['CALYPSO', 'POLYPHEMUS', 'CIRCE', 'HELIOS'];
 
 // ---------------------------------------------------------------------------
 // THE DAEMON'S VOICE — a death-aria in three movements, spoken as you break
@@ -203,7 +209,13 @@ function buildMaze(map, rng, cfg) {
 }
 
 // Build the fortress into a fresh southern annex and return its controller.
-export function createFortress(map, seed, spawn) {
+export function createFortress(map, seed, spawn, opts = {}) {
+  // Per-island parameters (R2 — the fortress-as-module abstraction). Omitting
+  // opts reproduces the original raid exactly: same maze, guards, core, breach.
+  //   aiName  — whose fortress this is (messages + core label). Default: the const.
+  //   winMode — 'kill' (raze the core) | 'depart' (break out to the raft; R3).
+  //   mazeCfg — overrides merged into buildMaze's cfg (rows / wallH / character).
+  const { aiName = AI_NAME, winMode = 'kill', mazeCfg } = opts;
   const w = map.w;
   const seamY = growSouth(map, ANNEX_H, 'panel');
   const southY = map.h - 1;
@@ -257,7 +269,7 @@ export function createFortress(map, seed, spawn) {
   const footprint = [];
   for (let dy = 0; dy < CORE; dy++) for (let dx = 0; dx < CORE; dx++) footprint.push({ x: coreX + dx, y: coreY + dy });
   const core = map.addObject('mainframe', coreX, coreY, {
-    fw: CORE, fh: CORE, footprint, ai: AI_NAME, hp: 250, maxHp: 250, defeated: false,
+    fw: CORE, fh: CORE, footprint, ai: aiName, hp: 250, maxHp: 250, defeated: false,
   });
   for (const t of footprint) map.objectGrid[t.y * w + t.x] = core;
 
@@ -285,6 +297,7 @@ export function createFortress(map, seed, spawn) {
   const gateCol = Math.max(0, Math.min(mazeCols - 1, Math.round((doorX0 + 1 - MAZE_MX0) / MAZE_PITCH)));
   const mazeBottom = buildMaze(map, mazeRng, {
     mx0: MAZE_MX0, my0: seamY + 3, cols: mazeCols, rows: 7, gateCol, wallH: 40,
+    ...(mazeCfg || {}), // per-island overrides (a softer "home" layout for CALYPSO, R3)
   });
 
   // The quad: the open paved killing-ground between the maze and the sanctum,
@@ -323,7 +336,8 @@ export function createFortress(map, seed, spawn) {
   };
 
   const controller = {
-    AI_NAME,
+    AI_NAME: aiName,   // per-instance name; main.js reads fortress.AI_NAME
+    winMode,           // 'kill' | 'depart' — the depart-mode body lands in R3
     region: { x0: 0, y0: seamY, x1: w - 1, y1: southY },
     seamY,
     door: { x0: doorX0, x1: doorX0 + DOOR_W - 1, y: seamY, cx: doorX0 + DOOR_W / 2 },
@@ -363,7 +377,7 @@ export function createFortress(map, seed, spawn) {
         return { ok: false, msg: 'unlock needs an AI key — pull one from a felled W-factory first.' };
       }
       if (state.hacked) {
-        return { ok: false, msg: `${AI_NAME}'s doorway is already unlocked. The key is yours.` };
+        return { ok: false, msg: `${aiName}'s doorway is already unlocked. The key is yours.` };
       }
       state.hacked = true;
       for (const d of doors) if (d) d.hacked = true; // lock beacons turn green
@@ -380,7 +394,7 @@ export function createFortress(map, seed, spawn) {
       if (!state.open && player.hasItem('fortress_key')) {
         if (Math.abs(player.y - seamY) <= 2.5 && player.x >= doorX0 - 1.5 && player.x <= doorX0 + DOOR_W + 0.5) {
           openDoor();
-          player.say(`The fortress key turns. ${AI_NAME}'s doorway grinds open.`);
+          player.say(`The fortress key turns. ${aiName}'s doorway grinds open.`);
           if (!state.announced) { state.announced = true; player.addScore?.(40); }
         }
       }
@@ -398,7 +412,7 @@ export function createFortress(map, seed, spawn) {
       // while the world is already stirred, the world calms at once.
       if (uplinkObj && uplinkObj.destroyed && state.uplinkAlive) {
         state.uplinkAlive = false;
-        player.say(`${AI_NAME}'s red uplink goes dark. The fortress is cut off — the world can't hear it now.`);
+        player.say(`${aiName}'s red uplink goes dark. The fortress is cut off — the world can't hear it now.`);
         if (state.alarm && world && world.calm) world.calm();
       }
 
@@ -413,7 +427,7 @@ export function createFortress(map, seed, spawn) {
           state.reportT += dt;
           if (state.reportT >= REPORT_DELAY) {
             state.alarm = true; state.quietT = 0; state.produceT = PRODUCE_INTERVAL;
-            player.say(`A drone reports the breach. ${AI_NAME} rouses — the core throws its guard down the maze at you.`);
+            player.say(`A drone reports the breach. ${aiName} rouses — the core throws its guard down the maze at you.`);
             if (world && world.spawnWave) world.spawnWave(4, 2); // first response: a full pack + snipers
             if (state.uplinkAlive && world && world.stir) world.stir();
           }
@@ -444,7 +458,7 @@ export function createFortress(map, seed, spawn) {
     markers() {
       return {
         gate: { x: doorX0 + DOOR_W / 2, y: seamY, open: state.open, hacked: state.hacked },
-        core: { x: coreCx, y: coreCy, ai: AI_NAME, defeated: core.defeated },
+        core: { x: coreCx, y: coreCy, ai: aiName, defeated: core.defeated },
       };
     },
   };

@@ -373,7 +373,7 @@ export function createIsland(seed) {
   // boundary gate terminal in RON-ML. `mainframe` points at the core so the
   // existing map overlay marks it; `fortress` owns the gate/door logic. (fortress.js
   // now names the AI ZEUS at source, so no override is needed here.)
-  const fortress = createFortress(map, seed, spawn);
+  const fortress = createFortress(map, seed, spawn, { aiName: 'CALYPSO' });
   const mainframe = fortress.core; // { x, y } of the core, for the RON-ML map star
   // Ring the island in sea: stamp a dithered sand+water coast into the border
   // tiles now that the towers, relays and fortress are placed (so it leaves them
@@ -391,7 +391,10 @@ export function createIsland(seed) {
   robots.push(...fortress.spawnGuards(spawnM4));
 
   const birds = spawnBirds(map, seed);
-  const world = createWorld('calypso', { map, spawn, robots, animals, birds, waterdroids, obelisks, obeliskObjs });
+  const world = createWorld('calypso', {
+    map, spawn, robots, animals, birds, waterdroids, obelisks, obeliskObjs,
+    obColor: '#232a46', obAlertColor: '#4b5cc4', // Ogygia: kalyptō — indigo at rest, brightening on alert (R1)
+  });
   // calypso-specific controllers, aliased by name in main.js (its ~60 runtime sites use these names).
   world.fortress = fortress;
   world.wfactory = wfactory;
