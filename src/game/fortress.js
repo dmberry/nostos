@@ -275,19 +275,6 @@ export function createFortress(map, seed, spawn, opts = {}) {
 
   const coreCx = coreX + CORE / 2, coreCy = coreY + CORE / 2;
 
-  // The red uplink mast beside the core: wires ZEUS into the overworld
-  // SKYLINK. While it stands, tripping the alarm stirs the world; hammer it
-  // down and a breach stays contained to the fortress. Seated just EAST of the
-  // core on the sanctum deck, where its tile depth sorts it in front of the
-  // tall core block rather than hidden behind it.
-  let uplinkObj = null;
-  {
-    const ux = coreX + CORE, uy = coreY + 1;
-    if (map.inBounds(ux, uy) && !map.objectAt(ux, uy)) {
-      uplinkObj = map.addObject('uplink', ux, uy, { hp: 90, maxHp: 90, destroyed: false });
-    }
-  }
-
   // CALYPSO's own console: a screen set INTO the core's SOUTH-EAST face (drawn by
   // renderer.drawMainframe when core.hasTerminal), so it is literally part of the
   // black core block, not a separate kiosk. Only CALYPSO has this sanctum terminal;
@@ -330,7 +317,7 @@ export function createFortress(map, seed, spawn, opts = {}) {
   // ---- controller ---------------------------------------------------------
   const state = {
     hacked: false, open: false, announced: false, mazeSolved: false,
-    alarm: false, reportT: 0, quietT: 0, produceT: 0, uplinkAlive: !!uplinkObj,
+    alarm: false, reportT: 0, quietT: 0, produceT: 0,
   };
 
   const nearTerminal = (px, py, r = 1.9) =>
@@ -377,10 +364,8 @@ export function createFortress(map, seed, spawn, opts = {}) {
     coreTerminal: (aiName === 'CALYPSO') ? { x: coreCx, y: coreCy, obj: core } : null, // CALYPSO's sanctum console (the screen on the core's SE face)
     core: { obj: core, x: coreCx, y: coreCy, tx: coreX, ty: coreY, fw: CORE, fh: CORE },
     quad: { top: quadTop, bottom: quadBottom, muster }, // the guard courtyard + muster points
-    uplink: uplinkObj,
     get alarm() { return state.alarm; },
     get reportProgress() { return Math.min(1, state.reportT / REPORT_DELAY); }, // 0..1 toward the breach report
-    get uplinkAlive() { return state.uplinkAlive; },
     get hacked() { return state.hacked; },
     get open() { return state.open; },
 
@@ -446,14 +431,6 @@ export function createFortress(map, seed, spawn, opts = {}) {
         player.say('The fortress map flares in your hand — its lines run out across the floor, lighting the way through.');
       }
 
-      // The uplink: hammer it down and the fortress is cut off. If it falls
-      // while the world is already stirred, the world calms at once.
-      if (uplinkObj && uplinkObj.destroyed && state.uplinkAlive) {
-        state.uplinkAlive = false;
-        player.say(`${aiName}'s red uplink goes dark. The fortress is cut off — the world can't hear it now.`);
-        if (state.alarm && world && world.calm) world.calm();
-      }
-
       // The breach mechanic. A guard that has acquired you (aggro) is reporting;
       // survive its report window (REPORT_DELAY) and the alarm trips. Kill the
       // watchers fast and the report clock cools back down. Once alarmed, a long
@@ -467,7 +444,10 @@ export function createFortress(map, seed, spawn, opts = {}) {
             state.alarm = true; state.quietT = 0; state.produceT = PRODUCE_INTERVAL;
             player.say(`A drone reports the breach. ${aiName} rouses — the core throws its guard down the maze at you.`);
             if (world && world.spawnWave) world.spawnWave(4, 2); // first response: a full pack + snipers
-            if (state.uplinkAlive && world && world.stir) world.stir();
+            // The fortress is wired into the overworld POSEIDON: a reported breach
+            // rouses the whole island (obelisks flare, the factory scrambles a
+            // hunter). Severing that link is a terminal hack, not a thing you smash.
+            if (world && world.stir) world.stir();
           }
         } else {
           state.reportT = Math.max(0, state.reportT - dt * 1.5);
@@ -493,16 +473,15 @@ export function createFortress(map, seed, spawn, opts = {}) {
     },
 
     // Save/restore the fortress's mutable state so a loaded game resumes the
-    // raid mid-progress — doors, core health/defeat, uplink — not just the world
-    // around it. Transient timers and the alarm are not persisted: the alarm
-    // re-trips if a guard still sees you. (Save/load, main.js's persist/restore.)
+    // raid mid-progress — doors, core health/defeat — not just the world around
+    // it. Transient timers and the alarm are not persisted: the alarm re-trips
+    // if a guard still sees you. (Save/load, main.js's persist/restore.)
     serialize() {
       return {
         hacked: state.hacked,
         open: state.open,
         coreHp: core.hp,
         coreDefeated: !!core.defeated,
-        uplinkDown: !!(uplinkObj && uplinkObj.destroyed),
       };
     },
     restore(snap) {
@@ -511,7 +490,6 @@ export function createFortress(map, seed, spawn, opts = {}) {
       if (snap.open) openDoor(); // removes the door objects + sets state.open
       if (typeof snap.coreHp === 'number') core.hp = snap.coreHp;
       if (snap.coreDefeated) core.defeated = true;
-      if (snap.uplinkDown && uplinkObj) { uplinkObj.destroyed = true; state.uplinkAlive = false; }
     },
 
     // Markers for the RON-ML `map` overlay.

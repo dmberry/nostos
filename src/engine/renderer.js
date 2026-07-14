@@ -608,7 +608,7 @@ export class Renderer {
     {
       const pfx2 = Math.floor(player.x), pfy2 = Math.floor(player.y);
       const NEAR_TALL = new Set(['wall', 'column', 'marbleblock']);
-      const BIG_TALL = new Set(['obelisk', 'wfactory', 'mainframe', 'uplink']);
+      const BIG_TALL = new Set(['obelisk', 'wfactory', 'mainframe']);
       let occluded = false;
       for (let dy = 0; dy <= 4 && !occluded; dy++) {
         for (let dx = 0; dx <= 4; dx++) {
@@ -1556,7 +1556,6 @@ export class Renderer {
       case 'fortdoor': this.drawFortDoor(obj); break;
       case 'gateterm': this.drawGateTerm(obj); break;
       case 'mainframe': this.drawMainframe(obj); break;
-      case 'uplink': this.drawUplink(obj); break;
       case 'furniture': this.drawFurniture(obj); break;
       case 'exitdoor': this.drawExitDoor(obj); break;
       case 'lamp': this.drawLamp(obj); break;
@@ -1827,32 +1826,6 @@ export class Renderer {
       const base2 = { top: top1.top, right: top1.right, bottom: top1.bottom, left: top1.left };
       prism(base2, H * 0.55, 0.6, off * 1.6);
     }
-  }
-
-  // The red uplink mast: a tall dark spar with a red-caged beacon at its head,
-  // wiring the fortress into POSEIDON. Wrecked once hammered down.
-  drawUplink(obj) {
-    const ctx = this.ctx;
-    const s = worldToScreen(obj.x + 0.5, obj.y + 0.5);
-    if (obj.destroyed) {
-      ctx.fillStyle = '#2a1416';
-      ctx.beginPath(); ctx.moveTo(s.x - 8, s.y); ctx.lineTo(s.x + 8, s.y); ctx.lineTo(s.x + 4, s.y - 10); ctx.lineTo(s.x - 5, s.y - 8); ctx.closePath(); ctx.fill();
-      return;
-    }
-    const H = 62;
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.beginPath(); ctx.ellipse(s.x, s.y + 2, 8, 4, 0, 0, Math.PI * 2); ctx.fill();
-    // Mast: a narrow dark red-black spar.
-    ctx.fillStyle = '#3a1416';
-    ctx.beginPath();
-    ctx.moveTo(s.x - 4, s.y); ctx.lineTo(s.x + 4, s.y);
-    ctx.lineTo(s.x + 2.5, s.y - H); ctx.lineTo(s.x - 2.5, s.y - H); ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = 1; ctx.stroke();
-    // Cross-strut near the top, and the red beacon (textured glow, slow pulse).
-    ctx.strokeStyle = '#521a1c'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(s.x - 7, s.y - H + 14); ctx.lineTo(s.x + 7, s.y - H + 14); ctx.stroke();
-    const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 620);
-    this.texturedGlow(s.x, s.y - H + 2, 4.5, 5.5, `rgba(255,42,32,${(0.5 + 0.45 * pulse).toFixed(3)})`, 12, 0.5, 'aigrate');
   }
 
   // --- ZEUS's fortress (southern annex) ------------------------------

@@ -1482,10 +1482,6 @@ export class Player {
     // drops an AI key.
     if (obj && obj.type === 'wfactory') { this.hitFactory(obj, map, tool); return; }
 
-    // The fortress red uplink: hammer it down to cut ZEUS off from the
-    // overworld POSEIDON (the fortress controller watches obj.destroyed).
-    if (obj && obj.type === 'uplink') { this.hitUplink(obj, map, tool); return; }
-
     // The mainframe core: the AI itself. Break its hull down (heavy kit only)
     // and the island's controlling mind dies — every machine goes dark.
     if (obj && obj.type === 'mainframe') { this.hitCore(obj, map, tool); return; }
@@ -1768,24 +1764,6 @@ export class Player {
   }
 
   // A melee blow on the W-factory hull.
-  // Hammer the red uplink mast down. Fewer blows than the factory; when it
-  // gives, clear its tile and mark it destroyed for the fortress to react to.
-  hitUplink(obj, map, tool) {
-    if (obj.destroyed) { this.say('The uplink is already wrecked.'); return; }
-    this.swingTimer = tool.swingCooldown || 0.5;
-    this.stamina = Math.max(0, this.stamina - (tool.staminaCost ?? 0));
-    sfx.play('clang', { pitch: 0.9 }); // the mast rings thin
-    this.sparkAt(map, obj.x + 0.5, obj.y + 0.5);
-    obj.shake = 0.2;
-    obj.hp = (obj.hp ?? obj.maxHp ?? 90) - ((tool.robotDamage ?? 1) + this.xpLevel('melee'));
-    if (obj.hp > 0) return;
-    obj.destroyed = true;
-    if (map.objectGrid[obj.y * map.w + obj.x] === obj) map.objectGrid[obj.y * map.w + obj.x] = null;
-    for (let s = 0; s < 6; s++) this.sparkAt(map, obj.x + 0.5 + (s - 3) * 0.15, obj.y + 0.5);
-    map.groundItems.push({ item: 'scrap', qty: 4, x: obj.x + 0.5, y: obj.y + 0.5 });
-    this.addScore(30);
-  }
-
   hitFactory(obj, map, tool) {
     if (obj.destroyed) { this.say('The factory is already a smoking ruin.'); return; }
     this.swingTimer = tool.swingCooldown || 0.5;

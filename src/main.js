@@ -91,10 +91,11 @@ const factoryLive = () => wfactory && !wfactory.destroyed;
 const factoryCx = () => wfactory.x + (wfactory.fw || 1) / 2;
 const factoryCy = () => wfactory.y + (wfactory.fh || 1) + 1.5;
 registerRobotsSystem(); // robots' AI ticks via systems.runUpdate (order 30); see robots.js
-// "Red starlink": when the fortress breach reaches the world (alarm + uplink
-// intact), every overworld obelisk flares red (its `stirred` flag forces the
-// alert glow, HUD untouched) and the W-factory throws a W4 toward the doorway.
-// `calm` clears the flare when the fortress stands down or the uplink is cut.
+// "Red starlink": when the fortress breach reaches the world (the alarm trips),
+// every overworld obelisk flares red (its `stirred` flag forces the alert glow,
+// HUD untouched) and the W-factory throws a W4 toward the doorway. `calm` clears
+// the flare when the fortress stands down. (Severing the link before it fires is
+// a terminal hack — the adjacent-possible that replaced the old smashable mast.)
 const worldStir = {
   stir() {
     for (const o of obeliskObjs) if (!o.destroyed) o.stirred = true;
@@ -272,7 +273,7 @@ function fullReset() {
 }
 // The full run snapshot (identity + progress + run state + world MUTATIONS). The
 // world regenerates from the seed on load, so we store only what changed (felled
-// obelisks, factory, daemon tally, fortress doors/core/uplink) and re-apply it
+// obelisks, factory, daemon tally, fortress doors/core) and re-apply it
 // (see the restore block above). Shared by the autosave and the stage checkpoints.
 function buildSaveBlob() {
   return {
@@ -3042,8 +3043,8 @@ function update(dt) {
   // keeps the gates). The world-contract bag carries everything a system reads.
   //   robots: every machine's AI + separation (draw stays in the renderer sort).
   //   fortress: swings the doorway, lights the maze way-out, runs the breach
-  //   alarm — on alarm (uplink intact) `stir` flares the obelisks red and sends
-  //   a W4, `calm` unwinds it. dayNight: advances the day/night clock. robots
+  //   alarm — on alarm `stir` flares the obelisks red and sends a W4, `calm`
+  //   unwinds it. dayNight: advances the day/night clock. robots
   //   ticks before fortress so fortress sees this-frame aggro (see robots.js).
   systems.runUpdate({ dt, player, input, map, camera, robots: currentWorld.robots, animals: currentWorld.animals, birds: currentWorld.birds, dayNight, worldStir, fortress });
   // Push the player out of any machine/animal body he ended the tick overlapping.

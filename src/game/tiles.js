@@ -68,9 +68,6 @@ export const OBJECTS = {
   // its inner maze can't be double-jumped, so the hacked doorway is the only
   // way in. `material` ('metal' | 'darkstone') selects the wall texture.
   fortwall: { solid: true },
-  // The red uplink mast: wires the fortress into the overworld POSEIDON. Hammer
-  // it down to cut the fortress off, so a breach no longer stirs the world.
-  uplink: { solid: true },
   // The grand doorway in the rampart: solid until the terminal hack drops a
   // fortress key and the key throws its bolts. Removed from the grid when open.
   fortdoor: { solid: true },

@@ -119,16 +119,18 @@ code, fully isolated. **Recommendation: reuse `robots.js`.**
    this added the orchestration in `fortress.update(dt, player, robots, world)`:
    report timer (guard `aggro` → +dt; unwatched → decays; `REPORT_DELAY` 3.5s →
    alarm), `STANDDOWN_DELAY` 90s quiet → stands back down, and "red starlink" —
-   the **red uplink** mast (new `uplink` object east of the core, hammerable via
-   `player.hitUplink`, 90hp) gates the world-stir: on alarm with the uplink
-   intact, `worldStir.stir()` flares every overworld obelisk red (`obj.stirred`
+   on alarm `worldStir.stir()` flares every overworld obelisk red (`obj.stirred`
    forces the alert glow; HUD untouched) and the W-factory sends a W4 to the
-   doorway; cutting the uplink (or standing down) calls `worldStir.calm()`.
-   Guards are `hardened` — `player.read` refuses to reprogram them. Verified by
-   direct-call: alarm trips at ~3.5s, 12/12 obelisks stir, W4 dispatched, stand-
-   down + uplink-cut both calm the world, re-alarm works; uplink + core render
-   correctly (loop-timing tests unreliable under headless rAF throttling, so the
-   alarm timing was checked by stepping `fortress.update` directly).
+   doorway; standing down calls `worldStir.calm()`. Guards are `hardened` —
+   `player.read` refuses to reprogram them.
+   > **UPDATED 2026-07-15 (v1.106):** the red **uplink mast** that used to gate
+   > the stir (a smashable `uplink` object east of the core, `player.hitUplink`,
+   > 90hp) is **removed** — it read as a silly little prop nobody understood. The
+   > stir is now **unconditional**: a reported breach always rouses the island.
+   > The "cut the fortress off from the world" capability is deferred to a
+   > **terminal hack on the core**, a better home for it than a mast you hammer.
+   > All `uplink` code (object, tile, `drawUplink`, `hitUplink`, `uplinkAlive`,
+   > the save field) is gone. Verified: alarm still trips at 3.5s and stir fires.
 2b. **Roster revision — DONE (2026-07-09).** Reworked the guard classes to
    David's spec: **M4** light report drone (unarmed — its `aggro` just drives the
    alarm; hovers at keep-range, orbits to hold LOS), now the ONLY dormant-fortress
@@ -180,9 +182,8 @@ a `daemonsDown` tally counts felled daemons. Then a **fireworks level-up modal**
 (`renderer.drawAiVictory`): "ZEUS SILENCED — Daemon N of 4", machines-powered-down
 count, score, dismissable (click/space) — it does NOT end the run. Verified: 24
 machines powered down, score +700, alarm cleared, modal draws (77 particles).
-*Still to come (the richer confrontation): ZEUS speaks, the secret word, a gate
-on the uplink/factories, and letting bombs/electro-gun/OB-gun damage the core too
-(melee-only for now).*
+*Still to come (the richer confrontation): ZEUS speaks, the secret word, and
+letting bombs/electro-gun/OB-gun damage the core too (melee-only for now).*
 
 Original plan: **Stage 4** — the core confrontation (the AI speaks; break it → "1 of 4").
 
@@ -201,15 +202,16 @@ Original plan: **Stage 4** — the core confrontation (the AI speaks; break it �
    the core is shielded (its damage bar won't move — drawn with a shield shimmer).
    Destroy all three to drop the shield and open the core to attack. Factories
    only *produce* while the alarm is up, but they can be attacked at any time.
-6. **A breach stirs the world, via a red uplink.** A distinct **red uplink**
-   (an obelisk-like mast) stands in the fortress by the core, wiring Adamantine
-   into the wider SKYLINK. When the alarm trips *and the uplink still stands*,
-   the world is stirred: the overworld obelisks **flare red** (alert), and the
-   W-factory (if standing) dispatches a W4 toward the fortress doorway. **The
-   HUD/countdown does NOT change colour** — only the obelisks and the uplink
-   glow red. **Destroy the uplink and the fortress is cut off**: a breach no
-   longer reaches the world (obelisks return to normal, no W4). The guards and
-   core factories are the fortress's own and still respond locally.
+6. **A breach stirs the world.** The fortress is wired into the wider SKYLINK, so
+   when the alarm trips the world is stirred: the overworld obelisks **flare red**
+   (alert), and the W-factory (if standing) dispatches a W4 toward the fortress
+   doorway. **The HUD/countdown does NOT change colour** — only the obelisks glow
+   red. Standing down returns them to normal. The guards and core factories are
+   the fortress's own and respond locally regardless.
+   > **UPDATED 2026-07-15 (v1.106):** this originally gated on a smashable **red
+   > uplink mast** by the core (destroy it → breach stays contained). The mast is
+   > removed (see §8.2 above); the stir is now unconditional, and the "cut the
+   > fortress off" capability is deferred to a **terminal hack on the core**.
 
 ## 9. The maze way-out + the fortress map (done; map-gated 2026-07-09)
 
