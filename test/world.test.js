@@ -81,3 +81,16 @@ test('a keepsPosition world restores returnPos; keepsPosition:false always uses 
   switchWorld(home, pocket, player);            // re-enter the pocket -> spawn again (no mid-pocket memory)
   assert.deepEqual({ x: player.x, y: player.y }, { x: 3, y: 3 });
 });
+
+test('departTrial: the Poseidon crossing belongs to OGYGIA and to no other island', () => {
+  // Ogygia's whole gate is the boat: launch an unfinished hull and the sea turns
+  // you back, over and over, until you build a proper ship to Calypso's recipe.
+  // Every island after it you leave in the greek ship you arrived in — so if a
+  // later island ever picks this flag up, it has acquired a trial it has no stake
+  // in, and a raft there would trigger a voyage instead of a plain refusal.
+  const ogygia = createWorld('calypso', { map: {}, departTrial: true });
+  assert.equal(ogygia.departTrial, true);
+  for (const id of ['polyphemus', 'circe', 'helios', 'ithaca', 'backspace']) {
+    assert.equal(createWorld(id, { map: {} }).departTrial, false, `${id} must not gate on the boat`);
+  }
+});

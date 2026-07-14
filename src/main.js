@@ -631,6 +631,12 @@ let crossFail = null;      // { t, sx, sy, dx, dy, dist, phase, type, hull… } 
 
 player.onDepartFail = (p, boat) => {
   if (crossFail) return;
+  // The voyage belongs to OGYGIA. Calypso's island is the one whose whole gate is
+  // the boat: you launch, the sea turns you back, and you keep launching until you
+  // have built a proper ship to her recipe. Every island after it you leave in the
+  // greek ship you arrived in, so a raft there is just a raft — it gets the plain
+  // refusal, not a crossing the island has no stake in.
+  if (!currentWorld.departTrial) return false;
   const dir = seawardFrom(map, p.x, p.y);
   // No open water to sail into (a stream mouth, a pinched cove): there is no
   // voyage to be had, so decline and let the plain bounce stand. Forcing the trip
