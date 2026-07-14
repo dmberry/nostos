@@ -526,6 +526,18 @@ export const ITEMS = {
     food: 20,
     lotus: true,      // flag read by Player.eat -> enterTorpor
   },
+  // MOLY — the herb Hermes gives Odysseus against Circe's drug (Odyssey 10.302-6):
+  // black at the root, milk-white in flower. On AEAEA, CIRCE's swine-magic rewrites
+  // what you ARE; simply CARRYING moly holds your shape (main.js's transmutation
+  // tick reads player.hasMoly()) and drains a transformation already begun. It is
+  // not eaten and never spends — the herb is a ward, not a cure you swallow.
+  moly: {
+    name: 'Moly',
+    kind: 'resource',
+    stack: 4,
+    color: '#eef4e2',  // milk-white flower on a black root
+    ward: 'swine',     // read by hasMoly() / the CIRCE transmutation
+  },
   torch: {
     name: 'Torch',
     kind: 'resource',

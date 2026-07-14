@@ -24,6 +24,9 @@ export function createWorld(id, opts = {}) {
     // combat worlds (CALYPSO, POLYPHEMUS, …) and the slim loop on the rest (the
     // Backspace, ITHACA). Off by default so a plain island is peaceful.
     combat: opts.combat ?? false,
+    // AEAEA (CIRCE): her swine-magic rewrites what you ARE while you are ashore.
+    // main.js runs the transmutation pass on worlds that set this.
+    transmute: opts.transmute ?? false,
 
     // Entity collections. 0a passes CALYPSO's already-built arrays in; other islands
     // may omit any and populate the empty array themselves.

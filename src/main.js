@@ -30,6 +30,7 @@ import { createWorld, registerWorld, switchWorld } from './game/world.js';
 import { createIsland } from './islands/calypso.js';
 import { createIthaca } from './islands/ithaca.js';
 import { createPolyphemus } from './islands/polyphemus.js';
+import { createCirce } from './islands/circe.js';
 import { CHOIR_NOTES, CHOIR_DURATION } from './engine/choir-notes.js';
 
 // Note onsets split into four pitch registers, so each singing machine can be
@@ -210,6 +211,7 @@ try {
       if (st.backpack) player.backpack = st.backpack;
       if (st.walkman !== undefined) player.walkman = st.walkman; // null = tape moved out, respected across reload
       if (st.calypsoLeave) player.calypsoLeave = true; // sticky: refunctioning Calypso persists across reload
+      if (typeof st.swine === 'number') player.swine = st.swine; // CIRCE's change follows you across a reload
       if (typeof st.x === 'number') _bootPos = { x: st.x, y: st.y }; // the saved position, for the island resume below
     }
     // Guard against stale item keys carried over from a save written by an
@@ -281,6 +283,7 @@ function buildSaveBlob() {
       wifiPower: player.wifiPower, x: player.x, y: player.y, hands: player.hands,
       pockets: player.pockets, backpack: player.backpack, walkman: player.walkman,
       calypsoLeave: player.calypsoLeave, // Calypso refunctioned: the sea will let you go
+      swine: player.swine,               // CIRCE's transmutation: you stay changed across a reload
     },
     world: {
       currentIsland: currentWorld.id, // Stage 1c: which island you're on, so a voyage survives reload
@@ -557,11 +560,22 @@ function ensurePolyphemus() {
     player.say("The ship grounds on the Cyclopes' shore. Somewhere inland a single vast eye turns, and the land goes taut with knowing you are here. This is POLYPHEMUS.");
   };
 }
+let circe = null;
+function ensureCirce() {
+  if (circe) return;
+  circe = registerWorld(createCirce(WORLD_SEED));
+  circe.onEnter = () => {
+    player.say(player.hasMoly()
+      ? 'You step onto Aeaea. Something reaches for the shape of you — and slides off. The moly in your pack holds you as you are.'
+      : 'You step onto Aeaea. The air is sweet and wrong, and something begins, very gently, to rewrite you. Find moly — it grows where HERMES stands.');
+  };
+}
 // Resolve an island id to its (lazily-built) World.
 function worldById(id) {
   if (id === 'calypso') return calypso;
   if (id === 'ithaca') { ensureIthaca(); return ithaca; }
   if (id === 'polyphemus') { ensurePolyphemus(); return polyphemus; }
+  if (id === 'circe') { ensureCirce(); return circe; }
   return null;
 }
 
@@ -571,6 +585,7 @@ function worldById(id) {
 const CROSSINGS = [
   { id: 'calypso', place: 'OGYGIA', desc: "Calypso's island, where you were kept." },
   { id: 'polyphemus', place: 'AEGILIA', desc: 'The Land of the Cyclopes. A single eye watches.' },
+  { id: 'circe', place: 'AEAEA', desc: "Circe's island. She does not kill you — she rewrites you." },
   { id: 'ithaca', place: 'ITHACA', desc: 'Home — if the sea will let you.' },
 ];
 const headingEl = document.getElementById('heading');
@@ -1706,6 +1721,7 @@ function replRun(line) {
 }
 
 function openObTerminal(ob) {
+  if (player.isSwine()) { player.say('You snuffle at the screen. A beast cannot work a terminal — find moly.'); return; }
   if (!player.hasItem('chip')) { openAiOs(ob); return; }
   // Chip present: jack in. Go invisible, then run the connect progress bar.
   terminalKind = 'ob';
@@ -1911,6 +1927,7 @@ function calypsoRun(line) {
 // key — friendly tech. Amber CRT (the `.hermes` class recolours the shell),
 // with a short glitchy boot, then the same input runs against hermesCtx.
 function openHermesTerminal(tor) {
+  if (player.isSwine()) { player.say('You snuffle at the relay. A beast cannot work a terminal — but the moly grows at its foot.'); return; }
   terminalKind = 'hermes';
   hermesTor = tor;
   terminalOb = null;
@@ -2334,6 +2351,29 @@ function update(dt) {
     const dest = worldById(target);
     if (dest) { goToWorld(dest); sfx.play('zap'); }
     return;
+  }
+
+  // CIRCE's swine-magic (AEAEA). The change only TAKES HOLD on her island (a
+  // `transmute` world), but MOLY undoes it anywhere — so you can flee Aeaea
+  // half-turned and shed it at sea, if you carry the herb. Runs before the
+  // world branch so it ticks wherever you are.
+  if (!player.deathCert && !player._ended && (player.swine > 0 || currentWorld.transmute)) {
+    const prev = player.swine;
+    if (player.hasMoly()) player.swine = Math.max(0, player.swine - dt * 0.09);        // ~11s to shed
+    else if (currentWorld.transmute) player.swine = Math.min(1, player.swine + dt * 0.0125); // ~80s to turn
+    const stage = (v) => (v >= 1 ? 3 : v >= 0.62 ? 2 : v >= 0.3 ? 1 : 0);
+    const s0 = stage(prev), s1 = stage(player.swine);
+    if (s1 > s0) {
+      if (s1 === 1) player.say('Your hands look wrong in this light. Something is being decided about you.');
+      else if (s1 === 2) player.say('You keep catching yourself on all fours, and your grip is going. Find moly — it grows where HERMES stands.');
+      else if (s1 === 3) player.say('The change closes over you. You are a beast now: the network no longer reads you as a person, and lets you be — but you can hold nothing, and work nothing.');
+    } else if (s1 < s0) {
+      if (s0 === 3) player.say('The moly bites, and you come back into your own shape — hands, and a name.');
+      else if (s1 === 0) player.say('The pull lets go of you. You are yourself again.');
+    }
+    // (The "machines lose interest in a beast" half of the mechanic lives at the
+    // point of DETECTION, in updateRobots — clearing aggro from out here does not
+    // stick, because each robot's own AI re-acquires you later in the same frame.)
   }
 
   // Resting (from B): the world holds still while the character lies down, the

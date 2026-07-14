@@ -168,6 +168,12 @@ export class Player {
     this.food = FOOD_MAX;
     this.maxFood = FOOD_MAX;
     this.venom = 0;       // seconds of poison remaining
+    // CIRCE's swine-magic (AEAEA): 0..1. On her island it climbs unless you carry
+    // MOLY; at 1 you are RECLASSIFIED — no longer a person to the network. The
+    // machines stop hunting you (a beast is not an intruder) but you can no longer
+    // wield a weapon or work a terminal. Carrying moly holds your shape and drains
+    // it back. Ticked in main.js's transmutation pass (combat loop, AEAEA only).
+    this.swine = 0;
 
     this.hands = 'penknife';                 // starting tool
     this.boatBuilt = false;                  // one boat at a time; a session flag (Stage 1c persists it as campaign state)
@@ -268,6 +274,18 @@ export class Player {
   // not. This is what opens the fortress gate now (fortress_key is retired).
   hasTrojanCard() {
     return this.hasItem('trojan_key') || this.hasItem('hermes_card');
+  }
+
+  // MOLY, the ward against CIRCE's swine-magic (Odyssey 10.302-6). Merely CARRYING
+  // it holds your shape — it is never eaten or spent.
+  hasMoly() {
+    return this.hasItem('moly');
+  }
+
+  // Fully reclassified by CIRCE: the network no longer reads you as a person. The
+  // machines let you be, but you cannot wield a weapon or work a terminal.
+  isSwine() {
+    return this.swine >= 1;
   }
 
   // Remove one of a named item from wherever it is. Returns whether it went.
@@ -967,8 +985,14 @@ export class Player {
     }
     // Jacked into an obelisk terminal (with a chip), the obelisk shields you —
     // the machines lose you entirely, same as a live Wi-Fi block.
-    this.invisibleToRobots = (this.ownsWifiBlock() && this.wifiPower > 0) || this.terminalSafe;
+    //
+    // CIRCE's swine (AEAEA) take the same road by the opposite route: the block
+    // hides you by jamming the signal, she hides you by making you not a person.
+    // Either way the network cannot find an intruder where there is none, and the
+    // whole existing plumbing (distTo → Infinity, detection → false, guard
+    // line-of-sight → false) already follows this one flag.
     this._wifiOn = this.ownsWifiBlock() && this.wifiPower > 0;
+    this.invisibleToRobots = this._wifiOn || this.terminalSafe || this.isSwine();
 
     // Forcefield: armed by clicking it in whatever slot it's carried in (hand,
     // pocket, or backpack — no need to hold it). While armed and carried it
@@ -1306,6 +1330,15 @@ export class Player {
   // ahead is always searched with the free hand regardless of what's in
   // the primary hand.
   useHands(map, animals = [], robots = []) {
+    // Reclassified by CIRCE: a beast has no hands to swing with. (Boarding a ship
+    // still works — you can flee Aeaea as a swine; you just can't fight on it.)
+    if (this.isSwine()) {
+      const obj = map.objectAt(Math.floor(this.x + this.facing.x), Math.floor(this.y + this.facing.y));
+      if (!(obj && (obj.type === 'boat' || obj.type === 'greek_ship'))) {
+        this.say('You paw at it with a trotter. Whatever you were, you cannot hold a thing like this now — find moly.');
+        return;
+      }
+    }
     // Empty hands still throw a (weak) punch — see BARE_HANDS — rather than
     // refusing to do anything.
     const tool = this.hands ? ITEMS[this.hands] : BARE_HANDS;

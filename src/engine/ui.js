@@ -753,7 +753,9 @@ export const uiMethods = {
     ctx.textAlign = 'left';
     const cx = bx + bw + 8;
     if (player.venom > 0) { ctx.fillStyle = '#b07fd8'; ctx.fillText('POISON', cx, top + 21); }
-    if (player.invisibleToRobots) { ctx.fillStyle = '#4fd8c3'; ctx.fillText(`HID ${Math.ceil((player.wifiPower || 0) / 60)}m`, cx, top + 39); }
+    if (player.isSwine()) { ctx.fillStyle = '#e0a0b0'; ctx.fillText('SWINE', cx, top + 39); }
+    else if (player.swine >= 0.3) { ctx.fillStyle = '#e0a0b0'; ctx.fillText('TURNING', cx, top + 39); }
+    else if (player.invisibleToRobots) { ctx.fillStyle = '#4fd8c3'; ctx.fillText(`HID ${Math.ceil((player.wifiPower || 0) / 60)}m`, cx, top + 39); }
     if (player.food <= 0) { ctx.fillStyle = '#e05548'; ctx.fillText('STARVING', cx, top + 57); }
     else if (player.food < 25) { ctx.fillStyle = '#d8a04f'; ctx.fillText('HUNGRY', cx, top + 57); }
     // score + countdown, right-aligned on the top row
@@ -1004,7 +1006,13 @@ export const uiMethods = {
     const ctx = this.ctx;
     ctx.font = 'bold 9px system-ui, sans-serif';
     if (player.venom > 0) { ctx.fillStyle = '#b07fd8'; ctx.fillText('POISONED', 92, top + 9); }
-    if (player.invisibleToRobots) {
+    if (player.isSwine()) {
+      ctx.fillStyle = '#e0a0b0';
+      ctx.fillText('SWINE — BENEATH NOTICE', 92, top + 32);
+    } else if (player.swine >= 0.3) {
+      ctx.fillStyle = '#e0a0b0';
+      ctx.fillText(`TURNING ${Math.round(player.swine * 100)}%`, 92, top + 32);
+    } else if (player.invisibleToRobots) {
       ctx.fillStyle = '#4fd8c3';
       ctx.fillText(player.terminalSafe ? 'HIDDEN' : `HIDDEN ${Math.ceil((player.wifiPower || 0) / 60)}m`, 92, top + 32);
     }
