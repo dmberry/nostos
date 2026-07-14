@@ -5,6 +5,7 @@ import * as systems from './engine/systems.js';
 import { buildWorld } from './game/worldgen.js';
 import { spawnAnimals, updateAnimals } from './game/animals.js';
 import { Player } from './game/player.js';
+import { seawardFrom, boatMirror, CF_MIN } from './game/crossing.js';
 import { makeRng } from './game/rng.js';
 import { DayNight } from './game/daynight.js';
 import { Minimap } from './game/minimap.js';
@@ -623,82 +624,45 @@ player.onDepart = () => { openHeadingChart(); };
 //   OUT   — you pull away from the beach, the island shrinking behind you
 //   SWELL — the water stands up; the boat is held, then taken
 //   BACK  — you are thrown home, and land hard on the sand
-const CF_OUT = 4.0, CF_SWELL = 2.4, CF_BACK = 1.5;
-const CF_DIST = 11;        // tiles of open water you'd LIKE before the sea answers
-const CF_MIN = 2;          // ...and the least that still counts as having launched
+const CF_OUT = 7.0, CF_SWELL = 2.6, CF_BACK = 2.2;
 const CF_HULL = 45;        // what the beating costs the hull (it can break up)
 const CF_HURT = 10;        // and what it costs you
-let crossFail = null;      // { t, boat, sx, sy, dx, dy, dist, phase } — null = not sailing
-
-// How far can you actually row that way before you hit something that isn't sea?
-// Counts whole tiles of open water from (x, y) along (dx, dy), stopping at the
-// first non-sea tile or the map edge. Capped at CF_DIST — nobody needs more.
-function seaRun(m, x, y, dx, dy) {
-  for (let s = 1; s <= CF_DIST; s++) {
-    const tx = Math.round(x + dx * s), ty = Math.round(y + dy * s);
-    if (tx < 1 || ty < 1 || tx > m.w - 2 || ty > m.h - 2) return s - 1;
-    if (m.floorAt(tx, ty) !== 'sea') return s - 1;
-  }
-  return CF_DIST;
-}
-
-// Which way is out? Not just "away from the land" — the direction with the most
-// open water in front of it, because the voyage has to actually fit. A beach in a
-// narrow cove or up against the map edge gets a short trip, not a trip through the
-// sand. Ties go to the direction the sea generally lies in.
-function seawardFrom(m, x, y) {
-  let vx = 0, vy = 0;
-  for (let dy = -4; dy <= 4; dy++) {
-    for (let dx = -4; dx <= 4; dx++) {
-      if (!dx && !dy) continue;
-      if (m.floorAt(Math.round(x) + dx, Math.round(y) + dy) !== 'sea') continue;
-      const d = Math.hypot(dx, dy);
-      vx += dx / d; vy += dy / d;
-    }
-  }
-  const len = Math.hypot(vx, vy) || 1;
-  const avg = { x: vx / len, y: vy / len };
-  let best = { x: avg.x, y: avg.y, run: seaRun(m, x, y, avg.x, avg.y) };
-  if (best.run >= CF_DIST) return best;
-  for (let i = 0; i < 24; i++) {
-    const a = (i / 24) * Math.PI * 2;
-    const d = { x: Math.cos(a), y: Math.sin(a) };
-    const run = seaRun(m, x, y, d.x, d.y);
-    const better = run > best.run
-      || (run === best.run && (d.x * avg.x + d.y * avg.y) > (best.x * avg.x + best.y * avg.y));
-    if (better) best = { x: d.x, y: d.y, run };
-  }
-  return best;
-}
+let crossFail = null;      // { t, sx, sy, dx, dy, dist, phase, type, hull… } — null = not sailing
 
 player.onDepartFail = (p, boat) => {
   if (crossFail) return;
   const dir = seawardFrom(map, p.x, p.y);
+  // No open water to sail into (a stream mouth, a pinched cove): there is no
+  // voyage to be had, so decline and let the plain bounce stand. Forcing the trip
+  // anyway would row you across the sand.
+  if (dir.run < CF_MIN) return false;
   crossFail = {
-    t: 0, boat, phase: '',
+    t: 0, phase: '',
     sx: p.x, sy: p.y,                       // the beach you shoved off from
     bx: boat ? boat.x : Math.round(p.x),    // and the tile the hull was drawn up on
     by: boat ? boat.y : Math.round(p.y),
     dx: dir.x, dy: dir.y,
-    dist: Math.max(CF_MIN, dir.run),        // as far out as this water actually goes
+    dist: dir.run,                          // as far out as this water actually goes
+    // The vessel itself, lifted off the map for the voyage (see below).
+    type: boat ? boat.type : 'boat',
+    hull: boat ? (boat.hull ?? 100) : 100,
+    maxHull: boat ? (boat.maxHull ?? 100) : 100,
+    seaworthy: boat ? !!boat.seaworthy : false,
   };
+  // Take the hull OFF the map for the crossing. A map object is pinned to a tile,
+  // so dragging one along behind you snaps it a whole tile at a time while you
+  // move smoothly — the boat visibly stutters under your feet. Instead the vessel
+  // rides on `player.aboard`, and the renderer draws hull and man as one image at
+  // one float position (drawPlayer). It goes back on the map when you land.
+  if (boat) map.removeObject(boat);
+  aboardHeading(crossFail, dir.x, dir.y);
   sfx.play('jump');
   p.say('You put your shoulder to the hull and shove. The sand lets go, and the boat swings out onto the water.');
 };
 
-// Carry the hull along under you. Map objects are keyed by tile, so "moving" one
-// is a remove + re-add; if the destination is taken, the boat simply stays put for
-// that step rather than blinking out of the world.
-function boatRidesWith(cf, wx, wy) {
-  const b = cf.boat;
-  if (!b) return;
-  const tx = Math.round(wx), ty = Math.round(wy);
-  if (b.x === tx && b.y === ty) return;
-  if (!map.inBounds(tx, ty) || map.objectAt(tx, ty)) return;
-  const props = { hull: b.hull, maxHull: b.maxHull, seaworthy: b.seaworthy };
-  map.removeObject(b);
-  cf.boat = map.addObject(b.type, tx, ty, props) || map.addObject(b.type, b.x, b.y, props) || b;
-  cf.boat.type = b.type;
+// Put the vessel under the player and point it where it is going (boatMirror).
+function aboardHeading(cf, hx, hy) {
+  player.aboard = { type: cf.type, mirror: boatMirror(hx, hy), wob: 0 };
 }
 
 // Drive the failed crossing. Returns nothing; the caller returns immediately
@@ -717,6 +681,7 @@ function updateCrossFail(dt) {
       cf.phase = 'out';
       player.say('The island falls away behind you. Open water, and no land in front of it.');
     }
+    if (player.aboard) player.aboard.wob = Math.sin(cf.t * 5) * 1.2;   // an easy swell
   } else if (cf.t < CF_OUT + CF_SWELL) {
     const u = (cf.t - CF_OUT) / CF_SWELL;
     // Held on the crest: the boat stops making way and starts being moved.
@@ -724,6 +689,7 @@ function updateCrossFail(dt) {
     const shudder = 0.22 * Math.sin(cf.t * 34) * u;
     player.x = cf.sx + cf.dx * d + shudder;
     player.y = cf.sy + cf.dy * d - shudder;
+    if (player.aboard) player.aboard.wob = Math.sin(cf.t * 26) * 5 * u; // and now a bad one
     if (cf.phase !== 'swell') {
       cf.phase = 'swell';
       sfx.play('charge');
@@ -737,37 +703,33 @@ function updateCrossFail(dt) {
     if (cf.phase !== 'back') {
       cf.phase = 'back';
       sfx.play('treefall');
+      aboardHeading(cf, -cf.dx, -cf.dy);    // she comes about: bow now points home
     }
+    if (player.aboard) player.aboard.wob = Math.sin(cf.t * 30) * 4 * (1 - u);
   } else {
     // Landfall. You are back on the sand you shoved off from, and the boat has
     // taken a beating; enough of them and it breaks up under you.
     player.x = cf.sx; player.y = cf.sy;
-    const boat = cf.boat;
+    player.aboard = null;                  // ashore: you step out of the hull
     crossFail = null;
     sfx.play('hurt');
     player.takeDamage(CF_HURT, 'Poseidon');
-    if (boat) {
-      map.removeObject(boat);
-      const hull = (boat.hull ?? 100) - CF_HULL;
-      // Re-beach it where it was drawn up. If that tile is somehow taken, the boat
-      // is gone — so clear boatBuilt too, or you'd be left with no boat and no way
-      // to lay another keel.
-      const rebeached = hull > 0
-        ? map.addObject(boat.type, cf.bx, cf.by, { hull, maxHull: boat.maxHull, seaworthy: boat.seaworthy })
-        : null;
-      if (rebeached) {
-        player.say(`Poseidon puts you back on your own beach, and the boat down on the sand beside you. Its planks are sprung. ${player.launchHint()}`);
-      } else {
-        player.boatBuilt = false;   // it is gone; you can lay another keel
-        player.say(`The sea breaks the boat over the sand and takes the pieces back. ${player.launchHint()}`);
-      }
+    const hull = cf.hull - CF_HULL;
+    // Put the vessel back on the map where it was drawn up. If that tile is somehow
+    // taken, the boat is gone — so clear boatBuilt too, or you'd be left with no
+    // boat and no way to lay another keel.
+    const rebeached = hull > 0
+      ? map.addObject(cf.type, cf.bx, cf.by, { hull, maxHull: cf.maxHull, seaworthy: cf.seaworthy })
+      : null;
+    if (rebeached) {
+      player.say(`Poseidon puts you back on your own beach, and the boat down on the sand beside you. Its planks are sprung. ${player.launchHint()}`);
     } else {
-      player.say(`Poseidon puts you back on your own beach. ${player.launchHint()}`);
+      player.boatBuilt = false;   // it is gone; you can lay another keel
+      player.say(`The sea breaks the boat over the sand and takes the pieces back. ${player.launchHint()}`);
     }
     persist();
     return;
   }
-  boatRidesWith(cf, player.x, player.y);
   // The camera rides with you, and shakes while the sea has hold of the boat.
   const q = cf.phase === 'swell' ? 0.18 : 0;
   camera.follow(player.x + (Math.random() - 0.5) * q, player.y + (Math.random() - 0.5) * q, dt);
@@ -2537,6 +2499,11 @@ function update(dt) {
   // still — no input, no AI, no clock — while the voyage plays out and the sea
   // sends you home. (updateCrossFail drives the camera itself.)
   if (crossFail) { updateCrossFail(dt); return; }
+  // You are ashore, so you are out of the boat. Not a tidy-up: while `aboard` is
+  // set the renderer draws the hull INSTEAD of the character, so a stray flag
+  // would leave you playing an invisible man in a boat on dry land. Nothing may
+  // leave you aboard once the crossing is over — not a death, not a world switch.
+  if (player.aboard) player.aboard = null;
 
   // Resting (from B): the world holds still while the character lies down, the
   // screen dims, and the clock visibly spins faster (REST_CLOCK_MULT) so you

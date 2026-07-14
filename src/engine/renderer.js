@@ -1574,15 +1574,25 @@ export class Renderer {
   // so there's never a blank tile on the first frames.
   drawShip(obj, img) {
     if (!img || !img.complete || !img.naturalWidth) { this.drawBoat(obj); return; }
+    const wob = obj.shake ? Math.sin(obj.shake * 40) * obj.shake * 4 : 0;
+    this.drawShipSprite(img, obj.x + 0.5, obj.y + 0.5, false, wob);
+  }
+
+  // A vessel's sprite at an arbitrary FLOAT world position. A beached boat is
+  // this at its tile centre; a boat under way is this at the player's exact
+  // sub-tile position, so the hull and the man aboard it can never slide or snap
+  // against each other. `mirror` flips the sprite left-right: its bow natively
+  // points world +y, and mirroring maps that to world +x, so the two together
+  // cover the two down-screen headings. Returns the sprite's drawn height, which
+  // is what the caller needs to seat a passenger on the deck.
+  drawShipSprite(img, cx, cy, mirror = false, wob = 0) {
     const ctx = this.ctx;
-    const cx = obj.x + 0.5, cy = obj.y + 0.5;
     const c = worldToScreen(cx, cy);
     // One iso tile's screen width, derived from the diamond so no magic constant.
-    const west = worldToScreen(obj.x, obj.y + 1), east = worldToScreen(obj.x + 1, obj.y);
+    const west = worldToScreen(cx - 0.5, cy + 0.5), east = worldToScreen(cx + 0.5, cy - 0.5);
     const tileW = Math.max(24, east.x - west.x);
     const w = tileW * 1.9;
     const h = w * (img.naturalHeight / img.naturalWidth);
-    const wob = obj.shake ? Math.sin(obj.shake * 40) * obj.shake * 4 : 0;
     ctx.save();
     ctx.translate(wob, 0);
     // Soft ground shadow at the waterline.
@@ -1593,9 +1603,11 @@ export class Renderer {
     ctx.beginPath();
     ctx.ellipse(c.x, c.y + 4, w * 0.46, w * 0.22, 0, 0, Math.PI * 2);
     ctx.fill();
+    if (mirror) { ctx.translate(c.x, 0); ctx.scale(-1, 1); ctx.translate(-c.x, 0); }
     // Anchor the hull so it sits on the tile (bottom of the sprite ~ the waterline).
     ctx.drawImage(img, c.x - w / 2, c.y - h + h * 0.18, w, h);
     ctx.restore();
+    return h;
   }
 
   drawBoat(obj) {
@@ -4052,6 +4064,20 @@ export class Renderer {
 
   drawPlayer(player) {
     const ctx = this.ctx;
+
+    // Aboard a vessel (the failed crossing): the boat IS the player. Draw the hull
+    // at the player's float position, in the player's own depth-sort slot, and draw
+    // no character at all — he is in it. One sprite moving as one thing, so there is
+    // nothing for the man and the hull to jitter against.
+    if (player.aboard) {
+      const a = player.aboard;
+      const img = a.type === 'greek_ship' ? (SHIP_SPRITES && SHIP_SPRITES.greek) : (SHIP_SPRITES && SHIP_SPRITES.noSail);
+      if (img && img.complete && img.naturalWidth) {
+        this.drawShipSprite(img, player.x, player.y, !!a.mirror, a.wob || 0);
+        return;
+      }
+    }
+
     const c = worldToScreen(player.x, player.y);
 
     // Swimming: only the head and shoulders show above the water, bobbing,

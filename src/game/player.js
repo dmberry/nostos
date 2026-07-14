@@ -177,6 +177,7 @@ export class Player {
 
     this.hands = 'penknife';                 // starting tool
     this.boatBuilt = false;                  // one boat at a time; a session flag (Stage 1c persists it as campaign state)
+    this.aboard = null;                      // {type, mirror, wob} while under way — the renderer draws hull + man as one
     this.shipBuilt = false;                  // one greek ship at a time (independent of the plain boat)
     this.calypsoLeave = false;               // Calypso refunctioned (retire): the sea will let you go (decision #8)
     this.pockets = [{ item: 'note_home', qty: 1 }, null, null, null]; // start with the Odyssey note in-pocket
@@ -488,13 +489,20 @@ export class Player {
       // get to push off, you get out onto the water, and the sea turns you back.
       // Poseidon is the one saying no, not the game — so hand off to the failed-
       // crossing sequence (main.js drives it: it moves the world, so it can't
-      // resolve here). The bounce below is the standalone fallback (unit tests).
-      if (this.onDepartFail) { this.onDepartFail(this, boat); return; }
-      sfx.play('hurt');
-      this.say(`You launch, and the swell rises against you. Poseidon hurls the boat back onto the beach. ${this.launchHint()}`);
-      this.x -= this.facing.x * 1.5;
-      this.y -= this.facing.y * 1.5;
+      // resolve here). It declines with `false` when there is no open water to
+      // sail into at all, and then — as with no hook wired, in the unit tests —
+      // you get the plain bounce, because there was never a voyage to have.
+      if (this.onDepartFail && this.onDepartFail(this, boat) !== false) return;
+      this.washedBack();
     }
+  }
+
+  // Shoved off the water before you were properly on it.
+  washedBack() {
+    sfx.play('hurt');
+    this.say(`You launch, and the swell rises against you. Poseidon hurls the boat back onto the beach. ${this.launchHint()}`);
+    this.x -= this.facing.x * 1.5;
+    this.y -= this.facing.y * 1.5;
   }
 
   // What you still need before the sea will have you. Shared by the instant

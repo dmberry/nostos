@@ -35,6 +35,7 @@ function stubShipwright({ x = 2.5, y = 2.5, wood = 12, recipe = true, parts = tr
     craftGreekShip: Player.prototype.craftGreekShip,
     boardBoat: Player.prototype.boardBoat,
     launchHint: Player.prototype.launchHint,
+    washedBack: Player.prototype.washedBack,
     _findLaunchTile: Player.prototype._findLaunchTile,
   };
 }
@@ -97,6 +98,16 @@ test('departure: an unfinished boat still LAUNCHES — the sea, not the game, re
   assert.equal(p.said.length, 0, 'no instant bounce message — you are out on the water');
   assert.equal(p.deathCert, null);
   assert.equal(p._ended, false);
+});
+
+test('departure: with no open water to sail into, the voyage declines and you just get bounced', () => {
+  const p = stubShipwright();
+  const x0 = p.x;
+  p.onDepartFail = () => false;          // a stream mouth: nowhere to go
+  p.boardBoat(shoreMap(), { type: 'boat', seaworthy: false, x: 3, y: 2 });
+  assert.match(p.said.at(-1), /hurls|swell/i, 'the plain bounce still happens');
+  assert.notEqual(p.x, x0, 'shoved back off the water');
+  assert.equal(p.deathCert, null);
 });
 
 test('parts: sail, oar and rope are placed as keep ground items on the island', () => {
