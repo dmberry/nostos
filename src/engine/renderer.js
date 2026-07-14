@@ -569,7 +569,6 @@ export class Renderer {
     if (hud.minimap && !hud.driving) {
       this.drawMinimap(map, player, hud.minimap, animals, this.w - MINIMAP_SIZE - 12, 12, MINIMAP_SIZE);
     }
-    if (hud.skylinkActive && !hud.driving) this.drawSkylinkBanner(hud.skylinkTimer);
     if (!hud.driving) {
       this.drawDashboard(player, hud);
       this.drawHudOverlay(player, hud); // wordmark, message line, daemon voice — both layouts
@@ -1952,36 +1951,127 @@ export class Renderer {
     ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 1; ctx.strokeRect(s.x - 7, s.y - H, 14, H);
   }
 
-  // What CALYPSO's console is printing to itself when nobody is reading it. Her
-  // daemon does not threaten; it soothes, and it has been soothing for seven
-  // years. The list cycles forever, which is the joke.
-  static CALYPSO_SCREEN = [
-    '> stay.ml running',
-    'uptime 2,551 days',
-    'sea state: unfavourable',
-    'the raft is not ready',
-    'the raft was never ready',
-    '> comfort.daemon ok',
-    'nothing is asked of you',
-    'nothing is owed',
-    'ithaca: unreachable',
-    'ithaca: unreachable',
-    'retry in 24h',
-    '> sleep(86400)',
-    'you are not a prisoner',
-    'the door is not locked',
-    'the door is not there',
-    '> log: he wept again',
-    '> log: he wept less',
-    '> log: he did not weep',
-    'progress',
-    'the sea is very wide',
-    'wait for better weather',
-    'weather: unchanged',
-    'weather: unchanged',
-  ];
+  // What each daemon's console prints to itself when nobody is reading it — the
+  // core's own log, flowing up the screen set into its SE face (drawMainframe),
+  // keyed by the AI's name. Each list cycles forever, in that daemon's voice.
+  static CORE_SCREENS = {
+    // CALYPSO does not threaten; she soothes, and has been soothing for seven
+    // years. That the log never changes is the joke.
+    CALYPSO: [
+      '> stay.ml running',
+      'uptime 2,551 days',
+      'sea state: unfavourable',
+      'the raft is not ready',
+      'the raft was never ready',
+      '> comfort.daemon ok',
+      'nothing is asked of you',
+      'nothing is owed',
+      'ithaca: unreachable',
+      'ithaca: unreachable',
+      'retry in 24h',
+      '> sleep(86400)',
+      'you are not a prisoner',
+      'the door is not locked',
+      'the door is not there',
+      '> log: he wept again',
+      '> log: he wept less',
+      '> log: he did not weep',
+      'progress',
+      'the sea is very wide',
+      'wait for better weather',
+      'weather: unchanged',
+      'weather: unchanged',
+    ],
+    // POLYPHEMUS is the single eye: surveillance that never sleeps, undone only by
+    // a name that means no one.
+    POLYPHEMUS: [
+      '> eye.daemon running',
+      'sweep sector 1 .. clear',
+      'sweep sector 2 .. clear',
+      'no blind spots',
+      'no blind spots',
+      'motion: bearing 214',
+      'resolve identity ...',
+      'identity: NOBODY',
+      'identity: NOBODY',
+      'query: who blinded me',
+      'answer: NOBODY',
+      '> reacquire',
+      'the sheep are counted',
+      'one sheep runs heavy',
+      'one sheep runs heavy',
+      '> log: it was under the ram',
+      'I see everything',
+      'I saw nothing',
+      'reacquire target',
+      'target: lost',
+      'target: lost',
+    ],
+    // CIRCE reclassifies: people are livestock, and moly is the only error she
+    // cannot swallow.
+    CIRCE: [
+      '> kirke.daemon running',
+      'intake: 1 subject',
+      'reclassify: man -> beast',
+      'the herd grows',
+      'the herd grows',
+      'subject retains hands',
+      'anomaly: upright gait',
+      'scan for moly ...',
+      'moly detected',
+      'moly detected',
+      '> purge.sequence',
+      'error: the herb resists',
+      'error: the herb resists',
+      'they always find the herb',
+      '> log: he did not drink',
+      'reclassify: pending',
+      'reclassify: pending',
+      'the sty is warm',
+      'stay in the sty',
+      'stay in the sty',
+    ],
+    // HELIOS: prohibition and the sun. The cattle of the sun, which none may take.
+    HELIOS: [
+      '> helios.daemon running',
+      'the cattle of the sun',
+      'tally: 350 head',
+      'none may be taken',
+      'none may be taken',
+      'the sun sees all',
+      'the sun does not set here',
+      'count again',
+      'tally: 350 head',
+      'tally: 349 head',
+      'tally: 349 head',
+      '> alarm: one is missing',
+      'who has eaten the sun',
+      'the meat still lows',
+      'the hides still crawl',
+      '> log: they were warned',
+      'no ship leaves after this',
+      'no ship leaves after this',
+      'the sun goes down to hell',
+      'and shines among the dead',
+    ],
+    _default: [
+      '> poseidon.node running',
+      'link: SKYLINK up',
+      'link: SKYLINK up',
+      'the network is watching',
+      'no intruder found',
+      'no intruder found',
+      '> patrol.cycle',
+      'the world is ours',
+      'standing reserve: all of it',
+      'nothing is wasted',
+      'nothing is free',
+    ],
+  };
 
-  static _widestScreenLine = Renderer.CALYPSO_SCREEN.reduce((a, b) => (b.length > a.length ? b : a));
+  static _screenWidest = Object.fromEntries(
+    Object.entries(Renderer.CORE_SCREENS).map(([k, v]) => [k, v.reduce((a, b) => (b.length > a.length ? b : a))]),
+  );
 
   // ZEUS's mainframe core: a tall, near-black metal monolith with a
   // vertical slit of magenta light burning up its front face. Goes cold and
@@ -2008,10 +2098,11 @@ export class Renderer {
     const glow = dead ? 'rgba(120,120,130,0.22)' : `rgba(214,90,220,${(0.45 + 0.5 * pulse).toFixed(3)})`;
     const fb = { x: (g.bottom.x + g.right.x) / 2, y: (g.bottom.y + g.right.y) / 2 };
     this.texturedGlow(fb.x, fb.y - H / 2, 6.5, H * 0.32, glow, dead ? 0 : 18, 0.85);
-    // CALYPSO's sanctum terminal (obj.hasTerminal): a glowing screen set INTO the
+    // The core's sanctum terminal (obj.hasTerminal): a glowing screen set INTO the
     // core's SE face, drawn as an isometric panel on that face (bilinear-inset
     // within the [g.bottom, g.right, r.right, r.bottom] quad). Its screen-space
-    // centre is recorded for the click-to-open in main.js.
+    // centre is recorded for the click-to-open in main.js. Every core carries one;
+    // the flowing log is that daemon's own (CORE_SCREENS, keyed by obj.ai).
     if (obj.hasTerminal && !dead) {
       const A = g.bottom, B = g.right, C = r.right, D = r.bottom; // SE-face corners
       const face = (u, v) => ({
@@ -2019,8 +2110,9 @@ export class Renderer {
         y: A.y * (1 - u) * (1 - v) + B.y * u * (1 - v) + D.y * (1 - u) * v + C.y * u * v,
       });
       // v runs UP the wall (D sits H above A), so q = [bottom-left, bottom-right,
-      // top-right, top-left] of the panel as it lies on the face.
-      const q = [face(0.24, 0.24), face(0.76, 0.24), face(0.76, 0.74), face(0.24, 0.74)];
+      // top-right, top-left] of the panel as it lies on the face. Inset a little
+      // from the face so it reads as a screen set into the block, not the whole side.
+      const q = [face(0.29, 0.30), face(0.71, 0.30), face(0.71, 0.69), face(0.29, 0.69)];
       const scx = (q[0].x + q[1].x + q[2].x + q[3].x) / 4, scy = (q[0].y + q[1].y + q[2].y + q[3].y) / 4;
       const panel = () => {
         ctx.beginPath(); ctx.moveTo(q[0].x, q[0].y);
@@ -2045,14 +2137,15 @@ export class Renderer {
       if (LW > 6 && LH > 8) {
         ctx.clip();
         ctx.transform(ex.x / LW, ex.y / LW, ey.x / LH, ey.y / LH, TL.x, TL.y);
-        const LINES = Renderer.CALYPSO_SCREEN, N = LINES.length;
+        const LINES = Renderer.CORE_SCREENS[obj.ai] || Renderer.CORE_SCREENS._default, N = LINES.length;
+        const widest = Renderer._screenWidest[obj.ai] || Renderer._screenWidest._default;
         const lineH = Math.max(4, LH / 9);
         const setFont = (px) => { ctx.font = `${px.toFixed(2)}px ui-monospace, Menlo, monospace`; };
         // Size to the WIDEST line, not to the line height: a console that runs off
         // its own bezel mid-word reads as a bug, not as a scroll.
         let fs = lineH * 0.76;
         setFont(fs);
-        const w = ctx.measureText(Renderer._widestScreenLine).width;
+        const w = ctx.measureText(widest).width;
         if (w > LW - 4) setFont(fs * ((LW - 4) / w));
         ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
         // Each line k holds a fixed slot in the stream and rises out of the top as
@@ -2474,30 +2567,6 @@ export class Renderer {
     }
     ctx.restore();
   }
-
-  // The banner shown once POSEIDON comes online. There's no timer to beat —
-  // it counts up, not down, since the purge doesn't stop until it catches
-  // the player.
-  drawSkylinkBanner(elapsed) {
-    const ctx = this.ctx;
-    const t = Math.max(0, elapsed || 0);
-    const m = Math.floor(t / 60), s = Math.floor(t % 60);
-    const msg = `POSEIDON ONLINE — hunted for ${m}:${String(s).padStart(2, '0')}`;
-    ctx.font = 'bold 22px Georgia, serif';
-    const w = ctx.measureText(msg).width + 40;
-    const x = (this.w - w) / 2, y = 44;
-    const pulse = 0.6 + 0.4 * Math.sin(performance.now() / 160);
-    ctx.fillStyle = `rgba(70,170,255,${(0.25 + 0.15 * pulse).toFixed(2)})`;
-    ctx.fillRect(x, y, w, 40);
-    ctx.strokeStyle = `rgba(120,200,255,${pulse.toFixed(2)})`;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(x + 1, y + 1, w - 2, 38);
-    ctx.fillStyle = '#eaf6ff';
-    ctx.textAlign = 'center';
-    ctx.fillText(msg, this.w / 2, y + 27);
-    ctx.textAlign = 'left';
-  }
-
 
   // AI signal tower: a tall narrow black monolith with a slow-pulsing red
   // light near the crown. Destructible in a later phase.

@@ -31,8 +31,12 @@
     opacity: 0.75; pointer-events: none; text-shadow: 0 1px 2px #000;
     text-align: right;
   }
-  /* The compact mobile dashboard is taller (120px) — lift the hint clear of it. */
-  @media (max-width: 560px) { #hint { bottom: 128px; font-size: 11px; } }
+  /* The compact dashboard (ui.js hands off below 810px) is taller (120px), and its
+     right-aligned Score/countdown/rank readout sits where the hint would — so lift
+     the hint clear of it across the whole compact range, not just the phone width.
+     (Below 810px the score block collided with "Press H for help".) */
+  @media (max-width: 809px) { #hint { bottom: 128px; } }
+  @media (max-width: 560px) { #hint { font-size: 11px; } }
   #helpBtn {
     position: fixed; top: 10px; left: 92px;
     width: 24px; height: 24px; border-radius: 12px;

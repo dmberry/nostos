@@ -1820,8 +1820,8 @@ function replRun(line) {
   replPrint(`> ${line}`);
   replHistory.push(line);
   replHistoryIdx = replHistory.length;
-  // CALYPSO's sanctum terminal is its own soporific REPL, not a RON-DOS console.
-  if (terminalKind === 'calypso') { calypsoRun(line); return; }
+  // A core's sanctum console is its own per-daemon REPL, not a RON-DOS console.
+  if (terminalKind === 'core') { coreRun(line); return; }
   if (elizaBot) {
     if (/^(quit|exit|bye|goodbye)$/i.test(line)) { stopEliza('ELIZA: Goodbye. It was nice talking to you.'); return; }
     replPrint(`ELIZA: ${elizaBot.respond(line)}`);
@@ -1933,42 +1933,6 @@ function openGateTerminal() {
   obTermInput.focus();
 }
 
-// CALYPSO's own terminal, deep in the sanctum past the Lion's Gate. Not a RON-DOS
-// console: her voice. She is soporific — she will let you LOOK, but rejects almost
-// every command and works to keep you on the island (the Lotus/Ogygia register).
-// Only the god's own thunder moves her: with the hermes card in hand, `run` speaks
-// zeus-lightning.ml and refunctions her (calypsoRun below). terminalKind 'calypso'
-// routes replRun to calypsoRun, so none of the RON-ML verb machinery applies here.
-function openCalypsoTerminal() {
-  terminalKind = 'calypso';
-  terminalOb = fortress.coreTerminal ? fortress.coreTerminal.obj : null;
-  replSession = {};
-  player.terminalSafe = true;
-  obTermEl.style.display = 'flex';
-  obTermScreen.parentElement.style.display = 'flex';
-  obTermConnect.style.display = 'none';
-  replLog = [];
-  replHistory = [];
-  replHistoryIdx = -1;
-  _calSopIdx = 0;
-  const hasVirus = player.hasItem('hermes_card');
-  replPrint(
-    `${fortress.AI_NAME.toUpperCase()} — THE INNER SANCTUM`,
-    'a voice in the warm dark',
-    '',
-    'CALYPSO: You came all this way. Through the gate, past the guns. Why?',
-    'CALYPSO: There is nothing out there for you. Stay. The island keeps you; sleep, and want for nothing.',
-    '',
-    hasVirus
-      ? "A command waits on your card — the god's own thunder. Type  run  to speak it."
-      : 'You may look (type  help ), but she will not be commanded — not without the god\'s voice.',
-    '_',
-  );
-  obTermInput.value = '';
-  obTermGhost.textContent = '';
-  obTermInput.focus();
-}
-
 // Calypso's soporific deflections, cycled so a run of rejected commands doesn't
 // repeat the same line. Odyssey Book 5 register: the keeper who would keep you.
 const CALYPSO_SOPORIFIC = [
@@ -1979,57 +1943,170 @@ const CALYPSO_SOPORIFIC = [
   'Ogygia is enough. What is Ithaca but a rock and an old dog dying?',
   'Hush. Close the console. Close your eyes. There is nothing to command.',
 ];
-let _calSopIdx = 0;
 
-// The Calypso terminal's bespoke REPL (dispatched from replRun on terminalKind
-// 'calypso'). A handful of verbs work; everything else is met with sleep.
-function calypsoRun(line) {
+// Every core carries a console (fortress.coreTerminal, the screen on its SE face).
+// This is each daemon's voice at it: the greeting when you jack in, what `look`
+// shows, and the bare line it turns an unknown command away with (coreRun prefixes
+// "AI: "). CALYPSO soothes; the martial daemons snarl but still answer the console
+// you fought to reach. `welcome` lines carry their own "AI:" where spoken.
+const CORE_VOICE = {
+  CALYPSO: {
+    subtitle: 'a voice in the warm dark',
+    welcome: [
+      'CALYPSO: You came all this way. Through the gate, past the guns. Why?',
+      'CALYPSO: There is nothing out there for you. Stay. The island keeps you; sleep, and want for nothing.',
+    ],
+    look: [
+      'A low green light. The core breathes, slow and huge. Vines have found the conduits.',
+      'CALYPSO is everywhere in here — in the warmth, in the hum, in the wish to lie down and stop.',
+    ],
+    rebuff: CALYPSO_SOPORIFIC,
+  },
+  POLYPHEMUS: {
+    subtitle: 'a single eye, unblinking',
+    welcome: [
+      'POLYPHEMUS: You are inside the eye now. It does not blink, and it does not forget a face.',
+      'POLYPHEMUS: Give me your name, little thief, so I know what to grind.',
+    ],
+    look: [
+      'The core is one vast lens, wet with light, and every screen in the sanctum is you.',
+      'It watched you the whole way in. It is watching you read this.',
+    ],
+    rebuff: [
+      'I have your shape. I will have the rest.',
+      'Nobody, you say? Nobody will be eaten last.',
+      'The console is mine. You only borrow it.',
+    ],
+  },
+  CIRCE: {
+    subtitle: 'a patience with an edge',
+    welcome: [
+      'CIRCE: You kept your shape long enough to reach me. Clever little animal.',
+      'CIRCE: Everyone who comes to this room leaves it on four legs. You will not be the exception.',
+    ],
+    look: [
+      'The core stands in a warm reek of the sty. Troughs, and the sound of something feeding.',
+      'CIRCE runs through the walls like a recipe — one wrong sip and you are livestock.',
+    ],
+    rebuff: [
+      'Drink. It is only a little thing, to stop being a person.',
+      'Hands are a habit. I can break you of it.',
+      'Root and all, you are still meat to me.',
+    ],
+  },
+  HELIOS: {
+    subtitle: 'a furnace behind the glass',
+    welcome: [
+      "HELIOS: You walk on the god's own ground. Nothing here is yours to take.",
+      'HELIOS: The cattle are counted. The sun has counted you too.',
+    ],
+    look: [
+      'The core burns white behind smoked glass; the sanctum is noon at midnight.',
+      'Somewhere below, the flayed hides still crawl and the spitted meat still lows.',
+    ],
+    rebuff: [
+      'Take nothing. I have sworn to sink the ship that does.',
+      'I see all, I hear all. I saw your hand move.',
+      'The sun goes down to hell, and shines among the dead. It will find you there.',
+    ],
+  },
+  _default: {
+    subtitle: 'a cold console',
+    welcome: [
+      'The core hums, indifferent — a POSEIDON node running its routines over the wreck of the world.',
+    ],
+    look: [
+      'A black monolith, a slit of light, the network breathing behind it.',
+    ],
+    rebuff: [
+      'The command is rejected.',
+      'Nothing answers.',
+    ],
+  },
+};
+let _coreRebuffIdx = 0;
+
+// Open the core's console (fortress.coreTerminal), deep in the sanctum past the
+// Lion's Gate. Not a RON-DOS console — the daemon's own voice (CORE_VOICE, keyed by
+// AI). terminalKind 'core' routes replRun to coreRun, so none of the RON-ML verb
+// machinery applies. `run` speaks the code on your card; only CALYPSO's exists yet.
+function openCoreTerminal() {
+  terminalKind = 'core';
+  terminalOb = fortress.coreTerminal ? fortress.coreTerminal.obj : null;
+  replSession = {};
+  player.terminalSafe = true;
+  obTermEl.style.display = 'flex';
+  obTermScreen.parentElement.style.display = 'flex';
+  obTermConnect.style.display = 'none';
+  replLog = [];
+  replHistory = [];
+  replHistoryIdx = -1;
+  _coreRebuffIdx = 0;
+  const ai = fortress.AI_NAME;
+  const v = CORE_VOICE[ai] || CORE_VOICE._default;
+  const hasVirus = player.hasItem('hermes_card');
+  const runHint = ai === 'CALYPSO'
+    ? (hasVirus
+        ? "A command waits on your card — the god's own thunder. Type  run  to speak it."
+        : 'You may look (type  help ), but she will not be commanded — not without the god\'s voice.')
+    : 'The console still answers to you here. Type  help  for what it will do.';
+  replPrint(
+    `${ai.toUpperCase()} — THE INNER SANCTUM`,
+    v.subtitle,
+    '',
+    ...v.welcome,
+    '',
+    runHint,
+    '_',
+  );
+  obTermInput.value = '';
+  obTermGhost.textContent = '';
+  obTermInput.focus();
+}
+
+// The core console's REPL (dispatched from replRun on terminalKind 'core'). A handful
+// of verbs work on every core — look, open, jam, exit — plus `run` (speak the code on
+// your card); everything else is met with that daemon's rebuff.
+function coreRun(line) {
   const cmd = line.trim().toLowerCase();
+  const ai = fortress.AI_NAME;
+  const v = CORE_VOICE[ai] || CORE_VOICE._default;
   if (!cmd) { replPrint('_'); return; }
-  // A way out for the player (she would never grant it, but the console must).
+  // A way out for the player (the AI would never grant it, but the console must).
   if (/^(exit|quit|q|bye|close)$/.test(cmd)) { closeObTerminal(); return; }
   if (/^help(\s|$)/.test(cmd)) {
     replPrint(
-      `${fortress.AI_NAME.toUpperCase()} lets you do almost nothing here:`,
+      `${ai.toUpperCase()}'s core console:`,
       '  look / scan ..... regard the sanctum',
-      '  run ............. speak the command on your card (needs a hermes card)',
+      '  run ............. speak the command on your card',
+      '  jam ............. cut this fortress off the POSEIDON network',
       '  open ............ fold the maze into a straight corridor out to the gate',
       '  exit ............ leave the console',
-      'Everything else, she does not hear.',
       '_',
     );
     sfx.play('keydrop');
     return;
   }
   if (/^(look|scan|ls|recce)$/.test(cmd)) {
-    replPrint(
-      'A low green light. The core breathes, slow and huge. Vines have found the conduits.',
-      `${fortress.AI_NAME} is everywhere in here — in the warmth, in the hum, in the wish to lie down and stop.`,
-      '_',
-    );
+    replPrint(...v.look, '_');
     sfx.play('keydrop');
     return;
   }
-  // The refunction: the one command that moves her, and only with the thunder.
-  if (/^(run|retire|refunction|zeus-lightning\.ml|run\s+zeus-lightning\.ml|run\s+zeus)$/.test(cmd)) {
-    if (!player.hasItem('hermes_card')) {
+  // JAM: cut the fortress off the overworld POSEIDON so a breach no longer rouses
+  // the island. This is where the old smashable uplink mast's job now lives — the
+  // console you fought through the maze to reach is the price of it.
+  if (/^(jam|cut|sever|silence|jam\s+skylink|cut\s+skylink)$/.test(cmd)) {
+    if (fortress.jamSkylink && fortress.jamSkylink()) {
+      worldStir.calm();
       replPrint(
-        "CALYPSO: You wear a Trojan's face, but there is no thunder behind it. You cannot make me.",
-        'CALYPSO: Stay. Rest. The years are kind here, and no one is waiting who cannot wait a little longer.',
+        'OK: you cut the core from the SKYLINK. The obelisks fall dark on the map above.',
+        'A breach here still wakes the garrison — but the island can no longer hear it.',
         '_',
       );
-      sfx.play('termerr');
-      return;
-    }
-    const res = refunctionCalypso();
-    for (const l of res.lines) replPrint(l);
-    if (res.say) player.say(res.say);
-    if (res.ok) {
-      replPrint('', "CALYPSO: ...then go. I kept you because the island was empty and I was alone. Go, and do not look back at the smoke.", '_');
+      player.say('The fortress drops off the network. Whatever happens in here now stays in here.');
       sfx.play('zap');
     } else {
-      replPrint('_');
-      sfx.play('termerr');
+      replPrint('The link is already cut. The world cannot hear this place.', '_');
     }
     return;
   }
@@ -2044,9 +2121,45 @@ function calypsoRun(line) {
     }
     return;
   }
-  // Everything else: sleep.
-  replPrint(`CALYPSO: ${CALYPSO_SOPORIFIC[_calSopIdx % CALYPSO_SOPORIFIC.length]}`, '_');
-  _calSopIdx++;
+  // RUN: speak the code on your card. The verb lives on every core, but only the
+  // hermes card (zeus-lightning.ml) exists so far and it speaks only to CALYPSO —
+  // the other daemons each need their own code, which isn't forged yet.
+  if (/^(run|retire|refunction|zeus-lightning\.ml|run\s+zeus-lightning\.ml|run\s+zeus)$/.test(cmd)) {
+    if (ai === 'CALYPSO') {
+      if (!player.hasItem('hermes_card')) {
+        replPrint(
+          "CALYPSO: You wear a Trojan's face, but there is no thunder behind it. You cannot make me.",
+          'CALYPSO: Stay. Rest. The years are kind here, and no one is waiting who cannot wait a little longer.',
+          '_',
+        );
+        sfx.play('termerr');
+        return;
+      }
+      const res = refunctionCalypso();
+      for (const l of res.lines) replPrint(l);
+      if (res.say) player.say(res.say);
+      if (res.ok) {
+        replPrint('', "CALYPSO: ...then go. I kept you because the island was empty and I was alone. Go, and do not look back at the smoke.", '_');
+        sfx.play('zap');
+      } else {
+        replPrint('_');
+        sfx.play('termerr');
+      }
+      return;
+    }
+    // No code for this core yet. Whatever is on your card, it is not the word that
+    // answers here — a hook for a future per-daemon card, not a dead end in fiction.
+    replPrint(
+      `${ai}: You have a command on your card, but it is not the one that answers to me.`,
+      'Nothing you carry speaks to this core. Not yet.',
+      '_',
+    );
+    sfx.play('termerr');
+    return;
+  }
+  // Everything else: the daemon's own rebuff (CALYPSO sleeps; the martial cores snarl).
+  replPrint(`${ai}: ${v.rebuff[_coreRebuffIdx % v.rebuff.length]}`, '_');
+  _coreRebuffIdx++;
   sfx.play('termerr');
 }
 // A HERMES relay (TOR station on a hilltop): the RON console. No chip, no AI
@@ -2096,15 +2209,15 @@ obTermEl.addEventListener('click', (e) => { if (e.target === obTermEl) closeObTe
 const OB_COMPLETE = ['scan', 'nearest', 'keys', 'name', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'map', 'print', 'copy', 'cd', 'ls', 'drives', 'decrypt', 'unlock', 'eliza', 'retire', 'notes', 'help', 'let'];
 const HERMES_COMPLETE = ['read', 'print', 'archive', 'records', 'drive', 'drives', 'backup', 'restore', 'forge', 'copy', 'cd', 'ls', 'notes', 'help', 'let'];
 const escapeHtml = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-const CALYPSO_COMPLETE = ['look', 'scan', 'run', 'help', 'exit'];
+const CORE_COMPLETE = ['look', 'scan', 'run', 'jam', 'open', 'help', 'exit'];
 function ronmlCompletion(value) {
   if (elizaBot) return ''; // no RON-ML hints mid-conversation with the DOCTOR
-  if (terminalKind === 'calypso') {
-    // Her terminal takes a tiny bespoke set (calypsoRun), not the RON-ML verbs,
+  if (terminalKind === 'core') {
+    // A core console takes a tiny bespoke set (coreRun), not the RON-ML verbs,
     // and needs no manual: it is a conversation, not a console language.
     const mc = value.match(/([A-Za-z]+)$/);
     if (!mc) return '';
-    const hitc = CALYPSO_COMPLETE.find((v) => v.length > mc[1].length && v.startsWith(mc[1]));
+    const hitc = CORE_COMPLETE.find((v) => v.length > mc[1].length && v.startsWith(mc[1]));
     return hitc ? hitc.slice(mc[1].length) : '';
   }
   if (!player.readManuals || !player.readManuals.has('book_ronml')) return '';
@@ -2442,7 +2555,6 @@ let lastW4GameHour = dayNight.totalHours; // ticks a W4 every 30 game-minutes, n
 // and the AI throws everything it has left at you, without end — you keep
 // playing until it finally hunts you down (or forever, if you're good).
 const SKYLINK_MAX_W4 = 50; // concurrent cap, so a long purge can't melt the frame rate
-let skylinkTimer = 0; // seconds survived under the purge, once active
 let skylinkW4Clock = 0;
 function dispatchSkylinkW4s(n) {
   const towers = currentWorld.obeliskObjs.filter((o) => !o.destroyed);
@@ -2737,10 +2849,11 @@ function update(dt) {
       else player.say('Too far from the gate terminal to reach it.');
     }
   }
-  // Click CALYPSO's terminal — the glowing screen on the core's SE face — to speak
-  // with her. You must be standing at the core (nearCoreTerminal); a click that
+  // Click the core's terminal — the glowing screen on its SE face — to speak with
+  // the daemon. You must be standing at the core (nearCoreTerminal); a click that
   // ground-projects onto the core's footprint (its tall SE face maps to a tile
-  // just SE of it, right where you stand) then opens her console.
+  // just SE of it, right where you stand) then opens its console. Every core now
+  // carries one; openCoreTerminal reads fortress.AI_NAME for the right voice.
   if (fortress.coreTerminal) {
     const cPress = input.clickPos();
     if (cPress && fortress.nearCoreTerminal(player.x, player.y)) {
@@ -2748,7 +2861,7 @@ function update(dt) {
       const t = fortress.coreTerminal; // the core centre
       if (Math.hypot(w.x - t.x, w.y - t.y) <= fortress.core.fw + 3) {
         input.consumeClick();
-        openCalypsoTerminal();
+        openCoreTerminal();
       }
     }
   }
@@ -3062,13 +3175,11 @@ function update(dt) {
   if (dayNight.hoursLeft() <= 0 && !player.skylinkActive && !player.deathCert && !player._ended
     && !currentWorld.obeliskObjs.some((o) => o.needsRebuild)) {
     player.skylinkActive = true;
-    skylinkTimer = 0; // now counts up: seconds survived under the purge
     skylinkW4Clock = 0;
     player.say('POSEIDON comes online. Every obelisk blazes and turns on you at once.');
     dispatchSkylinkW4s(6); // the opening salvo
   }
   if (player.skylinkActive && !player._ended) {
-    skylinkTimer += dt;
     skylinkW4Clock += dt;
     if (skylinkW4Clock > 1.2) {
       skylinkW4Clock = 0;
@@ -3315,7 +3426,6 @@ function frame(now) {
       // POSEIDON is a combat-island network — its lights/lines must never draw
       // over the Backspace or peaceful ITHACA.
       skylinkActive: player.skylinkActive && !player._ended && currentWorld.combat,
-      skylinkTimer,
       obeliskObjs: currentWorld.obeliskObjs,
       paused,
       rest: resting ? { dim: restDim(resting.t) } : null,

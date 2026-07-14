@@ -275,12 +275,12 @@ export function createFortress(map, seed, spawn, opts = {}) {
 
   const coreCx = coreX + CORE / 2, coreCy = coreY + CORE / 2;
 
-  // CALYPSO's own console: a screen set INTO the core's SOUTH-EAST face (drawn by
+  // The AI's own console: a screen set INTO the core's SOUTH-EAST face (drawn by
   // renderer.drawMainframe when core.hasTerminal), so it is literally part of the
-  // black core block, not a separate kiosk. Only CALYPSO has this sanctum terminal;
-  // the martial daemons (POLYPHEMUS, …) don't. main.js opens it when you click the
-  // screen (renderer.coreTermHit) from close by (nearCoreTerminal).
-  if (aiName === 'CALYPSO') core.hasTerminal = true;
+  // black core block, not a separate kiosk. EVERY core carries one — each daemon
+  // mutters its own log to the screen and answers its own console when you reach
+  // it. main.js opens it when you click the screen from close by (nearCoreTerminal).
+  core.hasTerminal = true;
 
   // The labyrinth: a full-width band between the doorway and the sanctum. Its
   // entrance/exit column is aligned to the doorway/core so the raid runs on a
@@ -318,15 +318,29 @@ export function createFortress(map, seed, spawn, opts = {}) {
   const state = {
     hacked: false, open: false, announced: false, mazeSolved: false,
     alarm: false, reportT: 0, quietT: 0, produceT: 0,
+    // Skylink cut from the core console (`jam`): a breach still trips the local
+    // alarm and the garrison still answers, but it no longer rouses the overworld.
+    // This is where the old smashable uplink mast's capability now lives.
+    jammed: false,
   };
 
   const nearTerminal = (px, py, r = 1.9) =>
     Math.hypot(px - (termX + 0.5), py - (termY + 0.5)) <= r;
 
   // Near the terminal = standing close to the core's SE corner, where its screen
-  // is. Only CALYPSO's core carries the terminal.
+  // is. Every core carries one.
   const nearCoreTerminal = (px, py, r = 2.4) =>
-    aiName === 'CALYPSO' && Math.hypot(px - (coreX + CORE), py - (coreY + CORE)) <= r + 1.5;
+    Math.hypot(px - (coreX + CORE), py - (coreY + CORE)) <= r + 1.5;
+
+  // Cut this fortress off from the overworld POSEIDON (the core console's `jam`).
+  // A breach still trips the local alarm and the garrison still answers, but the
+  // world is no longer roused. One-way for the run; persisted. Returns false if
+  // already cut.
+  const jamSkylink = () => {
+    if (state.jammed) return false;
+    state.jammed = true;
+    return true;
+  };
 
   const openDoor = () => {
     if (state.open) return;
@@ -361,10 +375,12 @@ export function createFortress(map, seed, spawn, opts = {}) {
     seamY,
     door: { x0: doorX0, x1: doorX0 + DOOR_W - 1, y: seamY, cx: doorX0 + DOOR_W / 2 },
     terminal: { x: termX, y: termY, obj: terminal },
-    coreTerminal: (aiName === 'CALYPSO') ? { x: coreCx, y: coreCy, obj: core } : null, // CALYPSO's sanctum console (the screen on the core's SE face)
+    coreTerminal: { x: coreCx, y: coreCy, obj: core }, // the sanctum console (the screen on the core's SE face)
     core: { obj: core, x: coreCx, y: coreCy, tx: coreX, ty: coreY, fw: CORE, fh: CORE },
     quad: { top: quadTop, bottom: quadBottom, muster }, // the guard courtyard + muster points
+    jamSkylink,
     get alarm() { return state.alarm; },
+    get jammed() { return state.jammed; },
     get reportProgress() { return Math.min(1, state.reportT / REPORT_DELAY); }, // 0..1 toward the breach report
     get hacked() { return state.hacked; },
     get open() { return state.open; },
@@ -446,8 +462,9 @@ export function createFortress(map, seed, spawn, opts = {}) {
             if (world && world.spawnWave) world.spawnWave(4, 2); // first response: a full pack + snipers
             // The fortress is wired into the overworld POSEIDON: a reported breach
             // rouses the whole island (obelisks flare, the factory scrambles a
-            // hunter). Severing that link is a terminal hack, not a thing you smash.
-            if (world && world.stir) world.stir();
+            // hunter) — UNLESS you cut the link at the core console (`jam`). That
+            // is where the old smashable uplink mast's job now lives.
+            if (!state.jammed && world && world.stir) world.stir();
           }
         } else {
           state.reportT = Math.max(0, state.reportT - dt * 1.5);
@@ -482,6 +499,7 @@ export function createFortress(map, seed, spawn, opts = {}) {
         open: state.open,
         coreHp: core.hp,
         coreDefeated: !!core.defeated,
+        jammed: state.jammed,
       };
     },
     restore(snap) {
@@ -490,6 +508,7 @@ export function createFortress(map, seed, spawn, opts = {}) {
       if (snap.open) openDoor(); // removes the door objects + sets state.open
       if (typeof snap.coreHp === 'number') core.hp = snap.coreHp;
       if (snap.coreDefeated) core.defeated = true;
+      if (snap.jammed) state.jammed = true;
     },
 
     // Markers for the RON-ML `map` overlay.
