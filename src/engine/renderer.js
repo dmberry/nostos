@@ -1967,6 +1967,37 @@ export class Renderer {
     ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 1; ctx.strokeRect(s.x - 7, s.y - H, 14, H);
   }
 
+  // What CALYPSO's console is printing to itself when nobody is reading it. Her
+  // daemon does not threaten; it soothes, and it has been soothing for seven
+  // years. The list cycles forever, which is the joke.
+  static CALYPSO_SCREEN = [
+    '> stay.ml running',
+    'uptime 2,551 days',
+    'sea state: unfavourable',
+    'the raft is not ready',
+    'the raft was never ready',
+    '> comfort.daemon ok',
+    'nothing is asked of you',
+    'nothing is owed',
+    'ithaca: unreachable',
+    'ithaca: unreachable',
+    'retry in 24h',
+    '> sleep(86400)',
+    'you are not a prisoner',
+    'the door is not locked',
+    'the door is not there',
+    '> log: he wept again',
+    '> log: he wept less',
+    '> log: he did not weep',
+    'progress',
+    'the sea is very wide',
+    'wait for better weather',
+    'weather: unchanged',
+    'weather: unchanged',
+  ];
+
+  static _widestScreenLine = Renderer.CALYPSO_SCREEN.reduce((a, b) => (b.length > a.length ? b : a));
+
   // ZEUS's mainframe core: a tall, near-black metal monolith with a
   // vertical slit of magenta light burning up its front face. Goes cold and
   // grey once defeated. A damage bar floats over it when hurt and you're near.
@@ -2002,16 +2033,58 @@ export class Renderer {
         x: A.x * (1 - u) * (1 - v) + B.x * u * (1 - v) + D.x * (1 - u) * v + C.x * u * v,
         y: A.y * (1 - u) * (1 - v) + B.y * u * (1 - v) + D.y * (1 - u) * v + C.y * u * v,
       });
-      const q = [face(0.30, 0.28), face(0.70, 0.28), face(0.70, 0.70), face(0.30, 0.70)];
-      const tp = 0.5 + 0.5 * Math.sin(performance.now() / 300);
+      // v runs UP the wall (D sits H above A), so q = [bottom-left, bottom-right,
+      // top-right, top-left] of the panel as it lies on the face.
+      const q = [face(0.24, 0.24), face(0.76, 0.24), face(0.76, 0.74), face(0.24, 0.74)];
       const scx = (q[0].x + q[1].x + q[2].x + q[3].x) / 4, scy = (q[0].y + q[1].y + q[2].y + q[3].y) / 4;
+      const panel = () => {
+        ctx.beginPath(); ctx.moveTo(q[0].x, q[0].y);
+        for (let i = 1; i < 4; i++) ctx.lineTo(q[i].x, q[i].y);
+        ctx.closePath();
+      };
+      // The console's own axes, in screen space: +x runs across the face, +y down
+      // it. Both are unit-length, so the transform is pure rotation+shear — text
+      // laid out in ordinary local pixels comes out lying ON the wall in
+      // isometric, at the same size the rest of the scene is drawn.
+      const TL = q[3], TR = q[2], BL = q[0];
+      const ex = { x: TR.x - TL.x, y: TR.y - TL.y };
+      const ey = { x: BL.x - TL.x, y: BL.y - TL.y };
+      const LW = Math.hypot(ex.x, ex.y), LH = Math.hypot(ey.x, ey.y);
+
       ctx.save();
+      panel();
       ctx.shadowColor = 'rgba(120,150,255,0.9)'; ctx.shadowBlur = 16;
-      ctx.beginPath(); ctx.moveTo(q[0].x, q[0].y); for (let i = 1; i < 4; i++) ctx.lineTo(q[i].x, q[i].y); ctx.closePath();
-      ctx.fillStyle = `rgba(120,150,255,${(0.5 + 0.35 * tp).toFixed(3)})`;
+      ctx.fillStyle = 'rgba(14,20,48,0.97)';   // the dark screen itself
       ctx.fill();
+      ctx.shadowBlur = 0;
+      if (LW > 6 && LH > 8) {
+        ctx.clip();
+        ctx.transform(ex.x / LW, ex.y / LW, ey.x / LH, ey.y / LH, TL.x, TL.y);
+        const LINES = Renderer.CALYPSO_SCREEN, N = LINES.length;
+        const lineH = Math.max(4, LH / 9);
+        const setFont = (px) => { ctx.font = `${px.toFixed(2)}px ui-monospace, Menlo, monospace`; };
+        // Size to the WIDEST line, not to the line height: a console that runs off
+        // its own bezel mid-word reads as a bug, not as a scroll.
+        let fs = lineH * 0.76;
+        setFont(fs);
+        const w = ctx.measureText(Renderer._widestScreenLine).width;
+        if (w > LW - 4) setFont(fs * ((LW - 4) / w));
+        ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+        // Each line k holds a fixed slot in the stream and rises out of the top as
+        // `p` (local px scrolled) grows — so the text flows up the screen forever.
+        const p = (performance.now() / 1000) * lineH * 1.1;
+        const k0 = Math.floor((p - LH) / lineH), k1 = Math.ceil(p / lineH);
+        for (let k = k0; k <= k1; k++) {
+          const ly = LH + k * lineH - p;
+          const a = 0.26 + 0.6 * Math.min(1, ly / LH);   // dims as it climbs away
+          ctx.fillStyle = `rgba(176,202,255,${a.toFixed(3)})`;
+          ctx.fillText(LINES[((k % N) + N) % N], 2, ly);
+        }
+        ctx.fillStyle = 'rgba(0,0,0,0.18)';               // CRT scanlines
+        for (let sy = 0; sy < LH; sy += 2) ctx.fillRect(0, sy, LW, 1);
+      }
       ctx.restore();
-      ctx.beginPath(); ctx.moveTo(q[0].x, q[0].y); for (let i = 1; i < 4; i++) ctx.lineTo(q[i].x, q[i].y); ctx.closePath();
+      panel();
       ctx.strokeStyle = 'rgba(205,218,255,0.75)'; ctx.lineWidth = 1.5; ctx.stroke();
       this.coreTermHit = { obj, x: scx, y: scy, r: Math.max(16, Math.hypot(q[1].x - q[0].x, q[1].y - q[0].y) * 0.7) };
     }

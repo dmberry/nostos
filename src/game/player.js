@@ -484,15 +484,25 @@ export class Player {
       sfx.play('zap');
       this.say('You push off the sand and step aboard. The sea heaves but does not close over you. Calypso has let you go. You have left Ogygia.');
     } else {
+      // An unfinished boat still LAUNCHES. The refusal is not a locked door: you
+      // get to push off, you get out onto the water, and the sea turns you back.
+      // Poseidon is the one saying no, not the game — so hand off to the failed-
+      // crossing sequence (main.js drives it: it moves the world, so it can't
+      // resolve here). The bounce below is the standalone fallback (unit tests).
+      if (this.onDepartFail) { this.onDepartFail(this, boat); return; }
       sfx.play('hurt');
-      const hint = this.hasItem('golden_axe')
-        ? "This is no ship for the open sea. Build a proper one to Calypso's recipe — wood, oar, rope, and sail."
-        : "This is no ship for the open sea, and Calypso has not released you. Refunction her at the fortress, then build a proper ship to her recipe.";
-      this.say(`You launch, and the swell rises against you. Poseidon hurls the boat back onto the beach. ${hint}`);
-      // Shove back inland so you are not left overlapping the hull.
+      this.say(`You launch, and the swell rises against you. Poseidon hurls the boat back onto the beach. ${this.launchHint()}`);
       this.x -= this.facing.x * 1.5;
       this.y -= this.facing.y * 1.5;
     }
+  }
+
+  // What you still need before the sea will have you. Shared by the instant
+  // bounce and the failed-crossing sequence, so they can never drift apart.
+  launchHint() {
+    return this.hasItem('golden_axe')
+      ? "This is no ship for the open sea. Build a proper one to Calypso's recipe — wood, oar, rope, and sail."
+      : "This is no ship for the open sea, and Calypso has not released you. Refunction her at the fortress, then build a proper ship to her recipe.";
   }
 
   // The nearest walkable land tile at the sea's edge (8-adjacent to an open-sea
