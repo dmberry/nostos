@@ -22,22 +22,26 @@ export const DASH_H = 78; // dashboard panel height
 export function deathRank(score) {
   const s = score || 0;
   let title, blurb;
-  if (s <= 0) { title = 'LAME'; blurb = 'You achieved precisely nothing. Impressive, in a way.'; }
-  else if (s < 100) { title = 'NOOB'; blurb = 'Everyone starts somewhere. You did not get far.'; }
-  else if (s < 200) { title = 'BEGINNER'; blurb = 'The basics, grasped. Barely.'; }
-  else if (s < 300) { title = 'INTERN'; blurb = 'Unpaid, unnoticed, unalive.'; }
-  else if (s < 400) { title = 'NORMIE'; blurb = 'Gloriously average. A credit to the mean.'; }
-  else if (s < 600) { title = 'POST-NORMIE'; blurb = 'You have transcended average, if not survival.'; }
-  else if (s < 800) { title = 'SEASONED'; blurb = 'Salt, scars, and a healthy fear of rivers.'; }
-  else if (s < 1200) { title = 'SERIOUS'; blurb = 'Nobody laughed at your loadout. Nobody.'; }
-  else if (s < 1500) { title = 'TRAINED'; blurb = 'Muscle memory and a mean crowbar swing.'; }
-  else if (s < 2000) { title = 'SNIPER'; blurb = 'One shot, one less machine. Usually.'; }
-  else if (s < 3000) { title = 'AI STALKER'; blurb = 'You hunt the things that hunt you.'; }
-  else if (s < 4000) { title = 'L33T'; blurb = 'The towers whisper your name in binary.'; }
-  else if (s < 5000) { title = 'L33T PRO'; blurb = 'Professionally terrifying to circuitry.'; }
-  else if (s < 10000) { title = 'ULTRA-L33T'; blurb = 'Small children draw you defeating obelisks.'; }
-  else { title = 'MEGA L33T'; blurb = 'POSEIDON has a folder named after you. It is afraid.'; }
-  const colors = { LAME: '#9a7a5a', NOOB: '#c9905a', BEGINNER: '#c9a05a', INTERN: '#c9b05a', NORMIE: '#b9c95a', 'POST-NORMIE': '#9fd058', SEASONED: '#6fbf4a', SERIOUS: '#4abf7a', TRAINED: '#4ac0b0', SNIPER: '#4aa8d8', 'AI STALKER': '#6f8fe0', L33T: '#e8d27a', 'L33T PRO': '#f0c040', 'ULTRA-L33T': '#f09040', 'MEGA L33T': '#ff5040' };
+  // The ladder is the Odyssey in miniature: from washed-up nobody to the homecoming
+  // (nostos) that is the game's whole win-condition. Most rungs are real epithets of
+  // Odysseus — polytropos (man of twists), polytlas (long-enduring), ptoliporthos
+  // (sacker of cities) — and NOBODY is the Cyclops gambit (Outis / No-one).
+  if (s <= 0) { title = 'FLOTSAM'; blurb = 'The sea spat you back. Even it did not want you.'; }
+  else if (s < 100) { title = 'LOTUS-EATER'; blurb = 'You forgot why you came, and were content. Briefly.'; }
+  else if (s < 200) { title = 'CASTAWAY'; blurb = 'Ashore, alive, and clueless. Two out of three.'; }
+  else if (s < 300) { title = 'OARSMAN'; blurb = 'You pulled your weight. The oar broke anyway.'; }
+  else if (s < 400) { title = 'WANDERER'; blurb = 'Gloriously lost. A credit to the current.'; }
+  else if (s < 600) { title = 'MARINER'; blurb = 'Salt in the beard, and a healthy fear of rivers.'; }
+  else if (s < 800) { title = 'HELMSMAN'; blurb = 'You read the water now. It still lies to you.'; }
+  else if (s < 1200) { title = 'RAIDER'; blurb = 'Nobody laughed at your spear. Nobody.'; }
+  else if (s < 1500) { title = 'TROJAN'; blurb = 'You left a gift. It was not a gift.'; }
+  else if (s < 2000) { title = 'NOBODY'; blurb = 'You told the giant your name was No-one. It worked.'; }
+  else if (s < 3000) { title = 'MAN OF TWISTS'; blurb = 'You hunt the things that hunt you, sideways.'; }
+  else if (s < 4000) { title = 'GOD-BELOVED'; blurb = 'The towers whisper your name, and something answers.'; }
+  else if (s < 5000) { title = 'LONG-ENDURING'; blurb = 'You outlasted the sea, the gods, and your own crew.'; }
+  else if (s < 10000) { title = 'SACKER OF CITIES'; blurb = 'Small children draw you pulling down obelisks.'; }
+  else { title = 'HOMECOMER'; blurb = 'You reached Ithaca. POSEIDON has a folder named after you. It is afraid.'; }
+  const colors = { FLOTSAM: '#9a7a5a', 'LOTUS-EATER': '#c9905a', CASTAWAY: '#c9a05a', OARSMAN: '#c9b05a', WANDERER: '#b9c95a', MARINER: '#9fd058', HELMSMAN: '#6fbf4a', RAIDER: '#4abf7a', TROJAN: '#4ac0b0', NOBODY: '#4aa8d8', 'MAN OF TWISTS': '#6f8fe0', 'GOD-BELOVED': '#e8d27a', 'LONG-ENDURING': '#f0c040', 'SACKER OF CITIES': '#f09040', HOMECOMER: '#ff5040' };
   return { title, blurb, color: colors[title] || '#e8d27a' };
 }
 
