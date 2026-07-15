@@ -1892,17 +1892,40 @@ document.getElementById('ronnotebook-close').addEventListener('click', closeNote
 notebookPrevTopBtn.addEventListener('click', notebookPrev);
 notebookNextTopBtn.addEventListener('click', notebookNext);
 notebookJumpEl.addEventListener('change', () => notebookJumpTo(parseInt(notebookJumpEl.value, 10)));
-// Capture-phase on window, ahead of both the still-focused terminal input's
-// own key handling and the game's WASD/arrow movement listener, so paging
-// the notebook can never leak an arrow key into a text caret or a step.
+// Capture-phase on window, ahead of both the still-focused terminal input's own
+// key handling and the game's WASD/arrow movement listener, so a key in the open
+// Scrapbook can never leak into a text caret or a step. Left/Right page the book;
+// Escape closes it; and Up/Down/PageUp/Down/Home/End/Space SCROLL the current page
+// — driven here rather than left to native scroll, because this same handler must
+// swallow those keys from the game, and a blanket preventDefault (the old bug) also
+// killed the very scrolling the help promises ("scroll with the wheel or up/down").
 window.addEventListener('keydown', (e) => {
   if (notebookEl.style.display !== 'flex') return;
+  const body = notebookBodyEl;
+  const page = Math.max(40, body.clientHeight - 40);
   if (e.key === 'ArrowLeft') notebookPrev();
   else if (e.key === 'ArrowRight') notebookNext();
   else if (e.key === 'Escape') closeNotebook();
+  else if (e.key === 'ArrowDown') body.scrollTop += 40;
+  else if (e.key === 'ArrowUp') body.scrollTop -= 40;
+  else if (e.key === 'PageDown' || e.key === ' ') body.scrollTop += page;
+  else if (e.key === 'PageUp') body.scrollTop -= page;
+  else if (e.key === 'Home') body.scrollTop = 0;
+  else if (e.key === 'End') body.scrollTop = body.scrollHeight;
+  // Every key is swallowed while the Scrapbook is open — acted on or not — so none
+  // leaks into player movement (WASD) or a text caret behind the modal.
   e.preventDefault();
   e.stopImmediatePropagation();
 }, true);
+
+// The wheel over the Scrapbook scrolls its page — driven explicitly so it can never
+// be swallowed by the canvas's own wheel-to-zoom handler (or a passive-listener
+// quirk). stopPropagation keeps the gesture out of the game entirely.
+notebookBodyEl.addEventListener('wheel', (e) => {
+  notebookBodyEl.scrollTop += e.deltaY;
+  e.preventDefault();
+  e.stopPropagation();
+}, { passive: false });
 
 // Which terminal is open — an AI obelisk / fortress gate ('ob') runs against
 // ronmlCtx; a RON HERMES relay ('hermes') runs against hermesCtx (adds
