@@ -180,6 +180,14 @@ export class Player {
     this.aboard = null;                      // {type, mirror, wob} while under way — the renderer draws hull + man as one
     this.shipBuilt = false;                  // one greek ship at a time (independent of the plain boat)
     this.calypsoLeave = false;               // Calypso refunctioned (retire): the sea will let you go (decision #8)
+    // The Nokia 3310 — Calypso's channel (docs/calypso-nokia-plan.md). A worn
+    // fixture like the walkman: never dropped, never a pocket slot. `calypsoHold`
+    // is her hold on you AND her protection of you (0..1); `nokiaSent` records the
+    // one-shot texts she has already sent, so a reload does not re-tutorial you.
+    this.nokia = true;
+    this.calypsoHold = 0.65;                  // seven years kept: you begin already held (nokia.js HOLD_INIT)
+    this.nokiaSent = new Set();
+    this._nokiaIvIdx = 0;                     // cycles her intervention lines
     this.pockets = [{ item: 'note_home', qty: 1 }, null, null, null]; // start with the Odyssey note in-pocket
     this.backpack = null;                    // {slots: [16], weapon} once found; dropped on death
     this.selectedPocket = null;              // 0-3 (pockets), 'bw' (backpack weapon), or null

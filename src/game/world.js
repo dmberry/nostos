@@ -31,6 +31,10 @@ export function createWorld(id, opts = {}) {
     // main.js runs the prohibition pass on worlds that set this — a warning near
     // the herd, and the god's wrath if you slaughter one.
     prohibition: opts.prohibition ?? false,
+    // OGYGIA (CALYPSO): her island, where she keeps you. main.js runs the Nokia
+    // channel on worlds that set this — her texts, and her interventions against
+    // POSEIDON's roaming machines (docs/calypso-nokia-plan.md).
+    keeper: opts.keeper ?? false,
     // OGYGIA (CALYPSO) only: the island whose whole gate is the boat. Launch an
     // unfinished hull here and you get the voyage — out to sea, and Poseidon turns
     // you back — over and over until you build a proper ship to her recipe. It

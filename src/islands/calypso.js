@@ -404,6 +404,7 @@ export function createIsland(seed) {
     obColor: '#232a46', obAlertColor: '#4b5cc4', // Ogygia: kalyptō — indigo at rest, brightening on alert (R1)
     combat: true, // a martial island: main.js runs the full combat/fortress/obelisk loop here
     departTrial: true, // Ogygia's gate IS the boat: launch an unfinished one and the sea sends you home
+    keeper: true, // Calypso's island: main.js runs the Nokia channel + her interventions here
   });
   // calypso-specific controllers, aliased by name in main.js (its ~60 runtime sites use these names).
   world.fortress = fortress;

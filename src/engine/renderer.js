@@ -637,6 +637,7 @@ export class Renderer {
     }
     if (hud.touchControls) this.drawTouchControls(hud);
     if (hud.toast) this.drawToast(hud.toast);
+    if (hud.nokiaToast) this.drawNokiaToast(hud.nokiaToast);
     if (hud.detail) this.drawDetail(hud.detail);
     if (hud.drag) this.drawDragGhost(hud.drag, player);
     if (player.torpor > 0) this.drawTorporHaze(player.torpor);

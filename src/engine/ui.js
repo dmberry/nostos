@@ -400,6 +400,52 @@ export const uiMethods = {
     ctx.textAlign = 'left';
   },
 
+  // The Nokia 3310 SMS toast — Calypso's texts (docs/calypso-nokia-plan.md). An
+  // 84x48-feel pea-green backlit LCD in a dark plastic bezel, lower-right where a
+  // phone sits (clear of the say() narration, lower-left), above the help hint.
+  // t = { header, lines, ttl, total }.
+  drawNokiaToast(t) {
+    const ctx = this.ctx;
+    const a = Math.min(Math.min(1, (t.total - t.ttl) / 0.22), Math.min(1, t.ttl / 0.8));
+    if (a <= 0) return;
+    const W = 214, padX = 12, headH = 20, lineH = 15;
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.font = '12px ui-monospace, "Courier New", monospace';
+    const lines = [];
+    for (const ln of t.lines) lines.push(...this._wrapText(ctx, ln, W - padX * 2));
+    const H = headH + lines.length * lineH + 12;
+    const x = this.w - W - 14;
+    const y = (this.hudTop != null ? this.hudTop : this.h - 100) - H - 40;
+    // Dark plastic bezel.
+    ctx.fillStyle = '#191c14';
+    ctx.fillRect(x - 6, y - 6, W + 12, H + 12);
+    // The backlit pea-green LCD.
+    ctx.fillStyle = '#9fb98a';
+    ctx.fillRect(x, y, W, H);
+    ctx.fillStyle = 'rgba(60,74,44,0.10)';   // faint horizontal pixel grid
+    for (let sy = y + 2; sy < y + H; sy += 3) ctx.fillRect(x, sy, W, 1);
+    const INK = '#2b3420';
+    // Status row: signal bars (left), sender header, battery (right).
+    ctx.fillStyle = INK;
+    for (let i = 0; i < 4; i++) ctx.fillRect(x + padX + i * 4, y + 12 - i * 2 - 2, 3, i * 2 + 3);
+    ctx.font = 'bold 11px ui-monospace, "Courier New", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(t.header, x + W / 2, y + 12);
+    ctx.strokeStyle = INK; ctx.lineWidth = 1;
+    ctx.strokeRect(x + W - padX - 15, y + 4, 12, 7); ctx.fillRect(x + W - padX - 3, y + 6, 2, 3); // battery
+    ctx.fillRect(x + W - padX - 14, y + 5, 10, 5);
+    // A thin divider under the status row.
+    ctx.fillRect(x + padX, y + headH - 4, W - padX * 2, 1);
+    // The message body.
+    ctx.textAlign = 'left';
+    ctx.font = '12px ui-monospace, "Courier New", monospace';
+    let ly = y + headH + 10;
+    for (const ln of lines) { ctx.fillText(ln, x + padX, ly); ly += lineH; }
+    ctx.restore();
+    ctx.textAlign = 'left';
+  },
+
   // Right-click inspection tooltip, near the cursor.
   drawDetail(d) {
     const ctx = this.ctx;

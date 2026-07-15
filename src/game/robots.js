@@ -885,6 +885,7 @@ export function updateRobots(dt, robots, player, map) {
     // (and aggros at once if the player is still in range).
     if (r.disabledT > 0) {
       r.disabledT = Math.max(0, r.disabledT - dt);
+      if (r.disabledT === 0) r.stunColor = null; // drop CALYPSO's indigo tint on expiry
       r.animT += dt;
       continue;
     }
@@ -1799,7 +1800,13 @@ function sensorStyle(r) {
     const t = r.animT || 0;
     const gate = Math.max(0, Math.sin(t * 11) * (0.4 + 0.6 * Math.sin(t * 4.3)));
     const a = 0.25 + 0.35 * gate;
-    return { fill: `rgba(${STUN_AMBER[0]},${STUN_AMBER[1]},${STUN_AMBER[2]},${a.toFixed(3)})`, halo: null };
+    // `stunColor` overrides the amber: CALYPSO's interventions flicker in her own
+    // indigo (nokia.js), so her hand on POSEIDON's machine reads as hers.
+    const c = r.stunColor || `rgb(${STUN_AMBER[0]},${STUN_AMBER[1]},${STUN_AMBER[2]})`;
+    const rgb = c.startsWith('#')
+      ? [parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16)]
+      : c.replace(/rgba?\(|\)/g, '').split(',').slice(0, 3).map(Number);
+    return { fill: `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${a.toFixed(3)})`, halo: null };
   }
   // Singing (RON-ML sing): the red light pulses in time with the choir. Each
   // machine is on a different vocal part (r.choirFlash, set in main from the

@@ -33,6 +33,7 @@ import { createIthaca } from './islands/ithaca.js';
 import { createPolyphemus } from './islands/polyphemus.js';
 import { createCirce } from './islands/circe.js';
 import { createHelios } from './islands/helios.js';
+import { createNokia, sendNokia, holdRise, holdFall, holdBand, HOLD_COLD, HOLD_WARM } from './game/nokia.js';
 import { CHOIR_NOTES, CHOIR_DURATION } from './engine/choir-notes.js';
 
 // Note onsets split into four pitch registers, so each singing machine can be
@@ -215,6 +216,9 @@ try {
       if (st.walkman !== undefined) player.walkman = st.walkman; // null = tape moved out, respected across reload
       if (st.calypsoLeave) player.calypsoLeave = true; // sticky: refunctioning Calypso persists across reload
       if (typeof st.swine === 'number') player.swine = st.swine; // CIRCE's change follows you across a reload
+      if (typeof st.calypsoHold === 'number') player.calypsoHold = st.calypsoHold; // Nokia gradient survives reload
+      if (Array.isArray(st.nokiaSent)) player.nokiaSent = new Set(st.nokiaSent);   // don't re-tutorial on reload
+      if (typeof st.nokiaParts === 'number') player._nokiaParts = st.nokiaParts;
       if (typeof st.x === 'number') _bootPos = { x: st.x, y: st.y }; // the saved position, for the island resume below
     }
     // Guard against stale item keys carried over from a save written by an
@@ -287,6 +291,9 @@ function buildSaveBlob() {
       pockets: player.pockets, backpack: player.backpack, walkman: player.walkman,
       calypsoLeave: player.calypsoLeave, // Calypso refunctioned: the sea will let you go
       swine: player.swine,               // CIRCE's transmutation: you stay changed across a reload
+      calypsoHold: player.calypsoHold,   // the Nokia gradient: her hold on you (docs/calypso-nokia-plan.md)
+      nokiaSent: [...player.nokiaSent],  // the one-shot texts already sent, so a reload does not re-tutorial
+      nokiaParts: player._nokiaParts || 0,
     },
     world: {
       currentIsland: currentWorld.id, // Stage 1c: which island you're on, so a voyage survives reload
@@ -633,7 +640,67 @@ function openHeadingChart() {
 // freeze class of bug). onDepart opens the chart; the chosen id sits in
 // pendingCrossing and update() performs the switch at its top. null = nothing queued.
 let pendingCrossing = null;
-player.onDepart = () => { openHeadingChart(); };
+player.onDepart = () => {
+  if (currentWorld.keeper) sendNokia(nokia, 'sail', { player }); // her last text, as you board to leave Ogygia
+  openHeadingChart();
+};
+
+// ---- The Nokia 3310: Calypso's channel on Ogygia (docs/calypso-nokia-plan.md) ----
+// She is not your enemy — POSEIDON's machines roam the island; she is the keeper
+// who texts you warnings, tips, and pleas, and (while her hold is not cold) freezes
+// one of his robots bearing down on you. The queue + tables live in game/nokia.js;
+// this drives the triggers, the beep, and the interventions on the keeper world.
+const nokia = createNokia();
+const NOKIA_DANGER_R = 6;   // she'll still one of his machines within this of you
+const NOKIA_SCAN = 0.5;     // seconds between intervention scans (cheap)
+let nokiaScanT = 0, nokiaIvCooldown = 0;
+
+function updateNokiaKeeper(dt) {
+  const ctx = { player };
+  sendNokia(nokia, 'landfall', ctx);
+
+  // Her hold on you IS her protection of you: it drifts UP while you linger inland,
+  // and DOWN while you loiter by a beached vessel — and each leaving-signal steps
+  // it down once, tied to the text that marks it.
+  const nearVessel = map.objects.some((o) => (o.type === 'boat' || o.type === 'greek_ship')
+    && Math.hypot(o.x + 0.5 - player.x, o.y + 0.5 - player.y) < 6);
+  if (nearVessel) holdFall(player, 0.01 * dt); else holdRise(player, 0.005 * dt);
+  const parts = ['oar', 'rope', 'sail'].reduce((n, p) => n + (player.hasItem(p) ? 1 : 0), 0);
+  if (parts > (player._nokiaParts || 0)) { holdFall(player, 0.05 * (parts - (player._nokiaParts || 0))); player._nokiaParts = parts; }
+  if (player.boatBuilt && sendNokia(nokia, 'boatCrafted', ctx)) holdFall(player, 0.15);
+  if (player.hasItem('golden_axe') && sendNokia(nokia, 'axeGranted', ctx)) holdFall(player, 0.25);
+  if (player.shipBuilt && sendNokia(nokia, 'shipCrafted', ctx)) holdFall(player, 0.20);
+
+  // Ambient one-shot triggers (sendNokia is idempotent for `once` texts).
+  if (dayNight.isNight && dayNight.isNight()) sendNokia(nokia, 'nightfall', ctx);
+  if (player.maxHealth && player.health / player.maxHealth < 0.35) sendNokia(nokia, 'lowHP', ctx);
+  if (player.weaponsFound && player.weaponsFound.size > 1) sendNokia(nokia, 'firstWeapon', ctx);
+  const hostiles = currentWorld.robots.filter((r) => !r.dead && !r.fused && !r.friendly);
+  if (hostiles.some((r) => Math.hypot(r.x - player.x, r.y - player.y) < 10)) sendNokia(nokia, 'firstHostile', ctx);
+  if (currentWorld.obeliskObjs.some((o) => !o.destroyed && Math.hypot(o.x + 0.5 - player.x, o.y + 0.5 - player.y) < 6)) sendNokia(nokia, 'firstObelisk', ctx);
+
+  // Her interventions: while her hold is not cold, reach out and freeze one of his
+  // machines closing on you — her indigo over his amber. Cooldown scales with how
+  // warm she is; below HOLD_COLD she does nothing (you lose her when you need her).
+  if (nokiaIvCooldown > 0) nokiaIvCooldown -= dt;
+  nokiaScanT += dt;
+  if (nokiaScanT >= NOKIA_SCAN) {
+    nokiaScanT = 0;
+    const hold = player.calypsoHold ?? 0.65;
+    if (hold >= HOLD_COLD && nokiaIvCooldown <= 0) {
+      const target = hostiles.find((r) => r.aggro && (r.disabledT || 0) <= 0
+        && Math.hypot(r.x - player.x, r.y - player.y) < NOKIA_DANGER_R);
+      if (target) {
+        target.disabledT = 5;
+        target.stunColor = '#4b5cc4';
+        nokiaIvCooldown = hold >= 0.85 ? 40 : hold >= HOLD_WARM ? 60 : 120;
+        if (!sendNokia(nokia, 'firstIntervention', ctx)) sendNokia(nokia, 'intervention', ctx);
+        player._nokiaIvIdx = (player._nokiaIvIdx || 0) + 1;
+        sfx.play('zap');
+      }
+    }
+  }
+}
 
 // The failed crossing. Boarding an unfinished boat does NOT bounce you off the
 // hull with a message — you launch, you row out, and the sea rises and sends you
@@ -682,6 +749,8 @@ player.onDepartFail = (p, boat) => {
   aboardHeading(crossFail, dir.x, dir.y);
   sfx.play('jump');
   p.say('You put your shoulder to the hull and shove. The sand lets go, and the boat swings out onto the water.');
+  // She watches you go, and her hold on you loosens as you make for open water.
+  if (currentWorld.keeper) { sendNokia(nokia, 'boardDepart', { player: p }); holdFall(p, 0.30); }
 };
 
 // Put the vessel under the player and point it where it is going (boatMirror).
@@ -751,6 +820,9 @@ function updateCrossFail(dt) {
       player.boatBuilt = false;   // it is gone; you can lay another keel
       player.say(`The sea breaks the boat over the sand and takes the pieces back. ${player.launchHint()}`);
     }
+    // The two gods are one system keeping you: Poseidon returns you, and her hold
+    // — her protection — rises with the relief. She texts, glad of it.
+    if (currentWorld.keeper) { holdRise(player, 0.15); sendNokia(nokia, 'crossFailReturn', { player }); }
     persist();
     return;
   }
@@ -2634,6 +2706,13 @@ function update(dt) {
     return;
   }
 
+  // The Nokia's queue drains every frame, wherever you are, so a text finishes even
+  // if you cross mid-message; the SMS beep fires the frame each one appears. Off
+  // Ogygia the phone has NO SIGNAL — one line, once, so the channel reads as hers.
+  nokia.tick(dt);
+  if (nokia.justShown) sfx.play('sms');
+  if (!currentWorld.keeper && currentWorld.id !== 'backspace') sendNokia(nokia, 'noSignal', { player });
+
   // CIRCE's swine-magic (AEAEA). The change only TAKES HOLD on her island (a
   // `transmute` world), but MOLY undoes it anywhere — so you can flee Aeaea
   // half-turned and shed it at sea, if you carry the herb. Runs before the
@@ -2717,6 +2796,8 @@ function update(dt) {
       player.resting = false;
       sleepCooldown = SLEEP_COOLDOWN_S;
       player.say('You wake, a little stronger.');
+      // Rest on Ogygia is exactly what she wants: her hold tightens, and she is glad.
+      if (currentWorld.keeper) { holdRise(player, 0.10); sendNokia(nokia, 'firstRest', { player }); }
       persist();
     }
     return; // everything else — movement, AI, other clocks — is frozen while resting
@@ -3215,6 +3296,9 @@ function update(dt) {
   if (saveClock >= 8) { saveClock = 0; persist(); }
   updateAnimals(dt, currentWorld.animals, player, map);
   updateBirds(dt, currentWorld.birds, currentWorld.animals, player, map);
+  // Calypso's channel: her texts + her interventions against POSEIDON's machines,
+  // only on her island (Ogygia is a combat world, so its robots are live here).
+  if (currentWorld.keeper) updateNokiaKeeper(dt);
   // (Robots' AI now ticks inside systems.runUpdate below — order 30, before
   //  fortress at 35, which reads this-frame robot aggro. See robots.js.)
   // Choir light-flash sync: while the piece plays, each singing machine's red
@@ -3497,6 +3581,7 @@ function frame(now) {
       showBackpack,
       detail: detail || hoverSlotTip(),
       toast,
+      nokiaToast: nokia.current,
       touchControls: touchLike,
       touchRunHeld: input._touchRun,
       drag: drag ? { ...drag, mx: input.mouseX, my: input.mouseY } : null,
