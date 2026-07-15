@@ -285,15 +285,18 @@ export const uiMethods = {
       ctx.fillStyle = '#e8e0d0';
       ctx.font = '13px system-ui, sans-serif';
       ctx.fillText(has ? def.name : '??? undiscovered', px + 58, y + 12);
-      // power bar
+      // power bar — hidden until found, so an undiscovered weapon does not leak its
+      // rating (an empty track + "pwr ?"). Only a found weapon fills the bar.
       const barX = px + pw - 130, barW = 100, pwr = def.power || 1;
       ctx.fillStyle = 'rgba(255,255,255,0.12)';
       ctx.fillRect(barX, y + 4, barW, 8);
-      ctx.fillStyle = has ? '#e8d27a' : 'rgba(207,216,195,0.4)';
-      ctx.fillRect(barX, y + 4, barW * (pwr / 10), 8);
+      if (has) {
+        ctx.fillStyle = '#e8d27a';
+        ctx.fillRect(barX, y + 4, barW * (pwr / 10), 8);
+      }
       ctx.fillStyle = 'rgba(207,216,195,0.7)';
       ctx.font = '10px system-ui, sans-serif';
-      ctx.fillText(`pwr ${pwr}`, barX + barW + 6, y + 12);
+      ctx.fillText(has ? `pwr ${pwr}` : 'pwr ?', barX + barW + 6, y + 12);
       ctx.globalAlpha = 1;
       y += rowH;
     }
