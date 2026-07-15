@@ -151,11 +151,18 @@ line, and it quietly promises the phone a future).
   another island → NO SIGNAL, then silence. `node --check` + tests + the
   dynamic-import black-screen guard before every push.
 
-## 7. Open questions (for David, not blockers to S1)
-1. **Her name on the phone.** `CALYPSO` — or does she sign otherwise ("K.")?
-2. Should her interventions have a *visible tell* beyond the amber freeze — a
-   heat-shimmer, a half-second of her voice? (Cheap: a say() line. Costly: art.)
-3. Does the boarding-attempt text fire *before* the voyage (she watches you go)
-   or as you return? Currently: both, different lines.
-4. The toast's screen-position (lower-right proposed) — confirm it doesn't
-   fight the touch controls on mobile.
+## 7. Decisions (David, 2026-07-15 — all four settled)
+1. **Sender name: `CALYPSO`.** Full name on every text — the tutorial channel
+   must instantly attribute itself; it matches her core terminal and the island
+   label.
+2. **Intervention tell: her indigo on his machine.** The frozen robot's
+   stun-flicker overrides the standard amber with Calypso's indigo (`#4b5cc4`)
+   for the freeze duration — her colour touching Poseidon's machine. Implement
+   as a per-stun colour override (`r.stunColor`, read where STUN_AMBER is
+   applied, robots.js:302/1794; cleared when `disabledT` expires).
+3. **Boarding texts: both, different lines.** Cold as you shove off (she
+   watches you go); warm relief when Poseidon returns you. The two texts
+   bracket the failed voyage — the pincer made audible.
+4. **Toast position: lower-right, above the hint line** — where a phone sits,
+   clear of the say() narration (lower-left). On touch devices it lifts above
+   the JUMP/run button cluster that owns that corner.
