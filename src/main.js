@@ -487,7 +487,10 @@ const UBIK_TELEPORT_COOLDOWN = 1.5; // seconds before another jump can fire (sto
 let backspace = null;
 function ensureBackspace() {
   if (backspace) return;
-  const pocket = createUnderworldPocket((WORLD_SEED ^ 0x0b1c) >>> 0);
+  // R4: one labelled way up per island — the doors of the dead, littered across the
+  // pocket. The pocket stamps each door with its island id + place name (CROSSINGS).
+  const dests = CROSSINGS.map((c) => ({ id: c.id, place: c.place }));
+  const pocket = createUnderworldPocket((WORLD_SEED ^ 0x0b1c) >>> 0, dests);
   const creatures = [spawnUnderworldCreature((WORLD_SEED ^ 0x1e57) >>> 0, pocket.creatureX, pocket.creatureY)];
   let ambClock = 0, ambNext = 8 + Math.random() * 10;
   backspace = registerWorld(createWorld('backspace', {
@@ -504,7 +507,7 @@ function ensureBackspace() {
     onEnter() { lore.placeBackspace(pocket.map); sfx.setDrone(0.8); player.say('The tear swallows you. The air in here is wrong — flat, yellow, humming.'); },
     onExit() { lore.leaveBackspace(); sfx.setDrone(0); player.say('You come up through the tear. Ordinary daylight, ordinary weight. You are back.'); },
   }));
-  backspace.exit = { x: pocket.exitX, y: pocket.exitY }; // the plain door home, proximity-checked in the loop
+  backspace.exits = pocket.exits; // the labelled ways up, proximity-checked in the loop
 }
 
 // The single world-switch point. switchWorld moves the player + syncs player.map +
@@ -603,22 +606,12 @@ const CROSSINGS = [
 ];
 const headingEl = document.getElementById('heading');
 const headingListEl = document.getElementById('heading-list');
-const headingTitleEl = document.getElementById('heading-title');
-const headingSubEl = document.getElementById('heading-sub');
-const headingCancelEl = document.getElementById('heading-cancel');
-headingCancelEl.addEventListener('click', () => { headingEl.style.display = 'none'; });
+document.getElementById('heading-cancel').addEventListener('click', () => { headingEl.style.display = 'none'; });
 headingEl.addEventListener('click', (e) => { if (e.target === headingEl) headingEl.style.display = 'none'; });
-// The chart the ship opens, and — in `surface` mode (R4) — the one the Backspace
-// opens: the underworld is a second road between the islands. Same island list, a
-// different way of travelling it. `surface` reworks the copy and, on pick, comes
-// UP through a tear rather than sailing.
-function openHeadingChart(mode = 'sail') {
-  const surface = mode === 'surface';
-  headingTitleEl.textContent = surface ? 'Choose a way up' : 'Set a heading';
-  headingSubEl.textContent = surface
-    ? 'The dead have roads. Every tear is a way up somewhere. Where do you surface?'
-    : 'You put out from the shore. Where do you steer?';
-  headingCancelEl.textContent = surface ? 'Stay below' : 'Stay ashore';
+// The chart the ship opens: pick an island and sail. (The Backspace's alternative
+// crossing road, R4, is diegetic doors now — not this chart — so this stays the
+// plain sailing chart.)
+function openHeadingChart() {
   headingListEl.innerHTML = '';
   for (const c of CROSSINGS) {
     if (c.id === currentWorld.id) continue;
@@ -626,9 +619,7 @@ function openHeadingChart(mode = 'sail') {
     btn.innerHTML = `<span class="place">${c.place}</span><span class="desc">${c.desc}</span>`;
     btn.addEventListener('click', () => {
       headingEl.style.display = 'none';
-      player.say(surface
-        ? 'You climb the dark toward a tear of daylight, and push up through it.'
-        : 'You set your heading and pull for open water.');
+      player.say('You set your heading and pull for open water.');
       pendingCrossing = c.id; // performed at the next frame top (see update())
     });
     headingListEl.appendChild(btn);
@@ -2997,17 +2988,19 @@ function update(dt) {
     currentWorld.update(dt, player); // the lurker + the ambient shrieks
     camera.follow(player.x, player.y, dt);
     if (player._ubikTeleportCooldown > 0) player._ubikTeleportCooldown -= dt;
-    // The exit is a plain door set in the wall — approach it (it's solid, so you
-    // stand a tile off) and it opens the surface chart. R4: the Backspace is an
-    // ALTERNATIVE CROSSING ROAD — the road of the dead. The tear no longer just
-    // dumps you back on Calypso; you come up on whichever island you choose, so
-    // the underworld is a second way to travel the archipelago. Open the chart
-    // once (debounced) and let the pick ride the normal pendingCrossing path.
-    else if (currentWorld.exit && Math.hypot(player.x - currentWorld.exit.x, player.y - currentWorld.exit.y) < 1.7) {
-      if (headingEl.style.display !== 'flex') {
-        openHeadingChart('surface');
-        player._ubikTeleportCooldown = UBIK_TELEPORT_COOLDOWN; // debounce: don't re-open every frame at the door
-        sfx.play('zap');
+    // R4: the Backspace is an ALTERNATIVE CROSSING ROAD — the road of the dead. It
+    // is littered with labelled doors, one per island (each drawn with its name on
+    // an isometric EXIT sign). Walk up to the door of the island you want and you
+    // come up THERE — no menu, the doors ARE the choice. The pick rides the normal
+    // pendingCrossing path (performed at the next frame top, against a clean map).
+    else if (currentWorld.exits) {
+      for (const e of currentWorld.exits) {
+        if (Math.hypot(player.x - e.x, player.y - e.y) < 1.7) {
+          pendingCrossing = e.island;   // worldById resolves it; null falls through harmlessly
+          player._ubikTeleportCooldown = UBIK_TELEPORT_COOLDOWN;
+          sfx.play('zap');
+          break;
+        }
       }
     }
     return;

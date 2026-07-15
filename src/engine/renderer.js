@@ -1731,7 +1731,7 @@ export class Renderer {
     // (the SE face, via the same skewed inset() used for the leaf) so it sits
     // in correct isometric perspective directly above the door rather than as
     // a flat billboard — the one clear marker in all this wrongness.
-    const sign = inset(g.bottom, g.right, 0.14, 0.86, H + 6, H + 22);
+    const sign = inset(g.bottom, g.right, 0.04, 0.96, H + 6, H + 25);
     const scx = (sign[0].x + sign[2].x) / 2, scy = (sign[0].y + sign[2].y) / 2;
     const glow = ctx.createRadialGradient(scx, scy, 2, scx, scy, 26);
     glow.addColorStop(0, 'rgba(60,220,120,0.5)'); glow.addColorStop(1, 'rgba(60,220,120,0)');
@@ -1748,8 +1748,8 @@ export class Renderer {
     // flat. The transform sends the text-image rectangle's corners to the
     // (slightly inset) sign quad: (0,0)->top-left, (w,0)->top-right,
     // (0,h)->bottom-left.
-    const img = this._exitTextImg();
-    const k = 0.84; // inset the letters inside the panel border
+    const img = this._signTextImg((obj.place || 'EXIT').toUpperCase());
+    const k = 0.9; // inset the letters inside the panel border
     const inner = sign.map((p) => ({ x: scx + (p.x - scx) * k, y: scy + (p.y - scy) * k }));
     const P00 = inner[3], P10 = inner[2], P01 = inner[0];
     const w = img.width, h = img.height;
@@ -1763,18 +1763,23 @@ export class Renderer {
     ctx.restore();
   }
 
-  // Cached green "EXIT" glyph image, drawn flat here and skewed at draw time.
-  _exitTextImg() {
-    if (this._exitText) return this._exitText;
+  // Cached green sign-glyph image (the island name, or "EXIT"), drawn flat here and
+  // skewed onto the door's SE face at draw time. One canvas per distinct label; the
+  // font auto-shrinks so a long island name (THRINACIA) still fits the sign width.
+  _signTextImg(text) {
+    this._signCache = this._signCache || {};
+    if (this._signCache[text]) return this._signCache[text];
     const c = document.createElement('canvas');
-    c.width = 120; c.height = 44;
+    c.width = 200; c.height = 44;
     const x = c.getContext('2d');
     x.fillStyle = '#8dffbc';
-    x.font = 'bold 34px system-ui, sans-serif';
     x.textAlign = 'center'; x.textBaseline = 'middle';
     x.shadowColor = 'rgba(140,255,185,0.9)'; x.shadowBlur = 5;
-    x.fillText('EXIT', 60, 23);
-    this._exitText = c;
+    let fs = 34;
+    x.font = `bold ${fs}px system-ui, sans-serif`;
+    while (x.measureText(text).width > c.width - 14 && fs > 12) { fs -= 2; x.font = `bold ${fs}px system-ui, sans-serif`; }
+    x.fillText(text, c.width / 2, c.height / 2);
+    this._signCache[text] = c;
     return c;
   }
 
