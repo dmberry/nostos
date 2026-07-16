@@ -238,6 +238,15 @@ export const ITEMS = {
     ammoType: 'battery',
     color: '#4fd8c3',
   },
+  // The Nokia 3310 — Calypso's channel (docs/calypso-nokia-plan.md). Lives in the
+  // dashboard's PHONE box (its own slot beside the walkman, never a pocket); click
+  // it to open the SMS screen and text the RONs — or her. Defined as an item so a
+  // later build can swap other handsets into the box.
+  nokia_3310: {
+    name: 'Nokia 3310',
+    kind: 'phone',
+    color: '#2b3350',
+  },
   // Access chip: carried (not held), it's your interface into the obelisk
   // terminals — the RON-DOS console only opens for someone holding one. While
   // you're jacked in, the obelisk masks you: the machines lose you entirely.

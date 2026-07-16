@@ -152,6 +152,8 @@ export const NOKIA_MESSAGES = {
 
 // Resolve a message key against the current hold, enqueue it, record one-shots.
 // Returns true iff a text was actually sent (so main.js can beep / mark state).
+// Every CALYPSO text is also filed into the phone's thread (player.nokiaLog), so
+// the handset's Messages screen holds the whole correspondence.
 export function sendNokia(nokia, key, ctx) {
   const msg = NOKIA_MESSAGES[key];
   if (!msg) return false;
@@ -160,7 +162,99 @@ export function sendNokia(nokia, key, ctx) {
   const band = holdBand(ctx.player ? (ctx.player.calypsoHold ?? HOLD_INIT) : HOLD_INIT);
   const lines = typeof msg.lines === 'function' ? msg.lines({ band, player: ctx.player }) : msg.lines;
   if (!lines || !lines.length) return false;
-  nokia.enqueue(msg.header || 'CALYPSO', lines.slice());
+  const header = msg.header || 'CALYPSO';
+  nokia.enqueue(header, lines.slice());
   if (msg.once && sent) sent.add(key);
+  if (header === 'CALYPSO' && ctx.player) logSms(ctx.player, 'CALYPSO', 'them', lines.join(' '));
   return true;
+}
+
+// File one SMS into the handset's thread log, capped so the save stays small.
+export function logSms(player, th, from, text) {
+  player.nokiaLog = player.nokiaLog || [];
+  player.nokiaLog.push({ th, from, text });
+  if (player.nokiaLog.length > 60) player.nokiaLog = player.nokiaLog.slice(-60);
+}
+
+// ---- Replies: texting HER, and texting the RONs -----------------------------
+//
+// The handset sends as well as receives. CALYPSO answers like what she is — a
+// keeper — warm or cold with her hold on you, and every text you send her feeds
+// it (attention is what she wants; main.js nudges calypsoHold on send). RON's
+// mesh answers like a resistance radio net: lower-case, clipped, practical,
+// nobody's mother. DRAFT COPY — flagged for David's voice pass.
+
+const CAL_SMS = [
+  [/\b(stay|staying|remain)\b/i, {
+    warm: 'Then stay. That is all I have ever asked. The island is yours, and so am I.',
+    wary: 'Do you mean it this time? Stay, and I will forget the boat on the sand.',
+    cold: 'You say stay and build a ship. I read both messages, love.',
+  }],
+  [/\b(leave|leaving|go|ship|boat|sail|home|ithaca)\b/i, {
+    warm: 'Why speak of leaving? The sea is his, and it does not want you. I do.',
+    wary: 'If you go, the water will bring you back to me, or it will keep you. Neither is Ithaca.',
+    cold: 'Go, then. I have watched from the rocks before. I know how it looks.',
+  }],
+  [/\b(help|robot|machine|hunt|chase|danger)\b/i, {
+    warm: 'Stand still in the dark and they pass. Or come back to the house, and nothing will touch you.',
+    wary: 'Keep off the skyline and out of the towers’ eyes. I will do what I still can.',
+    cold: 'You wanted the open island. The open island has teeth. Keep moving.',
+  }],
+  [/\b(love|miss|dear|darling)\b/i, {
+    warm: 'Seven years, and you finally text me first. Come home to the house, love.',
+    wary: 'You say it when you are frightened. I take it anyway.',
+    cold: 'Do not. Not while the ship sits finished on my sand.',
+  }],
+  [/\b(poseidon|sea|storm|swell)\b/i, {
+    warm: 'He watches the water; I watch you. Stay off the one and near the other.',
+    wary: 'The sea is his, every drop of it. That is not a door, it is a wall.',
+    cold: 'Ask him yourself, the next time he throws you back onto my beach.',
+  }],
+  [/\b(who|what) are you\b/i, {
+    warm: 'The one who kept you alive for seven years. The island, if the island loved you.',
+    wary: 'kalyptō: the one who conceals. I hid you from the whole network, love.',
+    cold: 'The keeper of a guest who is leaving. It is a small job now.',
+  }],
+];
+const CAL_SMS_FALLBACK = {
+  warm: [
+    'I am here. I am always here. That is rather the point of me.',
+    'Whatever it is, it can wait. Everything here can wait forever.',
+    'Text me again. The screen lights the room, and I pretend it is a hearth.',
+  ],
+  wary: [
+    'I read it twice. You are somewhere near the shore again, aren’t you.',
+    'Say more, or say you are staying. Either would do.',
+  ],
+  cold: [
+    'Received.',
+    'The signal is weak where you are. That is not the phone’s doing.',
+  ],
+};
+export function calypsoSms(text, band, n = 0) {
+  for (const [re, tiers] of CAL_SMS) if (re.test(text)) return tiers[band] || tiers.wary;
+  const pool = CAL_SMS_FALLBACK[band] || CAL_SMS_FALLBACK.wary;
+  return pool[n % pool.length];
+}
+
+const RON_SMS = [
+  [/\b(robot|machine|t1|t2|w4|hunter|chase)\b/i, 'wheels can’t climb. put a rise between you. rivers stop the runners dead. — RON'],
+  [/\b(fortress|gate|lion)\b/i, 'the gate reads a trojan card. wreck the w-factory for a key, refunction it at an obelisk. — RON'],
+  [/\b(key|card|chip)\b/i, 'back your key up at a relay. lose the card, reprint at any node: print aikey. — RON'],
+  [/\b(obelisk|tower|node)\b/i, 'hack it for its key, crash it with the key. loop freezes the garrison. no wire back to you. — RON'],
+  [/\b(moly|circe|aeaea|swine)\b/i, 'the herb grows at our relays on aeaea. carry it and her drug slides off. — RON'],
+  [/\b(helios|cattle|thrinacia)\b/i, 'the gold herd is wired. touch one and the whole island lights. take nothing. — RON'],
+  [/\b(calypso|her)\b/i, 'careful with that one. every kindness is a rope. we’ve lost people to worse islands and better reasons. — RON'],
+  [/\b(hello|hi|hey|test)\b/i, 'copy. mesh is up. keep this channel for real traffic. — RON'],
+  [/\b(where|lost|map)\b/i, 'off the skyline, out of the light, follow the coast. print map at any node you crack. — RON'],
+  [/\b(help|sos|dying|hurt)\b/i, 'no cavalry. eat, sleep off the open ground, and keep the water at your back. you’re the cavalry. — RON'],
+];
+const RON_SMS_FALLBACK = [
+  'copy that. keep moving. — RON',
+  'noted. stay off the wire. — RON',
+  'mesh heard you. nothing to add. reality or nothing. — RON',
+];
+export function ronSms(text, n = 0) {
+  for (const [re, reply] of RON_SMS) if (re.test(text)) return reply;
+  return RON_SMS_FALLBACK[n % RON_SMS_FALLBACK.length];
 }

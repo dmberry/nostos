@@ -243,6 +243,41 @@
   #ronnotebook .nb-text { white-space: pre-wrap; }
   #ronnotebook-footer { display: flex; align-items: center; justify-content: space-between;
     margin-top: 10px; padding-top: 8px; border-top: 1px dashed rgba(40,30,10,0.35); }
+  /* The Nokia 3310 (docs/calypso-nokia-plan.md): the handset beside a blown-up
+     pea-green LCD — the phone screen as a terminal. Same palette as the SMS toast. */
+  #nokiaphone { display: none; position: fixed; inset: 0; z-index: 24;
+    background: rgba(0,0,0,0.72); align-items: center; justify-content: center; }
+  #nokiaphone .ph-shell { display: flex; align-items: center; gap: 26px;
+    background: #191c14; border: 1px solid rgba(159,185,138,0.35); border-radius: 14px;
+    padding: 22px 26px; box-shadow: 0 14px 44px rgba(0,0,0,0.6); }
+  #nokiaphone .ph-handset { height: min(430px, 66vh); width: auto; user-select: none;
+    filter: drop-shadow(0 8px 16px rgba(0,0,0,0.5)); }
+  #nokiaphone .ph-lcd { width: min(400px, 52vw); height: min(430px, 66vh);
+    display: flex; flex-direction: column; background: #9fb98a; border-radius: 6px;
+    border: 3px solid #10120c; padding: 10px 12px;
+    font: 13px/1.5 ui-monospace, 'Courier New', monospace; color: #2b3420;
+    background-image: repeating-linear-gradient(rgba(60,74,44,0) 0 2px, rgba(60,74,44,0.06) 2px 3px); }
+  #nokiaphone .ph-status { display: flex; align-items: center; justify-content: space-between;
+    font: bold 11px ui-monospace, monospace; letter-spacing: 0.08em;
+    border-bottom: 1px solid rgba(43,52,32,0.5); padding-bottom: 6px; }
+  #nokiaphone #ph-bars { font: bold 11px ui-monospace, monospace; letter-spacing: -1px; }
+  #nokiaphone .ph-tabs { display: flex; gap: 8px; margin: 8px 0 6px; }
+  #nokiaphone .ph-tabs button { flex: 1; font: bold 11px ui-monospace, monospace; letter-spacing: 0.08em;
+    background: transparent; color: #2b3420; border: 1px solid rgba(43,52,32,0.5);
+    border-radius: 3px; padding: 5px 0; cursor: pointer; }
+  #nokiaphone .ph-tabs button.on { background: #2b3420; color: #9fb98a; }
+  #nokiaphone #ph-thread { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 2px; white-space: pre-wrap; }
+  #nokiaphone #ph-thread .ph-you { text-align: right; margin: 4px 0 4px 40px; opacity: 0.85; }
+  #nokiaphone #ph-thread .ph-them { margin: 4px 40px 4px 0; }
+  #nokiaphone #ph-thread .ph-sys { text-align: center; font-size: 11px; opacity: 0.6; margin: 6px 0; }
+  #nokiaphone .ph-inputrow { display: flex; align-items: center; gap: 6px;
+    border-top: 1px solid rgba(43,52,32,0.5); padding-top: 8px; }
+  #nokiaphone #ph-input { flex: 1; background: transparent; border: none; outline: none;
+    font: 13px ui-monospace, 'Courier New', monospace; color: #2b3420; caret-color: #2b3420; }
+  #nokiaphone #ph-send { font: bold 11px ui-monospace, monospace; background: #2b3420; color: #9fb98a;
+    border: none; border-radius: 3px; padding: 4px 10px; cursor: pointer; }
+  #nokiaphone .ph-hint { font-size: 10px; opacity: 0.55; text-align: right; margin-top: 5px; }
+  @media (max-width: 720px) { #nokiaphone .ph-handset { display: none; } #nokiaphone .ph-lcd { width: 86vw; } }
   #ronnotebook-page-label { font: 12px ui-monospace, monospace; color: #6b6350; }
   .nb-btn { font: 700 13px ui-monospace, monospace; color: #2a2418; background: rgba(40,30,10,0.08);
     border: 1px solid rgba(40,30,10,0.3); border-radius: 4px; padding: 5px 12px; cursor: pointer; }
@@ -579,6 +614,21 @@
     <div id="ronnotebook-title">NOTEPAD</div>
     <div id="ronnotebook-body"></div>
     <div class="nb-hint">&larr; &rarr; to flip &middot; the drop-down jumps to any page &middot; &times; or click outside to close</div>
+  </div>
+</div>
+<div id="nokiaphone">
+  <div class="ph-shell">
+    <img class="ph-handset" src="assets/textures/nokia-3310.png" alt="">
+    <div class="ph-lcd">
+      <div class="ph-status"><span id="ph-bars"></span><span id="ph-title">MESSAGES</span><span class="ph-batt">&#9646;&#9646;&#9646;</span></div>
+      <div class="ph-tabs">
+        <button id="ph-to-calypso" class="on" type="button">CALYPSO</button>
+        <button id="ph-to-ron" type="button">RON</button>
+      </div>
+      <div id="ph-thread"></div>
+      <div class="ph-inputrow"><span class="ph-prompt">&gt;</span><input id="ph-input" type="text" autocomplete="off" spellcheck="false" maxlength="120"><button id="ph-send" type="button">send</button></div>
+      <div class="ph-hint">Enter to send &middot; Esc or click outside to close</div>
+    </div>
   </div>
 </div>
 <script type="module">

@@ -188,6 +188,8 @@ export class Player {
     this.calypsoHold = 0.65;                  // seven years kept: you begin already held (nokia.js HOLD_INIT)
     this.nokiaSent = new Set();
     this._nokiaIvIdx = 0;                     // cycles her intervention lines
+    this.phone = { item: 'nokia_3310', qty: 1 }; // the PHONE box beside the walkman (swappable in a later build)
+    this.nokiaLog = [];                       // the SMS threads: { th: 'CALYPSO'|'RON', from: 'you'|'them', text }
     this.pockets = [{ item: 'note_home', qty: 1 }, null, null, null]; // start with the Odyssey note in-pocket
     this.backpack = null;                    // {slots: [16], weapon} once found; dropped on death
     this.selectedPocket = null;              // 0-3 (pockets), 'bw' (backpack weapon), or null

@@ -88,6 +88,10 @@ export const BOAT_TEXTURES = [
 // not `loadDownscaled`). `noSail` is the wood boat you can lash together without
 // Calypso's recipe — launchable but never sea-ready; `greek` is the proper ship
 // built to her recipe (wood + oar + rope + sail) that actually leaves Ogygia.
+// The Nokia 3310 — the phone that would survive the apocalypse, and did. Drawn in
+// the dashboard's PHONE box and as the handset in the SMS modal (calypso-nokia plan).
+export const NOKIA_SPRITE = load(T + 'nokia-3310.png');
+
 export const SHIP_SPRITES = {
   noSail: load(T + 'ships/boat-no-sail.png'),
   greek: load(T + 'ships/greek-ship.png'),

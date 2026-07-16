@@ -14,7 +14,7 @@
 // imports nothing from renderer.js, so there is no import cycle.
 
 import { ITEMS, WEAPON_ORDER } from '../game/items.js'; // weapon-chart data
-import { PAPER_TEXTURE } from './textures.js'; // death-cert paper
+import { PAPER_TEXTURE, NOKIA_SPRITE } from './textures.js'; // death-cert paper; the 3310 in the PHONE box
 
 export const DASH_H = 78; // dashboard panel height
 
@@ -407,7 +407,7 @@ export const uiMethods = {
   // 84x48-feel pea-green backlit LCD in a dark plastic bezel, lower-right where a
   // phone sits (clear of the say() narration, lower-left), above the help hint.
   // t = { header, lines, ttl, total }.
-  drawNokiaToast(t) {
+  drawNokiaToast(t, bars = 4) {
     const ctx = this.ctx;
     const a = Math.min(Math.min(1, (t.total - t.ttl) / 0.22), Math.min(1, t.ttl / 0.8));
     if (a <= 0) return;
@@ -429,9 +429,13 @@ export const uiMethods = {
     ctx.fillStyle = 'rgba(60,74,44,0.10)';   // faint horizontal pixel grid
     for (let sy = y + 2; sy < y + H; sy += 3) ctx.fillRect(x, sy, W, 1);
     const INK = '#2b3420';
-    // Status row: signal bars (left), sender header, battery (right).
+    // Status row: LIVE signal bars (left — stronger the nearer you are to Calypso),
+    // sender header, battery (right).
+    for (let i = 0; i < 4; i++) {
+      ctx.fillStyle = i < bars ? INK : 'rgba(43,52,32,0.25)';
+      ctx.fillRect(x + padX + i * 4, y + 12 - i * 2 - 2, 3, i * 2 + 3);
+    }
     ctx.fillStyle = INK;
-    for (let i = 0; i < 4; i++) ctx.fillRect(x + padX + i * 4, y + 12 - i * 2 - 2, 3, i * 2 + 3);
     ctx.font = 'bold 11px ui-monospace, "Courier New", monospace';
     ctx.textAlign = 'center';
     ctx.fillText(t.header, x + W / 2, y + 12);
@@ -869,6 +873,29 @@ export const uiMethods = {
       ctx2.restore();
     }
     this.uiSlots.push({ x: sx, y: sy, w: P, h: P, kind: 'walkman' });
+    // The PHONE box, beside the deck (compact strip).
+    sx += P + 10;
+    this.drawLabel('FONE', sx, sy - 5);
+    this.drawPhoneBox(sx, sy, P, player, hud && hud.nokiaSignal || 0);
+  },
+
+  // The PHONE box: the Nokia 3310 in its cradle beside the walkman. Click it to
+  // open the SMS screen (main.js, slot kind 'phone'). The tiny bars in the corner
+  // are LIVE signal — they strengthen as you near Calypso, and die entirely off
+  // her island: the handset itself tells you whose network this is.
+  drawPhoneBox(x, y, s, player, bars) {
+    const ctx = this.ctx;
+    this.drawSlot(x, y, s, null, 0);
+    if (player.phone && NOKIA_SPRITE && NOKIA_SPRITE.complete && NOKIA_SPRITE.naturalWidth) {
+      const ih = s - 6;
+      const iw = ih * (NOKIA_SPRITE.naturalWidth / NOKIA_SPRITE.naturalHeight);
+      ctx.drawImage(NOKIA_SPRITE, x + (s - iw) / 2, y + 3, iw, ih);
+    }
+    for (let i = 0; i < 4; i++) {
+      ctx.fillStyle = i < (bars || 0) ? '#9fd058' : 'rgba(207,216,195,0.25)';
+      ctx.fillRect(x + s - 12 + i * 2.5, y + 9 - i * 1.6, 2, 2 + i * 1.6);
+    }
+    this.uiSlots.push({ x, y, w: s, h: s, kind: 'phone' });
   },
 
   drawDashboard(player, hud) {
@@ -1012,6 +1039,10 @@ export const uiMethods = {
           : 'stopped';
         this.drawWalkmanTicker(label, wmX - 2, top + 60, ws + 4, spinning);
       }
+      // The PHONE box, right beside the deck: the Nokia 3310 in its cradle.
+      const phX = wmX + ws + 18;
+      this.drawLabel('PHONE', phX, top + 14);
+      this.drawPhoneBox(phX, top + 20, ws, player, hud.nokiaSignal || 0);
     }
 
     // Thin dividers between the kit groups: HANDS | POCKETS | PACK | WALKMAN,

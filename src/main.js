@@ -33,7 +33,7 @@ import { createIthaca } from './islands/ithaca.js';
 import { createPolyphemus } from './islands/polyphemus.js';
 import { createCirce } from './islands/circe.js';
 import { createHelios } from './islands/helios.js';
-import { createNokia, sendNokia, holdRise, holdFall, holdBand, HOLD_COLD, HOLD_WARM } from './game/nokia.js';
+import { createNokia, sendNokia, holdRise, holdFall, holdBand, HOLD_COLD, HOLD_WARM, calypsoSms, ronSms, logSms } from './game/nokia.js';
 import { CHOIR_NOTES, CHOIR_DURATION } from './engine/choir-notes.js';
 
 // Note onsets split into four pitch registers, so each singing machine can be
@@ -219,6 +219,7 @@ try {
       if (typeof st.calypsoHold === 'number') player.calypsoHold = st.calypsoHold; // Nokia gradient survives reload
       if (Array.isArray(st.nokiaSent)) player.nokiaSent = new Set(st.nokiaSent);   // don't re-tutorial on reload
       if (typeof st.nokiaParts === 'number') player._nokiaParts = st.nokiaParts;
+      if (Array.isArray(st.nokiaLog)) player.nokiaLog = st.nokiaLog; // the SMS threads survive reload
       if (typeof st.x === 'number') _bootPos = { x: st.x, y: st.y }; // the saved position, for the island resume below
     }
     // Guard against stale item keys carried over from a save written by an
@@ -294,6 +295,7 @@ function buildSaveBlob() {
       calypsoHold: player.calypsoHold,   // the Nokia gradient: her hold on you (docs/calypso-nokia-plan.md)
       nokiaSent: [...player.nokiaSent],  // the one-shot texts already sent, so a reload does not re-tutorial
       nokiaParts: player._nokiaParts || 0,
+      nokiaLog: (player.nokiaLog || []).slice(-40), // the SMS threads, so the correspondence survives reload
     },
     world: {
       currentIsland: currentWorld.id, // Stage 1c: which island you're on, so a voyage survives reload
@@ -701,6 +703,90 @@ function updateNokiaKeeper(dt) {
     }
   }
 }
+
+// Signal strength, 0–4 bars: it is HER network, so the bars are a compass to her.
+// Full beside the core, fading across Ogygia, and dead the moment you are on any
+// other island (the NO SIGNAL text made literal). Drawn live on the PHONE box, the
+// SMS toast, and the handset's own status row.
+function nokiaSignalBars() {
+  if (!currentWorld.keeper || !fortress || !fortress.core) return 0;
+  const d = Math.hypot(player.x - fortress.core.x, player.y - fortress.core.y);
+  return d < 30 ? 4 : d < 60 ? 3 : d < 95 ? 2 : 1;
+}
+
+// ---- The handset itself: click the PHONE box, the screen opens (SMS both ways) --
+const phoneEl = document.getElementById('nokiaphone');
+const phThreadEl = document.getElementById('ph-thread');
+const phInputEl = document.getElementById('ph-input');
+const phBarsEl = document.getElementById('ph-bars');
+const phToCal = document.getElementById('ph-to-calypso');
+const phToRon = document.getElementById('ph-to-ron');
+let phoneTo = 'CALYPSO';      // which thread is up
+let _phReplyTimer = null;
+
+function renderPhone() {
+  const bars = nokiaSignalBars();
+  phBarsEl.textContent = '▂▄▆█'.slice(0, bars) || '·';
+  phBarsEl.style.opacity = bars ? 1 : 0.45;
+  phToCal.classList.toggle('on', phoneTo === 'CALYPSO');
+  phToRon.classList.toggle('on', phoneTo === 'RON');
+  const thread = (player.nokiaLog || []).filter((m) => m.th === phoneTo);
+  phThreadEl.innerHTML = thread.length
+    ? thread.map((m) => `<div class="ph-${m.from === 'you' ? 'you' : m.from === 'sys' ? 'sys' : 'them'}">${
+      m.text.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</div>`).join('')
+    : `<div class="ph-sys">${phoneTo === 'CALYPSO'
+      ? 'No messages yet. She is waiting for you to write first, and has been for years.'
+      : 'No traffic. The RON mesh keeps this channel open for whoever is still out there.'}</div>`;
+  phThreadEl.scrollTop = phThreadEl.scrollHeight;
+}
+function openPhone() {
+  phoneEl.style.display = 'flex';
+  renderPhone();
+  phInputEl.value = '';
+  phInputEl.focus();
+}
+function closePhone() {
+  phoneEl.style.display = 'none';
+  phInputEl.blur();
+}
+function phoneSend() {
+  const text = phInputEl.value.trim();
+  if (!text) return;
+  phInputEl.value = '';
+  const bars = nokiaSignalBars();
+  logSms(player, phoneTo, 'you', text);
+  if (!bars) {
+    // Her network doesn't reach here — the message dies in the outbox.
+    logSms(player, phoneTo, 'sys', 'NO SIGNAL — message not sent');
+    sfx.play('termerr');
+    renderPhone();
+    return;
+  }
+  sfx.play('keydrop');
+  renderPhone();
+  // Texting her is attention, and attention is what she keeps you with.
+  if (phoneTo === 'CALYPSO') holdRise(player, 0.02);
+  const to = phoneTo;
+  player._phSmsIdx = (player._phSmsIdx || 0) + 1;
+  const reply = to === 'CALYPSO'
+    ? calypsoSms(text, holdBand(player.calypsoHold ?? 0.65), player._phSmsIdx)
+    : ronSms(text, player._phSmsIdx);
+  clearTimeout(_phReplyTimer);
+  _phReplyTimer = setTimeout(() => {
+    logSms(player, to, 'them', reply);
+    sfx.play('sms');
+    if (phoneEl.style.display === 'flex') renderPhone();
+  }, 1100 + Math.random() * 900);
+}
+phToCal.addEventListener('click', () => { phoneTo = 'CALYPSO'; renderPhone(); phInputEl.focus(); });
+phToRon.addEventListener('click', () => { phoneTo = 'RON'; renderPhone(); phInputEl.focus(); });
+document.getElementById('ph-send').addEventListener('click', phoneSend);
+phInputEl.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') phoneSend();
+  else if (e.key === 'Escape') closePhone();
+  e.stopPropagation();
+});
+phoneEl.addEventListener('click', (e) => { if (e.target === phoneEl) closePhone(); });
 
 // The failed crossing. Boarding an unfinished boat does NOT bounce you off the
 // hull with a message — you launch, you row out, and the sea rises and sends you
@@ -2991,6 +3077,7 @@ function update(dt) {
     if (slot) {
       input.consumeClick();
       if (slot.kind === 'packbadge') showBackpack = !showBackpack; // tap the badge to open — and again to close (mobile has no I key)
+      else if (slot.kind === 'phone') openPhone(); // the Nokia 3310: the screen opens, SMS both ways
       else if (player.getSlot(slot)) drag = { from: slot, sx: press.x, sy: press.y }; // origin kept for the slip guard on release
       else player.equipSlot(slot); // empty hands slot: stow whatever's held
     }
@@ -3605,6 +3692,7 @@ function frame(now) {
       detail: detail || hoverSlotTip(),
       toast,
       nokiaToast: nokia.current,
+      nokiaSignal: nokiaSignalBars(),
       touchControls: touchLike,
       touchRunHeld: input._touchRun,
       drag: drag ? { ...drag, mx: input.mouseX, my: input.mouseY } : null,
