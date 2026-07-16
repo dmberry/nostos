@@ -406,8 +406,9 @@ export const uiMethods = {
   // The Nokia 3310 SMS toast — Calypso's texts (docs/calypso-nokia-plan.md). An
   // 84x48-feel pea-green backlit LCD in a dark plastic bezel, lower-right where a
   // phone sits (clear of the say() narration, lower-left), above the help hint.
-  // t = { header, lines, ttl, total }.
-  drawNokiaToast(t, bars = 4) {
+  // On touch screens it slides left so it never covers the RUN/JUMP buttons,
+  // which own that same lower-right corner. t = { header, lines, ttl, total }.
+  drawNokiaToast(t, bars = 4, touch = false) {
     const ctx = this.ctx;
     const a = Math.min(Math.min(1, (t.total - t.ttl) / 0.22), Math.min(1, t.ttl / 0.8));
     if (a <= 0) return;
@@ -418,7 +419,9 @@ export const uiMethods = {
     const lines = [];
     for (const ln of t.lines) lines.push(...this._wrapText(ctx, ln, W - padX * 2));
     const H = headH + lines.length * lineH + 12;
-    const x = this.w - W - 14;
+    // Touch: the RUN/JUMP column occupies roughly the last 90px of the right
+    // edge above the dashboard — step the toast left of it.
+    const x = this.w - W - 14 - (touch ? 90 : 0);
     const y = (this.hudTop != null ? this.hudTop : this.h - 100) - H - 40;
     // Dark plastic bezel.
     ctx.fillStyle = '#191c14';
@@ -873,17 +876,17 @@ export const uiMethods = {
       ctx2.restore();
     }
     this.uiSlots.push({ x: sx, y: sy, w: P, h: P, kind: 'walkman' });
-    // The PHONE box, beside the deck (compact strip).
+    // The PHONE box, beside the deck (compact strip). Signal bars live next to
+    // the label, clear of the handset sprite.
     sx += P + 10;
-    this.drawLabel('FONE', sx, sy - 5);
-    this.drawPhoneBox(sx, sy, P, player, hud && hud.nokiaSignal || 0);
+    this.drawLabel('PHONE', sx, sy - 5);
+    this.drawSignalBars(sx + 34, sy - 5, hud && hud.nokiaSignal || 0);
+    this.drawPhoneBox(sx, sy, P, player);
   },
 
   // The PHONE box: the Nokia 3310 in its cradle beside the walkman. Click it to
-  // open the SMS screen (main.js, slot kind 'phone'). The tiny bars in the corner
-  // are LIVE signal — they strengthen as you near Calypso, and die entirely off
-  // her island: the handset itself tells you whose network this is.
-  drawPhoneBox(x, y, s, player, bars) {
+  // open the SMS screen (main.js, slot kind 'phone').
+  drawPhoneBox(x, y, s, player) {
     const ctx = this.ctx;
     this.drawSlot(x, y, s, null, 0);
     if (player.phone && NOKIA_SPRITE && NOKIA_SPRITE.complete && NOKIA_SPRITE.naturalWidth) {
@@ -891,11 +894,19 @@ export const uiMethods = {
       const iw = ih * (NOKIA_SPRITE.naturalWidth / NOKIA_SPRITE.naturalHeight);
       ctx.drawImage(NOKIA_SPRITE, x + (s - iw) / 2, y + 3, iw, ih);
     }
+    this.uiSlots.push({ x, y, w: s, h: s, kind: 'phone' });
+  },
+
+  // LIVE signal bars, drawn beside the PHONE label (not on the handset itself) —
+  // they strengthen as you near Calypso, and die entirely off her island: the
+  // handset tells you whose network this is. (x, y) is the label baseline to
+  // draw just right of.
+  drawSignalBars(x, y, bars) {
+    const ctx = this.ctx;
     for (let i = 0; i < 4; i++) {
       ctx.fillStyle = i < (bars || 0) ? '#9fd058' : 'rgba(207,216,195,0.25)';
-      ctx.fillRect(x + s - 12 + i * 2.5, y + 9 - i * 1.6, 2, 2 + i * 1.6);
+      ctx.fillRect(x + i * 3, y - 2 - i * 1.6, 2, 2 + i * 1.6);
     }
-    this.uiSlots.push({ x, y, w: s, h: s, kind: 'phone' });
   },
 
   drawDashboard(player, hud) {
@@ -1040,9 +1051,11 @@ export const uiMethods = {
         this.drawWalkmanTicker(label, wmX - 2, top + 60, ws + 4, spinning);
       }
       // The PHONE box, right beside the deck: the Nokia 3310 in its cradle.
+      // Signal bars sit next to the label, clear of the handset sprite.
       const phX = wmX + ws + 18;
       this.drawLabel('PHONE', phX, top + 14);
-      this.drawPhoneBox(phX, top + 20, ws, player, hud.nokiaSignal || 0);
+      this.drawSignalBars(phX + 34, top + 14, hud.nokiaSignal || 0);
+      this.drawPhoneBox(phX, top + 20, ws, player);
     }
 
     // Thin dividers between the kit groups: HANDS | POCKETS | PACK | WALKMAN,

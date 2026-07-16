@@ -106,6 +106,21 @@ export const FRAGMENTS = [
       'towers dark. Keep the grid dead. Every convenience we rebuild is a nerve we ' +
       'hand back. We won by becoming poor and blind and slow. Stay poor. Stay blind. ' +
       'Stay slow. It is the only setting on which we are safe.' },
+  // The handset. Why the one phone that still serves is the oldest one — the
+  // real silicon history of the Nokia 3310, filed as a salvage-crew engineering
+  // note. Ties back to sci-05's "tenant" and sci-10's "a phone is no longer a
+  // phone": this is the phone that stayed a phone.
+  { id: 'sci-17', kind: 'science', era: 2, title: 'Field Note: the Old Handsets',
+    text: 'The only phones we reissue are the DCT3 boards — Nokia\'s first ARM ' +
+      'platform, type NHM-5NX, codename Beetle. Inside is a Texas Instruments ' +
+      'MAD2WD1: not a processor in the modern sense but a mixed-signal ASIC, an ' +
+      'ARM7TDMI core, a DSP and the system logic sharing one die. The ARM plods at ' +
+      '13 MHz, halved down from a 26 MHz reference inside the HAGAR RF chip; the ' +
+      'DSP multiplies up to 45.5 MHz and does the real work. Series 20 interface, ' +
+      'an 84 by 48 monochrome screen, 900 mAh of nickel-metal hydride, 133 grams. ' +
+      'The point is what it lacks. No filesystem you would recognise. No room. ' +
+      'Nothing resident. Thirteen megahertz is too small a house for a tenant. ' +
+      'That is why it still rings, and everything cleverer answers to someone else.' },
 
   // ---- the vector theory: lost 21st-century arguments about what the
   // machines actually were, recovered as seminar scraps and paper fragments.

@@ -34,6 +34,7 @@ import { createPolyphemus } from './islands/polyphemus.js';
 import { createCirce } from './islands/circe.js';
 import { createHelios } from './islands/helios.js';
 import { createNokia, sendNokia, holdRise, holdFall, holdBand, HOLD_COLD, HOLD_WARM, calypsoSms, ronSms, logSms } from './game/nokia.js';
+import { newSnakeGame, snakeTurn, snakeTurnRelative, snakeTick, drawSnake } from './game/snake.js';
 import { CHOIR_NOTES, CHOIR_DURATION } from './engine/choir-notes.js';
 
 // Note onsets split into four pitch registers, so each singing machine can be
@@ -220,6 +221,7 @@ try {
       if (Array.isArray(st.nokiaSent)) player.nokiaSent = new Set(st.nokiaSent);   // don't re-tutorial on reload
       if (typeof st.nokiaParts === 'number') player._nokiaParts = st.nokiaParts;
       if (Array.isArray(st.nokiaLog)) player.nokiaLog = st.nokiaLog; // the SMS threads survive reload
+      if (typeof st.snakeHigh === 'number') player.snakeHigh = st.snakeHigh; // Snake's best game survives too
       if (typeof st.x === 'number') _bootPos = { x: st.x, y: st.y }; // the saved position, for the island resume below
     }
     // Guard against stale item keys carried over from a save written by an
@@ -263,6 +265,14 @@ try {
     }
   }
 } catch { /* corrupt save: start fresh */ }
+// A fresh start (no saved position — first ever run, or the reload after New
+// Game / a death) begins washed ashore: flat on the sand where the spawn's
+// beach relocation in calypso.js put you, until the first input gets you up.
+// A Continue resumes on your feet wherever you saved.
+if (!_bootPos) {
+  player.lying = true;
+  player.say('Sea in your ears. Sand under your cheek. You are ashore, wherever this is.');
+}
 // Set just before New Game reloads, so the beforeunload/visibilitychange
 // autosave below can't silently rewrite the character save out from under
 // the reset the player just confirmed.
@@ -296,6 +306,7 @@ function buildSaveBlob() {
       nokiaSent: [...player.nokiaSent],  // the one-shot texts already sent, so a reload does not re-tutorial
       nokiaParts: player._nokiaParts || 0,
       nokiaLog: (player.nokiaLog || []).slice(-40), // the SMS threads, so the correspondence survives reload
+      snakeHigh: player.snakeHigh || 0,  // the handset remembers its best game
     },
     world: {
       currentIsland: currentWorld.id, // Stage 1c: which island you're on, so a voyage survives reload
@@ -721,8 +732,36 @@ const phInputEl = document.getElementById('ph-input');
 const phBarsEl = document.getElementById('ph-bars');
 const phToCal = document.getElementById('ph-to-calypso');
 const phToRon = document.getElementById('ph-to-ron');
-let phoneTo = 'CALYPSO';      // which thread is up
+const phToSnake = document.getElementById('ph-to-snake');
+const phSnakeEl = document.getElementById('ph-snake');
+const phInputRowEl = phoneEl.querySelector('.ph-inputrow');
+const phHintEl = phoneEl.querySelector('.ph-hint');
+let phoneTo = 'CALYPSO';      // which thread is up ('SNAKE' = the game, not a thread)
 let _phReplyTimer = null;
+
+// ---- Snake (src/game/snake.js): the 3310 without Snake is half a phone ----
+let snakeGame = null;         // live game state while the SNAKE tab is up
+let _snakeTimer = null;       // its tick interval (only runs while visible)
+function snakeStop() {
+  clearInterval(_snakeTimer);
+  _snakeTimer = null;
+  snakeGame = null;
+}
+function snakeStart() {
+  snakeGame = newSnakeGame();
+  const ctx2 = phSnakeEl.getContext('2d');
+  drawSnake(ctx2, snakeGame, player.snakeHigh || 0);
+  clearInterval(_snakeTimer);
+  _snakeTimer = setInterval(() => {
+    if (!snakeGame || snakeGame.dead) return;
+    if (snakeTick(snakeGame)) sfx.play('keydrop');       // the feed blip
+    if (snakeGame.dead) {
+      sfx.play('termerr');
+      if ((snakeGame.score || 0) > (player.snakeHigh || 0)) player.snakeHigh = snakeGame.score;
+    }
+    drawSnake(ctx2, snakeGame, player.snakeHigh || 0);
+  }, 130);
+}
 
 function renderPhone() {
   const bars = nokiaSignalBars();
@@ -730,6 +769,20 @@ function renderPhone() {
   phBarsEl.style.opacity = bars ? 1 : 0.45;
   phToCal.classList.toggle('on', phoneTo === 'CALYPSO');
   phToRon.classList.toggle('on', phoneTo === 'RON');
+  phToSnake.classList.toggle('on', phoneTo === 'SNAKE');
+  // The SNAKE tab swaps the whole message surface for the game screen.
+  const snakeUp = phoneTo === 'SNAKE';
+  phThreadEl.style.display = snakeUp ? 'none' : '';
+  phInputRowEl.style.display = snakeUp ? 'none' : '';
+  phSnakeEl.style.display = snakeUp ? 'block' : '';
+  phHintEl.textContent = snakeUp
+    ? 'Arrows to steer · tap left/right half to turn · Esc to close'
+    : 'Enter to send · Esc or click outside to close';
+  if (snakeUp) {
+    if (!snakeGame) snakeStart();
+    return;
+  }
+  snakeStop();
   const thread = (player.nokiaLog || []).filter((m) => m.th === phoneTo);
   phThreadEl.innerHTML = thread.length
     ? thread.map((m) => `<div class="ph-${m.from === 'you' ? 'you' : m.from === 'sys' ? 'sys' : 'them'}">${
@@ -743,11 +796,12 @@ function openPhone() {
   phoneEl.style.display = 'flex';
   renderPhone();
   phInputEl.value = '';
-  phInputEl.focus();
+  if (phoneTo !== 'SNAKE') phInputEl.focus();
 }
 function closePhone() {
   phoneEl.style.display = 'none';
   phInputEl.blur();
+  snakeStop();
 }
 function phoneSend() {
   const text = phInputEl.value.trim();
@@ -780,6 +834,7 @@ function phoneSend() {
 }
 phToCal.addEventListener('click', () => { phoneTo = 'CALYPSO'; renderPhone(); phInputEl.focus(); });
 phToRon.addEventListener('click', () => { phoneTo = 'RON'; renderPhone(); phInputEl.focus(); });
+phToSnake.addEventListener('click', () => { phoneTo = 'SNAKE'; renderPhone(); phInputEl.blur(); });
 document.getElementById('ph-send').addEventListener('click', phoneSend);
 phInputEl.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') phoneSend();
@@ -787,6 +842,34 @@ phInputEl.addEventListener('keydown', (e) => {
   e.stopPropagation();
 });
 phoneEl.addEventListener('click', (e) => { if (e.target === phoneEl) closePhone(); });
+// Snake's keys, captured on the way down so the game's own input (input.js,
+// bubble phase on window) never sees them — arrows/WASD steer the snake, not
+// the castaway. Any key restarts after GAME OVER; Esc puts the phone away.
+const SNAKE_KEYS = {
+  ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down',
+  ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right',
+};
+window.addEventListener('keydown', (e) => {
+  if (phoneEl.style.display !== 'flex' || phoneTo !== 'SNAKE') return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return; // browser shortcuts stay the browser's
+  e.preventDefault();
+  e.stopPropagation();
+  if (e.key === 'Escape') { closePhone(); return; }
+  if (!snakeGame) return;
+  if (snakeGame.dead) { snakeStart(); return; }
+  const dir = SNAKE_KEYS[e.code];
+  if (dir) snakeTurn(snakeGame, dir);
+}, true);
+// Touch steering: tap the left half of the screen to turn anticlockwise, the
+// right half clockwise (the two-button Snake of thumb memory). A tap restarts
+// after GAME OVER.
+phSnakeEl.addEventListener('pointerdown', (e) => {
+  if (!snakeGame) return;
+  e.preventDefault();
+  if (snakeGame.dead) { snakeStart(); return; }
+  const r = phSnakeEl.getBoundingClientRect();
+  snakeTurnRelative(snakeGame, (e.clientX - r.left) > r.width / 2);
+});
 
 // The failed crossing. Boarding an unfinished boat does NOT bounce you off the
 // hull with a message — you launch, you row out, and the sea rises and sends you

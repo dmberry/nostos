@@ -382,6 +382,20 @@ export function createIsland(seed) {
   // standing). Beyond the outer water band the map edge is still the hard bound,
   // with the open ocean drawn past it.
   stampCoast(map, spawn);
+  // Washed ashore: the game starts on the beach itself, not on the road into
+  // town. Walk the spawn row east until the sea and take the last dry sand
+  // tile before it — that is where the water left you (main.js starts a fresh
+  // game lying there). Falls back to the inland spawn if the row somehow has
+  // no sand (it always does; the coast band guarantees it).
+  {
+    const ry = Math.floor(spawn.y);
+    for (let x = map.w - 1; x > Math.floor(spawn.x); x--) {
+      const f = map.floorAt(x, ry);
+      if (f === 'sea') continue;                    // still in the water
+      if (f === 'sand' && !map.objectAt(x, ry)) { spawn.x = x + 0.5; spawn.y = ry + 0.5; }
+      break;                                        // first dry tile decides it
+    }
+  }
   // Ruined marble columns: a few groves of fallen temple columns strewn across
   // the island, after the coast so none land in the sea.
   // Grove centres are kept: standing among the old stones heals you faster

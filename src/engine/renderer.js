@@ -637,7 +637,7 @@ export class Renderer {
     }
     if (hud.touchControls) this.drawTouchControls(hud);
     if (hud.toast) this.drawToast(hud.toast);
-    if (hud.nokiaToast) this.drawNokiaToast(hud.nokiaToast, hud.nokiaSignal);
+    if (hud.nokiaToast) this.drawNokiaToast(hud.nokiaToast, hud.nokiaSignal, !!hud.touchControls);
     if (hud.detail) this.drawDetail(hud.detail);
     if (hud.drag) this.drawDragGhost(hud.drag, player);
     if (player.torpor > 0) this.drawTorporHaze(player.torpor);
@@ -4178,9 +4178,11 @@ export class Renderer {
       return;
     }
 
-    // Resting: the character lies flat on the ground, tipped onto its back,
-    // no tool in hand, with a wide flat shadow and drifting sleep 'z's.
-    if (player.resting) {
+    // Resting — or washed ashore (player.lying, the fresh-game start): the
+    // character lies flat on the ground, tipped onto its back, no tool in
+    // hand, with a wide flat shadow. Only a rest earns the drifting sleep
+    // 'z's; the castaway on the sand is out cold, not napping.
+    if (player.resting || player.lying) {
       ctx.fillStyle = 'rgba(0,0,0,0.26)';
       ctx.beginPath();
       ctx.ellipse(c.x, c.y + 2, 17, 6, 0, 0, Math.PI * 2);
@@ -4199,17 +4201,19 @@ export class Renderer {
         ctx.fillStyle = '#d9b48c';
         ctx.beginPath(); ctx.arc(c.x - 9, c.y - 4, 5, 0, Math.PI * 2); ctx.fill();
       }
-      const t = performance.now() / 620;
-      ctx.font = '600 11px system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      for (let i = 0; i < 3; i++) {
-        const ph = (t + i * 0.6) % 3;
-        ctx.globalAlpha = Math.max(0, 0.85 - ph / 3);
-        ctx.fillStyle = 'rgba(232,236,244,0.9)';
-        ctx.fillText('z', c.x + 12 + ph * 4, c.y - 16 - ph * 7);
+      if (player.resting) {
+        const t = performance.now() / 620;
+        ctx.font = '600 11px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        for (let i = 0; i < 3; i++) {
+          const ph = (t + i * 0.6) % 3;
+          ctx.globalAlpha = Math.max(0, 0.85 - ph / 3);
+          ctx.fillStyle = 'rgba(232,236,244,0.9)';
+          ctx.fillText('z', c.x + 12 + ph * 4, c.y - 16 - ph * 7);
+        }
+        ctx.globalAlpha = 1;
+        ctx.textAlign = 'left';
       }
-      ctx.globalAlpha = 1;
-      ctx.textAlign = 'left';
       return;
     }
 

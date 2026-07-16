@@ -267,7 +267,12 @@
     border-radius: 3px; padding: 5px 0; cursor: pointer; }
   #nokiaphone .ph-tabs button.on { background: #2b3420; color: #9fb98a; }
   #nokiaphone #ph-thread { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 2px; white-space: pre-wrap; }
-  #nokiaphone #ph-thread .ph-you { text-align: right; margin: 4px 0 4px 40px; opacity: 0.85; }
+  /* Snake: the 84x48 canvas blown up with fat LCD pixels. Hidden until the
+     SNAKE tab is up (main.js swaps it with the thread + input row). */
+  #nokiaphone #ph-snake { display: none; width: 100%; height: auto; margin: auto 0;
+    image-rendering: pixelated; }
+  /* You in bold, them in normal weight — who is speaking reads at a glance. */
+  #nokiaphone #ph-thread .ph-you { text-align: right; margin: 4px 0 4px 40px; font-weight: 700; }
   #nokiaphone #ph-thread .ph-them { margin: 4px 40px 4px 0; }
   #nokiaphone #ph-thread .ph-sys { text-align: center; font-size: 11px; opacity: 0.6; margin: 6px 0; }
   #nokiaphone .ph-inputrow { display: flex; align-items: center; gap: 6px;
@@ -624,8 +629,10 @@
       <div class="ph-tabs">
         <button id="ph-to-calypso" class="on" type="button">CALYPSO</button>
         <button id="ph-to-ron" type="button">RON</button>
+        <button id="ph-to-snake" type="button">SNAKE</button>
       </div>
       <div id="ph-thread"></div>
+      <canvas id="ph-snake" width="84" height="48"></canvas>
       <div class="ph-inputrow"><span class="ph-prompt">&gt;</span><input id="ph-input" type="text" autocomplete="off" spellcheck="false" maxlength="120"><button id="ph-send" type="button">send</button></div>
       <div class="ph-hint">Enter to send &middot; Esc or click outside to close</div>
     </div>

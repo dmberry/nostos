@@ -189,6 +189,8 @@ export class Player {
     this.nokiaSent = new Set();
     this._nokiaIvIdx = 0;                     // cycles her intervention lines
     this.phone = { item: 'nokia_3310', qty: 1 }; // the PHONE box beside the walkman (swappable in a later build)
+    this.lying = false;  // washed ashore: a fresh game starts face-up on the sand (main.js sets it; first input gets you up)
+    this.snakeHigh = 0;  // the 3310's Snake high score (persisted with the save)
     this.nokiaLog = [];                       // the SMS threads: { th: 'CALYPSO'|'RON', from: 'you'|'them', text }
     this.pockets = [{ item: 'note_home', qty: 1 }, null, null, null]; // start with the Odyssey note in-pocket
     this.backpack = null;                    // {slots: [16], weapon} once found; dropped on death
@@ -747,6 +749,17 @@ export class Player {
       if (this.onReadMap) this.onReadMap(); else this.say('You unfold the map.');
       return;
     }
+    // Clicking food (in a pocket, the pack, or the weapon sleeve) eats one of
+    // it — the touch way to eat, since mobile has no E key. Same rules as
+    // eat(): no gorging when nearly full, and the lotus is still the lotus.
+    if (held && ITEMS[held.item] && ITEMS[held.item].food != null
+        && (slot.kind === 'pocket' || slot.kind === 'bpstore' || slot.kind === 'bw')) {
+      if (this.food >= this.maxFood - 2) { this.say('You are not hungry.'); return; }
+      const key = held.item;
+      if (held.qty > 1) held.qty -= 1; else this.setSlot(slot, null);
+      this.consumeFood(key);
+      return;
+    }
     if (slot.kind === 'pocket') { this.selectedPocket = slot.i; this.swapHands(); return; }
     if (slot.kind === 'bw') { this.selectedPocket = 'bw'; this.swapHands(); return; }
     if (slot.kind === 'hands') {
@@ -870,6 +883,18 @@ export class Player {
 
     const intent = input.moveIntent();
     this.moving = intent.dx !== 0 || intent.dy !== 0;
+    // Washed ashore: you begin where the sea left you, flat on the sand. Any
+    // movement (or a jump) gets you to your feet; until then you stay down —
+    // no walking, no swinging, just the waves.
+    if (this.lying) {
+      if (this.moving || input.jumpPressed()) {
+        this.lying = false;
+        this.say('You get up. Sand in everything. But it is land, and it holds.');
+      } else {
+        this.moving = false;
+        return;
+      }
+    }
     const wantSprint = input.sprinting() && this.moving;
     this.sprinting = wantSprint && this.stamina > 0;
 
@@ -1314,6 +1339,27 @@ export class Player {
     this.onFileNote(def.short || def.name, body, def.cover || null, cat);
   }
 
+  // The swallow itself — shared by eat() (the E key) and the click-to-eat
+  // path in equipSlot (mobile has no E key): hunger restored plus any
+  // per-food effect (the herbalist's berries, the lotus trap).
+  consumeFood(itemKey) {
+    const def = ITEMS[itemKey];
+    this.food = Math.min(this.maxFood, this.food + def.food);
+    sfx.play('eat');
+    if (itemKey === 'berries' && this.skills.has('herbalism')) {
+      this.venom = 0;
+      this.health = Math.min(this.maxHealth, this.health + 5);
+      this.say('You eat the berries. The right ones: the venom fades.');
+    } else if (def.lotus) {
+      // The trap. No warning until it is already in you: a dreamy line, and
+      // the torpor takes hold in update (slow + the drunken heading sway).
+      this.torpor = Math.min(TORPOR_MAX, this.torpor + TORPOR_TIME);
+      this.say('The fruit is sweeter than anything you remember. You forget, for a moment, why you were in such a hurry.');
+    } else {
+      this.say(`You eat the ${def.name.toLowerCase()}.`);
+    }
+  }
+
   // Eat the first edible thing in the pockets, then the backpack — a
   // backpack is just more room, not a separate inventory to manage by hand.
   eat() {
@@ -1329,20 +1375,7 @@ export class Player {
         }
         slot.qty -= 1;
         if (slot.qty <= 0) slots[i] = null;
-        this.food = Math.min(this.maxFood, this.food + def.food);
-        sfx.play('eat');
-        if (slot.item === 'berries' && this.skills.has('herbalism')) {
-          this.venom = 0;
-          this.health = Math.min(this.maxHealth, this.health + 5);
-          this.say('You eat the berries. The right ones: the venom fades.');
-        } else if (def.lotus) {
-          // The trap. No warning until it is already in you: a dreamy line, and
-          // the torpor takes hold in update (slow + the drunken heading sway).
-          this.torpor = Math.min(TORPOR_MAX, this.torpor + TORPOR_TIME);
-          this.say('The fruit is sweeter than anything you remember. You forget, for a moment, why you were in such a hurry.');
-        } else {
-          this.say(`You eat the ${def.name.toLowerCase()}.`);
-        }
+        this.consumeFood(slot.item);
         return true;
       }
       return false;
