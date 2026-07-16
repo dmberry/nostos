@@ -1,8 +1,14 @@
 # Build: the Nokia 3310 — Calypso texts you (Ogygia rework, phone-first)
 
-**Status: S1–S3 BUILT (v1.112). Gradient + phone-first, approved 2026-07-15.
-The depart-mode flip (R3) and the openable phone / Snake (S4) remain deferred.
-Draft copy is live and flagged for David's voice pass before it is canon.**
+**Status: S1–S3 BUILT (v1.112); openable phone BUILT (v1.115, 2026-07-16) —
+PHONE dashboard slot beside the walkman opens a handset+LCD modal with CALYPSO
+and RON SMS threads, keyword responders (calypsoSms by hold band, ronSms in
+radio voice), signal bars scaling with distance to Calypso's core, no-signal
+send failure off-island, and a persisted nokiaLog. Texting Calypso nudges hold
++0.02. `player.phone` slot ready for future handset swaps. The depart-mode
+flip (R3) and Snake remain deferred. Draft copy (including the new SMS
+responder tables) is live and flagged for David's voice pass before it is
+canon.**
 
 ## 1. The reframe this build implements
 
