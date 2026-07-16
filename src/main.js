@@ -776,8 +776,8 @@ function renderPhone() {
   phInputRowEl.style.display = snakeUp ? 'none' : '';
   phSnakeEl.style.display = snakeUp ? 'block' : '';
   phHintEl.textContent = snakeUp
-    ? 'Arrows to steer · tap left/right half to turn · Esc to close'
-    : 'Enter to send · Esc or click outside to close';
+    ? 'Arrows to steer · tap left/right half to turn · Esc or ✕ to close'
+    : 'Enter to send · Esc, ✕, or a click off the screen to close';
   if (snakeUp) {
     if (!snakeGame) snakeStart();
     return;
@@ -841,7 +841,14 @@ phInputEl.addEventListener('keydown', (e) => {
   else if (e.key === 'Escape') closePhone();
   e.stopPropagation();
 });
-phoneEl.addEventListener('click', (e) => { if (e.target === phoneEl) closePhone(); });
+// Click anywhere off the SCREEN — the backdrop, the phone's own body, even
+// the sprite's transparent margins (which used to swallow backdrop clicks
+// without closing) — and the phone goes back in the pocket. Only the live
+// LCD keeps the tap.
+phoneEl.addEventListener('click', (e) => { if (!e.target.closest('.ph-lcd')) closePhone(); });
+// The X on the screen itself: the reliable way out on touch, where there is
+// no Esc key (same pattern as the notebook's close).
+document.getElementById('ph-close').addEventListener('click', closePhone);
 // Snake's keys, captured on the way down so the game's own input (input.js,
 // bubble phase on window) never sees them — arrows/WASD steer the snake, not
 // the castaway. Any key restarts after GAME OVER; Esc puts the phone away.
@@ -2877,6 +2884,12 @@ function update(dt) {
   if (input.inventoryPressed()) showBackpack = !showBackpack;
   if (input.skillsPressed()) showSkills = !showSkills;
   if (input.weaponChartPressed()) showWeapons = !showWeapons;
+  // O: the phone, in and out of the pocket. Closing by key only matters when
+  // the thread input hasn't got focus (typing captures the keyboard; Esc and
+  // the X still close from inside).
+  if (input.phonePressed()) {
+    if (phoneEl.style.display === 'flex') closePhone(); else openPhone();
+  }
   if (input.pausePressed() && !player.deathCert) {
     paused = !paused;
     player.say(paused ? 'Paused. Press P to resume.' : 'Back in it.');

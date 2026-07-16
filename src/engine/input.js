@@ -7,7 +7,7 @@ const TRACKED = new Set([
   'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
   'ShiftLeft', 'ShiftRight',
   'KeyE', 'Slash', 'Space', 'KeyQ', 'KeyH', 'KeyR', 'KeyG', 'KeyF', 'KeyI', 'KeyP', 'KeyZ', 'KeyJ',
-  'KeyK', 'KeyC', 'KeyM', 'KeyV', 'KeyN', 'KeyB', 'KeyX', 'KeyT', 'BracketRight', 'Escape',
+  'KeyK', 'KeyC', 'KeyM', 'KeyO', 'KeyV', 'KeyN', 'KeyB', 'KeyX', 'KeyT', 'BracketRight', 'Escape',
   'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5',
 ]);
 
@@ -293,6 +293,12 @@ export class Input {
   // a not-yet-built phone feature and was otherwise unused.
   musicTogglePressed() {
     return this.consumePress('KeyM');
+  }
+
+  // O: the phone. Opens the 3310's screen (and closes it again, when the
+  // thread input doesn't have focus — typing captures the keyboard).
+  phonePressed() {
+    return this.consumePress('KeyO');
   }
 
   pausePressed() {

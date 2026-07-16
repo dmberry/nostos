@@ -268,6 +268,12 @@
     border-bottom: 1px solid rgba(43,52,32,0.5); padding-bottom: 5px; }
   #nokiaphone #ph-bars { font: bold 11px ui-monospace, monospace; letter-spacing: -1px; }
   #nokiaphone .ph-batt { font-size: 10px; }
+  /* Battery + close, grouped on the status row's right. The X is the reliable
+     way out on touch, where there's no Esc key (same pattern as the notebook). */
+  #nokiaphone .ph-status-right { display: flex; align-items: center; gap: 8px; }
+  #nokiaphone #ph-close { font: bold 12px ui-monospace, monospace; background: transparent;
+    color: #2b3420; border: none; padding: 0 2px; cursor: pointer; line-height: 1; }
+  #nokiaphone #ph-close:hover { color: #10120c; }
   #nokiaphone .ph-tabs { display: flex; gap: 7px; margin: 7px 0 5px; }
   #nokiaphone .ph-tabs button { flex: 1; font: bold 11px ui-monospace, monospace; letter-spacing: 0.08em;
     background: transparent; color: #2b3420; border: 1px solid rgba(43,52,32,0.5);
@@ -489,6 +495,7 @@
     <table>
       <tr><td><kbd>P</kbd></td><td>Pause the game</td></tr>
       <tr><td><kbd>M</kbd></td><td>Cycle the music: three found tapes, the old piano bed, or off</td></tr>
+      <tr><td><kbd>O</kbd></td><td>The phone — SMS to Calypso and the RONs (and Snake). Esc, the &#10005;, or a click off the screen puts it away</td></tr>
       <tr><td><kbd>N</kbd></td><td>Open the notepad — any pages you've found worth keeping, no terminal needed</td></tr>
       <tr><td><kbd>Ctrl</kbd>+<kbd>N</kbd></td><td>Start a new game (asks first — wipes saved progress; a bare N no longer does this)</td></tr>
       <tr><td><kbd>S</kbd></td><td>On the Certificate of Death: copy it to the clipboard as an image (or click the Copy button)</td></tr>
@@ -643,7 +650,7 @@
   <div class="ph-shell">
     <img class="ph-handset" src="assets/textures/nokia-3310.png" alt="">
     <div class="ph-lcd">
-      <div class="ph-status"><span id="ph-bars"></span><span id="ph-title">MESSAGES</span><span class="ph-batt">&#9646;&#9646;&#9646;</span></div>
+      <div class="ph-status"><span id="ph-bars"></span><span id="ph-title">MESSAGES</span><span class="ph-status-right"><span class="ph-batt">&#9646;&#9646;&#9646;</span><button id="ph-close" type="button" aria-label="Close">&#10005;</button></span></div>
       <div class="ph-tabs">
         <button id="ph-to-calypso" class="on" type="button">CALYPSO</button>
         <button id="ph-to-ron" type="button">RON</button>
@@ -653,7 +660,7 @@
       <canvas id="ph-snake" width="84" height="48"></canvas>
       <div class="ph-inputrow"><span class="ph-prompt">&gt;</span><input id="ph-input" type="text" autocomplete="off" spellcheck="false" maxlength="120"><button id="ph-send" type="button">send</button></div>
     </div>
-    <div class="ph-hint">Enter to send &middot; Esc or click outside to close</div>
+    <div class="ph-hint">Enter to send &middot; Esc, &#10005;, or a click off the screen to close</div>
   </div>
 </div>
 <script type="module">
