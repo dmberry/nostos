@@ -261,10 +261,11 @@
      and the maker's badge stays out of frame. The phone body renders soft at
      this blow-up; the LCD is live DOM and stays crisp. */
   #nokiaphone .ph-handset { display: block; width: min(310vh, 196vw);
-    height: auto; user-select: none; }
+    height: auto; user-select: none;
+    filter: brightness(0.62); /* the body recedes; only the lit LCD matters */ }
   /* All the LCD's type scales with the glass (children in em): ~2.2% of the
      screen's width, so the proportions hold at any viewport. */
-  #nokiaphone .ph-lcd { position: absolute; left: 33.5%; top: 31.8%; width: 35.8%; height: 16.9%;
+  #nokiaphone .ph-lcd { position: absolute; left: 32.3%; top: 30.7%; width: 37.8%; height: 18.7%;
     display: flex; flex-direction: column; background: #9fb98a; border-radius: 0.5em;
     padding: 0.7em 1em; color: #2b3420;
     font-family: ui-monospace, 'Courier New', monospace;
