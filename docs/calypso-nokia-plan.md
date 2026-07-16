@@ -14,7 +14,8 @@ happen on the phone's actual glass. Settled framing (v1.121, after trying a
 full-glass zoom in v1.119–1.120 and reverting): the whole handset in view —
 badge, navi key, keypad cropping off the bottom — with the corrected glass
 rect (32.3%/30.7%, 37.8% x 18.7%) seating the LCD cleanly. LCD-only fallback
-under 720px. The
+under 720px. v1.122: click anywhere off the LCD dismisses, an X on the status
+row for touch, and O toggles the phone from the keyboard. The
 depart-mode flip (R3) remains deferred. Draft copy (including the SMS responder tables) is live and flagged
 for David's voice pass before it is canon.**
 
