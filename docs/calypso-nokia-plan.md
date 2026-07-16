@@ -8,8 +8,10 @@ send failure off-island, and a persisted nokiaLog. Texting Calypso nudges hold
 +0.02. `player.phone` slot ready for future handset swaps. Snake BUILT
 (v1.116): SNAKE tab, 84x48 authentic-resolution canvas, wrap edges, 7 a feed,
 high score persisted; plus click-to-eat, the washed-ashore beach start, and
-the sci-17 DCT3/MAD2WD1 lore fragment. The depart-mode flip (R3) remains
-deferred. Draft copy (including the SMS responder tables) is live and flagged
+the sci-17 DCT3/MAD2WD1 lore fragment. v1.117: the handset IS the modal — the
+live LCD is overlaid on the sprite's own screen window, so texts and Snake
+happen on the phone's actual glass (LCD-only fallback under 720px). The
+depart-mode flip (R3) remains deferred. Draft copy (including the SMS responder tables) is live and flagged
 for David's voice pass before it is canon.**
 
 ## 1. The reframe this build implements
