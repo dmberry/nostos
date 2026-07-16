@@ -248,67 +248,58 @@
      cropped, so the glass dominates the view — earpiece above, navi key
      below, keypad falling off the bottom — and the live LCD (status row,
      tabs, thread, send row) is overlaid precisely on the sprite's own screen
-     window, measured off the glass at 33.5% / 31.8%, 35.8% x 16.9% of the
-     400x600 image. Same inks as the SMS toast. */
+     window, seated on the glass at 32.3% / 30.7%, 37.8% x 18.7% of the
+     400x600 image (the raw pixel-measure under-read the shadowed glass
+     edges; this rect covers them). Same inks as the SMS toast. */
   #nokiaphone { display: none; position: fixed; inset: 0; z-index: 24;
     background: rgba(0,0,0,0.72); align-items: center; justify-content: center;
     overflow: hidden; }
   /* The glass's centre sits at 40.25% of the sprite; nudging the shell down
      9.75% of its own height puts the SCREEN, not the phone, mid-viewport. */
   #nokiaphone .ph-shell { position: relative; flex: none; transform: translateY(9.75%); }
-  /* Zoomed right into the glass: the screen fills ~70% of the viewport width
-     (~78% of its height), just the bezel and the navi-key arc framing it —
-     and the maker's badge stays out of frame. The phone body renders soft at
-     this blow-up; the LCD is live DOM and stays crisp. */
-  #nokiaphone .ph-handset { display: block; width: min(310vh, 196vw);
-    height: auto; user-select: none;
-    filter: brightness(0.62); /* the body recedes; only the lit LCD matters */ }
-  /* All the LCD's type scales with the glass (children in em): ~2.2% of the
-     screen's width, so the proportions hold at any viewport. */
+  #nokiaphone .ph-handset { display: block; width: min(160vh, 170vw, 1550px);
+    height: auto; user-select: none; }
   #nokiaphone .ph-lcd { position: absolute; left: 32.3%; top: 30.7%; width: 37.8%; height: 18.7%;
-    display: flex; flex-direction: column; background: #9fb98a; border-radius: 0.5em;
-    padding: 0.7em 1em; color: #2b3420;
-    font-family: ui-monospace, 'Courier New', monospace;
-    font-size: min(2.4vh, 1.52vw); line-height: 1.5;
+    display: flex; flex-direction: column; background: #9fb98a; border-radius: 6px;
+    padding: 8px 12px; font: 13px/1.5 ui-monospace, 'Courier New', monospace; color: #2b3420;
     background-image: repeating-linear-gradient(rgba(60,74,44,0) 0 2px, rgba(60,74,44,0.06) 2px 3px); }
   #nokiaphone .ph-status { display: flex; align-items: center; justify-content: space-between;
-    font-size: 0.85em; font-weight: bold; letter-spacing: 0.08em;
-    border-bottom: 1px solid rgba(43,52,32,0.5); padding-bottom: 0.4em; }
-  #nokiaphone #ph-bars { font-size: 0.85em; font-weight: bold; letter-spacing: -1px; }
-  #nokiaphone .ph-batt { font-size: 0.75em; }
-  #nokiaphone .ph-tabs { display: flex; gap: 0.55em; margin: 0.55em 0 0.4em; }
-  #nokiaphone .ph-tabs button { flex: 1; font: bold 0.85em ui-monospace, monospace; letter-spacing: 0.08em;
-    background: transparent; color: #2b3420; border: 0.08em solid rgba(43,52,32,0.5);
-    border-radius: 0.3em; padding: 0.35em 0; cursor: pointer; }
+    font: bold 11px ui-monospace, monospace; letter-spacing: 0.08em;
+    border-bottom: 1px solid rgba(43,52,32,0.5); padding-bottom: 5px; }
+  #nokiaphone #ph-bars { font: bold 11px ui-monospace, monospace; letter-spacing: -1px; }
+  #nokiaphone .ph-batt { font-size: 10px; }
+  #nokiaphone .ph-tabs { display: flex; gap: 7px; margin: 7px 0 5px; }
+  #nokiaphone .ph-tabs button { flex: 1; font: bold 11px ui-monospace, monospace; letter-spacing: 0.08em;
+    background: transparent; color: #2b3420; border: 1px solid rgba(43,52,32,0.5);
+    border-radius: 3px; padding: 4px 0; cursor: pointer; }
   #nokiaphone .ph-tabs button.on { background: #2b3420; color: #9fb98a; }
-  #nokiaphone #ph-thread { flex: 1; min-height: 0; overflow-y: auto; padding: 0.25em 0.15em;
+  #nokiaphone #ph-thread { flex: 1; min-height: 0; overflow-y: auto; padding: 3px 2px;
     white-space: pre-wrap; scrollbar-width: thin; }
   /* Snake: the 84x48 canvas blown up with fat LCD pixels — inside the actual
      screen window, which is the whole point. Hidden until its tab is up. */
   #nokiaphone #ph-snake { display: none; width: 100%; height: auto; margin: auto 0;
     image-rendering: pixelated; }
   /* You in bold, them in normal weight — who is speaking reads at a glance. */
-  #nokiaphone #ph-thread .ph-you { text-align: right; margin: 0.3em 0 0.3em 2.8em; font-weight: 700; }
-  #nokiaphone #ph-thread .ph-them { margin: 0.3em 2.8em 0.3em 0; }
-  #nokiaphone #ph-thread .ph-sys { text-align: center; font-size: 0.85em; opacity: 0.6; margin: 0.4em 0; }
-  #nokiaphone .ph-inputrow { display: flex; align-items: center; gap: 0.45em;
-    border-top: 1px solid rgba(43,52,32,0.5); padding-top: 0.45em; }
+  #nokiaphone #ph-thread .ph-you { text-align: right; margin: 4px 0 4px 36px; font-weight: 700; }
+  #nokiaphone #ph-thread .ph-them { margin: 4px 36px 4px 0; }
+  #nokiaphone #ph-thread .ph-sys { text-align: center; font-size: 11px; opacity: 0.6; margin: 5px 0; }
+  #nokiaphone .ph-inputrow { display: flex; align-items: center; gap: 6px;
+    border-top: 1px solid rgba(43,52,32,0.5); padding-top: 6px; }
   #nokiaphone #ph-input { flex: 1; min-width: 0; background: transparent; border: none; outline: none;
-    font: 1em ui-monospace, 'Courier New', monospace; color: #2b3420; caret-color: #2b3420; }
-  #nokiaphone #ph-send { font: bold 0.85em ui-monospace, monospace; background: #2b3420; color: #9fb98a;
-    border: none; border-radius: 0.3em; padding: 0.25em 0.8em; cursor: pointer; }
+    font: 13px ui-monospace, 'Courier New', monospace; color: #2b3420; caret-color: #2b3420; }
+  #nokiaphone #ph-send { font: bold 11px ui-monospace, monospace; background: #2b3420; color: #9fb98a;
+    border: none; border-radius: 3px; padding: 3px 10px; cursor: pointer; }
   /* The hint pins to the viewport bottom, on the backdrop — the phone's own
      lower half is off-screen. */
   #nokiaphone .ph-hint { position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%);
     width: max-content; font: 11px ui-monospace, monospace;
     color: rgba(207,216,195,0.6); }
-  /* Narrow screens: no room for the handset at all — the LCD alone. The fixed
-     13px base re-sizes every em child with it. */
+  /* Narrow screens: no room for the handset at all — the LCD alone. */
   @media (max-width: 720px) {
     #nokiaphone .ph-shell { transform: none; }
     #nokiaphone .ph-handset { display: none; }
     #nokiaphone .ph-lcd { position: static; width: 86vw; height: min(430px, 70vh);
-      border: 3px solid #10120c; padding: 10px 12px; font-size: 13px; }
+      border: 3px solid #10120c; padding: 10px 12px; }
   }
   #ronnotebook-page-label { font: 12px ui-monospace, monospace; color: #6b6350; }
   .nb-btn { font: 700 13px ui-monospace, monospace; color: #2a2418; background: rgba(40,30,10,0.08);
