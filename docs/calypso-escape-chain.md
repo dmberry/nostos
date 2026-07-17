@@ -135,9 +135,13 @@ walking in past the open Lion's Gate). It is her voice, not a RON-DOS console
 refuses the refunction in-voice without the thunder. With the hermes card in hand, `run`
 speaks zeus-lightning.ml and fires the shared `refunctionCalypso()` (guards → gardeners,
 `calypsoLeave` set, her release beat). The OB `retire` verb calls the same function, so the
-payoff reads the same wherever it fires. Still deferred: R3 `winMode:'depart'` (raft-launch
-break-out replacing the destructible core), gating `retire` to her terminal only, and
-per-island voice/colour.
+payoff reads the same wherever it fires.
+
+**R3 `winMode:'depart'` now BUILT (v1.123):** Calypso's core is `indestructible` — no
+core-kill win; the departure (refunction → ship-launch) is the only way out, and
+`refunctionCalypso` records her fall in the daemons-down tally. Her fortress guards detain
+(warn-then-lethal) via `player.detainHit`. Still deferred (minor): gating `retire` to her
+terminal only, and per-island voice/colour (R5).
 
 
 **Exists:** `copy`(key) / `decrypt` / `unlock` / `backup` / `restore` / `eliza`(DOCTOR) /
