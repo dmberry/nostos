@@ -41,6 +41,10 @@ export function createWorld(id, opts = {}) {
     // belongs to Ogygia and nowhere else: you LEAVE every later island in the greek
     // ship you arrived in, so there is nothing there for the sea to refuse.
     departTrial: opts.departTrial ?? false,
+    // Endgame shape (R3). 'kill' (default) = raze the core (the martial daemons);
+    // 'depart' = the win is leaving, not killing — her core is indestructible and
+    // her fortress guards detain rather than slay (CALYPSO / Ogygia only).
+    winMode: opts.winMode ?? 'kill',
 
     // Entity collections. 0a passes CALYPSO's already-built arrays in; other islands
     // may omit any and populate the empty array themselves.

@@ -280,6 +280,9 @@ export function createFortress(map, seed, spawn, opts = {}) {
   for (let dy = 0; dy < CORE; dy++) for (let dx = 0; dx < CORE; dx++) footprint.push({ x: coreX + dx, y: coreY + dy });
   const core = map.addObject('mainframe', coreX, coreY, {
     fw: CORE, fh: CORE, footprint, ai: aiName, hp: 250, maxHp: 250, defeated: false,
+    // Depart mode (R3): the daemon you leave, not the one you kill. Her core
+    // cannot be razed — hitCore refuses it in-voice; the way out is the sea.
+    indestructible: winMode === 'depart',
   });
   for (const t of footprint) map.objectGrid[t.y * w + t.x] = core;
 

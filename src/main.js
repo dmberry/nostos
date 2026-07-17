@@ -548,6 +548,10 @@ function goToWorld(target) {
   }
   window.__game.map = map;
   window.__game.currentWorld = currentWorld;
+  // R3: in depart mode her fortress guards detain rather than slay (robots.js
+  // reads this at the M4/M5/M6 hit sites). Poseidon's roaming machines are
+  // untouched — only the guard classes consult it.
+  player.detainMode = currentWorld.winMode === 'depart';
   camera.snap(player.x, player.y);
 }
 
@@ -1387,6 +1391,15 @@ function refunctionCalypso() {
   }
   const firstRelease = !player.calypsoLeave;
   player.calypsoLeave = true; // her hold on the tide breaks (decision #8 / Stage 1b)
+  // R3: in depart mode her core is never razed, so the refunction IS her fall —
+  // record CALYPSO in the Archipelago tally here, exactly once, the way a
+  // core-kill records the martial daemons (onCoreDefeated). The daemon book
+  // seeds the same way, quietly (the release beat carries the message line).
+  if (firstRelease && currentWorld.winMode === 'depart') {
+    daemonsDown += 1;
+    player.addScore(500);
+    if (lore && lore.findFrag) lore.findFrag(DAEMON_BOOK_ID, player, true);
+  }
   let n = 0;
   for (const r of currentWorld.robots) {
     if (r.dead || r.fused) continue;
@@ -3844,4 +3857,7 @@ if (_bootIsland && _bootIsland !== 'calypso') {
     if (_bootPos && typeof _bootPos.x === 'number') { player.x = _bootPos.x; player.y = _bootPos.y; camera.snap(player.x, player.y); }
   }
 }
+// R3: seed the detain flag from the world we actually boot on (the Calypso start
+// never routes through goToWorld, so set it here too). Depart mode → her guards detain.
+player.detainMode = currentWorld.winMode === 'depart';
 requestAnimationFrame(frame);

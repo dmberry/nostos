@@ -375,7 +375,10 @@ export function createIsland(seed) {
   // boundary gate terminal in RON-ML. `mainframe` points at the core so the
   // existing map overlay marks it; `fortress` owns the gate/door logic. (fortress.js
   // now names the AI ZEUS at source, so no override is needed here.)
-  const fortress = createFortress(map, seed, spawn, { aiName: 'CALYPSO' });
+  // Depart mode (R3): Calypso is the daemon you leave, not the one you kill. Her
+  // core is indestructible and her fortress guards detain rather than slay; the
+  // win is launching the ship, not razing the mind.
+  const fortress = createFortress(map, seed, spawn, { aiName: 'CALYPSO', winMode: 'depart' });
   const mainframe = fortress.core; // { x, y } of the core, for the RON-ML map star
   // Ring the island in sea: stamp a dithered sand+water coast into the border
   // tiles now that the towers, relays and fortress are placed (so it leaves them
@@ -419,6 +422,7 @@ export function createIsland(seed) {
     combat: true, // a martial island: main.js runs the full combat/fortress/obelisk loop here
     departTrial: true, // Ogygia's gate IS the boat: launch an unfinished one and the sea sends you home
     keeper: true, // Calypso's island: main.js runs the Nokia channel + her interventions here
+    winMode: 'depart', // R3: the win is leaving. Her core is unbreakable; her guards detain (main.js sets player.detainMode)
   });
   // calypso-specific controllers, aliased by name in main.js (its ~60 runtime sites use these names).
   world.fortress = fortress;

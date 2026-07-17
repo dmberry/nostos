@@ -168,8 +168,20 @@ victory modal). Then a throwaway second call with different opts on the Stage 1
 stub islet builds a *second* fortress that also works — proof of reusability.
 
 ### R3 — Calypso the break-out-to-the-raft tutorial (`winMode: 'depart'`)
-**Confirmed (David, 2026-07-11).** Builds on R2, and must not land until
-Polyphemus carries the hard raid (see §4, "never orphan the endgame").
+**BUILT (v1.123, 2026-07-17).** Calypso runs `winMode: 'depart'`: her core is
+`indestructible` (hitCore/damageCore refuse it in-voice, no kill-hook), so the
+win is leaving — refunction + ship-launch — not razing her. `refunctionCalypso`
+records CALYPSO in the daemons-down tally on first release (the fall she has in
+depart mode). Her fortress guards route through `player.detainHit`: the warn-
+then-lethal escalation David chose — DETAIN_LIMIT (3) strikes of lotus torpor +
+turn-back, then real damage once patience runs out; the count resets after
+DETAIN_COOL_TIME off her radar. Poseidon's roaming machines stay lethal
+(guardHit gates only the M4/M5/M6 sites on `player.detainMode`). 6 unit tests
+in `test/depart-mode.test.js`; live-verified. The kill path is untouched for the
+martial daemons.
+
+**Original spec (Confirmed David, 2026-07-11).** Builds on R2, and must not land
+until Polyphemus carries the hard raid (see §4, "never orphan the endgame").
 COORDINATE — touches `fortress.js` and the guard AI.
 
 Calypso becomes the tutorial island: it teaches the systems, and its climax is

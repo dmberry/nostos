@@ -63,6 +63,11 @@ const TORPOR_SLOW = 0.5;      // movement multiplier while dazed
 const TORPOR_SWAY = 1.0;      // radians of peak heading roll while dazed (scaled by ease)
 const ANVIL_SLOW = 0.1;       // carrying the anvil, anywhere on you: a tenth of your pace
 const TORPOR_FOOD_DRAIN = 2;  // extra food/sec while dazed — you forget to look after yourself
+// Depart mode (R3): how her fortress guards DETAIN before they wound.
+const DETAIN_LIMIT = 3;       // warning strikes (torpor + turn-back) before patience runs out
+const DETAIN_TORPOR = 5;      // seconds of daze per detain strike (lighter than a lotus fruit)
+const DETAIN_PUSH = 1.4;      // tiles shoved back toward the island's heart per strike
+const DETAIN_COOL_TIME = 12;  // seconds off her guards' radar before the warning count resets
 
 const JUMP_VZ = 3.8;      // initial jump velocity (world units/s)
 const GRAVITY = 12;
@@ -180,6 +185,7 @@ export class Player {
     this.aboard = null;                      // {type, mirror, wob} while under way — the renderer draws hull + man as one
     this.shipBuilt = false;                  // one greek ship at a time (independent of the plain boat)
     this.calypsoLeave = false;               // Calypso refunctioned (retire): the sea will let you go (decision #8)
+    this.detainMode = false;                 // R3: on a depart-mode island her fortress guards detain, not slay (main.js sets it per world)
     // The Nokia 3310 — Calypso's channel (docs/calypso-nokia-plan.md). A worn
     // fixture like the walkman: never dropped, never a pocket slot. `calypsoHold`
     // is her hold on you AND her protection of you (0..1); `nokiaSent` records the
@@ -826,6 +832,15 @@ export class Player {
       if (this.daemonVoice.ttl <= 0) this.daemonVoice = null;
     }
     this.unstickIfTrapped(map);
+
+    // Depart-mode detention (R3): once you have been off her guards' radar for
+    // DETAIN_COOL_TIME, the warning count resets so a fresh foray gets warned
+    // again rather than going straight to lethal. Each detain hit zeroes the
+    // timer (detainHit), so this only advances while no guard is striking you.
+    if (this._detainStrikes) {
+      this._detainCool = (this._detainCool || 0) + dt;
+      if (this._detainCool >= DETAIN_COOL_TIME) { this._detainStrikes = 0; this._detainCool = 0; }
+    }
 
     // Face the cursor at all times, independent of movement direction —
     // lets the player strafe while keeping a weapon trained on a target.
@@ -1853,6 +1868,14 @@ export class Player {
   // `onCoreDefeated` fires (main.js powers down the island + the victory modal).
   hitCore(obj, map, tool) {
     if (obj.defeated) { this.say('The core stands dark and dead.'); return; }
+    // Depart mode (R3): Calypso is not yours to break. The core takes no damage
+    // and never falls to a wrecking tool — leaving is the sea, not her ruin.
+    if (obj.indestructible) {
+      this.swingTimer = tool.swingCooldown || 0.5;
+      sfx.play('swing'); obj.shake = 0.1;
+      this.say('You strike the core and it does not care. She is not yours to break — the way out of Ogygia is the sea, not her ruin.');
+      return;
+    }
     this.swingTimer = tool.swingCooldown || 0.5;
     this.stamina = Math.max(0, this.stamina - (tool.staminaCost ?? 0));
     if ((tool.robotDamage ?? 1) < FACTORY_MIN_TOOL) {
@@ -1870,7 +1893,7 @@ export class Player {
   // Apply `amount` to the core (melee, a bomb blast, or the electro-gun's arc).
   // On kill, mark it defeated and fire the island-death hook exactly once.
   damageCore(obj, map, amount) {
-    if (obj.defeated) return;
+    if (obj.defeated || obj.indestructible) return; // depart mode: she cannot be razed (bombs/electro-arc land here too)
     obj.maxHp = obj.maxHp ?? obj.hp ?? 250;
     obj.hp = (obj.hp ?? obj.maxHp) - amount;
     if (obj.hp > 0) { this.daemonSpeak(obj); return; }
@@ -2322,6 +2345,40 @@ export class Player {
     // out of a machine's reach: robots strike up onto it (see reachBonus in
     // robots.js), so a loot box is no longer an invincibility pedestal.
     return m.effectiveHeightAt(fx, fy) - m.heightAt(fx, fy) >= 2;
+  }
+
+  // Depart mode (R3): a hit from one of Calypso's fortress guards. Being caught
+  // in her domain means being KEPT, not killed — the first few strikes daze you
+  // with the same lotus torpor and shove you back toward the centre (a warning).
+  // Sustained intrusion past DETAIN_LIMIT turns lethal: her patience runs out and
+  // the blow lands for real. `amount` is the guard's ordinary damage, used once
+  // the detention escalates. The strike count cools while you are off her radar
+  // (reset by the guard-free quiet in update), so a later foray warns again.
+  detainHit(amount, source) {
+    if (this._ended || this.deathCert) return;
+    // Shields/forcefield still turn the blow, exactly as in combat.
+    if (this.forcefieldActive()) { this.forcefieldCharge = Math.max(0, this.forcefieldCharge - FORCEFIELD_HIT_COST); this.hurtTimer = 0.12; return; }
+    if (source === 'machine' && this.absorbMeleeOnShield()) { this.hurtTimer = 0.12; return; }
+    this._detainStrikes = (this._detainStrikes || 0) + 1;
+    this._detainCool = 0; // resets the off-radar cooldown in update
+    if (this._detainStrikes <= DETAIN_LIMIT) {
+      // Warned, not wounded: a dose of torpor and a push back toward the island's
+      // heart — kalyptō, detention by comfort.
+      this.torpor = Math.min(TORPOR_MAX, this.torpor + DETAIN_TORPOR);
+      const cx = (this.map && this.map.w ? this.map.w / 2 : this.x);
+      const cy = (this.map && this.map.h ? this.map.h / 2 : this.y);
+      const dx = cx - this.x, dy = cy - this.y, d = Math.hypot(dx, dy) || 1;
+      this.x += (dx / d) * DETAIN_PUSH;
+      this.y += (dy / d) * DETAIN_PUSH;
+      this.hurtTimer = 0.2;
+      sfx.play('hurt', { pitch: 1.4 }); // a softer, higher note than a real wound
+      if (this._detainStrikes === 1) this.say('The guard takes you gently by the arm and turns you back inward. A sweetness fogs your head. You are being kept, not killed — for now.');
+      else this.say('Turned back again, and dazed. Her guards will not let you leave this way — press it and their patience ends.');
+      return;
+    }
+    // Patience spent: the detention turns real. From here the guard wounds.
+    if (this._detainStrikes === DETAIN_LIMIT + 1) this.say('Her guards give up on gentleness. The next blows are meant to hurt.');
+    this.takeDamage(amount, source);
   }
 
   takeDamage(amount, source) {

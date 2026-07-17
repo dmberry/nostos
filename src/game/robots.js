@@ -131,6 +131,15 @@ const W4_HEAD = '#2c0c05';
 //  M6 — pack robot. Attacks in waves of 3-5: close and strike, then withdraw,
 //       then charge again. On its own it hangs back at the pack's edge and
 //       waits for enough of its fellows to gather before committing to a rush.
+// Depart mode (R3): a guard's blow either wounds (kill islands) or detains (her
+// Ogygia — a warning of torpor + turn-back until patience runs out). One helper
+// so all three M-class hit sites route the same way; `player.detainMode` is set
+// by main.js per world, so only her fortress guards ever detain.
+function guardHit(player, amount, source) {
+  if (player.detainMode && player.detainHit) player.detainHit(amount, source);
+  else player.takeDamage(amount, source);
+}
+
 const M6_HP = 40;               // several sword-blows; a bow burst inside the report window still kills
 const M6_PATROL_SPEED = 1.0;
 const M6_CHASE_SPEED = 4.6;     // between your walk and sprint, same as a W1
@@ -1646,7 +1655,7 @@ function updateM5(r, dt, player, map, ease, d) {
       r.hp -= 999; r.hurt = true;
       map.projectiles.push({ x0: player.x, y0: player.y, x1: r.x, y1: r.y, prog: 0, kind: 'laser_m5' });
     } else if (!block) {
-      player.takeDamage(M5_DAMAGE * ease, 'machine');
+      guardHit(player, M5_DAMAGE * ease, 'machine');
     }
   }
 }
@@ -1683,7 +1692,7 @@ function updateM6Pack(r, dt, player, map, robots, ease) {
   const realD = Math.hypot(player.x - r.x, player.y - r.y);
   if (r.m6Phase === 'attack' && realD < M6_HIT_RANGE + reachBonus(player, map) && r.attackTimer <= 0) {
     r.attackTimer = M6_HIT_COOLDOWN;
-    player.takeDamage(M6_HIT_DAMAGE * ease, 'machine');
+    guardHit(player, M6_HIT_DAMAGE * ease, 'machine');
   }
 }
 
