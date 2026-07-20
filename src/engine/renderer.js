@@ -242,6 +242,12 @@ export class Renderer {
       }
     }
 
+    // Sacred mist: a low, slow swirl of pale vapour lying over each temple grove
+    // — the visible sign of the healing there. Drawn on the ground (after the
+    // floor, before the depth-sorted objects) so the fallen columns and the
+    // player stand up out of it. Only the groves in view are drawn.
+    if (map.temples && map.temples.length) this.drawTempleMist(map, range);
+
     // Pass 2: depth-sorted drawables. Objects use their tile centre for
     // depth; the player uses its continuous position.
     const drawables = [];
@@ -2531,6 +2537,43 @@ export class Renderer {
     o.drawImage(TREE_SHEET, 0, 0);
     this._treeTints.set(key, off);
     return off;
+  }
+
+  // Sacred mist over the temple groves (map.temples). A handful of soft pale
+  // clouds orbiting the grove centre and breathing in and out, so the ground
+  // among the old stones looks touched — a quiet, benign counterpart to the
+  // sea's angry fog. Cheap: a few gradient blobs per grove, only for groves near
+  // the visible range, phased off world time.
+  drawTempleMist(map, range) {
+    const ctx = this.ctx;
+    const t = performance.now() / 1000;
+    const R = 7; // matches player.js TEMPLE_HEAL_R — the mist marks the heal zone
+    ctx.save();
+    for (const g of map.temples) {
+      if (g.x < range.minX - R || g.x > range.maxX + R || g.y < range.minY - R || g.y > range.maxY + R) continue;
+      // Six banks drifting round the grove on a slow gyre, each breathing out of
+      // phase so the mass rolls rather than spins as a wheel.
+      for (let i = 0; i < 6; i++) {
+        const seed = i * 2.399963;
+        const ang = seed + t * (0.10 + (i % 3) * 0.04);
+        const rad = R * (0.30 + 0.5 * ((i * 5 % 7) / 7)) * (0.85 + 0.15 * Math.sin(t * 0.5 + seed));
+        const wx = g.x + Math.cos(ang) * rad;
+        const wy = g.y + Math.sin(ang) * rad;
+        const s = worldToScreen(wx, wy);
+        const size = 44 + 20 * Math.sin(t * 0.6 + seed);
+        const puff = 0.5 + 0.5 * Math.sin(t * 0.8 + seed);
+        const a = 0.16 * puff;
+        const grad = ctx.createRadialGradient(s.x, s.y - 6, 0, s.x, s.y - 6, size);
+        grad.addColorStop(0, `rgba(232,240,236,${a.toFixed(3)})`);
+        grad.addColorStop(0.6, `rgba(214,226,222,${(a * 0.5).toFixed(3)})`);
+        grad.addColorStop(1, 'rgba(206,220,216,0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.ellipse(s.x, s.y - 6, size, size * 0.5, 0, 0, Math.PI * 2); // flat, ground-hugging
+        ctx.fill();
+      }
+    }
+    ctx.restore();
   }
 
   // Poseidon's fog, drawn during the failed crossing (main.js updateCrossFail).
