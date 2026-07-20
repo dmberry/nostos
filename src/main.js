@@ -33,7 +33,7 @@ import { createIthaca } from './islands/ithaca.js';
 import { createPolyphemus } from './islands/polyphemus.js';
 import { createCirce } from './islands/circe.js';
 import { createHelios } from './islands/helios.js';
-import { createNokia, sendNokia, holdRise, holdFall, holdBand, HOLD_COLD, HOLD_WARM, calypsoSms, ronSms, logSms } from './game/nokia.js';
+import { createNokia, sendNokia, holdRise, holdFall, holdBand, HOLD_COLD, HOLD_WARM, calypsoSms, ronSms, daemonSms, hasDaemonSms, logSms } from './game/nokia.js';
 import { newSnakeGame, snakeTurn, snakeTurnRelative, snakeTick, drawSnake } from './game/snake.js';
 import { CHOIR_NOTES, CHOIR_DURATION } from './engine/choir-notes.js';
 
@@ -485,6 +485,14 @@ for (const type of ['t1', 't2', 't3', 'w1', 'w2', 'w3', 'w4', 'w5', 'm4', 'm5', 
   if (img) img.src = renderMachineIcon(type);
 }
 const camera = new Camera(player.x, player.y);
+// Height (in steps) of the ground under the player, for the camera's elevation
+// follow so a climb up the mountain does not walk the sprite off the top of view.
+// effectiveHeightAt includes standing on a climbable block, matching the sprite lift.
+function playerElevSteps() {
+  const fx = Math.floor(player.x), fy = Math.floor(player.y);
+  if (map.effectiveHeightAt) return map.effectiveHeightAt(fx, fy);
+  return map.heightAt ? map.heightAt(fx, fy) : 0;
+}
 // `lore` self-registers as a system in its own constructor (Stage 0 of the
 // systems-registry refactor, docs/refactor-registry.md) — the hub never names it.
 // Its update ticks via systems.runUpdate() in update(); its two draw phases via
@@ -855,8 +863,12 @@ function updateNokiaKeeper(dt) {
 // Full beside the core, fading across Ogygia, and dead the moment you are on any
 // other island (the NO SIGNAL text made literal). Drawn live on the PHONE box, the
 // SMS toast, and the handset's own status row.
+// It is the ruling daemon's network your handset joins, so signal is a compass to
+// that island's core: full beside it, fading with distance, and dead on an island
+// with no daemon at all (Ithaca, the Backspace). This used to be CALYPSO-only;
+// now every daemon can reach you on their own ground.
 function nokiaSignalBars() {
-  if (!currentWorld.keeper || !fortress || !fortress.core) return 0;
+  if (!currentWorld.combat || !fortress || !fortress.core) return 0;
   const d = Math.hypot(player.x - fortress.core.x, player.y - fortress.core.y);
   return d < 30 ? 4 : d < 60 ? 3 : d < 95 ? 2 : 1;
 }
@@ -899,11 +911,25 @@ function snakeStart() {
   }, 130);
 }
 
+// Whichever daemon rules the island you are on is the phone's first contact —
+// it is their network the handset is on here. CALYPSO on Ogygia, POLYPHEMUS on
+// Aegilia, and so on; on an island with no daemon (Ithaca, the Backspace) the
+// first tab falls back to CALYPSO's dormant thread so the button is never blank.
+function phoneDaemon() {
+  const ai = islandAiName();
+  return hasDaemonSms(ai) || ai === 'CALYPSO' ? ai : 'CALYPSO';
+}
+
 function renderPhone() {
   const bars = nokiaSignalBars();
   phBarsEl.textContent = '▂▄▆█'.slice(0, bars) || '·';
   phBarsEl.style.opacity = bars ? 1 : 0.45;
-  phToCal.classList.toggle('on', phoneTo === 'CALYPSO');
+  // The first tab tracks the island's daemon. If the open thread is a daemon
+  // that no longer rules here (you sailed), snap it to the current one.
+  const daemon = phoneDaemon();
+  if (phoneTo !== 'RON' && phoneTo !== 'SNAKE' && phoneTo !== daemon) phoneTo = daemon;
+  phToCal.textContent = daemon;
+  phToCal.classList.toggle('on', phoneTo === daemon);
   phToRon.classList.toggle('on', phoneTo === 'RON');
   phToSnake.classList.toggle('on', phoneTo === 'SNAKE');
   // The SNAKE tab swaps the whole message surface for the game screen.
@@ -931,9 +957,11 @@ function renderPhone() {
       const meta = m.from === 'sys' ? '' : `<div class="ph-meta ph-meta-${who}">${label}${stamp}</div>`;
       return `${meta}<div class="ph-${who}">${esc(m.text)}</div><div class="ph-sep"></div>`;
     }).join('')
-    : `<div class="ph-sys">${phoneTo === 'CALYPSO'
-      ? 'No messages yet. She is waiting for you to write first, and has been for years.'
-      : 'No traffic. The RON mesh keeps this channel open for whoever is still out there.'}</div>`;
+    : `<div class="ph-sys">${phoneTo === 'RON'
+      ? 'No traffic. The RON mesh keeps this channel open for whoever is still out there.'
+      : phoneTo === 'CALYPSO'
+        ? 'No messages yet. She is waiting for you to write first, and has been for years.'
+        : `You are on ${phoneTo}'s network now. Text, and see if it answers.`}</div>`;
   phThreadEl.scrollTop = phThreadEl.scrollHeight;
 }
 function openPhone() {
@@ -968,7 +996,9 @@ function phoneSend() {
   player._phSmsIdx = (player._phSmsIdx || 0) + 1;
   const reply = to === 'CALYPSO'
     ? calypsoSms(text, holdBand(player.calypsoHold ?? 0.65), player._phSmsIdx)
-    : ronSms(text, player._phSmsIdx);
+    : to === 'RON'
+      ? ronSms(text, player._phSmsIdx)
+      : (daemonSms(to, text, player._phSmsIdx) || ronSms(text, player._phSmsIdx));
   clearTimeout(_phReplyTimer);
   _phReplyTimer = setTimeout(() => {
     logSms(player, to, 'them', reply);
@@ -976,7 +1006,7 @@ function phoneSend() {
     if (phoneEl.style.display === 'flex') renderPhone();
   }, 1100 + Math.random() * 900);
 }
-phToCal.addEventListener('click', () => { phoneTo = 'CALYPSO'; renderPhone(); phInputEl.focus(); });
+phToCal.addEventListener('click', () => { phoneTo = phoneDaemon(); renderPhone(); phInputEl.focus(); });
 phToRon.addEventListener('click', () => { phoneTo = 'RON'; renderPhone(); phInputEl.focus(); });
 phToSnake.addEventListener('click', () => { phoneTo = 'SNAKE'; renderPhone(); phInputEl.blur(); });
 document.getElementById('ph-send').addEventListener('click', phoneSend);
@@ -3799,7 +3829,7 @@ function update(dt) {
   if (!currentWorld.combat) {
     player.update(dt, input, map, [], [], mouseWorld);
     currentWorld.update(dt, player); // the lurker + the ambient shrieks
-    camera.follow(player.x, player.y, dt);
+    camera.follow(player.x, player.y, dt, playerElevSteps());
     if (player._ubikTeleportCooldown > 0) player._ubikTeleportCooldown -= dt;
     // R4: the Backspace is an ALTERNATIVE CROSSING ROAD — the road of the dead. It
     // is littered with labelled doors, one per island (each drawn with its name on
@@ -4110,7 +4140,7 @@ function update(dt) {
       if (liveW4 < SKYLINK_MAX_W4) dispatchSkylinkW4s(2 + Math.floor(Math.random() * 3));
     }
   }
-  camera.follow(player.x, player.y, dt);
+  camera.follow(player.x, player.y, dt, playerElevSteps());
   if (map.objects.length !== lastObjectCount) {
     lastObjectCount = map.objects.length;
     minimap.refresh(map); // felled trees disappear from the minimap

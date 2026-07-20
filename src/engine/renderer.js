@@ -1,4 +1,4 @@
-import { worldToScreen, screenToWorld, TILE_W } from './iso.js';
+import { worldToScreen, screenToWorld, TILE_W, ELEV } from './iso.js';
 import { runDrawWorld, runDrawScreen } from './systems.js';
 import { uiMethods, DASH_H } from './ui.js';
 import { FLOORS } from '../game/tiles.js';
@@ -84,7 +84,8 @@ const WALL_H = 40;
 const EDGE_ROCK_H = 52;   // height of the impassable rock blocks ringing the map edge
 const EDGE_ROCK_ALPHA = 0.38; // semi-transparent so the player shows through a block in front
 const SIGHT_CONE = false; // directional peripheral-fog vision cone (off pending tuning)
-const ELEV = 16;   // pixels of lift per height level
+// ELEV (pixels of lift per height level) now lives in iso.js, so the camera can
+// read the same constant to follow the player's elevation. Imported below.
 const MINIMAP_SIZE = 160;
 
 const WALL_BASE = [122, 113, 102];
@@ -521,10 +522,8 @@ export class Renderer {
     if (hud.light != null && hud.light < 1) {
       const dark = (1 - hud.light) * 0.78;
       const z = camera.zoom || 1;
-      const pw = worldToScreen(player.x, player.y);
-      const cw = worldToScreen(camera.x, camera.y);
-      const px = (pw.x - cw.x) * z + this.w / 2;
-      const py = (pw.y - cw.y) * z + this.h / 2 - 16 * z;
+      const p = this.playerScreen(map, player, camera);
+      const px = p.x, py = p.y;
       const radius = (hud.torch ? 200 : 70) * z;
       const veil = ctx.createRadialGradient(px, py, radius * 0.25, px, py, radius);
       veil.addColorStop(0, `rgba(8,12,28,${Math.max(0, dark - (hud.torch ? 0.72 : 0.3))})`);
@@ -563,13 +562,11 @@ export class Renderer {
     // it goes live; the drawSightCone method is kept ready to switch back on.
     if (SIGHT_CONE && !hud.rest && !hud.deathCert && !hud.paused) {
       const z = camera.zoom || 1;
-      const cw = worldToScreen(camera.x, camera.y);
       const pw = worldToScreen(player.x, player.y);
       const fw = worldToScreen(player.x + player.facing.x, player.y + player.facing.y);
-      const px = (pw.x - cw.x) * z + this.w / 2;
-      const py = (pw.y - cw.y) * z + this.h / 2 - 16 * z;
+      const p = this.playerScreen(map, player, camera);
       const ang = Math.atan2(fw.y - pw.y, fw.x - pw.x);
-      this.drawSightCone(px, py, ang, z);
+      this.drawSightCone(p.x, p.y, ang, z);
     }
 
     // The underworld: a sickly, jaundiced wash over the whole play area with
@@ -1111,6 +1108,24 @@ export class Renderer {
       }
     }
     ctx.restore();
+  }
+
+  // The player sprite's actual on-screen pixel, accounting for the camera's
+  // elevation lift and the player's own height (the sprite is drawn raised by
+  // effectiveHeightAt * ELEV). Used by the night veil and the sight cone so the
+  // light pool tracks the sprite up the mountain instead of staying on its feet
+  // at sea level. Mirrors the drawables lift, minus the camera lift the transform
+  // already applied.
+  playerScreen(map, player, camera) {
+    const z = camera.zoom || 1;
+    const cw = worldToScreen(camera.x, camera.y);
+    const pw = worldToScreen(player.x, player.y);
+    const elev = (map.effectiveHeightAt ? map.effectiveHeightAt(Math.floor(player.x), Math.floor(player.y))
+      : map.heightAt ? map.heightAt(Math.floor(player.x), Math.floor(player.y)) : 0) * ELEV;
+    const lift = (camera.screenLift || 0);
+    const x = (pw.x - cw.x) * z + this.w / 2;
+    const y = (pw.y - cw.y + lift - elev - (player.z || 0) * 32) * z + this.h / 2 - 16 * z;
+    return { x, y };
   }
 
   drawFloor(map, tx, ty, type, shade) {
@@ -2550,26 +2565,25 @@ export class Renderer {
   drawTempleMist(map, range) {
     const ctx = this.ctx;
     const t = performance.now() / 1000;
-    const R = 7; // matches player.js TEMPLE_HEAL_R — the mist marks the heal zone
+    const R = 4; // hug the heart of the grove, not the whole heal radius
     ctx.save();
     for (const g of map.temples) {
       if (g.x < range.minX - R || g.x > range.maxX + R || g.y < range.minY - R || g.y > range.maxY + R) continue;
-      // Six banks drifting round the grove on a slow gyre, each breathing out of
-      // phase so the mass rolls rather than spins as a wheel.
-      for (let i = 0; i < 6; i++) {
+      // A tight knot of pale banks turning slowly over the grove, each breathing
+      // out of phase so the mass rolls rather than spins as a wheel. Denser and
+      // closer than the old version, which was too thin and wide to read.
+      for (let i = 0; i < 7; i++) {
         const seed = i * 2.399963;
-        const ang = seed + t * (0.10 + (i % 3) * 0.04);
-        const rad = R * (0.30 + 0.5 * ((i * 5 % 7) / 7)) * (0.85 + 0.15 * Math.sin(t * 0.5 + seed));
-        const wx = g.x + Math.cos(ang) * rad;
-        const wy = g.y + Math.sin(ang) * rad;
-        const s = worldToScreen(wx, wy);
-        const size = 44 + 20 * Math.sin(t * 0.6 + seed);
-        const puff = 0.5 + 0.5 * Math.sin(t * 0.8 + seed);
-        const a = 0.16 * puff;
+        const ang = seed + t * (0.13 + (i % 3) * 0.05);
+        const rad = R * (0.15 + 0.4 * ((i * 5 % 7) / 7)) * (0.85 + 0.15 * Math.sin(t * 0.5 + seed));
+        const s = worldToScreen(g.x + Math.cos(ang) * rad, g.y + Math.sin(ang) * rad);
+        const size = 34 + 14 * Math.sin(t * 0.6 + seed);
+        const puff = 0.55 + 0.45 * Math.sin(t * 0.8 + seed);
+        const a = 0.34 * puff;
         const grad = ctx.createRadialGradient(s.x, s.y - 6, 0, s.x, s.y - 6, size);
-        grad.addColorStop(0, `rgba(232,240,236,${a.toFixed(3)})`);
-        grad.addColorStop(0.6, `rgba(214,226,222,${(a * 0.5).toFixed(3)})`);
-        grad.addColorStop(1, 'rgba(206,220,216,0)');
+        grad.addColorStop(0, `rgba(236,244,240,${a.toFixed(3)})`);
+        grad.addColorStop(0.55, `rgba(216,228,224,${(a * 0.55).toFixed(3)})`);
+        grad.addColorStop(1, 'rgba(208,222,218,0)');
         ctx.fillStyle = grad;
         ctx.beginPath();
         ctx.ellipse(s.x, s.y - 6, size, size * 0.5, 0, 0, Math.PI * 2); // flat, ground-hugging
@@ -2590,20 +2604,19 @@ export class Renderer {
     const t = performance.now() / 1000;
     const lift = (map.heightAt ? map.heightAt(m.x, m.y) : 0) * ELEV; // ELEV px per height level
     ctx.save();
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 9; i++) {
       const seed = i * 2.399963;
-      const ang = seed + t * (0.07 + (i % 3) * 0.03);
-      const rad = 4 + 3.5 * ((i * 5 % 7) / 7);                 // tiles from the peak
-      const wx = m.x + Math.cos(ang) * rad, wy = m.y + Math.sin(ang) * rad;
-      const s = worldToScreen(wx, wy);
-      const sy = s.y - lift;                                    // hang up at the summit
-      const size = 70 + 30 * Math.sin(t * 0.5 + seed);
-      const puff = 0.5 + 0.5 * Math.sin(t * 0.6 + seed);
-      const a = 0.20 * puff;
+      const ang = seed + t * (0.09 + (i % 3) * 0.04);
+      const rad = 1.4 + 2.4 * ((i * 5 % 7) / 7);               // tight cap of cloud on the summit
+      const s = worldToScreen(m.x + Math.cos(ang) * rad, m.y + Math.sin(ang) * rad);
+      const sy = s.y - lift;                                    // hang up at the peak's elevation
+      const size = 56 + 22 * Math.sin(t * 0.5 + seed);
+      const puff = 0.55 + 0.45 * Math.sin(t * 0.6 + seed);
+      const a = 0.4 * puff;
       const g = ctx.createRadialGradient(s.x, sy, 0, s.x, sy, size);
-      g.addColorStop(0, `rgba(238,244,246,${a.toFixed(3)})`);
-      g.addColorStop(0.6, `rgba(216,226,230,${(a * 0.5).toFixed(3)})`);
-      g.addColorStop(1, 'rgba(210,222,226,0)');
+      g.addColorStop(0, `rgba(242,247,249,${a.toFixed(3)})`);
+      g.addColorStop(0.55, `rgba(220,230,234,${(a * 0.55).toFixed(3)})`);
+      g.addColorStop(1, 'rgba(214,226,230,0)');
       ctx.fillStyle = g;
       ctx.beginPath();
       ctx.ellipse(s.x, sy, size, size * 0.6, 0, 0, Math.PI * 2);

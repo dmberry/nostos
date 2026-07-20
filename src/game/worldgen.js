@@ -96,6 +96,12 @@ export function buildWorld(seed, cfg = {}) {
   if (t.river) carveStreams(map, rng, hills);
   finalizeHeights(map, keepClear);
   carveHollows(map, rng, keepClear, t.hollows);
+  // Ground the inland water. A river or a hillside stream must lie IN the land,
+  // never perched above it with a wall of water dropping to lower ground (which
+  // is what a stream carved down a slope, or a hollow dug beside a river, would
+  // otherwise leave). Runs after every height pass, before the floor-only
+  // scatter, so trees and loot place on the corrected relief.
+  groundWater(map, keepClear);
   // The mountain's rock/snow lines are painted AFTER the heights are final (the
   // Chebyshev clamp shaped the cone) and BEFORE the forests, so trees only land
   // on the grassy lower slopes and never on bare rock.
@@ -566,6 +572,52 @@ function finalizeHeights(map, keepClear) {
       }
       H[y * w + x] = v;
     }
+  }
+}
+
+// Ground the inland water so no river or stream tile is ever higher than the
+// land beside it. Streams are carved down a hillside and keep the slope's
+// height, and a hollow can be dug next to a river, either of which leaves water
+// perched with a vertical face of water dropping to lower ground. Water lies in
+// the land, not on it. Force every water/stream tile to 0, lift any bank a
+// hollow dug below 0, then relax outward with a lowering-only clamp so the banks
+// step down to meet the water at one level per tile (a river cuts its valley).
+function groundWater(map) {
+  const w = map.w, h = map.h;
+  const isWater = (x, y) => { const f = map.floorAt(x, y); return f === 'water' || f === 'stream'; };
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (isWater(x, y)) { if (map.heightAt(x, y) !== 0) map.setHeight(x, y, 0); }
+    }
+  }
+  // No bank below the water it borders.
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (isWater(x, y) || map.heightAt(x, y) >= 0) continue;
+      let touches = false;
+      for (let dy = -1; dy <= 1 && !touches; dy++) {
+        for (let dx = -1; dx <= 1; dx++) if (isWater(x + dx, y + dy)) { touches = true; break; }
+      }
+      if (touches) map.setHeight(x, y, 0);
+    }
+  }
+  // Lowering-only relax: any land tile more than one step above a neighbour is
+  // stepped down. Water is pinned, so this cuts the valley toward the channel
+  // without ever raising the water. A few passes settle the whole corridor.
+  for (let pass = 0; pass < 8; pass++) {
+    let changed = false;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (isWater(x, y)) continue;
+        const hh = map.heightAt(x, y);
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          if (!map.inBounds(x + dx, y + dy)) continue;
+          const nb = map.heightAt(x + dx, y + dy);
+          if (hh - nb > 1) { map.setHeight(x, y, nb + 1); changed = true; break; }
+        }
+      }
+    }
+    if (!changed) break;
   }
 }
 

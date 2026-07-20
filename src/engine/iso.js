@@ -3,6 +3,10 @@
 
 export const TILE_W = 64;
 export const TILE_H = 32;
+// Screen pixels a tile lifts per height level. The renderer draws hill tiles and
+// everything on them raised by this; the camera reads it to keep the player
+// centred when they climb (otherwise a lifted sprite walks off the top of view).
+export const ELEV = 16;
 
 const HW = TILE_W / 2;
 const HH = TILE_H / 2;

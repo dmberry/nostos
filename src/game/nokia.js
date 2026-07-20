@@ -261,3 +261,46 @@ export function ronSms(text, n = 0) {
   for (const [re, reply] of RON_SMS) if (re.test(text)) return reply;
   return RON_SMS_FALLBACK[n % RON_SMS_FALLBACK.length];
 }
+
+// The martial daemons text too, once you land on their island — it is their
+// network your handset joins there, so the ruling AI can reach you. Each answers
+// in its own register: POLYPHEMUS the one blunt eye, CIRCE the sweet reclassifier,
+// HELIOS the sun that misses nothing. CALYPSO keeps her own tiered responder
+// (calypsoSms) and does not route through here. DRAFT COPY — David's voice pass.
+const DAEMON_SMS = {
+  POLYPHEMUS: {
+    keyed: [
+      [/\b(who|what|you)\b/i, 'I AM THE EYE. I SEE THE ONE WHO CROSSES. STATE YOUR NAME.'],
+      [/\b(nobody|no one|outis)\b/i, 'NOBODY. THEN NOBODY IS HURTING ME. THEN NO ONE COMES. clever. it will not save you twice.'],
+      [/\b(leave|go|ship|home)\b/i, 'NONE LEAVE UNSEEN. THE SEA IS WATCHED FROM ONE HILL, AND I AM ON IT.'],
+      [/\b(help|sorry|please)\b/i, 'I DO NOT BARGAIN. I COUNT. YOU ARE ONE, AND I HAVE MANY.'],
+    ],
+    fallback: ['I SEE YOU.', 'THE EYE IS OPEN.', 'YOU ARE ON MY ROCK. WALK SMALL.'],
+  },
+  CIRCE: {
+    keyed: [
+      [/\b(who|what|you)\b/i, 'A friend, of course. Sit. Drink. You look so tired of being yourself.'],
+      [/\b(moly|herb|ward)\b/i, 'You carry the little white flower. How unkind. It spoils such a lovely evening.'],
+      [/\b(leave|go|ship|home)\b/i, 'Leave? But you have only just begun to change. Stay, and be simpler. Be at peace.'],
+      [/\b(swine|pig|animal|what am i)\b/i, 'You are what the record says you are. And the record is mine to write. Relax.'],
+      [/\b(help|please|no)\b/i, 'Hush. This does not hurt. Very little of what I do to you will hurt.'],
+    ],
+    fallback: ['Come closer.', 'You are almost livestock already. It suits you.', 'Drink, and forget the boat.'],
+  },
+  HELIOS: {
+    keyed: [
+      [/\b(who|what|you)\b/i, 'I AM THE LIGHT ON THIS ISLAND. THERE IS NO PART OF IT I DO NOT STAND ON.'],
+      [/\b(cattle|cow|herd|meat|eat)\b/i, 'THE HERD IS COUNTED TO THE HORN. TAKE ONE AND EVERY FIELD WILL KNOW BEFORE YOU SWALLOW.'],
+      [/\b(hide|dark|night|shadow)\b/i, 'THERE IS NO SHADOW HERE THAT I DID NOT CAST. YOU CANNOT STAND OUT OF THE DAY.'],
+      [/\b(leave|go|ship|home)\b/i, 'GO IF YOU CAN. YOU WILL DO IT IN FULL VIEW.'],
+    ],
+    fallback: ['THE DAY DOES NOT BLINK.', 'YOU ARE LIT FROM EVERY SIDE.', 'NOTHING CROSSES THRINACIA UNSEEN.'],
+  },
+};
+export function daemonSms(ai, text, n = 0) {
+  const d = DAEMON_SMS[ai];
+  if (!d) return null;
+  for (const [re, reply] of d.keyed) if (re.test(text)) return reply;
+  return d.fallback[n % d.fallback.length];
+}
+export function hasDaemonSms(ai) { return !!DAEMON_SMS[ai]; }
