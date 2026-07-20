@@ -29,7 +29,13 @@ const WEST_ROAD_X = 14;   // north-south lane through the hamlet (cols 14-15)
 //   hollows   { count }         — pits and dells
 //   forests   { density }       — scales every forest region's tree count
 //   meadows   { count }
-//   wrecks    { count }
+//   flowers   { density }   — wildflower banks; Ithaca runs generous
+//   wrecks    { count }  — abandoned cars. DEFAULTS TO 0: the wrecks are off the
+//             islands for now, but scatterWrecks and everything downstream (the
+//             car sprites, smashCar's salvage, the right-click inspection) is
+//             kept whole, so a better vehicle can be dropped in later by setting
+//             a count. Do not delete the generator.
+//   feature   a signature landform: 'sandpit' | 'marsh' | 'burn' | 'olives'
 //   lotus     false on every island but Ogygia (it was generated on ALL of them,
 //             at the identical spot — her signature grove was everywhere)
 const TERRAIN_DEFAULTS = {
@@ -40,7 +46,9 @@ const TERRAIN_DEFAULTS = {
   hollows: { count: null },
   forests: { density: 1 },
   meadows: { count: null },
-  wrecks: { count: 4 },
+  flowers: { density: 1 },
+  wrecks: { count: 0 },   // no cars on any island for now — see the note above
+  feature: null,
   lotus: false,
 };
 
@@ -54,6 +62,7 @@ export function buildWorld(seed, cfg = {}) {
     hollows: { ...TERRAIN_DEFAULTS.hollows, ...(cfg.hollows || {}) },
     forests: { ...TERRAIN_DEFAULTS.forests, ...(cfg.forests || {}) },
     meadows: { ...TERRAIN_DEFAULTS.meadows, ...(cfg.meadows || {}) },
+    flowers: { ...TERRAIN_DEFAULTS.flowers, ...(cfg.flowers || {}) },
     wrecks: { ...TERRAIN_DEFAULTS.wrecks, ...(cfg.wrecks || {}) },
     // `river: null` must survive the spread as a genuine null, not be re-defaulted.
     river: 'river' in cfg ? cfg.river : TERRAIN_DEFAULTS.river,
@@ -87,9 +96,12 @@ export function buildWorld(seed, cfg = {}) {
   plantForests(map, rng, keepClear, t.forests);
   layMeadows(map, rng, keepClear, t.meadows);
   if (t.lotus) plantLotusGrove(map, rng, keepClear);
-  scatterFlowers(map, rng, keepClear);
+  scatterFlowers(map, rng, keepClear, t.flowers);
   scatterLoners(map, rng, keepClear);
   scatterWrecks(map, rng, t.wrecks);
+  // The island's one unmistakable landform, stamped over the general terrain so
+  // it overrides whatever was scattered there (B3).
+  stampFeature(map, rng, t.feature, keepClear);
   paintGraffiti(map, rng);
 
   const spawn = { x: 112.5, y: MAIN_ROAD_Y + 0.5 };
@@ -571,6 +583,120 @@ function inKeepClear(x, y, rects) {
   return false;
 }
 
+// ---- Signature landforms (B3) ----------------------------------------------
+// One big, unmistakable feature per island, so you know where you are from the
+// shape of the ground rather than only its colour. Each is a single named blob
+// stamped after the general terrain, and each is opt-in from the island's
+// terrain profile (`feature: 'sandpit' | 'marsh' | 'burn' | 'olives'`).
+//
+// They deliberately sit near the middle of the map, well clear of the coast and
+// the spawn, so they read as *the* landmark of that island rather than scenery
+// you might sail past without seeing.
+
+// A great bowl of sand bitten out of the interior — Thrinacia's dust-bowl, the
+// sun's own scar. Sand floor, dished down so it reads as a crater, cleared of
+// trees, with a rim of dry grass.
+function stampSandPit(map, rng, cx, cy, R) {
+  for (let y = Math.floor(cy - R - 2); y <= cy + R + 2; y++) {
+    for (let x = Math.floor(cx - R - 2); x <= cx + R + 2; x++) {
+      if (!map.inBounds(x, y)) continue;
+      const f = map.floorAt(x, y);
+      if (f === 'water' || f === 'sea' || f === 'road' || f === 'bridge' || f === 'boards') continue;
+      const d = Math.hypot(x - cx, y - cy) + (rng() - 0.5) * 1.8; // ragged edge
+      if (d > R + 2) continue;
+      const o = map.objectAt(x, y);
+      if (o && (o.type === 'tree' || o.type === 'rock')) map.removeObject(o);
+      if (d <= R) {
+        map.setFloor(x, y, 'sand');
+        // Dish it: deepest in the middle, so you walk down into it.
+        if (map.setHeight) map.setHeight(x, y, d < R * 0.45 ? -2 : d < R * 0.75 ? -1 : 0);
+      } else if (map.floorAt(x, y) === 'grass') {
+        map.setFloor(x, y, 'tallgrass'); // a dry fringe around the lip
+      }
+    }
+  }
+}
+
+// Standing water in the low ground — Aeaea's fen. Wadeable stream tiles laced
+// through tallgrass, with reed clumps: slow to cross, easy to lose a line of
+// sight in, and exactly the sort of place a witch's island should have.
+function stampMarsh(map, rng, cx, cy, R) {
+  for (let y = Math.floor(cy - R); y <= cy + R; y++) {
+    for (let x = Math.floor(cx - R); x <= cx + R; x++) {
+      if (!map.inBounds(x, y)) continue;
+      const f = map.floorAt(x, y);
+      if (f === 'water' || f === 'sea' || f === 'road' || f === 'bridge' || f === 'boards') continue;
+      const d = Math.hypot(x - cx, y - cy) + (rng() - 0.5) * 2.4;
+      if (d > R) continue;
+      const o = map.objectAt(x, y);
+      if (o && (o.type === 'tree' || o.type === 'rock')) map.removeObject(o);
+      if (map.setHeight) map.setHeight(x, y, 0); // marsh is flat; no wading uphill
+      // Stippled: pools through reedbed rather than one clean pond.
+      map.setFloor(x, y, rng() < 0.55 ? 'stream' : 'tallgrass');
+    }
+  }
+}
+
+// A burnt forest — Aegilia's fire scar. Dead standing trunks (tree variant 4,
+// the bare one) on scorched dirt: a grey, open, hostile patch where a wood used
+// to be, and one of the few places on the goat isle with clear sightlines.
+function stampBurn(map, rng, cx, cy, R) {
+  for (let y = Math.floor(cy - R); y <= cy + R; y++) {
+    for (let x = Math.floor(cx - R); x <= cx + R; x++) {
+      if (!map.inBounds(x, y)) continue;
+      const f = map.floorAt(x, y);
+      if (f === 'water' || f === 'sea' || f === 'road' || f === 'bridge' || f === 'boards') continue;
+      const d = Math.hypot(x - cx, y - cy) + (rng() - 0.5) * 2.2;
+      if (d > R) continue;
+      const o = map.objectAt(x, y);
+      if (o && o.type === 'tree') map.removeObject(o);
+      if (f === 'grass' || f === 'tallgrass') map.setFloor(x, y, 'dirt');
+      // A thin stand of dead trunks left standing in the ash.
+      if (!map.objectAt(x, y) && rng() < 0.16) map.addObject('tree', x, y, { variant: 4 });
+    }
+  }
+}
+
+// An olive grove — Ithaca's, and the one landform in the game that is purely a
+// kindness. Ordered rows of trees on tended ground: the only regular planting
+// in the archipelago, because someone once looked after it. (Odysseus's own
+// olive is the bed-post his marriage is proved by, Od. 23.190-204.)
+function stampOlives(map, rng, cx, cy, R) {
+  for (let y = Math.floor(cy - R); y <= cy + R; y++) {
+    for (let x = Math.floor(cx - R); x <= cx + R; x++) {
+      if (!map.inBounds(x, y)) continue;
+      const f = map.floorAt(x, y);
+      if (f !== 'grass' && f !== 'tallgrass') continue;
+      const d = Math.hypot(x - cx, y - cy);
+      if (d > R) continue;
+      if (map.objectAt(x, y)) continue;
+      // Planted in rows, not scattered — the tell that this is husbandry.
+      if (x % 2 === 0 && y % 2 === 0 && rng() < 0.9) {
+        map.addObject('tree', x, y, { variant: Math.floor(rng() * 3) });
+      } else if (rng() < 0.25) {
+        map.setFloor(x, y, 'tallgrass'); // long grass between the rows
+      }
+    }
+  }
+}
+
+// Stamp whichever signature feature this island asked for.
+function stampFeature(map, rng, kind, keepClear) {
+  if (!kind) return;
+  // Somewhere central-ish, nudged by the seed, and never on the town.
+  let cx = 0, cy = 0;
+  for (let tries = 0; tries < 60; tries++) {
+    cx = 34 + Math.floor(rng() * 60);
+    cy = 34 + Math.floor(rng() * 60);
+    if (!inKeepClear(cx, cy, keepClear)) break;
+  }
+  if (kind === 'sandpit') stampSandPit(map, rng, cx, cy, 13);
+  else if (kind === 'marsh') stampMarsh(map, rng, cx, cy, 15);
+  else if (kind === 'burn') stampBurn(map, rng, cx, cy, 14);
+  else if (kind === 'olives') stampOlives(map, rng, cx, cy, 18);
+  map.feature = { kind, x: cx, y: cy };
+}
+
 // Three dense forest regions, like the test-map cluster but larger: one on
 // each side of the river in the north, one in the south-east.
 function plantForests(map, rng, keepClear, cfg = {}) {
@@ -626,7 +752,10 @@ function layMeadows(map, rng, keepClear, cfg = {}) {
 // banks of mixed blooms on the gentle hill slopes, yellow daffodils drifting
 // through the valleys and hollows, and the odd lone flower out on the flat,
 // sparse on purpose. kind: 0 daisy, 1 campion, 2 cornflower, 3 daffodil.
-function scatterFlowers(map, rng, keepClear) {
+// cfg.density scales the wildflower banks. Ithaca runs generous: flowers are the
+// cheapest possible signal that a place is loved rather than merely survived.
+function scatterFlowers(map, rng, keepClear, cfg = {}) {
+  const density = cfg.density == null ? 1 : cfg.density;
   const plant = (x, y, kind) => {
     if (map.floorAt(x, y) !== 'grass' || map.objectAt(x, y)) return;
     if (inKeepClear(x, y, keepClear)) return;
@@ -639,7 +768,7 @@ function scatterFlowers(map, rng, keepClear) {
     const h = map.heightAt(x, y);
     if (h >= 1 && h <= 3 && map.floorAt(x, y) === 'grass') hillTiles.push([x, y]);
   }
-  const banks = Math.min(14, Math.floor(hillTiles.length / 40));
+  const banks = Math.round(Math.min(14, Math.floor(hillTiles.length / 40)) * density);
   for (let b = 0; b < banks; b++) {
     const [cx, cy] = hillTiles[Math.floor(rng() * hillTiles.length)];
     const kind = rng() < 0.45 ? 0 : rng() < 0.55 ? 1 : 2;
@@ -651,11 +780,11 @@ function scatterFlowers(map, rng, keepClear) {
   }
   // Daffodils in the low ground — the valley flower.
   for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) {
-    if (map.heightAt(x, y) <= -1 && rng() < 0.10) plant(x, y, 3);
+    if (map.heightAt(x, y) <= -1 && rng() < 0.10 * density) plant(x, y, 3);
   }
   // Lone blooms on the flat, rare enough to be a small pleasure to pass.
   for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) {
-    if (map.heightAt(x, y) === 0 && rng() < 0.006) plant(x, y, Math.floor(rng() * 3));
+    if (map.heightAt(x, y) === 0 && rng() < 0.006 * density) plant(x, y, Math.floor(rng() * 3));
   }
 }
 

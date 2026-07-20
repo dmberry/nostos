@@ -106,6 +106,7 @@ export const ISLAND_TERRAIN = {
   // proper road grid, and the most mountainous ground in the archipelago (goats
   // and caves). The river is a narrow torrent cutting the east.
   polyphemus: {
+    feature: 'burn',   // a fire scar: dead trunks on scorched dirt
     river: { cx: 88, amp: 5, freq: 0.07, halfMin: 0.6, halfMax: 1.2 },
     roads: 'spur',
     lots: 5,
@@ -113,13 +114,14 @@ export const ISLAND_TERRAIN = {
     hollows: { count: 5 },
     forests: { density: 0.55 },
     meadows: { count: 3 },
-    wrecks: { count: 2 },
+    flowers: { density: 0.35 },  // bare volcanic rock: almost nothing in bloom
   },
 
   // Aeaea: Circe's wooded island. Homer's men see smoke through dense oak and
   // thicket — so the heaviest forest cover of the five, a broad slow river
   // running EAST-WEST across the middle, and only the hall and its outbuildings.
   circe: {
+    feature: 'marsh',  // a reed fen in the low ground — pools, cover, slow going
     river: { cx: 58, amp: 12, freq: 0.03, halfMin: 1.6, halfMax: 3.0, axis: 'ew' },
     roads: 'none',
     lots: 4,
@@ -127,7 +129,7 @@ export const ISLAND_TERRAIN = {
     hollows: { count: 2 },
     forests: { density: 1.9 },
     meadows: { count: 5 },
-    wrecks: { count: 0 },
+    flowers: { density: 0.6 },   // too dark under that canopy for much to flower
   },
 
   // Thrinacia: the sun's meadows, where the cattle graze. Wide open pasture —
@@ -135,6 +137,7 @@ export const ISLAND_TERRAIN = {
   // single coastal road. The emptiness is the point: nowhere to hide from a sun
   // that is also the sensor.
   helios: {
+    feature: 'sandpit', // the dust-bowl: a great dished crater of sand
     river: null,
     roads: 'coastal',
     lots: 6,
@@ -142,7 +145,7 @@ export const ISLAND_TERRAIN = {
     hollows: { count: 1 },
     forests: { density: 0.3 },
     meadows: { count: 7 },
-    wrecks: { count: 3 },
+    flowers: { density: 0.45 },  // scorched pasture; the sun burns it off
   },
 
   // Ithaca: home, and the most beautiful ground in the game. A generous river,
@@ -150,6 +153,7 @@ export const ISLAND_TERRAIN = {
   // landscape feature the archipelago has, at its kindest. Nothing here is
   // stripped back; the abundance is the reward.
   ithaca: {
+    feature: 'olives', // an olive grove in tended rows — the one planting in the game
     river: { cx: 46, amp: 14, freq: 0.038, halfMin: 1.2, halfMax: 2.4 },
     roads: 'grid',
     lots: null,
@@ -157,7 +161,7 @@ export const ISLAND_TERRAIN = {
     hollows: { count: 4 },
     forests: { density: 1.4 },
     meadows: { count: 7 },
-    wrecks: { count: 1 },  // one wreck, long grown over: the war barely touched here
+    flowers: { density: 2.6 },  // home is in bloom — the clearest signal it is loved
   },
 };
 
