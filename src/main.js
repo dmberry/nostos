@@ -2133,7 +2133,7 @@ function endDrive(msg) {
   if (r) r.driven = false;
   driveState = null;
   player.terminalSafe = false;
-  if (hintEl) hintEl.style.display = '';
+  if (hintEl && !hintDone) hintEl.style.display = ''; // never resurrect it once it has had its say
   if (msg) player.say(msg);
 }
 
@@ -3090,8 +3090,13 @@ const touchLike = (window.matchMedia && window.matchMedia('(pointer: coarse)').m
 if (touchLike) {
   hintEl.textContent = 'Hold to move · tap to act · \u00bb run · \u25b2 jump · ? for help';
 }
-const HINT_LIFETIME = 120; // seconds of played time
+// How long "Press H for help" hangs about. It only ever needs to be read once,
+// and it sits over the bottom-right of the play area where it fouls the
+// Scrapbook and the SMS toast, so it goes early and — once gone — stays gone
+// (hintDone, or endDrive's restore would flick it back afterwards).
+const HINT_LIFETIME = 40; // seconds of played time
 let playTime = 0;
+let hintDone = false;
 
 // Backpack view: I toggles the full panel (drawn by the renderer), which
 // exposes the backpack's own storage/weapon slots for dragging — the
@@ -3340,6 +3345,15 @@ function update(dt) {
   if (pendingCrossing) {
     const target = pendingCrossing;
     pendingCrossing = null;
+    // END THE ROW-OUT HERE. This block runs BEFORE the departOut tick and
+    // returns, so a row-out left standing would survive the crossing and then
+    // hijack the next frame with the OLD island's coordinates — and because
+    // pendingCrossing is null by then, its own self-clear never fires. The
+    // result is a frame loop that returns before any input is read: you arrive
+    // stuck aboard, unable to step out or to board. Clear it where the crossing
+    // is actually committed, not where the voyage hopes to notice.
+    departOut = null;
+    player.aboard = null;
     const dest = worldById(target);
     if (dest) { goToWorld(dest); sfx.play('zap'); }
     return;
@@ -3498,9 +3512,13 @@ function update(dt) {
       player.say('You lie down to rest a while...');
     }
   }
-  if (hintEl.style.display !== 'none') {
+  if (!hintDone && hintEl.style.display !== 'none') {
     playTime += dt;
-    if (playTime >= HINT_LIFETIME) hintEl.style.display = 'none';
+    if (playTime >= HINT_LIFETIME) {
+      hintDone = true;
+      hintEl.style.opacity = '0';                          // fades, rather than popping out
+      setTimeout(() => { hintEl.style.display = 'none'; }, 1200);
+    }
   }
   const mouse = input.mousePos();
   const mouseWorld = camera.toWorld(mouse.x, mouse.y, renderer.w, renderer.h);
