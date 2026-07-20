@@ -243,6 +243,29 @@
   #ronnotebook .nb-text { white-space: pre-wrap; }
   #ronnotebook-footer { display: flex; align-items: center; justify-content: space-between;
     margin-top: 10px; padding-top: 8px; border-top: 1px dashed rgba(40,30,10,0.35); }
+  /* The HERMES test console (type "hermes" in-game). Deliberately plain and
+     un-game-like — it is a tool, not a diegetic screen, and it should never be
+     mistaken for one. */
+  #devbox { display: none; position: fixed; inset: 0; z-index: 40;
+    background: rgba(0,0,0,0.55); align-items: flex-start; justify-content: center; }
+  #devbox .dev-panel { margin-top: 6vh; width: min(720px, 92vw); max-height: 82vh; overflow: auto;
+    background: #12140f; border: 1px solid #47c07a; border-radius: 8px; padding: 14px 16px;
+    font: 12px ui-monospace, 'Courier New', monospace; color: #cfe8d4;
+    box-shadow: 0 18px 50px rgba(0,0,0,0.7); }
+  #devbox .dev-head { display: flex; justify-content: space-between; align-items: center;
+    font-weight: 700; letter-spacing: 0.12em; color: #47c07a; margin-bottom: 10px; }
+  #devbox #dev-close { background: transparent; border: none; color: #47c07a; font: 700 14px ui-monospace, monospace; cursor: pointer; }
+  #devbox .dev-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  #devbox .dev-row button { font: 11px ui-monospace, monospace; background: #1b2018; color: #cfe8d4;
+    border: 1px solid #35603f; border-radius: 4px; padding: 5px 9px; cursor: pointer; }
+  #devbox .dev-row button:hover { background: #24301f; border-color: #47c07a; }
+  #devbox #dev-out { max-height: 32vh; overflow-y: auto; white-space: pre-wrap; line-height: 1.5;
+    border-top: 1px solid #2a3a2c; border-bottom: 1px solid #2a3a2c; padding: 8px 2px; margin: 4px 0;
+    color: #a9c9b0; }
+  #devbox .dev-inputrow { display: flex; gap: 6px; align-items: center; padding-top: 6px; }
+  #devbox #dev-input { flex: 1; background: transparent; border: none; outline: none;
+    font: 12px ui-monospace, monospace; color: #eafff0; caret-color: #47c07a; }
+
   /* The Nokia 3310 (docs/calypso-nokia-plan.md): the handset IS the modal,
      ZOOMED into the screen. The sprite is scaled well past the viewport and
      cropped, so the glass dominates the view — earpiece above, navi key
@@ -644,6 +667,15 @@
     <div id="ronnotebook-title">NOTEPAD</div>
     <div id="ronnotebook-body"></div>
     <div class="nb-hint">&larr; &rarr; to flip &middot; the drop-down jumps to any page &middot; &times; or click outside to close</div>
+  </div>
+</div>
+<div id="devbox">
+  <div class="dev-panel">
+    <div class="dev-head"><span>HERMES · test console</span><button id="dev-close" type="button" aria-label="Close">&#10005;</button></div>
+    <div class="dev-row" id="dev-jump"></div>
+    <div class="dev-row" id="dev-kit"></div>
+    <div id="dev-out"></div>
+    <div class="dev-inputrow"><span>&gt;</span><input id="dev-input" type="text" autocomplete="off" spellcheck="false" placeholder="help"></div>
   </div>
 </div>
 <div id="nokiaphone">

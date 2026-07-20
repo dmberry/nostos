@@ -887,6 +887,214 @@ phSnakeEl.addEventListener('pointerdown', (e) => {
   snakeTurnRelative(snakeGame, (e.clientX - r.left) > r.width / 2);
 });
 
+// ---- HERMES test console ---------------------------------------------------
+// Type "hermes" anywhere in-game and this opens: jump between islands, conjure
+// items, arm the escape chain, and skip the parts you are not testing. It is a
+// DEVELOPMENT TOOL, deliberately plain-looking so it can never be mistaken for a
+// diegetic screen, and it is opened by a typed word rather than a key so it
+// cannot be found by accident.
+//
+// Nothing here reimplements game logic: jumps go through goToWorld/worldById
+// (so islands build lazily exactly as they do when you sail), items go through
+// player.stow, arming writes the same player.virusArmed the forge writes.
+const DEV_WORD = 'hermes';
+let _devTyped = '';
+const devEl = document.getElementById('devbox');
+const devOutEl = document.getElementById('dev-out');
+const devInputEl = document.getElementById('dev-input');
+
+function devPrint(...lines) {
+  for (const l of lines) {
+    const d = document.createElement('div');
+    d.textContent = l;
+    devOutEl.appendChild(d);
+  }
+  devOutEl.scrollTop = devOutEl.scrollHeight;
+}
+function devOpen() {
+  if (devEl.style.display === 'flex') return;
+  devEl.style.display = 'flex';
+  devInputEl.value = '';
+  devInputEl.focus();
+  if (!devOutEl.childElementCount) {
+    devPrint('HERMES test console. `help` for commands.',
+      `on: ${currentWorld.id}   pos: ${player.x.toFixed(1)},${player.y.toFixed(1)}`);
+  }
+}
+function devClose() { devEl.style.display = 'none'; devInputEl.blur(); }
+
+// The kit buttons: the things worth reaching for over and over when testing.
+const DEV_KITS = [
+  ['AI key', () => { player.stow('ai_key', 1); return 'ai_key'; }],
+  ['Trojan card', () => { player.stow('trojan_key', 1); return 'trojan_key'; }],
+  ['Hermes card (armed: all)', () => {
+    player.stow('hermes_card', 1);
+    for (const ai of ['CALYPSO', 'POLYPHEMUS', 'CIRCE', 'HELIOS']) player.virusArmed.add(ai);
+    return 'hermes_card, armed against every daemon';
+  }],
+  ['Chip + manual', () => { player.stow('chip', 1); player.stow('book_ronml', 1); return 'chip, book_ronml'; }],
+  ['Golden axe', () => { player.stow('golden_axe', 1); return 'golden_axe' ; }],
+  ['Ship parts', () => { for (const k of ['oar', 'rope', 'sail']) player.stow(k, 1); player.stow('wood', 40); return 'oar, rope, sail, 40 wood'; }],
+  ['Weapons kit', () => {
+    for (const [k, n] of [['railgun', 1], ['battery', 20], ['shotgun', 1], ['shells', 20], ['sledgehammer', 1], ['crowbar', 1]]) player.stow(k, n);
+    return 'railgun+cells, shotgun+shells, sledgehammer, crowbar';
+  }],
+  ['Backpack + map', () => { player.stow('backpack', 1); player.stow('fortress_map', 1); player.stow('printed_map', 1); return 'backpack, fortress_map, printed_map'; }],
+  ['Heal + feed', () => { player.health = player.maxHealth; player.stamina = player.maxStamina; player.food = player.maxFood; player.venom = 0; player.torpor = 0; return 'restored'; }],
+];
+
+function devBuildButtons() {
+  const jump = document.getElementById('dev-jump');
+  const kit = document.getElementById('dev-kit');
+  if (jump.childElementCount) return; // built once
+  for (const c of CROSSINGS) {
+    const b = document.createElement('button');
+    b.textContent = c.place;
+    b.onclick = () => devRun('go ' + c.id);
+    jump.appendChild(b);
+  }
+  const bs = document.createElement('button');
+  bs.textContent = 'BACKSPACE';
+  bs.onclick = () => devRun('go backspace');
+  jump.appendChild(bs);
+  DEV_KITS.forEach((k, i) => {
+    const b = document.createElement('button');
+    b.textContent = k[0];
+    b.onclick = () => devRun('kit ' + i);
+    kit.appendChild(b);
+  });
+}
+
+function devRun(raw) {
+  const cmd = (raw || '').trim();
+  if (!cmd) return;
+  devPrint('> ' + cmd);
+  const [verb, ...rest] = cmd.split(/\s+/);
+  const arg = rest.join(' ');
+  switch (verb.toLowerCase()) {
+    case 'help':
+      devPrint('go <island|backspace>   jump (calypso polyphemus circe helios ithaca)',
+        'give <item> [n]         any key from items.js — `items <text>` to search',
+        'items [text]            list item keys, optionally filtered',
+        'kit <n>                 the numbered buttons above',
+        'arm <AI|all>            arm the card against a daemon (CALYPSO/POLYPHEMUS/CIRCE/HELIOS)',
+        'unshield                drop this island\'s core shield',
+        'open                    open the fortress gate + sanctum door + maze',
+        'leave                   set calypsoLeave (the sea will let you go)',
+        'tp <x> <y>              teleport on this island',
+        'score <n> / heal / kill / where');
+      return;
+    case 'go': {
+      const id = arg.toLowerCase();
+      if (id === 'backspace') { enterBackspace(); devPrint('-> backspace'); return; }
+      const dest = worldById(id);
+      if (!dest) { devPrint('no island "' + id + '"'); return; }
+      const arrival = dest.onEnter;
+      dest.onEnter = () => {};        // a test jump is not a story arrival
+      goToWorld(dest);
+      dest.onEnter = arrival;
+      devPrint(`-> ${id} at ${player.x.toFixed(1)},${player.y.toFixed(1)}`);
+      return;
+    }
+    case 'give': {
+      const m = arg.match(/^(\S+)(?:\s+(\d+))?$/);
+      if (!m) { devPrint('give <item> [n]'); return; }
+      const key = m[1], n = m[2] ? parseInt(m[2], 10) : 1;
+      if (!ITEMS[key]) { devPrint(`no item "${key}" — try: items ${key}`); return; }
+      const left = player.stow(key, n);
+      devPrint(`gave ${n - (left || 0)} x ${key}${left ? ` (${left} would not fit)` : ''}`);
+      return;
+    }
+    case 'items': {
+      const keys = Object.keys(ITEMS).filter((k) => !arg || k.includes(arg.toLowerCase()));
+      devPrint(`${keys.length} item(s):`, keys.join('  '));
+      return;
+    }
+    case 'kit': {
+      const k = DEV_KITS[parseInt(arg, 10)];
+      if (!k) { devPrint('no such kit'); return; }
+      devPrint('+ ' + k[1]());
+      return;
+    }
+    case 'arm': {
+      const who = arg.toUpperCase();
+      const all = ['CALYPSO', 'POLYPHEMUS', 'CIRCE', 'HELIOS'];
+      const list = who === 'ALL' || !who ? all : [who];
+      for (const ai of list) player.virusArmed.add(ai);
+      if (!player.hasTrojanCard()) player.stow('hermes_card', 1);
+      devPrint('armed: ' + [...player.virusArmed].join(', '));
+      return;
+    }
+    case 'unshield': {
+      const core = fortress && fortress.core && fortress.core.obj;
+      if (!core) { devPrint('no core here'); return; }
+      core.shielded = false;
+      devPrint('core shield down');
+      return;
+    }
+    case 'open': {
+      if (fortress && fortress.openMaze) { fortress.openMaze(); devPrint('gate, sanctum and maze opened'); }
+      else devPrint('no fortress here');
+      return;
+    }
+    case 'leave':
+      player.calypsoLeave = true;
+      devPrint('calypsoLeave set — the sea will let you go');
+      return;
+    case 'tp': {
+      const [tx, ty] = rest.map(Number);
+      if (!isFinite(tx) || !isFinite(ty)) { devPrint('tp <x> <y>'); return; }
+      player.x = tx; player.y = ty; camera.snap(player.x, player.y);
+      devPrint(`-> ${tx},${ty}`);
+      return;
+    }
+    case 'score':
+      player.addScore(parseInt(arg, 10) || 0);
+      devPrint('score ' + player.score);
+      return;
+    case 'heal':
+      player.health = player.maxHealth; player.stamina = player.maxStamina;
+      player.food = player.maxFood; player.venom = 0; player.torpor = 0;
+      devPrint('restored');
+      return;
+    case 'kill': {
+      let n = 0;
+      for (const r of currentWorld.robots) if (!r.dead) { r.dead = true; n++; }
+      devPrint(`killed ${n} machine(s) on this island`);
+      return;
+    }
+    case 'where':
+      devPrint(`${currentWorld.id} @ ${player.x.toFixed(1)},${player.y.toFixed(1)}  winMode=${currentWorld.winMode}`,
+        `armed: ${[...player.virusArmed].join(', ') || 'none'}  calypsoLeave=${!!player.calypsoLeave}`);
+      return;
+    default:
+      devPrint(`? ${verb} — try \`help\``);
+  }
+}
+
+devEl.addEventListener('click', (e) => { if (e.target === devEl) devClose(); });
+document.getElementById('dev-close').addEventListener('click', devClose);
+devInputEl.addEventListener('keydown', (e) => {
+  e.stopPropagation();               // never leaks into movement
+  if (e.key === 'Enter') { devRun(devInputEl.value); devInputEl.value = ''; }
+  else if (e.key === 'Escape') devClose();
+});
+// The secret knock. Letters typed while NOT in a text field accumulate; the word
+// opens the console. Capture phase so it sees the key before input.js swallows
+// tracked game keys (E, R, S...) — which "hermes" is full of.
+window.addEventListener('keydown', (e) => {
+  if (devEl.style.display === 'flex') return;
+  const tag = e.target && e.target.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  if (e.metaKey || e.ctrlKey || e.altKey || e.key.length !== 1) return;
+  _devTyped = (_devTyped + e.key.toLowerCase()).slice(-DEV_WORD.length);
+  if (_devTyped === DEV_WORD) {
+    _devTyped = '';
+    devBuildButtons();
+    devOpen();
+  }
+}, true);
+
 // The failed crossing. Boarding an unfinished boat does NOT bounce you off the
 // hull with a message — you launch, you row out, and the sea rises and sends you
 // home. Poseidon has to actually refuse you for the refusal to mean anything, and
