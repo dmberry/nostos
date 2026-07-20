@@ -18,6 +18,7 @@ import { placeRuins } from '../game/ruins.js';
 import { stampCoast } from '../engine/coast.js';
 import { createFortress } from '../game/fortress.js';
 import { makeRng } from '../game/rng.js';
+import { applyIslandPalette } from '../game/palettes.js';
 import { createWorld } from '../game/world.js';
 
 const OB_COLOR = '#4e1410';       // ember at rest — the single burning eye
@@ -204,6 +205,7 @@ export function createPolyphemus(seed) {
   map.explored = new Uint8Array(map.w * map.h);
   map.newlyRevealed = [];
 
+  applyIslandPalette(map, 'polyphemus'); // per-island ground + foliage colour (B2)
   const world = createWorld('polyphemus', {
     map, spawn: arrival, robots, animals, birds, waterdroids, obelisks, obeliskObjs,
     obColor: OB_COLOR, obAlertColor: OB_ALERT,

@@ -19,6 +19,7 @@ import { placeRuins } from '../game/ruins.js';
 import { stampCoast } from '../engine/coast.js';
 import { createFortress } from '../game/fortress.js';
 import { makeRng } from '../game/rng.js';
+import { applyIslandPalette } from '../game/palettes.js';
 import { createWorld } from '../game/world.js';
 
 const OB_COLOR = '#1f3a24';       // venom green at rest — the drugged kykeon
@@ -224,6 +225,7 @@ export function createCirce(seed) {
   map.explored = new Uint8Array(map.w * map.h);
   map.newlyRevealed = [];
 
+  applyIslandPalette(map, 'circe'); // per-island ground + foliage colour (B2)
   const world = createWorld('circe', {
     map, spawn: arrival, robots, animals, birds, waterdroids, obelisks, obeliskObjs,
     obColor: OB_COLOR, obAlertColor: OB_ALERT,

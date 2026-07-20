@@ -1104,6 +1104,13 @@ export class Renderer {
   drawFloor(map, tx, ty, type, shade) {
     const ctx = this.ctx;
     const def = FLOORS[type];
+    // Per-island ground palette (B2). `map.palette` overrides a floor's base
+    // colour for THIS island only — FLOORS itself is a shared singleton, so
+    // mutating it would repaint every island at once. Everything downstream
+    // (hillside skirts, the texture wash, the grass blades) derives from this
+    // one value, so an island's whole ground character comes from one line in
+    // its island file. The minimap reads the same map.palette.
+    const baseColor = (map.palette && map.palette[type]) || def.color;
     // The sea is always flat — draw it (deep-ocean texture at height 0) and
     // return before any elevation handling, so an edge tile that ended up as
     // sea while still carrying terrain height can never lift into a block or
@@ -1115,9 +1122,9 @@ export class Renderer {
     // lower, including level ground dropping into a hollow.
     if (map.heightAt) {
       const hs = map.heightAt(tx, ty + 1);
-      if (hs < h) this.skirt(corners[3], corners[2], (h - hs) * ELEV, shadeHex(def.color, shade - 0.3));
+      if (hs < h) this.skirt(corners[3], corners[2], (h - hs) * ELEV, shadeHex(baseColor, shade - 0.3));
       const he = map.heightAt(tx + 1, ty);
-      if (he < h) this.skirt(corners[1], corners[2], (h - he) * ELEV, shadeHex(def.color, shade - 0.45));
+      if (he < h) this.skirt(corners[1], corners[2], (h - he) * ELEV, shadeHex(baseColor, shade - 0.45));
     }
     // The underworld floor is its own thing: the open sea is flat yellow +
     // procedural wear, rooms carry one of the seven photo floors, corridors
@@ -1155,17 +1162,17 @@ export class Renderer {
         const flow = 0.5 + 0.5 * Math.sin((tx + ty) * 0.6 - performance.now() / 260);
         alpha = Math.max(0.12, Math.min(0.85, alpha + flow * 0.14 - 0.07));
       }
-      this.drawTexturedQuad(corners, tex, shadeHex(def.color, shade), tintColor, tintMode, alpha);
+      this.drawTexturedQuad(corners, tex, shadeHex(baseColor, shade), tintColor, tintMode, alpha);
     } else {
       this.diamondPath(corners);
-      ctx.fillStyle = shadeHex(def.color, shade);
+      ctx.fillStyle = shadeHex(baseColor, shade);
       ctx.fill();
     }
     this.diamondPath(corners);
     ctx.strokeStyle = 'rgba(0,0,0,0.07)';
     ctx.lineWidth = 1;
     ctx.stroke();
-    if (type === 'grass' || type === 'tallgrass') this.drawGrassBlades(tx, ty, corners, def.color, shade);
+    if (type === 'grass' || type === 'tallgrass') this.drawGrassBlades(tx, ty, corners, baseColor, shade);
     // The maze's "way out" trail: once solved, a lit floor-stud on each tile of
     // the solution path (a green guide, so it never reads as danger). Textured
     // like every glow, and rolled along the trail so it looks like it's flowing
@@ -2475,6 +2482,36 @@ export class Renderer {
     else if (obj.graffiti) this.drawGraffiti(obj, gFace, gSide);
   }
 
+  // A copy of the tree sheet multiplied through an island's foliage colour,
+  // built once per tint and cached for the session. `tint` is either null (the
+  // sheet as drawn) or { color, strength } / a bare colour string. The alpha
+  // mask is restored from the original afterwards, so the cut-out edges stay
+  // exact and only the visible pixels take the colour.
+  tintedTreeSheet(tint) {
+    if (!tint || !TREE_SHEET || !TREE_SHEET.complete || !TREE_SHEET.naturalWidth) return TREE_SHEET;
+    const color = typeof tint === 'string' ? tint : tint.color;
+    const strength = typeof tint === 'string' ? 0.45 : (tint.strength ?? 0.45);
+    if (!color) return TREE_SHEET;
+    const key = `${color}|${strength}`;
+    this._treeTints = this._treeTints || new Map();
+    const cached = this._treeTints.get(key);
+    if (cached) return cached;
+    const off = document.createElement('canvas');
+    off.width = TREE_SHEET.naturalWidth;
+    off.height = TREE_SHEET.naturalHeight;
+    const o = off.getContext('2d');
+    o.drawImage(TREE_SHEET, 0, 0);
+    o.globalCompositeOperation = 'multiply';  // keeps the painted shading, shifts the hue
+    o.globalAlpha = strength;
+    o.fillStyle = color;
+    o.fillRect(0, 0, off.width, off.height);
+    o.globalAlpha = 1;
+    o.globalCompositeOperation = 'destination-in'; // re-cut to the sheet's own alpha
+    o.drawImage(TREE_SHEET, 0, 0);
+    this._treeTints.set(key, off);
+    return off;
+  }
+
   drawTree(obj) {
     const ctx = this.ctx;
     const c = worldToScreen(obj.x + 0.5, obj.y + 0.5);
@@ -2492,10 +2529,14 @@ export class Renderer {
     if (spr && TREE_SHEET && TREE_SHEET.complete && TREE_SHEET.naturalWidth) {
       const BASE = 0.72;          // sheet px -> screen px for a full-grown tree
       const dw = spr.sw * BASE * g, dh = spr.sh * BASE * g;
+      // Per-island foliage colour (B2): olive, ash, gold, deep green. Uses a
+      // pre-tinted copy of the sheet — tinting each tree each frame would cost
+      // far too much with hundreds on screen.
+      const sheet = this.tintedTreeSheet(this.hudMap && this.hudMap.treeTint);
       ctx.save();
       ctx.translate(c.x, c.y + 3);   // pivot at the trunk base (shadow sits here)
       if (wob) ctx.rotate(wob * 0.012);
-      ctx.drawImage(TREE_SHEET, spr.sx, spr.sy, spr.sw, spr.sh, -dw / 2, -dh, dw, dh);
+      ctx.drawImage(sheet, spr.sx, spr.sy, spr.sw, spr.sh, -dw / 2, -dh, dw, dh);
       ctx.restore();
       this.treeDamageBar(obj, c.x, c.y + 3 - dh - 4);
       return;

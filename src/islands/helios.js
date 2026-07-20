@@ -19,6 +19,7 @@ import { placeRuins } from '../game/ruins.js';
 import { stampCoast } from '../engine/coast.js';
 import { createFortress } from '../game/fortress.js';
 import { makeRng } from '../game/rng.js';
+import { applyIslandPalette } from '../game/palettes.js';
 import { createWorld } from '../game/world.js';
 
 const OB_COLOR = '#5c4310';       // burnt gold at rest — the darkened sun
@@ -229,6 +230,7 @@ export function createHelios(seed) {
   map.explored = new Uint8Array(map.w * map.h);
   map.newlyRevealed = [];
 
+  applyIslandPalette(map, 'helios'); // per-island ground + foliage colour (B2)
   const world = createWorld('helios', {
     map, spawn: arrival, robots, animals, birds, waterdroids, obelisks, obeliskObjs,
     obColor: OB_COLOR, obAlertColor: OB_ALERT,

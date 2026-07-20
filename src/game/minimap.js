@@ -25,8 +25,11 @@ export class Minimap {
     const ctx = this.canvas.getContext('2d');
     for (let y = 0; y < map.h; y++) {
       for (let x = 0; x < map.w; x++) {
-        const def = FLOORS[map.floorAt(x, y)];
-        ctx.fillStyle = def ? def.color : FALLBACK_FLOOR;
+        const type = map.floorAt(x, y);
+        const def = FLOORS[type];
+        // Same per-island palette the world floor uses (B2), so the minimap
+        // never disagrees with the ground under your feet.
+        ctx.fillStyle = (map.palette && map.palette[type]) || (def ? def.color : FALLBACK_FLOOR);
         ctx.fillRect(x, y, 1, 1);
       }
     }

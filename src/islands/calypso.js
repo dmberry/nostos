@@ -19,6 +19,7 @@ import { placeShipParts } from '../game/ships.js';
 import { placeBoatYard } from '../game/boatyard.js';
 import { createFortress } from '../game/fortress.js';
 import { makeRng } from '../game/rng.js';
+import { applyIslandPalette } from '../game/palettes.js';
 import { TAPES } from '../game/items.js';
 import { createWorld } from '../game/world.js';
 
@@ -416,6 +417,7 @@ export function createIsland(seed) {
   robots.push(...fortress.spawnGuards(spawnM4));
 
   const birds = spawnBirds(map, seed);
+  applyIslandPalette(map, 'calypso'); // per-island ground + foliage colour (B2)
   const world = createWorld('calypso', {
     map, spawn, robots, animals, birds, waterdroids, obelisks, obeliskObjs,
     obColor: '#232a46', obAlertColor: '#4b5cc4', // Ogygia: kalyptō — indigo at rest, brightening on alert (R1)

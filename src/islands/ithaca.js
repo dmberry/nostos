@@ -16,6 +16,7 @@ import { spawnTameDog, updateAnimals } from '../game/animals.js';
 import { stampCoast } from '../engine/coast.js';
 import { placeRuins } from '../game/ruins.js';
 import { makeRng } from '../game/rng.js';
+import { applyIslandPalette } from '../game/palettes.js';
 import { createWorld } from '../game/world.js';
 
 // A beach tile (sand with open sea on one cardinal side, buildable land on the
@@ -112,6 +113,7 @@ export function createIthaca(seed) {
   map.explored = new Uint8Array(map.w * map.h).fill(1);
   map.newlyRevealed = [];
 
+  applyIslandPalette(map, 'ithaca'); // per-island ground + foliage colour (B2)
   const world = createWorld('ithaca', {
     map,
     spawn: arrival,
