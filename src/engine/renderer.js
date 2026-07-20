@@ -568,6 +568,9 @@ export class Renderer {
     // thin, distinct from the ordinary day/night veil.
     if (hud.underworld) this.drawUnderworldVeil();
 
+    // Poseidon's fog on the failed crossing. Over the world, under the HUD.
+    if (hud.seaFog) this.drawSeaFog(hud.seaFog);
+
     // While driving a machine, the robot-vision overlay (drawn by main.js after
     // this) samples the canvas as ASCII — so suppress the normal HUD here, or it
     // would be turned into ASCII too. The scene + sprites still render.
@@ -2510,6 +2513,93 @@ export class Renderer {
     o.drawImage(TREE_SHEET, 0, 0);
     this._treeTints.set(key, off);
     return off;
+  }
+
+  // Poseidon's fog, drawn during the failed crossing (main.js updateCrossFail).
+  // Two jobs at once: it sells the refusal — the sea closing round the boat and
+  // walking it home — and it veils the open water, which is the emptiest, most
+  // primitive-looking part of the game, at exactly the moment the camera is
+  // furthest from land.
+  //
+  // f = { amount 0..1, swirl, t, push } where `push` is the seaward unit vector
+  // the boat is being driven back ALONG (screen space). Banks stream in from
+  // ahead — the direction you were trying to go — and turn about the boat, so
+  // the motion reads as the sea itself refusing, not as weather.
+  drawSeaFog(f) {
+    const a = Math.max(0, Math.min(1, f.amount || 0));
+    if (a <= 0.001) return;
+    const ctx = this.ctx;
+    const W = this.w, H = this.hudTop != null ? this.hudTop : this.h;
+    const cx = W / 2, cy = H / 2 - 16;   // the boat sits at the camera's centre
+    const t = f.t || 0;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip(); // never bleed onto the dashboard
+    // A flat grey-green veil first, so distance genuinely goes: the further you
+    // are from the boat the less you can make out.
+    const veil = ctx.createRadialGradient(cx, cy, Math.min(W, H) * 0.10, cx, cy, Math.max(W, H) * 0.62);
+    veil.addColorStop(0, `rgba(196,206,206,${(a * 0.10).toFixed(3)})`);
+    veil.addColorStop(1, `rgba(176,190,196,${(a * 0.80).toFixed(3)})`);
+    ctx.fillStyle = veil;
+    ctx.fillRect(0, 0, W, H);
+    // Banks: big soft blobs orbiting the boat. Each has its own radius, rate and
+    // phase, so they shear past one another and the mass never reads as a
+    // rotating wheel. The swirl tightens (radius shrinks, rate rises) as the sea
+    // takes hold, which is what makes it look like it is closing IN.
+    const swirl = f.swirl || 0;
+    const px = f.push ? f.push.x : 0, py = f.push ? f.push.y : -1;
+    // One streak. Drawn as a circle squashed hard along its own orbit tangent —
+    // round blobs, however many, just average into a flat wash and read as haze;
+    // ELONGATED banks lying along the direction of travel are what the eye picks
+    // up as rotation. That is the whole trick of this effect.
+    const streak = (ox, oy, size, tangent, stretch, alpha, core) => {
+      if (alpha <= 0.002) return;
+      ctx.save();
+      ctx.translate(ox, oy);
+      ctx.rotate(tangent);
+      ctx.scale(1, stretch);                 // squash across the direction of motion
+      const g = ctx.createRadialGradient(0, 0, 0, 0, 0, size);
+      g.addColorStop(0, `rgba(${core},${alpha.toFixed(3)})`);
+      g.addColorStop(0.5, `rgba(210,220,222,${(alpha * 0.5).toFixed(3)})`);
+      g.addColorStop(1, 'rgba(198,210,214,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(0, 0, size, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    };
+    // The banks: long shelves of fog orbiting the boat, counter-rotating so they
+    // shear past one another. They tighten and speed up as the sea takes hold.
+    const BANKS = 13;
+    const drift = (1 - Math.cos(Math.min(1, t / 6) * Math.PI)) * 0.5;
+    for (let i = 0; i < BANKS; i++) {
+      const seed = i * 2.399963;                       // golden angle: even spread, no banding
+      const spin = (i % 2 ? 1 : -1);
+      const rate = 0.30 + (i % 4) * 0.11 + swirl * 0.85;
+      const ang = seed + t * rate * spin;
+      const spread = Math.max(W, H) * (0.52 - swirl * 0.20);
+      const rad = spread * (0.30 + 0.70 * ((i * 7 % 11) / 11));
+      // Drift the field in from the seaward side, so the fog arrives from the way
+      // you were headed and is driven back over you with the boat.
+      const ox = cx + Math.cos(ang) * rad - px * spread * 0.40 * drift;
+      const oy = cy + Math.sin(ang) * rad * 0.60 - py * spread * 0.40 * drift;
+      const size = Math.max(W, H) * (0.16 + 0.13 * ((i * 5 % 7) / 7));
+      const puff = 0.5 + 0.5 * Math.sin(t * (0.7 + (i % 3) * 0.25) + seed);
+      // Tangent to the orbit = the way this bank is actually travelling.
+      const tangent = ang + Math.PI / 2 * spin;
+      streak(ox, oy, size, tangent, 0.34 - swirl * 0.10, a * 0.42 * puff, '234,240,240');
+    }
+    // A close, fast layer right around the hull — the part that reads as the fog
+    // TOUCHING the boat and dragging round it rather than sitting behind.
+    for (let i = 0; i < 7; i++) {
+      const spin = (i % 2 ? 1 : -1);
+      const ang = i * 0.897 + t * (1.3 + swirl * 2.4) * spin;
+      const rad = (64 + 30 * Math.sin(t * 1.3 + i)) * (1 - swirl * 0.22);
+      const ox = cx + Math.cos(ang) * rad, oy = cy + Math.sin(ang) * rad * 0.5;
+      const size = 84 + 26 * Math.sin(t * 0.9 + i * 2);
+      const alpha = a * (0.16 + 0.20 * swirl) * (0.55 + 0.45 * Math.sin(t * 1.7 + i));
+      streak(ox, oy, size, ang + Math.PI / 2 * spin, 0.30, alpha, '246,250,250');
+    }
+    ctx.restore();
   }
 
   drawTree(obj) {

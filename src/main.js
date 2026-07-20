@@ -943,6 +943,38 @@ function aboardHeading(cf, hx, hy) {
   player.aboard = { type: cf.type, mirror: boatMirror(hx, hy), wob: 0 };
 }
 
+// Poseidon's fog for the failed crossing (renderer.drawSeaFog). It thickens as
+// the island falls away, closes right in on the crest while the sea takes hold,
+// and thins again as the land comes back up under you — so the weather tells the
+// same story as the boat's motion. It also, frankly, veils a lot of empty water
+// at the one moment the camera is furthest from anything worth looking at.
+function seaFogState() {
+  if (!crossFail) return null;
+  const cf = crossFail;
+  const T_SWELL = CF_OUT, T_BACK = CF_OUT + CF_SWELL;
+  let amount, swirl;
+  if (cf.t < T_SWELL) {
+    const u = cf.t / T_SWELL;
+    amount = 0.14 + 0.70 * u;          // rolls in behind you
+    swirl = 0.12 * u;
+  } else if (cf.t < T_BACK) {
+    const u = (cf.t - T_SWELL) / CF_SWELL;
+    amount = 0.84 + 0.16 * u;          // right in on the crest
+    swirl = 0.12 + 0.88 * u;           // and turning hard
+  } else {
+    const u = Math.min(1, (cf.t - T_BACK) / CF_BACK);
+    amount = 1.0 - 0.80 * u;           // opens again as home comes up
+    swirl = 1.0 - 0.55 * u;
+  }
+  // The seaward heading in SCREEN space, so the banks stream in from the way you
+  // were trying to go and get driven back over you with the boat.
+  const a = worldToScreen(player.x, player.y);
+  const b = worldToScreen(player.x + cf.dx, player.y + cf.dy);
+  const sx = b.x - a.x, sy = b.y - a.y;
+  const len = Math.hypot(sx, sy) || 1;
+  return { amount, swirl, t: cf.t, push: { x: sx / len, y: sy / len } };
+}
+
 // Drive the failed crossing. Returns nothing; the caller returns immediately
 // after, so the whole world holds still while the sea deals with you.
 function updateCrossFail(dt) {
@@ -3871,6 +3903,7 @@ function frame(now) {
       toast,
       nokiaToast: nokia.current,
       nokiaSignal: nokiaSignalBars(),
+      seaFog: seaFogState(), // Poseidon's fog on the failed crossing (null otherwise)
       touchControls: touchLike,
       touchRunHeld: input._touchRun,
       drag: drag ? { ...drag, mx: input.mouseX, my: input.mouseY } : null,
