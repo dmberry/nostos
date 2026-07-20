@@ -326,6 +326,13 @@ function buildSaveBlob() {
 }
 const persist = () => {
   if (resettingGame) return;
+  // Never save a TRANSIENT VOYAGE. While aboard a boat, mid-crossing, or rowing
+  // out to the chart, the player's x/y is out on open water and the aboard flag
+  // is set — persisting that (the 8s autosave fires regardless) is what left
+  // players reloading onto the sea, marooned, with no boat and no way back in.
+  // These states resolve within seconds; skip the save until the keel is on
+  // sand again.
+  if (player.aboard || crossFail || departOut || pendingCrossing) return;
   // Savable worlds are the islands you can be on across a reload: CALYPSO and
   // ITHACA (Stage 1c — buildSaveBlob records world.currentIsland, and the boot
   // restore resumes you there). The Backspace is a transient pocket you always
@@ -4337,4 +4344,38 @@ if (_bootIsland && _bootIsland !== 'calypso') {
 // R3: seed the detain flag from the world we actually boot on (the Calypso start
 // never routes through goToWorld, so set it here too). Depart mode → her guards detain.
 player.detainMode = currentWorld.winMode === 'depart';
+
+// Rescue any save that was already stranded on the water (an older build could
+// autosave you mid-voyage; the new guard above stops fresh ones). If the boot
+// position is a sea/water tile, spiral outward to the nearest walkable land and
+// stand the player there, so a Continue never drops you marooned offshore. Also
+// clears aboard, which is never persisted but belt-and-braces.
+player.aboard = null;
+{
+  const wet = (x, y) => {
+    const f = map.floorAt(Math.floor(x), Math.floor(y));
+    return f === 'sea' || f === 'water' || f == null;
+  };
+  if (wet(player.x, player.y)) {
+    let best = null;
+    for (let r = 1; r <= 40 && !best; r++) {
+      for (let dy = -r; dy <= r && !best; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue; // ring only
+          const nx = Math.floor(player.x) + dx, ny = Math.floor(player.y) + dy;
+          if (!map.inBounds || !map.inBounds(nx, ny)) continue;
+          const f = map.floorAt(nx, ny);
+          if (f && f !== 'sea' && f !== 'water' && !(map.isSolid && map.isSolid(nx, ny))) {
+            best = { x: nx + 0.5, y: ny + 0.5 }; break;
+          }
+        }
+      }
+    }
+    if (best) {
+      player.x = best.x; player.y = best.y;
+      camera.snap(player.x, player.y);
+      player.say('You come to on the shore, soaked, the boat nowhere in sight. However you got here, you are ashore now.');
+    }
+  }
+}
 requestAnimationFrame(frame);
