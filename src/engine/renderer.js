@@ -247,6 +247,9 @@ export class Renderer {
     // floor, before the depth-sorted objects) so the fallen columns and the
     // player stand up out of it. Only the groves in view are drawn.
     if (map.temples && map.temples.length) this.drawTempleMist(map, range);
+    // Cloud on the summit: the great mountain's snow-cap wears the same mist,
+    // lifted to the peak's elevation so it hangs about the top of the massif.
+    if (map.mountain) this.drawSummitMist(map, range);
 
     // Pass 2: depth-sorted drawables. Objects use their tile centre for
     // depth; the player uses its continuous position.
@@ -2572,6 +2575,39 @@ export class Renderer {
         ctx.ellipse(s.x, s.y - 6, size, size * 0.5, 0, 0, Math.PI * 2); // flat, ground-hugging
         ctx.fill();
       }
+    }
+    ctx.restore();
+  }
+
+  // Cloud crowning the mountain summit — the same swirl as the temple mist, but
+  // bigger, colder, and lifted to the peak's own elevation so it hangs about the
+  // top of the massif rather than lying on the ground. Only drawn when the summit
+  // is near the visible range.
+  drawSummitMist(map, range) {
+    const m = map.mountain;
+    if (m.x < range.minX - 20 || m.x > range.maxX + 20 || m.y < range.minY - 20 || m.y > range.maxY + 20) return;
+    const ctx = this.ctx;
+    const t = performance.now() / 1000;
+    const lift = (map.heightAt ? map.heightAt(m.x, m.y) : 0) * ELEV; // ELEV px per height level
+    ctx.save();
+    for (let i = 0; i < 7; i++) {
+      const seed = i * 2.399963;
+      const ang = seed + t * (0.07 + (i % 3) * 0.03);
+      const rad = 4 + 3.5 * ((i * 5 % 7) / 7);                 // tiles from the peak
+      const wx = m.x + Math.cos(ang) * rad, wy = m.y + Math.sin(ang) * rad;
+      const s = worldToScreen(wx, wy);
+      const sy = s.y - lift;                                    // hang up at the summit
+      const size = 70 + 30 * Math.sin(t * 0.5 + seed);
+      const puff = 0.5 + 0.5 * Math.sin(t * 0.6 + seed);
+      const a = 0.20 * puff;
+      const g = ctx.createRadialGradient(s.x, sy, 0, s.x, sy, size);
+      g.addColorStop(0, `rgba(238,244,246,${a.toFixed(3)})`);
+      g.addColorStop(0.6, `rgba(216,226,230,${(a * 0.5).toFixed(3)})`);
+      g.addColorStop(1, 'rgba(210,222,226,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.ellipse(s.x, sy, size, size * 0.6, 0, 0, Math.PI * 2);
+      ctx.fill();
     }
     ctx.restore();
   }

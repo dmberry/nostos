@@ -170,9 +170,12 @@ export function sendNokia(nokia, key, ctx) {
 }
 
 // File one SMS into the handset's thread log, capped so the save stays small.
-export function logSms(player, th, from, text) {
+// `at` is the in-world clock (HH:MM) stamped on the message; callers pass
+// dayNight.clock. player._smsClock is the fallback so a call site without the
+// clock to hand (an old one) still records something plausible.
+export function logSms(player, th, from, text, at) {
   player.nokiaLog = player.nokiaLog || [];
-  player.nokiaLog.push({ th, from, text });
+  player.nokiaLog.push({ th, from, text, at: at || player._smsClock || '' });
   if (player.nokiaLog.length > 60) player.nokiaLog = player.nokiaLog.slice(-60);
 }
 

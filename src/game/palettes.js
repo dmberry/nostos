@@ -34,58 +34,62 @@ export const ISLAND_PALETTES = {
     treeTint: { color: '#63b06a', strength: 0.30 },
   },
 
-  // Aegilia, the goat isle: burnt volcanic ground, ash-grey sand, scrub
-  // clinging on. Polyphemus's rock, and it should feel like rock.
+  // Aegilia, the goat isle: burnt volcanic ground. Pushed hard toward grey-brown
+  // and DESATURATED — the least green island, so it reads as rock the moment you
+  // land. (The whole point of the saturation pass: each island's chroma is its
+  // signature as much as its hue.)
   polyphemus: {
     palette: {
-      grass: '#6b7042',
-      tallgrass: '#79763f',
-      dirt: '#6b5340',
-      sand: '#a89b84',
+      grass: '#77714f',    // olive-grey, barely green
+      tallgrass: '#8a7f48',
+      dirt: '#5f4a38',
+      sand: '#9c917d',     // ash
       stream: '#5b7d92',
     },
-    treeTint: { color: '#7d7a4a', strength: 0.45 },
+    treeTint: { color: '#8a7f4e', strength: 0.6 },  // dusty, greyed foliage
   },
 
-  // Aeaea: Circe's garden. Everything grows too well here — a dark, wet,
-  // over-fed green with the faintest violet in the shadows.
+  // Aeaea: Circe's garden. Everything grows too well — the DARKEST, most
+  // saturated green of the five, dropped low in value with a violet cast in the
+  // shadows, so it feels wet, over-fed, and faintly wrong.
   circe: {
     palette: {
-      grass: '#3f7a45',
-      tallgrass: '#4a7c3a',
-      dirt: '#5f4a44',
-      sand: '#b3a48f',
-      stream: '#4a7f8c',
+      grass: '#2f6b3c',    // deep bottle green
+      tallgrass: '#3a7233',
+      dirt: '#57433f',
+      sand: '#a99a86',
+      stream: '#3f7683',
     },
-    treeTint: { color: '#2f6b46', strength: 0.5 },
+    treeTint: { color: '#245a3c', strength: 0.62 },
   },
 
-  // Thrinacia: the sun's own island, where the light is the sensor. Parched
-  // gold, bleached ground, the grass burnt pale by a sun that never looks away.
+  // Thrinacia: the sun's own island. Pushed further into BLEACHED gold — the
+  // grass is barely grass, more scorched hay, so it reads as heat and exposure.
   helios: {
     palette: {
-      grass: '#94914a',
-      tallgrass: '#a89b46',
-      dirt: '#93764a',
-      sand: '#dcc98d',
-      stream: '#6f96a8',
+      grass: '#a89f4a',    // dry gold
+      tallgrass: '#c0ac42',
+      dirt: '#9c7c46',
+      sand: '#e6d290',     // pale hot sand
+      stream: '#7ba1b0',
     },
-    treeTint: { color: '#b09a4e', strength: 0.5 },
+    treeTint: { color: '#bda44e', strength: 0.58 },
   },
 
-  // Ithaca: home. The warmest, kindest ground in the archipelago — olive and
-  // meadow green, soft golden sand. Nothing here is bleached or burnt; it is
-  // the one island whose colour is meant to be a relief after the others.
+  // Ithaca: home. The warmest, MOST saturated and vivid ground in the game —
+  // olive and living meadow-green, rich golden sand, a bright kind sea. It is the
+  // one island whose colour is a relief, and it should look it against the muted
+  // and bleached and over-dark others.
   ithaca: {
     palette: {
-      grass: '#5d9a4e',
-      tallgrass: '#7aa54a',
-      dirt: '#8a7050',
-      sand: '#e2d2a4',
-      stream: '#5a93bd',
-      water: '#3f7cb4',
+      grass: '#5aa64d',    // bright living green
+      tallgrass: '#7fb548',
+      dirt: '#8f7250',
+      sand: '#ecd9a6',
+      stream: '#4f9ac9',
+      water: '#3f86c4',
     },
-    treeTint: { color: '#7cbf63', strength: 0.32 },
+    treeTint: { color: '#79c85f', strength: 0.3 },
   },
 };
 
@@ -115,6 +119,7 @@ export const ISLAND_TERRAIN = {
     forests: { density: 0.55 },
     meadows: { count: 3 },
     flowers: { density: 0.35 },  // bare volcanic rock: almost nothing in bloom
+    mountain: { x: 40, y: 44, peak: 15 }, // the great peak of the goat isle — rock and snow above the tree line
   },
 
   // Aeaea: Circe's wooded island. Homer's men see smoke through dense oak and

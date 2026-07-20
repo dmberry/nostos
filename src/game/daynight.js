@@ -65,6 +65,14 @@ export class DayNight {
     return 1 + Math.floor(this.totalHours / 24);
   }
 
+  // Bare HH:MM of the in-world clock — used to timestamp SMS in the phone thread.
+  get clock() {
+    const h = Math.floor(this.hour);
+    const m = Math.floor((this.hour - h) * 60);
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${pad(h)}:${pad(m)}`;
+  }
+
   // e.g. "Day 2 · 14:30" (24h clock, zero-padded minutes).
   get label() {
     const h = Math.floor(this.hour);

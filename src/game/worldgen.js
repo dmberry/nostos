@@ -35,6 +35,8 @@ const WEST_ROAD_X = 14;   // north-south lane through the hamlet (cols 14-15)
 //             car sprites, smashCar's salvage, the right-click inspection) is
 //             kept whole, so a better vehicle can be dropped in later by setting
 //             a count. Do not delete the generator.
+//   mountain  one great peak: { x, y, peak } — much taller than the ordinary
+//             hills (which cap at 8), rock above the tree line, snow at the top
 //   feature   a signature landform: 'sandpit' | 'marsh' | 'burn' | 'olives'
 //   lotus     false on every island but Ogygia (it was generated on ALL of them,
 //             at the identical spot — her signature grove was everywhere)
@@ -48,6 +50,7 @@ const TERRAIN_DEFAULTS = {
   meadows: { count: null },
   flowers: { density: 1 },
   wrecks: { count: 0 },   // no cars on any island for now — see the note above
+  mountain: null,
   feature: null,
   lotus: false,
 };
@@ -89,9 +92,14 @@ export function buildWorld(seed, cfg = {}) {
   // height field is zeroed on all locked ground and relaxed so no two
   // adjacent tiles ever differ by more than one step.
   const hills = raiseHills(map, rng, t.hills);
+  if (t.mountain) raiseMountain(map, rng, t.mountain, keepClear);
   if (t.river) carveStreams(map, rng, hills);
   finalizeHeights(map, keepClear);
   carveHollows(map, rng, keepClear, t.hollows);
+  // The mountain's rock/snow lines are painted AFTER the heights are final (the
+  // Chebyshev clamp shaped the cone) and BEFORE the forests, so trees only land
+  // on the grassy lower slopes and never on bare rock.
+  if (t.mountain) dressMountain(map, rng, t.mountain);
 
   plantForests(map, rng, keepClear, t.forests);
   layMeadows(map, rng, keepClear, t.meadows);
@@ -374,6 +382,82 @@ function raiseHills(map, rng, cfg = {}) {
     hills.push({ cx, cy, r, peak });
   }
   return hills;
+}
+
+// One GREAT mountain — much taller than the ordinary hills (which cap at 8).
+// A single cone stamped with its own high peak and a radius wide enough that
+// finalizeHeights' one-step clamp leaves a steep but climbable spiral of banks
+// rather than a sheer cliff. A couple of shoulder-blobs break the perfect cone
+// so it reads as a mountain, not a wizard's hat. Placed near the interior, clear
+// of the town, so it dominates the skyline of its island.
+function raiseMountain(map, rng, cfg, keepClear) {
+  const peak = cfg.peak || 14;
+  const cx = cfg.x, cy = cfg.y;
+  // Radius must cover the whole descent (one step per tile) plus slack, or the
+  // clamp would shave the summit down to fit the ground it can reach.
+  const r = peak + 4 + Math.floor(rng() * 3);
+  const blobs = [{ x: cx, y: cy, p: peak, r }];
+  // Two lower shoulders, offset, so the massif is lopsided and natural.
+  for (let i = 0; i < 2; i++) {
+    blobs.push({
+      x: cx + Math.round((rng() - 0.5) * peak),
+      y: cy + Math.round((rng() - 0.5) * peak),
+      p: Math.round(peak * (0.5 + rng() * 0.2)),
+      r: r * 0.6,
+    });
+  }
+  for (const b of blobs) {
+    const R = Math.ceil(b.r);
+    for (let y = b.y - R; y <= b.y + R; y++) {
+      for (let x = b.x - R; x <= b.x + R; x++) {
+        if (!map.inBounds(x, y)) continue;
+        const d = Math.hypot(x - b.x, y - b.y);
+        // LINEAR descent (peak/radius per tile, kept under 1 by the radius slack
+        // above) so finalizeHeights' one-step clamp never has to shave the flanks
+        // — which, propagating inward, would lower the summit. Small per-tile
+        // jitter roughens the otherwise perfect cone.
+        const v = Math.round(b.p * (1 - d / b.r) + (rng() - 0.5) * 0.8);
+        if (v > map.heightAt(x, y)) map.setHeight(x, y, v); // no 8-cap: this is THE mountain
+      }
+    }
+  }
+  map.mountain = { x: cx, y: cy, peak };
+}
+
+// Paint the mountain's zones once the heights are final: bare rock above the
+// tree line, a snow-cap near the summit. Only converts open ground (so it never
+// eats a road or a building that happens to sit on a shoulder), and marks the
+// grass just below the tree line so plantForests can thin it into an alpine
+// fringe (see the 'treeLine' hook there).
+function dressMountain(map, rng, cfg) {
+  const peak = cfg.peak || 14;
+  const snowLine = Math.max(6, peak - 3);   // white cap: the top few levels
+  const stoneLine = Math.max(4, Math.round(peak * 0.5)); // bare rock: the upper half
+  map.treeLine = stoneLine;                 // plantForests / scatterLoners read this
+  for (let y = 0; y < map.h; y++) {
+    for (let x = 0; x < map.w; x++) {
+      const f = map.floorAt(x, y);
+      if (f !== 'grass' && f !== 'tallgrass') continue;
+      const h = map.heightAt(x, y);
+      if (h >= snowLine) map.setFloor(x, y, 'snow');
+      else if (h >= stoneLine) map.setFloor(x, y, 'stone');
+      // A ragged rock/grass border just under the stone line so the transition
+      // isn't a clean contour ring.
+      else if (h === stoneLine - 1 && rng() < 0.35) map.setFloor(x, y, 'stone');
+    }
+  }
+  // The alpine fringe: a scatter of small, spare conifers on the grass just
+  // below the rock (a real tree line thins to stunted trees, not lush forest).
+  // Planted here — before plantForests, which is told to skip this high band —
+  // so the upper slopes read as mountain, not woodland climbing to the summit.
+  for (let y = 0; y < map.h; y++) {
+    for (let x = 0; x < map.w; x++) {
+      if (map.floorAt(x, y) !== 'grass' || map.objectAt(x, y)) continue;
+      const h = map.heightAt(x, y);
+      if (h < stoneLine - 3 || h >= stoneLine) continue;   // just the fringe band
+      if (rng() < 0.22) map.addObject('tree', x, y, { variant: rng() < 0.6 ? 3 : 4 }); // small / bare-conifer
+    }
+  }
 }
 
 // Streams: 2-3 shallow, wadeable channels, 1-2 tiles wide, each rising at
@@ -715,6 +799,9 @@ function plantForests(map, rng, keepClear, cfg = {}) {
       const y = r.y + Math.floor(rng() * r.h);
       if (map.floorAt(x, y) !== 'grass' || map.objectAt(x, y)) continue;
       if (inKeepClear(x, y, keepClear)) continue;
+      // Leafy forest stops at the tree line: the alpine fringe (dressMountain)
+      // owns the band just below the rock, and above it is bare mountain.
+      if (map.treeLine != null && map.heightAt(x, y) >= map.treeLine - 2) continue;
       if (rng() < 0.7) map.addObject('tree', x, y, { variant: treeVariant(rng) });
     }
   }
@@ -833,6 +920,9 @@ function scatterLoners(map, rng, keepClear) {
     const y = Math.floor(rng() * map.h);
     if (map.floorAt(x, y) !== 'grass' || map.objectAt(x, y)) continue;
     if (inKeepClear(x, y, keepClear)) continue;
+    // Above the tree line, drop a bare rock but never a leafy loner.
+    const highGround = map.treeLine != null && map.heightAt(x, y) >= map.treeLine - 2;
+    if (highGround) { map.addObject('rock', x, y); continue; }
     if (rng() < 0.75) map.addObject('tree', x, y, { variant: treeVariant(rng) });
     else map.addObject('rock', x, y);
   }

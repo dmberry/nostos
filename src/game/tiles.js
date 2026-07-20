@@ -13,6 +13,11 @@ export const FLOORS = {
   stream: { color: '#4f83b5', solid: false }, // shallow water, wadeable
   bridge: { color: '#8a7048', solid: false },
   tallgrass: { color: '#6f8f3f', solid: false },
+  // High ground on a mountain island: bare rock above the tree line, and a pale
+  // snow-cap at the very top. Both walkable — you climb the mountain — just no
+  // longer green. (worldgen's dressMountain converts high open tiles to these.)
+  stone:  { color: '#7c7a74', solid: false },
+  snow:   { color: '#dfe3e6', solid: false },
   // ZEUS's fortress (the map's southern annex): a cold metal-panel deck
   // for the corridors and maze, a paved quadrangle for the open killing-ground,
   // and a dark charcoal deck for the inner sanctum. All walkable.

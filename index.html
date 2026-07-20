@@ -340,9 +340,14 @@
   #nokiaphone #ph-snake { display: none; width: 100%; height: auto; margin: auto 0;
     image-rendering: pixelated; }
   /* You in bold, them in normal weight — who is speaking reads at a glance. */
-  #nokiaphone #ph-thread .ph-you { text-align: right; margin: 4px 0 4px 36px; font-weight: 700; }
-  #nokiaphone #ph-thread .ph-them { margin: 4px 36px 4px 0; }
+  #nokiaphone #ph-thread .ph-you { text-align: right; margin: 1px 0 4px 36px; font-weight: 700; }
+  #nokiaphone #ph-thread .ph-them { margin: 1px 36px 4px 0; }
   #nokiaphone #ph-thread .ph-sys { text-align: center; font-size: 11px; opacity: 0.6; margin: 5px 0; }
+  /* Sender + time header over each bubble, and a hairline separating senders. */
+  #nokiaphone #ph-thread .ph-meta { font-size: 0.72em; opacity: 0.5; letter-spacing: 0.05em; margin-top: 4px; }
+  #nokiaphone #ph-thread .ph-meta-you { text-align: right; }
+  #nokiaphone #ph-thread .ph-sep { border-bottom: 1px solid rgba(43,52,32,0.22); margin: 4px 0; }
+  #nokiaphone #ph-thread .ph-sep:last-child { border-bottom: none; margin-bottom: 0; }
   #nokiaphone .ph-inputrow { display: flex; align-items: center; gap: 6px;
     border-top: 1px solid rgba(43,52,32,0.5); padding-top: 6px; }
   #nokiaphone #ph-input { flex: 1; min-width: 0; background: transparent; border: none; outline: none;

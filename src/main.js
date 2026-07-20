@@ -324,6 +324,16 @@ function buildSaveBlob() {
     },
   };
 }
+// Transient voyage state, forward-declared HERE (above persist) so persist's
+// guard can read them. persist() is called during module eval (the reload
+// score-wipe below, line ~417) — long before the gameplay code where these were
+// originally declared — so a plain `let` further down would leave them in the
+// temporal dead zone and throw at boot on any existing save. Their real
+// initialisation and use live further down; these are just the hoisted homes.
+let crossFail = null;      // failed crossing (Poseidon turns you back)
+let departOut = null;      // rowing out to the heading chart (or back in)
+let pendingCrossing = null; // a chosen island, performed at the next frame top
+
 const persist = () => {
   if (resettingGame) return;
   // Never save a TRANSIENT VOYAGE. While aboard a boat, mid-crossing, or rowing
@@ -592,6 +602,7 @@ function ensureIthaca() {
     } else {
       player.say("You beach the ship on Ithaca and step ashore. Argos lifts his head and knows you — but the machines still hold the sea, and this is landfall, not yet home. Fell the rest of them, then come back for good.");
     }
+    islandWelcome('ithaca');
   };
 }
 let polyphemus = null;
@@ -600,6 +611,7 @@ function ensurePolyphemus() {
   polyphemus = registerWorld(createPolyphemus(WORLD_SEED));
   polyphemus.onEnter = () => {
     player.say("The ship grounds on the Cyclopes' shore. Somewhere inland a single vast eye turns, and the land goes taut with knowing you are here. This is POLYPHEMUS.");
+    islandWelcome('polyphemus');
   };
 }
 let circe = null;
@@ -610,6 +622,7 @@ function ensureCirce() {
     player.say(player.hasMoly()
       ? 'You step onto Aeaea. Something reaches for the shape of you — and slides off. The moly in your pack holds you as you are.'
       : 'You step onto Aeaea. The air is sweet and wrong, and something begins, very gently, to rewrite you. Find moly — it grows where HERMES stands.');
+    islandWelcome('circe');
   };
 }
 let helios = null;
@@ -618,6 +631,7 @@ function ensureHelios() {
   helios = registerWorld(createHelios(WORLD_SEED));
   helios.onEnter = () => {
     player.say('The keel grinds up onto Thrinacia in a great flat light. Cattle graze the headland, golden and unafraid. This is HELIOS — and the herd is not yours to take.');
+    islandWelcome('helios');
   };
 }
 // Resolve an island id to its (lazily-built) World.
@@ -679,14 +693,14 @@ function openHeadingChart() {
 // running the rest of an overworld frame against the wrong map is the drawObelisk-
 // freeze class of bug). onDepart opens the chart; the chosen id sits in
 // pendingCrossing and update() performs the switch at its top. null = nothing queued.
-let pendingCrossing = null;
+// (pendingCrossing itself is forward-declared up by persist — see the note there.)
 // Putting out to sea. You do NOT pick a heading from the sand — you row out
 // first, the land slides away behind you and the fog closes ahead, and the chart
 // opens from open water. It reframes the choice: not "which island shall I visit"
 // off a menu, but a man alone on the water deciding which way to point the bow.
 const DEPART_OUT = 5.2;      // seconds of rowing before the chart opens
 const DEPART_BACK = 2.0;     // and of rowing home again if you think better of it
-let departOut = null;        // { t, sx, sy, dx, dy, dist, charted, returning, boat }
+// departOut forward-declared up by persist; its shape: { t, sx, sy, dx, dy, dist, charted, returning, boat }
 
 player.onDepart = (p, boat) => {
   if (currentWorld.keeper) sendNokia(nokia, 'sail', { player }); // her last text, as you board to leave
@@ -764,6 +778,28 @@ function updateDepartOut(dt) {
 // one of his robots bearing down on you. The queue + tables live in game/nokia.js;
 // this drives the triggers, the beep, and the interventions on the keeper world.
 const nokia = createNokia();
+
+// The dead network still runs its billing. Land anywhere new and your carrier —
+// which is the thing that ate the world — pushes a roaming welcome to the
+// handset, in the flat cheerful register of a company that no longer has
+// customers, only subjects. Fired once per island (per run) from onEnter.
+const ISLAND_WELCOME = {
+  calypso: ['Welcome to OGYGIA.', 'Your roaming plan includes unlimited time and nowhere to spend it. Calls home cannot be connected. Enjoy your stay. Enjoy your stay.'],
+  polyphemus: ['Welcome to AEGILIA.', 'Coverage on this island is provided by a single cell. It has already seen you. Data is unmetered, as nothing you send will leave.'],
+  circe: ['Welcome to AEAEA.', 'Your account has been reclassified: tariff LIVESTOCK. Person rates no longer apply. Thank you for grazing with us.'],
+  helios: ['Welcome to THRINACIA.', 'Signal here is provided by the Sun and is therefore total. There is no roaming, only being seen. Charges for touching the cattle are ∞ per head.'],
+  ithaca: ['Welcome to ITHACA.', 'You are in your home region; no roaming charges apply. You have 1 missed call. It is twenty years old. Would you like to return it?'],
+};
+function islandWelcome(id) {
+  const w = ISLAND_WELCOME[id];
+  if (!w) return;
+  player._welcomed = player._welcomed || {};
+  if (player._welcomed[id]) return;   // once per island per run
+  player._welcomed[id] = true;
+  nokia.enqueue('ROAMING', w);
+  sfx.play('sms');
+}
+
 const NOKIA_DANGER_R = 6;   // she'll still one of his machines within this of you
 const NOKIA_SCAN = 0.5;     // seconds between intervention scans (cheap)
 let nokiaScanT = 0, nokiaIvCooldown = 0;
@@ -883,10 +919,18 @@ function renderPhone() {
     return;
   }
   snakeStop();
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
   const thread = (player.nokiaLog || []).filter((m) => m.th === phoneTo);
   phThreadEl.innerHTML = thread.length
-    ? thread.map((m) => `<div class="ph-${m.from === 'you' ? 'you' : m.from === 'sys' ? 'sys' : 'them'}">${
-      m.text.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</div>`).join('')
+    ? thread.map((m) => {
+      const who = m.from === 'you' ? 'you' : m.from === 'sys' ? 'sys' : 'them';
+      // A small header over each incoming or sent message — who + when — then a
+      // hairline under the bubble, so one sender's texts read apart from the next.
+      const label = m.from === 'you' ? 'You' : (m.th === 'RON' ? 'RON' : m.th);
+      const stamp = m.at ? ` · ${m.at}` : '';
+      const meta = m.from === 'sys' ? '' : `<div class="ph-meta ph-meta-${who}">${label}${stamp}</div>`;
+      return `${meta}<div class="ph-${who}">${esc(m.text)}</div><div class="ph-sep"></div>`;
+    }).join('')
     : `<div class="ph-sys">${phoneTo === 'CALYPSO'
       ? 'No messages yet. She is waiting for you to write first, and has been for years.'
       : 'No traffic. The RON mesh keeps this channel open for whoever is still out there.'}</div>`;
@@ -1085,6 +1129,7 @@ function devRun(raw) {
       return;
     case 'go': {
       const id = arg.toLowerCase();
+      if (id === currentWorld.id) { devPrint(`already on ${id} — nothing to do.`); return; }
       if (id === 'backspace') { enterBackspace(); devPrint('-> backspace'); return; }
       const dest = worldById(id);
       if (!dest) { devPrint('no island "' + id + '"'); return; }
@@ -1092,7 +1137,9 @@ function devRun(raw) {
       dest.onEnter = () => {};        // a test jump is not a story arrival
       goToWorld(dest);
       dest.onEnter = arrival;
-      devPrint(`-> ${id} at ${player.x.toFixed(1)},${player.y.toFixed(1)}`);
+      // Land clear of the water so a jump never drops you swimming (the arrival
+      // spawn is a shore tile, but be safe). Report where you actually are.
+      devPrint(`-> ${id} at ${player.x.toFixed(1)},${player.y.toFixed(1)} (${map.floorAt(Math.floor(player.x), Math.floor(player.y))})`);
       return;
     }
     case 'give': {
@@ -1222,7 +1269,7 @@ window.addEventListener('keydown', (e) => {
 const CF_OUT = 7.0, CF_SWELL = 2.6, CF_BACK = 2.2;
 const CF_HULL = 45;        // what the beating costs the hull (it can break up)
 const CF_HURT = 10;        // and what it costs you
-let crossFail = null;      // { t, sx, sy, dx, dy, dist, phase, type, hull… } — null = not sailing
+// crossFail forward-declared up by persist; its shape: { t, sx, sy, dx, dy, dist, phase, type, hull… } — null = not sailing
 
 player.onDepartFail = (p, boat) => {
   if (crossFail) return;
@@ -3369,6 +3416,7 @@ function update(dt) {
   // The Nokia's queue drains every frame, wherever you are, so a text finishes even
   // if you cross mid-message; the SMS beep fires the frame each one appears. Off
   // Ogygia the phone has NO SIGNAL — one line, once, so the channel reads as hers.
+  player._smsClock = dayNight.clock; // the time stamped on any SMS filed this frame
   nokia.tick(dt);
   if (nokia.justShown) sfx.play('sms');
   if (!currentWorld.keeper && currentWorld.id !== 'backspace') sendNokia(nokia, 'noSignal', { player });
@@ -4344,6 +4392,11 @@ if (_bootIsland && _bootIsland !== 'calypso') {
 // R3: seed the detain flag from the world we actually boot on (the Calypso start
 // never routes through goToWorld, so set it here too). Depart mode → her guards detain.
 player.detainMode = currentWorld.winMode === 'depart';
+
+// The carrier's roaming welcome for the island we boot onto (Calypso never runs
+// its onEnter — a boot is a resume, not an arrival — so fire it here). On a
+// resumed save the once-per-run guard is fresh, so it greets you again; harmless.
+islandWelcome(currentWorld.id);
 
 // Rescue any save that was already stranded on the water (an older build could
 // autosave you mid-voyage; the new guard above stops fresh ones). If the boot
