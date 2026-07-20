@@ -114,5 +114,39 @@ export function stampCoast(map, spawn = null) {
         if (map.floorAt(x, y) === 'sea' && map.heightAt(x, y) !== 0) map.setHeight(x, y, 0);
       }
     }
+    // ...and the mirror of that problem: no GROUND may sit below sea level at the
+    // shoreline. A hollow carved out to the water (carveHollows / the sandpit)
+    // leaves land at -1 or -2 right beside a sea tile pinned at 0. drawFloor
+    // returns early for sea, before the skirt pass, so nothing paints the
+    // vertical face down to that lower ground and raw canvas shows through as a
+    // black wedge on the beach. Lift the shoreline back to sea level, then relax
+    // outward so the fill never leaves a cliff of more than one step behind it
+    // (the same invariant finalizeHeights maintains).
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        if (map.floorAt(x, y) === 'sea' || map.heightAt(x, y) >= 0) continue;
+        let touchesSea = false;
+        for (let dy = -1; dy <= 1 && !touchesSea; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (map.floorAt(x + dx, y + dy) === 'sea') { touchesSea = true; break; }
+          }
+        }
+        if (touchesSea) map.setHeight(x, y, 0);
+      }
+    }
+    for (let pass = 0; pass < 6; pass++) {
+      let changed = false;
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          if (map.floorAt(x, y) === 'sea') continue;
+          const h = map.heightAt(x, y);
+          for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const n = map.heightAt(x + dx, y + dy);
+            if (n - h > 1) { map.setHeight(x, y, n - 1); changed = true; break; }
+          }
+        }
+      }
+      if (!changed) break;
+    }
   }
 }

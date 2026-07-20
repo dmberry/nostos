@@ -1118,7 +1118,25 @@ export class Renderer {
     // return before any elevation handling, so an edge tile that ended up as
     // sea while still carrying terrain height can never lift into a block or
     // cast a dark, sea-coloured hillside skirt floating over the water.
-    if (type === 'sea') { this.drawSeaTile(tx, ty); return; }
+    if (type === 'sea') {
+      this.drawSeaTile(tx, ty);
+      // Belt-and-braces against the black-wedge bug: a sea tile is pinned flat at
+      // height 0, but if its south/east neighbour sits LOWER (a hollow carved to
+      // the shore), the general skirt pass below never runs for sea — so nothing
+      // paints the vertical face down to that ground and raw canvas shows through.
+      // coast.js now lifts such shorelines to 0 so this should never fire, but if
+      // any generator dips below sea level again, fill the face in the sea colour
+      // rather than leave a hole. (Only DOWNWARD faces; sea never stacks upward.)
+      if (map.heightAt) {
+        const c = this.tileCorners(tx, ty, 0);
+        const seaFace = shadeHex(FLOORS.sea.color, -0.15);
+        const hs = map.heightAt(tx, ty + 1);
+        if (hs < 0) this.skirt(c[3], c[2], -hs * ELEV, seaFace);
+        const he = map.heightAt(tx + 1, ty);
+        if (he < 0) this.skirt(c[1], c[2], -he * ELEV, seaFace);
+      }
+      return;
+    }
     const h = map.heightAt ? map.heightAt(tx, ty) : 0;
     const corners = this.tileCorners(tx, ty, h * ELEV);
     // Skirts: visible hillside faces wherever the south/east neighbour sits
