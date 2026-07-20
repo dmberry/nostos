@@ -626,17 +626,27 @@ function worldById(id) {
 // The heading chart (islands-plan §10.1): boarding the ship opens a chart of the
 // islands you know of; you pick where to steer. Every island but the one you are
 // on is offered. (Danger-gated, not locked — you may sail early into a slaughter.)
+// Each landfall carries its Homeric epithet — the formula the poem itself uses
+// when it names the place — so the chart reads as a rhapsode's list of harbours
+// rather than a level select.
 const CROSSINGS = [
-  { id: 'calypso', place: 'OGYGIA', desc: "Calypso's island, where you were kept." },
-  { id: 'polyphemus', place: 'AEGILIA', desc: 'The Land of the Cyclopes. A single eye watches.' },
-  { id: 'circe', place: 'AEAEA', desc: "Circe's island. She does not kill you — she rewrites you." },
-  { id: 'helios', place: 'THRINACIA', desc: 'The island of the Sun. Its cattle are forbidden.' },
-  { id: 'ithaca', place: 'ITHACA', desc: 'Home — if the sea will let you.' },
+  { id: 'calypso', place: 'OGYGIA', epithet: 'the navel of the sea',
+    desc: "Calypso's island, where you were kept, and kept well." },
+  { id: 'polyphemus', place: 'AEGILIA', epithet: 'the goat isle, harbourless',
+    desc: 'The land of the Cyclopes, who plant nothing and answer to no one. One eye watches it all.' },
+  { id: 'circe', place: 'AEAEA', epithet: 'where the dawn has her dancing-floor',
+    desc: 'Circe of the lovely braids. She does not kill what she takes — she changes what it is.' },
+  { id: 'helios', place: 'THRINACIA', epithet: 'the island of the Sun',
+    desc: 'His cattle graze there, and they are forbidden. The light itself keeps the watch.' },
+  { id: 'ithaca', place: 'ITHACA', epithet: 'clear-seen, a good nurse of young men',
+    desc: 'Home — rough, and small, and yours, if the sea will let you come to it.' },
 ];
 const headingEl = document.getElementById('heading');
 const headingListEl = document.getElementById('heading-list');
-document.getElementById('heading-cancel').addEventListener('click', () => { headingEl.style.display = 'none'; });
-headingEl.addEventListener('click', (e) => { if (e.target === headingEl) headingEl.style.display = 'none'; });
+// Cancelling puts the helm over and rows you back in (headingCancelled), rather
+// than just dismissing the modal and leaving you adrift offshore.
+document.getElementById('heading-cancel').addEventListener('click', () => headingCancelled());
+headingEl.addEventListener('click', (e) => { if (e.target === headingEl) headingCancelled(); });
 // The chart the ship opens: pick an island and sail. (The Backspace's alternative
 // crossing road, R4, is diegetic doors now — not this chart — so this stays the
 // plain sailing chart.)
@@ -645,10 +655,11 @@ function openHeadingChart() {
   for (const c of CROSSINGS) {
     if (c.id === currentWorld.id) continue;
     const btn = document.createElement('button');
-    btn.innerHTML = `<span class="place">${c.place}</span><span class="desc">${c.desc}</span>`;
+    btn.innerHTML = `<span class="place">${c.place}</span><span class="epithet">${c.epithet}</span>`
+      + `<span class="desc">${c.desc}</span>`;
     btn.addEventListener('click', () => {
       headingEl.style.display = 'none';
-      player.say('You set your heading and pull for open water.');
+      player.say(`You put the bow toward ${c.place}, and the fog takes the boat.`);
       pendingCrossing = c.id; // performed at the next frame top (see update())
     });
     headingListEl.appendChild(btn);
@@ -662,10 +673,83 @@ function openHeadingChart() {
 // freeze class of bug). onDepart opens the chart; the chosen id sits in
 // pendingCrossing and update() performs the switch at its top. null = nothing queued.
 let pendingCrossing = null;
-player.onDepart = () => {
-  if (currentWorld.keeper) sendNokia(nokia, 'sail', { player }); // her last text, as you board to leave Ogygia
-  openHeadingChart();
+// Putting out to sea. You do NOT pick a heading from the sand — you row out
+// first, the land slides away behind you and the fog closes ahead, and the chart
+// opens from open water. It reframes the choice: not "which island shall I visit"
+// off a menu, but a man alone on the water deciding which way to point the bow.
+const DEPART_OUT = 5.2;      // seconds of rowing before the chart opens
+const DEPART_BACK = 2.0;     // and of rowing home again if you think better of it
+let departOut = null;        // { t, sx, sy, dx, dy, dist, charted, returning, boat }
+
+player.onDepart = (p, boat) => {
+  if (currentWorld.keeper) sendNokia(nokia, 'sail', { player }); // her last text, as you board to leave
+  const dir = seawardFrom(map, p.x, p.y);
+  if (!dir || dir.run < 2) { openHeadingChart(); return; } // nowhere to row: chart from where you stand
+  departOut = {
+    t: 0, sx: p.x, sy: p.y, dx: dir.x, dy: dir.y,
+    dist: Math.min(dir.run, 15), charted: false, returning: false,
+    bx: boat ? boat.x : Math.round(p.x), by: boat ? boat.y : Math.round(p.y),
+    type: boat ? boat.type : 'greek_ship',
+    boatProps: boat ? { ...boat } : null,
+  };
+  if (boat) map.removeObject(boat);           // she rides on player.aboard for the voyage
+  player.aboard = { type: departOut.type, mirror: boatMirror(dir.x, dir.y), wob: 0 };
+  sfx.play('jump');
+  p.say('You put out from the beach. The land slides away behind you, and ahead there is only the fog.');
 };
+
+// Cancelled the chart while sitting out on the water: come about and row home
+// rather than leaving the player marooned in a modal-less void offshore.
+function headingCancelled() {
+  headingEl.style.display = 'none';
+  if (departOut && !departOut.returning) {
+    departOut.returning = true;
+    departOut.t = 0;
+    player.aboard = { type: departOut.type, mirror: boatMirror(-departOut.dx, -departOut.dy), wob: 0 };
+    player.say('You let the bow fall off, and pull back for the beach.');
+  }
+}
+
+// Drive the row out (and, if you change your mind, the row home). Holds the rest
+// of the world still, like the failed crossing does.
+function updateDepartOut(dt) {
+  const d = departOut;
+  d.t += dt;
+  const ease = (u) => u * u * (3 - 2 * u);
+  if (d.returning) {
+    const u = Math.min(1, d.t / DEPART_BACK);
+    const run = d.dist * (1 - ease(u));
+    player.x = d.sx + d.dx * run;
+    player.y = d.sy + d.dy * run;
+    if (player.aboard) player.aboard.wob = Math.sin(d.t * 6) * 1.4 * (1 - u);
+    if (u >= 1) {
+      // Ashore again, with the hull put back where it was drawn up.
+      player.x = d.sx; player.y = d.sy;
+      player.aboard = null;
+      if (!map.objectAt(d.bx, d.by)) {
+        const o = map.addObject(d.type, d.bx, d.by, d.boatProps || {});
+        if (o && d.boatProps) Object.assign(o, d.boatProps, { x: d.bx, y: d.by });
+      }
+      departOut = null;
+      player.say('The keel grates on the sand. Ogygia has you back, for now.');
+    }
+    return;
+  }
+  // Outward: the beach falls away and the fog gathers ahead.
+  const u = Math.min(1, d.t / DEPART_OUT);
+  const run = ease(u) * d.dist;
+  player.x = d.sx + d.dx * run;
+  player.y = d.sy + d.dy * run;
+  if (player.aboard) player.aboard.wob = Math.sin(d.t * 4.4) * 1.6;
+  if (!d.charted && d.t >= DEPART_OUT) {
+    d.charted = true;
+    sfx.play('zap');
+    player.say('No land in any direction now. Only the fog, and the choice of a heading.');
+    openHeadingChart();
+  }
+  // A heading was chosen: the crossing itself takes over at the next frame top.
+  if (pendingCrossing) { player.aboard = null; departOut = null; }
+}
 
 // ---- The Nokia 3310: Calypso's channel on Ogygia (docs/calypso-nokia-plan.md) ----
 // She is not your enemy — POSEIDON's machines roam the island; she is the keeper
@@ -1157,6 +1241,26 @@ function aboardHeading(cf, hx, hy) {
 // same story as the boat's motion. It also, frankly, veils a lot of empty water
 // at the one moment the camera is furthest from anything worth looking at.
 function seaFogState() {
+  // Putting out to sea (the successful departure): the fog gathers ahead as the
+  // land falls away and hangs thick while the chart is up, so the heading is
+  // chosen out of the murk rather than off a clear horizon. Thins again if you
+  // come about and row home.
+  if (departOut) {
+    const d = departOut;
+    const u = d.returning
+      ? 1 - Math.min(1, d.t / DEPART_BACK)
+      : Math.min(1, d.t / DEPART_OUT);
+    const a = worldToScreen(player.x, player.y);
+    const b = worldToScreen(player.x + d.dx, player.y + d.dy);
+    const sx = b.x - a.x, sy = b.y - a.y;
+    const len = Math.hypot(sx, sy) || 1;
+    return {
+      amount: 0.10 + 0.78 * u,
+      swirl: 0.10 + 0.25 * u,        // it drifts; it is not yet angry
+      t: d.t,                        // keeps advancing while the chart is up, so it rolls
+      push: { x: sx / len, y: sy / len },
+    };
+  }
   if (!crossFail) return null;
   const cf = crossFail;
   const T_SWELL = CF_OUT, T_BACK = CF_OUT + CF_SWELL;
@@ -3287,6 +3391,9 @@ function update(dt) {
   // still — no input, no AI, no clock — while the voyage plays out and the sea
   // sends you home. (updateCrossFail drives the camera itself.)
   if (crossFail) { updateCrossFail(dt); return; }
+  // Rowing out to the chart (or back in after thinking better of it). Like the
+  // failed crossing, the world holds still while the sea has you.
+  if (departOut) { updateDepartOut(dt); return; }
   // You are ashore, so you are out of the boat. Not a tidy-up: while `aboard` is
   // set the renderer draws the hull INSTEAD of the character, so a stray flag
   // would leave you playing an invisible man in a boat on dry land. Nothing may
