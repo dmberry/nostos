@@ -8,7 +8,7 @@ import {
   narrowsStart, narrowsCalm, narrowsPressure, narrowsAnimate, charybdisReachAt,
   HULL_MAX, NARROWS_W, SHIP_ROW, SHIP_ROW_MIN, SHIP_ROW_MAX,
   RUN_ROWS, TOTAL_ROWS, WARMUP_ROWS, VIEW_ROWS,
-  SCYLLA_MAX, SCYLLA_TRIGGER, SCYLLA_REAR, CHARYBDIS_MAX, CHARYBDIS_ROWS,
+  SCYLLA_MAX, SCYLLA_TRIGGER, SCYLLA_REAR, CHARYBDIS_MAX, CHARYBDIS_ROWS, RAM_MAX,
   SAFE_LANE, MONSTERS, CHICANE_FROM,
 } from '../src/game/narrows.js';
 
@@ -357,4 +357,55 @@ test('animation is presentation only: it never moves the ship the rules use', ()
   for (let i = 0; i < 90; i++) narrowsAnimate(s, 0.016, 0);
   assert.equal(s.xDraw, 3, 'and it settles exactly on the column');
   assert.equal(s.yDraw, 12);
+});
+
+test('THE BRONZE RAM shoulders rocks aside without touching the hull', () => {
+  const s = started(never);
+  calmScylla(s);
+  s.ram = RAM_MAX;
+  const hits = [];
+  for (let i = 0; i < RAM_MAX; i++) {
+    clear(s);
+    s.rows[s.y - 1] = { rock: 6 };
+    s.x = 6; s.grace = 0;
+    hits.push(narrowsTick(s, never));
+  }
+  assert.deepEqual(hits, Array(RAM_MAX).fill('shatter'));
+  assert.equal(s.hull, HULL_MAX, 'the hull is untouched while the beak holds');
+  assert.equal(s.ram, 0);
+  assert.equal(s.rocks, RAM_MAX, 'but the strikes are still counted');
+  // and once it is spent, rocks cost what they always cost
+  clear(s);
+  s.rows[s.y - 1] = { rock: 6 };
+  s.x = 6; s.grace = 0;
+  assert.equal(narrowsTick(s, never), 'rock');
+  assert.equal(s.hull, HULL_MAX - 1);
+});
+
+test('the ram is NO use against either monster', () => {
+  // The whole reason it is a ram and not a gun. If it saved you from Scylla or
+  // Charybdis it would be answering the wrong hazard.
+  const s = started(never);
+  clear(s); calmScylla(s);
+  s.ram = RAM_MAX;
+  s.charybdis = { row: s.y - 1, reach: CHARYBDIS_MAX };
+  s.x = NARROWS_W - 1;
+  assert.equal(narrowsTick(s, never), 'swallowed');
+  assert.equal(s.ram, RAM_MAX, 'it is not even spent trying');
+
+  const s2 = started(never);
+  clear(s2);
+  s2.ram = RAM_MAX;
+  s2.x = 0;
+  s2.scylla = { row: s2.y, reach: SCYLLA_MAX, vis: 1, state: 'strike', timer: 4, cool: 0 };
+  assert.equal(narrowsTick(s2, never), 'bite');
+  assert.equal(s2.ram, RAM_MAX);
+});
+
+test('no ram, no pips: a run without one is exactly as it was', () => {
+  const s = newNarrowsRun();
+  assert.equal(s.ram, 0);
+  assert.equal(s.ramFitted, false);
+  assert.equal(newNarrowsRun({ ram: true }).ram, RAM_MAX);
+  assert.equal(newNarrowsRun({ ram: true }).ramFitted, true);
 });

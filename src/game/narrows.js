@@ -88,6 +88,15 @@ const CHICANE_LO = 2, CHICANE_HI = NARROWS_W - 3;
 // rather than merely hurt.
 export const HULL_MAX = 6;
 
+// THE BRONZE RAM. Found at a wreck on Aeaea and fitted to the bow, it shoulders
+// the first few rocks aside instead of taking them on the hull. Note what it
+// deliberately does NOT do: it cannot clear a rock out of the channel, and it is
+// no use whatever against either monster. A weapon that removed rocks would undo
+// the only job rocks have — making the seam between the two of them cost
+// something — and the correct play would go back to parking mid-channel. This
+// changes what a mistake COSTS, not whether the hazard is there.
+export const RAM_MAX = 3;
+
 // Named, because "the left one" and "the right one" is not how you talk about
 // monsters. The cabinet labels them on the water.
 export const MONSTERS = {
@@ -95,7 +104,8 @@ export const MONSTERS = {
   charybdis: { name: 'CHARYBDIS', side: 'right', cost: 'takes the ship' },
 };
 
-export function newNarrowsRun() {
+// `opts.ram` fits the bronze ram to the bow for this run: see RAM_MAX.
+export function newNarrowsRun(opts = {}) {
   return {
     x: 6,                          // the ship's column, mid-channel
     y: SHIP_ROW,                   // and its row: the helm works fore-and-aft too
@@ -109,6 +119,8 @@ export function newNarrowsRun() {
     bites: 0,                      // Scylla's tally: one thing off the deck each
     rocks: 0,                      // rocks struck: hull damage, not cargo
     hull: HULL_MAX,                // strikes left before she comes apart
+    ram: opts.ram ? RAM_MAX : 0,   // rocks the bronze beak will shoulder aside
+    ramFitted: !!opts.ram,         // kept once spent, so the HUD can show it empty
     grace: 0,                      // brief invulnerability after a bite
     sinceR: 0,
     sinceK: ROCK_GAP,
@@ -275,8 +287,15 @@ export function narrowsTick(s, rng = Math.random) {
   const row = s.rows[s.y];
   if (row && row.rock >= 0 && s.x === row.rock && s.grace <= 0) {
     s.rocks += 1;
-    s.hull -= 1;
     s.grace = 3;
+    // The ram takes it. The rock is still there and still had to be dodged; you
+    // simply do not pay for having failed to.
+    if (s.ram > 0) {
+      s.ram -= 1;
+      if (s.rowsLeft <= 0) { s.over = true; s.outcome = 'through'; }
+      return 'shatter';
+    }
+    s.hull -= 1;
     if (s.hull <= 0) {             // she comes apart under you
       s.over = true; s.outcome = 'wrecked';
       return 'wrecked';

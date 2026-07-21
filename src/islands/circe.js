@@ -208,6 +208,30 @@ export function createCirce(seed) {
     }
   }
 
+  // THE BRONZE RAM, in a wreck on the far shore. Aeaea is where it belongs: the
+  // strait is the crossing OUT of here (strait.js STRAIT_ROUTE), and Circe is the
+  // one who briefs you on it, so the thing that softens the passage sits on the
+  // island of the person who tells you what the passage is. Deliberately far from
+  // where you land, and deliberately no use against either monster.
+  {
+    const rng = makeRng((IS ^ 0x2a11) >>> 0);
+    const shore = [];
+    for (let y = 2; y < map.h - 2; y++) {
+      for (let x = 2; x < map.w - 2; x++) {
+        const f = map.floorAt(x, y);
+        if (f === 'sea' || f === 'water' || f === 'stream') continue;
+        if (map.objectAt(x, y) || map.isSolid(x, y)) continue;
+        let edge = false;
+        for (let dy = -1; dy <= 1 && !edge; dy++) {
+          for (let dx = -1; dx <= 1; dx++) if (map.floorAt(x + dx, y + dy) === 'sea') { edge = true; break; }
+        }
+        if (edge && Math.hypot(x - spawn.x, y - spawn.y) > 24) shore.push([x, y]);
+      }
+    }
+    const at = shore.length ? shore[Math.floor(rng() * shore.length)] : null;
+    if (at) map.groundItems.push({ item: 'ram', qty: 1, x: at[0] + 0.5, y: at[1] + 0.5, keep: true });
+  }
+
   const birds = spawnBirds(map, IS);
 
   const beach = findBeach(map, makeRng((IS ^ 0xb0a7) >>> 0));

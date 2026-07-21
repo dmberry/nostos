@@ -961,12 +961,17 @@ function narrowsChrome(on) {
 }
 
 function openNarrows() {
-  strait.run = newNarrowsRun();     // opens on its attract screen; nothing ticks yet
+  // The bronze ram is fitted if you are carrying it: it is not consumed, because
+  // it is bronze bolted to a bow, but its charges are per-run.
+  const ram = player.hasItem('ram');
+  strait.run = newNarrowsRun({ ram }); // opens on its attract screen; nothing ticks yet
   strait.tickT = 0;
   strait.taken = [];                // what she has had off the deck, for the report
   narrowsChrome(true);
   sfx.play('narrowsTune');
-  player.say('The channel closes to a throat of rock, and something in the cliff is awake.');
+  player.say(ram
+    ? 'The channel closes to a throat of rock, and something in the cliff is awake. The old bronze beak is lashed to your bow.'
+    : 'The channel closes to a throat of rock, and something in the cliff is awake.');
 }
 
 // One head got you: she takes ONE thing off the deck and you sail on. Bites
@@ -1081,6 +1086,10 @@ function updateNarrows(dt) {
       // jolt, and its real job is to move you off the safe column.
       player.health = Math.max(1, player.health - 6);
       sfx.play('clang');
+    } else if (ev === 'shatter') {
+      // The ram took it. No hull, no health, and the rock still made you flinch.
+      sfx.play('clang');
+      if (n.ram === 0) player.say('The beak takes the last of it and rings hollow. Nothing left between you and the stone.');
     } else if (ev === 'bite') narrowsBite();
     else if (ev === 'swallowed') { endNarrows('swallowed'); return; }
     else if (ev === 'through') { endNarrows('through'); return; }
@@ -1487,6 +1496,7 @@ const DEV_KITS = [
   ['Chip + manual', () => { player.stow('chip', 1); player.stow('book_ronml', 1); return 'chip, book_ronml'; }],
   ['Golden axe', () => { player.stow('golden_axe', 1); return 'golden_axe' ; }],
   ['Ship parts', () => { for (const k of ['oar', 'rope', 'sail']) player.stow(k, 1); player.stow('wood', 40); return 'oar, rope, sail, 40 wood'; }],
+  ['Bronze ram', () => { player.stow('ram', 1); return 'ram (carry it into the narrows)'; }],
   ['Weapons kit', () => {
     for (const [k, n] of [['railgun', 1], ['battery', 20], ['shotgun', 1], ['shells', 20], ['sledgehammer', 1], ['crowbar', 1]]) player.stow(k, n);
     return 'railgun+cells, shotgun+shells, sledgehammer, crowbar';

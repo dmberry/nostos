@@ -16,7 +16,7 @@
 import { ITEMS, WEAPON_ORDER } from '../game/items.js'; // weapon-chart data
 import { PAPER_TEXTURE, NOKIA_SPRITE } from './textures.js'; // death-cert paper; the 3310 in the PHONE box
 import {
-  NARROWS_W, VIEW_ROWS, MONSTERS, HULL_MAX, CHARYBDIS_ROWS,
+  NARROWS_W, VIEW_ROWS, MONSTERS, HULL_MAX, RAM_MAX, CHARYBDIS_ROWS,
   narrowsProgress, narrowsCalm,
 } from '../game/narrows.js'; // the Scylla/Charybdis arcade run
 
@@ -1212,6 +1212,27 @@ export const uiMethods = {
     ctx.font = `${Math.max(8, Math.round(cell * 0.42))}px ui-monospace, monospace`;
     ctx.fillText('HULL', lx, labY);
     lx += ctx.measureText('HULL').width + Math.max(7, cell * 0.5);
+    // The bronze ram, if one is fitted: its own pips in bronze, and its own
+    // label, because it is not more hull — it is the thing that spends itself
+    // first so the hull does not have to.
+    if (n.ram != null && (n.ram > 0 || n.ramFitted)) {
+      ctx.fillStyle = 'rgba(207,216,195,0.22)';
+      ctx.fillRect(Math.round(lx), labY - pip + 1, 1, pip + 1);
+      lx += Math.max(7, cell * 0.5);
+      for (let i = 0; i < RAM_MAX; i++) {
+        ctx.fillStyle = i < n.ram ? '#b07d3a' : 'rgba(176,125,58,0.16)';
+        ctx.beginPath();
+        ctx.moveTo(lx + i * (pip + 3), labY);
+        ctx.lineTo(lx + i * (pip + 3) + pip, labY - pip * 0.5);
+        ctx.lineTo(lx + i * (pip + 3), labY - pip);
+        ctx.closePath(); ctx.fill();
+      }
+      lx += RAM_MAX * (pip + 3) + 4;
+      ctx.fillStyle = 'rgba(207,216,195,0.45)';
+      ctx.font = `${Math.max(8, Math.round(cell * 0.42))}px ui-monospace, monospace`;
+      ctx.fillText('RAM', lx, labY);
+      lx += ctx.measureText('RAM').width + Math.max(7, cell * 0.5);
+    }
     ctx.fillStyle = 'rgba(207,216,195,0.22)';
     ctx.fillRect(Math.round(lx), labY - pip + 1, 1, pip + 1);      // the divider
     lx += Math.max(7, cell * 0.5);
@@ -1287,6 +1308,7 @@ export const uiMethods = {
     rule('#a8304c', MONSTERS.scylla.name, 'lurks to port. come near and she lunges.');
     rule('#7b3fa8', MONSTERS.charybdis.name, 'opens to starboard. takes the ship whole.');
     rule('#5c636d', 'ROCKS', 'mid-channel, and late on they walk.');
+    if (n.ram > 0) rule('#b07d3a', 'BRONZE RAM', `fitted. shoulders ${RAM_MAX} rocks aside.`);
 
     ctx.fillStyle = 'rgba(207,216,195,0.6)';
     const c1 = 'row her anywhere: WASD  or  ← → ↑ ↓';

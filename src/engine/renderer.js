@@ -4140,6 +4140,22 @@ export class Renderer {
         }
         break;
       }
+      case 'ram': {
+        // A trireme's bronze beak: three fins over a wedge, lying on its side.
+        ctx.fillStyle = '#8a5f28';
+        ctx.beginPath();
+        ctx.moveTo(-9, -4); ctx.lineTo(6, -3); ctx.lineTo(10, 0); ctx.lineTo(6, 3); ctx.lineTo(-9, 4);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#c08a3e';
+        ctx.beginPath();
+        ctx.moveTo(-9, -4); ctx.lineTo(6, -3); ctx.lineTo(10, 0); ctx.lineTo(-9, -1);
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = '#5c3f19'; ctx.lineWidth = 1;
+        for (let f = -2; f <= 2; f += 2) {
+          ctx.beginPath(); ctx.moveTo(-6, f); ctx.lineTo(7, f * 0.4); ctx.stroke();
+        }
+        break;
+      }
       case 'golden_axe': {
         // A small gold axe: shaft + head, for Calypso's recipe.
         ctx.strokeStyle = '#7a5a2a'; ctx.lineWidth = 2;
