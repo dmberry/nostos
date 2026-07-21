@@ -8,7 +8,7 @@ import {
   narrowsStart, narrowsCalm, narrowsPressure, narrowsAnimate, charybdisReachAt,
   HULL_MAX, NARROWS_W, SHIP_ROW, SHIP_ROW_MIN, SHIP_ROW_MAX,
   RUN_ROWS, TOTAL_ROWS, WARMUP_ROWS, VIEW_ROWS,
-  SCYLLA_MAX, SCYLLA_TRIGGER, SCYLLA_REAR, CHARYBDIS_MAX, CHARYBDIS_ROWS, RAM_MAX,
+  SCYLLA_MAX, SCYLLA_TRIGGER, SCYLLA_REAR, CHARYBDIS_MAX, CHARYBDIS_ROWS, CHARYBDIS_CORE, RAM_MAX,
   SAFE_LANE, MONSTERS, CHICANE_FROM,
 } from '../src/game/narrows.js';
 
@@ -21,6 +21,15 @@ const started = (rng) => { const s = newNarrowsRun(rng); narrowsStart(s); s.warm
 const clear = (s) => { s.rows.forEach((r) => { r.rock = -1; }); };
 // Park Scylla out of the way for tests that are about something else.
 const calmScylla = (s) => { s.scylla = { row: 0, reach: 0, state: 'lurk', timer: 0, cool: 999 }; };
+
+// Charybdis's reach is RECOMPUTED from her row every tick (she widens as she
+// comes down the channel), so a test cannot just assign a reach and expect it to
+// survive the step. This puts her where the step will open her fully, across the
+// ship's row.
+const whirlpoolAcross = (s) => {
+  s.y = 11; s.yDraw = 11;
+  s.charybdis = { row: 9, reach: 0 };
+};
 
 test('THE LANE INVARIANT: the two of them can never seal the channel', () => {
   // If Scylla at her deepest and Charybdis at hers could meet, a row would be a
@@ -408,4 +417,55 @@ test('no ram, no pips: a run without one is exactly as it was', () => {
   assert.equal(s.ramFitted, false);
   assert.equal(newNarrowsRun({ ram: true }).ram, RAM_MAX);
   assert.equal(newNarrowsRun({ ram: true }).ramFitted, true);
+});
+
+test('CHARYBDIS: her outer water costs the HULL and throws you clear', () => {
+  // Clipping the edge of a whirlpool used to delete you from the run. The pull
+  // batters you and spits you out to port instead; only the throat is final.
+  const s = started(never);
+  clear(s); calmScylla(s);
+  whirlpoolAcross(s);
+  s.x = NARROWS_W - CHARYBDIS_MAX;            // the outermost column of her reach
+  assert.equal(narrowsTick(s, never), 'churn');
+  assert.equal(s.over, false, 'the run goes on');
+  assert.equal(s.hull, HULL_MAX - 1);
+  assert.ok(s.x < NARROWS_W - s.charybdis.reach, `thrown clear of the pull, got x=${s.x}`);
+  assert.ok(s.grace > 0, 'and not billed twice for the one mistake');
+});
+
+test('CHARYBDIS: her throat still takes the ship', () => {
+  const s = started(never);
+  clear(s); calmScylla(s);
+  s.charybdis = { row: s.y - 1, reach: CHARYBDIS_MAX };
+  s.x = NARROWS_W - 1;                        // hard against the wall: the mouth
+  assert.equal(narrowsTick(s, never), 'swallowed');
+  assert.equal(s.over, true);
+  assert.equal(s.outcome, 'swallowed');
+});
+
+test('CHARYBDIS: the boundary between pull and throat is exactly CHARYBDIS_CORE', () => {
+  const swallowedAt = (x) => {
+    const s = started(never);
+    clear(s); calmScylla(s);
+    whirlpoolAcross(s);
+    s.x = x;
+    return narrowsTick(s, never) === 'swallowed';
+  };
+  assert.equal(swallowedAt(NARROWS_W - CHARYBDIS_CORE), true, 'innermost pull column is the mouth');
+  assert.equal(swallowedAt(NARROWS_W - CHARYBDIS_CORE - 1), false, 'one out from it is only the pull');
+});
+
+test('the churn can still sink you: enough of her water and the hull goes', () => {
+  const s = started(never);
+  clear(s); calmScylla(s);
+  let ev = null;
+  for (let i = 0; i < HULL_MAX && !s.over; i++) {
+    clear(s);
+    whirlpoolAcross(s);
+    s.x = NARROWS_W - CHARYBDIS_MAX;
+    s.grace = 0;
+    ev = narrowsTick(s, never);
+  }
+  assert.equal(ev, 'wrecked');
+  assert.equal(s.outcome, 'wrecked');
 });

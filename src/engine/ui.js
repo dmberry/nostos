@@ -1085,7 +1085,10 @@ export const uiMethods = {
     // --- the ship ------------------------------------------------------------
     const sx = shipScreenX;
     const sy = shipScreenY;
-    const blink = n.grace > 0 && (n.t & 1);
+    // The grace flash must NOT keep running once the run is over: the card's
+    // clock still ticks so PRESS ANY KEY can blink, and the ship was flickering
+    // in and out underneath it.
+    const blink = !n.over && n.grace > 0 && (n.t & 1);
     if (!blink) {
       // A BOAT, not an insect. Two things were doing that: oars radiating at
       // their own phases like legs, and a hull too narrow for its length. The
@@ -1247,6 +1250,88 @@ export const uiMethods = {
     grad.addColorStop(0, '#6ad0a0'); grad.addColorStop(1, '#e8d27a');
     ctx.fillStyle = grad;
     ctx.fillRect(ox, by + 8, pw2, 6);
+    ctx.textAlign = 'left';
+    ctx.restore();
+  },
+
+  // GAME OVER, over the frozen channel. The run used to resolve the instant it
+  // ended: one frame you were steering, the next you were back in the world
+  // reading a line of prose about what had happened. A cabinet owes you the
+  // moment, and it owes you the numbers.
+  drawNarrowsGameOver(n, over) {
+    const ctx = this.ctx;
+    const W = NARROWS_W, ROWS = VIEW_ROWS;
+    const cell = Math.max(10, Math.floor(Math.min((this.w - 40) / W, (this.h - 190) / ROWS)));
+    const gw = W * cell, gh = ROWS * cell;
+    const ox = Math.round((this.w - gw) / 2), oy = Math.round((this.h - gh) / 2) - 10;
+    const cx = ox + gw / 2;
+    const won = over.outcome === 'through';
+
+    ctx.save();
+    // The field dims but stays visible: you want to see the water that got you.
+    ctx.fillStyle = 'rgba(3,5,9,0.72)';
+    ctx.fillRect(ox, oy, gw, gh);
+
+    const fitW = gw - cell * 1.4;
+    const fit = (text, startPx, weight = '') => {
+      let px = startPx;
+      do {
+        ctx.font = `${weight}${px}px ui-monospace, monospace`;
+        if (ctx.measureText(text).width <= fitW) break;
+        px -= 1;
+      } while (px > 7);
+      return px;
+    };
+    ctx.textAlign = 'center';
+
+    const title = won ? 'THROUGH' : 'GAME OVER';
+    const big = fit(title, Math.round(cell * 1.5), 'bold ');
+    const ty = oy + gh * 0.30;
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillText(title, cx + 3, ty + 3);
+    ctx.fillStyle = won ? '#6ad0a0' : '#e05548';
+    ctx.fillText(title, cx, ty);
+
+    const why = {
+      swallowed: 'CHARYBDIS TOOK THE SHIP',
+      wrecked: 'THE HULL CAME APART',
+      through: 'THE ROCK FALLS AWAY ASTERN',
+    }[over.outcome] || '';
+    fit(why, Math.round(cell * 0.62), 'bold ');
+    ctx.fillStyle = 'rgba(207,216,195,0.75)';
+    ctx.fillText(why, cx, ty + big * 0.95);
+
+    // The tally. An arcade cabinet always tells you what the run came to.
+    const lh = Math.max(15, Math.round(cell * 0.82));
+    let ly = ty + big * 0.95 + lh * 1.5;
+    const stat = (label, value, tone) => {
+      const px = Math.max(9, Math.round(cell * 0.52));
+      ctx.font = `${px}px ui-monospace, monospace`;
+      ctx.textAlign = 'left';
+      ctx.fillStyle = 'rgba(207,216,195,0.45)';
+      ctx.fillText(label, ox + cell * 1.6, ly);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = tone || 'rgba(232,224,208,0.92)';
+      ctx.fillText(String(value), ox + gw - cell * 1.6, ly);
+      ctx.textAlign = 'center';
+      ly += lh;
+    };
+    stat('DISTANCE', `${Math.round(narrowsProgress(n) * 100)}%`);
+    stat('TAKEN BY SCYLLA', n.bites || 0, n.bites ? '#e0864a' : null);
+    stat('ROCKS STRUCK', n.rocks || 0, n.rocks ? '#e0864a' : null);
+    if (n.ramFitted) stat('RAM REMAINING', `${n.ram} / ${RAM_MAX}`, '#b07d3a');
+    stat('HULL', `${Math.max(0, n.hull)} / ${HULL_MAX}`,
+      n.hull <= 0 ? '#e05548' : n.hull <= 2 ? '#e0864a' : null);
+
+    if ((n.t >> 4) & 1) {
+      fit('PRESS ANY KEY', Math.round(cell * 0.72), 'bold ');
+      ctx.fillStyle = '#e8d27a';
+      ctx.fillText('PRESS ANY KEY', cx, oy + gh * 0.86);
+    }
+
+    ctx.strokeStyle = won ? 'rgba(106,208,160,0.5)' : 'rgba(224,85,72,0.5)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(ox - 1, oy - 1, gw + 2, gh + 2);
     ctx.textAlign = 'left';
     ctx.restore();
   },

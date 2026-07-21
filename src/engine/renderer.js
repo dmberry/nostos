@@ -670,6 +670,9 @@ export class Renderer {
     if (hud.narrows) {
       if (hud.narrows.attract) this.drawNarrowsAttract(hud.narrows);
       else this.drawNarrows(hud.narrows);
+      // The GAME OVER card sits OVER the frozen field, arcade fashion, rather
+      // than replacing it: you want to see the water that got you.
+      if (hud.narrowsOver) this.drawNarrowsGameOver(hud.narrows, hud.narrowsOver);
     }
     if (hud.paused) this.drawPausedOverlay();
   }

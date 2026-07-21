@@ -953,7 +953,13 @@ const MAX_CATCHUP = 3;              // rows a single frame may ever advance
 // renderer's modal suppression cannot reach it and it has to be hidden here.
 function narrowsChrome(on) {
   if (!hintEl) return;
-  if (on) { hintEl.dataset.preNarrows = hintEl.style.display || ''; hintEl.style.display = 'none'; }
+  // Idempotent on the way IN: the run hides the chrome and the GAME OVER card
+  // hides it again, and a second stash would record 'none' as the thing to
+  // restore — so the hint would never come back for the rest of the session.
+  if (on) {
+    if (hintEl.dataset.preNarrows === undefined) hintEl.dataset.preNarrows = hintEl.style.display || '';
+    hintEl.style.display = 'none';
+  }
   else if (hintEl.dataset.preNarrows !== undefined) {
     hintEl.style.display = hintEl.dataset.preNarrows;
     delete hintEl.dataset.preNarrows;
@@ -994,6 +1000,7 @@ function narrowsBite() {
 // understands, so finishStrait needs no special case.
 function endNarrows(outcome) {
   const s = strait;
+  s.gameover = null;
   narrowsChrome(false);
   const hull = (s.run && s.run.rocks) || 0;   // read before the run is cleared
   s.run = null;
@@ -1029,10 +1036,43 @@ function endNarrows(outcome) {
   }
 }
 
+// THE GAME OVER CARD. The run used to resolve the instant it ended: one frame you
+// were steering, the next you were back in the world reading a line of prose
+// about it. A cabinet owes you the moment. The field freezes, the card comes up
+// over it with what the passage cost, and nothing resolves until you press
+// something — so the ending is read rather than glimpsed.
+const GAMEOVER_HOLD = 0.9;          // seconds before a keypress will dismiss it
+
+function finishRun(outcome) {
+  const s = strait;
+  s.gameover = { outcome, t: 0 };
+  narrowsChrome(true);              // keep the world's chrome out of the card
+  sfx.play(outcome === 'through' ? 'narrowsWin' : 'termerr');
+}
+
+// Waiting on the card. Returns true while it still owns the screen.
+function updateGameOver(dt) {
+  const s = strait, g = s.gameover;
+  g.t += dt;
+  s.run.t = (s.run.t || 0) + 1;     // the card blinks, so the run's clock keeps going
+  if (g.t < GAMEOVER_HOLD) return true;
+  const pressed = ['Space', 'Enter', 'Escape', 'KeyA', 'KeyD', 'KeyW', 'KeyS',
+    'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].some((k) => input.consumePress(k));
+  const tapped = !!input.clickPos();
+  if (pressed || tapped) {
+    if (tapped) input.consumeClick();
+    s.gameover = null;
+    endNarrows(g.outcome);
+    return false;
+  }
+  return true;
+}
+
 // Drive the run: a fixed tick so the channel scrolls at a readable rate whatever
 // the frame rate, with steering read from held keys (and the touch halves).
 function updateNarrows(dt) {
   const s = strait, n = s.run;
+  if (s.gameover) { updateGameOver(dt); return; }
   n.t = (n.t || 0) + 1;
   // ATTRACT: the cabinet waits. Any key, or a tap anywhere, is the coin. Read
   // as an edge rather than a held state so the keypress that opened the strait
@@ -1080,7 +1120,7 @@ function updateNarrows(dt) {
     s.tickT -= NARROWS_TICK;
     steps += 1;
     const ev = narrowsTick(n);
-    if (ev === 'wrecked') { endNarrows('wrecked'); return; }
+    if (ev === 'wrecked') { finishRun('wrecked'); return; }
     if (ev === 'rock') {
       // Hull, not cargo — a rock is neither of them. It costs you health and a
       // jolt, and its real job is to move you off the safe column.
@@ -1090,9 +1130,14 @@ function updateNarrows(dt) {
       // The ram took it. No hull, no health, and the rock still made you flinch.
       sfx.play('clang');
       if (n.ram === 0) player.say('The beak takes the last of it and rings hollow. Nothing left between you and the stone.');
+    } else if (ev === 'churn') {
+      // Her outer water: it batters the hull and throws you clear. Not the end
+      // of anything, which is the point of the change.
+      player.health = Math.max(1, player.health - 8);
+      sfx.play('zap');
     } else if (ev === 'bite') narrowsBite();
-    else if (ev === 'swallowed') { endNarrows('swallowed'); return; }
-    else if (ev === 'through') { endNarrows('through'); return; }
+    else if (ev === 'swallowed') { finishRun('swallowed'); return; }
+    else if (ev === 'through') { finishRun('through'); return; }
   }
   // Presentation LAST, from whatever is left of the accumulator. Doing this
   // before the tick loop was the jump: on the frame a tick fired, the picture
@@ -4905,6 +4950,7 @@ function frame(now) {
       timeLabel: dayNight.countdownLabel,
       // The Scylla/Charybdis arcade run, while it has the helm.
       narrows: (strait && strait.phase === 'choice') ? strait.run : null,
+      narrowsOver: (strait && strait.phase === 'choice') ? strait.gameover : null,
       place: hudPlace(),      // the island you are on, by its chart name
       daemon: hudDaemon(),    // { name, fallen } — null where nothing rules
       minimap: (amb.minimap && showMinimap) ? minimap : null,

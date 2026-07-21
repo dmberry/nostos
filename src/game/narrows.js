@@ -7,11 +7,12 @@
 // BOTH monsters are in the water. SCYLLA lives on the left wall: ONE creature,
 // keeping station on you, who rears and lunges when you come inside her reach —
 // each lunge takes one thing off the deck. CHARYBDIS is the right-hand water
-// itself: a single enormous whirlpool that surfaces at the head of the channel,
-// opens as it comes down on you, and takes the ship whole. So the channel is a
-// weave: her side is cheap and provoked, hers is rare, huge and final, and the
-// safe water is the seam between them — which the rocks and the chicanes make
-// you work for.
+// itself: a single enormous whirlpool that surfaces at the head of the channel
+// and opens as it comes down on you. Her outer water batters the hull and throws
+// you clear; only her THROAT takes the ship and the voyage with it. So the
+// channel is a weave: her side is cheap and provoked, hers is rare and final if
+// you go all the way in, and the safe water is the seam between them — which the
+// rocks and the chicanes make you work for.
 //
 // Earlier this was a field of independent per-row heads, which read as wallpaper
 // rather than as two named monsters. One of each, with states you can see coming,
@@ -66,6 +67,15 @@ export const SCYLLA_COOL = 8;     // and a breath after that before she looks ag
 // water she is going to want before she wants it.
 export const CHARYBDIS_ROWS = 4;
 export const CHARYBDIS_GAP = 26;  // ticks between whirlpools, minimum
+// Her water has two parts, and this is the difference between a hazard and an
+// execution. The PULL is the outer turning water: it batters the hull and spits
+// you back out to port, and you sail on. The THROAT is the columns hard against
+// the wall where her mouth actually is, and that still takes the ship and the
+// voyage with it. Clipping the edge of a whirlpool and being deleted from the
+// run was the wrong punishment for the wrong mistake: the shape of the passage
+// is a cheap repeatable loss weighed against one final one, and that only reads
+// if the final one takes a real error to reach.
+export const CHARYBDIS_CORE = 2;  // columns of her reach, at the wall, that are the mouth
 
 // ROCKS. Without them the seam between the two monsters is a permanently safe
 // column and the correct play is to park mid-channel and never touch the helm —
@@ -276,11 +286,27 @@ export function narrowsTick(s, rng = Math.random) {
   if (s.grace > 0) s.grace -= 1;
   if (!calm) { stepScylla(s); stepCharybdis(s, rng); }
 
-  // CHARYBDIS first, and deliberately NOT behind the grace period: no amount of
-  // recent luck saves you from the one that ends the voyage.
-  if (s.x >= NARROWS_W - charybdisReachAt(s, s.y)) {
-    s.over = true; s.outcome = 'swallowed';
-    return 'swallowed';
+  // CHARYBDIS first. Her THROAT is deliberately NOT behind the grace period: no
+  // amount of recent luck saves you from the one that ends the voyage.
+  const pull = charybdisReachAt(s, s.y);
+  if (pull > 0 && s.x >= NARROWS_W - pull) {
+    if (s.x >= NARROWS_W - Math.min(CHARYBDIS_CORE, pull)) {
+      s.over = true; s.outcome = 'swallowed';
+      return 'swallowed';
+    }
+    // The outer turning water. It costs the hull and throws you to port, clear
+    // of her, so the same tick cannot bill you twice for one mistake.
+    if (s.grace <= 0) {
+      s.hull -= 1;
+      s.grace = 4;
+      s.x = Math.max(0, NARROWS_W - pull - 1);
+      if (s.hull <= 0) {
+        s.over = true; s.outcome = 'wrecked';
+        return 'wrecked';
+      }
+      if (s.rowsLeft <= 0) { s.over = true; s.outcome = 'through'; }
+      return 'churn';
+    }
   }
   // A rock: it costs you, but it is neither of them — it is the thing that makes
   // you move, and moving is what puts you in their reach.

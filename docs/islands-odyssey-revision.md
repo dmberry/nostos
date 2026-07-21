@@ -404,8 +404,12 @@ landfalls):
     it). That exclusion is a tested invariant, not a convention.
   - *Charybdis* is ONE enormous whirlpool that surfaces at the head of the channel
     and comes down it with the current, widening as she comes and covering a band
-    of rows. Take her and she takes the ship, once, and throws you back at the
-    island you sailed from.
+    of rows. Her water has TWO parts (v1.162): the outer PULL batters the hull and
+    throws you clear to port, and you sail on; only the THROAT, the columns hard
+    against the wall, takes the ship and the voyage with it. Clipping the rim of a
+    whirlpool and being deleted from the run was the wrong punishment for the
+    wrong mistake — the passage is a cheap repeatable loss weighed against one
+    final one, and that only reads if the final one takes a real error to reach.
   - *Rocks and chicanes* hold the seam between them. Without them the middle of the
     channel was permanently safe water and the correct play was to park and never
     touch the helm; there is a regression test named for it. Late in the passage
