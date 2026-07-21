@@ -43,6 +43,12 @@ export const SHIP_ROW_MAX = 17;
 // back half is tight without outstaying itself.
 export const RUN_ROWS = 570;
 export const WARMUP_ROWS = 30;    // open water first: you come UP to the narrows
+// And open water LAST. The rock stops before the run does, so you row out of the
+// throat and into the sea for a few seconds before anything is counted up. The
+// passage knows when it is over; ending it with a whirlpool still turning and a
+// chicane still walking, and then dropping a card over the top, told you it was
+// over while showing you it was not. You come out, and THEN it stops.
+export const COOLDOWN_ROWS = 28;
 export const TOTAL_ROWS = WARMUP_ROWS + RUN_ROWS;
 
 // How far each of them can reach in from her own side. The pair is capped so
@@ -336,13 +342,35 @@ export function charybdisReachAt(s, row) {
 export function narrowsTick(s, rng = Math.random) {
   if (s.over || s.attract) return null;   // no coin, no game
 
-  const calm = s.warmup > 0;
+  // Calm at BOTH ends: the run-in you come up through, and the run-out you leave
+  // by. In the run-out nothing is generated, nothing is stepped and nothing can
+  // reach you — you are past it, and the cabinet should behave as though you are.
+  const calm = s.warmup > 0 || s.rowsLeft <= COOLDOWN_ROWS;
   s.rows.pop();
-  s.rows.unshift(calm ? { rock: -1 } : nextRow(s, rng));
+  s.rows.unshift(calm ? { rock: -1, pick: -1, kind: null } : nextRow(s, rng));
   s.rowsLeft -= 1;
   if (s.warmup > 0) s.warmup -= 1;
   if (s.grace > 0) s.grace -= 1;
   if (!calm) { stepScylla(s); stepCharybdis(s, rng); }
+  else if (s.warmup <= 0) {
+    // Leaving. She goes back under and the whirlpool shuts VISIBLY, over a few
+    // rows, rather than being deleted between two frames.
+    // Wound down by hand rather than by state machine: stepScylla is what would
+    // normally retire her, and it is exactly what must not run out here (it would
+    // notice you and rear again). So she sinks on a fixed decay instead.
+    const k = s.scylla;
+    if (k.vis > 0 || k.reach > 0) {
+      k.vis = Math.max(0, k.vis - 1 / SCYLLA_RECOVER);
+      k.reach = Math.max(0, k.reach - SCYLLA_MAX / SCYLLA_RECOVER);
+      if (k.vis <= 0) { k.state = 'lurk'; k.reach = 0; k.vis = 0; }
+    } else { k.state = 'lurk'; k.cool = SCYLLA_COOL; }
+    if (s.charybdis) {
+      s.charybdis.reach = Math.max(0, s.charybdis.reach - 1);
+      if (s.charybdis.reach <= 0) s.charybdis = null;
+    }
+    if (s.rowsLeft <= 0) { s.over = true; s.outcome = 'through'; return 'through'; }
+    return null;                    // nothing out here can touch you
+  }
 
   // FLOTSAM first, and outside the grace period entirely: picking a spar out of
   // the water is not something a recent knock should stop you doing. It is
@@ -459,7 +487,21 @@ export function narrowsAnimate(s, dt, tickFrac) {
   }
 }
 
-// Still on open water? The cabinet says so, so the calm reads as deliberate.
+// Still on open water? True at BOTH ends now: the run-in and the run-out. The
+// cabinet says so, so the calm reads as deliberate rather than as the generator
+// having quietly failed.
 export function narrowsCalm(s) {
-  return s.warmup > 0;
+  return s.warmup > 0 || narrowsRunOut(s);
+}
+
+// Out the far side: the last stretch, where nothing is generated and nothing can
+// touch you. The cabinet draws the walls falling away astern across it.
+export function narrowsRunOut(s) {
+  return !s.attract && s.warmup <= 0 && s.rowsLeft <= COOLDOWN_ROWS;
+}
+
+// How far through the run-out, 0..1.
+export function narrowsRunOutT(s) {
+  if (!narrowsRunOut(s)) return 0;
+  return Math.max(0, Math.min(1, 1 - s.rowsLeft / COOLDOWN_ROWS));
 }

@@ -17,7 +17,7 @@ import { ITEMS, WEAPON_ORDER } from '../game/items.js'; // weapon-chart data
 import { PAPER_TEXTURE, NOKIA_SPRITE } from './textures.js'; // death-cert paper; the 3310 in the PHONE box
 import {
   NARROWS_W, VIEW_ROWS, MONSTERS, HULL_MAX, RAM_MAX, CHARYBDIS_ROWS,
-  narrowsProgress, narrowsCalm,
+  narrowsProgress, narrowsCalm, narrowsRunOut, narrowsRunOutT,
 } from '../game/narrows.js'; // the Scylla/Charybdis arcade run
 
 export const DASH_H = 78; // dashboard panel height
@@ -851,10 +851,19 @@ export const uiMethods = {
       ctx.fillStyle = 'rgba(200,225,245,0.18)';
       ctx.fillRect(edgeX - (dir < 0 ? 0 : 1), oy, 1.5, gh);
     };
+    // On the way OUT the walls fall away astern: they slide off their own sides
+    // and fade, so the channel opens into sea before the run is counted up. You
+    // can see that you are through, which is the whole point of the run-out.
+    const outT = narrowsRunOutT(n);
     ctx.save();
+    // Clipped to the cabinet, not to where the crags are going: as they slide
+    // outward they are cut off by the frame rather than floating out over the
+    // world behind it.
     ctx.beginPath(); ctx.rect(ox - cragW, oy, gw + cragW * 2, gh); ctx.clip();
-    drawCrags(ox, -1);              // port crag
-    drawCrags(ox + gw, 1);          // starboard crag
+    if (outT > 0) { ctx.globalAlpha = Math.max(0, 1 - outT * 1.25); }
+    const open = outT * cragW * 2.4;
+    drawCrags(ox - open, -1);       // port crag, falling away to port
+    drawCrags(ox + gw + open, 1);   // starboard crag, likewise
     ctx.restore();
 
     // --- the two of them, surfacing from their own sides ---------------------
@@ -1236,8 +1245,9 @@ export const uiMethods = {
     ctx.font = `bold ${Math.max(10, Math.round(cell * 0.6))}px ui-monospace, monospace`;
     ctx.fillText('THE NARROWS', ox, by);
     ctx.textAlign = 'right';
+    const leaving = narrowsRunOut(n);
     ctx.fillStyle = calm ? 'rgba(106,208,160,0.9)' : n.bites ? '#e0864a' : 'rgba(232,224,208,0.5)';
-    ctx.fillText(calm ? 'OPEN WATER' : n.bites ? `TAKEN ${n.bites}` : 'CLEAN', ox + gw, by);
+    ctx.fillText(leaving ? 'CLEAR OF IT' : calm ? 'OPEN WATER' : n.bites ? `TAKEN ${n.bites}` : 'CLEAN', ox + gw, by);
     // Hull, as pips that go out — a number counting up never felt like damage.
     const pip = Math.max(5, Math.round(cell * 0.34));
     const hull = n.hull != null ? n.hull : HULL_MAX;

@@ -9,7 +9,7 @@ import {
   HULL_MAX, NARROWS_W, SHIP_ROW, SHIP_ROW_MIN, SHIP_ROW_MAX,
   RUN_ROWS, TOTAL_ROWS, WARMUP_ROWS, VIEW_ROWS,
   SCYLLA_MAX, SCYLLA_TRIGGER, SCYLLA_REAR, CHARYBDIS_MAX, CHARYBDIS_ROWS, CHARYBDIS_CORE, RAM_MAX,
-  SAFE_LANE, MONSTERS, CHICANE_FROM,
+  SAFE_LANE, MONSTERS, CHICANE_FROM, COOLDOWN_ROWS, narrowsRunOut, narrowsRunOutT,
 } from '../src/game/narrows.js';
 
 const never = () => 0.99;   // rng that never surfaces anything
@@ -549,4 +549,46 @@ test('the ship rides in the MIDDLE of the view, and can drop back for reading ti
   assert.ok(SHIP_ROW_MAX - SHIP_ROW > SHIP_ROW - SHIP_ROW_MIN,
     'the band must run further aft than forward: dropping back is what buys warning');
   assert.ok(SHIP_ROW_MAX < VIEW_ROWS);
+});
+
+test('THE RUN-OUT: the rock stops before the run does, and you sail into open sea', () => {
+  // Ending the passage with a whirlpool still turning and a chicane still walking,
+  // then dropping a card over the top, told you it was over while showing you it
+  // was not. You come out first.
+  const s = started(always);
+  s.rowsLeft = COOLDOWN_ROWS;
+  s.scylla = { row: s.y, reach: SCYLLA_MAX, vis: 1, state: 'strike', timer: 4, cool: 0 };
+  s.charybdis = { row: s.y - 1, reach: CHARYBDIS_MAX };
+  s.x = 0;                                   // hard against her wall: still safe out here
+  let touched = 0, ev = null;
+  for (let i = 0; i < COOLDOWN_ROWS && !s.over; i++) {
+    ev = narrowsTick(s, always);
+    if (ev && ev !== 'through') touched += 1;
+  }
+  assert.equal(touched, 0, 'nothing can reach you in the run-out');
+  assert.equal(ev, 'through');
+  assert.ok(s.rows.every((r) => r.rock < 0), 'and no new rock was laid');
+  assert.equal(s.charybdis, null, 'the whirlpool has shut');
+  assert.equal(s.scylla.vis, 0, 'and she is back under');
+});
+
+test('the run-out reports itself as calm, and the run-in still does too', () => {
+  const s = newNarrowsRun();
+  narrowsStart(s);
+  assert.ok(narrowsCalm(s), 'the run-in is calm');
+  assert.equal(narrowsRunOut(s), false, 'but it is not the run-out');
+  s.warmup = 0;
+  s.rowsLeft = COOLDOWN_ROWS - 1;
+  assert.ok(narrowsRunOut(s));
+  assert.ok(narrowsCalm(s));
+  assert.ok(narrowsRunOutT(s) > 0 && narrowsRunOutT(s) <= 1);
+  // and the attract screen is neither
+  const t = newNarrowsRun();
+  t.rowsLeft = 1;
+  assert.equal(narrowsRunOut(t), false, 'no coin, no run-out');
+});
+
+test('the dangerous stretch is still most of the passage', () => {
+  const danger = RUN_ROWS - COOLDOWN_ROWS;
+  assert.ok(danger / RUN_ROWS > 0.9, `the run-out must not eat the game: ${danger}/${RUN_ROWS}`);
 });
