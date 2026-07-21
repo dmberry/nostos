@@ -1,106 +1,135 @@
-// THE NARROWS — the Scylla/Charybdis passage as an 8-bit arcade run.
+// THE NARROWS — the Scylla/Charybdis passage as a SNES-era arcade run.
 //
 // Homer's bargain was a choice: hug the cliff and lose a few for certain, or
 // steer wide and gamble the ship. As a two-button modal that choice was made
-// once and watched. Here it is made continuously, with your hands: the cliff is
-// the left wall and Scylla's heads dart out of it, the right of the channel is
-// Charybdis's pull. Every moment you are deciding how close to shave the rock,
-// which is the same bargain played rather than picked.
+// once and watched. Here it is made continuously, with your hands.
+//
+// BOTH monsters are in the water now. SCYLLA surfaces on the left and takes one
+// thing off the deck each time she reaches you — painful, survivable, endlessly
+// repeatable. CHARYBDIS surfaces on the right and takes the ship and the voyage
+// with it, once. So the channel is a weave: her side is cheap and constant, hers
+// is rare and final, and the safe water is the seam between them.
 //
 // Pure state, no canvas and no globals, in the shape of game/snake.js — the hub
 // owns the clock and the input, this owns the rules. `rng` is injected so a test
 // can pin the run.
 
-export const NARROWS_W = 12;      // channel width, in cells
-export const VIEW_ROWS = 18;      // rows of channel on screen at once
-export const SHIP_ROW = 13;       // the ship's fixed row (near the bottom)
-export const RUN_ROWS = 64;       // how long the passage is, in ticks
+export const NARROWS_W = 13;      // channel width, in cells
+export const VIEW_ROWS = 20;      // rows of channel on screen at once
+export const SHIP_ROW = 15;       // the ship's fixed row (near the bottom)
 
-// Charybdis owns the right of the channel. The further in you drift the harder
-// she pulls, and `drag` is how much of you she has: reach the limit and she has
-// all of it. Steering back out of the pull sheds it, but slower than it builds —
-// so a long drift is not undone by one flick of the helm.
-export const PULL_FROM = 8;
-export const DRAG_LIMIT = 16;
-export const DRAG_SHED = 2;
+// A passage worth sitting down for. At the hub's tick (~0.1s a row) this runs
+// about two and a half minutes, and the density ramps across it so the last
+// third is genuinely tight rather than more of the same.
+export const RUN_ROWS = 1150;
+export const WARMUP_ROWS = 30;    // open water first: you come UP to the narrows
+export const TOTAL_ROWS = WARMUP_ROWS + RUN_ROWS;
 
-// Scylla's heads come out of the cliff (column 0) and reach into the channel.
-// MAX_REACH is bounded well short of the pull zone: there is ALWAYS a lane
-// through, so a run is never unwinnable — you just have to find it and be
-// willing to sail closer to her than is comfortable.
-export const MAX_REACH = 5;
-const HEAD_GAP = 3;               // never two heads within this many rows
+// How far each of them can reach in from her own side. The pair is capped so
+// that even at their deepest there is clear water between them:
+//   SCYLLA_MAX + CHARYBDIS_MAX + SAFE_LANE <= NARROWS_W
+// That invariant is what keeps a run winnable, and it is asserted in the tests
+// rather than merely intended.
+export const SCYLLA_MAX = 4;
+export const CHARYBDIS_MAX = 4;
+export const SAFE_LANE = 3;
 
-export function newNarrowsRun(rng = Math.random) {
-  const s = {
-    x: 4,                         // the ship's column
-    rows: new Array(VIEW_ROWS).fill(0),   // rows[i] = how far a head reaches; 0 = clear
-    rowsLeft: RUN_ROWS,
-    drag: 0,                      // how much of you Charybdis has
-    bites: 0,                     // heads that got you: each is one thing off the deck
-    grace: 0,                     // brief invulnerability after a bite
-    since: HEAD_GAP,              // rows since the last head
+const GAP_MIN = 3;                // never two of the same monster within this
+// Rows of warning between a head breaking the surface and reaching your line.
+export const TELEGRAPH = VIEW_ROWS - SHIP_ROW;
+
+// Named, because "the left one" and "the right one" is not how you talk about
+// monsters. The cabinet labels them on the water.
+export const MONSTERS = {
+  scylla: { name: 'SCYLLA', side: 'left', cost: 'takes one thing' },
+  charybdis: { name: 'CHARYBDIS', side: 'right', cost: 'takes the ship' },
+};
+
+export function newNarrowsRun() {
+  return {
+    x: 6,                          // the ship's column, mid-channel
+    // Each row is { l, r }: how far Scylla reaches in from the left, and how far
+    // Charybdis reaches in from the right. 0 = that side is clear.
+    rows: Array.from({ length: VIEW_ROWS }, () => ({ l: 0, r: 0 })),
+    rowsLeft: TOTAL_ROWS,
+    warmup: WARMUP_ROWS,
+    bites: 0,                      // Scylla's tally: one thing off the deck each
+    grace: 0,                      // brief invulnerability after a bite
+    sinceL: GAP_MIN,
+    sinceR: GAP_MIN,
     over: false,
-    outcome: null,                // 'through' | 'swallowed'
+    outcome: null,                 // 'through' | 'swallowed'
+    attract: true,                 // the cabinet opens on its title card
+    t: 0,                          // frames, for blinks and the churn
   };
-  // Seed the visible channel so the run does not open on an empty screen.
-  for (let i = 0; i < VIEW_ROWS; i++) s.rows[i] = nextRow(s, rng);
-  return s;
 }
 
-// One new row at the top of the channel. Heads are spaced so there is always
-// water between them, and never so deep that the only lane is inside the pull.
+// How hard the channel is right now, 0..1. It thickens as you go, so a long run
+// escalates instead of flatlining.
+export function narrowsPressure(s) {
+  const danger = Math.max(0, s.rowsLeft - WARMUP_ROWS);
+  return Math.max(0, Math.min(1, 1 - danger / RUN_ROWS));
+}
+
+// One new row at the top of the channel. Each side is spaced from its own last
+// appearance, and the pair is clamped so a row can never be sealed.
 function nextRow(s, rng) {
-  s.since += 1;
-  if (s.since < HEAD_GAP) return 0;
-  if (rng() < 0.42) {
-    s.since = 0;
-    return 1 + Math.floor(rng() * MAX_REACH);   // reaches columns 0..reach
+  const p = narrowsPressure(s);
+  const chance = 0.20 + 0.30 * p;      // sparse at the start, busy by the end
+  s.sinceL += 1; s.sinceR += 1;
+  let l = 0, r = 0;
+  if (s.sinceL >= GAP_MIN && rng() < chance) {
+    l = 1 + Math.floor(rng() * SCYLLA_MAX);
+    s.sinceL = 0;
   }
-  return 0;
+  // Charybdis is the rarer half — she ends the run, so she must never feel
+  // cheap, and she must never be the thing you could not have avoided.
+  if (s.sinceR >= GAP_MIN && rng() < chance * 0.55) {
+    r = 1 + Math.floor(rng() * CHARYBDIS_MAX);
+    s.sinceR = 0;
+  }
+  if (l + r > NARROWS_W - SAFE_LANE) r = Math.max(0, NARROWS_W - SAFE_LANE - l);
+  return { l, r };
 }
 
-// Put the helm over. Clamped to the channel; column 0 is the cliff face itself,
-// so the closest you may sail is 1.
+// Coin in: leave the attract screen and start the passage.
+export function narrowsStart(s) {
+  if (!s.attract) return false;
+  s.attract = false;
+  return true;
+}
+
+// Put the helm over. Column 0 and NARROWS_W-1 are the channel's own walls.
 export function narrowsSteer(s, dx) {
-  if (s.over) return;
-  s.x = Math.max(1, Math.min(NARROWS_W - 1, s.x + (dx < 0 ? -1 : 1)));
+  if (s.over || s.attract) return;
+  s.x = Math.max(0, Math.min(NARROWS_W - 1, s.x + (dx < 0 ? -1 : 1)));
 }
 
-// Advance one row. Returns what happened this tick, for the hub to narrate:
-// 'bite' (she took one), 'swallowed' (the pool has you), 'through' (clear), or
-// null. Bites do NOT end the run — they accumulate, which is the whole shape of
-// the thing: you can be nibbled the length of the strait and still get out.
+// Advance one row. Returns 'bite' (Scylla took one), 'swallowed' (Charybdis has
+// the ship), 'through' (clear), or null.
 export function narrowsTick(s, rng = Math.random) {
-  if (s.over) return null;
+  if (s.over || s.attract) return null;   // no coin, no game
 
+  const calm = s.warmup > 0;
   s.rows.pop();
-  s.rows.unshift(nextRow(s, rng));
+  s.rows.unshift(calm ? { l: 0, r: 0 } : nextRow(s, rng));
   s.rowsLeft -= 1;
+  if (s.warmup > 0) s.warmup -= 1;
   if (s.grace > 0) s.grace -= 1;
 
-  // Charybdis tugs: inside her pull you are dragged a column further in, so
-  // holding a line near the edge costs you steering, not just nerve.
-  if (s.x >= PULL_FROM) {
-    s.drag += (s.x - PULL_FROM) + 1;
-    if (rng() < 0.5) s.x = Math.min(NARROWS_W - 1, s.x + 1);
-  } else {
-    s.drag = Math.max(0, s.drag - DRAG_SHED);
-  }
-  if (s.drag >= DRAG_LIMIT) {
+  const row = s.rows[SHIP_ROW];
+  // CHARYBDIS first, and deliberately NOT behind the grace period: no amount of
+  // recent luck saves you from the one that ends the voyage.
+  if (row.r > 0 && s.x >= NARROWS_W - row.r) {
     s.over = true; s.outcome = 'swallowed';
     return 'swallowed';
   }
-
-  // A head on the ship's row reaching at least as far as the ship has it.
-  const reach = s.rows[SHIP_ROW];
-  if (reach >= s.x && s.grace <= 0) {
+  if (row.l > 0 && s.x < row.l && s.grace <= 0) {
     s.bites += 1;
-    s.grace = 3;                  // she has to let go before she can take again
+    s.grace = 4;                   // she has to let go before she can take again
     if (s.rowsLeft <= 0) { s.over = true; s.outcome = 'through'; }
     return 'bite';
   }
-
   if (s.rowsLeft <= 0) {
     s.over = true; s.outcome = 'through';
     return 'through';
@@ -110,5 +139,10 @@ export function narrowsTick(s, rng = Math.random) {
 
 // How far through the passage you are, 0..1 — the hub draws this as a bar.
 export function narrowsProgress(s) {
-  return Math.max(0, Math.min(1, 1 - s.rowsLeft / RUN_ROWS));
+  return Math.max(0, Math.min(1, 1 - s.rowsLeft / TOTAL_ROWS));
+}
+
+// Still on open water? The cabinet says so, so the calm reads as deliberate.
+export function narrowsCalm(s) {
+  return s.warmup > 0;
 }

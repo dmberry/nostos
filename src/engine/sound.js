@@ -169,6 +169,37 @@ class Sound {
           [0.85, 0.96, 1.07].forEach((a) => beep(a, 0.05));   // S = · · ·
           break;
         }
+        case 'coin': { // the arcade coin: two rising square blips, unmistakable
+          const B = (at, f, dur) => this._tone({ when: t + at, dur, type: 'square', freq: f * v, gain: 0.16, attack: 0.002 });
+          B(0.00, 988, 0.06);    // B5
+          B(0.07, 1319, 0.16);   // E6
+          break;
+        }
+        case 'narrowsTune': { // attract-screen chiptune: a square-wave motif in D
+          // minor, jaunty over the top and grim underneath, which is the whole
+          // joke of putting Scylla in a cabinet. Two bars, then it stops — an
+          // attract loop that actually looped would wear out fast.
+          const N = { d4: 293.66, f4: 349.23, g4: 392.00, a4: 440.00, c5: 523.25, d5: 587.33, e5: 659.25, f5: 698.46 };
+          const lead = [
+            [0.00, N.d4, 0.11], [0.13, N.f4, 0.11], [0.26, N.a4, 0.11], [0.39, N.d5, 0.20],
+            [0.62, N.c5, 0.11], [0.75, N.a4, 0.11], [0.88, N.f4, 0.20],
+            [1.13, N.d4, 0.11], [1.26, N.a4, 0.11], [1.39, N.d5, 0.11], [1.52, N.f5, 0.20],
+            [1.75, N.e5, 0.11], [1.88, N.d5, 0.30],
+          ];
+          for (const [at, f, dur] of lead) {
+            this._tone({ when: t + at, dur, type: 'square', freq: f, gain: 0.085, attack: 0.004 });
+          }
+          // A plodding bass under it, one note to the bar — the thing in the rock.
+          for (const [at, f] of [[0.00, 73.42], [0.62, 87.31], [1.13, 73.42], [1.75, 98.00]]) {
+            this._tone({ when: t + at, dur: 0.5, type: 'triangle', freq: f, gain: 0.13, attack: 0.01 });
+          }
+          break;
+        }
+        case 'narrowsWin': { // through clean: a short rising fanfare
+          const B = (at, f, dur) => this._tone({ when: t + at, dur, type: 'square', freq: f, gain: 0.13, attack: 0.003 });
+          B(0.00, 587.33, 0.08); B(0.09, 698.46, 0.08); B(0.18, 880.00, 0.08); B(0.27, 1174.66, 0.26);
+          break;
+        }
         case 'eat': // two soft low pops
           this._tone({ when: t, dur: 0.06, freq: 170 * v, end: 120, gain: 0.28, attack: 0.003 });
           this._tone({ when: t + 0.11, dur: 0.06, freq: 160 * v, end: 115, gain: 0.28, attack: 0.003 });

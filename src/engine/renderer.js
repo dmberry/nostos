@@ -667,7 +667,10 @@ export class Renderer {
     if (hud.aiVictory) this.drawAiVictory(hud.aiVictory);
     // The narrows: an arcade cabinet over everything, because while you are in
     // it there is nothing else to attend to.
-    if (hud.narrows) this.drawNarrows(hud.narrows);
+    if (hud.narrows) {
+      if (hud.narrows.attract) this.drawNarrowsAttract(hud.narrows);
+      else this.drawNarrows(hud.narrows);
+    }
     if (hud.paused) this.drawPausedOverlay();
   }
 

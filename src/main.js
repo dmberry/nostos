@@ -7,7 +7,7 @@ import { spawnAnimals, updateAnimals } from './game/animals.js';
 import { Player } from './game/player.js';
 import { seawardFrom, boatMirror, CF_MIN } from './game/crossing.js';
 import { isStraitCrossing, scyllaToll, STRAIT_COST } from './game/strait.js';
-import { newNarrowsRun, narrowsSteer, narrowsTick } from './game/narrows.js';
+import { newNarrowsRun, narrowsSteer, narrowsTick, narrowsStart } from './game/narrows.js';
 import { makeRng } from './game/rng.js';
 import { DayNight } from './game/daynight.js';
 import { Minimap } from './game/minimap.js';
@@ -946,15 +946,15 @@ function circeStraitAdvice() {
 // the length of it, deciding moment to moment how close to shave Scylla's rock
 // against how far you dare drift into Charybdis's pull. Same bargain, made with
 // your hands instead of a click. Rules in game/narrows.js.
-const NARROWS_TICK = 0.11;          // seconds per row — brisk, but readable
+const NARROWS_TICK = 0.10;          // seconds per row — brisk, but readable
 const MAX_CATCHUP = 3;              // rows a single frame may ever advance
 
 function openNarrows() {
-  strait.run = newNarrowsRun();
+  strait.run = newNarrowsRun();     // opens on its attract screen; nothing ticks yet
   strait.tickT = 0;
   strait.taken = [];                // what she has had off the deck, for the report
-  sfx.play('charge');
-  player.say('The channel closes. Rock to port, and to starboard the water is turning. Steer.');
+  sfx.play('narrowsTune');
+  player.say('The channel closes to a throat of rock, and something in the cliff is awake.');
 }
 
 // One head got you: she takes ONE thing off the deck and you sail on. Bites
@@ -990,7 +990,7 @@ function endNarrows(outcome) {
   }
   // Through. What it cost depends entirely on how well you steered.
   if (!s.taken.length) {
-    sfx.play('sms');
+    sfx.play('narrowsWin');
     player.say('The rock falls away astern and the water goes quiet. Six mouths, and not one of them touched you. Nobody gets through the narrows clean. You just did.');
   } else {
     player.health = Math.max(1, player.health - 2);
@@ -1004,6 +1004,22 @@ function endNarrows(outcome) {
 function updateNarrows(dt) {
   const s = strait, n = s.run;
   n.t = (n.t || 0) + 1;
+  // ATTRACT: the cabinet waits. Any key, or a tap anywhere, is the coin. Read
+  // as an edge rather than a held state so the keypress that opened the strait
+  // cannot roll straight through the title card without being seen.
+  if (n.attract) {
+    // Space/Enter is the coin slot; a steering key works too, since reaching for
+    // the helm is the same gesture as starting. (There is no any-key API, and
+    // inventing one for this would be a lot of surface for one title card.)
+    const coin = ['Space', 'Enter', 'KeyA', 'KeyD', 'ArrowLeft', 'ArrowRight']
+      .some((k) => input.consumePress(k));
+    const tapped = !!input.clickPos();
+    if (coin || tapped) {
+      if (tapped) input.consumeClick();
+      if (narrowsStart(n)) { sfx.play('coin'); player.say('Steer.'); }
+    }
+    return;
+  }
   // Steering is HELD, not tapped, so you can lean on a direction and hold a line
   // against the pull. moveIntent() already folds the keyboard and a dragged
   // finger into one screen-space vector, so the helm works the same on a desk
@@ -1039,7 +1055,8 @@ function finishStrait() {
   const s = strait;
   strait = null;
   player.aboard = null;
-  const backwards = s.outcome === 'swallowed';
+  // A lyre test loop returns you to where you were, whatever the sea did.
+  const backwards = s.testOnly || s.outcome === 'swallowed';
   const dest = worldById(backwards ? s.from : s.to);
   if (dest) { goToWorld(dest, { beach: true }); sfx.play('zap'); }
   if (backwards) player.say('The sea puts you back on the beach you sailed from. The strait is still there, and still wants paying.');
@@ -1473,6 +1490,8 @@ function devRun(raw) {
         'leave                   set calypsoLeave (the sea will let you go)',
         'tp <x> <y>              teleport on this island',
         'time <day|night|0-23>   set the clock (day=noon, night=22:00)',
+        'narrows                play the Scylla/Charybdis cabinet, then come back',
+        'boat [raft]            a hull at your feet (raft = the one the sea refuses)',
         'strait [island] [now]   sail into the narrows (`now` = skip to the choice)',
         'score <n> / heal / kill / where');
       return;
@@ -1541,6 +1560,43 @@ function devRun(raw) {
       if (!isFinite(tx) || !isFinite(ty)) { devPrint('tp <x> <y>'); return; }
       player.x = tx; player.y = ty; camera.snap(player.x, player.y);
       devPrint(`-> ${tx},${ty}`);
+      return;
+    }
+    case 'narrows': {
+      // Play the cabinet on its own, and come back to exactly where you were.
+      // Testing it through a real crossing meant building a ship and sailing the
+      // AEAEA-THRINACIA leg every single time.
+      if (strait) { devPrint('already at sea'); return; }
+      const here = currentWorld.id;
+      beginStrait(here, here);        // from and to the same island: a test loop
+      strait.phase = 'choice'; strait.t = 0;
+      strait.testOnly = true;         // finishStrait puts you back, whatever happens
+      openNarrows();
+      devPrint('-> the narrows (test loop; you return here either way)');
+      return;
+    }
+    case 'boat': {
+      // A hull at your feet — testing the crossings otherwise means building a
+      // whole ship first. `boat` gives the seaworthy greek ship; `boat raft`
+      // gives the unfinished one the sea refuses, for testing the refusal.
+      const raft = (arg || '').toLowerCase().startsWith('r');
+      const px = Math.round(player.x), py = Math.round(player.y);
+      let spot = null;
+      for (let r = 1; r <= 6 && !spot; r++) {
+        for (let dy = -r; dy <= r && !spot; dy++) {
+          for (let dx = -r; dx <= r; dx++) {
+            const x = px + dx, y = py + dy;
+            if (!map.inBounds(x, y) || map.objectAt(x, y)) continue;
+            const f = map.floorAt(x, y);
+            if (f === 'sand' || f === 'sea') { spot = { x, y }; break; }
+          }
+        }
+      }
+      if (!spot) { devPrint('no shore tile free nearby — move to a beach'); return; }
+      const o = map.addObject(raft ? 'boat' : 'greek_ship', spot.x, spot.y,
+        raft ? { hull: 100, maxHull: 100 } : { hull: 100, maxHull: 100, seaworthy: true });
+      devPrint(o ? `${raft ? 'boat (no sail)' : 'greek ship'} drawn up at ${spot.x},${spot.y}`
+                 : 'could not place a hull there');
       return;
     }
     case 'strait': {

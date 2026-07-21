@@ -15,7 +15,7 @@
 
 import { ITEMS, WEAPON_ORDER } from '../game/items.js'; // weapon-chart data
 import { PAPER_TEXTURE, NOKIA_SPRITE } from './textures.js'; // death-cert paper; the 3310 in the PHONE box
-import { NARROWS_W, VIEW_ROWS, SHIP_ROW, PULL_FROM, DRAG_LIMIT, narrowsProgress } from '../game/narrows.js'; // the Scylla/Charybdis arcade run
+import { NARROWS_W, VIEW_ROWS, SHIP_ROW, MONSTERS, narrowsProgress, narrowsCalm } from '../game/narrows.js'; // the Scylla/Charybdis arcade run
 
 export const DASH_H = 78; // dashboard panel height
 
@@ -785,108 +785,228 @@ export const uiMethods = {
   // or whose machines you were fighting, which is exactly what you need when you
   // have just made landfall. It is drawn unboxed and grey because it is
   // reference, not instrumentation: there to be glanced at, not watched.
-  // THE NARROWS — the Scylla/Charybdis run, drawn as an 8-bit arcade cabinet
-  // laid over the world. Everything is on a hard cell grid with no smoothing and
-  // a four-colour palette, so it reads as a machine from 1983 that someone has
-  // wired into an Odyssey.
+  // THE NARROWS — the Scylla/Charybdis run, drawn in a 16-bit register rather
+  // than a blocky 8-bit one: gradients on the water, shaded and outlined
+  // sprites, highlights and drop shadows. Still a hard cell grid underneath, so
+  // it reads as a SNES cabinet rather than an Atari one.
   drawNarrows(n) {
     const ctx = this.ctx;
     const W = NARROWS_W, ROWS = VIEW_ROWS;
-    // Fit the cabinet to the viewport, kept on whole pixels so cells stay crisp.
-    const cell = Math.max(8, Math.floor(Math.min((this.w - 40) / W, (this.h - 190) / ROWS)));
+    const cell = Math.max(10, Math.floor(Math.min((this.w - 40) / W, (this.h - 190) / ROWS)));
     const gw = W * cell, gh = ROWS * cell;
     const ox = Math.round((this.w - gw) / 2), oy = Math.round((this.h - gh) / 2) - 10;
+    const calm = narrowsCalm(n);
 
     ctx.save();
-    ctx.imageSmoothingEnabled = false;
-    // Blacked-out room around the screen.
-    ctx.fillStyle = 'rgba(4,6,8,0.88)';
+    ctx.fillStyle = 'rgba(3,5,9,0.90)';
     ctx.fillRect(0, 0, this.w, this.h);
 
-    // The water.
-    ctx.fillStyle = '#0d1b2a';
+    // --- the sea: a vertical gradient with a slow swell rolling down it ------
+    const sea = ctx.createLinearGradient(0, oy, 0, oy + gh);
+    sea.addColorStop(0, '#0a1830');
+    sea.addColorStop(0.5, '#123156');
+    sea.addColorStop(1, '#0b1e3a');
+    ctx.fillStyle = sea;
     ctx.fillRect(ox, oy, gw, gh);
-    // Scanline wash, every other row — the CRT tell.
-    ctx.fillStyle = 'rgba(0,0,0,0.22)';
-    for (let r = 0; r < ROWS; r++) if (r % 2) ctx.fillRect(ox, oy + r * cell, gw, cell);
-
-    // Charybdis: her pull, banded darker the deeper in you are, with the water
-    // visibly turning. The nearer the limit, the angrier the band.
-    const heat = Math.min(1, n.drag / DRAG_LIMIT);
-    for (let c = PULL_FROM; c < W; c++) {
-      const depth = (c - PULL_FROM + 1) / (W - PULL_FROM);
-      ctx.fillStyle = `rgba(${Math.round(40 + 150 * heat)},18,46,${(0.20 + depth * 0.42).toFixed(3)})`;
-      ctx.fillRect(ox + c * cell, oy, cell, gh);
+    for (let r = 0; r < ROWS; r++) {
+      const swell = Math.sin((r + n.t * 0.06) * 0.7);
+      ctx.fillStyle = `rgba(120,190,235,${(0.05 + 0.045 * swell).toFixed(3)})`;
+      ctx.fillRect(ox, oy + r * cell + cell * 0.62, gw, Math.max(1, cell * 0.16));
     }
-    // Her spiral, a few chunky arcs wound round the far column.
-    const spinX = ox + (W - 1.2) * cell, spinY = oy + gh * 0.5;
-    ctx.strokeStyle = `rgba(210,120,190,${(0.35 + 0.5 * heat).toFixed(2)})`;
-    ctx.lineWidth = Math.max(2, cell * 0.22);
-    for (let a = 0; a < 3; a++) {
-      const rr = cell * (1.0 + a * 0.9);
+    // Foam crests, scrolling, so the channel obviously moves.
+    ctx.fillStyle = 'rgba(210,235,255,0.16)';
+    for (let r = 0; r < ROWS; r++) {
+      const k = (r * 5 + Math.floor(n.t * 0.5)) % W;
+      ctx.fillRect(ox + k * cell + cell * 0.2, oy + r * cell + cell * 0.3, cell * 0.5, 2);
+    }
+
+    // --- the two of them, surfacing from their own sides ---------------------
+    // Both are IN THE WATER now: Scylla's necks break the surface on the left,
+    // Charybdis's maw on the right. Each is drawn with an outline, a lit top and
+    // a shaded underside, which is what separates a SNES sprite from a blob.
+    const head = (cx, cy, rad, base, lit, dark, facing) => {
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';                       // sit it in the water
+      ctx.beginPath(); ctx.ellipse(cx, cy + rad * 0.55, rad * 1.15, rad * 0.42, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = base;
+      ctx.beginPath(); ctx.ellipse(cx, cy, rad, rad * 0.92, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = dark;                                     // shaded underside
+      ctx.beginPath(); ctx.ellipse(cx, cy + rad * 0.25, rad * 0.92, rad * 0.55, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = lit;                                      // lit crown
+      ctx.beginPath(); ctx.ellipse(cx - rad * 0.2 * facing, cy - rad * 0.35, rad * 0.55, rad * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = Math.max(1, cell * 0.08);
+      ctx.beginPath(); ctx.ellipse(cx, cy, rad, rad * 0.92, 0, 0, Math.PI * 2); ctx.stroke();
+      // eye
+      ctx.fillStyle = '#fdf6e0';
+      ctx.beginPath(); ctx.arc(cx + rad * 0.35 * facing, cy - rad * 0.12, rad * 0.26, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#150a10';
+      ctx.beginPath(); ctx.arc(cx + rad * 0.42 * facing, cy - rad * 0.12, rad * 0.12, 0, Math.PI * 2); ctx.fill();
+    };
+
+    for (let r = 0; r < ROWS; r++) {
+      const row = n.rows[r];
+      const y = oy + r * cell + cell * 0.5;
+      if (row.l > 0) {
+        // SCYLLA: a sinuous neck out of the left, head at its tip.
+        const tip = ox + row.l * cell - cell * 0.5;
+        ctx.strokeStyle = '#6f1d33';
+        ctx.lineWidth = cell * 0.42;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(ox, y + Math.sin(n.t * 0.2 + r) * cell * 0.12);
+        ctx.quadraticCurveTo(tip - cell * 0.8, y - cell * 0.3, tip, y);
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(190,90,120,0.45)';               // highlight along the top
+        ctx.lineWidth = cell * 0.12;
+        ctx.beginPath();
+        ctx.moveTo(ox, y - cell * 0.12);
+        ctx.quadraticCurveTo(tip - cell * 0.8, y - cell * 0.42, tip, y - cell * 0.14);
+        ctx.stroke();
+        head(tip, y, cell * 0.42, '#a8304c', '#d9668a', '#6d1730', 1);
+      }
+      if (row.r > 0) {
+        // CHARYBDIS: a churning maw out of the right, ringed by her own spiral.
+        const tip = ox + gw - row.r * cell + cell * 0.5;
+        ctx.strokeStyle = 'rgba(150,90,190,0.5)';
+        ctx.lineWidth = cell * 0.14;
+        for (let a = 0; a < 2; a++) {
+          ctx.beginPath();
+          ctx.arc(tip, y, cell * (0.55 + a * 0.42), n.t * 0.22 + a * 1.7, n.t * 0.22 + a * 1.7 + Math.PI * 1.35);
+          ctx.stroke();
+        }
+        ctx.fillStyle = '#2b1038';
+        ctx.beginPath(); ctx.ellipse(tip, y, cell * 0.52, cell * 0.46, 0, 0, Math.PI * 2); ctx.fill();
+        head(tip, y, cell * 0.40, '#7b3fa8', '#c07fe0', '#3f1a5c', -1);
+      }
+    }
+
+    // --- the ship ------------------------------------------------------------
+    const sx = ox + n.x * cell + cell * 0.5, sy = oy + SHIP_ROW * cell + cell * 0.5;
+    const blink = n.grace > 0 && (n.t & 1);
+    if (!blink) {
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.beginPath(); ctx.ellipse(sx, sy + cell * 0.34, cell * 0.46, cell * 0.18, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#8a5a24';                                  // hull, shaded
       ctx.beginPath();
-      ctx.arc(spinX, spinY, rr, n.t * 0.15 + a * 1.4, n.t * 0.15 + a * 1.4 + Math.PI * 1.3);
+      ctx.moveTo(sx - cell * 0.42, sy + cell * 0.08);
+      ctx.quadraticCurveTo(sx, sy + cell * 0.42, sx + cell * 0.42, sy + cell * 0.08);
+      ctx.lineTo(sx + cell * 0.34, sy - cell * 0.05);
+      ctx.lineTo(sx - cell * 0.34, sy - cell * 0.05);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#c9932f';                                  // lit gunwale
+      ctx.fillRect(sx - cell * 0.38, sy - cell * 0.08, cell * 0.76, cell * 0.1);
+      ctx.fillStyle = '#f2ead6';                                  // sail
+      ctx.beginPath();
+      ctx.moveTo(sx, sy - cell * 0.62); ctx.lineTo(sx + cell * 0.26, sy - cell * 0.1);
+      ctx.lineTo(sx - cell * 0.26, sy - cell * 0.1); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = Math.max(1, cell * 0.06);
       ctx.stroke();
     }
 
-    // Scylla's cliff: the left wall, blocky rock.
-    for (let r = 0; r < ROWS; r++) {
-      ctx.fillStyle = (r % 3) ? '#3a3630' : '#454038';
-      ctx.fillRect(ox, oy + r * cell, cell, cell);
-    }
-    // Her heads, reaching out of it. Each is a stubby neck of cells and a blunt
-    // head with one pale eye — six of them somewhere in the rock, and these are
-    // the ones currently out.
-    for (let r = 0; r < ROWS; r++) {
-      const reach = n.rows[r];
-      if (!reach) continue;
-      const y = oy + r * cell;
-      ctx.fillStyle = '#7d2233';
-      ctx.fillRect(ox + cell, y + Math.floor(cell * 0.2), reach * cell, Math.ceil(cell * 0.6));
-      ctx.fillStyle = '#a33048';
-      ctx.fillRect(ox + reach * cell, y, cell, cell);          // the head
-      ctx.fillStyle = '#f0e8d0';
-      ctx.fillRect(ox + reach * cell + Math.floor(cell * 0.55), y + Math.floor(cell * 0.3),
-        Math.max(2, Math.floor(cell * 0.2)), Math.max(2, Math.floor(cell * 0.2)));   // eye
-    }
+    // --- frame + HUD ---------------------------------------------------------
+    ctx.strokeStyle = 'rgba(180,200,220,0.35)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(ox - 1, oy - 1, gw + 2, gh + 2);
 
-    // The ship: a chunky hull, a mast, and the eye on the sail.
-    const sx = ox + n.x * cell, sy = oy + SHIP_ROW * cell;
-    const blink = n.grace > 0 && (n.t & 1);                    // flashes just after a bite
-    if (!blink) {
-      ctx.fillStyle = '#c9a227';
-      ctx.fillRect(sx, sy + Math.floor(cell * 0.45), cell, Math.ceil(cell * 0.5));   // hull
-      ctx.fillStyle = '#e8e0d0';
-      ctx.fillRect(sx + Math.floor(cell * 0.35), sy, Math.max(2, Math.floor(cell * 0.3)), Math.ceil(cell * 0.5)); // sail
-    }
-
-    // HUD strip under the cabinet: how far through, and what she has had.
-    const by = oy + gh + 12;
-    ctx.fillStyle = 'rgba(232,224,208,0.85)';
-    ctx.font = `bold ${Math.max(9, Math.round(cell * 0.7))}px ui-monospace, monospace`;
+    // Their names, on their own sides, so you never have to guess which is which.
+    ctx.font = `bold ${Math.max(10, Math.round(cell * 0.62))}px ui-monospace, monospace`;
     ctx.textAlign = 'left';
-    ctx.fillText('THE NARROWS', ox, by + 2);
+    ctx.fillStyle = calm ? 'rgba(200,120,150,0.35)' : 'rgba(230,140,170,0.9)';
+    ctx.fillText(MONSTERS.scylla.name, ox + 4, oy - 8);
     ctx.textAlign = 'right';
-    ctx.fillStyle = n.bites ? '#e0864a' : 'rgba(232,224,208,0.5)';
-    ctx.fillText(n.bites ? `TAKEN ${n.bites}` : 'CLEAN', ox + gw, by + 2);
-    // Progress bar, in cells rather than a smooth fill.
-    const pcells = Math.round(narrowsProgress(n) * W);
-    for (let c = 0; c < W; c++) {
-      ctx.fillStyle = c < pcells ? '#6ad0a0' : 'rgba(255,255,255,0.10)';
-      ctx.fillRect(ox + c * cell + 1, by + 10, cell - 2, 5);
-    }
-    // Charybdis meter, only once she has any of you — a warning that grows.
-    if (n.drag > 0) {
-      ctx.fillStyle = `rgba(210,120,190,${(0.4 + 0.6 * heat).toFixed(2)})`;
-      ctx.textAlign = 'center';
-      ctx.font = `bold ${Math.max(9, Math.round(cell * 0.6))}px ui-monospace, monospace`;
-      ctx.fillText(heat > 0.66 ? 'SHE HAS YOU' : 'THE PULL', ox + gw / 2, by + 2);
-    }
+    ctx.fillStyle = calm ? 'rgba(170,120,210,0.35)' : 'rgba(200,150,240,0.9)';
+    ctx.fillText(MONSTERS.charybdis.name, ox + gw - 4, oy - 8);
+
+    const by = oy + gh + 14;
+    ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(232,224,208,0.9)';
+    ctx.font = `bold ${Math.max(10, Math.round(cell * 0.6))}px ui-monospace, monospace`;
+    ctx.fillText('THE NARROWS', ox, by);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = calm ? 'rgba(106,208,160,0.9)' : n.bites ? '#e0864a' : 'rgba(232,224,208,0.5)';
+    ctx.fillText(calm ? 'OPEN WATER' : n.bites ? `TAKEN ${n.bites}` : 'CLEAN', ox + gw, by);
+    const pw2 = Math.round(narrowsProgress(n) * gw);
+    ctx.fillStyle = 'rgba(255,255,255,0.10)';
+    ctx.fillRect(ox, by + 8, gw, 6);
+    const grad = ctx.createLinearGradient(ox, 0, ox + gw, 0);
+    grad.addColorStop(0, '#6ad0a0'); grad.addColorStop(1, '#e8d27a');
+    ctx.fillStyle = grad;
+    ctx.fillRect(ox, by + 8, pw2, 6);
     ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(207,216,195,0.5)';
+    ctx.font = `${Math.max(9, Math.round(cell * 0.5))}px system-ui, sans-serif`;
+    ctx.fillText('A / D  or  ← →  ·  or drag', ox + gw / 2, by + 30);
+    ctx.textAlign = 'left';
+    ctx.restore();
+  },
+
+  // The cabinet's attract screen — see drawNarrows for why it exists.
+  drawNarrowsAttract(n) {
+    const ctx = this.ctx;
+    const W = NARROWS_W, ROWS = VIEW_ROWS;
+    const cell = Math.max(10, Math.floor(Math.min((this.w - 40) / W, (this.h - 190) / ROWS)));
+    const gw = W * cell, gh = ROWS * cell;
+    const ox = Math.round((this.w - gw) / 2), oy = Math.round((this.h - gh) / 2) - 10;
+    const cx = ox + gw / 2;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(3,5,9,0.92)';
+    ctx.fillRect(0, 0, this.w, this.h);
+    const g2 = ctx.createLinearGradient(0, oy, 0, oy + gh);
+    g2.addColorStop(0, '#0a1830'); g2.addColorStop(1, '#07101f');
+    ctx.fillStyle = g2; ctx.fillRect(ox, oy, gw, gh);
+    ctx.strokeStyle = 'rgba(180,200,220,0.35)'; ctx.lineWidth = 2;
+    ctx.strokeRect(ox - 1, oy - 1, gw + 2, gh + 2);
+    ctx.textAlign = 'center';
+
+    const fitW = gw - cell * 1.2;
+    const fit = (text, startPx, weight = '') => {
+      let px = startPx;
+      do {
+        ctx.font = `${weight}${px}px ui-monospace, monospace`;
+        if (ctx.measureText(text).width <= fitW) break;
+        px -= 1;
+      } while (px > 7);
+      return px;
+    };
+
+    const big = fit('THE NARROWS', Math.round(cell * 1.3), 'bold ');
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillText('THE NARROWS', cx + 2, oy + gh * 0.15 + 2);
+    ctx.fillStyle = '#e8d27a';
+    ctx.fillText('THE NARROWS', cx, oy + gh * 0.15);
     ctx.fillStyle = 'rgba(207,216,195,0.55)';
-    ctx.font = `${Math.max(9, Math.round(cell * 0.55))}px system-ui, sans-serif`;
-    ctx.fillText('A / D  or  \u2190 \u2192  ·  hug the rock, or chance the pool',
-      ox + gw / 2, by + 30);
+    fit('AN ODYSSEY, IN ONE CHANNEL', Math.round(cell * 0.6));
+    ctx.fillText('AN ODYSSEY, IN ONE CHANNEL', cx, oy + gh * 0.15 + big * 0.95);
+
+    const lh = Math.max(14, Math.round(cell * 0.95));
+    let ly = oy + gh * 0.40;
+    const rule = (swatch, name, text) => {
+      ctx.textAlign = 'left';
+      ctx.fillStyle = swatch;
+      ctx.beginPath(); ctx.arc(ox + cell * 1.2, ly - lh * 0.2, cell * 0.28, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#e8e0d0';
+      fit(name, Math.round(cell * 0.66), 'bold ');
+      ctx.fillText(name, ox + cell * 1.9, ly);
+      ctx.fillStyle = 'rgba(207,216,195,0.72)';
+      fit(text, Math.round(cell * 0.52));
+      ctx.fillText(text, ox + cell * 1.9, ly + lh * 0.62);
+      ctx.textAlign = 'center';
+      ly += lh * 1.6;
+    };
+    rule('#a8304c', MONSTERS.scylla.name, 'surfaces to port. takes one thing.');
+    rule('#7b3fa8', MONSTERS.charybdis.name, 'surfaces to starboard. takes the ship.');
+
+    ctx.fillStyle = 'rgba(207,216,195,0.6)';
+    const c1 = 'hold A / D  or  ← →  ·  or drag';
+    const c2 = 'through clean costs you nothing';
+    fit(c1, Math.round(cell * 0.52)); ctx.fillText(c1, cx, ly);
+    fit(c2, Math.round(cell * 0.52)); ctx.fillText(c2, cx, ly + lh * 0.66);
+
+    if ((n.t >> 4) & 1) {
+      ctx.fillStyle = '#6ad0a0';
+      fit('INSERT COINS TO PLAY', Math.round(cell * 0.8), 'bold ');
+      ctx.fillText('INSERT COINS TO PLAY', cx, oy + gh * 0.88);
+    }
     ctx.textAlign = 'left';
     ctx.restore();
   },
