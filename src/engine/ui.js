@@ -666,29 +666,29 @@ export const uiMethods = {
   // or whose machines you were fighting, which is exactly what you need when you
   // have just made landfall. It is drawn unboxed and grey because it is
   // reference, not instrumentation: there to be glanced at, not watched.
-  drawStatusCard(player, hud, rx, ry, w) {
+  drawStatusCard(player, hud, rx, ry) {
     const ctx = this.ctx;
     ctx.textBaseline = 'alphabetic';
-    const left = rx - w + 9;
 
-    // 1-2. Where you are and who holds it, as a labelled pair. Label and value
-    // are the SAME size — the value only differs by weight and brightness. All
-    // of this is supplementary; sizing the value up made it shout.
+    // Where you are and who holds it, as a labelled pair. ONE font throughout —
+    // same family, size and weight for label and value alike; they differ only
+    // in tone, the label dimmer than the thing it names. Right-justified, so the
+    // values line up flush against the panel edge and the block reads as a
+    // column rather than two loose strings.
     const labelled = (label, value, ly, valueColor, strike) => {
-      ctx.textAlign = 'left';
-      ctx.font = '10px system-ui, sans-serif';
-      ctx.fillStyle = 'rgba(207,216,195,0.45)';
-      ctx.fillText(label, left, ly);
-      const lw = ctx.measureText(label).width;
-      ctx.font = 'bold 10px system-ui, sans-serif';
+      ctx.font = '11px system-ui, sans-serif';
+      ctx.textAlign = 'right';
       ctx.fillStyle = valueColor;
-      ctx.fillText(value, left + lw + 5, ly);
+      ctx.fillText(value, rx, ly);
+      const vw = ctx.measureText(value).width;
+      ctx.fillStyle = 'rgba(207,216,195,0.40)';
+      ctx.fillText(label, rx - vw - 6, ly);
       if (strike) {
-        const vw = ctx.measureText(value).width;
         ctx.strokeStyle = valueColor;
+        ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.moveTo(left + lw + 5, ly - 3.5);
-        ctx.lineTo(left + lw + 5 + vw, ly - 3.5);
+        ctx.moveTo(rx - vw, ly - 3.5);
+        ctx.lineTo(rx, ly - 3.5);
         ctx.stroke();
       }
     };
@@ -939,7 +939,7 @@ export const uiMethods = {
     // The status card: where you are, who holds it, and how you are doing —
     // boxed and tight so it reads as one panel rather than three loose lines
     // floating over the terrain.
-    this.drawStatusCard(player, hud, W - 8, top + 8, 132);
+    this.drawStatusCard(player, hud, W - 10, top + 8);
     // Score hard into the bottom-right corner of the dashboard panel.
     this.drawScoreCorner(player, W - 10, top + MDH - 13);
 
@@ -1191,13 +1191,13 @@ export const uiMethods = {
     // dashboards say the same things about where you are and who holds it. The
     // card must sit inside DASH_H (78) — hence the tight top offset — and the
     // name sits to its LEFT rather than above it, where there is no room.
-    const cardW = 150, cardX = this.w - 12 - cardW;
+    const cardX = this.w - 12 - 150;   // where the name sits, left of the status lines
     ctx.font = '11px system-ui, sans-serif';
     ctx.textAlign = 'right';
     ctx.fillStyle = 'rgba(207,216,195,0.75)';
     ctx.fillText(player.name || '', cardX - 12, top + 44);
     ctx.textAlign = 'left';
-    this.drawStatusCard(player, hud, this.w - 12, top + 6, cardW);
+    this.drawStatusCard(player, hud, this.w - 12, top + 6);
     this.drawScoreCorner(player, this.w - 12, top + DASH_H - 10);
   },
 
