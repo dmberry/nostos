@@ -2077,6 +2077,11 @@ input.touchButtonHit = (x, y) => {
 
 // Touches that land on the HUD are UI, never movement (input.js touch path).
 input.uiHitTest = (x, y) => {
+  // The cabinet owns the screen: while the narrows are up, NOTHING on the
+  // dashboard is touchable. Without this the bottom strip of a phone stays a HUD
+  // hit-area, so the thumb you are steering with lands on a slot instead of the
+  // helm — and can swap what is in your hands mid-passage.
+  if (strait && strait.phase === 'choice' && strait.run) return false;
   if (renderer.slotAt && renderer.slotAt(x, y)) return true;
   if (renderer.hudTop != null && y >= renderer.hudTop) return true;
   const bp = renderer._backpackRect;

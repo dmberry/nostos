@@ -792,7 +792,7 @@ export const uiMethods = {
   // than a blocky 8-bit one: gradients on the water, shaded and outlined
   // sprites, highlights and drop shadows. Still a hard cell grid underneath, so
   // it reads as a SNES cabinet rather than an Atari one.
-  drawNarrows(n) {
+  drawNarrows(n, touch = false) {
     const ctx = this.ctx;
     const W = NARROWS_W, ROWS = VIEW_ROWS;
     const cell = Math.max(10, Math.floor(Math.min((this.w - 40) / W, (this.h - 190) / ROWS)));
@@ -1247,7 +1247,7 @@ export const uiMethods = {
     ctx.textAlign = 'right';
     const leaving = narrowsRunOut(n);
     ctx.fillStyle = calm ? 'rgba(106,208,160,0.9)' : n.bites ? '#e0864a' : 'rgba(232,224,208,0.5)';
-    ctx.fillText(leaving ? 'CLEAR OF IT' : calm ? 'OPEN WATER' : n.bites ? `TAKEN ${n.bites}` : 'CLEAN', ox + gw, by);
+    ctx.fillText(leaving ? 'SUCCESS!' : calm ? 'OPEN WATER' : n.bites ? `TAKEN ${n.bites}` : 'CLEAN', ox + gw, by);
     // Hull, as pips that go out — a number counting up never felt like damage.
     const pip = Math.max(5, Math.round(cell * 0.34));
     const hull = n.hull != null ? n.hull : HULL_MAX;
@@ -1289,9 +1289,19 @@ export const uiMethods = {
     ctx.fillStyle = 'rgba(207,216,195,0.22)';
     ctx.fillRect(Math.round(lx), labY - pip + 1, 1, pip + 1);      // the divider
     lx += Math.max(7, cell * 0.5);
+    // The controls line has to FIT: on a phone the strip is a third of the width
+    // it has on a desk, and the key list was being cut off mid-glyph at the
+    // frame's edge. On touch it is not a key list at all.
+    const ctrl = touch ? 'drag anywhere to steer' : 'WASD  or  ← → ↑ ↓  ·  or drag';
+    const room = Math.max(20, ox + gw - lx);
+    let cpx = Math.max(9, Math.round(cell * 0.46));
+    do {
+      ctx.font = `${cpx}px system-ui, sans-serif`;
+      if (ctx.measureText(ctrl).width <= room) break;
+      cpx -= 1;
+    } while (cpx > 7);
     ctx.fillStyle = 'rgba(207,216,195,0.5)';
-    ctx.font = `${Math.max(9, Math.round(cell * 0.46))}px system-ui, sans-serif`;
-    ctx.fillText('WASD  or  ← → ↑ ↓  ·  or drag', lx, labY);
+    ctx.fillText(ctrl, lx, labY);
     ctx.textAlign = 'right';
     const pw2 = Math.round(narrowsProgress(n) * gw);
     ctx.fillStyle = 'rgba(255,255,255,0.10)';
@@ -1419,7 +1429,7 @@ export const uiMethods = {
   },
 
   // The cabinet's attract screen — see drawNarrows for why it exists.
-  drawNarrowsAttract(n) {
+  drawNarrowsAttract(n, touch = false) {
     const ctx = this.ctx;
     const W = NARROWS_W, ROWS = VIEW_ROWS;
     const cell = Math.max(10, Math.floor(Math.min((this.w - 40) / W, (this.h - 190) / ROWS)));
@@ -1479,7 +1489,7 @@ export const uiMethods = {
     if (n.ram > 0) rule('#b07d3a', 'BRONZE RAM', `fitted. shoulders ${RAM_MAX} rocks aside.`);
 
     ctx.fillStyle = 'rgba(207,216,195,0.6)';
-    const c1 = 'row her anywhere: WASD  or  ← → ↑ ↓';
+    const c1 = touch ? 'drag anywhere to steer her' : 'row her anywhere: WASD  or  ← → ↑ ↓';
     const c2 = 'through clean costs you nothing';
     fit(c1, Math.round(cell * 0.52)); ctx.fillText(c1, cx, ly);
     fit(c2, Math.round(cell * 0.52)); ctx.fillText(c2, cx, ly + lh * 0.66);
