@@ -15,7 +15,10 @@
 
 import { ITEMS, WEAPON_ORDER } from '../game/items.js'; // weapon-chart data
 import { PAPER_TEXTURE, NOKIA_SPRITE } from './textures.js'; // death-cert paper; the 3310 in the PHONE box
-import { NARROWS_W, VIEW_ROWS, SHIP_ROW, MONSTERS, HULL_MAX, narrowsProgress, narrowsCalm } from '../game/narrows.js'; // the Scylla/Charybdis arcade run
+import {
+  NARROWS_W, VIEW_ROWS, MONSTERS, HULL_MAX, CHARYBDIS_ROWS,
+  narrowsProgress, narrowsCalm,
+} from '../game/narrows.js'; // the Scylla/Charybdis arcade run
 
 export const DASH_H = 78; // dashboard panel height
 
@@ -862,6 +865,7 @@ export const uiMethods = {
     // its jaw works. Placid heads with a fixed dot for an eye read as furniture;
     // the whole point of these two is that they are watching you.
     const shipScreenX = ox + (n.xDraw != null ? n.xDraw : n.x) * cell + cell * 0.5;
+    const shipScreenY = oy + (n.yDraw != null ? n.yDraw : n.y) * cell + cell * 0.5;
     const head = (cx, cy, rad, base, lit, dark, facing, seed) => {
       const beat = n.t * 0.14 + seed * 2.3;
       // Blink: shut for a few frames on an irregular cycle, so they do not all
@@ -928,24 +932,6 @@ export const uiMethods = {
       const row = n.rows[r];
       const y = oy + r * cell + cell * 0.5 + slide;
       if (y < oy - cell || y > oy + gh + cell) continue;
-      if (row.l > 0) {
-        // SCYLLA: a sinuous neck out of the left, head at its tip.
-        const tip = ox + row.l * cell - cell * 0.5;
-        ctx.strokeStyle = '#6f1d33';
-        ctx.lineWidth = cell * 0.42;
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.moveTo(ox, y + Math.sin(n.t * 0.2 + r) * cell * 0.12);
-        ctx.quadraticCurveTo(tip - cell * 0.8, y - cell * 0.3, tip, y);
-        ctx.stroke();
-        ctx.strokeStyle = 'rgba(190,90,120,0.45)';               // highlight along the top
-        ctx.lineWidth = cell * 0.12;
-        ctx.beginPath();
-        ctx.moveTo(ox, y - cell * 0.12);
-        ctx.quadraticCurveTo(tip - cell * 0.8, y - cell * 0.42, tip, y - cell * 0.14);
-        ctx.stroke();
-        head(tip, y, cell * 0.42, '#a8304c', '#d9668a', '#6d1730', 1, r);
-      }
       if (row.rock >= 0) {
         // A rock in the seam: wet granite with a lit crown and a wash of foam
         // round its base. The thing that stops the middle of the channel being
@@ -975,20 +961,92 @@ export const uiMethods = {
         ctx.lineTo(rx + cell * 0.38, y + cell * 0.3);
         ctx.stroke();
       }
-      if (row.r > 0) {
-        // CHARYBDIS: a churning maw out of the right, ringed by her own spiral.
-        const tip = ox + gw - row.r * cell + cell * 0.5;
-        ctx.strokeStyle = 'rgba(150,90,190,0.5)';
-        ctx.lineWidth = cell * 0.14;
-        for (let a = 0; a < 2; a++) {
-          ctx.beginPath();
-          ctx.arc(tip, y, cell * (0.55 + a * 0.42), n.t * 0.22 + a * 1.7, n.t * 0.22 + a * 1.7 + Math.PI * 1.35);
-          ctx.stroke();
-        }
-        ctx.fillStyle = '#2b1038';
-        ctx.beginPath(); ctx.ellipse(tip, y, cell * 0.52, cell * 0.46, 0, 0, Math.PI * 2); ctx.fill();
-        head(tip, y, cell * 0.40, '#7b3fa8', '#c07fe0', '#3f1a5c', -1, r + 5);
+    }
+
+    // --- CHARYBDIS: one enormous whirlpool, coming down the channel ----------
+    // She is the water on the starboard hand, not a row property: a single maw
+    // spanning a band of rows, widening as she comes and shutting as she passes.
+    // Drawn before Scylla so a lunge crossing her rim reads as being in front.
+    const c = n.charybdis;
+    const cReach = c ? (c.reachDraw != null ? c.reachDraw : c.reach) : 0;
+    if (c && cReach > 0.05) {
+      // She DOES travel with the current, so she takes the channel's sub-row
+      // offset — that is what keeps her sliding rather than stepping.
+      const cyc = oy + (c.row + CHARYBDIS_ROWS / 2) * cell + slide;
+      const rad = cReach * cell;
+      const cxw = ox + gw;                        // her eye sits ON the far wall
+      const spin = n.t * 0.10;
+      // the drag: water bending into her for a good way outside the mouth
+      const drag = ctx.createRadialGradient(cxw, cyc, rad * 0.2, cxw, cyc, rad * 1.5);
+      drag.addColorStop(0, 'rgba(60,20,90,0.85)');
+      drag.addColorStop(0.6, 'rgba(70,40,120,0.35)');
+      drag.addColorStop(1, 'rgba(70,40,120,0)');
+      ctx.fillStyle = drag;
+      ctx.beginPath(); ctx.ellipse(cxw, cyc, rad * 1.5, rad * 1.25, 0, 0, Math.PI * 2); ctx.fill();
+      // three turns of the spiral, each running a little faster than the last
+      ctx.lineCap = 'round';
+      for (let a = 0; a < 3; a++) {
+        ctx.strokeStyle = `rgba(170,120,215,${0.55 - a * 0.13})`;
+        ctx.lineWidth = cell * (0.20 - a * 0.04);
+        ctx.beginPath();
+        ctx.ellipse(cxw, cyc, rad * (0.95 - a * 0.26), rad * (0.80 - a * 0.22), 0,
+          spin * (1 + a * 0.5), spin * (1 + a * 0.5) + Math.PI * 1.5);
+        ctx.stroke();
       }
+      // the throat, and her one eye down in it
+      ctx.fillStyle = '#1a0726';
+      ctx.beginPath(); ctx.ellipse(cxw, cyc, rad * 0.5, rad * 0.42, 0, 0, Math.PI * 2); ctx.fill();
+      head(cxw - rad * 0.18, cyc, Math.min(cell * 0.9, rad * 0.42),
+        '#7b3fa8', '#c07fe0', '#3f1a5c', -1, 5);
+      // a bright lip where the pull begins, so the edge of her reach is visible
+      ctx.strokeStyle = 'rgba(220,190,255,0.35)';
+      ctx.lineWidth = Math.max(1.5, cell * 0.08);
+      ctx.beginPath(); ctx.ellipse(cxw, cyc, rad, rad * 0.86, 0, Math.PI * 0.5, Math.PI * 1.5);
+      ctx.stroke();
+    }
+
+    // --- SCYLLA: one creature on the port wall, keeping station on you --------
+    // She lurks half-submerged at your row, rears when you come inside her
+    // reach, and lunges. The three poses are the whole tell, so they are drawn
+    // as three distinct silhouettes rather than one neck of varying length.
+    const k = n.scylla;
+    const kReach = k ? Math.max(0.55, k.reachDraw != null ? k.reachDraw : k.reach) : 0;
+    const kVis = k ? (k.visDraw != null ? k.visDraw : (k.vis || 0)) : 0;
+    if (k && kVis > 0.03) {
+      // NO `slide`: she holds her station against the current while the channel
+      // runs past her, so borrowing the water's sub-row offset made her snap back
+      // a whole cell every tick. Her row is eased instead.
+      const ky = oy + (k.rowDraw != null ? k.rowDraw : k.row) * cell + cell * 0.5;
+      const striking = k.state === 'strike';
+      const reach = kReach * cell;
+      const tip = ox + reach;
+      const bob = Math.sin(n.t * 0.09) * cell * 0.10;
+      // She rises OUT of the water and sinks back into it: the fade is driven by
+      // the same eased reach, so there is no frame where she simply exists.
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, kVis);
+      // wake round her shoulders: she is a big thing coming up through moving water
+      ctx.fillStyle = 'rgba(210,235,255,0.13)';
+      ctx.beginPath(); ctx.ellipse(ox + cell * 0.2, ky + bob, cell * 1.1, cell * 0.55, 0, 0, Math.PI * 2); ctx.fill();
+      // the neck, out of the rock on the port hand
+      ctx.strokeStyle = striking ? '#8c2440' : '#5e1a2c';
+      ctx.lineWidth = cell * (striking ? 0.50 : 0.40);
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(ox - cell * 0.4, ky + bob + cell * 0.3);
+      ctx.quadraticCurveTo(tip - cell * 0.9, ky - cell * (striking ? 0.65 : 0.25), tip, ky + bob);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(200,100,130,0.42)';
+      ctx.lineWidth = cell * 0.11;
+      ctx.beginPath();
+      ctx.moveTo(ox - cell * 0.4, ky + bob + cell * 0.16);
+      ctx.quadraticCurveTo(tip - cell * 0.9, ky - cell * (striking ? 0.82 : 0.42), tip, ky + bob - cell * 0.14);
+      ctx.stroke();
+      // The tell is HER — rising out of the water where she was not a moment ago.
+      // A lit rectangle over the water she is about to take said the same thing
+      // and said it as a debug overlay: a hitbox drawn on the sea.
+      head(tip, ky + bob, cell * (striking ? 0.52 : 0.44), '#a8304c', '#d9668a', '#6d1730', 1, 0);
+      ctx.restore();
     }
 
     // --- gulls ---------------------------------------------------------------
@@ -1025,8 +1083,8 @@ export const uiMethods = {
     ctx.restore();   // end playfield clip
 
     // --- the ship ------------------------------------------------------------
-    const sx = ox + (n.xDraw != null ? n.xDraw : n.x) * cell + cell * 0.5;
-    const sy = oy + SHIP_ROW * cell + cell * 0.5;
+    const sx = shipScreenX;
+    const sy = shipScreenY;
     const blink = n.grace > 0 && (n.t & 1);
     if (!blink) {
       // A BOAT, not an insect. Two things were doing that: oars radiating at
@@ -1036,7 +1094,9 @@ export const uiMethods = {
       // planked deck inside, matching the greek ship you sail in the world.
       const L = cell * 0.92;                 // half-length, bow to midships
       const B = cell * 0.40;                 // half-beam
-      const stroke = Math.sin(n.t * 0.22);   // ONE phase for the whole crew
+      // ONE phase for the whole crew, and a long slow one: a bank of oars at a
+      // twitchy rate was half of what made this read as an insect.
+      const stroke = Math.sin(n.t * 0.10);
 
       ctx.fillStyle = 'rgba(0,0,0,0.32)';
       ctx.beginPath(); ctx.ellipse(sx, sy + cell * 0.34, B * 1.1, L * 0.62, 0, 0, Math.PI * 2); ctx.fill();
@@ -1157,7 +1217,7 @@ export const uiMethods = {
     lx += Math.max(7, cell * 0.5);
     ctx.fillStyle = 'rgba(207,216,195,0.5)';
     ctx.font = `${Math.max(9, Math.round(cell * 0.46))}px system-ui, sans-serif`;
-    ctx.fillText('A / D  or  ← →  ·  or drag', lx, labY);
+    ctx.fillText('WASD  or  ← → ↑ ↓  ·  or drag', lx, labY);
     ctx.textAlign = 'right';
     const pw2 = Math.round(narrowsProgress(n) * gw);
     ctx.fillStyle = 'rgba(255,255,255,0.10)';
@@ -1224,12 +1284,12 @@ export const uiMethods = {
       ctx.textAlign = 'center';
       ly += lh * 1.6;
     };
-    rule('#a8304c', MONSTERS.scylla.name, 'surfaces to port. takes one thing.');
-    rule('#7b3fa8', MONSTERS.charybdis.name, 'surfaces to starboard. takes the ship.');
-    rule('#5c636d', 'ROCKS', 'mid-channel. there is no safe lane.');
+    rule('#a8304c', MONSTERS.scylla.name, 'lurks to port. come near and she lunges.');
+    rule('#7b3fa8', MONSTERS.charybdis.name, 'opens to starboard. takes the ship whole.');
+    rule('#5c636d', 'ROCKS', 'mid-channel, and late on they walk.');
 
     ctx.fillStyle = 'rgba(207,216,195,0.6)';
-    const c1 = 'hold A / D  or  ← →  ·  or drag';
+    const c1 = 'row her anywhere: WASD  or  ← → ↑ ↓';
     const c2 = 'through clean costs you nothing';
     fit(c1, Math.round(cell * 0.52)); ctx.fillText(c1, cx, ly);
     fit(c2, Math.round(cell * 0.52)); ctx.fillText(c2, cx, ly + lh * 0.66);

@@ -7,7 +7,7 @@ import { spawnAnimals, updateAnimals } from './game/animals.js';
 import { Player } from './game/player.js';
 import { seawardFrom, boatMirror, CF_MIN } from './game/crossing.js';
 import { isStraitCrossing, scyllaToll, STRAIT_COST } from './game/strait.js';
-import { newNarrowsRun, narrowsSteer, narrowsTick, narrowsStart, narrowsAnimate } from './game/narrows.js';
+import { newNarrowsRun, narrowsSteer, narrowsRow, narrowsTick, narrowsStart, narrowsAnimate } from './game/narrows.js';
 import { makeRng } from './game/rng.js';
 import { DayNight } from './game/daynight.js';
 import { Minimap } from './game/minimap.js';
@@ -1036,7 +1036,7 @@ function updateNarrows(dt) {
     // Space/Enter is the coin slot; a steering key works too, since reaching for
     // the helm is the same gesture as starting. (There is no any-key API, and
     // inventing one for this would be a lot of surface for one title card.)
-    const coin = ['Space', 'Enter', 'KeyA', 'KeyD', 'ArrowLeft', 'ArrowRight']
+    const coin = ['Space', 'Enter', 'KeyA', 'KeyD', 'KeyW', 'KeyS', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']
       .some((k) => input.consumePress(k));
     const tapped = !!input.clickPos();
     if (coin || tapped) {
@@ -1055,6 +1055,14 @@ function updateNarrows(dt) {
     s.steerT = (s.steerT || 0) + dt;
     if (s.steerT >= 0.07) { s.steerT = 0; narrowsSteer(n, dir); }
   } else s.steerT = 0;
+  // And fore-and-aft, on its own slower repeat: rowing up the channel or backing
+  // off is a manoeuvre, not a twitch, and at the lateral rate you would cross
+  // the whole playfield before you had seen what you were rowing into.
+  const fwd = mv && mv.dy < -0.35 ? -1 : mv && mv.dy > 0.35 ? 1 : 0;
+  if (fwd) {
+    s.rowT = (s.rowT || 0) + dt;
+    if (s.rowT >= 0.12) { s.rowT = 0; narrowsRow(n, fwd); }
+  } else s.rowT = 0;
 
   // Fixed-timestep catch-up, but CAPPED. Unbounded, a single long frame (a
   // stall, a backgrounded tab, anything that lets dt pile up) would run dozens

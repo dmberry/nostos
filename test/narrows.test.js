@@ -4,19 +4,23 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  newNarrowsRun, narrowsSteer, narrowsTick, narrowsProgress,
-  narrowsStart, narrowsCalm, narrowsPressure, narrowsAnimate, HULL_MAX,
-  NARROWS_W, SHIP_ROW, RUN_ROWS, TOTAL_ROWS, WARMUP_ROWS,
-  SCYLLA_MAX, CHARYBDIS_MAX, SAFE_LANE, MONSTERS,
+  newNarrowsRun, narrowsSteer, narrowsRow, narrowsTick, narrowsProgress,
+  narrowsStart, narrowsCalm, narrowsPressure, narrowsAnimate, charybdisReachAt,
+  HULL_MAX, NARROWS_W, SHIP_ROW, SHIP_ROW_MIN, SHIP_ROW_MAX,
+  RUN_ROWS, TOTAL_ROWS, WARMUP_ROWS, VIEW_ROWS,
+  SCYLLA_MAX, SCYLLA_TRIGGER, SCYLLA_REAR, CHARYBDIS_MAX, CHARYBDIS_ROWS,
+  SAFE_LANE, MONSTERS, CHICANE_FROM,
 } from '../src/game/narrows.js';
 
 const never = () => 0.99;   // rng that never surfaces anything
-const always = () => 0.0;   // rng that surfaces both, as deep as they go
+const always = () => 0.0;   // rng that surfaces everything, as big as it goes
 
 // Most tests are about the DANGEROUS part of the passage, so they start a run
 // with the coin in and the open-water run-in already behind them.
 const started = (rng) => { const s = newNarrowsRun(rng); narrowsStart(s); s.warmup = 0; return s; };
-const clear = (s) => { s.rows.forEach((r) => { r.l = 0; r.r = 0; r.rock = -1; }); };
+const clear = (s) => { s.rows.forEach((r) => { r.rock = -1; }); };
+// Park Scylla out of the way for tests that are about something else.
+const calmScylla = (s) => { s.scylla = { row: 0, reach: 0, state: 'lurk', timer: 0, cool: 999 }; };
 
 test('THE LANE INVARIANT: the two of them can never seal the channel', () => {
   // If Scylla at her deepest and Charybdis at hers could meet, a row would be a
@@ -29,7 +33,10 @@ test('THE LANE INVARIANT: the two of them can never seal the channel', () => {
   for (let i = 0; i < 400 && !s.over; i++) {
     s.x = 6;                                  // never actually touch anything
     narrowsTick(s, always);
-    for (const row of s.rows) worstGap = Math.min(worstGap, NARROWS_W - row.l - row.r);
+    for (let r = 0; r < VIEW_ROWS; r++) {
+      const left = s.scylla.row === r ? Math.ceil(s.scylla.reach) : 0;
+      worstGap = Math.min(worstGap, NARROWS_W - left - charybdisReachAt(s, r));
+    }
   }
   assert.ok(worstGap >= SAFE_LANE, `every row must leave ${SAFE_LANE} clear; worst was ${worstGap}`);
 });
@@ -38,7 +45,8 @@ test('PARKING IS NOT A STRATEGY: sitting mid-channel must not survive the run', 
   // The bug this exists to prevent: Scylla reaches at most SCYLLA_MAX and
   // Charybdis at most CHARYBDIS_MAX, so the seam between them was permanently
   // safe water. You could hold one column for two minutes, never touch the helm
-  // and win. Rocks sit IN that seam precisely so the safe lane has to be earned.
+  // and win. Rocks and chicanes sit IN that seam precisely so the safe lane has
+  // to be earned.
   let survivedParked = 0;
   for (let seed = 0; seed < 12; seed++) {
     let k = seed * 977 + 13;
@@ -55,30 +63,36 @@ test('PARKING IS NOT A STRATEGY: sitting mid-channel must not survive the run', 
     `a parked ship came through untouched in ${survivedParked}/12 runs — the seam is still free`);
 });
 
-test('a rock is always dodgeable: every row keeps a clear column', () => {
+test('a rock is always dodgeable: at most one column of any row is stone', () => {
   const s = started(always);
   for (let i = 0; i < 400 && !s.over; i++) {
     s.x = 6;
     narrowsTick(s, always);
     for (const row of s.rows) {
-      let free = 0;
-      for (let c = 0; c < NARROWS_W; c++) {
-        const blocked = c < row.l || c >= NARROWS_W - row.r || c === row.rock;
-        if (!blocked) free += 1;
-      }
-      assert.ok(free >= 1, `a row with no way through: l=${row.l} r=${row.r} rock=${row.rock}`);
+      assert.ok(row.rock < NARROWS_W, `a rock outside the channel: ${row.rock}`);
     }
   }
 });
 
-test('striking a rock costs you but does not end the run', () => {
-  const s = started(never);
-  clear(s);
-  s.rows[SHIP_ROW - 1] = { l: 0, r: 0, rock: 6 };
+test('THE CHICANE: late on, the rocks walk across the channel instead of scattering', () => {
+  // A run of rocks stepping one column per row, so the gap slides and you have
+  // to follow it. Only in the back half — early channel stays scattered.
+  const s = started(always);
+  s.rowsLeft = WARMUP_ROWS + Math.round(RUN_ROWS * (1 - CHICANE_FROM)) - 10;
   s.x = 6;
-  assert.equal(narrowsTick(s, never), 'rock');
-  assert.equal(s.rocks, 1);
-  assert.equal(s.over, false);
+  const cols = [];
+  for (let i = 0; i < 12 && !s.over; i++) { narrowsTick(s, always); cols.push(s.rows[0].rock); }
+  assert.ok(s.chicane || cols.every((c) => c >= 0), 'a chicane should have started');
+  for (let i = 1; i < cols.length; i++) {
+    assert.equal(Math.abs(cols[i] - cols[i - 1]), 1, `chicane rocks step one column: ${cols}`);
+  }
+});
+
+test('the early channel does NOT run chicanes', () => {
+  const s = started(always);
+  s.rowsLeft = TOTAL_ROWS;                    // pressure 0
+  for (let i = 0; i < 30 && !s.over; i++) narrowsTick(s, always);
+  assert.equal(s.chicane, null, 'no chicane before the channel tightens');
 });
 
 test('both monsters are named', () => {
@@ -88,33 +102,106 @@ test('both monsters are named', () => {
   assert.equal(MONSTERS.charybdis.side, 'right');
 });
 
-test('SCYLLA surfaces on the left and takes one thing, and the run goes on', () => {
+test('SCYLLA is ONE creature who lunges when you come near her, not a field of heads', () => {
+  // She keeps station on your row, rears where you can see it, and only the
+  // strike itself takes anything.
   const s = started(never);
   clear(s);
-  s.rows[SHIP_ROW - 1] = { l: 5, r: 0 };
-  s.x = 2;                                    // inside her reach
-  assert.equal(narrowsTick(s, never), 'bite');
+  s.x = 1; s.y = SHIP_ROW;
+  s.scylla.row = SHIP_ROW;
+  let ev = null, reared = false;
+  for (let i = 0; i < SCYLLA_REAR + 4 && !ev; i++) {
+    if (s.scylla.state === 'rear') reared = true;
+    ev = narrowsTick(s, never);
+    clear(s);
+  }
+  assert.ok(reared, 'she must telegraph before she takes');
+  assert.equal(ev, 'bite');
   assert.equal(s.bites, 1);
   assert.equal(s.over, false, 'she nibbles; she does not end it');
 });
 
-test('CHARYBDIS surfaces on the right and ends the voyage', () => {
+test('SCYLLA is out of sight until she commits, and never takes without showing first', () => {
+  // She is drawn from `vis`, so this is the rule the picture obeys: nothing on
+  // the port hand while she lurks, and no bite that was not preceded by frames
+  // of her out of the water.
   const s = started(never);
   clear(s);
-  s.rows[SHIP_ROW - 1] = { l: 0, r: 4 };
-  s.x = NARROWS_W - 1;                        // inside her reach
+  s.x = 1; s.y = SHIP_ROW; s.scylla.row = SHIP_ROW;
+  assert.equal(s.scylla.vis, 0, 'invisible while lurking');
+  let shown = 0, ev = null;
+  for (let i = 0; i < SCYLLA_REAR + 4 && ev !== 'bite'; i++) {
+    ev = narrowsTick(s, never);
+    clear(s);
+    if (s.scylla.vis > 0.5) shown += 1;
+  }
+  assert.equal(ev, 'bite');
+  assert.ok(shown >= 3, `she must be plainly visible before she takes; only ${shown} ticks`);
+  // and once she is done she goes back under
+  for (let i = 0; i < 40; i++) { clear(s); narrowsTick(s, never); if (s.scylla.state === 'lurk') break; }
+  assert.equal(s.scylla.state, 'lurk');
+  assert.equal(s.scylla.vis, 0, 'and she is gone again');
+});
+
+test('SCYLLA ignores you if you keep off her side', () => {
+  const s = started(never);
+  clear(s);
+  s.x = SCYLLA_TRIGGER;                        // one column outside her interest
+  for (let i = 0; i < 60 && !s.over; i++) { clear(s); assert.equal(narrowsTick(s, never), null); }
+  assert.equal(s.bites, 0);
+  assert.equal(s.scylla.state, 'lurk');
+});
+
+test('you can duck a lunge by rowing out of her row', () => {
+  // The whole reason the helm works fore-and-aft: her strike is one row wide and
+  // you get SCYLLA_REAR ticks of warning to leave it.
+  const s = started(never);
+  clear(s);
+  s.x = 1; s.y = SHIP_ROW; s.scylla.row = SHIP_ROW;
+  narrowsTick(s, never);                       // she notices and rears
+  assert.equal(s.scylla.state, 'rear');
+  narrowsRow(s, -1); narrowsRow(s, -1); narrowsRow(s, -1);   // pull ahead of her
+  let ev = null;
+  for (let i = 0; i < SCYLLA_REAR + 3 && !ev; i++) { clear(s); ev = narrowsTick(s, never); }
+  assert.equal(s.bites, 0, 'the lunge closed on empty water');
+});
+
+test('CHARYBDIS is one big whirlpool that comes down the channel and ends the voyage', () => {
+  const s = started(never);
+  clear(s);
+  calmScylla(s);
+  s.charybdis = { row: s.y - 1, reach: CHARYBDIS_MAX };
+  s.x = NARROWS_W - 1;                         // hard against her side
   assert.equal(narrowsTick(s, never), 'swallowed');
   assert.equal(s.over, true);
   assert.equal(s.outcome, 'swallowed');
+});
+
+test('CHARYBDIS covers a BAND of rows, not a line', () => {
+  const s = started(never);
+  s.charybdis = { row: 5, reach: CHARYBDIS_MAX };
+  assert.equal(charybdisReachAt(s, 4), 0);
+  assert.equal(charybdisReachAt(s, 5), CHARYBDIS_MAX);
+  assert.equal(charybdisReachAt(s, 5 + CHARYBDIS_ROWS - 1), CHARYBDIS_MAX);
+  assert.equal(charybdisReachAt(s, 5 + CHARYBDIS_ROWS), 0);
+});
+
+test('a shut whirlpool takes nothing: her mouth has to be open', () => {
+  const s = started(never);
+  clear(s); calmScylla(s);
+  s.charybdis = { row: s.y, reach: 0 };
+  s.x = NARROWS_W - 1;
+  assert.equal(narrowsTick(s, never), null);
+  assert.equal(s.over, false);
 });
 
 test('the grace period never shields you from Charybdis', () => {
   // Being freshly bitten by Scylla must not buy a free pass through the thing
   // that ends the run — that would be the wrong lesson entirely.
   const s = started(never);
-  clear(s);
+  clear(s); calmScylla(s);
   s.grace = 4;                                // just been bitten
-  s.rows[SHIP_ROW - 1] = { l: 0, r: 4 };
+  s.charybdis = { row: s.y - 1, reach: CHARYBDIS_MAX };
   s.x = NARROWS_W - 1;
   assert.equal(narrowsTick(s, never), 'swallowed');
 });
@@ -122,7 +209,8 @@ test('the grace period never shields you from Charybdis', () => {
 test('steering between them is always possible: the seam is sailable', () => {
   const s = started(never);
   clear(s);
-  s.rows[SHIP_ROW - 1] = { l: SCYLLA_MAX, r: CHARYBDIS_MAX };
+  s.scylla = { row: s.y, reach: SCYLLA_MAX, state: 'strike', timer: 2, cool: 0 };
+  s.charybdis = { row: s.y - 1, reach: CHARYBDIS_MAX };
   s.x = SCYLLA_MAX;                           // first clear column past Scylla
   assert.equal(narrowsTick(s, never), null, 'the seam is clear water');
   assert.equal(s.over, false);
@@ -132,8 +220,8 @@ test('bites accumulate rather than ending it', () => {
   const s = started(never);
   s.x = 0;
   let bites = 0;
-  for (let i = 0; i < 200 && !s.over; i++) {
-    s.rows[SHIP_ROW - 1] = { l: 5, r: 0 };
+  for (let i = 0; i < 400 && !s.over; i++) {
+    clear(s);
     if (narrowsTick(s, never) === 'bite') bites += 1;
   }
   assert.ok(bites > 3, `expected repeated bites, got ${bites}`);
@@ -144,18 +232,31 @@ test('the grace period stops one head taking everything at once', () => {
   const s = started(never);
   clear(s);
   s.x = 0;
-  s.rows[SHIP_ROW - 1] = { l: 5, r: 0 };
+  s.scylla = { row: s.y, reach: SCYLLA_MAX, state: 'strike', timer: 4, cool: 0 };
   assert.equal(narrowsTick(s, never), 'bite');
-  s.rows[SHIP_ROW - 1] = { l: 5, r: 0 };
+  s.scylla = { row: s.y, reach: SCYLLA_MAX, state: 'strike', timer: 4, cool: 0 };
+  clear(s);
   assert.equal(narrowsTick(s, never), null, 'still in grace');
   assert.equal(s.bites, 1);
+});
+
+test('striking a rock costs you but does not end the run', () => {
+  const s = started(never);
+  clear(s); calmScylla(s);
+  s.rows[s.y] = { rock: 6 };
+  s.x = 6;
+  // the row the ship sits in shifts down one on the tick, so seed the one above
+  s.rows[s.y - 1] = { rock: 6 };
+  assert.equal(narrowsTick(s, never), 'rock');
+  assert.equal(s.rocks, 1);
+  assert.equal(s.over, false);
 });
 
 test('THE RUN-IN: you come up to the narrows on open water', () => {
   const s = newNarrowsRun();
   narrowsStart(s);
   assert.ok(narrowsCalm(s), 'opens calm');
-  assert.ok(s.rows.every((r) => r.l === 0 && r.r === 0), 'and on genuinely open water');
+  assert.ok(s.rows.every((r) => r.rock < 0), 'and on genuinely open water');
   let touched = 0;
   for (let i = 0; i < WARMUP_ROWS; i++) {
     s.x = 0;                                   // hard against the wall: still safe
@@ -172,13 +273,14 @@ test('the cabinet waits for a coin', () => {
   assert.equal(narrowsTick(s, never), null, 'no tick without a coin');
   assert.equal(s.rowsLeft, left);
   narrowsSteer(s, +1);
+  narrowsRow(s, -1);
   assert.equal(s.x, 6, 'the helm is dead too');
+  assert.equal(s.y, SHIP_ROW);
   assert.equal(narrowsStart(s), true);
   assert.equal(narrowsStart(s), false, 'a second coin does nothing');
 });
 
 test('the passage is long enough to be a game, and gets harder', () => {
-  // "A couple of minutes" at the hub's ~0.1s tick.
   // Long enough to be a game, short enough not to be a haul: about a minute.
   const secs = TOTAL_ROWS * 0.10;
   assert.ok(secs >= 45, `passage is only ${Math.round(secs)}s`);
@@ -191,20 +293,27 @@ test('the passage is long enough to be a game, and gets harder', () => {
   assert.ok(late > early, 'the channel thickens as you go');
 });
 
-test('the helm is clamped to the channel', () => {
+test('the helm is clamped to the channel, across AND along', () => {
   const s = started(never);
   for (let i = 0; i < 60; i++) narrowsSteer(s, -1);
   assert.equal(s.x, 0);
   for (let i = 0; i < 60; i++) narrowsSteer(s, +1);
   assert.equal(s.x, NARROWS_W - 1);
+  for (let i = 0; i < 60; i++) narrowsRow(s, -1);
+  assert.equal(s.y, SHIP_ROW_MIN);
+  for (let i = 0; i < 60; i++) narrowsRow(s, +1);
+  assert.equal(s.y, SHIP_ROW_MAX);
+  assert.ok(SHIP_ROW_MAX < VIEW_ROWS, 'and never off the bottom of the view');
 });
 
 test('a finished run ignores further steering and ticks', () => {
   const s = started(never);
   s.over = true; s.outcome = 'through';
-  const x = s.x;
+  const x = s.x, y = s.y;
   narrowsSteer(s, +1);
+  narrowsRow(s, -1);
   assert.equal(s.x, x);
+  assert.equal(s.y, y);
   assert.equal(narrowsTick(s, never), null);
 });
 
@@ -213,7 +322,8 @@ test('progress runs 0 to 1 across the passage', () => {
   s.rowsLeft = TOTAL_ROWS;
   assert.equal(narrowsProgress(s), 0);
   s.x = 6;
-  for (let i = 0; i < TOTAL_ROWS && !s.over; i++) { clear(s); narrowsTick(s, never); }
+  calmScylla(s);
+  for (let i = 0; i < TOTAL_ROWS && !s.over; i++) { clear(s); s.charybdis = null; narrowsTick(s, never); }
   assert.equal(s.outcome, 'through');
   assert.equal(narrowsProgress(s), 1);
 });
@@ -222,10 +332,11 @@ test('the hull is finite: six strikes and she comes apart', () => {
   // Rocks used to be a tally that only went up, so a hopeless run had no floor —
   // you could grind the whole passage off the rocks and still arrive.
   const s = started(never);
+  calmScylla(s);
   let ev = null;
   for (let i = 0; i < HULL_MAX && !s.over; i++) {
     clear(s);
-    s.rows[SHIP_ROW - 1] = { l: 0, r: 0, rock: 6 };
+    s.rows[s.y - 1] = { rock: 6 };
     s.x = 6;
     s.grace = 0;                       // ignore the flash between strikes
     ev = narrowsTick(s, never);
@@ -238,11 +349,12 @@ test('the hull is finite: six strikes and she comes apart', () => {
 
 test('animation is presentation only: it never moves the ship the rules use', () => {
   const s = started(never);
-  s.x = 3;
+  s.x = 3; s.y = 12;
   narrowsAnimate(s, 0.016, 0.5);
   assert.equal(s.x, 3, 'the logical column is untouched');
-  assert.ok(s.xDraw !== 3 || s.xDraw === 3, 'xDraw eases separately');
+  assert.equal(s.y, 12, 'and so is the logical row');
   assert.equal(s.frac, 0.5);
-  for (let i = 0; i < 60; i++) narrowsAnimate(s, 0.016, 0);
+  for (let i = 0; i < 90; i++) narrowsAnimate(s, 0.016, 0);
   assert.equal(s.xDraw, 3, 'and it settles exactly on the column');
+  assert.equal(s.yDraw, 12);
 });
