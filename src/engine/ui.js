@@ -858,22 +858,60 @@ export const uiMethods = {
     // Both are IN THE WATER now: Scylla's necks break the surface on the left,
     // Charybdis's maw on the right. Each is drawn with an outline, a lit top and
     // a shaded underside, which is what separates a SNES sprite from a blob.
-    const head = (cx, cy, rad, base, lit, dark, facing) => {
-      ctx.fillStyle = 'rgba(0,0,0,0.35)';                       // sit it in the water
+    // A head that is actually alive: it blinks, its pupil tracks the ship, and
+    // its jaw works. Placid heads with a fixed dot for an eye read as furniture;
+    // the whole point of these two is that they are watching you.
+    const shipScreenX = ox + (n.xDraw != null ? n.xDraw : n.x) * cell + cell * 0.5;
+    const head = (cx, cy, rad, base, lit, dark, facing, seed) => {
+      const beat = n.t * 0.14 + seed * 2.3;
+      // Blink: shut for a few frames on an irregular cycle, so they do not all
+      // blink together like a row of lights.
+      const cyc = (n.t + seed * 37) % 150;
+      const blinkAmt = cyc < 7 ? 1 - Math.abs(cyc - 3.5) / 3.5 : 0;
+      const jaw = (Math.sin(beat) * 0.5 + 0.5) ** 2;              // 0..1, snappy
+
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
       ctx.beginPath(); ctx.ellipse(cx, cy + rad * 0.55, rad * 1.15, rad * 0.42, 0, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = base;
       ctx.beginPath(); ctx.ellipse(cx, cy, rad, rad * 0.92, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = dark;                                     // shaded underside
+      ctx.fillStyle = dark;
       ctx.beginPath(); ctx.ellipse(cx, cy + rad * 0.25, rad * 0.92, rad * 0.55, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = lit;                                      // lit crown
+      ctx.fillStyle = lit;
       ctx.beginPath(); ctx.ellipse(cx - rad * 0.2 * facing, cy - rad * 0.35, rad * 0.55, rad * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+
+      // the jaw, hinged at the front of the head and opening toward the channel
+      const gape = rad * (0.18 + 0.5 * jaw);
+      ctx.fillStyle = '#2a0912';
+      ctx.beginPath();
+      ctx.moveTo(cx + rad * 0.20 * facing, cy - gape * 0.5);
+      ctx.quadraticCurveTo(cx + rad * 1.15 * facing, cy, cx + rad * 0.20 * facing, cy + gape * 0.5);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#fdf6e0';                                   // teeth
+      for (let ti = 0; ti < 3; ti++) {
+        const tx = cx + (rad * 0.35 + ti * rad * 0.24) * facing;
+        const th = gape * (0.30 - ti * 0.06);
+        ctx.beginPath();
+        ctx.moveTo(tx, cy - gape * 0.42);
+        ctx.lineTo(tx + rad * 0.10 * facing, cy - gape * 0.42 + th);
+        ctx.lineTo(tx - rad * 0.06 * facing, cy - gape * 0.42 + th);
+        ctx.closePath(); ctx.fill();
+      }
+
       ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = Math.max(1, cell * 0.08);
       ctx.beginPath(); ctx.ellipse(cx, cy, rad, rad * 0.92, 0, 0, Math.PI * 2); ctx.stroke();
-      // eye
+
+      // eye: white shrinks to a slit on the blink, pupil leans toward the ship
+      const eyeX = cx + rad * 0.35 * facing, eyeY = cy - rad * 0.12;
+      const open = 1 - blinkAmt;
       ctx.fillStyle = '#fdf6e0';
-      ctx.beginPath(); ctx.arc(cx + rad * 0.35 * facing, cy - rad * 0.12, rad * 0.26, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#150a10';
-      ctx.beginPath(); ctx.arc(cx + rad * 0.42 * facing, cy - rad * 0.12, rad * 0.12, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(eyeX, eyeY, rad * 0.26, rad * 0.26 * Math.max(0.06, open), 0, 0, Math.PI * 2); ctx.fill();
+      if (open > 0.3) {
+        const look = Math.max(-1, Math.min(1, (shipScreenX - cx) / (cell * 4)));
+        ctx.fillStyle = '#150a10';
+        ctx.beginPath();
+        ctx.arc(eyeX + look * rad * 0.1, eyeY, rad * 0.12 * (0.85 + 0.3 * jaw), 0, Math.PI * 2);
+        ctx.fill();
+      }
     };
 
     // Everything from here is inside the frame: with the sub-row slide a row can
@@ -906,7 +944,7 @@ export const uiMethods = {
         ctx.moveTo(ox, y - cell * 0.12);
         ctx.quadraticCurveTo(tip - cell * 0.8, y - cell * 0.42, tip, y - cell * 0.14);
         ctx.stroke();
-        head(tip, y, cell * 0.42, '#a8304c', '#d9668a', '#6d1730', 1);
+        head(tip, y, cell * 0.42, '#a8304c', '#d9668a', '#6d1730', 1, r);
       }
       if (row.rock >= 0) {
         // A rock in the seam: wet granite with a lit crown and a wash of foam
@@ -949,7 +987,7 @@ export const uiMethods = {
         }
         ctx.fillStyle = '#2b1038';
         ctx.beginPath(); ctx.ellipse(tip, y, cell * 0.52, cell * 0.46, 0, 0, Math.PI * 2); ctx.fill();
-        head(tip, y, cell * 0.40, '#7b3fa8', '#c07fe0', '#3f1a5c', -1);
+        head(tip, y, cell * 0.40, '#7b3fa8', '#c07fe0', '#3f1a5c', -1, r + 5);
       }
     }
 
@@ -991,74 +1029,88 @@ export const uiMethods = {
     const sy = oy + SHIP_ROW * cell + cell * 0.5;
     const blink = n.grace > 0 && (n.t & 1);
     if (!blink) {
-      // A long, low hull rather than a dinghy: prow and ram forward, the stern
-      // post curling back over the steering oar. It runs about 1.6 cells bow to
-      // stern, but COLLISION IS STILL THE COLUMN AND THE ROW — the sprite is
-      // longer than its hitbox on purpose, so the ship reads as a ship without
-      // making the channel meaner than the rules say it is.
-      const L = cell * 0.95;                 // half-length, bow to midships
+      // A BOAT, not an insect. Two things were doing that: oars radiating at
+      // their own phases like legs, and a hull too narrow for its length. The
+      // oars now stroke in unison — one bank, one beat, the way a crew actually
+      // rows — and the beam is wide enough to read as a hull. Red outside,
+      // planked deck inside, matching the greek ship you sail in the world.
+      const L = cell * 0.92;                 // half-length, bow to midships
+      const B = cell * 0.40;                 // half-beam
+      const stroke = Math.sin(n.t * 0.22);   // ONE phase for the whole crew
+
       ctx.fillStyle = 'rgba(0,0,0,0.32)';
-      ctx.beginPath(); ctx.ellipse(sx, sy + cell * 0.42, cell * 0.34, cell * 0.62, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(sx, sy + cell * 0.34, B * 1.1, L * 0.62, 0, 0, Math.PI * 2); ctx.fill();
 
-      // hull
-      ctx.fillStyle = '#7b4d1f';
-      ctx.beginPath();
-      ctx.moveTo(sx, sy - L);                                        // the ram
-      ctx.quadraticCurveTo(sx + cell * 0.30, sy - L * 0.25, sx + cell * 0.26, sy + L * 0.35);
-      ctx.quadraticCurveTo(sx + cell * 0.20, sy + L * 0.72, sx, sy + L * 0.78);
-      ctx.quadraticCurveTo(sx - cell * 0.20, sy + L * 0.72, sx - cell * 0.26, sy + L * 0.35);
-      ctx.quadraticCurveTo(sx - cell * 0.30, sy - L * 0.25, sx, sy - L);
-      ctx.closePath(); ctx.fill();
-      ctx.fillStyle = '#c9932f';                                     // lit sheer strake
-      ctx.beginPath();
-      ctx.moveTo(sx, sy - L * 0.92);
-      ctx.quadraticCurveTo(sx + cell * 0.22, sy - L * 0.2, sx + cell * 0.18, sy + L * 0.3);
-      ctx.lineTo(sx + cell * 0.07, sy + L * 0.3);
-      ctx.quadraticCurveTo(sx + cell * 0.11, sy - L * 0.2, sx, sy - L * 0.7);
-      ctx.closePath(); ctx.fill();
-      ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = Math.max(1, cell * 0.055);
-      ctx.beginPath();
-      ctx.moveTo(sx, sy - L);
-      ctx.quadraticCurveTo(sx + cell * 0.30, sy - L * 0.25, sx + cell * 0.26, sy + L * 0.35);
-      ctx.quadraticCurveTo(sx + cell * 0.20, sy + L * 0.72, sx, sy + L * 0.78);
-      ctx.quadraticCurveTo(sx - cell * 0.20, sy + L * 0.72, sx - cell * 0.26, sy + L * 0.35);
-      ctx.quadraticCurveTo(sx - cell * 0.30, sy - L * 0.25, sx, sy - L);
-      ctx.stroke();
-
-      // the aphlaston: the stern post curling back over the helmsman
-      ctx.strokeStyle = '#8a5a24'; ctx.lineWidth = Math.max(1.4, cell * 0.1);
-      ctx.beginPath();
-      ctx.moveTo(sx, sy + L * 0.74);
-      ctx.quadraticCurveTo(sx + cell * 0.22, sy + L * 1.0, sx + cell * 0.02, sy + L * 1.12);
-      ctx.stroke();
-
-      // oars, a short bank each side, feathering with the swell
-      ctx.strokeStyle = 'rgba(180,140,80,0.85)'; ctx.lineWidth = Math.max(1, cell * 0.055);
+      // oars first, so they sit under the hull like real looms through ports
+      ctx.strokeStyle = 'rgba(196,158,96,0.9)';
+      ctx.lineWidth = Math.max(1.1, cell * 0.06);
+      ctx.lineCap = 'round';
       for (let o = 0; o < 3; o++) {
-        const oy2 = sy - L * 0.1 + o * cell * 0.28;
-        const kick = Math.sin(n.t * 0.25 + o) * cell * 0.06;
+        const oy2 = sy - L * 0.28 + o * cell * 0.30;
+        const reach = cell * (0.30 + 0.13 * stroke);      // all together
+        const dropY = cell * (0.16 + 0.07 * stroke);
         ctx.beginPath();
-        ctx.moveTo(sx - cell * 0.24, oy2); ctx.lineTo(sx - cell * 0.52, oy2 + cell * 0.16 + kick);
-        ctx.moveTo(sx + cell * 0.24, oy2); ctx.lineTo(sx + cell * 0.52, oy2 + cell * 0.16 - kick);
+        ctx.moveTo(sx - B * 0.85, oy2); ctx.lineTo(sx - B * 0.85 - reach, oy2 + dropY);
+        ctx.moveTo(sx + B * 0.85, oy2); ctx.lineTo(sx + B * 0.85 + reach, oy2 + dropY);
         ctx.stroke();
       }
 
-      // mast and square sail, with her eye on it
+      // hull: red outside
+      const hull = new Path2D();
+      hull.moveTo(sx, sy - L);                                        // stem
+      hull.quadraticCurveTo(sx + B, sy - L * 0.35, sx + B * 0.92, sy + L * 0.35);
+      hull.quadraticCurveTo(sx + B * 0.7, sy + L * 0.80, sx, sy + L * 0.86);
+      hull.quadraticCurveTo(sx - B * 0.7, sy + L * 0.80, sx - B * 0.92, sy + L * 0.35);
+      hull.quadraticCurveTo(sx - B, sy - L * 0.35, sx, sy - L);
+      hull.closePath();
+      ctx.fillStyle = '#a3302c';
+      ctx.fill(hull);
+      ctx.fillStyle = '#7d1f1e';                                      // shaded starboard side
+      ctx.save(); ctx.clip(hull);
+      ctx.fillRect(sx + B * 0.25, sy - L, B, L * 2);
+      ctx.restore();
+      ctx.strokeStyle = '#2a1a2e'; ctx.lineWidth = Math.max(1.2, cell * 0.07);
+      ctx.stroke(hull);
+
+      // the deck inside it, planked
+      const deck = new Path2D();
+      deck.moveTo(sx, sy - L * 0.74);
+      deck.quadraticCurveTo(sx + B * 0.60, sy - L * 0.25, sx + B * 0.55, sy + L * 0.32);
+      deck.quadraticCurveTo(sx + B * 0.4, sy + L * 0.62, sx, sy + L * 0.66);
+      deck.quadraticCurveTo(sx - B * 0.4, sy + L * 0.62, sx - B * 0.55, sy + L * 0.32);
+      deck.quadraticCurveTo(sx - B * 0.60, sy - L * 0.25, sx, sy - L * 0.74);
+      deck.closePath();
+      ctx.fillStyle = '#c69a54'; ctx.fill(deck);
+      ctx.save(); ctx.clip(deck);
+      ctx.strokeStyle = 'rgba(120,84,40,0.55)'; ctx.lineWidth = 1;
+      for (let d2 = -3; d2 <= 3; d2++) {
+        ctx.beginPath(); ctx.moveTo(sx - B, sy + d2 * cell * 0.16); ctx.lineTo(sx + B, sy + d2 * cell * 0.16); ctx.stroke();
+      }
+      ctx.restore();
+
+      // stern post curling back over the steering oar
+      ctx.strokeStyle = '#a3302c'; ctx.lineWidth = Math.max(1.4, cell * 0.09);
+      ctx.beginPath();
+      ctx.moveTo(sx, sy + L * 0.84);
+      ctx.quadraticCurveTo(sx + B * 0.5, sy + L * 1.06, sx + B * 0.05, sy + L * 1.16);
+      ctx.stroke();
+
+      // mast and square sail, her eye on it
       ctx.strokeStyle = '#6d4718'; ctx.lineWidth = Math.max(1.2, cell * 0.07);
-      ctx.beginPath(); ctx.moveTo(sx, sy + L * 0.3); ctx.lineTo(sx, sy - L * 0.55); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(sx, sy + L * 0.2); ctx.lineTo(sx, sy - L * 0.6); ctx.stroke();
       ctx.fillStyle = '#f2ead6';
       ctx.beginPath();
-      ctx.moveTo(sx - cell * 0.30, sy - L * 0.5);
-      ctx.lineTo(sx + cell * 0.30, sy - L * 0.5);
-      ctx.lineTo(sx + cell * 0.24, sy + L * 0.05);
-      ctx.lineTo(sx - cell * 0.24, sy + L * 0.05);
+      ctx.moveTo(sx - B * 0.86, sy - L * 0.54);
+      ctx.lineTo(sx + B * 0.86, sy - L * 0.54);
+      ctx.lineTo(sx + B * 0.70, sy + L * 0.02);
+      ctx.lineTo(sx - B * 0.70, sy + L * 0.02);
       ctx.closePath(); ctx.fill();
-      ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = Math.max(1, cell * 0.05);
+      ctx.strokeStyle = 'rgba(42,26,46,0.55)'; ctx.lineWidth = Math.max(1, cell * 0.05);
       ctx.stroke();
-      ctx.fillStyle = '#2f4d8a';                                     // the eye
-      ctx.beginPath(); ctx.ellipse(sx, sy - L * 0.22, cell * 0.10, cell * 0.07, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#2f4d8a';
+      ctx.beginPath(); ctx.ellipse(sx, sy - L * 0.26, B * 0.30, B * 0.21, 0, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = '#f2ead6';
-      ctx.beginPath(); ctx.arc(sx, sy - L * 0.22, cell * 0.035, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(sx, sy - L * 0.26, B * 0.09, 0, Math.PI * 2); ctx.fill();
     }
 
     // --- frame + HUD ---------------------------------------------------------
