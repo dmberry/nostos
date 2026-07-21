@@ -342,7 +342,9 @@ export const uiMethods = {
       : [...(player.skills || [])].map((s) => ({ skill: s }));
     ctx.font = `${Math.round(12 * k)}px ui-monospace, monospace`;
     const obLines = (player.killLog && player.killLog.length)
-      ? this._wrapText(ctx, player.killLog.join('  '), pw - 50) : [];
+      // Bracketed, so a run of hex codes reads as a list of separate names
+      // rather than one long string of characters.
+      ? this._wrapText(ctx, player.killLog.map((c) => `[${c}]`).join(' '), pw - 50) : [];
     const H_HEAD = Math.round(68 * k);                                    // title + subtitle
     const H_RECORD = pad + 3 * row + Math.round(12 * k);                    // heading + 3 rows
     const H_PRACTICE = pad + Math.round(26 * k);                           // heading + one inline row
