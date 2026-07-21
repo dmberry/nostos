@@ -469,3 +469,84 @@ test('the churn can still sink you: enough of her water and the hull goes', () =
   assert.equal(ev, 'wrecked');
   assert.equal(s.outcome, 'wrecked');
 });
+
+test('FLOTSAM: timber puts a hull back, and only up to full', () => {
+  const s = started(never);
+  clear(s); calmScylla(s);
+  s.hull = 2;
+  s.rows[s.y - 1] = { rock: -1, pick: 6, kind: 'timber' };
+  s.x = 6;
+  assert.equal(narrowsTick(s, never), 'pickup');
+  assert.equal(s.hull, 3);
+  assert.equal(s.picks, 1);
+  assert.equal(s.lastPick, 'timber');
+  // and it cannot be taken twice
+  assert.equal(s.rows[s.y].pick, -1);
+  s.hull = HULL_MAX;
+  clear(s);
+  s.rows[s.y - 1] = { rock: -1, pick: 6, kind: 'timber' };
+  narrowsTick(s, never);
+  assert.equal(s.hull, HULL_MAX, 'never over full');
+});
+
+test('FLOTSAM: a broken beak recharges the ram, and fits one if you came without', () => {
+  const s = started(never);
+  clear(s); calmScylla(s);
+  assert.equal(s.ramFitted, false);
+  s.rows[s.y - 1] = { rock: -1, pick: 6, kind: 'beak' };
+  s.x = 6;
+  assert.equal(narrowsTick(s, never), 'pickup');
+  assert.equal(s.ramFitted, true);
+  assert.equal(s.ram, 1);
+  for (let i = 0; i < RAM_MAX + 2; i++) {
+    clear(s);
+    s.rows[s.y - 1] = { rock: -1, pick: 6, kind: 'beak' };
+    narrowsTick(s, never);
+  }
+  assert.equal(s.ram, RAM_MAX, 'never over a full set of charges');
+});
+
+test('FLOTSAM is reachable even in the grace period', () => {
+  // A recent knock must not stop you getting a hand to a spar.
+  const s = started(never);
+  clear(s); calmScylla(s);
+  s.hull = 1; s.grace = 3;
+  s.rows[s.y - 1] = { rock: -1, pick: 6, kind: 'timber' };
+  s.x = 6;
+  narrowsTick(s, never);
+  assert.equal(s.hull, 2);
+});
+
+test('THE RAM IS A CONSUMABLE: spending the last charge marks the beak gone', () => {
+  const s = started(never);
+  calmScylla(s);
+  s.ram = RAM_MAX; s.ramFitted = true;
+  assert.equal(s.ramSpent, false);
+  for (let i = 0; i < RAM_MAX; i++) {
+    clear(s);
+    s.rows[s.y - 1] = { rock: 6, pick: -1, kind: null };
+    s.x = 6; s.grace = 0;
+    assert.equal(narrowsTick(s, never), 'shatter');
+  }
+  assert.equal(s.ram, 0);
+  assert.equal(s.ramSpent, true, 'the hub reads this to take the item away');
+});
+
+test('a ram that is NOT run down survives the passage', () => {
+  const s = started(never);
+  calmScylla(s);
+  s.ram = RAM_MAX; s.ramFitted = true;
+  clear(s);
+  s.rows[s.y - 1] = { rock: 6, pick: -1, kind: null };
+  s.x = 6; s.grace = 0;
+  narrowsTick(s, never);
+  assert.equal(s.ram, RAM_MAX - 1);
+  assert.equal(s.ramSpent, false);
+});
+
+test('the ship rides in the MIDDLE of the view, and can drop back for reading time', () => {
+  assert.ok(Math.abs(SHIP_ROW - VIEW_ROWS / 2) <= 1, `SHIP_ROW ${SHIP_ROW} should be mid-view of ${VIEW_ROWS}`);
+  assert.ok(SHIP_ROW_MAX - SHIP_ROW > SHIP_ROW - SHIP_ROW_MIN,
+    'the band must run further aft than forward: dropping back is what buys warning');
+  assert.ok(SHIP_ROW_MAX < VIEW_ROWS);
+});

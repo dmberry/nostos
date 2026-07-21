@@ -961,6 +961,46 @@ export const uiMethods = {
         ctx.lineTo(rx + cell * 0.38, y + cell * 0.3);
         ctx.stroke();
       }
+      if (row.pick >= 0) {
+        // FLOTSAM: worth steering for, so it is drawn with a halo the hazards
+        // never get. Nothing else in this channel glows.
+        const px = ox + row.pick * cell + cell * 0.5;
+        const pulse = 0.55 + 0.45 * Math.sin(n.t * 0.16 + r);
+        const halo = ctx.createRadialGradient(px, y, cell * 0.1, px, y, cell * 0.7);
+        // Timber's halo is pushed harder than bronze's: a brown plank on dark
+        // blue water simply does not carry at a glance the way a lit bronze
+        // wedge does, and both have to read as "steer for this".
+        const beak = row.kind === 'beak';
+        const tint = beak ? '176,125,58' : '170,225,190';
+        halo.addColorStop(0, `rgba(${tint},${((beak ? 0.42 : 0.60) * pulse).toFixed(2)})`);
+        halo.addColorStop(1, `rgba(${tint},0)`);
+        ctx.fillStyle = halo;
+        ctx.beginPath(); ctx.arc(px, y, cell * 0.7, 0, Math.PI * 2); ctx.fill();
+        ctx.save();
+        ctx.translate(px, y);
+        ctx.rotate(Math.sin(n.t * 0.05 + r) * 0.25);      // rolling in the swell
+        if (row.kind === 'beak') {
+          ctx.fillStyle = '#8a5f28';
+          ctx.beginPath();
+          ctx.moveTo(-cell * 0.30, -cell * 0.14); ctx.lineTo(cell * 0.18, -cell * 0.10);
+          ctx.lineTo(cell * 0.34, 0); ctx.lineTo(cell * 0.18, cell * 0.10);
+          ctx.lineTo(-cell * 0.30, cell * 0.14);
+          ctx.closePath(); ctx.fill();
+          ctx.fillStyle = '#c08a3e';
+          ctx.beginPath();
+          ctx.moveTo(-cell * 0.30, -cell * 0.14); ctx.lineTo(cell * 0.18, -cell * 0.10);
+          ctx.lineTo(cell * 0.34, 0); ctx.lineTo(-cell * 0.30, -cell * 0.03);
+          ctx.closePath(); ctx.fill();
+        } else {
+          ctx.fillStyle = '#8a6437';                        // a spar, banded
+          ctx.fillRect(-cell * 0.34, -cell * 0.11, cell * 0.68, cell * 0.22);
+          ctx.fillStyle = '#b08a52';
+          ctx.fillRect(-cell * 0.34, -cell * 0.11, cell * 0.68, cell * 0.08);
+          ctx.strokeStyle = 'rgba(60,40,20,0.6)'; ctx.lineWidth = 1;
+          ctx.strokeRect(-cell * 0.34, -cell * 0.11, cell * 0.68, cell * 0.22);
+        }
+        ctx.restore();
+      }
     }
 
     // --- CHARYBDIS: one enormous whirlpool, coming down the channel ----------
@@ -1319,6 +1359,7 @@ export const uiMethods = {
     stat('DISTANCE', `${Math.round(narrowsProgress(n) * 100)}%`);
     stat('TAKEN BY SCYLLA', n.bites || 0, n.bites ? '#e0864a' : null);
     stat('ROCKS STRUCK', n.rocks || 0, n.rocks ? '#e0864a' : null);
+    if (n.picks) stat('TAKEN FROM THE SEA', n.picks, '#6ad0a0');
     if (n.ramFitted) stat('RAM REMAINING', `${n.ram} / ${RAM_MAX}`, '#b07d3a');
     stat('HULL', `${Math.max(0, n.hull)} / ${HULL_MAX}`,
       n.hull <= 0 ? '#e05548' : n.hull <= 2 ? '#e0864a' : null);
@@ -1424,6 +1465,7 @@ export const uiMethods = {
     rule('#a8304c', MONSTERS.scylla.name, 'lurks to port. come near and she lunges.');
     rule('#7b3fa8', MONSTERS.charybdis.name, 'opens to starboard. takes the ship whole.');
     rule('#5c636d', 'ROCKS', 'mid-channel, and late on they walk.');
+    rule('#6ad0a0', 'FLOTSAM', 'timber and bronze. steer FOR these.');
     if (n.ram > 0) rule('#b07d3a', 'BRONZE RAM', `fitted. shoulders ${RAM_MAX} rocks aside.`);
 
     ctx.fillStyle = 'rgba(207,216,195,0.6)';

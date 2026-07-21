@@ -24,13 +24,18 @@
 
 export const NARROWS_W = 13;      // channel width, in cells
 export const VIEW_ROWS = 20;      // rows of channel on screen at once
-export const SHIP_ROW = 15;       // where you start, and where the helm sits at rest
+// The ship rides in the MIDDLE of the view, not down at the bottom of it. Five
+// rows of dead water below her was wasted screen, and it put her hard against
+// the GAME OVER card's furniture. Centring costs warning time, so the band she
+// can work in runs further AFT than forward: dropping back buys you reading time
+// and is a real tactic, not just a shuffle.
+export const SHIP_ROW = 10;
 // You can work the ship UP and DOWN the channel as well as across it. Rowing
 // forward to beat a whirlpool down the channel, or backing off a rearing head
 // until it drops, is the manoeuvre the fixed-row version could not express — and
 // with monsters that key off where you ARE, moving in two axes is what makes
 // avoidance a decision rather than a shuffle.
-export const SHIP_ROW_MIN = 8;
+export const SHIP_ROW_MIN = 6;
 export const SHIP_ROW_MAX = 17;
 
 // About a minute of channel at the hub's tick (~0.1s a row). Two minutes turned
@@ -92,6 +97,25 @@ export const CHICANE_LEN = 16;    // rows in one chicane
 export const CHICANE_COOL = 40;   // rows of ordinary channel between chicanes
 const CHICANE_LO = 2, CHICANE_HI = NARROWS_W - 3;
 
+// FLOTSAM. The passage got genuinely hard once both monsters had intentions and
+// the rocks learned to walk, and a run you can only ever lose ground on is a war
+// of attrition rather than a game. So the sea gives something back: wreckage
+// worth steering FOR. Two kinds, both scarce, and deliberately placed in the
+// open water rather than tucked in the safe seam — a plank you can reach without
+// thinking about it is not a decision.
+//   TIMBER  a spar off some earlier ship: one hull back.
+//   BEAK    a broken bronze ram: one charge back on yours, fitting one if you
+//           came in without.
+export const PICKUPS = {
+  timber: { name: 'TIMBER', gives: 'one hull' },
+  beak: { name: 'BRONZE', gives: 'one ram charge' },
+};
+// Rows between them, minimum. Measured rather than guessed: at 14 a run threw up
+// ~29 pieces, one every two seconds, which is a supply line and makes the hull
+// meaningless. At 90 it is about five in a passage — enough to change how a bad
+// run goes, not enough to sail through the rock on salvage.
+const PICKUP_GAP = 90;
+
 // The hull is finite. Rocks used to be a tally that only ever went up, so a bad
 // run had no floor: you could grind the whole passage off the rocks and still
 // arrive. Six strikes and she breaks up — which is what makes a hopeless run end
@@ -105,6 +129,13 @@ export const HULL_MAX = 6;
 // the only job rocks have — making the seam between the two of them cost
 // something — and the correct play would go back to parking mid-channel. This
 // changes what a mistake COSTS, not whether the hazard is there.
+//
+// It is a CONSUMABLE. Bronze bolted to a bow sounded permanent, but a permanent
+// three free rocks every crossing is a difficulty setting you find once and
+// never think about again. Spend all three and the beak is torn off: the item
+// goes, and you sail the next passage without one unless you find another, or
+// fish a broken one out of the channel (see PICKUPS). `ramSpent` is what the hub
+// reads to decide whether the item survived the run.
 export const RAM_MAX = 3;
 
 // Named, because "the left one" and "the right one" is not how you talk about
@@ -121,7 +152,7 @@ export function newNarrowsRun(opts = {}) {
     y: SHIP_ROW,                   // and its row: the helm works fore-and-aft too
     // Rows carry the rocks and nothing else now — both monsters are single
     // creatures with their own state, not a property of every row.
-    rows: Array.from({ length: VIEW_ROWS }, () => ({ rock: -1 })),
+    rows: Array.from({ length: VIEW_ROWS }, () => ({ rock: -1, pick: -1, kind: null })),
     scylla: { row: SHIP_ROW, reach: 0, vis: 0, state: 'lurk', timer: 0, cool: 0 },
     charybdis: null,               // { row, reach } while one is in the channel
     rowsLeft: TOTAL_ROWS,
@@ -131,9 +162,13 @@ export function newNarrowsRun(opts = {}) {
     hull: HULL_MAX,                // strikes left before she comes apart
     ram: opts.ram ? RAM_MAX : 0,   // rocks the bronze beak will shoulder aside
     ramFitted: !!opts.ram,         // kept once spent, so the HUD can show it empty
+    ramSpent: false,               // ran it down to nothing: the item does not survive
     grace: 0,                      // brief invulnerability after a bite
     sinceR: 0,
     sinceK: ROCK_GAP,
+    sinceP: 0,                     // rows since the last piece of flotsam
+    picks: 0,                      // what the sea has given back this run
+    lastPick: null,
     chicane: null,                 // { col, dir, left } while one is running
     chicaneCool: 0,
     over: false,
@@ -186,7 +221,30 @@ function nextRow(s, rng) {
     rock = 1 + Math.floor(rng() * (NARROWS_W - 2));
     s.sinceK = 0;
   }
-  return { rock };
+
+  // Flotsam, in the open water and never on the rock. Weighted toward whichever
+  // you are actually short of: a hull patch when you are holed, a beak when the
+  // ram is spent. A relief that arrives in the wrong currency is not a relief.
+  let pick = -1, kind = null;
+  s.sinceP += 1;
+  if (s.sinceP >= PICKUP_GAP && rng() < 0.08 + 0.06 * p) {
+    for (let tries = 0; tries < 6 && pick < 0; tries++) {
+      const c = 1 + Math.floor(rng() * (NARROWS_W - 2));
+      if (c !== rock) pick = c;
+    }
+    if (pick >= 0) {
+      // Weighted by what you are short of, PROPORTIONALLY rather than
+      // winner-takes-all: a strict comparison meant one scratch on the hull
+      // outweighed the standing want of a ram forever, and a player who came in
+      // without a beak found one about once in eight passages.
+      const wantHull = HULL_MAX - s.hull;
+      const wantRam = s.ramFitted ? RAM_MAX - s.ram : 2;
+      const want = wantHull + wantRam;
+      kind = (want > 0 && rng() * want < wantRam) ? 'beak' : 'timber';
+      s.sinceP = 0;
+    }
+  }
+  return { rock, pick, kind };
 }
 
 // SCYLLA, one tick. She keeps station on your row while she lurks, so the head
@@ -286,6 +344,20 @@ export function narrowsTick(s, rng = Math.random) {
   if (s.grace > 0) s.grace -= 1;
   if (!calm) { stepScylla(s); stepCharybdis(s, rng); }
 
+  // FLOTSAM first, and outside the grace period entirely: picking a spar out of
+  // the water is not something a recent knock should stop you doing. It is
+  // applied even if this same tick then goes badly — you did reach it.
+  const here = s.rows[s.y];
+  let took = null;
+  if (here && here.pick >= 0 && s.x === here.pick) {
+    took = here.kind;
+    here.pick = -1; here.kind = null;
+    s.picks += 1;
+    s.lastPick = took;
+    if (took === 'timber') s.hull = Math.min(HULL_MAX, s.hull + 1);
+    else if (took === 'beak') { s.ramFitted = true; s.ram = Math.min(RAM_MAX, s.ram + 1); }
+  }
+
   // CHARYBDIS first. Her THROAT is deliberately NOT behind the grace period: no
   // amount of recent luck saves you from the one that ends the voyage.
   const pull = charybdisReachAt(s, s.y);
@@ -318,6 +390,7 @@ export function narrowsTick(s, rng = Math.random) {
     // simply do not pay for having failed to.
     if (s.ram > 0) {
       s.ram -= 1;
+      if (s.ram === 0) s.ramSpent = true;   // the beak is gone, not merely empty
       if (s.rowsLeft <= 0) { s.over = true; s.outcome = 'through'; }
       return 'shatter';
     }
@@ -344,7 +417,7 @@ export function narrowsTick(s, rng = Math.random) {
     s.over = true; s.outcome = 'through';
     return 'through';
   }
-  return null;
+  return took ? 'pickup' : null;
 }
 
 // How far through the passage you are, 0..1 — the hub draws this as a bar.

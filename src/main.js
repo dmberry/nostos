@@ -1003,6 +1003,13 @@ function endNarrows(outcome) {
   s.gameover = null;
   narrowsChrome(false);
   const hull = (s.run && s.run.rocks) || 0;   // read before the run is cleared
+  // The ram is a consumable: run it down to nothing and the beak is torn off the
+  // bow. Only if you actually brought one — a beak fished out of the channel was
+  // never an item and has nothing to take away.
+  if (s.run && s.run.ramSpent && player.hasItem('ram')) {
+    player.removeItem('ram');
+    player.say('The bronze beak is gone, wrenched off her bow somewhere back in the rock. You will want another before you try that again.');
+  }
   s.run = null;
   s.t = 0;
   s.phase = 'out';
@@ -1139,6 +1146,13 @@ function updateNarrows(dt) {
       // The ram took it. No hull, no health, and the rock still made you flinch.
       sfx.play('clang');
       if (n.ram === 0) player.say('The beak takes the last of it and rings hollow. Nothing left between you and the stone.');
+    } else if (ev === 'pickup') {
+      // The sea gives something back. Named out loud, because a silent +1 on a
+      // pip row is not a reward you can feel.
+      sfx.play('pickup');
+      player.say(n.lastPick === 'timber'
+        ? 'A spar off some earlier ship comes past on the swell. You get a hand to it and drag it aboard: one plank between you and the water.'
+        : 'A broken beak, green with the sea, rolling in the wash. It is not yours and it fits well enough.');
     } else if (ev === 'churn') {
       // Her outer water: it batters the hull and throws you clear. Not the end
       // of anything, which is the point of the change.
