@@ -1323,10 +1323,41 @@ export const uiMethods = {
     stat('HULL', `${Math.max(0, n.hull)} / ${HULL_MAX}`,
       n.hull <= 0 ? '#e05548' : n.hull <= 2 ? '#e0864a' : null);
 
-    if ((n.t >> 4) & 1) {
-      fit('PRESS ANY KEY', Math.round(cell * 0.72), 'bold ');
-      ctx.fillStyle = '#e8d27a';
-      ctx.fillText('PRESS ANY KEY', cx, oy + gh * 0.86);
+    // The ENTER key, drawn as a key. It does not appear until the hold is up, so
+    // there is nothing to hit early — the card cannot be skipped before it has
+    // been read, which is the whole reason it stops the game at all. The rect is
+    // stamped back onto the state so the hub can hit-test a tap against it
+    // without either side guessing at the other's layout.
+    over.enterRect = null;
+    if (over.ready) {
+      const bh = Math.max(26, Math.round(cell * 1.15));
+      const label = 'ENTER';
+      ctx.font = `bold ${Math.max(11, Math.round(cell * 0.6))}px ui-monospace, monospace`;
+      const bw = Math.max(cell * 4.2, ctx.measureText(label).width + cell * 2.2);
+      const bx = Math.round(cx - bw / 2), byy = Math.round(oy + gh * 0.84 - bh / 2);
+      const pulse = 0.55 + 0.45 * Math.sin(n.t * 0.12);
+
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';                 // the key's shadow: it stands up
+      this.roundRect(bx + 2, byy + 4, bw, bh, 5);
+      ctx.fill();
+      const kg = ctx.createLinearGradient(0, byy, 0, byy + bh);
+      kg.addColorStop(0, '#3a4050'); kg.addColorStop(1, '#232838');
+      ctx.fillStyle = kg;
+      this.roundRect(bx, byy, bw, bh, 5);
+      ctx.fill();
+      ctx.strokeStyle = `rgba(232,210,122,${(0.45 + 0.5 * pulse).toFixed(2)})`;
+      ctx.lineWidth = 2;
+      this.roundRect(bx, byy, bw, bh, 5);
+      ctx.stroke();
+      ctx.fillStyle = `rgba(232,210,122,${(0.7 + 0.3 * pulse).toFixed(2)})`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(label, bx + bw / 2, byy + bh / 2 + 1);
+      ctx.textBaseline = 'alphabetic';
+
+      over.enterRect = { x: bx, y: byy, w: bw, h: bh };
+      ctx.fillStyle = 'rgba(207,216,195,0.4)';
+      ctx.font = `${Math.max(9, Math.round(cell * 0.44))}px system-ui, sans-serif`;
+      ctx.fillText('press enter, or tap', cx, byy + bh + Math.max(14, cell * 0.62));
     }
 
     ctx.strokeStyle = won ? 'rgba(106,208,160,0.5)' : 'rgba(224,85,72,0.5)';

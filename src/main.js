@@ -1041,7 +1041,10 @@ function endNarrows(outcome) {
 // about it. A cabinet owes you the moment. The field freezes, the card comes up
 // over it with what the passage cost, and nothing resolves until you press
 // something — so the ending is read rather than glimpsed.
-const GAMEOVER_HOLD = 0.9;          // seconds before a keypress will dismiss it
+// Long enough that a key you were already leaning on cannot carry you straight
+// through the card. At 0.9s the tally was being skipped by accident, which
+// defeats the whole point of stopping to show it.
+const GAMEOVER_HOLD = 2.2;
 
 function finishRun(outcome) {
   const s = strait;
@@ -1055,12 +1058,18 @@ function updateGameOver(dt) {
   const s = strait, g = s.gameover;
   g.t += dt;
   s.run.t = (s.run.t || 0) + 1;     // the card blinks, so the run's clock keeps going
-  if (g.t < GAMEOVER_HOLD) return true;
-  const pressed = ['Space', 'Enter', 'Escape', 'KeyA', 'KeyD', 'KeyW', 'KeyS',
-    'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].some((k) => input.consumePress(k));
-  const tapped = !!input.clickPos();
-  if (pressed || tapped) {
-    if (tapped) input.consumeClick();
+  // The ENTER button does not even appear until the hold is up, so there is
+  // nothing to hit early and the card cannot be skipped before it is read.
+  g.ready = g.t >= GAMEOVER_HOLD;
+  if (!g.ready) return true;
+  // ENTER specifically, not any key: a named key and a drawn button are the two
+  // things a player can deliberately aim at.
+  const pressed = input.consumePress('Enter') || input.consumePress('NumpadEnter');
+  const at = input.clickPos();
+  const r = g.enterRect;            // stamped by the card as it draws itself
+  const hit = at && r && at.x >= r.x && at.x <= r.x + r.w && at.y >= r.y && at.y <= r.y + r.h;
+  if (pressed || hit) {
+    if (hit) input.consumeClick();
     s.gameover = null;
     endNarrows(g.outcome);
     return false;
