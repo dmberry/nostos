@@ -1247,7 +1247,7 @@ export const uiMethods = {
     ctx.textAlign = 'right';
     const leaving = narrowsRunOut(n);
     ctx.fillStyle = calm ? 'rgba(106,208,160,0.9)' : n.bites ? '#e0864a' : 'rgba(232,224,208,0.5)';
-    ctx.fillText(leaving ? 'SUCCESS!' : calm ? 'OPEN WATER' : n.bites ? `TAKEN ${n.bites}` : 'CLEAN', ox + gw, by);
+    ctx.fillText(leaving ? 'SUCCESS!' : calm ? 'OPEN WATER' : n.bites ? `TAKEN ${n.bites}` : 'BEWARE!', ox + gw, by);
     // Hull, as pips that go out — a number counting up never felt like damage.
     const pip = Math.max(5, Math.round(cell * 0.34));
     const hull = n.hull != null ? n.hull : HULL_MAX;

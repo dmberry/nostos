@@ -126,7 +126,7 @@ export function initMobileGate(mode = 'gate') {
       <source src="assets/media/videos/postAI-background.mp4" type="video/mp4">
     </video>`;
   const copyHtml = isTitle
-    ? `<p class="mg-sub">The machines made the world standing reserve. Now survive it.<span class="mg-sub2">A keyboard-and-mouse survival game.<br>Here's the soundtrack while you decide.</span></p>
+    ? `<p class="mg-sub">The machines made the world standing reserve. Only a God can save you.<span class="mg-sub2">A keyboard-and-mouse survival game.<br>Here's the soundtrack while you decide.</span></p>
        <div class="mg-actions">
          ${hasSave ? '<button id="mg-continue" class="mg-btn primary">Continue</button>' : ''}
          <button id="mg-start" class="mg-btn ${hasSave ? '' : 'primary'}">${hasSave ? 'New game' : 'Start'}</button>
