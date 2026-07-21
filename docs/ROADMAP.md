@@ -29,8 +29,14 @@ long time and are now in the game:
   greek-ship recipe, Poseidon's refusal, and the Backspace's labelled doors.
 - **The fortress as a per-island module** (R1/R2) and **Calypso's depart mode**
   (R3) — she is left, not killed.
-- **Scylla and Charybdis** (v1.145) — the forced-choice strait on the
-  AEAEA ↔ THRINACIA passage. The first of the sea's own monsters.
+- **Scylla and Charybdis** (v1.145, rebuilt as an arcade cabinet v1.150–v1.160) —
+  the AEAEA ↔ THRINACIA passage. It began as a two-button modal: you picked your
+  loss once and watched it happen. It is now a played 8-bit run with a title card
+  and a coin, a helm that works across the channel and along it, one Scylla who
+  keeps station on you and lunges out of the water, one Charybdis who comes down
+  the channel as a widening whirlpool, walking rock chicanes in the back half, and
+  a bronze ram found on Aeaea that shoulders three rocks aside. Rules in
+  `src/game/narrows.js`, unit-tested without a canvas.
 - **Per-island save fidelity** (v1.147) — the run snapshot now stores each
   island's own world state instead of reading Calypso's arrays whatever island
   you were on. Found while preparing the v1.147 release.
@@ -39,9 +45,6 @@ long time and are now in the game:
 
 ## Phase 1 — polish & small wins (low risk, mostly self-contained)
 
-- **Strait visuals**: the narrows currently play out over the generic sea fog.
-  Scylla's cliff silhouette and Charybdis's whirlpool want drawing, so the choice
-  is *seen* and not only read.
 - **Limping / WOUNDED tell**: the low-health slowdown exists; add the limp
   animation + a WOUNDED tag so the player can read it.
 - **Persist fog of war across reload/death** (like skills already do), so map
