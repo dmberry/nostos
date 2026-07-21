@@ -15,7 +15,7 @@
 
 import { ITEMS, WEAPON_ORDER } from '../game/items.js'; // weapon-chart data
 import { PAPER_TEXTURE, NOKIA_SPRITE } from './textures.js'; // death-cert paper; the 3310 in the PHONE box
-import { NARROWS_W, VIEW_ROWS, SHIP_ROW, MONSTERS, narrowsProgress, narrowsCalm } from '../game/narrows.js'; // the Scylla/Charybdis arcade run
+import { NARROWS_W, VIEW_ROWS, SHIP_ROW, MONSTERS, HULL_MAX, narrowsProgress, narrowsCalm } from '../game/narrows.js'; // the Scylla/Charybdis arcade run
 
 export const DASH_H = 78; // dashboard panel height
 
@@ -809,16 +809,50 @@ export const uiMethods = {
     ctx.fillStyle = sea;
     ctx.fillRect(ox, oy, gw, gh);
     for (let r = 0; r < ROWS; r++) {
-      const swell = Math.sin((r + n.t * 0.06) * 0.7);
+      const swell = Math.sin((r + (n.frac || 0) + n.t * 0.06) * 0.7);
       ctx.fillStyle = `rgba(120,190,235,${(0.05 + 0.045 * swell).toFixed(3)})`;
-      ctx.fillRect(ox, oy + r * cell + cell * 0.62, gw, Math.max(1, cell * 0.16));
+      ctx.fillRect(ox, oy + r * cell + cell * 0.62 + (n.frac || 0) * cell, gw, Math.max(1, cell * 0.16));
     }
     // Foam crests, scrolling, so the channel obviously moves.
     ctx.fillStyle = 'rgba(210,235,255,0.16)';
     for (let r = 0; r < ROWS; r++) {
       const k = (r * 5 + Math.floor(n.t * 0.5)) % W;
-      ctx.fillRect(ox + k * cell + cell * 0.2, oy + r * cell + cell * 0.3, cell * 0.5, 2);
+      ctx.fillRect(ox + k * cell + cell * 0.2, oy + r * cell + cell * 0.3 + (n.frac || 0) * cell, cell * 0.5, 2);
     }
+
+    // --- rocky crags framing the channel -------------------------------------
+    // Not playfield: the walls of the strait, outside the water on both hands.
+    // They scroll with the current so the whole picture moves as one thing, and
+    // they are what makes the channel read as a channel rather than a corridor.
+    const cragW = Math.max(10, Math.round(cell * 0.9));
+    const drawCrags = (edgeX, dir) => {
+      const g3 = ctx.createLinearGradient(edgeX, 0, edgeX + cragW * dir, 0);
+      g3.addColorStop(0, '#3a3a42'); g3.addColorStop(1, '#14161c');
+      ctx.fillStyle = g3;
+      ctx.fillRect(Math.min(edgeX, edgeX + cragW * dir), oy, cragW, gh);
+      // Jagged teeth along the water's edge, on a long scroll so they repeat
+      // slower than the swell.
+      const step = cell * 1.1;
+      const off = ((n.t * 0.9 + (n.frac || 0) * 6) % step);
+      ctx.fillStyle = '#4a4b55';
+      for (let y2 = oy - step + off; y2 < oy + gh + step; y2 += step) {
+        const h2 = cell * (0.5 + 0.35 * Math.abs(Math.sin(y2 * 0.07)));
+        ctx.beginPath();
+        ctx.moveTo(edgeX, y2);
+        ctx.lineTo(edgeX + cragW * 0.75 * dir, y2 + h2 * 0.45);
+        ctx.lineTo(edgeX, y2 + h2);
+        ctx.closePath();
+        ctx.fill();
+      }
+      // A pale line where rock meets water.
+      ctx.fillStyle = 'rgba(200,225,245,0.18)';
+      ctx.fillRect(edgeX - (dir < 0 ? 0 : 1), oy, 1.5, gh);
+    };
+    ctx.save();
+    ctx.beginPath(); ctx.rect(ox - cragW, oy, gw + cragW * 2, gh); ctx.clip();
+    drawCrags(ox, -1);              // port crag
+    drawCrags(ox + gw, 1);          // starboard crag
+    ctx.restore();
 
     // --- the two of them, surfacing from their own sides ---------------------
     // Both are IN THE WATER now: Scylla's necks break the surface on the left,
@@ -842,9 +876,20 @@ export const uiMethods = {
       ctx.beginPath(); ctx.arc(cx + rad * 0.42 * facing, cy - rad * 0.12, rad * 0.12, 0, Math.PI * 2); ctx.fill();
     };
 
+    // Everything from here is inside the frame: with the sub-row slide a row can
+    // sit a whole cell past the edge, and a rock hanging below the cabinet looks
+    // like a rendering fault.
+    ctx.save();
+    ctx.beginPath(); ctx.rect(ox, oy, gw, gh); ctx.clip();
+
+    // Rows are drawn at a sub-row offset so the channel FLOWS instead of jumping
+    // a whole cell per logic tick. The rules still run on whole rows; this only
+    // moves the picture between them.
+    const slide = (n.frac || 0) * cell;
     for (let r = 0; r < ROWS; r++) {
       const row = n.rows[r];
-      const y = oy + r * cell + cell * 0.5;
+      const y = oy + r * cell + cell * 0.5 + slide;
+      if (y < oy - cell || y > oy + gh + cell) continue;
       if (row.l > 0) {
         // SCYLLA: a sinuous neck out of the left, head at its tip.
         const tip = ox + row.l * cell - cell * 0.5;
@@ -908,8 +953,42 @@ export const uiMethods = {
       }
     }
 
+    // --- gulls ---------------------------------------------------------------
+    // Every so often a few birds cross the channel. Nothing to do with the
+    // rules; they exist because a strait with two monsters and no birds reads as
+    // a test harness, and because something ordinary passing overhead makes the
+    // rest of it worse. Derived from n.t, so they need no state of their own.
+    const CYCLE = 520;                       // frames between flights
+    const phase = n.t % CYCLE;
+    if (phase < 190) {
+      const flight = Math.floor(n.t / CYCLE);
+      const dir = (flight % 2) ? -1 : 1;                       // alternate the crossing
+      const baseY = oy + gh * (0.15 + ((flight * 37) % 60) / 100);
+      const u = phase / 190;
+      const headX = dir > 0 ? ox - cell + u * (gw + cell * 2) : ox + gw + cell - u * (gw + cell * 2);
+      ctx.strokeStyle = 'rgba(232,238,245,0.75)';
+      ctx.lineWidth = Math.max(1.2, cell * 0.09);
+      ctx.lineCap = 'round';
+      for (let g4 = 0; g4 < 3; g4++) {
+        const gx = headX - dir * g4 * cell * 1.5;
+        const gy = baseY + Math.sin(n.t * 0.12 + g4 * 1.3) * cell * 0.35 + g4 * cell * 0.5;
+        if (gx < ox - cell * 2 || gx > ox + gw + cell * 2) continue;
+        const flap = Math.sin(n.t * 0.35 + g4 * 0.9) * 0.5 + 0.5;   // 0..1 wingbeat
+        const span = cell * (0.30 + 0.16 * flap);
+        const lift = cell * (0.16 * flap);
+        ctx.beginPath();
+        ctx.moveTo(gx - span, gy + lift);
+        ctx.quadraticCurveTo(gx - span * 0.4, gy - lift * 1.4, gx, gy);
+        ctx.quadraticCurveTo(gx + span * 0.4, gy - lift * 1.4, gx + span, gy + lift);
+        ctx.stroke();
+      }
+    }
+
+    ctx.restore();   // end playfield clip
+
     // --- the ship ------------------------------------------------------------
-    const sx = ox + n.x * cell + cell * 0.5, sy = oy + SHIP_ROW * cell + cell * 0.5;
+    const sx = ox + (n.xDraw != null ? n.xDraw : n.x) * cell + cell * 0.5;
+    const sy = oy + SHIP_ROW * cell + cell * 0.5;
     const blink = n.grace > 0 && (n.t & 1);
     if (!blink) {
       ctx.fillStyle = 'rgba(0,0,0,0.35)';
@@ -952,10 +1031,20 @@ export const uiMethods = {
     ctx.fillText('THE NARROWS', ox, by);
     ctx.textAlign = 'right';
     ctx.fillStyle = calm ? 'rgba(106,208,160,0.9)' : n.bites ? '#e0864a' : 'rgba(232,224,208,0.5)';
-    const tally = n.bites || n.rocks
-      ? `${n.bites ? `TAKEN ${n.bites}` : ''}${n.bites && n.rocks ? '  ' : ''}${n.rocks ? `HULL ${n.rocks}` : ''}`
-      : 'CLEAN';
-    ctx.fillText(calm ? 'OPEN WATER' : tally, ox + gw, by);
+    ctx.fillText(calm ? 'OPEN WATER' : n.bites ? `TAKEN ${n.bites}` : 'CLEAN', ox + gw, by);
+    // Hull, as pips that go out — a number counting up never felt like damage.
+    const pip = Math.max(5, Math.round(cell * 0.34));
+    const hull = n.hull != null ? n.hull : HULL_MAX;
+    for (let i = 0; i < HULL_MAX; i++) {
+      const lit = i < hull;
+      ctx.fillStyle = lit ? (hull <= 2 ? '#e05548' : '#c9932f') : 'rgba(255,255,255,0.10)';
+      ctx.fillRect(ox + i * (pip + 3), by + 20, pip, pip);
+    }
+    ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(207,216,195,0.45)';
+    ctx.font = `${Math.max(8, Math.round(cell * 0.42))}px ui-monospace, monospace`;
+    ctx.fillText('HULL', ox + HULL_MAX * (pip + 3) + 6, by + 20 + pip - 1);
+    ctx.textAlign = 'right';
     const pw2 = Math.round(narrowsProgress(n) * gw);
     ctx.fillStyle = 'rgba(255,255,255,0.10)';
     ctx.fillRect(ox, by + 8, gw, 6);
@@ -966,7 +1055,7 @@ export const uiMethods = {
     ctx.textAlign = 'center';
     ctx.fillStyle = 'rgba(207,216,195,0.5)';
     ctx.font = `${Math.max(9, Math.round(cell * 0.5))}px system-ui, sans-serif`;
-    ctx.fillText('A / D  or  ← →  ·  or drag', ox + gw / 2, by + 30);
+    ctx.fillText('A / D  or  ← →  ·  or drag', ox + gw / 2, by + 46);
     ctx.textAlign = 'left';
     ctx.restore();
   },

@@ -18,10 +18,10 @@ export const NARROWS_W = 13;      // channel width, in cells
 export const VIEW_ROWS = 20;      // rows of channel on screen at once
 export const SHIP_ROW = 15;       // the ship's fixed row (near the bottom)
 
-// A passage worth sitting down for. At the hub's tick (~0.1s a row) this runs
-// about two and a half minutes, and the density ramps across it so the last
-// third is genuinely tight rather than more of the same.
-export const RUN_ROWS = 1150;
+// About a minute of channel at the hub's tick (~0.1s a row). Two minutes turned
+// out to be a haul rather than a game; the density still ramps across it, so the
+// back half is tight without outstaying itself.
+export const RUN_ROWS = 570;
 export const WARMUP_ROWS = 30;    // open water first: you come UP to the narrows
 export const TOTAL_ROWS = WARMUP_ROWS + RUN_ROWS;
 
@@ -41,6 +41,11 @@ const GAP_MIN = 3;                // never two of the same monster within this
 // one is what pushes you toward one monster or the other. That is the whole
 // point of them: they convert the safe lane into a decision.
 const ROCK_GAP = 2;
+// The hull is finite. Rocks used to be a tally that only ever went up, so a bad
+// run had no floor: you could grind the whole passage off the rocks and still
+// arrive. Six strikes and she breaks up — which is what makes a hopeless run
+// end rather than merely hurt.
+export const HULL_MAX = 6;
 // Rows of warning between a head breaking the surface and reaching your line.
 export const TELEGRAPH = VIEW_ROWS - SHIP_ROW;
 
@@ -61,14 +66,22 @@ export function newNarrowsRun() {
     warmup: WARMUP_ROWS,
     bites: 0,                      // Scylla's tally: one thing off the deck each
     rocks: 0,                      // rocks struck: hull damage, not cargo
+    hull: HULL_MAX,                // strikes left before she comes apart
     grace: 0,                      // brief invulnerability after a bite
     sinceL: GAP_MIN,
     sinceR: GAP_MIN,
     sinceK: ROCK_GAP,
     over: false,
-    outcome: null,                 // 'through' | 'swallowed'
+    outcome: null,                 // 'through' | 'swallowed' | 'wrecked'
     attract: true,                 // the cabinet opens on its title card
     t: 0,                          // frames, for blinks and the churn
+    // Presentation only — the RULES stay on whole rows and whole columns, so
+    // none of this can change what hits what. `frac` is how far through the
+    // current row we are (0..1) and `xDraw` is the hull easing toward the column
+    // the helm has actually selected. Without them the channel jumps a whole
+    // cell ten times a second, which looks like a slideshow.
+    frac: 0,
+    xDraw: 6,
   };
 }
 
@@ -124,8 +137,9 @@ export function narrowsSteer(s, dx) {
   s.x = Math.max(0, Math.min(NARROWS_W - 1, s.x + (dx < 0 ? -1 : 1)));
 }
 
-// Advance one row. Returns 'bite' (Scylla took one), 'swallowed' (Charybdis has
-// the ship), 'through' (clear), or null.
+// Advance one row. Returns 'bite' (Scylla took one), 'rock' (a strike on the
+// hull), 'wrecked' (the hull is gone), 'swallowed' (Charybdis has the ship),
+// 'through' (clear), or null.
 export function narrowsTick(s, rng = Math.random) {
   if (s.over || s.attract) return null;   // no coin, no game
 
@@ -147,7 +161,12 @@ export function narrowsTick(s, rng = Math.random) {
   // you move, and moving is what puts you in their reach.
   if (row.rock >= 0 && s.x === row.rock && s.grace <= 0) {
     s.rocks += 1;
+    s.hull -= 1;
     s.grace = 3;
+    if (s.hull <= 0) {             // she comes apart under you
+      s.over = true; s.outcome = 'wrecked';
+      return 'wrecked';
+    }
     if (s.rowsLeft <= 0) { s.over = true; s.outcome = 'through'; }
     return 'rock';
   }
@@ -167,6 +186,16 @@ export function narrowsTick(s, rng = Math.random) {
 // How far through the passage you are, 0..1 — the hub draws this as a bar.
 export function narrowsProgress(s) {
   return Math.max(0, Math.min(1, 1 - s.rowsLeft / TOTAL_ROWS));
+}
+
+// Advance the presentation between logic ticks. `tickFrac` is 0..1 through the
+// current row. Kept here rather than in the hub so the cabinet's look travels
+// with its rules.
+export function narrowsAnimate(s, dt, tickFrac) {
+  s.frac = Math.max(0, Math.min(1, tickFrac));
+  const k = Math.min(1, dt * 16);          // snappy, but not instant
+  s.xDraw += (s.x - s.xDraw) * k;
+  if (Math.abs(s.x - s.xDraw) < 0.01) s.xDraw = s.x;
 }
 
 // Still on open water? The cabinet says so, so the calm reads as deliberate.

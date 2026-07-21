@@ -7,7 +7,7 @@ import { spawnAnimals, updateAnimals } from './game/animals.js';
 import { Player } from './game/player.js';
 import { seawardFrom, boatMirror, CF_MIN } from './game/crossing.js';
 import { isStraitCrossing, scyllaToll, STRAIT_COST } from './game/strait.js';
-import { newNarrowsRun, narrowsSteer, narrowsTick, narrowsStart } from './game/narrows.js';
+import { newNarrowsRun, narrowsSteer, narrowsTick, narrowsStart, narrowsAnimate } from './game/narrows.js';
 import { makeRng } from './game/rng.js';
 import { DayNight } from './game/daynight.js';
 import { Minimap } from './game/minimap.js';
@@ -949,10 +949,22 @@ function circeStraitAdvice() {
 const NARROWS_TICK = 0.10;          // seconds per row — brisk, but readable
 const MAX_CATCHUP = 3;              // rows a single frame may ever advance
 
+// The cabinet owns the screen: the DOM hint sits outside the canvas, so the
+// renderer's modal suppression cannot reach it and it has to be hidden here.
+function narrowsChrome(on) {
+  if (!hintEl) return;
+  if (on) { hintEl.dataset.preNarrows = hintEl.style.display || ''; hintEl.style.display = 'none'; }
+  else if (hintEl.dataset.preNarrows !== undefined) {
+    hintEl.style.display = hintEl.dataset.preNarrows;
+    delete hintEl.dataset.preNarrows;
+  }
+}
+
 function openNarrows() {
   strait.run = newNarrowsRun();     // opens on its attract screen; nothing ticks yet
   strait.tickT = 0;
   strait.taken = [];                // what she has had off the deck, for the report
+  narrowsChrome(true);
   sfx.play('narrowsTune');
   player.say('The channel closes to a throat of rock, and something in the cliff is awake.');
 }
@@ -977,11 +989,21 @@ function narrowsBite() {
 // understands, so finishStrait needs no special case.
 function endNarrows(outcome) {
   const s = strait;
+  narrowsChrome(false);
   const hull = (s.run && s.run.rocks) || 0;   // read before the run is cleared
   s.run = null;
   s.t = 0;
   s.phase = 'out';
   s.outcome = outcome === 'swallowed' ? 'swallowed' : 'scylla';
+  if (outcome === 'wrecked') {
+    // The hull is gone: she breaks up under you and the crossing is lost, the
+    // same as being taken. A run you cannot finish now ends instead of grinding.
+    s.outcome = 'swallowed';        // finishStrait already knows how to put you back
+    player.health = Math.max(1, player.health - STRAIT_COST.mauled.hurt);
+    sfx.play('zap');
+    player.say('One rock too many. The keel goes, and the sea comes in through the whole length of her — you are swimming, and the current is carrying you back the way you came.');
+    return;
+  }
   if (outcome === 'swallowed') {
     s.outcome = 'swallowed';
     player.health = Math.max(1, player.health - STRAIT_COST.swallowed.hurt);
@@ -1045,6 +1067,7 @@ function updateNarrows(dt) {
     s.tickT -= NARROWS_TICK;
     steps += 1;
     const ev = narrowsTick(n);
+    if (ev === 'wrecked') { endNarrows('wrecked'); return; }
     if (ev === 'rock') {
       // Hull, not cargo — a rock is neither of them. It costs you health and a
       // jolt, and its real job is to move you off the safe column.
@@ -1054,6 +1077,12 @@ function updateNarrows(dt) {
     else if (ev === 'swallowed') { endNarrows('swallowed'); return; }
     else if (ev === 'through') { endNarrows('through'); return; }
   }
+  // Presentation LAST, from whatever is left of the accumulator. Doing this
+  // before the tick loop was the jump: on the frame a tick fired, the picture
+  // was drawn with the old fraction (≈1, a whole cell down) against rows that
+  // had already shifted — so the channel snapped back a cell, ten times a
+  // second. The rules run on whole rows; only this decides where they are drawn.
+  narrowsAnimate(n, dt, s.tickT / NARROWS_TICK);
 }
 
 // The sea is done with you: land where the outcome says. 'swallowed' loses the
@@ -1462,15 +1491,19 @@ function devBuildButtons() {
   const jump = document.getElementById('dev-jump');
   const kit = document.getElementById('dev-kit');
   if (jump.childElementCount) return; // built once
+  // A chip that changes what you are LOOKING at closes the console behind it —
+  // you pressed it to go and see the thing, not to keep reading the panel. Kit
+  // chips deliberately leave it open, since those get stacked several at a time.
+  const goThenClose = (cmd) => { devRun(cmd); devClose(); };
   for (const c of CROSSINGS) {
     const b = document.createElement('button');
     b.textContent = c.place;
-    b.onclick = () => devRun('go ' + c.id);
+    b.onclick = () => goThenClose('go ' + c.id);
     jump.appendChild(b);
   }
   const bs = document.createElement('button');
   bs.textContent = 'BACKSPACE';
-  bs.onclick = () => devRun('go backspace');
+  bs.onclick = () => goThenClose('go backspace');
   jump.appendChild(bs);
   DEV_KITS.forEach((k, i) => {
     const b = document.createElement('button');
@@ -1484,7 +1517,7 @@ function devBuildButtons() {
   for (const [label, cmd] of DEV_SCENES) {
     const b = document.createElement('button');
     b.textContent = label;
-    b.onclick = () => devRun(cmd);
+    b.onclick = () => goThenClose(cmd);
     scene.appendChild(b);
   }
 }

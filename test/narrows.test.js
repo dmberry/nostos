@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   newNarrowsRun, narrowsSteer, narrowsTick, narrowsProgress,
-  narrowsStart, narrowsCalm, narrowsPressure,
+  narrowsStart, narrowsCalm, narrowsPressure, narrowsAnimate, HULL_MAX,
   NARROWS_W, SHIP_ROW, RUN_ROWS, TOTAL_ROWS, WARMUP_ROWS,
   SCYLLA_MAX, CHARYBDIS_MAX, SAFE_LANE, MONSTERS,
 } from '../src/game/narrows.js';
@@ -179,7 +179,10 @@ test('the cabinet waits for a coin', () => {
 
 test('the passage is long enough to be a game, and gets harder', () => {
   // "A couple of minutes" at the hub's ~0.1s tick.
-  assert.ok(TOTAL_ROWS * 0.11 >= 110, `passage is only ${Math.round(TOTAL_ROWS * 0.11)}s`);
+  // Long enough to be a game, short enough not to be a haul: about a minute.
+  const secs = TOTAL_ROWS * 0.10;
+  assert.ok(secs >= 45, `passage is only ${Math.round(secs)}s`);
+  assert.ok(secs <= 90, `passage is ${Math.round(secs)}s — too long to sit through`);
   const s = started(never);
   s.rowsLeft = TOTAL_ROWS;
   const early = narrowsPressure(s);
@@ -213,4 +216,33 @@ test('progress runs 0 to 1 across the passage', () => {
   for (let i = 0; i < TOTAL_ROWS && !s.over; i++) { clear(s); narrowsTick(s, never); }
   assert.equal(s.outcome, 'through');
   assert.equal(narrowsProgress(s), 1);
+});
+
+test('the hull is finite: six strikes and she comes apart', () => {
+  // Rocks used to be a tally that only went up, so a hopeless run had no floor —
+  // you could grind the whole passage off the rocks and still arrive.
+  const s = started(never);
+  let ev = null;
+  for (let i = 0; i < HULL_MAX && !s.over; i++) {
+    clear(s);
+    s.rows[SHIP_ROW - 1] = { l: 0, r: 0, rock: 6 };
+    s.x = 6;
+    s.grace = 0;                       // ignore the flash between strikes
+    ev = narrowsTick(s, never);
+  }
+  assert.equal(ev, 'wrecked');
+  assert.equal(s.over, true);
+  assert.equal(s.outcome, 'wrecked');
+  assert.ok(s.hull <= 0);
+});
+
+test('animation is presentation only: it never moves the ship the rules use', () => {
+  const s = started(never);
+  s.x = 3;
+  narrowsAnimate(s, 0.016, 0.5);
+  assert.equal(s.x, 3, 'the logical column is untouched');
+  assert.ok(s.xDraw !== 3 || s.xDraw === 3, 'xDraw eases separately');
+  assert.equal(s.frac, 0.5);
+  for (let i = 0; i < 60; i++) narrowsAnimate(s, 0.016, 0);
+  assert.equal(s.xDraw, 3, 'and it settles exactly on the column');
 });
