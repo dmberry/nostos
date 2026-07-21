@@ -587,6 +587,12 @@ export class Renderer {
       this.drawDashboard(player, hud);
       this.drawHudOverlay(player, hud); // wordmark, message line, daemon voice — both layouts
     }
+    // A panel is up. The world's own overlays all draw AFTER the panels, so
+    // without this the touch buttons, the toasts and the occlusion ghost paint
+    // straight over whatever you are trying to read. (The lore archive draws
+    // in runDrawScreen just below, so it counts as a panel too.)
+    const modalOpen = !!(hud.showBackpack || hud.showSkills || hud.showWeapons
+      || (hud.lore && hud.lore.archiveOpen));
     if (hud.showBackpack) this.drawBackpackPanel(player);
     runDrawScreen(ctx, { w: this.w, h: this.h, map, player });
     if (hud.craftPrompt) {
@@ -634,7 +640,7 @@ export class Renderer {
           if ((dx + dy <= 3 && NEAR_TALL.has(o.type)) || BIG_TALL.has(o.type)) { occluded = true; break; }
         }
       }
-      if (occluded && !hud.underworld) {
+      if (occluded && !hud.underworld && !modalOpen) {
         const lift2 = (map.effectiveHeightAt ? map.effectiveHeightAt(pfx2, pfy2)
           : map.heightAt ? map.heightAt(pfx2, pfy2) : 0) * ELEV;
         ctx.save();
@@ -644,9 +650,14 @@ export class Renderer {
         ctx.restore();
       }
     }
-    if (hud.touchControls) this.drawTouchControls(hud);
-    if (hud.toast) this.drawToast(hud.toast);
-    if (hud.nokiaToast) this.drawNokiaToast(hud.nokiaToast, hud.nokiaSignal, !!hud.touchControls);
+    if (hud.touchControls && !modalOpen) this.drawTouchControls(hud);
+    // Not drawn means not TAPPABLE: the hit list is rebuilt each frame from the
+    // draw, so leaving a stale one would let a tap on the panel — where JUMP
+    // happens to sit — still jump.
+    else if (modalOpen) this.touchButtons = [];
+    if (hud.toast && !modalOpen) this.drawToast(hud.toast);
+    if (hud.nokiaToast && !modalOpen) this.drawNokiaToast(hud.nokiaToast, hud.nokiaSignal, !!hud.touchControls);
+    else if (modalOpen) this._nokiaToastRect = null;   // nor tappable-to-dismiss behind a panel
     if (hud.detail) this.drawDetail(hud.detail);
     if (hud.drag) this.drawDragGhost(hud.drag, player);
     if (player.torpor > 0) this.drawTorporHaze(player.torpor);
