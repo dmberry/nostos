@@ -1,6 +1,8 @@
 # The AI cabinets — one arcade game per daemon
 
-**Status:** ideas, not yet built. Raised 2026-07-21 after the narrows cabinet
+**Status:** ideas, not yet built. Filed under Phase 2 of
+[ROADMAP.md](ROADMAP.md), which is the master list; this doc is only the detail
+behind that one line. Raised 2026-07-21 after the narrows cabinet
 (v1.150–v1.167) turned out to work. Nothing here is committed to; it is the
 design conversation written down so it survives the night.
 

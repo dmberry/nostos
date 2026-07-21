@@ -7,7 +7,9 @@ version table and `PAI-version-plan.md`; this file is only what's *ahead*.
 Order within a phase is rough priority. Nothing here is committed to — it's a
 map, not a schedule.
 
-*Last reconciled against the code at v1.145.*
+*Last FULL reconciliation against the code: v1.145. The strait/narrows entries
+were reconciled at v1.161–v1.167; everything else on this map is 20-odd versions
+unchecked and may already be built. A full pass is overdue.*
 
 ---
 
@@ -43,15 +45,6 @@ long time and are now in the game:
 
 ---
 
-## Ideas parked with a design doc
-
-- **The AI cabinets** — one arcade game per daemon, each mechanic saying
-  something true about that AI (Calypso's un-winnable Pong, Polyphemus's blind
-  Breakout, Circe's memory game against an opponent editing your memory, Helios's
-  cattle). Written up in [ai-cabinets-plan.md](ai-cabinets-plan.md) with the test
-  each one has to pass, the shared chassis the narrows already established, and
-  the open questions. Not committed to.
-
 ## Phase 1 — polish & small wins (low risk, mostly self-contained)
 
 - **Limping / WOUNDED tell**: the low-health slowdown exists; add the limp
@@ -79,6 +72,15 @@ long time and are now in the game:
   **Laestrygonians** (an ambush that costs you on arrival), **Aeolus and the bag
   of winds** (a boon that turns on you), the **Cicones** (an opening raid), and
   seeding a **Siren** on a crossing as well as on the islands.
+- **The AI cabinets** — the same observation as the line above, turned on the
+  daemons: the narrows proved that an arcade cabinet can *be* the argument rather
+  than decorate it, so each AI gets a game whose mechanic says something true
+  about her. Calypso's un-winnable Pong (the hack is to stop playing),
+  Polyphemus's Breakout played blind inside his gaze, Circe's memory game against
+  an opponent editing your memory, Helios's cattle. Sketches, the test each one
+  has to pass, the shared chassis and the open questions are in
+  [ai-cabinets-plan.md](ai-cabinets-plan.md). Build Calypso's first; refactor the
+  cabinet shell out of `narrows.js` before the second.
 - **The dead-internet browser**: cached pages from before the collapse, as a
   reading surface alongside the notepad and Scrapbook. The phone shipped without
   it.
