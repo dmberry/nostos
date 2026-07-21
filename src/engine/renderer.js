@@ -592,6 +592,7 @@ export class Renderer {
     // straight over whatever you are trying to read. (The lore archive draws
     // in runDrawScreen just below, so it counts as a panel too.)
     const modalOpen = !!(hud.showBackpack || hud.showSkills || hud.showWeapons
+      || hud.narrows                       // the arcade cabinet owns the screen
       || (hud.lore && hud.lore.archiveOpen));
     if (hud.showBackpack) this.drawBackpackPanel(player);
     runDrawScreen(ctx, { w: this.w, h: this.h, map, player });
@@ -664,6 +665,9 @@ export class Renderer {
     if (hud.rest) this.drawRestOverlay(hud.rest.dim);
     if (hud.deathCert) this.drawDeathCert(hud.deathCert);
     if (hud.aiVictory) this.drawAiVictory(hud.aiVictory);
+    // The narrows: an arcade cabinet over everything, because while you are in
+    // it there is nothing else to attend to.
+    if (hud.narrows) this.drawNarrows(hud.narrows);
     if (hud.paused) this.drawPausedOverlay();
   }
 

@@ -6,7 +6,8 @@ import { buildWorld } from './game/worldgen.js';
 import { spawnAnimals, updateAnimals } from './game/animals.js';
 import { Player } from './game/player.js';
 import { seawardFrom, boatMirror, CF_MIN } from './game/crossing.js';
-import { isStraitCrossing, scyllaToll, charybdisRoll, STRAIT_COST } from './game/strait.js';
+import { isStraitCrossing, scyllaToll, STRAIT_COST } from './game/strait.js';
+import { newNarrowsRun, narrowsSteer, narrowsTick } from './game/narrows.js';
 import { makeRng } from './game/rng.js';
 import { DayNight } from './game/daynight.js';
 import { Minimap } from './game/minimap.js';
@@ -906,8 +907,6 @@ function updateDepartOut(dt) {
 // Charybdis risks the voyage itself. See the module header for why.
 const STRAIT_IN = 4.6;    // seconds rowing into the throat before the choice
 const STRAIT_OUT = 2.8;   // and of the sea having its way once you have chosen
-const straitEl = document.getElementById('strait');
-const straitListEl = document.getElementById('strait-list');
 
 function beginStrait(fromId, toId) {
   strait = { t: 0, from: fromId, to: toId, phase: 'in', choice: null, outcome: null };
@@ -942,63 +941,95 @@ function circeStraitAdvice() {
   sfx.play('sms');
 }
 
-// The chart is a choice of where to go; this is a choice of what to lose. No
-// cancel, no coming about: the modal only closes on a decision.
-function openStraitChoice() {
-  straitListEl.innerHTML = '';
-  const opts = [
-    { id: 'scylla', place: 'SCYLLA', epithet: 'the six-headed, yelping horror',
-      desc: 'Hug the cliff. She will take what is stowed on deck — a certain toll, paid once, and you are through.' },
-    { id: 'charybdis', place: 'CHARYBDIS', epithet: 'that sucks the black water down',
-      desc: 'Steer wide of the rock and chance the whirlpool. She may only maul you. She may take the boat and the voyage with it.' },
-  ];
-  for (const o of opts) {
-    const btn = document.createElement('button');
-    btn.innerHTML = `<span class="place">${o.place}</span><span class="epithet">${o.epithet}</span>`
-      + `<span class="desc">${o.desc}</span>`;
-    btn.addEventListener('click', () => chooseStrait(o.id));
-    straitListEl.appendChild(btn);
-  }
-  straitEl.style.display = 'flex';
+// THE NARROWS, played. The passage used to be a two-button modal: you picked
+// your monster once and watched the result. It is an arcade run now — you steer
+// the length of it, deciding moment to moment how close to shave Scylla's rock
+// against how far you dare drift into Charybdis's pull. Same bargain, made with
+// your hands instead of a click. Rules in game/narrows.js.
+const NARROWS_TICK = 0.11;          // seconds per row — brisk, but readable
+const MAX_CATCHUP = 3;              // rows a single frame may ever advance
+
+function openNarrows() {
+  strait.run = newNarrowsRun();
+  strait.tickT = 0;
+  strait.taken = [];                // what she has had off the deck, for the report
+  sfx.play('charge');
+  player.say('The channel closes. Rock to port, and to starboard the water is turning. Steer.');
 }
 
-// Apply the loss and set the sea going. Scylla is certain and always lets you
-// through; Charybdis is rolled, and on the bad end the crossing itself is lost.
-function chooseStrait(which) {
-  if (!strait || strait.phase !== 'choice') return;
-  straitEl.style.display = 'none';
-  strait.choice = which;
-  strait.t = 0;
-  strait.phase = 'out';
-  const outcome = which === 'scylla' ? 'scylla' : charybdisRoll();
-  strait.outcome = outcome;
-  const cost = STRAIT_COST[outcome];
-  if (which === 'scylla') {
-    // The heads come down and take what is stowed. Certain, bounded, and it hurts.
-    const toll = scyllaToll(player);
-    const taken = [];
-    for (const slot of toll) {
-      const s = player.getSlot(slot);
-      if (!s) continue;
-      taken.push(ITEMS[s.item] ? ITEMS[s.item].name : s.item);
-      player.setSlot(slot, null);
-    }
-    sfx.play('termerr');
-    player.say(taken.length
-      ? `Six necks come down out of the rock, faster than looking. When the screaming stops she has taken ${listPhrase(taken)} off the deck, and the cliff is quiet again.`
-      : 'Six necks come down out of the rock and find nothing worth the taking. She lets you past with empty mouths, which is its own kind of luck.');
-  } else if (outcome === 'mauled') {
-    sfx.play('termerr');
-    player.say('The whirlpool has you by the keel and shakes the boat like a dog with a rat. Timbers go. Then, as suddenly, she lets go, and you are through — afloat, and barely.');
-  } else {
-    sfx.play('zap');
-    player.say('Charybdis opens under the hull and the sea simply stops being there. You go down with it, and come up spitting, clinging to a piece of your own boat — and the current is carrying you back the way you came.');
+// One head got you: she takes ONE thing off the deck and you sail on. Bites
+// accumulate rather than ending the run — you can be nibbled the whole length of
+// the strait and still come out the far side, which is the shape David asked for
+// and, as it happens, exactly what happens to Odysseus.
+function narrowsBite() {
+  const toll = scyllaToll(player, Math.random, 1);
+  for (const slot of toll) {
+    const it = player.getSlot(slot);
+    if (!it) continue;
+    strait.taken.push(ITEMS[it.item] ? ITEMS[it.item].name : it.item);
+    player.setSlot(slot, null);
   }
-  // The strait MAIMS but never kills. Deliberately not routed through
-  // takeDamage(): dying here would leave the run dead mid-voyage, aboard a boat,
-  // inside a frame that returns before any input is read — and Homer's Odysseus
-  // survives both monsters. It can leave you on your last legs; it cannot end you.
-  player.health = Math.max(1, player.health - cost.hurt);
+  player.health = Math.max(1, player.health - 4);
+  sfx.play('termerr');
+}
+
+// The run is over. Translate it into the outcome the rest of the strait already
+// understands, so finishStrait needs no special case.
+function endNarrows(outcome) {
+  const s = strait;
+  s.run = null;
+  s.t = 0;
+  s.phase = 'out';
+  s.outcome = outcome === 'swallowed' ? 'swallowed' : 'scylla';
+  if (outcome === 'swallowed') {
+    s.outcome = 'swallowed';
+    player.health = Math.max(1, player.health - STRAIT_COST.swallowed.hurt);
+    sfx.play('zap');
+    player.say('The water stops being there. You go down with it and come up spitting, clinging to a piece of your own boat, and the current is carrying you back the way you came.');
+    return;
+  }
+  // Through. What it cost depends entirely on how well you steered.
+  if (!s.taken.length) {
+    sfx.play('sms');
+    player.say('The rock falls away astern and the water goes quiet. Six mouths, and not one of them touched you. Nobody gets through the narrows clean. You just did.');
+  } else {
+    player.health = Math.max(1, player.health - 2);
+    sfx.play('termerr');
+    player.say(`You are through. She had ${listPhrase(s.taken)} off the deck on the way past, and the cliff is quiet again.`);
+  }
+}
+
+// Drive the run: a fixed tick so the channel scrolls at a readable rate whatever
+// the frame rate, with steering read from held keys (and the touch halves).
+function updateNarrows(dt) {
+  const s = strait, n = s.run;
+  n.t = (n.t || 0) + 1;
+  // Steering is HELD, not tapped, so you can lean on a direction and hold a line
+  // against the pull. moveIntent() already folds the keyboard and a dragged
+  // finger into one screen-space vector, so the helm works the same on a desk
+  // and on a phone without a second code path.
+  const mv = input.moveIntent();
+  const dir = mv && mv.dx < -0.35 ? -1 : mv && mv.dx > 0.35 ? 1 : 0;
+  if (dir) {
+    s.steerT = (s.steerT || 0) + dt;
+    if (s.steerT >= 0.07) { s.steerT = 0; narrowsSteer(n, dir); }
+  } else s.steerT = 0;
+
+  // Fixed-timestep catch-up, but CAPPED. Unbounded, a single long frame (a
+  // stall, a backgrounded tab, anything that lets dt pile up) would run dozens
+  // of rows in one go and Scylla would strip the whole pack between two drawn
+  // frames — with no chance to steer out of it. Better to let the channel slip
+  // than to bill you for time you never got to play.
+  s.tickT = Math.min(s.tickT + dt, NARROWS_TICK * MAX_CATCHUP);
+  let steps = 0;
+  while (s.tickT >= NARROWS_TICK && !n.over && steps < MAX_CATCHUP) {
+    s.tickT -= NARROWS_TICK;
+    steps += 1;
+    const ev = narrowsTick(n);
+    if (ev === 'bite') narrowsBite();
+    else if (ev === 'swallowed') { endNarrows('swallowed'); return; }
+    else if (ev === 'through') { endNarrows('through'); return; }
+  }
 }
 
 // The sea is done with you: land where the outcome says. 'swallowed' loses the
@@ -1020,10 +1051,11 @@ function updateStrait(dt) {
   // Rolling on through the throat while the sea decides what it is going to do.
   if (player.aboard) player.aboard.wob = Math.sin(s.t * 5) * 1.7;
   if (s.phase === 'in') {
-    if (s.t >= STRAIT_IN) { s.phase = 'choice'; s.t = 0; openStraitChoice(); }
+    if (s.t >= STRAIT_IN) { s.phase = 'choice'; s.t = 0; openNarrows(); }
     return;
   }
-  if (s.phase === 'choice') return;   // held on the water until you decide
+  // In the narrows: the arcade run has the helm until it resolves.
+  if (s.phase === 'choice') { if (s.run) updateNarrows(dt); return; }
   if (s.t >= STRAIT_OUT) finishStrait();
 }
 
@@ -1524,7 +1556,7 @@ function devRun(raw) {
       if (!worldById(to)) { devPrint('no island "' + to + '"'); return; }
       if (to === currentWorld.id) { devPrint('the strait needs somewhere to be going'); return; }
       beginStrait(currentWorld.id, to);
-      if (skip) { strait.phase = 'choice'; strait.t = 0; openStraitChoice(); }
+      if (skip) { strait.phase = 'choice'; strait.t = 0; openNarrows(); }
       devPrint(`-> the narrows, ${currentWorld.id} to ${to}${skip ? ' (choice up)' : ''}`);
       return;
     }
@@ -4737,6 +4769,8 @@ function frame(now) {
       light: amb.light != null ? amb.light : dayNight.light(),
       dawnGlow: amb.dawnGlow ? dayNight.dawnGlow() : 0,
       timeLabel: dayNight.countdownLabel,
+      // The Scylla/Charybdis arcade run, while it has the helm.
+      narrows: (strait && strait.phase === 'choice') ? strait.run : null,
       place: hudPlace(),      // the island you are on, by its chart name
       daemon: hudDaemon(),    // { name, fallen } — null where nothing rules
       minimap: (amb.minimap && showMinimap) ? minimap : null,

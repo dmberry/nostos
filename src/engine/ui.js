@@ -15,6 +15,7 @@
 
 import { ITEMS, WEAPON_ORDER } from '../game/items.js'; // weapon-chart data
 import { PAPER_TEXTURE, NOKIA_SPRITE } from './textures.js'; // death-cert paper; the 3310 in the PHONE box
+import { NARROWS_W, VIEW_ROWS, SHIP_ROW, PULL_FROM, DRAG_LIMIT, narrowsProgress } from '../game/narrows.js'; // the Scylla/Charybdis arcade run
 
 export const DASH_H = 78; // dashboard panel height
 
@@ -784,6 +785,112 @@ export const uiMethods = {
   // or whose machines you were fighting, which is exactly what you need when you
   // have just made landfall. It is drawn unboxed and grey because it is
   // reference, not instrumentation: there to be glanced at, not watched.
+  // THE NARROWS — the Scylla/Charybdis run, drawn as an 8-bit arcade cabinet
+  // laid over the world. Everything is on a hard cell grid with no smoothing and
+  // a four-colour palette, so it reads as a machine from 1983 that someone has
+  // wired into an Odyssey.
+  drawNarrows(n) {
+    const ctx = this.ctx;
+    const W = NARROWS_W, ROWS = VIEW_ROWS;
+    // Fit the cabinet to the viewport, kept on whole pixels so cells stay crisp.
+    const cell = Math.max(8, Math.floor(Math.min((this.w - 40) / W, (this.h - 190) / ROWS)));
+    const gw = W * cell, gh = ROWS * cell;
+    const ox = Math.round((this.w - gw) / 2), oy = Math.round((this.h - gh) / 2) - 10;
+
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    // Blacked-out room around the screen.
+    ctx.fillStyle = 'rgba(4,6,8,0.88)';
+    ctx.fillRect(0, 0, this.w, this.h);
+
+    // The water.
+    ctx.fillStyle = '#0d1b2a';
+    ctx.fillRect(ox, oy, gw, gh);
+    // Scanline wash, every other row — the CRT tell.
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    for (let r = 0; r < ROWS; r++) if (r % 2) ctx.fillRect(ox, oy + r * cell, gw, cell);
+
+    // Charybdis: her pull, banded darker the deeper in you are, with the water
+    // visibly turning. The nearer the limit, the angrier the band.
+    const heat = Math.min(1, n.drag / DRAG_LIMIT);
+    for (let c = PULL_FROM; c < W; c++) {
+      const depth = (c - PULL_FROM + 1) / (W - PULL_FROM);
+      ctx.fillStyle = `rgba(${Math.round(40 + 150 * heat)},18,46,${(0.20 + depth * 0.42).toFixed(3)})`;
+      ctx.fillRect(ox + c * cell, oy, cell, gh);
+    }
+    // Her spiral, a few chunky arcs wound round the far column.
+    const spinX = ox + (W - 1.2) * cell, spinY = oy + gh * 0.5;
+    ctx.strokeStyle = `rgba(210,120,190,${(0.35 + 0.5 * heat).toFixed(2)})`;
+    ctx.lineWidth = Math.max(2, cell * 0.22);
+    for (let a = 0; a < 3; a++) {
+      const rr = cell * (1.0 + a * 0.9);
+      ctx.beginPath();
+      ctx.arc(spinX, spinY, rr, n.t * 0.15 + a * 1.4, n.t * 0.15 + a * 1.4 + Math.PI * 1.3);
+      ctx.stroke();
+    }
+
+    // Scylla's cliff: the left wall, blocky rock.
+    for (let r = 0; r < ROWS; r++) {
+      ctx.fillStyle = (r % 3) ? '#3a3630' : '#454038';
+      ctx.fillRect(ox, oy + r * cell, cell, cell);
+    }
+    // Her heads, reaching out of it. Each is a stubby neck of cells and a blunt
+    // head with one pale eye — six of them somewhere in the rock, and these are
+    // the ones currently out.
+    for (let r = 0; r < ROWS; r++) {
+      const reach = n.rows[r];
+      if (!reach) continue;
+      const y = oy + r * cell;
+      ctx.fillStyle = '#7d2233';
+      ctx.fillRect(ox + cell, y + Math.floor(cell * 0.2), reach * cell, Math.ceil(cell * 0.6));
+      ctx.fillStyle = '#a33048';
+      ctx.fillRect(ox + reach * cell, y, cell, cell);          // the head
+      ctx.fillStyle = '#f0e8d0';
+      ctx.fillRect(ox + reach * cell + Math.floor(cell * 0.55), y + Math.floor(cell * 0.3),
+        Math.max(2, Math.floor(cell * 0.2)), Math.max(2, Math.floor(cell * 0.2)));   // eye
+    }
+
+    // The ship: a chunky hull, a mast, and the eye on the sail.
+    const sx = ox + n.x * cell, sy = oy + SHIP_ROW * cell;
+    const blink = n.grace > 0 && (n.t & 1);                    // flashes just after a bite
+    if (!blink) {
+      ctx.fillStyle = '#c9a227';
+      ctx.fillRect(sx, sy + Math.floor(cell * 0.45), cell, Math.ceil(cell * 0.5));   // hull
+      ctx.fillStyle = '#e8e0d0';
+      ctx.fillRect(sx + Math.floor(cell * 0.35), sy, Math.max(2, Math.floor(cell * 0.3)), Math.ceil(cell * 0.5)); // sail
+    }
+
+    // HUD strip under the cabinet: how far through, and what she has had.
+    const by = oy + gh + 12;
+    ctx.fillStyle = 'rgba(232,224,208,0.85)';
+    ctx.font = `bold ${Math.max(9, Math.round(cell * 0.7))}px ui-monospace, monospace`;
+    ctx.textAlign = 'left';
+    ctx.fillText('THE NARROWS', ox, by + 2);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = n.bites ? '#e0864a' : 'rgba(232,224,208,0.5)';
+    ctx.fillText(n.bites ? `TAKEN ${n.bites}` : 'CLEAN', ox + gw, by + 2);
+    // Progress bar, in cells rather than a smooth fill.
+    const pcells = Math.round(narrowsProgress(n) * W);
+    for (let c = 0; c < W; c++) {
+      ctx.fillStyle = c < pcells ? '#6ad0a0' : 'rgba(255,255,255,0.10)';
+      ctx.fillRect(ox + c * cell + 1, by + 10, cell - 2, 5);
+    }
+    // Charybdis meter, only once she has any of you — a warning that grows.
+    if (n.drag > 0) {
+      ctx.fillStyle = `rgba(210,120,190,${(0.4 + 0.6 * heat).toFixed(2)})`;
+      ctx.textAlign = 'center';
+      ctx.font = `bold ${Math.max(9, Math.round(cell * 0.6))}px ui-monospace, monospace`;
+      ctx.fillText(heat > 0.66 ? 'SHE HAS YOU' : 'THE PULL', ox + gw / 2, by + 2);
+    }
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(207,216,195,0.55)';
+    ctx.font = `${Math.max(9, Math.round(cell * 0.55))}px system-ui, sans-serif`;
+    ctx.fillText('A / D  or  \u2190 \u2192  ·  hug the rock, or chance the pool',
+      ox + gw / 2, by + 30);
+    ctx.textAlign = 'left';
+    ctx.restore();
+  },
+
   drawStatusCard(player, hud, rx, ry) {
     const ctx = this.ctx;
     ctx.textBaseline = 'alphabetic';
@@ -1067,7 +1174,7 @@ export const uiMethods = {
     else if (player.invisibleToRobots) { ctx.fillStyle = '#4fd8c3'; ctx.fillText(`HID ${Math.ceil((player.wifiPower || 0) / 60)}m`, cx, top + 39); }
     if (player.food <= 0) { ctx.fillStyle = '#e05548'; ctx.fillText('STARVING', cx, top + 57); }
     else if (player.food < 25) { ctx.fillStyle = '#d8a04f'; ctx.fillText('HUNGRY', cx, top + 57); }
-    // The status card: where you are, who holds it, and how you are doing —
+  // The status card: where you are, who holds it, and how you are doing —
     // boxed and tight so it reads as one panel rather than three loose lines
     // floating over the terrain.
     this.drawStatusCard(player, hud, W - 10, top + 8);
