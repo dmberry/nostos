@@ -377,11 +377,36 @@ Journey hazards that live *between* islands, not on them, and still need a home
 somewhere in the archipelago (probably on the crossings or the coasts, not as
 landfalls):
 
-- **Scylla and Charybdis — the two monsters.** The forced-choice strait: the
-  six-headed cliff-thing that takes a few of you for certain, and the whirlpool
-  that risks all of you. The natural fit is a narrows on one of the crossings
-  (sea route or the Backspace road), where the player must choose which loss to
-  take. These two want building somewhere; flagged so they are not forgotten.
+- **Scylla and Charybdis — BUILT (v1.145).** The forced-choice strait now sits on
+  the **AEAEA <-> THRINACIA** crossing, where Homer puts it (Od. XII): Circe sends
+  Odysseus through the narrows and he makes landfall on Helios's island after.
+  Sail that route either way and the crossing is held: you row into the throat of
+  rock and choose which loss to take. Rules in `src/game/strait.js` (pure,
+  unit-tested); sequence, modal and narration in `main.js`.
+
+  **The bargain, translated.** Homer's choice only works because Odysseus has a
+  crew — Scylla eats six men, Charybdis risks the ship. You sail alone here, so
+  the translation keeps the *shape* rather than the cargo: a certain, bounded loss
+  against an unbounded gamble.
+  - *Scylla* takes three stacks off the deck. No roll, no escape, and the crossing
+    always completes. She can reach pockets and pack storage only — never what is
+    in your hands, and **never the AI card** in any of its three states, since
+    losing the hermes card would leave the run quietly unwinnable (there is no
+    reprint for it). That exclusion is a tested invariant, not a convention.
+  - *Charybdis* is rolled: usually she mauls you and lets you through; ~30% of the
+    time she swallows the boat and throws you back at the island you sailed from,
+    and the voyage is lost. The strait maims but never kills — dying mid-passage
+    would leave the run dead aboard a boat in a frame that returns before input.
+  - **Circe's advice** is hers in the game as in the poem: if you have made
+    landfall on Aeaea, she texts you before the narrows telling you to hug the
+    rock and grieve for the few. Never been to her island, and you choose blind —
+    exploration is what buys the information.
+
+  Testing: the lyre console gains `strait [island] [now]` (`now` skips the row-in
+  and puts the choice up at once).
+
+  *Still open:* the narrows have no art of their own yet — the passage plays out
+  over the existing sea fog. Scylla's cliff and Charybdis's whirlpool want drawing.
 - **The Sirens** — already in the game (the teal SIREN obelisk, tape as counter).
   Keep, and consider seeding one on a crossing as well as on the islands.
 - **Other unplaced encounters** worth a home eventually: the Laestrygonians (an

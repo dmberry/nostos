@@ -6,6 +6,7 @@ import { buildWorld } from './game/worldgen.js';
 import { spawnAnimals, updateAnimals } from './game/animals.js';
 import { Player } from './game/player.js';
 import { seawardFrom, boatMirror, CF_MIN } from './game/crossing.js';
+import { isStraitCrossing, scyllaToll, charybdisRoll, STRAIT_COST } from './game/strait.js';
 import { makeRng } from './game/rng.js';
 import { DayNight } from './game/daynight.js';
 import { Minimap } from './game/minimap.js';
@@ -333,6 +334,7 @@ function buildSaveBlob() {
 let crossFail = null;      // failed crossing (Poseidon turns you back)
 let departOut = null;      // rowing out to the heading chart (or back in)
 let pendingCrossing = null; // a chosen island, performed at the next frame top
+let strait = null;         // in the narrows: Scylla and Charybdis (game/strait.js)
 
 const persist = () => {
   if (resettingGame) return;
@@ -342,7 +344,7 @@ const persist = () => {
   // players reloading onto the sea, marooned, with no boat and no way back in.
   // These states resolve within seconds; skip the save until the keel is on
   // sand again.
-  if (player.aboard || crossFail || departOut || pendingCrossing) return;
+  if (player.aboard || crossFail || departOut || pendingCrossing || strait) return;
   // Savable worlds are the islands you can be on across a reload: CALYPSO and
   // ITHACA (Stage 1c — buildSaveBlob records world.currentIsland, and the boot
   // restore resumes you there). The Backspace is a transient pocket you always
@@ -788,6 +790,140 @@ function updateDepartOut(dt) {
   if (pendingCrossing) { player.aboard = null; departOut = null; }
 }
 
+// ---- Scylla and Charybdis: the narrows (docs/islands-odyssey-revision.md §8) ----
+// The AEAEA <-> THRINACIA passage runs through a throat of rock, where Homer puts
+// them (Od. XII). The crossing is HELD here: you row into the narrows, the sea
+// makes you choose which loss to take, and only then do you land. The rules (which
+// route, what she can take, how the gamble falls) live in game/strait.js; this owns
+// the sequence, the modal, and the narration.
+//
+// The bargain, translated for a man sailing alone: Scylla takes cargo for certain,
+// Charybdis risks the voyage itself. See the module header for why.
+const STRAIT_IN = 4.6;    // seconds rowing into the throat before the choice
+const STRAIT_OUT = 2.8;   // and of the sea having its way once you have chosen
+const straitEl = document.getElementById('strait');
+const straitListEl = document.getElementById('strait-list');
+
+function beginStrait(fromId, toId) {
+  strait = { t: 0, from: fromId, to: toId, phase: 'in', choice: null, outcome: null };
+  // You are still in the greek ship you left the island in — put it back under you
+  // for the passage (the row-out cleared it when the heading was committed).
+  player.aboard = { type: 'greek_ship', mirror: true, wob: 0 };
+  sfx.play('charge');
+  player.say('The open water narrows. Cliffs stand up on either hand, and the channel between them is barely a ship wide. Somewhere ahead the sea is making a noise no sea should make.');
+  circeStraitAdvice();
+}
+
+// In Homer it is CIRCE who tells Odysseus what the strait is and which loss to
+// take: hug Scylla's cliff and lose a few, rather than gamble the ship on
+// Charybdis (Od. XII.108-110). So the advice is hers here too — but only if you
+// have actually made landfall on Aeaea and met her. Sail the narrows blind and
+// you choose blind. Exploration is what buys you the information.
+function circeStraitAdvice() {
+  if (!player._welcomed || !player._welcomed.circe) return;   // never been to Aeaea
+  if (player._straitAdvised) return;                          // she says it once
+  player._straitAdvised = true;
+  const lines = [
+    'YOU ARE IN MY STRAIT.',
+    'Two ways, sweetness, and no third. The cliff will take a little of what you carry. The pool may take all of it, and you with it.',
+    'Hug the rock. Grieve for the few. Do not be brave here: brave is how the whole ship goes down.',
+  ];
+  nokia.enqueue('CIRCE', lines);
+  for (const l of lines) logSms(player, 'CIRCE', 'them', l);
+  sfx.play('sms');
+}
+
+// The chart is a choice of where to go; this is a choice of what to lose. No
+// cancel, no coming about: the modal only closes on a decision.
+function openStraitChoice() {
+  straitListEl.innerHTML = '';
+  const opts = [
+    { id: 'scylla', place: 'SCYLLA', epithet: 'the six-headed, yelping horror',
+      desc: 'Hug the cliff. She will take what is stowed on deck — a certain toll, paid once, and you are through.' },
+    { id: 'charybdis', place: 'CHARYBDIS', epithet: 'that sucks the black water down',
+      desc: 'Steer wide of the rock and chance the whirlpool. She may only maul you. She may take the boat and the voyage with it.' },
+  ];
+  for (const o of opts) {
+    const btn = document.createElement('button');
+    btn.innerHTML = `<span class="place">${o.place}</span><span class="epithet">${o.epithet}</span>`
+      + `<span class="desc">${o.desc}</span>`;
+    btn.addEventListener('click', () => chooseStrait(o.id));
+    straitListEl.appendChild(btn);
+  }
+  straitEl.style.display = 'flex';
+}
+
+// Apply the loss and set the sea going. Scylla is certain and always lets you
+// through; Charybdis is rolled, and on the bad end the crossing itself is lost.
+function chooseStrait(which) {
+  if (!strait || strait.phase !== 'choice') return;
+  straitEl.style.display = 'none';
+  strait.choice = which;
+  strait.t = 0;
+  strait.phase = 'out';
+  const outcome = which === 'scylla' ? 'scylla' : charybdisRoll();
+  strait.outcome = outcome;
+  const cost = STRAIT_COST[outcome];
+  if (which === 'scylla') {
+    // The heads come down and take what is stowed. Certain, bounded, and it hurts.
+    const toll = scyllaToll(player);
+    const taken = [];
+    for (const slot of toll) {
+      const s = player.getSlot(slot);
+      if (!s) continue;
+      taken.push(ITEMS[s.item] ? ITEMS[s.item].name : s.item);
+      player.setSlot(slot, null);
+    }
+    sfx.play('termerr');
+    player.say(taken.length
+      ? `Six necks come down out of the rock, faster than looking. When the screaming stops she has taken ${listPhrase(taken)} off the deck, and the cliff is quiet again.`
+      : 'Six necks come down out of the rock and find nothing worth the taking. She lets you past with empty mouths, which is its own kind of luck.');
+  } else if (outcome === 'mauled') {
+    sfx.play('termerr');
+    player.say('The whirlpool has you by the keel and shakes the boat like a dog with a rat. Timbers go. Then, as suddenly, she lets go, and you are through — afloat, and barely.');
+  } else {
+    sfx.play('zap');
+    player.say('Charybdis opens under the hull and the sea simply stops being there. You go down with it, and come up spitting, clinging to a piece of your own boat — and the current is carrying you back the way you came.');
+  }
+  // The strait MAIMS but never kills. Deliberately not routed through
+  // takeDamage(): dying here would leave the run dead mid-voyage, aboard a boat,
+  // inside a frame that returns before any input is read — and Homer's Odysseus
+  // survives both monsters. It can leave you on your last legs; it cannot end you.
+  player.health = Math.max(1, player.health - cost.hurt);
+}
+
+// The sea is done with you: land where the outcome says. 'swallowed' loses the
+// crossing and throws you back at the island you left — the unbounded end of the
+// bargain, and the reason the certain toll is worth taking.
+function finishStrait() {
+  const s = strait;
+  strait = null;
+  player.aboard = null;
+  const backwards = s.outcome === 'swallowed';
+  const dest = worldById(backwards ? s.from : s.to);
+  if (dest) { goToWorld(dest, { beach: true }); sfx.play('zap'); }
+  if (backwards) player.say('The sea puts you back on the beach you sailed from. The strait is still there, and still wants paying.');
+}
+
+function updateStrait(dt) {
+  const s = strait;
+  s.t += dt;
+  // Rolling on through the throat while the sea decides what it is going to do.
+  if (player.aboard) player.aboard.wob = Math.sin(s.t * 5) * 1.7;
+  if (s.phase === 'in') {
+    if (s.t >= STRAIT_IN) { s.phase = 'choice'; s.t = 0; openStraitChoice(); }
+    return;
+  }
+  if (s.phase === 'choice') return;   // held on the water until you decide
+  if (s.t >= STRAIT_OUT) finishStrait();
+}
+
+// "a, b and c" — for reading back what Scylla took.
+function listPhrase(items) {
+  if (items.length === 1) return items[0];
+  return items.slice(0, -1).join(', ') + ' and ' + items[items.length - 1];
+}
+
 // ---- The Nokia 3310: Calypso's channel on Ogygia (docs/calypso-nokia-plan.md) ----
 // She is not your enemy — POSEIDON's machines roam the island; she is the keeper
 // who texts you warnings, tips, and pleas, and (while her hold is not cold) freezes
@@ -1164,6 +1300,7 @@ function devRun(raw) {
         'leave                   set calypsoLeave (the sea will let you go)',
         'tp <x> <y>              teleport on this island',
         'time <day|night|0-23>   set the clock (day=noon, night=22:00)',
+        'strait [island] [now]   sail into the narrows (`now` = skip to the choice)',
         'score <n> / heal / kill / where');
       return;
     case 'go': {
@@ -1231,6 +1368,23 @@ function devRun(raw) {
       if (!isFinite(tx) || !isFinite(ty)) { devPrint('tp <x> <y>'); return; }
       player.x = tx; player.y = ty; camera.snap(player.x, player.y);
       devPrint(`-> ${tx},${ty}`);
+      return;
+    }
+    case 'strait': {
+      // Force the narrows without sailing the route: the passage only happens on
+      // CIRCE <-> HELIOS, which is a long way to row to test a monster.
+      if (strait) { devPrint('already in the narrows'); return; }
+      // `now` skips the row-in and puts the choice up at once — you do not want to
+      // sit through the approach every time you are testing the two outcomes.
+      const parts = rest.map((s) => s.toLowerCase());
+      const skip = parts.includes('now');
+      const named = parts.find((p) => p !== 'now');
+      const to = named || (currentWorld.id === 'circe' ? 'helios' : 'circe');
+      if (!worldById(to)) { devPrint('no island "' + to + '"'); return; }
+      if (to === currentWorld.id) { devPrint('the strait needs somewhere to be going'); return; }
+      beginStrait(currentWorld.id, to);
+      if (skip) { strait.phase = 'choice'; strait.t = 0; openStraitChoice(); }
+      devPrint(`-> the narrows, ${currentWorld.id} to ${to}${skip ? ' (choice up)' : ''}`);
       return;
     }
     case 'time':
@@ -1397,6 +1551,21 @@ function seaFogState() {
       push: { x: sx / len, y: sy / len },
     };
   }
+  // In the narrows: the murk stands thick and turns hard while the sea decides,
+  // then eases as you are let through (or spat back). Same weather language as
+  // the refusal, because this is the sea having its way with you too.
+  if (strait) {
+    const s = strait;
+    const u = s.phase === 'in' ? Math.min(1, s.t / STRAIT_IN)
+      : s.phase === 'choice' ? 1
+      : Math.max(0, 1 - s.t / STRAIT_OUT);
+    return {
+      amount: 0.30 + 0.62 * u,
+      swirl: 0.30 + 0.70 * u,          // it is turning: something under the boat
+      t: s.t,
+      push: { x: 0, y: -1 },           // driving up the channel
+    };
+  }
   if (!crossFail) return null;
   const cf = crossFail;
   const T_SWELL = CF_OUT, T_BACK = CF_OUT + CF_SWELL;
@@ -1543,7 +1712,10 @@ input.uiHitTest = (x, y) => {
 window.__game = { player, map, camera,
   animals: currentWorld.animals, birds: currentWorld.birds, robots: currentWorld.robots,
   waterdroids: currentWorld.waterdroids, obelisks: currentWorld.obelisks, obeliskObjs: currentWorld.obeliskObjs,
-  wfactory, dayNight, lore, input, renderer, fortress, sfx, currentWorld };
+  wfactory, dayNight, lore, input, renderer, fortress, sfx, currentWorld,
+  // Transient voyage state is reassigned wholesale, so expose it as a getter —
+  // a plain field would freeze at whatever it was when this object was built.
+  get strait() { return strait; } };
 
 function resize() {
   // Size to the *visual* viewport, not innerHeight/100vh. On iOS Safari the
@@ -3463,6 +3635,14 @@ function update(dt) {
     // stuck aboard, unable to step out or to board. Clear it where the crossing
     // is actually committed, not where the voyage hopes to notice.
     departOut = null;
+    // Scylla and Charybdis: the AEAEA <-> THRINACIA passage runs through the
+    // narrows. Hold the crossing here and play the strait — the world switch
+    // happens in finishStrait, once the sea has taken its price. (The Backspace
+    // door-road is not a sea route, so it never enters the strait.)
+    if (!strait && currentWorld.id !== 'backspace' && isStraitCrossing(currentWorld.id, target)) {
+      beginStrait(currentWorld.id, target);
+      return;
+    }
     player.aboard = null;
     const dest = worldById(target);
     // A boat/road crossing arrives by keel: beach at the destination's spawn and
@@ -3545,6 +3725,9 @@ function update(dt) {
   // still — no input, no AI, no clock — while the voyage plays out and the sea
   // sends you home. (updateCrossFail drives the camera itself.)
   if (crossFail) { updateCrossFail(dt); return; }
+  // In the narrows between Scylla and Charybdis. The world holds still the same
+  // way: you are on the water, and the only move left is the choice.
+  if (strait) { updateStrait(dt); return; }
   // Rowing out to the chart (or back in after thinking better of it). Like the
   // failed crossing, the world holds still while the sea has you.
   if (departOut) { updateDepartOut(dt); return; }

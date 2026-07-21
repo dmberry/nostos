@@ -83,14 +83,14 @@
   /* The heading chart. Opened from OPEN WATER after you have rowed out, so it
      wants to read as a chart unrolled on the thwart in the fog — old paper, sea
      ink, a Greek-key border — not as a level-select menu. */
-  #heading {
+  .seamodal {
     display: none; position: fixed; inset: 0;
     background: rgba(4,8,12,0.86); z-index: 24;
     /* main.js shows this with display:flex — without these the panel stretches
        to the full viewport height instead of hugging its content. */
     align-items: flex-start; justify-content: center; overflow-y: auto;
   }
-  #heading .panel {
+  .seamodal .panel {
     position: relative; width: min(470px, 92vw); margin: 11vh 0 6vh; padding: 26px 30px 22px;
     color: #2e2617; font: 14px/1.55 Georgia, 'Times New Roman', serif;
     /* aged chart paper, foxed at the edges */
@@ -103,7 +103,7 @@
   }
   /* The meander (Greek key) rule, top and bottom — the same border motif the
      death certificate and the marble columns use. */
-  #heading .panel::before, #heading .panel::after {
+  .seamodal .panel::before, .seamodal .panel::after {
     content: ''; position: absolute; left: 26px; right: 26px; height: 10px;
     /* A true Greek-key fret, tiled from an inline SVG — the same meander motif
        the marble columns and the death certificate use. */
@@ -111,28 +111,28 @@
     background-repeat: repeat-x;
     opacity: 0.75;
   }
-  #heading .panel::before { top: 11px; }
-  #heading .panel::after { bottom: 9px; transform: scaleY(-1); }
-  #heading h2 {
+  .seamodal .panel::before { top: 11px; }
+  .seamodal .panel::after { bottom: 9px; transform: scaleY(-1); }
+  .seamodal h2 {
     font: 600 13px/1 Georgia, serif; text-transform: uppercase; letter-spacing: 0.28em;
     color: #6b5526; margin: 10px 0 6px; text-align: center; }
-  #heading .sub { color: #5f5334; font-size: 13px; font-style: italic; margin: 0 0 18px;
+  .seamodal .sub { color: #5f5334; font-size: 13px; font-style: italic; margin: 0 0 18px;
     text-align: center; }
-  #heading-list { display: flex; flex-direction: column; gap: 7px; }
-  #heading-list button {
+  .seamodal-list { display: flex; flex-direction: column; gap: 7px; }
+  .seamodal-list button {
     display: block; width: 100%; text-align: left; cursor: pointer;
     padding: 9px 14px; border-radius: 2px; color: #241d10;
     background: rgba(255,252,238,0.42);
     border: 1px solid rgba(122,104,58,0.45);
     font: 14px/1.4 Georgia, 'Times New Roman', serif; transition: background 90ms, border-color 90ms; }
-  #heading-list button:hover { background: rgba(255,252,238,0.85); border-color: #7d6a3c; }
-  #heading-list button .place { font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; font-size: 13px; }
+  .seamodal-list button:hover { background: rgba(255,252,238,0.85); border-color: #7d6a3c; }
+  .seamodal-list button .place { font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; font-size: 13px; }
   /* The Homeric epithet, set as a line of verse beside the name. */
-  #heading-list button .epithet { color: #6b5526; font-style: italic; font-size: 12.5px; margin-left: 8px; }
-  #heading-list button .desc { display: block; color: #4a3f27; font-size: 12.5px; margin-top: 3px; }
-  #heading .cancel { margin: 16px 0 6px; color: #6b5526; font-size: 12.5px; font-style: italic;
+  .seamodal-list button .epithet { color: #6b5526; font-style: italic; font-size: 12.5px; margin-left: 8px; }
+  .seamodal-list button .desc { display: block; color: #4a3f27; font-size: 12.5px; margin-top: 3px; }
+  .seamodal .cancel { margin: 16px 0 6px; color: #6b5526; font-size: 12.5px; font-style: italic;
     cursor: pointer; text-align: center; }
-  #heading .cancel:hover { color: #241d10; text-decoration: underline; }
+  .seamodal .cancel:hover { color: #241d10; text-decoration: underline; }
   #help {
     display: none; position: fixed; inset: 0;
     background: rgba(5,7,4,0.75); z-index: 10;
@@ -471,12 +471,22 @@
     <div class="foot">Game designed in the UK &middot; v<span id="aboutVer"></span> &middot; github.com/dmberry/nostos</div>
   </div>
 </div>
-<div id="heading">
+<div id="heading" class="seamodal">
   <div class="panel">
     <h2>Set a heading</h2>
     <p class="sub">The fog stands close on every side. Which way do you put the bow?</p>
-    <div id="heading-list"></div>
+    <div id="heading-list" class="seamodal-list"></div>
     <div class="cancel" id="heading-cancel">Come about, and row back to the beach</div>
+  </div>
+</div>
+<!-- Scylla and Charybdis. Deliberately has NO cancel: the narrows are the one
+     place the sea does not let you come about. You are already in it; the only
+     question left is which loss you take. -->
+<div id="strait" class="seamodal">
+  <div class="panel">
+    <h2>The narrows</h2>
+    <p class="sub">The channel closes to a throat of rock. There is no way through that is not past one of them.</p>
+    <div id="strait-list" class="seamodal-list"></div>
   </div>
 </div>
 <div id="help">
