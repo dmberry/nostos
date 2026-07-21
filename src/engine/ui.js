@@ -991,23 +991,74 @@ export const uiMethods = {
     const sy = oy + SHIP_ROW * cell + cell * 0.5;
     const blink = n.grace > 0 && (n.t & 1);
     if (!blink) {
-      ctx.fillStyle = 'rgba(0,0,0,0.35)';
-      ctx.beginPath(); ctx.ellipse(sx, sy + cell * 0.34, cell * 0.46, cell * 0.18, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#8a5a24';                                  // hull, shaded
+      // A long, low hull rather than a dinghy: prow and ram forward, the stern
+      // post curling back over the steering oar. It runs about 1.6 cells bow to
+      // stern, but COLLISION IS STILL THE COLUMN AND THE ROW — the sprite is
+      // longer than its hitbox on purpose, so the ship reads as a ship without
+      // making the channel meaner than the rules say it is.
+      const L = cell * 0.95;                 // half-length, bow to midships
+      ctx.fillStyle = 'rgba(0,0,0,0.32)';
+      ctx.beginPath(); ctx.ellipse(sx, sy + cell * 0.42, cell * 0.34, cell * 0.62, 0, 0, Math.PI * 2); ctx.fill();
+
+      // hull
+      ctx.fillStyle = '#7b4d1f';
       ctx.beginPath();
-      ctx.moveTo(sx - cell * 0.42, sy + cell * 0.08);
-      ctx.quadraticCurveTo(sx, sy + cell * 0.42, sx + cell * 0.42, sy + cell * 0.08);
-      ctx.lineTo(sx + cell * 0.34, sy - cell * 0.05);
-      ctx.lineTo(sx - cell * 0.34, sy - cell * 0.05);
+      ctx.moveTo(sx, sy - L);                                        // the ram
+      ctx.quadraticCurveTo(sx + cell * 0.30, sy - L * 0.25, sx + cell * 0.26, sy + L * 0.35);
+      ctx.quadraticCurveTo(sx + cell * 0.20, sy + L * 0.72, sx, sy + L * 0.78);
+      ctx.quadraticCurveTo(sx - cell * 0.20, sy + L * 0.72, sx - cell * 0.26, sy + L * 0.35);
+      ctx.quadraticCurveTo(sx - cell * 0.30, sy - L * 0.25, sx, sy - L);
       ctx.closePath(); ctx.fill();
-      ctx.fillStyle = '#c9932f';                                  // lit gunwale
-      ctx.fillRect(sx - cell * 0.38, sy - cell * 0.08, cell * 0.76, cell * 0.1);
-      ctx.fillStyle = '#f2ead6';                                  // sail
+      ctx.fillStyle = '#c9932f';                                     // lit sheer strake
       ctx.beginPath();
-      ctx.moveTo(sx, sy - cell * 0.62); ctx.lineTo(sx + cell * 0.26, sy - cell * 0.1);
-      ctx.lineTo(sx - cell * 0.26, sy - cell * 0.1); ctx.closePath(); ctx.fill();
-      ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = Math.max(1, cell * 0.06);
+      ctx.moveTo(sx, sy - L * 0.92);
+      ctx.quadraticCurveTo(sx + cell * 0.22, sy - L * 0.2, sx + cell * 0.18, sy + L * 0.3);
+      ctx.lineTo(sx + cell * 0.07, sy + L * 0.3);
+      ctx.quadraticCurveTo(sx + cell * 0.11, sy - L * 0.2, sx, sy - L * 0.7);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = Math.max(1, cell * 0.055);
+      ctx.beginPath();
+      ctx.moveTo(sx, sy - L);
+      ctx.quadraticCurveTo(sx + cell * 0.30, sy - L * 0.25, sx + cell * 0.26, sy + L * 0.35);
+      ctx.quadraticCurveTo(sx + cell * 0.20, sy + L * 0.72, sx, sy + L * 0.78);
+      ctx.quadraticCurveTo(sx - cell * 0.20, sy + L * 0.72, sx - cell * 0.26, sy + L * 0.35);
+      ctx.quadraticCurveTo(sx - cell * 0.30, sy - L * 0.25, sx, sy - L);
       ctx.stroke();
+
+      // the aphlaston: the stern post curling back over the helmsman
+      ctx.strokeStyle = '#8a5a24'; ctx.lineWidth = Math.max(1.4, cell * 0.1);
+      ctx.beginPath();
+      ctx.moveTo(sx, sy + L * 0.74);
+      ctx.quadraticCurveTo(sx + cell * 0.22, sy + L * 1.0, sx + cell * 0.02, sy + L * 1.12);
+      ctx.stroke();
+
+      // oars, a short bank each side, feathering with the swell
+      ctx.strokeStyle = 'rgba(180,140,80,0.85)'; ctx.lineWidth = Math.max(1, cell * 0.055);
+      for (let o = 0; o < 3; o++) {
+        const oy2 = sy - L * 0.1 + o * cell * 0.28;
+        const kick = Math.sin(n.t * 0.25 + o) * cell * 0.06;
+        ctx.beginPath();
+        ctx.moveTo(sx - cell * 0.24, oy2); ctx.lineTo(sx - cell * 0.52, oy2 + cell * 0.16 + kick);
+        ctx.moveTo(sx + cell * 0.24, oy2); ctx.lineTo(sx + cell * 0.52, oy2 + cell * 0.16 - kick);
+        ctx.stroke();
+      }
+
+      // mast and square sail, with her eye on it
+      ctx.strokeStyle = '#6d4718'; ctx.lineWidth = Math.max(1.2, cell * 0.07);
+      ctx.beginPath(); ctx.moveTo(sx, sy + L * 0.3); ctx.lineTo(sx, sy - L * 0.55); ctx.stroke();
+      ctx.fillStyle = '#f2ead6';
+      ctx.beginPath();
+      ctx.moveTo(sx - cell * 0.30, sy - L * 0.5);
+      ctx.lineTo(sx + cell * 0.30, sy - L * 0.5);
+      ctx.lineTo(sx + cell * 0.24, sy + L * 0.05);
+      ctx.lineTo(sx - cell * 0.24, sy + L * 0.05);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = Math.max(1, cell * 0.05);
+      ctx.stroke();
+      ctx.fillStyle = '#2f4d8a';                                     // the eye
+      ctx.beginPath(); ctx.ellipse(sx, sy - L * 0.22, cell * 0.10, cell * 0.07, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#f2ead6';
+      ctx.beginPath(); ctx.arc(sx, sy - L * 0.22, cell * 0.035, 0, Math.PI * 2); ctx.fill();
     }
 
     // --- frame + HUD ---------------------------------------------------------
@@ -1040,10 +1091,21 @@ export const uiMethods = {
       ctx.fillStyle = lit ? (hull <= 2 ? '#e05548' : '#c9932f') : 'rgba(255,255,255,0.10)';
       ctx.fillRect(ox + i * (pip + 3), by + 20, pip, pip);
     }
+    // HULL and the controls share the strip, divided by a rule — without it the
+    // label ran straight into the first key and read as one word.
     ctx.textAlign = 'left';
+    const labY = by + 20 + pip - 1;
+    let lx = ox + HULL_MAX * (pip + 3) + 6;
     ctx.fillStyle = 'rgba(207,216,195,0.45)';
     ctx.font = `${Math.max(8, Math.round(cell * 0.42))}px ui-monospace, monospace`;
-    ctx.fillText('HULL', ox + HULL_MAX * (pip + 3) + 6, by + 20 + pip - 1);
+    ctx.fillText('HULL', lx, labY);
+    lx += ctx.measureText('HULL').width + Math.max(7, cell * 0.5);
+    ctx.fillStyle = 'rgba(207,216,195,0.22)';
+    ctx.fillRect(Math.round(lx), labY - pip + 1, 1, pip + 1);      // the divider
+    lx += Math.max(7, cell * 0.5);
+    ctx.fillStyle = 'rgba(207,216,195,0.5)';
+    ctx.font = `${Math.max(9, Math.round(cell * 0.46))}px system-ui, sans-serif`;
+    ctx.fillText('A / D  or  ← →  ·  or drag', lx, labY);
     ctx.textAlign = 'right';
     const pw2 = Math.round(narrowsProgress(n) * gw);
     ctx.fillStyle = 'rgba(255,255,255,0.10)';
@@ -1052,10 +1114,6 @@ export const uiMethods = {
     grad.addColorStop(0, '#6ad0a0'); grad.addColorStop(1, '#e8d27a');
     ctx.fillStyle = grad;
     ctx.fillRect(ox, by + 8, pw2, 6);
-    ctx.textAlign = 'center';
-    ctx.fillStyle = 'rgba(207,216,195,0.5)';
-    ctx.font = `${Math.max(9, Math.round(cell * 0.5))}px system-ui, sans-serif`;
-    ctx.fillText('A / D  or  ← →  ·  or drag', ox + gw / 2, by + 46);
     ctx.textAlign = 'left';
     ctx.restore();
   },
