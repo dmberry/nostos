@@ -7,9 +7,10 @@ version table and `PAI-version-plan.md`; this file is only what's *ahead*.
 Order within a phase is rough priority. Nothing here is committed to — it's a
 map, not a schedule.
 
-*Last FULL reconciliation against the code: v1.145. The strait/narrows entries
-were reconciled at v1.161–v1.167; everything else on this map is 20-odd versions
-unchecked and may already be built. A full pass is overdue.*
+*Last full reconciliation against the code: **v1.167**. Every item below was
+checked against `src/` rather than assumed — nothing on this list had quietly
+shipped, but two entries were wrong about the state of the code and are corrected
+in place, and the pass turned up one live defect (the daemon aria, Phase 1).*
 
 ---
 
@@ -61,7 +62,17 @@ long time and are now in the game:
   "collect wood/loot and bring it back", a guard/hold mode, and show your
   reprogrammed robots on the minimap.
 - **Gate `retire` to Calypso's own terminal** (minor, noted in the escape-chain
-  doc): the OB verb still fires the refunction from anywhere.
+  doc): the OB verb still fires the refunction from anywhere. *Confirmed still
+  open at v1.167 — `ronmlCtx.retire` calls `refunctionCalypso()` unguarded.*
+- **The daemon's death-aria names the wrong AI.** Found in the v1.167 pass, and
+  it is a defect rather than a gap: `DAEMON_VOICE` in `game/fortress.js` is
+  hardcoded to ZEUS ("You lift iron against ZEUS?") and its own comment admits
+  "ZEUS speaks for all four for now". The R1 rename gave every fortress a correct
+  per-instance `AI_NAME`, but the aria never took it — so breaking CALYPSO's core
+  has her introduce herself as a god who is not in the game. Cheap fix: template
+  the name through the existing `fortress.AI_NAME`. The *writing* of four
+  distinct voices is the Phase 2 item below; this is just stopping the shipped
+  one from lying.
 
 ## Phase 2 — world & story depth (the atmospheric layer)
 
@@ -90,14 +101,19 @@ long time and are now in the game:
   exists, and the doors are now a crossing road, so this compounds.
 - **More animals from the original design**: stags with shockwave antlers,
   wolves that track scent, bears, the panther.
-- **Per-island character pass (R5)**: per-island daemon voice and colour beyond
-  what the palette/OB-colour work already does.
+- **Per-island character pass (R5)**: four distinct daemon voices — the aria
+  currently shared by all four is one voice wearing four names (see the Phase 1
+  defect). Circe should not threaten you the way Polyphemus does; Calypso should
+  not threaten you at all. Colour and palette are already done.
 
 ## Phase 3 — big machine systems (combat & AI escalation)
 
 - **The portal gun** (a separate item from the Ubik tear): the clean sci-fi
-  paired-portal teleporter, a deliberate homage. The Ubik tear was restyled to
-  clear this aesthetic; the item itself is unbuilt.
+  paired-portal teleporter, a deliberate homage. *Corrected at v1.167: paired
+  portals already EXIST as a mechanic — `UBIK_PORTAL_LIFE` and
+  `UBIK_TELEPORT_RANGE` in `main.js`, linked Ubik patches you step into and come
+  out of. So what is missing is the item and its aesthetic, not the teleporting.
+  Worth deciding whether that is still worth a second system.*
 - **Awareness meter + escalation event** (Henrik): chain raven-sightings and
   obelisk-proximity into a rising "AI awareness"; crossing a threshold flips
   the game into a short, brutal, retry-friendly escalation (fast converging
