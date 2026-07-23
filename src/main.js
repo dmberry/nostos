@@ -68,15 +68,24 @@ function loadOrCreateSeed() {
 }
 const WORLD_SEED = loadOrCreateSeed();
 
+// Boot progress → the loader terminal (see game/boot-loader.js). Each call is a
+// genuine phase reached, not a fake tick; wrapped so a missing listener (or a
+// context where CustomEvent is odd) can never itself break the boot.
+function bootStep(step) {
+  try { window.dispatchEvent(new CustomEvent('nostos:progress', { detail: { step } })); } catch (_) { /* no-op */ }
+}
+
 const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
 const input = new Input(window, canvas);
+bootStep('engine');
 // The island is built by createIsland (src/islands/calypso.js): buildWorld + all
 // overworld construction, returned as a World. main.js keeps the player, save/load,
 // lore, and the player/lore-coupled controllers (worldStir, onCoreDefeated), and
 // aliases the World's arrays + controllers by name so the runtime sites below are
 // unchanged. (islands Stage 0c, docs/islands-plan.md §3.)
 const calypso = registerWorld(createIsland(WORLD_SEED));
+bootStep('world');
 let map = calypso.map;
 const overworldMap = map; // stable handle: `map` gets reassigned to the underworld pocket and back
 // currentWorld is the world the player is on now; calypso is the stable overworld
@@ -289,6 +298,7 @@ try {
     }
   }
 } catch { /* corrupt save: start fresh */ }
+bootStep('save');
 // A fresh start (no saved position — first ever run, or the reload after New
 // Game / a death) begins washed ashore: flat on the sand where the spawn's
 // beach relocation in calypso.js put you, until the first input gets you up.
@@ -2132,6 +2142,7 @@ let fps = 0, frameCount = 0, fpsClock = 0;
 const RENDER_FPS_CAP = 60;
 const MIN_RENDER_MS = 1000 / RENDER_FPS_CAP;
 let lastRenderTime = 0;
+let _firstFramePainted = false;  // dismiss the boot loader on the first real draw
 
 // Help modal: H toggles, the ? button opens, clicking the backdrop closes.
 const helpEl = document.getElementById('help');
@@ -5027,6 +5038,14 @@ function frame(now) {
     // Robot-vision: resample the just-drawn scene as ASCII + a Terminator HUD.
     if (driveState) drawDriveOverlay(now);
     frameCount += 1;
+    // The world is on screen. Tell the boot loader to stand down — after the
+    // FIRST successful draw, not on module eval, so "ready" means genuinely
+    // painted, not merely parsed.
+    if (!_firstFramePainted) {
+      _firstFramePainted = true;
+      try { window.dispatchEvent(new CustomEvent('nostos:progress', { detail: { step: 'ready' } })); } catch (_) { /* no-op */ }
+      try { window.dispatchEvent(new Event('nostos:ready')); } catch (_) { /* no-op */ }
+    }
   }
 
   fpsClock += elapsed;

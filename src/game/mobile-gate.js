@@ -11,6 +11,7 @@ import { VERSION } from '../version.js';
 import { Renderer } from '../engine/renderer.js';
 import { drawRobot } from './robots.js';
 import { worldToScreen } from '../engine/iso.js';
+import { showBootLoader } from './boot-loader.js';
 
 export function isMobile() {
   const ua = /Mobi|Android|iPhone|iPod|iPad|Silk|Kindle|BlackBerry|Opera Mini|IEMobile/i.test(navigator.userAgent || '');
@@ -388,7 +389,33 @@ export function initMobileGate(mode = 'gate') {
       } catch (e) { /* storage blocked */ }
     }
     el.remove();
-    import('../main.js');
+
+    // The boot loader takes the screen the instant the title goes, so there is
+    // never a black gap — and, more importantly, it is what catches a boot that
+    // fails. `import('../main.js')` returns a promise nobody was awaiting, so a
+    // throw during module evaluation (a Safari parse quirk, a bad asset) vanished
+    // and left a black screen. Now it is caught and printed.
+    const loader = showBootLoader(VERSION);
+    loader.step('modules');
+
+    const onProgress = (e) => { try { loader.step(e.detail && e.detail.step); } catch (_) { /* loader gone */ } };
+    const cleanup = () => {
+      window.removeEventListener('nostos:progress', onProgress);
+      window.removeEventListener('error', onError);
+      window.removeEventListener('unhandledrejection', onRejection);
+    };
+    const onReady = () => { cleanup(); loader.succeed(); };
+    // A throw inside the first frame() (not the import) surfaces here rather than
+    // as a black canvas. One-shot: once we have shown a failure, stop listening.
+    const onError = (ev) => { cleanup(); loader.fail(ev.error || ev.message || 'script error'); };
+    const onRejection = (ev) => { cleanup(); loader.fail(ev.reason || 'unhandled rejection'); };
+
+    window.addEventListener('nostos:ready', onReady, { once: true });
+    window.addEventListener('nostos:progress', onProgress);
+    window.addEventListener('error', onError);
+    window.addEventListener('unhandledrejection', onRejection);
+
+    import('../main.js').catch((err) => { cleanup(); loader.fail(err); });
   };
   if (isTitle) {
     // Start = new game (wipe save); Continue = resume the existing save.
