@@ -25,3 +25,17 @@ export const pic = (name, cap, side) =>
   `<figure${side === 'r' ? ' class="r"' : ''}>` +
   `<img src="assets/media/web/${name}.jpg" alt="${cap}">` +
   `<figcaption>${cap}</figcaption></figure>`;
+
+// A film on a cached page, drawn as the QuickTime plugin it would have been
+// served through: a grey bezel, the title in the strip above, and a controller
+// under the picture. In 2002 a video on a web page WAS a window inside the
+// window and looked like somebody else's application, so it should here.
+//
+// Nothing autoplays and nothing loops. You press it or it does not run, which
+// is the other half of what that plugin was like, and keeps a page that has
+// two films on it from being two films at once.
+export const vid = (name, title, cap) =>
+  `<figure class="ns-vid">` +
+  `<div class="qt-bar">${title}</div>` +
+  `<video src="assets/media/web/${name}.mp4" controls preload="none" playsinline></video>` +
+  `<figcaption>${cap}</figcaption></figure>`;

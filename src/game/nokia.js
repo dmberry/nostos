@@ -291,9 +291,81 @@ export function bearingText(from, to) {
   return `${compass(dx, dy)}, about ${d} paces`;
 }
 
+// ---- ASKING HER FOR HELP (#201, #202) ---------------------------------------
+//
+// David, 2026-08-17: "when you send SMS for help from calypso she will immobile
+// some robots near you to help... but not always... other times she will hint
+// about what you should do e.g. 'Search the web on netscape on your laptop...
+// you will find the answers there, my love'".
+//
+// Before this, HELP was the one word a frightened player would actually type
+// and the only one that did nothing: it fell through to a talk line about
+// standing still in the dark. Now it is her whole character in one exchange —
+// she stops the machines around you, and it costs you; or she tells you where
+// to look, and that costs you less; and every so often she does neither and
+// simply answers, because a keeper who comes every time you call is a service,
+// and she is not a service.
+//
+// THE HINTS POINT AT WHAT THE PLAYER ALREADY HAS. Every line below names
+// something in the pack or on the island — the machine you carry, the wire, a
+// tower's own console. None of them names a puzzle or a solution. She is a way
+// of remembering the verbs, not a walkthrough.
+
+/**
+ * What she says when she is telling you where to look instead of intervening.
+ *
+ * `[when, line]`: the first element is a test against whatever `helpState` the
+ * host could supply, so a hint about the laptop is never given to a player who
+ * has not got one. Anything with no test is always available.
+ */
+const CAL_HINTS = [
+  [(s) => s.hasLaptop, 'Search the web on Netscape, on that machine of yours. The old pages are all still there, love, and you will find your answers in them. Nobody has taken anything down. There is nobody left to.'],
+  [(s) => s.hasLaptop, 'You can reach his towers from where you are sitting. Telnet into one from the machine and read what it holds. You do not have to stand under a thing to know what it thinks of you.'],
+  [(s) => s.hasLaptop, 'Everything on that machine has a manual on it. Type man, and the name of the thing. He wrote them for people who are gone.'],
+  [() => true, 'Stand at one of his towers and log into it. It will tell you its own name and its own rules, and one of them is the way in. They were built to be read. That is the arrogance of them.'],
+  [(s) => s.live > 0, 'You want the wire down. Every tower is a knot in it, and while one of them is standing they can all see you through it. Take the nearest.'],
+  [() => true, 'There are others on the wire, if you would rather ask them. They will give you a bearing and nothing else, and then they will call you the cavalry. I would not lean on a voice that does not want you to stay.'],
+  [(s) => s.night, 'It is dark. Lay a fire and sit by it until it is not. He hunts better than you see, and there is no prize for walking through the middle of a night.'],
+  [(s) => s.hurt, 'You are hurt, and you are asking me for tactics. Eat. Sleep somewhere with a roof. The island will still be here when you are whole, and so will I.'],
+];
+
+/** The hint that fits, varied so a player who keeps asking is not read a loop. */
+function calypsoHint(state, n) {
+  const s = state || {};
+  const ok = CAL_HINTS.filter(([when]) => { try { return !!when(s); } catch { return false; } });
+  if (!ok.length) return null;
+  return ok[Math.abs(n) % ok.length][1];
+}
+
 // Her favours. Each: [pattern, cost to your freedom, what it does].
-// `act` returns the line she sends back, or null to fall through to talk.
+// `act(ctx, n)` returns the line she sends back, `{text, cost}` to override the
+// entry's price, or null to fall through to talk.
 const CAL_ACTS = [
+  // HELP goes first, or the words a player wraps around it — "I am lost", "I
+  // cannot see" — take the ask somewhere smaller than they meant it.
+  [/\b(help|sos|save me|rescue|hint|stuck|what do i do|what should i do)\b/i, 0.06, (ctx, n) => {
+    // NOT ALWAYS. One ask in four she gives you nothing but the answer of
+    // somebody who is glad you wrote: the talk line below still runs.
+    if (n % 4 === 3) return null;
+    // When there is something on you, stopping it IS the help, and it is the
+    // expensive kind. She only reaches for it on the even asks — the rope has
+    // to be offered, not hung there permanently.
+    if (n % 2 === 0 && ctx.sleepNearby) {
+      const k = ctx.sleepNearby(20);
+      if (k) {
+        return {
+          text: `${k} of his machines have stopped where they stand, love. I did not ask him. Go, quickly, and do not thank me for it — they always wake.`,
+          cost: 0.06,
+        };
+      }
+    }
+    const hint = calypsoHint(ctx.helpState ? ctx.helpState() : {}, n);
+    if (!hint) return null;
+    // Telling you where to look costs less than doing it for you, and costs
+    // something all the same: you asked, and she answered, and that is the
+    // whole mechanism of her.
+    return { text: hint, cost: 0.02 };
+  }],
   [/\b(sleep|quiet|hush|stop them|shut them)\b/i, 0.05, (ctx) => {
     const n = ctx.sleepNearby ? ctx.sleepNearby(20) : 0;
     return n
@@ -336,10 +408,15 @@ export function calypsoSms(text, band, n = 0, ctx = null) {
       if (band === 'cold' && cost > 0) {
         return 'No. You have a boat on my sand and you want my help with the walk to it.';
       }
-      const line = act(ctx);
+      const line = act(ctx, n);
       if (line == null) continue;                 // not available here: fall through to talk
-      if (cost && ctx.holdRise) ctx.holdRise(cost);
-      return line;
+      // An act may price its own outcome: asking her for help can end in her
+      // stopping a machine or in her telling you where to look, and those are
+      // not worth the same amount of you.
+      const said = typeof line === 'string' ? line : line.text;
+      const paid = typeof line === 'string' ? cost : (line.cost != null ? line.cost : cost);
+      if (paid && ctx.holdRise) ctx.holdRise(paid);
+      return said;
     }
   }
   for (const [re, tiers] of CAL_SMS) if (re.test(text)) return tiers[band] || tiers.wary;
@@ -405,6 +482,21 @@ const RON_CMDS = [
     return b
       ? `no cavalry. break their line of sight: ${b}. count ten and they lose you. — RON`
       : 'no cavalry and no cover out there. put ground between you and the towers. — RON';
+  }],
+  // HELP, last, so that "help me build a raft" still reaches the recipe and only
+  // a bare ask lands here (#201).
+  //
+  // The mesh sends nobody, and it says so — but "no cavalry" on its own is what
+  // made this word feel broken: a player who types the one word they mean gets
+  // told off and learns nothing. So the refusal now carries the index. RON is a
+  // radio net with a field manual and a map, and this is the page that says what
+  // is in them.
+  [/\b(help|sos|commands|what can you do)\b/i, (ctx) => {
+    const s = ctx.status && ctx.status();
+    const sit = s ? ` ${s.live}/${s.total} towers up, ${s.hours}h on the clock.` : '';
+    return 'no cavalry — nobody is coming, that\'s the deal. but this channel answers: '
+      + 'STATUS, SUPPLY, RELAY, COVER, WHAT IS <thing>, BUILD <thing>. '
+      + `ask and walk.${sit} — RON`;
   }],
 ];
 

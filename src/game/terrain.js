@@ -41,8 +41,27 @@
 // lets the overwhelming majority of tiles stay in the two typed arrays they
 // have always lived in and cost nothing at all.
 
-/** The underside of an ordinary tile: ground is one block of soil, lid at 0. */
-export const GROUND_BASE = -1;
+/**
+ * HOW DEEP THE GROUND GOES (David, 2026-08-17: "we need to fix the depth cubes
+ * - to stop this problem. so dirt four cubes deep", and 2026-08-16: "if you
+ * gave 4 blocks beneath with dirt - then it would always be covered").
+ *
+ * A tile used to be ONE block thick, and that is the root of a whole family of
+ * artefacts: any time the camera can see the side of something — a step, an
+ * arch, the tile behind a raised block — the face has to reach down past the
+ * bottom of a column that has nothing under it, and what is painted there is
+ * whatever the renderer guesses. It has been patched twice (the black abyss in
+ * v1.564, the clear colour in v1.565) and the patches are nets, not floors.
+ *
+ * Four blocks of soil under every tile removes the question instead of
+ * answering it: there is always material below, so a face always has something
+ * to be. It also draws better — a hillside is now a lip of grass or sand over a
+ * band of earth, which is what a cut bank looks like.
+ */
+export const GROUND_DEPTH = 4;
+
+/** The underside of an ordinary tile. Its lid is the surface you walk on. */
+export const GROUND_BASE = -GROUND_DEPTH;
 
 /** A column's top surface: the level you stand on. */
 export function columnTop(col) {
@@ -66,9 +85,18 @@ export function columnSurface(col) {
   return null;
 }
 
-/** An ordinary tile: one material, one top level, nothing under or above it. */
+/**
+ * An ordinary tile: a plinth of earth with one block of its own material on
+ * top, and nothing above it.
+ *
+ * The surface is ONE block deep and the rest is soil, so painting a tile still
+ * changes only what you can see. A tile whose surface IS dirt is one run of
+ * four, because a seam between dirt and dirt is a line that is not there.
+ */
 export function simpleColumn(mat, top = 0) {
-  return { base: top - 1, runs: [{ mat, n: 1 }] };
+  const base = top - GROUND_DEPTH;
+  if (mat === 'dirt') return { base, runs: [{ mat: 'dirt', n: GROUND_DEPTH }] };
+  return { base, runs: [{ mat: 'dirt', n: GROUND_DEPTH - 1 }, { mat, n: 1 }] };
 }
 
 /**
@@ -80,7 +108,14 @@ export function simpleColumn(mat, top = 0) {
  * rather than a second copy of the island.
  */
 export function isSimple(col) {
-  return !!col && col.runs.length === 1 && !!col.runs[0].mat;
+  if (!col || !col.runs.length) return false;
+  if (col.base !== columnTop(col) - GROUND_DEPTH) return false;
+  // One run of four: a tile of plain earth.
+  if (col.runs.length === 1) return col.runs[0].mat === 'dirt' && col.runs[0].n === GROUND_DEPTH;
+  // Or the plinth and its lid, which is every other ordinary tile.
+  if (col.runs.length !== 2) return false;
+  const [under, top] = col.runs;
+  return under.mat === 'dirt' && under.n === GROUND_DEPTH - 1 && !!top.mat && top.n === 1;
 }
 
 /** A deep copy, so callers can hand a column about without aliasing the store. */
@@ -101,6 +136,17 @@ export function setColumnTop(col, top) {
   const mat = columnSurface(col) || 'grass';
   let cur = columnTop(col);
   if (cur === top) return col;
+  // AN ORDINARY TILE MOVES WHOLE. The ground is a four-deep plinth with its own
+  // material on the lid, and a hill is that same plinth higher up — not a
+  // stretched surface run over a base left behind at sea level. Rebuilding it
+  // is what keeps a raised tile expressible as a floor and a height, which is
+  // the whole reason the two typed arrays can still hold the island.
+  if (isSimple(col)) {
+    const fresh = simpleColumn(mat, top);
+    col.base = fresh.base;
+    col.runs = fresh.runs;
+    return col;
+  }
   if (top > cur) {
     const last = col.runs[col.runs.length - 1];
     if (last && last.mat) last.n += top - cur;
@@ -114,14 +160,32 @@ export function setColumnTop(col, top) {
     cur -= drop;
     if (last.n <= 0) col.runs.pop();
   }
-  if (!col.runs.length) { col.base = top - 1; col.runs.push({ mat, n: 1 }); }
+  if (!col.runs.length) { const f = simpleColumn(mat, top); col.base = f.base; col.runs = f.runs; return col; }
+  // Cut down into the plinth, the tile is bare earth with no surface left on
+  // it. Give it its own material back as a lid: a lowered grass tile is still
+  // grass, which is what every caller of this has always assumed.
+  const lastRun = col.runs[col.runs.length - 1];
+  if (lastRun.mat !== mat) {
+    if (lastRun.n > 1) { lastRun.n -= 1; col.runs.push({ mat, n: 1 }); }
+    else lastRun.mat = mat;
+  }
   return col;
 }
 
 /** Repaint the top face without moving it — the old `setFloor`, exactly. */
 export function setColumnSurface(col, mat) {
   for (let i = col.runs.length - 1; i >= 0; i--) {
-    if (col.runs[i].mat) { col.runs[i].mat = mat; return col; }
+    const r = col.runs[i];
+    if (!r.mat) continue;
+    if (r.mat === mat) return col;
+    // ONE LEVEL, NOT THE WHOLE RUN. Painting a tile sand is a change to its
+    // surface; it does not turn the four levels of earth under it into sand.
+    // Repainting the run entire also broke the cheap-tile shape — a plinth of
+    // sand is not a plinth — and every ordinary tile would have moved out of
+    // the typed arrays and into the exceptions Map.
+    if (r.n > 1) { r.n -= 1; col.runs.splice(i + 1, 0, { mat, n: 1 }); }
+    else r.mat = mat;
+    return col;
   }
   col.runs.push({ mat, n: 1 });
   return col;
@@ -288,4 +352,50 @@ export function standOn(col, feetZ, maxStep = 1, headroom = 1) {
     lo = lid;
   }
   return best;
+}
+
+/**
+ * Put one solid block at level `z` — the block spanning `[z-1, z)` (#186).
+ *
+ * THIS IS WHAT AN ARCH IS MADE OF. Everything else here grows a column from its
+ * top: `pushBlock` stacks, `popBlock` unstacks, and neither can put anything
+ * beside something at a height without also filling in everything under it. A
+ * span across a gap needs a block placed AT a level with air left below it, and
+ * that is the only thing this does.
+ *
+ * Padding with air when the column is short is the whole trick: a tile whose
+ * top is at 0 and a block asked for at 3 becomes ground, two levels of nothing,
+ * then the block — which read from the side is a lintel with a doorway under
+ * it. Placing into a level that is already solid is refused rather than
+ * silently repainting it, because the caller meant an empty space.
+ */
+export function setBlockAt(col, z, mat) {
+  if (!col || !col.runs || !mat) return false;
+  if (z <= col.base) return false;            // below the tile's own underside
+  if (solidAt(col, z)) return false;          // something is already there
+  const top = columnTop(col);
+  if (z > top) {
+    if (z - 1 > top) pushGap(col, z - 1 - top);
+    pushBlock(col, mat);
+    return true;
+  }
+  // Inside an existing gap: split the run of air the block lands in.
+  let lo = col.base;
+  for (let i = 0; i < col.runs.length; i++) {
+    const r = col.runs[i];
+    const hi = lo + r.n;
+    if (z > lo && z <= hi) {
+      if (r.mat) return false;                 // solid after all — caller is wrong
+      const below = z - 1 - lo;                // air left under the new block
+      const above = hi - z;                    // air left over it
+      const parts = [];
+      if (below > 0) parts.push({ mat: null, n: below });
+      parts.push({ mat, n: 1 });
+      if (above > 0) parts.push({ mat: null, n: above });
+      col.runs.splice(i, 1, ...parts);
+      return true;
+    }
+    lo = hi;
+  }
+  return false;
 }

@@ -193,6 +193,33 @@ export const APPS = {
     'takes the word apart in about forty generations. When the board',
     'stops moving I write it again.',
   ]),
+  // Mail was reachable from the dock and had no bundle in /Apps, so the folder
+  // said this machine had no mail on it (David, 2026-08-18: "nor is mail").
+  'Mail.app': bundle('Mail', '3.3', [
+    'One mailbox, and it is not a queue. Nothing has arrived in it for a',
+    'long time and nothing is going to.',
+    '',
+    'The messages that are in it were read when they came. I have not',
+    'deleted them. There is no reason to and no room needed.',
+  ]),
+  // #203 — the two desk accessories every NeXT shipped with. They do nothing
+  // for the plot and that is the reason they are here: a desktop with only the
+  // applications the game needs on it is a set, and this one is meant to be a
+  // machine somebody used.
+  'Clock.app': bundle('Clock', '3.3', [
+    'The time, in the type it was always in.',
+    '',
+    'It reads the island clock, so it is the same hour the sky is. There',
+    'is no setting for it. Nobody on this machine has needed to know what',
+    'time it is anywhere else for a long while.',
+  ]),
+  'Calculator.app': bundle('Calculator', '3.3', [
+    'Four functions, a display, and a memory that holds one number.',
+    '',
+    'Click the keys or type at it. The display is fourteen digits and it',
+    'will tell you when a result is longer than that rather than rounding',
+    'quietly and letting you carry the error away.',
+  ]),
   'Draughts.app': bundle('Draughts', '1.0', [
     'A board, and an opponent who has read the whole game.',
     '',

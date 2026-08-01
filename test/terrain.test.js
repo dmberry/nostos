@@ -22,7 +22,7 @@ import assert from 'node:assert/strict';
 import {
   GROUND_BASE, simpleColumn, columnTop, columnSurface, isSimple, cloneColumn,
   setColumnTop, setColumnSurface, pushBlock, popBlock, pushGap,
-  solidAt, surfaceBelow, slabs, packColumn, unpackColumn, standOn,
+  solidAt, surfaceBelow, slabs, packColumn, unpackColumn, standOn, setBlockAt,
 } from '../src/game/terrain.js';
 
 // ---- the shape of an ordinary tile ------------------------------------------
@@ -45,12 +45,17 @@ test('a column knows its top and its surface at any height, including below zero
 
 // ---- raising and lowering ---------------------------------------------------
 
-test('raising thickens the top run, so a raised grass tile is more grass', () => {
+test('AN ORDINARY TILE MOVES WHOLE, plinth and all', () => {
+  // The ground is a four-deep plinth of earth with its own material on the lid,
+  // and a hill is that same plinth higher up — not a stretched surface run over
+  // a base left behind at sea level. It is what keeps a raised tile expressible
+  // as a floor and a height, which is why the two typed arrays can still hold
+  // the whole island.
   const c = simpleColumn('grass', 0);
   setColumnTop(c, 3);
   assert.equal(columnTop(c), 3);
-  assert.equal(c.runs.length, 1, 'one run, not one per click');
-  assert.equal(c.runs[0].n, 4, 'four levels of soil: base -1 up to lid 3');
+  assert.deepEqual(c, simpleColumn('grass', 3));
+  assert.equal(isSimple(c), true, 'and it stays cheap');
 });
 
 test('lowering eats runs off the top and never leaves nothing', () => {
@@ -86,14 +91,16 @@ test('stone under grass: two materials in one column', () => {
   pushBlock(c, 'grass');
   assert.equal(columnTop(c), 3);
   assert.equal(columnSurface(c), 'grass');
-  assert.deepEqual(slabs(c).map((s) => s.mat), ['stone', 'grass']);
+  assert.deepEqual(slabs(c).map((s) => s.mat), ['dirt', 'stone', 'grass']);
   assert.equal(isSimple(c), false, 'and it can no longer live in the two arrays');
 });
 
 test('placing the same material merges, so a wall has no seams in it', () => {
   const c = simpleColumn('stone', 0);
   pushBlock(c, 'stone'); pushBlock(c, 'stone'); pushBlock(c, 'stone');
-  assert.equal(c.runs.length, 1, 'one run of four, not four runs of one');
+  assert.equal(c.runs.length, 2, 'the plinth, then one run of four — not four runs of one');
+  assert.equal(c.runs[1].mat, 'stone');
+  assert.equal(c.runs[1].n, 4);
   assert.equal(columnTop(c), 3);
 });
 
@@ -106,8 +113,8 @@ test('a gap is air, and that is what a bridge spans', () => {
   assert.equal(solidAt(c, 1), false, 'and you can walk through here');
   assert.equal(solidAt(c, 2), false);
   assert.equal(solidAt(c, 3), true, 'the deck');
-  assert.deepEqual(slabs(c).map((s) => s.mat), ['grass', 'boards'],
-    'the renderer sees two slabs with a hole between them');
+  assert.deepEqual(slabs(c).map((s) => s.mat), ['dirt', 'grass', 'boards'],
+    'the renderer sees the ground and the deck with a hole between them');
 });
 
 test('surfaceBelow is what walking under a bridge is made of', () => {
@@ -412,4 +419,45 @@ test('a two-block body needs two blocks of clearance to stand somewhere', async 
     'one clear level is a crawlspace — the ground below is not standable, so the deck is the answer');
   assert.equal(tight.standingHeightAt(3, 3, 0, 1, 1), 0,
     'and something one block high would happily walk under it');
+});
+
+// ---- #186: a block placed AT a level, which is what an arch is made of ------
+
+test('setBlockAt spans a gap: ground, air, and a lintel over it', () => {
+  const col = simpleColumn('grass');            // top at 0
+  assert.equal(setBlockAt(col, 3, 'stone'), true);
+  assert.equal(columnTop(col), 3);
+  assert.equal(solidAt(col, 1), false, 'the doorway is open');
+  assert.equal(solidAt(col, 2), false);
+  assert.equal(solidAt(col, 3), true, 'and the lintel is up there');
+  assert.deepEqual(slabs(col).map((s) => [s.mat, s.from, s.to]),
+    [['dirt', -4, -1], ['grass', -1, 0], ['stone', 2, 3]]);
+});
+
+test('setBlockAt fills a gap it lands inside without moving the roof', () => {
+  const col = simpleColumn('grass');
+  pushGap(col, 3);
+  pushBlock(col, 'boards');                     // deck at 4, three levels of air under it
+  assert.equal(columnTop(col), 4);
+  assert.equal(setBlockAt(col, 2, 'stone'), true);
+  assert.equal(columnTop(col), 4, 'the deck did not move');
+  assert.equal(solidAt(col, 1), false, 'air below the new block');
+  assert.equal(solidAt(col, 2), true);
+  assert.equal(solidAt(col, 3), false, 'and above it');
+});
+
+test('setBlockAt refuses a level that is already solid, or below the tile', () => {
+  const col = simpleColumn('grass');
+  assert.equal(setBlockAt(col, 0, 'stone'), false, 'that is the ground itself');
+  assert.equal(setBlockAt(col, -1, 'stone'), false);
+  assert.equal(setBlockAt(col, 2, null), false, 'and a block of nothing is not a block');
+  assert.equal(columnTop(col), 0, 'nothing moved');
+});
+
+test('setBlockAt directly on top is the same as pushing one', () => {
+  const a = simpleColumn('grass');
+  const b = simpleColumn('grass');
+  setBlockAt(a, 1, 'stone');
+  pushBlock(b, 'stone');
+  assert.deepEqual(slabs(a), slabs(b));
 });

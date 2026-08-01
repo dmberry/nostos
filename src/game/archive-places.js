@@ -110,13 +110,15 @@ export const PLACE_SITES = [
         '<a href="blackcountryboard.co.uk">blackcountryboard.co.uk</a></p>',
       '<p class="kv">&#9679; where i am now ............. ' +
         '<a href="brightonrocks.co.uk">brightonrocks.co.uk</a></p>',
+      '<p class="kv">&#9679; joe\u2019s label site ......... ' +
+        '<a href="homepage.mac.com/mirrordisc">homepage.mac.com/mirrordisc</a></p>',
       '<p class="kv">&#9679; the course ................. ' +
         '<a href="sussex.ac.uk">sussex.ac.uk</a></p>',
       '<p class="kv">&#9679; guestbook .................. [ script not found ]</p>',
       '<hr>',
       '<h2>&#9664; the Midlands Exiles webring &#9654;</h2>',
       '<p><small>this site is a member. 41 sites, 3 still answering.</small></p>',
-      '<p class="kv">&#9664; prev ... [ no longer resolving ]</p>',
+      '<p class="kv">&#9664; prev ... <a href="geocities.com">geocities.com</a></p>',
       '<p class="kv">random .. <a href="blackcountryboard.co.uk">blackcountryboard.co.uk</a></p>',
       '<p class="kv">next &#9654; . <a href="geocities.com">the neighbourhood index</a></p>',
       '<hr>',
@@ -154,6 +156,17 @@ export const PLACE_SITES = [
       '<p><b>brumbrumbrum</b></p>',
       '<p>The record shop by the bus stop in Bearwood. Not the big one. The one ' +
         'that was mostly reggae and the bloke never looked up.</p>',
+      '<p><b>stourbridge_steve</b></p>',
+      '<p>JB\u2019s. Obviously JB\u2019s. I am not going to write it all out again ' +
+        'here because I have got a page for it and I will only start: ' +
+        '<a href="jbs-dudley.org.uk">jbs-dudley.org.uk</a>. Sam Jukes, King ' +
+        'Street then Castle Hill, 1969 to 2011. There is a banqueting suite in ' +
+        'it now.</p>',
+      '<p>&nbsp;&nbsp;<b>halesowen_pete</b></p>',
+      '<p>&nbsp;&nbsp;Saw Ned\u2019s in there twice before anyone had heard of ' +
+        'them and once after, and the once after was worse.</p>',
+      '<p>&nbsp;&nbsp;&nbsp;&nbsp;<b>stourbridge_steve</b></p>',
+      '<p>&nbsp;&nbsp;&nbsp;&nbsp;It always is.</p>',
       '<p><b>halesowen_pete</b></p>',
       '<p>Going to add something that is still there, sorry: the <b>9</b>. It has ' +
         'been rerouted about six times and renumbered twice and it is still the 9 ' +
@@ -197,6 +210,52 @@ export const PLACE_SITES = [
       '<p>&nbsp;&nbsp;<b>quinton_gary</b></p>',
       '<p>&nbsp;&nbsp;Mr Latham. And he absolutely could be bothered. He was doing ' +
         'it on purpose.</p>',
+      '<hr>',
+      '<h2>Members&rsquo; own pages &mdash; list, pinned</h2>',
+      '<p><small>by <b>hagley_rd_regular</b> &middot; 302 replies, pinned by ' +
+        'moderator</small></p>',
+      '<p>People keep asking. Everything anyone here has built, in one place. ' +
+        'Post yours and I will add it. I am not linking anything that has not ' +
+        'been updated in two years and I am not sorry.</p>',
+      '<pre class="jb-list">',
+      '  the road itself       <a href="hagleyroad.geocities.ws">hagleyroad.geocities.ws</a>',
+      '  Uplands               <a href="uplands.geocities.ws">uplands.geocities.ws</a>',
+      '  Bristnall Hall        <a href="bristnallhall.geocities.ws">bristnallhall.geocities.ws</a>',
+      '  Smethwick High        <a href="smethwickhigh.geocities.ws">smethwickhigh.geocities.ws</a>',
+      '  Leasowes              <a href="leasowes.geocities.ws">leasowes.geocities.ws</a>',
+      '  Bearwood              <a href="bearwood.geocities.ws">bearwood.geocities.ws</a>',
+      '  Halesowen             <a href="halesowentown.geocities.ws">halesowentown.geocities.ws</a>',
+      '  Birmingham            <a href="brum.geocities.ws">brum.geocities.ws</a>',
+      '  New Street            <a href="newstreet.geocities.ws">newstreet.geocities.ws</a>',
+      '  Digbeth coaches       <a href="digbethcoach.geocities.ws">digbethcoach.geocities.ws</a>',
+      '  the Bull Ring         <a href="bullring.geocities.ws">bullring.geocities.ws</a>',
+      '  JB’s                 <a href="jbs-dudley.org.uk">jbs-dudley.org.uk</a>',
+      '',
+      '  the colleges          <a href="halesowencollege.ac.uk">halesowencollege.ac.uk</a>',
+      '                        <a href="sandwellcollege.ac.uk">sandwellcollege.ac.uk</a>',
+      '',
+      '  and the machines, since that thread will not die',
+      '',
+      '  Amiga                 <a href="amiga.fanpages.org.uk">amiga.fanpages.org.uk</a>',
+      '  Atari ST              <a href="atarist.fanpages.org.uk">atarist.fanpages.org.uk</a>',
+      '  Spectrum 48K          <a href="spectrum48.geocities.ws">spectrum48.geocities.ws</a>',
+      '  BBC Micro Model B     <a href="bbcmicro.geocities.ws">bbcmicro.geocities.ws</a>',
+      '  PageMaker on an Amiga <a href="pagemaker.geocities.ws">pagemaker.geocities.ws</a>',
+      '  Winchester disks      <a href="winchester.geocities.ws">winchester.geocities.ws</a>',
+      '</pre>',
+      '<p>&nbsp;&nbsp;<b>margaret_h</b></p>',
+      '<p>&nbsp;&nbsp;The last one is my brother. He will not put his name on it ' +
+        'so I am putting it here instead. He was thirty years on those machines ' +
+        'and he has never once been asked about it.</p>',
+      '<p>&nbsp;&nbsp;<b>halesowen_pete</b></p>',
+      '<p>&nbsp;&nbsp;Gary is doing the Halesowen page. Gary is from Quinton.</p>',
+      '<p>&nbsp;&nbsp;&nbsp;&nbsp;<b>quinton_gary</b></p>',
+      '<p>&nbsp;&nbsp;&nbsp;&nbsp;Then do one, Pete.</p>',
+      '<p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b>halesowen_pete</b></p>',
+      '<p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;I might.</p>',
+      '<p>&nbsp;&nbsp;<b>margaret_h</b></p>',
+      '<p>&nbsp;&nbsp;He has put my letter about the roof on the Uplands page ' +
+        'and I did not expect to mind seeing it and I do.</p>',
       '<hr>',
       '<h2>Telford</h2>',
       '<p><small>by <b>anon</b> &middot; 611 replies, locked</small></p>',
@@ -1040,6 +1099,130 @@ export const PLACE_SITES = [
       '<p class="kv">&#9679; Bike workshop Weds, bring your own puncture</p>',
       '<p class="kv">&#9679; Anyone with a photocopier at work: you know what to do</p>',
       '<hr>',
+      '<h2>WHERE THIS CAME FROM</h2>',
+      '<p>Asked often enough that it is going on the site.</p>',
+      '<p>SchNEWS came out of <b>Justice?</b>, Brighton’s campaign against the ' +
+        'Criminal Justice and Public Order Act. In September 1994 the campaign ' +
+        'squatted an old courthouse in the middle of Brighton, and one of the ' +
+        'things that happened in it was live <b>newsreading performances</b>, ' +
+        'alongside the demonstrations, the direct action, the talks and the ' +
+        'parties.</p>',
+      '<p>After the courthouse was evicted, one of the newsreaders and another ' +
+        'activist started a newsletter. The stated purpose, and this is worth ' +
+        'holding on to, was to act as a <b>collective memory</b> for the groups ' +
+        'that had formed under the Justice? banner. Not a campaign organ. A ' +
+        'record, so that a loose set of people who kept getting evicted would ' +
+        'still know what they had done.</p>',
+      '<p>The working name was <i>The SchNEWSPAPER</i>. There was a dummy run ' +
+        'under that title, and the first headline it ever carried was <b>Man ' +
+        'sits down in park</b>.</p>',
+      '<p>The pilot proper was made by <b>David M. Berry</b> and <b>Gibby ' +
+        'Zobel</b> in Luther Street, Brighton, and published on <b>16 November ' +
+        '1994</b>, one side of A4. That is the one further down this page.</p>',
+      '<p>The masthead is <b>Dave FT</b>’s. The heavy inked SchNEWS with the ' +
+        'star behind it, the one that went on every issue for the whole run and ' +
+        'onto the cover of the Reader, was his, and it has never been redrawn.</p>',
+      '<p>It got a national readership quickly, on concise, funny, jargon-free ' +
+        'writing, and then it did the thing campaign papers almost never do: it ' +
+        'outgrew its own cause. The Criminal Justice Bill was the start. What ' +
+        'followed was the M11 link road, the Newbury bypass, Reclaim the ' +
+        'Streets, the Liverpool dockers through 1995 to 1997, privatisation, ' +
+        'racism, climate, and genetic engineering.</p>',
+      '<p>SchNEWS outlasted the anti-CJB campaign, and it outlasted Justice? ' +
+        'itself.</p>',
+      '<p><small>On the phrase collective memory, and on what happens to one ' +
+        'when nobody is printing it out any more, somebody has written a page: ' +
+        '<a href="whatishistory.geocities.ws">whatishistory.geocities.ws</a>.' +
+        '</small></p>',
+      '<hr>',
+      '<h2>THE BACK ISSUES</h2>',
+      '<p>Somebody has been scanning their pile in. Four so far, and they are ' +
+        'staying up.</p>',
+      pic('schnews-pilot', 'The pilot issue. 16 November 1994, published in Brighton, under the masthead JUSTICE? Brighton’s Campaign In Defiance of the Criminal Injustice Act. Lead story: fourteen CCTV cameras going up across town at a cost of £310,000, with a list of every street you can now be filmed in, ending please say hello.', 'r'),
+      '<p><b>Pilot issue, 16 November 1994.</b> Two front-page stories and both ' +
+        'of them still going. Fourteen cameras arriving in Brighton at three ' +
+        'hundred and ten thousand pounds, a police superintendent on record ' +
+        'saying there is no intention of using the scheme for information ' +
+        'gathering, and then a list of the streets where you are now on film, ' +
+        'finished off with <i>please say hello</i>.</p>',
+      '<p>The other one is Justice? being evicted off the Courthouse after a ' +
+        'rooftop protest, with an apology to anyone who rang the phone tree and ' +
+        'did not get a call, on the grounds that it was a bit hectic. At the ' +
+        'foot of the column: SchNEWS live, 5.45 on a Friday, Prince George, ' +
+        'Trafalgar Street.</p>',
+      pic('schnews-13', 'Issue thirteen, 10 March 1995. McPOLICE ON THE WAY? over a cartoon of an officer in a sponsored jacket beside a van reading THRESHERS, and down the right-hand column a box headed CJA ARRESTOMETER counting hunt sabs 107, road protestors 16, travellers 11.', 'l'),
+      '<p><b>Issue thirteen, 10 March 1995.</b> Free/Donation by now, and a ' +
+        'masthead definition in the corner: <i>DISORGANISATION n. An ' +
+        'unstructured protest group of the mid-Nineties, without the leadership ' +
+        'of a conventional organisation. Want to join one? Don’t expect to ' +
+        'fill in an application form.</i></p>',
+      '<p>The lead is Threshers sponsoring a police force under section 23 of the ' +
+        '1994 Act, which let a police authority accept commercial money, and a ' +
+        'sponsorship officer being asked on the telephone whether you could ' +
+        'sponsor a police operation and say Operation Coca-Cola. The answer ' +
+        'printed is yes but I suppose it depends what it was, maybe not an armed ' +
+        'operation.</p>',
+      '<p>And down the side, the <b>CJA Arrestometer</b>, which is the invention ' +
+        'this paper should be remembered for. A running scoreboard of who has ' +
+        'been nicked under the new Act, by category, updated weekly, with a ' +
+        'footnote that at least three hundred people have gone under the 1986 ' +
+        'Public Order Act so far that year.</p>',
+      pic('schnews-13-back', 'The back page. OUT OF SITE OUT OF MIND on travellers and the confiscation powers, the Party and Protest listings down the right, and along the very bottom the addresses: SchNEWS c/o on-the-fiddle, PO Box 2600, Brighton.'),
+      '<p>The back page of that one is the whole operating model printed in four ' +
+        'lines. Send stamps or donations, payable to Justice?, care of ' +
+        '<b>on-the-fiddle, PO Box 2600, Brighton</b>. Or pick one up at the Peace ' +
+        'Centre in Gardner Street and around town. There is an e-mail address, ' +
+        'at intermedia.co.uk, and it has a question mark in it, because the group ' +
+        'is called Justice? and they were not going to drop the punctuation for ' +
+        'the convenience of a mail server.</p>',
+      pic('schnews-reader', 'The SchNEWS Reader, issues 0 to 50, bound up. Orange cover, a fan of front pages, and quotes off The Face and Steve Bell. Sixty pages of cartoons by Kate Evans. BUY THIS &amp; KEEP SchNEWS FREE.', 'r'),
+      '<p><b>The Reader.</b> Issues 0 to 50 collected into a book so the free ' +
+        'sheet could stay free, all proceeds to Justice?, and the copyright line ' +
+        'on the front reads <b>@nti-copyright</b>, <i>information for action</i>. ' +
+        'A pull quote off <i>The Face</i> and another off Steve Bell about Kate ' +
+        'Evans, who did the sixty pages of cartoons in it.</p>',
+      '<p><b>1994/5</b>, which is the pilot straight through the first year, and ' +
+        'the blurb on it is a decent index of what that year was:</p>',
+      '<pre class="jb-list">',
+      '  Where It All Began',
+      '',
+      '  the first of many Crap Arrest Of The Week',
+      '  the Criminal Justice Act Arrestometer',
+      '  a running commentary of resistance as the sections come in',
+      '',
+      '  against Travellers, Squatters, Hunt Sabs, Ravers,',
+      '  Protesters, Footie Fans, and freedom in general',
+      '',
+      '  in the news that year:',
+      '',
+      '    Shoreham          live animal export protests',
+      '    London E11        the end of the No-M11 Link Road campaign',
+      '    Glasgow           Pollok Free State, against the M77',
+      '    nr Blackburn      Stanworth Valley, the village in the trees,',
+      '                      evicted, against the M65',
+      '    South Wales       opencast mining protest camps',
+      '</pre>',
+      '<p>Read that list as a document rather than as nostalgia. It is one year, ' +
+        'in one country, and it is a free sheet run out of a PO box keeping the ' +
+        'only continuous record anybody was keeping of most of it.</p>',
+      '<p class="kv"><small><b>Footnote, and somebody please settle this.</b> ' +
+        'Bottom of the back page of thirteen, in a little ruled box next to ' +
+        '<i>Justice? meet every wednesday 7pm @ prince albert</i>, there are two ' +
+        'letters: <b>FT</b>. Whoever laid the page out signed it, the way people ' +
+        'did.</small></p>',
+      '<p class="kv"><small>There is a party invitation on ' +
+        '<a href="theboxunderthestairs.geocities.ws">theboxunderthestairs.geocities.ws</a> ' +
+        'for a <b>Dave FT</b>, Brighton, off the Lewes Road, promising orchestras ' +
+        'and light devices that will astound and amaze. Same town, same years, ' +
+        'same two letters, and somebody who could set type.</small></p>',
+      '<p class="kv"><small>And the masthead credit further up this page says ' +
+        'Dave FT drew the logo. So he was already the one doing the artwork. ' +
+        'Somebody who draws the masthead is somebody who would put his initials ' +
+        'in a box at the bottom of a page he had laid out.</small></p>',
+      '<p class="kv"><small>I am not saying the party invitation is the same ' +
+        'man. I am saying nobody has told me it is not, and I have asked twice ' +
+        'on the board.</small></p>',
+      '<hr>',
       '<p><b>DISCLAIMER.</b> SchNEWS warns all readers not to confuse a bypass with ' +
         'a way past. Honest.</p>',
       '<p><small>Cached 05:16. The website outlived the paper by four years and ' +
@@ -1321,6 +1504,43 @@ export const PLACE_SITES = [
         'destroyed what was there before. A generation of people learned what ' +
         'safety in a computer feels like from that one design decision and have ' +
         'been quietly disappointed ever since.</p>',
+      '<h2>The first draft</h2>',
+      '<p>People like to say that journalism is the first rough draft of ' +
+        'history. It is usually given to <b>Philip Graham</b> of the Washington ' +
+        'Post, who did say it, to his correspondents, in the sixties. It was in ' +
+        'print before that, and the trail runs back further than anybody has ' +
+        'cleanly fixed, and the line about the first draft of history has no ' +
+        'settled first draft of its own. We enjoy that more than we should.</p>',
+      '<p>What the phrase gets right is the pressure. A wire item is written by ' +
+        'somebody who does not yet know which part of it will matter, for an ' +
+        'editor who needs it now, about a thing that has not finished happening. ' +
+        'Every judgement in it is provisional and none of it can wait.</p>',
+      '<p>What the phrase gets wrong is <i>draft</i>, which sounds like a thing ' +
+        'you go back to. A wire story is not revised. It is superseded. The old ' +
+        'one has already gone down the line into somebody else’s newspaper, ' +
+        'somebody else’s screen, somebody else’s decision to buy or ' +
+        'sell.</p>',
+      '<h2>Kills and corrections</h2>',
+      '<p>Which is why the correction is a real piece of machinery here and not ' +
+        'an embarrassment. If a number goes out wrong we do not quietly change ' +
+        'it. We send a correction down the same wire, with the same urgency, ' +
+        'and if it is bad enough we send a <b>kill</b>, which instructs every ' +
+        'client to withdraw the item entirely.</p>',
+      '<p class="kv">CORRECTION ... the record now carries both the error and the fix</p>',
+      '<p class="kv">KILL ......... the record carries the withdrawal, and the reason</p>',
+      '<p>Note what a kill is not. It is not a deletion. Nothing is reached into ' +
+        'and taken out of anybody’s archive, because we cannot do that and ' +
+        'would not want the ability. A kill is one more message, timed and ' +
+        'numbered, joining the queue behind the thing it withdraws.</p>',
+      '<p>So the wrong story is still there, followed by the notice that it was ' +
+        'wrong. Anybody working back through the file finds the mistake, and ' +
+        'finds us finding it. That is the whole design and it is the same ' +
+        'instinct as the version number VMS put on every file upstairs.</p>',
+      '<p><small>Somebody has written a page about what happens to all this when ' +
+        'a record can be altered without leaving a mark: ' +
+        '<a href="whatishistory.geocities.ws">whatishistory.geocities.ws</a>. ' +
+        'The desk has read it and the desk did not enjoy it.</small></p>',
+
       '<h2>Elsewhere</h2>',
       pic('standard-interest-rates', 'The stand outside the station, about six. Same headline on both sides.'),
       '<p>Bureaux in <b>Geneva</b>, New York, Singapore, and about a hundred more. ' +

@@ -7,6 +7,8 @@
 // version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
 // General Public License for details: <https://www.gnu.org/licenses/>.
 
+import { awolText } from './awol.js';   // #192: the circulated defaulters' list
+
 // #162 — THE GARRISON ROSTER.
 //
 // David: "all the robots at a garrison report their position to their OB which
@@ -261,6 +263,11 @@ export function unitLogText(tower, entry, opts = {}) {
  */
 export function logsFolder(tower, units, opts = {}) {
   const files = { garrison: rosterText(tower, units, opts) };
+  // #192 — the defaulters' list, circulated. It is the ISLAND'S, not this
+  // tower's: a unit written up at the far end of the map is on the sheet here,
+  // because a tower does not keep its defaulters to itself, it files them. The
+  // caller passes the island-wide list; this only lays it out.
+  if (opts.awol) files.muster = awolText(tower, opts.awol, opts);
   for (const u of units) files[logName(u.netId || (u.r || u)._netId || (u.r || u).type)] = unitLogText(tower, u, opts);
   return files;
 }

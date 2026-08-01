@@ -697,3 +697,4 @@ test('a message tile holds steady while the figure holds, rather than shimmering
   }
   assert.ok(worst < MAX_RATE, `a letter tile changed at ${worst.toFixed(3)}/s`);
 });
+

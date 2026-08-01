@@ -26,6 +26,14 @@ export const FLOORS = {
   // snow-cap at the very top. Both walkable — you climb the mountain — just no
   // longer green. (worldgen's dressMountain converts high open tiles to these.)
   stone:  { color: '#7c7a74', solid: false },
+  // GLASS. A block you can see through and stand on (David, 2026-08-17: "glass
+  // as a block would be cool!"). `alpha` is the only thing that makes it what it
+  // is: the prism pass draws a translucent material's faces and its lid at that
+  // value, so a glass floor shows the ground under it and a glass wall shows
+  // whatever is behind. It became possible the moment drawTexturedQuad started
+  // COMPOSING alpha instead of overwriting it — before that a face was always
+  // painted at full strength whatever anybody asked for.
+  glass:  { color: '#cfe6ea', solid: false, alpha: 0.38 },
   snow:   { color: '#dfe3e6', solid: false },
   // ZEUS's fortress (the map's southern annex): a cold metal-panel deck
   // for the corridors and maze, a paved quadrangle for the open killing-ground,

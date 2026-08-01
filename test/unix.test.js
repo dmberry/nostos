@@ -52,13 +52,28 @@ test('pwd starts at /home and cd moves around', () => {
   assert.equal(run('pwd', env).text, '/home');
 });
 
-test('ls lists, ls -l gives the long form', () => {
+test('ls lists, ls -l gives a real long listing', () => {
   const env = sh();
   const plain = run('ls', env).text;
   assert.match(plain, /readme/);
   assert.match(plain, /hello\.ml/);
   const long = run('ls -l', env).text;
-  assert.match(long, /^-\s+\d+\s+readme$/m, 'long form shows kind and size');
+  // Mode, links, owner, group, size, date, name — the columns anybody types
+  // `-l` to see. It used to print `-  6  readme`, which is a size with a letter
+  // in front of it.
+  assert.match(long, /^total \d+$/m, 'a long listing opens with its block total');
+  assert.match(long, /^-rw-r--r--\s+1 obs\s+staff\s+\d+ [A-Z][a-z]{2} [ 0-9]\d \d\d:\d\d readme$/m);
+  // An .ml file is executable, and a directory is a directory.
+  assert.match(long, /^-rwxr-xr-x .* hello\.ml$/m);
+});
+
+test('a file\u2019s date never moves, because nothing on this disk is being written', () => {
+  // There is no clock in unix.js and there should not be. The stamp is a hash
+  // of the name, so two listings a minute apart agree, and a seven-year-old
+  // archive does not read as saved this morning.
+  const a = run('ls -l', sh()).text;
+  const b = run('ls -l', sh()).text;
+  assert.equal(a, b);
 });
 
 test('cat reads a file; a missing file is a readable error', () => {

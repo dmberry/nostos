@@ -1731,6 +1731,44 @@ export function hasFile(env, name) {
   return false;
 }
 
+// ---- what `ls -l` needs -----------------------------------------------------
+//
+// The owner is the machine's, not a player's: this disk was somebody's work
+// account and the account outlived the work.
+const LS_OWNER = 'obs   ';
+const LS_GROUP = 'staff';
+const LS_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** A small stable hash, so a file's date is its own and never moves. */
+function nameHash(s) {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+  return h;
+}
+
+/**
+ * `Mar  8 14:22` — a fixed modification time per name.
+ *
+ * Deterministic on purpose. A real `ls -l` prints when the file was last
+ * touched; nothing on this disk has been touched, so the honest thing is a date
+ * that never changes rather than one that tracks the wall clock and makes a
+ * seven-year-old archive look freshly saved.
+ */
+function stamp(name) {
+  const h = nameHash(name);
+  const mon = LS_MONTHS[h % 12];
+  const day = 1 + ((h >> 4) % 28);
+  const hh = (h >> 9) % 24;
+  const mm = (h >> 14) % 60;
+  return `${mon} ${String(day).padStart(2)} ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+}
+
+/** Blocks, for the `total` line every long listing opens with. */
+function blocksOf(node) {
+  const bytes = node && node.d ? Object.keys(node.d).length * 32 + 64 : ((node && node.f) || '').length;
+  return Math.max(1, Math.ceil(bytes / 512));
+}
+
 const COMMANDS = {
   pwd: (_a, _in, env) => pathString(env.cwd) || '/',
 
@@ -1749,12 +1787,27 @@ const COMMANDS = {
     // else's. The slash is on by default here; -F still works, because a person
     // who knows the flag should not be told it does not exist.
     if (!long) return names.map((name) => `${name}${isDir(n.d[name]) ? '/' : ''}`).join('  ');
-    return names.map((name) => {
+    // THE REAL LONG FORM. It used to print `d  6  name`, which is a size column
+    // with a letter in front of it and not what anybody types `-l` for: the
+    // mode, the link count, the owner, the size, the date. A shell that answers
+    // `ls -l` with a summary is a shell pretending, and the whole point of this
+    // laptop is that it is the one machine in the game that is not.
+    //
+    // THE DATES ARE FIXED AND OLD. There is no clock here — unix.js is pure and
+    // takes no world — and there should not be: nothing on this disk has been
+    // written since the estate stopped. Each name gets a stable date out of its
+    // own hash, in the last months anybody was filing, so a listing reads as an
+    // archive rather than as something saved this morning.
+    const total = names.reduce((a, name) => a + blocksOf(n.d[name]), 0);
+    return [`total ${total}`, ...names.map((name) => {
       const c = n.d[name];
-      const kind = isDir(c) ? 'd' : '-';
-      const size = isDir(c) ? Object.keys(c.d).length : c.f.length;
-      return `${kind}  ${String(size).padStart(6)}  ${name}${isDir(c) ? '/' : ''}`;
-    }).join('\n');
+      const dir = isDir(c);
+      const mode = dir ? 'drwxr-xr-x' : (name.endsWith('.ml') || name.endsWith('.sh') ? '-rwxr-xr-x' : '-rw-r--r--');
+      const links = dir ? String(Object.keys(c.d).filter((k) => isDir(c.d[k])).length + 2) : '1';
+      const size = dir ? Object.keys(c.d).length * 32 + 64 : c.f.length;
+      return `${mode} ${links.padStart(2)} ${LS_OWNER} ${LS_GROUP} `
+        + `${String(size).padStart(7)} ${stamp(name)} ${name}${dir ? '/' : ''}`;
+    })].join('\n');
   },
 
   cd: (args, _in, env) => {

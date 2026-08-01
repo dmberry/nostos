@@ -28,7 +28,8 @@
 // tested without a browser.
 
 import { FLOORS, OBJECTS } from './tiles.js';
-import { columnTop, columnSurface, pushBlock, popBlock } from './terrain.js';
+import { columnTop, columnSurface, pushBlock, popBlock, setBlockAt, solidAt } from './terrain.js';
+import { breakRule, dropOf, isPlaceable } from './blocks.js';
 
 /**
  * What must never be edited, however creative the mode is.
@@ -46,12 +47,12 @@ export const PROTECTED = new Set([
 ]);
 
 /**
- * The ten tools, in the order they sit on the palette.
+ * The tools, in the order they sit on the palette.
  *
- * Ten and no more. A palette that scrolls is a palette you hunt through, and
- * the point of this is to put a thing down and see how it looks. `swatch` is
- * what the strip draws: a material shows its own colour, everything else gets
- * one of its own.
+ * SHORT ENOUGH NOT TO SCROLL, which was always the real constraint — a palette
+ * you hunt through is a palette you stop using, and the point of this is to put
+ * a thing down and see how it looks. `swatch` is what the strip draws: a
+ * material shows its own colour, everything else gets one of its own.
  */
 export const TOOLS = [
   // PLACE AND BREAK, AND NOTHING ELSE (David, 2026-08-16: "like Minecraft - you
@@ -72,6 +73,7 @@ export const TOOLS = [
   { key: 'sand', name: 'Sand', kind: 'block', floor: 'sand' },
   { key: 'stone', name: 'Stone', kind: 'block', floor: 'stone' },
   { key: 'boards', name: 'Boards', kind: 'block', floor: 'boards' },
+  { key: 'glass', name: 'Glass', kind: 'block', floor: 'glass' },
   { key: 'water', name: 'Water', kind: 'block', floor: 'stream' },
   { key: 'tree', name: 'Tree', kind: 'object', object: 'tree', swatch: '#3f6b34' },
   { key: 'wall', name: 'Wall', kind: 'object', object: 'wall', swatch: '#8f8474' },
@@ -122,9 +124,16 @@ export function canBuildAt(map, x, y) {
  * object on the tile you are standing on would trap you inside it, which in a
  * mode with no damage means standing there forever.
  */
-export function applyBuild(map, x, y, toolKey, { player = null } = {}) {
+export function applyBuild(map, x, y, toolKey, { player = null, face = null, z = null, held = undefined, pack = null } = {}) {
   const tool = toolOf(toolKey);
   if (!tool) return fail('no such tool');
+  // A BLOCK ASKED FOR ON A SIDE FACE GOES BESIDE, NOT ON TOP (#186, David
+  // 2026-08-16). Placing only ever grew a column upward, so there was no way to
+  // put a block at a height with air under it — and without that there are no
+  // arches, no doorways and no bridges you built yourself. The face you pointed
+  // at names both the neighbour and the level: the south face of a block at 3
+  // is a block at 3 on the tile to the south.
+  if (face && tool.kind === 'block' && z != null) return placeBeside(map, x, y, tool, face, z, player);
   const allowed = canBuildAt(map, x, y);
   if (!allowed.ok) return allowed;
   const tx = Math.floor(x), ty = Math.floor(y);
@@ -164,6 +173,15 @@ export function applyBuild(map, x, y, toolKey, { player = null } = {}) {
   const there = map.objectAt(tx, ty);
   if (there) { map.removeObject(there); return { ok: true, what: `${there.type} cleared` }; }
   const col = map.editColumn(tx, ty);
+  // A TOOL IN HAND, WHERE THERE IS ONE (#187). Creative passes no `tool` and no
+  // `pack` and is unchanged: break anything, keep nothing. Where a caller does
+  // pass them, the material decides whether what you are holding will take it
+  // and what comes off in your hands — see blocks.js, which owns the ladder.
+  if (tool.kind === 'erase' && held !== undefined) {
+    const mat0 = columnSurface(col);
+    const rule = breakRule(mat0, held);
+    if (!rule.ok) return fail(rule.why);
+  }
   // THE ISLAND IS NOT YOURS TO DIG. You can take back every block you put down
   // and not one grain of the ground underneath — so there is no way to open a
   // hole in the world, which is the whole reason the ground level is remembered.
@@ -171,5 +189,41 @@ export function applyBuild(map, x, y, toolKey, { player = null } = {}) {
   const mat = columnSurface(col);
   popBlock(col);
   map.setColumn(tx, ty, col);
-  return { ok: true, what: `${mat} block broken` };
+  const drop = held !== undefined ? dropOf(mat) : null;
+  if (drop && pack && pack.stow) pack.stow(`block_${drop}`, 1);
+  return { ok: true, what: `${mat} block broken`, drop };
+}
+
+/**
+ * Put a block against the face of another one (#186).
+ *
+ * `face` is which side of `(x, y)` was pointed at — 's' for the south face,
+ * 'e' for the east — and `z` is that face's own top level. The block lands on
+ * the NEIGHBOUR beyond it, at the same level, so a run of them walks out into
+ * the air and meets the pier on the other side: an arch.
+ *
+ * It is still the Minecraft rule. You may only build against something that is
+ * already there, the ceiling is the same six above the ground, and nothing here
+ * can dig — the level asked for is either empty or the placement is refused.
+ */
+function placeBeside(map, x, y, tool, face, z, player) {
+  if (!FLOORS[tool.floor]) return fail('no such material');
+  const tx = Math.floor(x) + (face === 'e' ? 1 : 0);
+  const ty = Math.floor(y) + (face === 's' ? 1 : 0);
+  const allowed = canBuildAt(map, tx, ty);
+  if (!allowed.ok) return allowed;
+  if (player && Math.floor(player.x) === tx && Math.floor(player.y) === ty) {
+    // Only where it would actually close over you: a block at head height or
+    // your feet traps you, one well overhead is a ceiling and perfectly fine.
+    const feet = player.footZ != null ? player.footZ : 0;
+    if (z > feet && z <= feet + 2) return fail('not on top of yourself');
+  }
+  const ground = map.bedrockAt(tx, ty);
+  if (z - ground > BUILD_MAX) return fail('as high as it goes');
+  const col = map.editColumn(tx, ty);
+  if (solidAt(col, z)) return fail('there is already a block there');
+  map.rememberBedrock(tx, ty);
+  if (!setBlockAt(col, z, tool.floor)) return fail('nothing to build against there');
+  map.setColumn(tx, ty, col);
+  return { ok: true, what: `${tool.floor} block placed`, at: { x: tx, y: ty, z } };
 }

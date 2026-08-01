@@ -773,8 +773,15 @@ function searchPage(host, hosts) {
     ...header(host, 'INDEXING.', 'search service'),
     '<p>Ask AltaVista a question. Or enter a few words in any language.</p>',
     '<p>Search For:  [x] Web Pages  [ ] Images  [ ] Video  [ ] Audio</p>',
-    '<p>SEARCH FOR: [________________________________]  type:  search &lt;words&gt;</p>',
-    '<p><small>Example: how precisely will the new millennium begin?</small></p>',
+    // A REAL BOX. It used to be a row of underscores with a note telling you to
+    // go up to the location bar and type `search words`, which is a search
+    // engine you cannot search from — the one thing this page exists to do. The
+    // field is wired in main.js, the way the unit upload form is: net.js stays
+    // pure and does not know there is a browser on the other end.
+    '<p>SEARCH FOR: <input id="ns-search-q" size="34" value=""> '
+      + '<button id="ns-search-go" type="button">Search</button></p>',
+    '<p><small>Example: how precisely will the new millennium begin? &middot; '
+      + 'you can also type <b>search &lt;words&gt;</b> in the location bar.</small></p>',
     '<h2>AltaVista Channels</h2>',
     tour ? link(tour, 'Travel — islands of the archipelago') : '',
     ai ? link(ai, 'Government — island administration') : '',
@@ -803,7 +810,14 @@ export function searchResults(hosts, query) {
   const q = String(query || '').trim().toLowerCase();
   const words = q.split(/\s+/).filter(Boolean);
   const hit = (h) => {
+    // THE TEXT OF THE PAGE COUNTS. Matching only the host, the name and the
+    // title made this an address book with a search box on it: a player who
+    // remembered a band, a venue or a phrase on a page could not find the page
+    // that carried it. The cached body goes in the haystack, so the engine
+    // answers for the words somebody actually read.
+    const cached = h.cached ? archivedSite(h.cached) : null;
     const hay = [h.host, h.name, h.title, h.kind, h.type, h.homeCode, h.cat,
+      cached && cached.body.join(' ').replace(/<[^>]+>/g, ' '),
       h.tour && [h.tour.place, h.tour.tag, h.tour.welcome, h.tour.culture, h.tour.climate, ...(h.tour.tips || []), ...(h.tour.facts || [])].join(' '),
       h.legacy && [h.legacy.org, h.legacy.was, ...(h.legacy.frags || []), ...(h.legacy.notices || [])].join(' '),
     ].filter(Boolean).join(' ').toLowerCase();
@@ -1924,4 +1938,72 @@ export function deptPage(key, hosts) {
     `<a href="${domain}">${domain} &mdash; university index</a>`,
     `<small>${domain} · ${SERVER.archive}</small>`,
   ].join('\n');
+}
+
+// ---- The deep link -------------------------------------------------------
+//
+// A page in the cache can be pointed at from outside the game. That matters
+// because the corpus is now the kind of thing that gets referred to: a commit
+// message, a note, somebody's post. Without this the only instruction you can
+// give a stranger is "start a run, find a laptop, type this in", which nobody
+// does.
+//
+// Two forms, because the two have different jobs.
+//
+//   /?cache=whatishistory.geocities.ws     works anywhere, no server config
+//   /c/whatishistory.geocities.ws          short, and reads as an address
+//
+// The second needs one rewrite in vercel.json sending /c/* to the index, and
+// because a REWRITE leaves the browser's URL alone (unlike a redirect), the
+// path is still there on the client to be read. So both forms are parsed here
+// rather than only the query.
+//
+// NOT /www/. That path is a REAL FOLDER in this repo — it holds the outside
+// site, which Vercel serves as a plain static file with no configuration. A
+// rewrite whose source overlapped that folder took the deployment down, so the
+// two are kept apart by name: /www/ is the outside site, /c/ is a link inside.
+//
+// Until a /c/ rewrite is added, the query form is the one that is EMITTED,
+// because it needs no server configuration and therefore cannot break serving.
+//
+// An alias table for the ones that get quoted often, so a link can be short
+// enough to say out loud. Unknown aliases fall through as literal hostnames,
+// which means adding a page to the corpus needs no change here.
+export const CACHE_ALIASES = {
+  history: 'whatishistory.geocities.ws',
+  logs: 'itwasnotlikethat.geocities.ws',
+  eliza: 'eliza.geocities.ws',
+  pub: 'theheartandhand.geocities.ws',
+  ward: 'ward.fanpages.org.uk',
+  loca: 'locarecords.com',
+  schnews: 'schnews.org.uk',
+};
+
+// Pure: search string in, hostname out, or null. Takes the two pieces rather
+// than reading `location`, so it is testable and so main.js stays the only
+// place that knows there is a browser.
+//
+// Tolerant of what people actually paste: a scheme on the front, a trailing
+// slash, whitespace, percent-encoding, and the cache:// form used in prose to
+// mark an address as being inside the game rather than on the open web.
+export function cacheLink(search, pathname) {
+  let raw = '';
+  try {
+    const q = new URLSearchParams(String(search || '')).get('cache');
+    if (q) raw = q;
+  } catch (e) { /* a malformed query is simply no link */ }
+  if (!raw) {
+    const m = String(pathname || '').match(/^\/c\/(.+?)\/?$/);
+    if (m) { try { raw = decodeURIComponent(m[1]); } catch (e) { raw = m[1]; } }
+  }
+  raw = String(raw).trim();
+  if (!raw) return null;
+  const alias = CACHE_ALIASES[raw.toLowerCase()];
+  if (alias) return alias;
+  // Strip any scheme, including the unresolvable cache:// one, and any path.
+  const host = raw.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '').replace(/\/+$/, '').trim();
+  // A hostname and nothing else. Anything with a space, a slash left in the
+  // middle or an @ in it is somebody else's URL pasted by accident.
+  if (!host || /[\s@]/.test(host)) return null;
+  return host;
 }

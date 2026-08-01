@@ -787,6 +787,182 @@ export function openMail(ws) {
   return openWindow(ws, newWindow('mail', 'Active.mbox', 120, 100, 480, 330, { sel: 0 }));
 }
 
+// ---- WHAT THE THING IN THE WINDOW ACTUALLY IS -------------------------------
+//
+// David, 2026-08-16: "give it an info box for people to read about what it is -
+// e.g. conways game of life", and the same for the draughts cabinet, "citing
+// earlier versions".
+//
+// Both of these windows run a real piece of computing history and neither of
+// them says so. A player watching cells blink on a green grid has no way to
+// know they are looking at Conway, and a player losing at draughts to a machine
+// has no way to know that this particular machine is the oldest argument in the
+// field. The panels are the citation, in the register the rest of this desktop
+// uses: what it is, who made it, when, and what happened.
+//
+// EVERYTHING IN THEM IS TRUE. No page invents a date or a result.
+
+export const APP_INFO = {
+  grove: [
+    "Conway's Game of Life",
+    'John Horton Conway, 1970',
+    '',
+    'A cellular automaton on a square grid. Every cell is',
+    'alive or dead, and each step it looks at its eight',
+    'neighbours: a live cell with two or three of them lives',
+    'on, any other live cell dies, and a dead cell with',
+    'exactly three comes alive. That is the whole rule.',
+    '',
+    'It has no player and no goal. Conway designed it to',
+    'settle a question of von Neumann’s — whether a very',
+    'simple set of local rules could support patterns that',
+    'copy themselves — and the answer turned out to be yes.',
+    'Life is Turing complete: anything a computer can be made',
+    'to do, some arrangement of these cells will do.',
+    '',
+    'It reached the public through Martin Gardner’s column in',
+    'Scientific American in October 1970, and a very large',
+    'number of people learnt what a computer was by typing it',
+    'in. Conway said afterwards that he had come to dislike',
+    'how completely it overshadowed his other work.',
+    '',
+    'The board here is seeded from the word written in her',
+    'floor. It is a MODEL of the grove and not a view of it:',
+    'nothing in this window samples the real clearing.',
+  ],
+  draughts: [
+    'Draughts, and the machines that play it',
+    '',
+    'Checkers is where machine learning starts. Arthur Samuel',
+    'at IBM wrote a program for the 701 in 1952 that improved',
+    'by playing against itself and keeping what worked, and in',
+    'the 1959 paper describing it he used the phrase "machine',
+    'learning" for what it did. It beat a strong amateur on',
+    'television in 1956 and made the field look possible.',
+    '',
+    'Christopher Strachey had got there first with a draughts',
+    'program on the Ferranti Mark I in 1951, which is one of',
+    'the earliest games ever written for a computer, and Alan',
+    'Turing’s chess work of the same period was played out by',
+    'hand because no machine would run it.',
+    '',
+    'The end of the story is Chinook, at the University of',
+    'Alberta under Jonathan Schaeffer. It played Marion',
+    'Tinsley — who lost a handful of games in forty years —',
+    'through the 1990s, and in 2007 the team announced that',
+    'checkers was SOLVED: with perfect play by both sides the',
+    'game is a draw, proved by search rather than argued.',
+    '',
+    'The cabinet in this window is none of those. It is a few',
+    'hundred lines with a shallow search, and it will lose to',
+    'anyone who has read a book about the game.',
+  ],
+};
+
+/**
+ * A panel about the program in the window: what it is and where it came from.
+ *
+ * One window kind for every app, keyed by `topic` into APP_INFO, so a new
+ * panel is a new entry in that table and nothing else.
+ */
+export function openAppInfo(ws, topic, title) {
+  const had = ws.windows.find((w) => w.kind === 'appinfo' && w.topic === topic);
+  if (had) { restore(ws, had.id); raise(ws, had.id); return had; }
+  const lines = APP_INFO[topic] || ['No information.'];
+  const h = Math.min(420, 40 + lines.length * 14 + 24);
+  const win = newWindow('appinfo', title || 'Info', MENU_EDGE + 70, 90, 380, h, { topic, scroll: 0 });
+  win.topic = topic;
+  return openWindow(ws, win);
+}
+
+// ---- the desk accessories (#203) --------------------------------------------
+//
+// Two applications that do nothing the game needs. A desktop carrying only the
+// tools a puzzle requires is a set dressed for a scene; a machine somebody used
+// has a clock on it and a calculator with a number left in the memory.
+//
+// The clock reads the island's hour, so it agrees with the sky outside the
+// window the laptop is sitting under. The calculator is four functions and a
+// display, and its state lives on the window like the grove's board does.
+
+export function openClock(ws) {
+  const had = ws.windows.find((w) => w.kind === 'clock');
+  if (had) { restore(ws, had.id); raise(ws, had.id); return had; }
+  return openWindow(ws, newWindow('clock', 'Clock', MENU_EDGE + 40, 300, 150, 176));
+}
+
+export function openCalc(ws) {
+  const had = ws.windows.find((w) => w.kind === 'calc');
+  if (had) { restore(ws, had.id); raise(ws, had.id); return had; }
+  return openWindow(ws, newWindow('calc', 'Calculator', MENU_EDGE + 210, 300, 176, 232, {
+    // `shown` is what the display reads; `acc` and `op` are the pending sum.
+    shown: '0', acc: null, op: null, fresh: true, mem: 0,
+  }));
+}
+
+/**
+ * One key on the calculator. Pure in the window's own state: digits and a dot
+ * build `shown`, an operator banks it, `=` finishes, and C clears.
+ *
+ * FOURTEEN DIGITS AND THEN IT SAYS SO. A display that silently rounds hands you
+ * a wrong number that looks right, which is the one thing a calculator must not
+ * do; this one prints `-- too long --` and keeps the accumulator.
+ */
+export function calcKey(w, key) {
+  if (!w) return;
+  const D = 14;
+  const val = () => Number(w.shown) || 0;
+  const put = (n) => {
+    const s = String(n);
+    w.shown = s.length > D ? '-- too long --' : s;
+    w.fresh = true;
+  };
+  if (/^[0-9]$/.test(key)) {
+    w.shown = (w.fresh || w.shown === '0') ? key : (w.shown + key).slice(0, D);
+    w.fresh = false;
+    return;
+  }
+  if (key === '.') {
+    if (w.fresh) { w.shown = '0.'; w.fresh = false; return; }
+    if (!w.shown.includes('.')) w.shown += '.';
+    return;
+  }
+  if (key === 'C') { w.shown = '0'; w.acc = null; w.op = null; w.fresh = true; return; }
+  if (key === '±') { w.shown = String(-val()); w.fresh = false; return; }
+  if (key === 'M+') { w.mem = (w.mem || 0) + val(); w.fresh = true; return; }
+  if (key === 'MR') { put(w.mem || 0); return; }
+  if (['+', '-', '×', '÷', '='].includes(key)) {
+    const rhs = val();
+    let out = rhs;
+    if (w.op != null && w.acc != null) {
+      if (w.op === '+') out = w.acc + rhs;
+      else if (w.op === '-') out = w.acc - rhs;
+      else if (w.op === '×') out = w.acc * rhs;
+      else if (w.op === '÷') out = rhs === 0 ? NaN : w.acc / rhs;
+    }
+    if (Number.isNaN(out)) { w.shown = 'cannot divide by 0'; w.acc = null; w.op = null; w.fresh = true; return; }
+    // Trim float noise before it reaches the display: 0.1 + 0.2 is 0.3 on a
+    // desk calculator and always was.
+    out = Math.round(out * 1e10) / 1e10;
+    put(out);
+    w.acc = key === '=' ? null : out;
+    w.op = key === '=' ? null : key;
+    return;
+  }
+}
+
+/** The clock's hands, as angles. Pure: an hour in, three angles out. */
+export function clockHands(hour24, minute = 0) {
+  const h = ((Number(hour24) || 0) % 12) + (Number(minute) || 0) / 60;
+  const m = Number(minute) || 0;
+  return {
+    hour: (h / 12) * Math.PI * 2 - Math.PI / 2,
+    minute: (m / 60) * Math.PI * 2 - Math.PI / 2,
+    // Which half of the day, for the little window under the face.
+    pm: ((Number(hour24) || 0) % 24) >= 12,
+  };
+}
+
 /** The Info panel: what the machine says about itself. */
 export function openAbout(ws) {
   const had = ws.windows.find((w) => w.kind === 'about');

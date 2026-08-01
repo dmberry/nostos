@@ -610,6 +610,17 @@ export function initMobileGate(mode = 'gate') {
     // for BOTH gates: the phone used to offer one button that always resumed,
     // so a player on a phone could not start a fresh run or load a checkpoint
     // without finding a laptop, and could not tell that was why.
+    // A DEEP LINK SKIPS THE DOOR. Somebody arriving on
+    // ?cache=whatishistory.geocities.ws followed a link to one page of the cached
+    // web, and asking them to click Start first is a door in front of a door.
+    // Boot straight in, resuming rather than wiping, and main.js opens the page
+    // once it is up. The title screen is still where they land when they close
+    // the browser, which is the whole point of pointing links at it.
+    try {
+      const q = new URLSearchParams(location.search).get('cache');
+      const path = /^\/c\/.+/.test(location.pathname);
+      if (q || path) { boot(false); return; }
+    } catch (e) { /* no link, ordinary title screen */ }
     el.querySelector('#mg-start')?.addEventListener('click', () => boot(true));
     const cont = el.querySelector('#mg-continue');
     if (cont) cont.addEventListener('click', () => boot(false));

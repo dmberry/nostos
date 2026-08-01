@@ -85,8 +85,28 @@ export function pickTile(hits, xf, px, py, scale = 1) {
   }
   for (let i = hits.length - 1; i >= 0; i--) {
     const t = hits[i];
+    // A SIDE FACE IS A THING YOU CAN POINT AT (#186). A face records its four
+    // corners rather than a centre, because it is a parallelogram standing on
+    // the ground plane and the diamond test says nothing about it. Pointing at
+    // one is how you place a block BESIDE a block instead of on top of it,
+    // which is the only way to build an arch.
+    if (t.quad) { if (pointInQuad(ix, iy, t.quad)) return t; continue; }
     // Exact for a 2:1 diamond: the unit ball of the L1 norm on the tile's axes.
     if (Math.abs(ix - t.x) / HW + Math.abs(iy - t.y) / HH <= 1) return t;
   }
   return null;
+}
+
+/** Is this point inside the convex quad? Same winding throughout, so one sign. */
+export function pointInQuad(px, py, q) {
+  let sign = 0;
+  for (let i = 0; i < 4; i++) {
+    const a = q[i], b = q[(i + 1) % 4];
+    const cross = (b.x - a.x) * (py - a.y) - (b.y - a.y) * (px - a.x);
+    if (cross === 0) continue;
+    const s = cross > 0 ? 1 : -1;
+    if (sign === 0) sign = s;
+    else if (s !== sign) return false;
+  }
+  return true;
 }

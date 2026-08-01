@@ -26,6 +26,11 @@ const flat = () => ({
   isSolid: () => false, isSoft: () => false, isWater: () => false,
   isBlocked: () => false, blocked: () => false, objectAt: () => null,
   tileAt: () => 0, hasLineOfSight: () => true,
+  // The M-class held station at half a tile until v1.588 and therefore never
+  // actually walked in these tests, so the stub could get away without the
+  // parts of a map that MOVING needs. It moves now.
+  inBounds: (x, y) => x >= 0 && y >= 0 && x < 64 && y < 64,
+  standingHeightAt: () => 0,
 });
 
 const mkPlayer = () => ({
