@@ -108,6 +108,7 @@ function smsStub(over = {}) {
     status: () => ({ live: 9, total: 12, factory: true, hours: 7 }),
     manualOn: (q) => (/bluebox/i.test(q) ? 'Bluebox: splices a downed machine.' : null),
     recipeOf: (q) => (/bluebox/i.test(q) ? 'two circuit boards. press C.' : /rope/i.test(q) ? '' : null),
+    helpState: () => ({ hasLaptop: true, hurt: false, night: false, live: 9 }),
     ...over,
   };
 }
@@ -198,4 +199,72 @@ test('bearingText names a direction and a distance you can walk', () => {
   assert.match(bearingText(at, { x: 20, y: 10 }), /^E, about 10 paces$/);
   assert.equal(bearingText(at, { x: 10.2, y: 10 }), 'right where you are standing');
   assert.equal(bearingText(null, at), null);
+});
+
+// ---- asking for help (#201, #202) -------------------------------------------
+//
+// The one word a frightened player actually types. It used to reach a talk line
+// and nothing else, from either correspondent.
+
+test('CALYPSO stops the machines around you when you ask for help', () => {
+  const s = smsStub();
+  const r = calypsoSms('help', 'warm', 0, s);
+  assert.match(r, /3 of his machines have stopped/);
+  assert.deepEqual(s.calls, [['sleep', 20], ['hold', 0.06]], 'the hand ran and it cost the most');
+});
+
+test('with nothing near her, she tells you where to look instead — and it costs less', () => {
+  const s = smsStub({ sleepNearby: () => 0 });
+  const r = calypsoSms('help', 'warm', 0, s);
+  assert.doesNotMatch(r, /stopped where they stand|machines have stopped/);
+  assert.deepEqual(s.calls, [['hold', 0.02]], 'a hint is the cheaper favour');
+});
+
+test('not always: some asks she answers and does nothing', () => {
+  // n % 4 === 3 falls through to the talk line, which is the existing one.
+  const s = smsStub();
+  const r = calypsoSms('help', 'warm', 3, s);
+  assert.deepEqual(s.calls, [], 'no favour ran, so nothing was charged');
+  assert.match(r, /Stand still in the dark/);
+});
+
+test('a hint names something the player has actually got', () => {
+  const seen = [];
+  for (let n = 0; n < 8; n++) {
+    if (n % 4 === 3) continue;
+    seen.push(calypsoSms('help', 'warm', n, smsStub({ sleepNearby: () => 0 })));
+  }
+  assert.ok(seen.some((r) => /Netscape/.test(r)), 'she never points at the web');
+  assert.ok(new Set(seen).size > 1, 'she reads the same hint on a loop');
+  // No machine in the pack, so no line about a machine in the pack.
+  for (let n = 0; n < 12; n++) {
+    if (n % 4 === 3) continue;
+    const r = calypsoSms('help', 'warm', n, smsStub({
+      sleepNearby: () => 0,
+      helpState: () => ({ hasLaptop: false, hurt: false, night: false, live: 0 }),
+    }));
+    assert.doesNotMatch(r, /Netscape|Telnet|type man/i, `n=${n} hinted at a machine that is not there`);
+  }
+});
+
+test('asking her for help while she is cold gets the refusal, not a hand', () => {
+  const s = smsStub();
+  const r = calypsoSms('help', 'cold', 0, s);
+  assert.match(r, /boat on my sand/);
+  assert.deepEqual(s.calls, [], 'nothing ran and nothing was charged');
+});
+
+test('a bare help to RON answers with the index, not just no cavalry', () => {
+  const s = smsStub();
+  const r = ronSms('help', 0, s);
+  assert.match(r, /no cavalry/);
+  assert.match(r, /STATUS/);
+  assert.match(r, /WHAT IS/);
+  assert.match(r, /9\/12 towers up/);
+});
+
+test('help wrapped around a real question still reaches the answer', () => {
+  const s = smsStub();
+  assert.match(ronSms('help me build a bluebox', 0, s), /two circuit boards/);
+  assert.match(ronSms('help, what is a bluebox', 0, s), /splices a downed machine/);
 });

@@ -236,3 +236,21 @@ test('the panels open once each, and Info is the browser’s own', async () => {
   const i = WS.openWWWInfo(ws);
   assert.equal(WS.openWWWInfo(ws).id, i.id);
 });
+
+// ---- #194: every bundle in /Apps opens as an application --------------------
+
+test('EVERY .app IN THE LIBRARY HAS A LAUNCHER', async () => {
+  // Three were missing — Grove, Mail and WorldWideWeb — so double-clicking them
+  // in the file manager fell through to the text viewer and showed the bundle's
+  // own manifest, which is a true thing to show and not what a double-click
+  // means (David, 2026-08-18). The table is data, so a test can hold it to the
+  // library rather than trusting whoever adds the next app to remember.
+  const { APPS } = await import('../src/game/workspace-library.js');
+  const src = await (await import('node:fs/promises')).readFile(
+    new URL('../src/main.js', import.meta.url), 'utf8');
+  const table = /const WS_APP_LAUNCH = \{([\s\S]*?)\};/.exec(src);
+  assert.ok(table, 'the launcher table is still called WS_APP_LAUNCH');
+  const wired = new Set([...table[1].matchAll(/'([^']+\.app)'\s*:/g)].map((m) => m[1]));
+  const missing = Object.keys(APPS).filter((n) => !wired.has(n));
+  assert.deepEqual(missing, [], `bundles in /Apps with no launcher: ${missing.join(', ')}`);
+});

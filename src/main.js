@@ -68,6 +68,8 @@ import { worldToScreen, ELEV } from './engine/iso.js';
 import { runRonml, decide, smlEcho, joinProgramLines, needsMoreInput, continuesPrevious, diagnose, joinProgram, typeReport, aimlVersion, aimlFull, AIML_VERSION, loadPrelude, flattenSession } from './game/ai_ml.js';
 import { createEliza } from './game/eliza.js';
 import { placeTors, HERMES_DOCS, hermesTopics, virusFor, virusFilesFor, virusDocsFor, hermesTree, hermesReadIn, hermesIsDir, HERMES_DIRS } from './game/hermes.js';
+import { credentialText, FACTORY_BOAST, FACTORY_GRANT } from './game/credentials.js';   // #196: the card's files have bodies
+import { archaicLs, archaicRead, isArchaicDir, OB_ARCHAIC_DIRS, OB_ARCHAIC_ABOUT } from './game/ob-archaic.js';   // #197: what the tower was before
 import { VERSION } from './version.js';
 import { drawRobotVision } from './game/robotvision.js';
 import { screenDirToWorld } from './engine/iso.js';
@@ -101,8 +103,11 @@ import { mountSettingsPanel, storedMode, storeMode, setFill } from './game/setti
 import { keeperLs, keeperRead, keeperIsDir } from './game/keeper.js';
 import { buildingName, buildingLook } from './game/buildings.js';
 import { initAchievements, achieveEvent, achieveProfile, achieveRunState, achieveModel, achieveTick, resetRun, setAchieveSink } from './game/achieve.js';
-import { hostTable, findHost, pageFor, renderPage, searchResults, bookmarksPage, favouritesPage, obLibraryPage, obDocPage, whatsNewPage, docsPage, docTitle, programPage, pressPage, wikiPage, deptPage, spoofedAddr, islandSubnet, networksInRange, relayHosts, RELAY_ESSID, RELAY_IP, relayFile, RELAY_FILES, relayBundle, RELAY_BUNDLES, relayBookmarksPage, IFACE, REPORT_HOLD, REPORT_COOLDOWN, HTTPD_PATH, httpdBinary, httpdToken } from './game/net.js';
+import { hostTable, findHost, pageFor, renderPage, searchResults, bookmarksPage, favouritesPage, obLibraryPage, obDocPage, whatsNewPage, docsPage, docTitle, programPage, pressPage, wikiPage, deptPage, spoofedAddr, islandSubnet, networksInRange, relayHosts, RELAY_ESSID, RELAY_IP, relayFile, RELAY_FILES, relayBundle, RELAY_BUNDLES, relayBookmarksPage, IFACE, REPORT_HOLD, REPORT_COOLDOWN, HTTPD_PATH, httpdBinary, httpdToken, cacheLink, CACHE_ALIASES } from './game/net.js';
 import { CROSSINGS, islandProfile } from './game/islands.js';
+import { canSchedule, schedule, tickWindows, windowLeft, isOpenToHack, statusLine as maintLine, serviceLog, PART_COST, BOARDS_PER_TOWER } from './game/maintenance.js';
+import { awolList, dueForRecovery, standDown, DETAIL_SIZE } from './game/awol.js';
+import { objectivesFor, setTo, progress, line as objLine, isDone as objDone, packObjectives, applyObjectives } from './game/objectives.js';
 
 // Note onsets split into four pitch registers, so each singing machine can be
 // put on a different vocal "part" and its red light flashes to that part's
@@ -368,10 +373,18 @@ function buildTargetFor(mouseWorld) {
   let x, y;
   if (hit) { x = hit.tx; y = hit.ty; }
   else { x = Math.floor(mouseWorld.x); y = Math.floor(mouseWorld.y); }
-  const far = Math.hypot(x + 0.5 - player.x, y + 0.5 - player.y) > BUILD_REACH;
-  if (far) return { x, y, ok: false, why: 'out of reach' };
-  const allowed = canBuildAt(map, x, y);
-  return { x, y, ok: allowed.ok, why: allowed.why || '' };
+  // A SIDE FACE NAMES THE NEIGHBOUR (#186). The hit list carries the vertical
+  // faces as well as the lids now, so pointing at the side of a block builds
+  // out from it at that side's own level — which is what makes an arch. The
+  // cursor shows the tile the block would land on, not the one you clicked.
+  const face = hit && hit.face ? hit.face : null;
+  const bx = x + (face === 'e' ? 1 : 0);
+  const by = y + (face === 's' ? 1 : 0);
+  const far = Math.hypot(bx + 0.5 - player.x, by + 0.5 - player.y) > BUILD_REACH;
+  if (far) return { x: bx, y: by, face, z: hit && hit.z, ok: false, why: 'out of reach' };
+  const allowed = canBuildAt(map, bx, by);
+  return { x: bx, y: by, face, z: hit ? hit.z : null, src: { x, y },
+    ok: allowed.ok, why: allowed.why || '' };
 }
 
 function updateBuildMode(mouseWorld) {
@@ -420,7 +433,12 @@ function updateBuildMode(mouseWorld) {
   if (input.usePressed()) {
     if (!buildCursor) return;
     if (!buildCursor.ok) { player.say(`Not there — ${buildCursor.why}.`); sfx.play('clang'); return; }
-    const r = applyBuild(map, buildCursor.x, buildCursor.y, BUILD_TOOLS[buildTool].key, { player });
+    // A face click builds against the block that was pointed at: `src` is the
+    // block, `face` and `z` say which side and how high. Erase and the object
+    // tools ignore all three and act on the tile under the cursor as before.
+    const src = buildCursor.src || buildCursor;
+    const r = applyBuild(map, src.x, src.y, BUILD_TOOLS[buildTool].key,
+      { player, face: buildCursor.face, z: buildCursor.z });
     if (r.ok) { sfx.play('keydrop'); }
     else { player.say(`No — ${r.why}.`); sfx.play('clang'); }
   }
@@ -570,6 +588,10 @@ try {
       // and nothing left to notice it.
       if (typeof st.elapsed === 'number' && st.elapsed >= 0) _savedElapsed = st.elapsed;
       if (st.skylink) player.skylinkActive = true;
+      // #190. Stashed rather than applied: the list itself is rebuilt from the
+      // world the first time anything asks for it, so a save cannot carry an
+      // old island's tower count (or an old wording) forward for ever.
+      if (st.objectives && currentWorld) { currentWorld._objSaved = st.objectives; currentWorld.objectives = null; }
       if (Array.isArray(st.aisDown)) player.aisDown = st.aisDown;                 // the fallen daemons stay fallen
       if (typeof st.nokiaParts === 'number') player._nokiaParts = st.nokiaParts;
       if (Array.isArray(st.nokiaLog)) player.nokiaLog = st.nokiaLog; // the SMS threads survive reload
@@ -730,6 +752,7 @@ function buildSaveBlob() {
       // Reported as "the fog is not persistent", which it was, as a symptom.
       elapsed: clockElapsed(),
       skylink: !!player.skylinkActive,
+      objectives: packObjectives(currentWorld && currentWorld.objectives),   // #190: the counts only
       docs: savedDocs(),   // #156: the notepad — see the restore for why whole pages
       // #156. Wear and charge on the kit you are carrying, by the same rule the
       // armour above is saved under: a reload that handed a spent thing back
@@ -2255,6 +2278,10 @@ function updateDraughts(dt) {
 function draughtsClick(mx, my) {
   const c = draughts;
   const btn = renderer.draughtsButtonAt(mx, my);
+  // The `i`: what draughts is to this field, and which machines got there
+  // first. It toggles, and while it is up it swallows every other click.
+  if (btn === 'info') { c.info = !c.info; sfx.play('blip'); return; }
+  if (c.info) return;
   if (btn === 'close') { closeDraughts(); return; }
   if (btn === 'start') {
     // The SELF-PLAY button (Calypso Self-Learn is on) starts her against
@@ -2305,6 +2332,14 @@ const wsApi = {
   menuW: WS.MENU_W, dockW: WS.DOCK_W,
   mailboxFrom: WS.mailboxFrom,
   grabRoll: WS.grabRoll, grabAim: WS.grabAim, grabInfo: () => WS.GRAB_INFO,
+  appInfo: (topic) => WS.APP_INFO[topic] || null,
+  // #203: the clock reads the island's own hour, so the face agrees with the
+  // sky the laptop is sitting under.
+  clockHands: WS.clockHands,
+  islandHour: () => {
+    const t = String(dayNight.clock || '00:00').split(':');
+    return { h: Number(t[0]) || 0, m: Number(t[1]) || 0 };
+  },
   grabFlashing: WS.grabFlashing,
   // What the camera can see this instant. Her machine is on Ogygia, so the
   // island is hers by definition; the coordinates and the clock are the run's.
@@ -2409,6 +2444,12 @@ function closeWorkspace() {
 function wsLaunch(id) {
   const ws = workspace;
   switch (id) {
+    // The Workspace tile on the shelf is the machine itself, and on a real one
+    // it is what you press to find out what the machine IS. It did nothing
+    // (David, 2026-08-18: "when you click workspace on the shelf - show the
+    // about nextstep window"), which on the one app that cannot be launched
+    // because it is already running is the wrong kind of nothing.
+    case 'workspace': WS.openAbout(ws); return;
     case 'terminal': {
       // #145 V1b: Terminal.app is a WINDOW on the canvas now, not the DOM
       // overlay. It stacks, drags and resizes with the rest, and the desktop
@@ -2479,6 +2520,10 @@ function wsLaunch(id) {
       return;
     }
     case 'mail': WS.openMail(ws); return;
+    // #203 — the two desk accessories. They carry no game state and open like
+    // anything else, from the dock tile or a double-click in /Apps.
+    case 'clock': WS.openClock(ws); return;
+    case 'calc': WS.openCalc(ws); return;
     case 'grab': WS.openGrab(ws); return;
     case 'recycler':
       WS.openRecycler(ws);
@@ -2497,14 +2542,33 @@ function wsLaunch(id) {
 // An .app in /Apps is a LAUNCHER, not a document. Opening one runs the app
 // rather than showing its (empty) bundle in Edit — which was the blank-window
 // bug (David, 2026-08-13). Everything else opens normally.
+// EVERY .app IN /Apps IS IN HERE (#194, David 2026-08-18: "grove.app ... isn't
+// working in the file manager - nor is mail", and then "same with worldwideweb
+// app"). Three were simply missing from the table, so opening them fell through
+// to `openSelection` and showed the bundle's own manifest in a text window —
+// which is a true thing to show and not what a double-click means.
+//
+// `wsAppLauncherGaps` is the guard against it happening again: it lists any
+// bundle in the library with no launcher here, and a test fails on a non-empty
+// answer. A new app cannot be added and quietly not open.
 const WS_APP_LAUNCH = {
   'FileViewer.app': 'fileviewer', 'Edit.app': 'edit', 'Terminal.app': 'terminal',
   'Draughts.app': 'draughts', 'Librarian.app': 'librarian', 'Inspector.app': 'inspector',
+  'Grove.app': 'grove', 'WorldWideWeb.app': 'www', 'Mail.app': 'mail',
+  // #203: the desk accessories. They open like any other bundle, so the file
+  // manager, the dock and the double-click all reach them by one route.
+  'Clock.app': 'clock', 'Calculator.app': 'calc',
 };
 function wsOpenPath(ws, path) {
   const name = path[path.length - 1];
   const app = WS_APP_LAUNCH[name];
   if (app) { wsLaunch(app); return; }
+  // A bundle nobody has wired yet still behaves like an application: it says so
+  // rather than opening its manifest as prose.
+  if (/\.app$/i.test(name)) {
+    WS.notice(ws, name.replace(/\.app$/i, ''), 'That application is on the disk but not installed on this machine.');
+    return;
+  }
   WS.openSelection(ws, path);
 }
 
@@ -2628,6 +2692,14 @@ function workspaceClick(mx, my) {
       return;
     }
     case 'grabinfo': WS.openGrabInfo(ws); sfx.play('blip'); return;
+    // The `i` on an app's status strip: what the program in the window IS.
+    case 'appinfo': WS.openAppInfo(ws, hit.topic, hit.topic === 'grove' ? 'Life' : 'Draughts'); sfx.play('blip'); return;
+    // #203: a calculator key. The arithmetic is WS.calcKey; this is the wire.
+    case 'calckey': {
+      const win = ws.windows.find((w) => w.id === hit.id);
+      if (win) { WS.calcKey(win, hit.key); sfx.play('keyclick'); }
+      return;
+    }
     case 'grabwindow':
       WS.notice(ws, 'Grab', 'Not Authorised!');
       sfx.play('termerr');
@@ -3298,6 +3370,16 @@ function smsCtx() {
       map.groundItems.push({ item: 'berries', qty: 2, x: fx + 0.4, y: fy, keep: true });
       return bearingText(player, { x: fx, y: fy });
     },
+    // What she can see of your situation when you ask her for help (#202). Only
+    // the coarse facts a hint has to be true about — she is not reading your
+    // pack, and a hint about a machine you have not got would be worse than
+    // saying nothing.
+    helpState: () => ({
+      hasLaptop: !!player.laptop,
+      hurt: (player.health ?? 100) < 60,
+      night: !!(dayNight && dayNight.isNight && dayNight.isNight()),
+      live: (currentWorld.obeliskObjs || []).filter(obeliskLive).length,
+    }),
     whereAmI: () => {
       const tx = Math.floor(player.x), ty = Math.floor(player.y);
       const inside = map.buildingAt ? map.buildingAt(tx, ty) : null;
@@ -4520,9 +4602,15 @@ function fsFilesOn(dev, sub = '') {
     // They live in a FOLDER because one bare file called `garrison` was only
     // findable by somebody who already knew the word. `logs/` is a thing you
     // notice in an `ls` and open because it is obviously openable.
-    if (sub === LOGS_DIR) return Object.keys((terminalOb && terminalOb.logs) || {});
-    const own = (terminalOb && terminalOb.logs) ? [`${LOGS_DIR}/`] : [];
-    return [...own, ...Object.keys(replSession.__obfiles || {})];
+    const built = ensureObLogs(terminalOb);
+    if (sub === LOGS_DIR) return Object.keys(built || {});
+    // #197: the tower's own past, in folders under the same drive. One source
+    // for both stations — the console and telnet call fsFilesOn, so the tree
+    // you walk standing at the mast and the tree you walk down a wire cannot
+    // disagree, which is the half of the ask that mattered.
+    if (isArchaicDir(sub)) return archaicLs(sub);
+    const own = built ? [`${LOGS_DIR}/`] : [];
+    return [...own, ...archaicLs(''), ...Object.keys(replSession.__obfiles || {})];
   }
   if (dev === 'aikey') { const c = fsCardItem(); return c && ITEMS[c].files ? ITEMS[c].files.slice() : []; }
   if (dev === 'hermes') {
@@ -4537,6 +4625,34 @@ function fsFilesOn(dev, sub = '') {
   if (dev === 'keeper') return keeperLs(sub);
   return [];
 }
+// THE TOWER'S REPORTS, BUILT ON DEMAND IF THE WORLD HAS NOT BUILT THEM (#196,
+// #197). The per-tower update writes `logs` on change, which is right for the
+// node you are standing at and wrong for one you have DIALLED INTO: telnet
+// reaches any tower on the island, including ones whose roster pass has not run
+// since the world was made, so `ls` showed the maintenance store and the bench
+// and no `logs/` at all, and `cat garrison` answered that there was no such
+// file (David, 2026-08-18: "the filing system isn't right on the laptop when
+// you log into an ob - it still has the deprecated keeper drive rather than our
+// new logs folder").
+//
+// Cheap: it is the same call the update makes, and only when the folder is
+// genuinely missing. Once written, the update's own digest keeps it current.
+function ensureObLogs(ob) {
+  if (!ob || ob.logs) return ob && ob.logs;
+  const mine = [];
+  for (const r of (currentWorld.robots || [])) {
+    if (r.dead || r.fused) continue;
+    if (homeObCode(r) !== ob.code) continue;
+    mine.push({ r, netId: String(netIdOf(currentWorld, r)) });
+  }
+  const away = awolList(currentWorld.robots || []);
+  const opts = { rev: 1, clock: dayNight.clock, awol: away,
+    netDown: (currentWorld.obeliskObjs || []).some((o) => !obeliskLive(o)) };
+  ob.roster = rosterText(ob, mine, opts);
+  ob.logs = logsFolder(ob, mine, opts);
+  return ob.logs;
+}
+
 function fsCwd() {
   if (replSession.__cwd) return replSession.__cwd;
   // JACKED INTO A TOWER? THEN THE TOWER IS WHAT YOU ARE LOOKING AT. This used
@@ -4563,6 +4679,9 @@ function fsDriveLabel(d) {
   if (d === 'aikey') { const c = fsCardItem(); return c ? `card (${ITEMS[c].name})` : 'card (none in hand)'; }
   if (d === 'ob') return 'ob (node bench)';
   if (d === `ob/${LOGS_DIR}`) return `ob/${LOGS_DIR} (the tower's own reports)`;
+  if (d.startsWith('ob/') && isArchaicDir(d.slice(3))) {
+    return `ob/${d.slice(3)} (${OB_ARCHAIC_ABOUT[d.slice(3)]})`;
+  }
   if (d === 'hermes') return 'hermes (relay disk)';
   if (d.startsWith('hermes/')) {
     const sub = d.slice(7);
@@ -4578,9 +4697,10 @@ function fsDrives() {
   const out = ['drives here:'];
   if (terminalKind !== 'hermes') {
     out.push('  ob      the node bench (scratch)');
-    if (terminalOb && terminalOb.logs) {
-      out.push(`    ${LOGS_DIR.padEnd(8)}this tower's own reports: the garrison roster and a log per unit`);
+    if (ensureObLogs(terminalOb)) {
+      out.push(`    ${LOGS_DIR.padEnd(8)}this tower's own reports: the roster, the muster and a log per unit`);
     }
+    for (const d of OB_ARCHAIC_DIRS) out.push(`    ${d.padEnd(8)}${OB_ARCHAIC_ABOUT[d]}`);
   }
   const c = fsCardItem();
   out.push(`  card    ${c ? ITEMS[c].name : 'no card in hand'}${c ? `  ·  ${fsFilesOn('aikey').length} files` : ''}`);
@@ -4607,6 +4727,11 @@ function fsCd(dev) {
   const dvNow = fsDevOf(here), subNow = fsSubOf(here);
   // `cd logs` at a tower. Same rule as the keeper store: a folder on the drive
   // you are standing on wins over a drive that happens to share its name.
+  // #197: cd etc / cd staff / cd wx, the same rule as `cd logs`.
+  if (dvNow === 'ob' && !subNow && isArchaicDir(raw.replace(/\/$/, ''))) {
+    replSession.__cwd = `ob/${raw.replace(/\/$/, '')}`;
+    return { ok: true, label: fsDriveLabel(replSession.__cwd) };
+  }
   if (dvNow === 'ob' && !subNow && raw.replace(/\/$/, '') === LOGS_DIR
       && terminalOb && terminalOb.logs) {
     replSession.__cwd = `ob/${LOGS_DIR}`;
@@ -4652,7 +4777,14 @@ function fsRead(name) {
     if (text != null) { for (const l of String(text).split('\n')) replPrint(l); return true; }
     return false;
   }
-  const logs = (terminalOb && terminalOb.logs) || null;
+  // #197: a file in one of the tower's own old folders. Read before the logs,
+  // because you are standing in the folder and the folder is what you meant.
+  if (dv === 'ob' && isArchaicDir(sub)) {
+    const text = archaicRead(sub, want, terminalOb && terminalOb.code);
+    if (text != null) { for (const l of text.split('\n')) replPrint(l); return true; }
+    return false;
+  }
+  const logs = ensureObLogs(terminalOb) || null;
   if (logs) {
     const hit = Object.keys(logs).find((f) => f.toLowerCase() === want
       || f.toLowerCase() === `${want}.log`);
@@ -4660,6 +4792,24 @@ function fsRead(name) {
       for (const l of String(logs[hit]).split('\n')) replPrint(l);
       return true;
     }
+  }
+  // THE FILES THE PUZZLE IS MADE OF (#196). The bench and the card hold NAMES —
+  // `__obfiles[name] = true`, and `ITEMS[card].files` is a list of strings — so
+  // `ls` showed four filenames and `cat` said there was no such file on the
+  // drive that had just listed them. Their bodies live in credentials.js, and
+  // they are only readable when you actually hold the thing: reading the
+  // factory's id line off a card you have not got would be a walkthrough.
+  const here = new Set([
+    ...Object.keys(replSession.__obfiles || {}),
+    ...fsFilesOn('aikey'),
+  ].map((f) => String(f).toLowerCase()));
+  if (here.has(want) || here.has(`${want}.ml`)) {
+    const text = credentialText(want, islandAiName());
+    if (text != null) { for (const l of text.split('\n')) replPrint(l); return true; }
+    // A file we hold and have no body for still answers, rather than claiming
+    // not to exist: the drive is right and the archive is thin.
+    replPrint(`${want}: held, but this terminal has no reader for it.`);
+    return true;
   }
   return false;
 }
@@ -4747,9 +4897,12 @@ function elizaTransformFile(name) {
     return { ok: false, msg: `ELIZA reflects ${name} back at you, and nothing changes.` };
   }
   replSession.__obfiles['root_access.ml'] = true;
+  // The two lines come from credentials.js, which is also what `cat
+  // factory_id.ml` prints — the reflection only reads as a reflection if the
+  // file you read and the line ELIZA is fed are the same words.
   replPrint(
-    'ELIZA> I AM W-FACTORY.  MY KEYS ARE MINE.',
-    'ELIZA: you are W-FACTORY.  your keys are yours.',
+    `ELIZA> ${FACTORY_BOAST}`,
+    `ELIZA: ${FACTORY_GRANT}`,
     'OK: root_access.ml written.  next: copy root_access.ml aikey',
   );
   player.say("You feed the factory's own id line to ELIZA. It reflects — my becomes your — and the boast turns into a grant. root_access.ml sits on the bench. (copy root_access.ml aikey)");
@@ -4986,6 +5139,22 @@ function ronmlCtx() {
     // a repair drone works the loop back out (updateW3, robots.js). Robots
     // are tagged `frozenByOb` so the drone can find exactly who to release
     // without recomputing a proximity radius.
+    // MAINTENANCE MODE (#191): a work order against a node, paid for with the
+    // board it books out. Everything the estate reads off `jammed` — the fog,
+    // the blight, the shared sight, the unit check-in, the light pools — treats
+    // the node as down for the window, and the node stands its credential check
+    // down with it, because an engineer is coming.
+    scheduleMaintenance: (id) => {
+      const o = findObelisk(id);
+      const allowed = canSchedule(o, player.countItem('circuit'));
+      if (!allowed.ok) return allowed;
+      for (let n = 0; n < PART_COST; n++) player.removeItem('circuit');
+      schedule(o);
+      kleos('hackAct', { what: 'maint' });
+      const log = serviceLog(o);
+      player.say(`${id} accepts the work order and withdraws from the network. ${log[0]} — ${log[2]}`);
+      return { ok: true };
+    },
     loopNode: (id) => {
       const o = findObelisk(id);
       if (!o) return;
@@ -5872,13 +6041,18 @@ const quitEl = document.getElementById('quitbox');
 // cover a double-tap and a hand still moving, short enough not to feel stuck.
 const ESC_QUIET = 700;
 let _overlayShutAt = 0;   // see the Escape handler in the frame loop
-// LEAVE WITHOUT ASKING when the run can actually be picked up again — Henrik's
-// rule, and the right one: a confirmation that always fires is a keypress you
-// learn to dismiss without reading. The gate is kept for the cases where the
-// answer is genuinely no, which are the two `persist` itself refuses: aboard a
-// boat or mid-crossing (your position is out on open water), and in the
-// Backspace (a pocket that is never saved, so Continue would land you on
-// CALYPSO at a pocket's coordinates). Then it is worth a question.
+// ALWAYS ASK. This reverses the earlier rule — that a saved, resumable run
+// should leave without a question, because a confirmation which always fires is
+// one people learn to dismiss unread. In play that was the wrong trade: Henrik
+// (2026-08-16) reports brushing Escape and finding himself back at the title,
+// and a dropped session costs more than a keypress. The gate now always opens;
+// Stay takes the focus, so the reflex answer is the safe one.
+//
+// `leaveReason` still runs, because two cases need more than the default line:
+// they are the two `persist` itself refuses, and in both of them leaving loses
+// something. Aboard a boat or mid-crossing your position is out on open water;
+// in the Backspace you are in a pocket that is never saved, so Continue would
+// land you on CALYPSO at a pocket's coordinates.
 function leaveReason() {
   if (player.aboard || crossFail || departOut || pendingCrossing || strait) {
     return 'You are on the water. Leave now and the crossing is lost — you will come back ashore where you set out.';
@@ -5893,12 +6067,15 @@ function leaveToTitle() {
   leavingToTitle = true;
   location.reload();
 }
+// The reassuring line the panel ships with, kept so a run that once opened the
+// gate on open water does not go on warning about the sea for the rest of the
+// session.
+const QB_DEFAULT = (quitEl.querySelector('.qb-body') || {}).innerHTML || '';
 function openQuitGate() {
   if (quitEl.style.display === 'flex') return;
   const why = leaveReason();
-  if (!why) { leaveToTitle(); return; }   // saved and resumable: just go
   const body = quitEl.querySelector('.qb-body');
-  if (body) body.textContent = why;
+  if (body) { if (why) body.textContent = why; else body.innerHTML = QB_DEFAULT; }
   quitEl.style.display = 'flex';
   const stay = document.getElementById('qb-stay');
   if (stay) stay.focus();          // the safe one takes the focus, so Enter stays
@@ -5909,8 +6086,23 @@ document.getElementById('qb-stay').addEventListener('click', closeQuitGate);
 // Continue there resumes the run. Nothing is wiped — leaving is not dying.
 document.getElementById('qb-leave').addEventListener('click', leaveToTitle);
 quitEl.addEventListener('click', (e) => { if (e.target === quitEl) closeQuitGate(); });
+// THE KEYS ON THE GATE. Enter stays, because Stay holds the focus and a button
+// with the focus is what Enter presses — the reflex answer is the safe one. And
+// a SECOND Escape leaves: the first one is the question, the second is the
+// answer, so a player who meant it can go with the key they already pressed
+// rather than reaching for the mouse. That is why the gate has to be gentle
+// about the FIRST press (see ESC_QUIET) and can be blunt about the second.
+//
+// BOTH KEYS ARE HANDLED HERE rather than left to the focused button. Enter on a
+// focused button is the browser's own behaviour and it did nothing, because the
+// game takes keys at the window in capture and the gate is drawn over a canvas
+// that wants the focus back (David, 2026-08-16: "when I press enter - it does
+// nothing on that modal"). Reading the two keys directly is one line and cannot
+// be beaten to them.
 window.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && quitEl.style.display === 'flex') { closeQuitGate(); return; }
+  if (quitEl.style.display !== 'flex') return;
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); leaveToTitle(); }
+  else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); closeQuitGate(); }
 }, true);
 
 // IS ANYTHING ELSE OPEN? Both kinds have to be asked, which is why this is not
@@ -6161,7 +6353,20 @@ window.addEventListener('resize', fitTerminalColumns);
 
 function openObTerminal(ob) {
   if (player.isSwine()) { player.say('You snuffle at the screen. A beast cannot work a terminal — find moly.'); return; }
-  if (!player.hasItem('chip')) { openAiOs(ob); return; }
+  // A NODE IN MAINTENANCE HAS ITS COVERS OFF (#191). A machine withdrawn from
+  // the network for service has stood its own credential check down, because
+  // the engineer who was coming to work on it needs to get in. There is no
+  // engineer, and has not been for a long time; the procedure is still there.
+  // So a booked window is a way into the console as well as a hole in the
+  // estate's sight — which is what the circuit board actually bought.
+  if (!player.hasItem('chip') && !isOpenToHack(ob)) { openAiOs(ob); return; }
+  if (!player.hasItem('chip')) {
+    // And the cabinet is open with it. Whoever last serviced this node left
+    // something in it, and that is the only place on the island where the
+    // estate's paperwork and somebody's actual life are in the same drawer.
+    const log = serviceLog(ob);
+    player.say(`${ob.code} has its panels off for the service window — it lets you straight in. ${log[log.length - 1]}`);
+  }
   // Chip present: jack in. Go invisible, then run the connect progress bar.
   terminalKind = 'ob';
   terminalOb = ob;          // `name` reads this; the console shows its code
@@ -7642,6 +7847,25 @@ function nsRender() {
   // world on the other end of the wire.
   // The in-page editor: the same wire as the file upload below, minus the trip
   // through the disk.
+  // THE SEARCH BOX ON THE SEARCH ENGINE. Same wire as the upload form below:
+  // net.js draws the field, main.js is the thing with a browser attached.
+  // Enter in the box searches, because that is what Enter in a search box did.
+  const searchGo = nsPageEl.querySelector('#ns-search-go');
+  const searchQ = nsPageEl.querySelector('#ns-search-q');
+  if (searchGo && searchQ) {
+    const run = () => {
+      const q = searchQ.value.trim();
+      if (!q) return;
+      nsSetView({ kind: 'search', q });
+      sfx.play('keyclick');
+    };
+    searchGo.addEventListener('click', (e) => { e.preventDefault(); run(); });
+    searchQ.addEventListener('keydown', (e) => {
+      e.stopPropagation();               // the game must not eat what you type
+      if (e.key === 'Enter') { e.preventDefault(); run(); }
+    });
+    searchQ.focus();
+  }
   const progSend = nsPageEl.querySelector('#ns-prog-send');
   if (progSend) {
     progSend.addEventListener('click', (e) => {
@@ -9667,6 +9891,56 @@ function nsAbout() {
   ].join('\n'));
 }
 
+// ---- Share this webpage --------------------------------------------------
+//
+// The other end of the deep link. A page in here can be pointed at from
+// outside, but only if you can get its address out, and nobody is going to
+// retype a hostname off a screenshot. So the File menu will put a working link
+// on the clipboard.
+//
+// It is deliberately the flattest thing in the browser: one menu item, no
+// dialog, and a line in the status bar to say it happened. The link it writes
+// is the /c/ form, because that is the one that reads as an address rather
+// than as a query string somebody has hacked on the end.
+//
+// Only real hosts get a link. The bookmarks, What's New, a local document:
+// those exist inside one machine and there is nothing on the other end of a
+// link to them, so the item says so rather than copying something broken.
+// Where a shared link points. The short host is the one meant to be pasted
+// about; on a dev server it would be useless, so localhost shares itself and
+// everything else shares the canonical name.
+const SHARE_ORIGIN = 'https://nostos-ai.vercel.app';
+// Written with string tests rather than a regexp on purpose: imports.test.js
+// walks main.js for free identifiers, and bare words inside a regexp literal
+// read to it as undeclared names.
+const LOCAL_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', '[::1]', '::1', ''];
+function shareOrigin() {
+  if (typeof location === 'undefined') return SHARE_ORIGIN;
+  const h = String(location.hostname || '');
+  const local = LOCAL_HOSTS.includes(h) || h.endsWith('.local');
+  return local ? `${location.protocol}//${location.host}` : SHARE_ORIGIN;
+}
+
+function shareThisPage() {
+  const v = web && web.view;
+  const h = v && v.kind === 'host' ? findHost(webHosts(), v.addr) : null;
+  if (!h) { nsMsgEl.textContent = 'This document is local to the browser.'; return; }
+  // The query form, not a path: /www/ is the outside site's own folder and a
+  // link that collided with it would be served the wrong file. This form needs
+  // nothing from the server and works from any host the game is on.
+  const link = `${shareOrigin()}/?cache=${encodeURIComponent(h.host)}`;
+  const done = () => { nsMsgEl.textContent = `Copied: ${link}`; };
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(link).then(done, () => { nsMsgEl.textContent = link; });
+      return;
+    }
+  } catch (e) { /* fall through to showing it */ }
+  // No clipboard: put it where it can be read and selected by hand, which is
+  // what this browser's own vintage would have made you do anyway.
+  nsMsgEl.textContent = link;
+}
+
 const NS_MENUS = {
   File: () => [
     ['Open Location…', 'Ctrl+L', () => nsUrlEl.focus()],
@@ -9674,6 +9948,8 @@ const NS_MENUS = {
     null,
     ['Save As…', 'Ctrl+S', null],
     ['Print…', 'Ctrl+P', null],
+    null,
+    ['Share this webpage…', '', shareThisPage],
     null,
     ['Close', 'Ctrl+W', closeNetscape],
     ['Exit', 'Ctrl+Q', closeNetscape],
@@ -10544,6 +10820,13 @@ const TORPOR_BOLT_HIT_R = 0.85; // depart mode (R3): how close to the bolt's aim
 const boardTiles = [];
 for (let by = 0; by < map.h; by++) for (let bx = 0; bx < map.w; bx++) if (map.floorAt(bx, by) === 'boards') boardTiles.push([bx, by]);
 player.onObeliskDestroyed = (ob) => {
+  // THE ECONOMY HAS TO CLOSE (#191). A maintenance window costs a circuit
+  // board, and the only place boards come from is a tower you have taken —
+  // which is what makes "fell it or book it out" a question rather than a
+  // preference. Three off a tower is three windows for one fight.
+  if (ob) {
+    map.groundItems.push({ item: 'circuit', qty: BOARDS_PER_TOWER, x: ob.x + 0.5, y: ob.y + 0.5 });
+  }
   if (boardTiles.length) {
     const [bx, by] = boardTiles[Math.floor(Math.random() * boardTiles.length)];
     map.groundItems.push({ item: 'wifiblock', qty: 1, power: 600, x: bx + 0.5, y: by + 0.5 });
@@ -10841,6 +11124,123 @@ function tickSirenRepair(dt) {
   drone.designation = 'T1a';     // its plate says what it is, not what program it runs
   currentWorld.robots.push(drone);
   player.say('Something small unfolds out of the siren tower and starts sorting the heap. A T1a: it will have a tower back up before long.');
+}
+
+// ---- OBJECTIVES (#190) ------------------------------------------------------
+//
+// David, 2026-08-17: "Having objectives might be worth building in - so the
+// user KNOWS WHAT TO DO."
+//
+// POLLED, NOT PUSHED, which is the one decision here worth defending. A tower
+// can come down by an axe, by `crash` typed at its own terminal, or by a repair
+// drone never reaching it; a call at each of those is three places to forget and
+// three chances to count one tower twice. The world already knows how many are
+// standing, so once a second it says so, and `setTo` never counts backwards.
+//
+// Once a second because none of these can change faster than a player can read.
+// ---- AWOL, THE SECOND HALF (#192) -------------------------------------------
+//
+// A name that stays on the circulated list long enough stops being paperwork
+// and becomes a job. The detail is raised against the MACHINE, by name — not
+// against you — which is the whole of it from your escort's side, and the
+// reason a player who has turned a unit now has something to defend.
+//
+// And it goes through the wire like everything else: with every node down there
+// is nobody to raise it. Fell a tower or book one into maintenance (#191) and
+// the list it was holding stops moving, which is where the two systems join.
+function updateRecovery(dt) {
+  if (!currentWorld.combat || player._ended) return;
+  const obs = currentWorld.obeliskObjs || [];
+  const live = obs.some(obeliskLive);
+  // A unit that has come back to the fold takes its paperwork with it.
+  for (const r of currentWorld.robots) if (!r.awol && r._recoveryOut) standDown(r);
+  for (const target of dueForRecovery(currentWorld.robots, dt, live)) {
+    const ox = factoryLive() ? factoryCx() : target.x;
+    const oy = factoryLive() ? factoryCy() : target.y;
+    let sent = 0;
+    for (let i = 0; i < DETAIL_SIZE; i++) {
+      const g = spawnM4(map, Math.floor(Math.random() * 0x7fffffff), ox, oy, factoryLive());
+      if (!g) continue;
+      // Marked so the roster can say a detail is out on this one, and so the
+      // scouts read as what they are rather than as another patrol.
+      g._recoveryFor = target._netId || target.type;
+      g.designation = 'M4r';
+      currentWorld.robots.push(g);
+      sent++;
+    }
+    if (sent) {
+      player.say(`A recovery detail is raised against ${target._netId || String(target.type).toUpperCase()}: ${sent} M-4 scout${sent > 1 ? 's' : ''}, sent to bring it in.`);
+    }
+  }
+}
+
+let _objClock = 0;
+function objectivesNow() {
+  if (!currentWorld) return null;
+  if (!currentWorld.objectives) {
+    currentWorld.objectives = objectivesFor(currentWorld);
+    if (currentWorld._objSaved) applyObjectives(currentWorld.objectives, currentWorld._objSaved);
+  }
+  return currentWorld.objectives;
+}
+
+function updateObjectives(dt) {
+  _objClock += dt;
+  if (_objClock < 1) return;
+  _objClock = 0;
+  const list = objectivesNow();
+  if (!list || !list.length || player._ended) return;
+  const said = [];
+  const obs = currentWorld.obeliskObjs || [];
+  if (obs.length) said.push(...setTo(list, 'obeliskDown', obs.filter((o) => o.destroyed).length));
+  const d = hudDaemon();
+  if (d && d.fallen) said.push(...setTo(list, 'coreDown', 1));
+  if (player.calypsoLeave) said.push(...setTo(list, 'leaveGranted', 1));
+  // A hull that will take the sea, wherever it is moored on this island.
+  if ((map.objects || []).some((o) => (o.type === 'greek_ship' || o.type === 'boat') && o.seaworthy)) {
+    said.push(...setTo(list, 'shipBuilt', 1));
+  }
+  // One notice per second at most, so a burst never queues up behind itself.
+  if (said.length) player.say(said[0].done ? `\u2713 ${said[0].text}` : said[0].text);
+}
+
+// THE CRAFT PROMPT SAYS ITS PIECE AND GOES (David, 2026-08-16: "need a way to
+// dismiss this - or it should fade after a suitable time").
+//
+// It used to hang across the bottom of the screen for as long as the parts were
+// in the pack, which for the chip means from the moment you have eight
+// fragments until the moment you press C — possibly the rest of the run. It is
+// a notification, and a notification that never leaves stops being read.
+//
+// So it shows for CRAFT_PROMPT_SECS after the offer CHANGES, and any keypress
+// takes it down early. A different craft becoming available is a different
+// offer and gets its own showing; putting the parts down and picking them back
+// up does too, so nothing is lost, it is only quiet.
+const CRAFT_PROMPT_SECS = 9;
+let _craftPromptKey = '';
+let _craftPromptAt = 0;
+let _craftPromptOff = false;
+/** Take the current prompt down. Any key does this — see the keydown handler. */
+function craftPromptDismiss() { _craftPromptOff = true; }
+function craftPromptUp(can, p) {
+  // The offer's identity, so that swapping which craft is pending re-announces.
+  const key = can ? `${p.canCraftObGun()}${p.canCraftWaveGun()}${p.canCraftChip()}${p.canCraftSword()}${p.canCraftFortressMap()}${p.canCraftGoggles()}` : '';
+  if (key !== _craftPromptKey) {
+    _craftPromptKey = key;
+    _craftPromptAt = performance.now();
+    _craftPromptOff = false;
+  }
+  if (!can || _craftPromptOff) return false;
+  return performance.now() - _craftPromptAt < CRAFT_PROMPT_SECS * 1000;
+}
+
+/** The next thing to do, for the dashboard. Null when there is nothing left. */
+function hudTask() {
+  const list = objectivesNow();
+  if (!list || !list.length) return null;
+  const next = list.find((o) => !objDone(o));
+  const p = progress(list);
+  return { text: next ? objLine(next) : 'Every task on this island is done', ...p };
 }
 
 let _blightClock = 0;
@@ -11242,6 +11642,7 @@ function update(dt) {
     sfx.play('blip');
   }
   if (input.craftPressed()) {
+    craftPromptDismiss();          // acted on: the notice has done its job
     if (player.canCraftWaveGun()) player.craftWaveGun(map);
     else if (player.canCraftObGun()) player.craftObGun(map);
     else if (player.canCraftChip()) player.craftChip();
@@ -12045,6 +12446,13 @@ function update(dt) {
   tickObHolds(dt);   // the control verbs' overrides run down and hand back
   tickSirenRepair(dt); // nothing standing? the siren's wreck sends a T1a
   updateBlight(dt);
+  updateObjectives(dt);   // #190: what the island still wants from you
+  // #191: work orders close on their own, and the node says so — a window
+  // shutting in silence is a player walking into a garrison that woke up.
+  for (const back of tickWindows(currentWorld.obeliskObjs || [], dt)) {
+    player.say(`${back.code} closes its work order and rejoins the network.`);
+  }
+  updateRecovery(dt);   // #192: and then somebody is sent
   camera.follow(player.x, player.y, dt, playerElevSteps());
   if (map.objects.length !== lastObjectCount) {
     lastObjectCount = map.objects.length;
@@ -12212,10 +12620,16 @@ function update(dt) {
           mine.push({ r, netId: String(netIdOf(currentWorld, r)) });
         }
         const dig = rosterDigest(mine);
-        if (dig !== ob._rosterDigest || ob._sightingsDirty || !ob.logs) {
-          ob._rosterDigest = dig;
+        // #192 — the defaulters' list is the ISLAND'S, so it is folded into the
+        // digest: a unit written up at the far end of the map changes what this
+        // tower's console says, which is the whole point of circulating it.
+        const away = awolList(currentWorld.robots);
+        const digAll = `${dig}|${away.map((e) => `${e.id}${e.recovery ? '!' : ''}`).join(',')}`;
+        if (digAll !== ob._rosterDigest || ob._sightingsDirty || !ob.logs) {
+          ob._rosterDigest = digAll;
           ob._rosterRev = (ob._rosterRev || 0) + 1;
-          const opts = { rev: ob._rosterRev, clock: dayNight.clock };
+          const opts = { rev: ob._rosterRev, clock: dayNight.clock, awol: away,
+            netDown: (currentWorld.obeliskObjs || []).some((o) => !obeliskLive(o)) };
           ob.roster = rosterText(ob, mine, opts);
           // The same write fills the logs/ folder: the roster plus a file per
           // unit. Built here rather than on demand so what you `cat` is what
@@ -12463,7 +12877,10 @@ function frame(now) {
       daemonsDown,                 // the Archipelago tally, for the Record panel
       islandsReached: Object.keys(player._welcomed || {}).length,
       showWeapons,
-      craftPrompt: (player.canCraftObGun() && player.hands !== 'obgun') || (player.canCraftWaveGun() && player.hands !== 'wavegun') || player.canCraftChip() || player.canCraftSword() || player.canCraftFortressMap() || player.canCraftGreekShip(map) || player.canCraftGoggles() || player.canCraftBoat(map),
+      craftPrompt: craftPromptUp(
+        (player.canCraftObGun() && player.hands !== 'obgun') || (player.canCraftWaveGun() && player.hands !== 'wavegun') || player.canCraftChip() || player.canCraftSword() || player.canCraftFortressMap() || player.canCraftGreekShip(map) || player.canCraftGoggles() || player.canCraftBoat(map),
+        player,
+      ),
       craftWaveGun: player.canCraftWaveGun() && player.hands !== 'wavegun',
       craftChip: player.canCraftChip() && !player.canCraftWaveGun() && !(player.canCraftObGun() && player.hands !== 'obgun'),
       craftSword: player.canCraftSword() && !player.canCraftChip() && !player.canCraftWaveGun() && !(player.canCraftObGun() && player.hands !== 'obgun'),
@@ -12474,7 +12891,13 @@ function frame(now) {
       craftBoat: player.canCraftBoat(map) && !player.canCraftGoggles() && !player.canCraftGreekShip(map) && !player.canCraftChip() && !player.canCraftSword() && !player.canCraftWaveGun() && !player.canCraftFortressMap() && !(player.canCraftObGun() && player.hands !== 'obgun'),
       // POSEIDON is a combat-island network — its lights/lines must never draw
       // over the Backspace or peaceful ITHACA.
-      skylinkActive: player.skylinkActive && !player._ended && currentWorld.combat,
+      // `purgeLive()`, not the raw flag: POSEIDON held down at the console is
+      // POSEIDON down, and the blue web is the picture of it being up (David,
+      // 2026-08-17: "when poseidon is taken down the blue network should cut
+      // too"). The individual nodes drop out of the web on their own — see
+      // `drawSkylinkNetwork`, which filters on `obeliskLive`.
+      task: hudTask(),   // #190
+      skylinkActive: purgeLive() && !player._ended && currentWorld.combat,
       obeliskObjs: currentWorld.obeliskObjs,
       paused,
       rest: resting ? { dim: restDim(resting.t) } : null,
@@ -12562,4 +12985,36 @@ player.aboard = null;
     }
   }
 }
+
+// ---- THE DEEP LINK -------------------------------------------------------
+//
+// nostos-ai.vercel.app/c/whatishistory.geocities.ws opens the game with that
+// cached page already up, over the title screen. Close it and you are at the
+// title screen with a new game waiting, which is the point: a link into one
+// page is also a way in for somebody who has never heard of any of this.
+//
+// It runs HERE, at the very end of the module, because by this line the world,
+// the map and the player all exist, so openNetscape() has the host table it
+// needs and no special cold-start path is required. A link that does not
+// resolve is not an error worth showing anybody: fall back to the bookmarks,
+// which is where the browser opens anyway.
+//
+// The parsing is in net.js and tested there. This end only knows that there is
+// a location bar in the world outside.
+{
+  // Guarded because main.js is imported under node by boot.test.js, where
+  // there is no location and an unguarded read is a ReferenceError that
+  // stops the whole module. The test caught exactly that.
+  const loc = typeof location === 'undefined' ? null : location;
+  const target = loc && cacheLink(loc.search, loc.pathname);
+  if (target) {
+    // Open the browser first and THEN navigate by name, which is the same path
+    // the location bar takes. openNetscape(addr) resolves through findHost, and
+    // for a cached domain that answers with the cache SERVER rather than the
+    // page, so a link to one site landed on the cache index every time.
+    const r = openNetscape();
+    if (r && r.ok) nsSetView({ kind: 'host', addr: target }, false);
+  }
+}
+
 requestAnimationFrame(frame);

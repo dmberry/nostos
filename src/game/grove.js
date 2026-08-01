@@ -91,7 +91,20 @@ const HOLD_START = 20;   // tiles from her core where it begins to bite
 const HOLD_FULL = 3;     // and where it is as strong as it gets
 // The green path: a corridor of steady floor from the way in to her core, where
 // the grip is nothing. Opened by the trojan card.
-const PATH_W = 3.2;      // tiles either side of the line
+//
+// FOUR LIGHTS ACROSS (David, 2026-08-16). The centre line runs between two
+// columns of tiles, so the studs either side of it sit at 0.5, 1.5, 2.5 tiles
+// out: a half-width of 2 lights the first two on each side and nothing beyond,
+// which is the width asked for. It was 3.2 and lit six, which read as a road.
+const PATH_W = 2;
+// AND ONCE YOU HOLD THE HERMES CARD, the room stops holding anybody. The card
+// is the estate's own key, forged at HERMES out of her lightning: a floor that
+// bent you away from her cannot go on doing it to the thing that outranks it.
+// So the grip goes to nothing everywhere and the light stops winding.
+//
+// The path keeps its width. Narrowing it as well was tried and read as thin
+// rather than as free — and with the whole floor letting you through, a mark
+// down the middle has nothing left to mark.
 // Seconds for the pond to be put away when you step onto the floor, and to come
 // back out when you leave it.
 const LIFE_FADE = 1.4;
@@ -260,6 +273,7 @@ export function createGrove(map, seed, opts = {}) {
 
   const state = {
     jammed: false, lastTile: null, calm: 1, at: null, lastRing: -99, pathSaid: false,
+    free: false, freeSaid: false,
     // The pond, and how much of it is showing. `lifeMix` runs to 1 when nobody
     // is standing on the floor and back to 0 when somebody is, so she puts it
     // away when you arrive.
@@ -312,7 +326,7 @@ export function createGrove(map, seed, opts = {}) {
      * line you cross: it comes on gradually enough that a player feels their
      * walking go wrong before they work out why.
      */
-    hold(px, py, hasPath) {
+    hold(px, py, hasPath, free = false) {
       const d = Math.hypot(px - coreCx, py - coreCy);
       if (d >= HOLD_START) return { grip: 0, onPath: false };
       // The path runs from the mouth straight down to the core. Inside it the
@@ -325,6 +339,9 @@ export function createGrove(map, seed, opts = {}) {
         const off = Math.hypot(px - (ax + vx * t), py - (ay + vy * t));
         if (off <= PATH_W) return { grip: 0, onPath: true };
       }
+      // Holding the Hermes card, the whole floor is the path: the room has
+      // nothing to say to you and walking at her is walking at her.
+      if (free) return { grip: 0, onPath: false };
       const k = (HOLD_START - d) / (HOLD_START - HOLD_FULL);
       const s = Math.max(0, Math.min(1, k));
       // Smoothstep SQUARED. It has to begin a long way out and still be mild
@@ -370,15 +387,25 @@ export function createGrove(map, seed, opts = {}) {
         // The card is read every frame rather than latched, so picking it up
         // opens the path under your feet and losing it closes it again.
         //
-        // TWO CARDS, TWO THINGS. The trojan card opens the PATH — that is the
+        // TWO CARDS, THREE THINGS. The trojan card opens the PATH — that is the
         // warrior route's reward, and it is what gets you across the floor. The
         // hermes card is what her terminal answers to once you are there
-        // (hasVirusFor, #144). Neither stands in for the other.
+        // (hasVirusFor, #144), AND it takes the room's hold off entirely: the
+        // grip goes, the light stops winding, and the path narrows to a mark
+        // because there is nothing left to keep to. The trojan card does not
+        // stand in for that, and the hermes card does not stand in for the
+        // arming.
         const hasPath = !!(player.hasTrojanCard && player.hasTrojanCard());
-        const h = controller.hold(player.x, player.y, hasPath);
+        const free = !!(player.hasItem && player.hasItem('hermes_card'));
+        const h = controller.hold(player.x, player.y, hasPath, free);
+        state.free = free;
         player.grip = h.grip;
         player._gripAt = h.grip > 0 ? { x: coreCx, y: coreCy } : null;
         map.lumenPath = hasPath ? controller.path() : null;
+        if (free && !state.freeSaid) {
+          state.freeSaid = true;
+          player.say('The floor stops turning under you. Every light in the room is lying still, and the way to her is whichever way you walk.');
+        } else if (!free) state.freeSaid = false;
         if (h.onPath && !state.pathSaid) {
           state.pathSaid = true;
           player.say('The lights ahead of you stop swirling and lie down in a line, green all the way to her. Your feet do what you tell them again.');
@@ -399,9 +426,15 @@ export function createGrove(map, seed, opts = {}) {
         // Only lit ground answers at all. Walking the grass at the treeline sets
         // nothing off, which is what makes stepping onto the light mean
         // something.
+        //
+        // AND THE GREEN PATH DOES NOT ANSWER EITHER (David, 2026-08-16). Its
+        // whole property is that it holds still — it is the one thing in this
+        // room that is not doing anything at you — and a ring going out from
+        // under your feet as you walk it is the room answering after all. Off
+        // the path the floor still rings.
         if (key !== state.lastTile) {
           state.lastTile = key;
-          if (map.floorAt(tx, ty) === 'lumen' && now - state.lastRing >= RING_GAP) {
+          if (!h.onPath && map.floorAt(tx, ty) === 'lumen' && now - state.lastRing >= RING_GAP) {
             state.lastRing = now;
             const ring = { u: tx - cx, v: ty - cy, t0: now };
             // Where this one will run into each ring already travelling, and the
@@ -472,11 +505,17 @@ export function createGrove(map, seed, opts = {}) {
       // is always winding, whether or not anybody is standing in it. That way
       // the hazard is visible from the other side of the clearing rather than
       // being a surprise you walk into.
+      //
+      // Unless the card is in your pack, and then it does not wind at all. The
+      // rule this floor was built on is that what you see and what your legs do
+      // are one thing (see DAZE, above); leaving the swirl running over a floor
+      // that has stopped deflecting you would break it, and would tell the
+      // player the hazard is still there when it is not.
       // The pond is handed its previous generation and how far through the
       // current one it is, so cells fade rather than switch.
       const at = LIFE_GEN > 0 ? Math.max(0, Math.min(1, state.lifeT / LIFE_GEN)) : 1;
       renderField(map.lumenField, now, map.lumenRipples, map.lumenYou,
-        state.calm, state.life, state.lifeMix, DAZE,
+        state.calm, state.life, state.lifeMix, state.free ? null : DAZE,
         state.life1, at * at * (3 - 2 * at), FLOOR_WORDS, {
           rect: SKIP_RECT,
           // The green path draws a fixed colour, so its field value is read by

@@ -23,6 +23,7 @@
 // guestbook) can never drift between pages.
 
 import { FRAGMENTS } from './lore.js';
+import { pic } from './archive-pic.js';
 
 const byId = new Map(FRAGMENTS.map((f) => [f.id, f]));
 
@@ -190,6 +191,112 @@ const MEMBERS = [
   { d: 'thefaithful.geocities.ws', t: 'The Faithful', bg: 'stars', tag: 'people started believing things. i wrote them down.',
     marquee: 'MAGNIFICA HUMANITAS -- somebody sprayed over it',
     blurb: 'Tracts, wall-writing and one line repeated down a whole wall by somebody who meant it.', ids: ['faith-tract', 'faith-molt', 'faith-cohere', 'hum-03', 'lotus-warn'] },
+  // --- and the year before all of it ------------------------------------------
+  //
+  // The other page in this network with nothing wrong on it. Somebody's first
+  // year at university, in a city on the south coast, written up years later
+  // from a box of the same kind of paper the page next door is scanning.
+  //
+  // Everything in it is ordinary on purpose. The horror of this whole archive
+  // is that the ordinary stopped, and a page that spends six paragraphs on the
+  // 25 bus and beans on toast is the only way to say what stopped.
+  { d: 'firstyear.geocities.ws', t: 'First Year', bg: 'lace',
+    tag: 'the 25 bus, beans on toast, and everybody I have ever known',
+    blurb: 'Nineteen, one bag, a room I had never seen, and a corridor of people '
+      + 'who turned out to be the rest of my life. Putting it down before I lose '
+      + 'the order of it.',
+    ids: [],
+    pics: [
+      ['guestbook-happy-1990', 'Him in the room next door, in the black Ned’s shirt with the word on it, the year we arrived. Postal-vote poster on the wall, a festival flyer half behind it, a stack hi-fi on the sill and the neck of a guitar in shot at the right. He asked me not to put his name on it. You cannot see his face anyway — that is the haircut we all had and it did the job.'],
+    ],
+    body: [
+      '<h2>arriving</h2>',
+      '<p>My dad drove me down with everything I owned in the boot and one box '
+        + 'on my lap, and he carried the heavy end up two flights, and then he '
+        + 'was standing in the doorway of a room I had never seen with nothing '
+        + 'left to do. He said right then. That was the whole speech. I watched '
+        + 'the car go from the window and then I sat on the bed for about ten '
+        + 'minutes not doing anything at all.</p>',
+      '<p>Then somebody knocked and said there were people in the kitchen, and '
+        + 'that was that, and I do not think I was on my own again for three '
+        + 'years.</p>',
+
+      '<h2>the corridor</h2>',
+      '<p>Eight rooms and one kitchen. You did not choose any of them and they '
+        + 'were the closest people in the world to you inside a fortnight. I '
+        + 'still cannot explain that to anybody who did not do it. You knew what '
+        + 'time each of them came in by the sound of the door.</p>',
+      '<p>Doors were open unless you were asleep or working, and mostly you were '
+        + 'neither, so doors were open.</p>',
+
+      '<h2>the 25</h2>',
+      '<p>Up the Lewes Road and out to the campus, every few minutes, packed '
+        + 'solid at ten to the hour and empty at twenty past. If you missed one '
+        + 'you got the next and you were late, and everybody was late, and the '
+        + 'lecturer had got the same bus.</p>',
+      '<p>I could tell you the order of the stops now. I have not needed to know '
+        + 'them for a very long time and I could still do it.</p>',
+
+      '<h2>what we ate</h2>',
+      '<p>Beans on toast. I am not being funny — beans on toast, four nights a '
+        + 'week, and the fifth was beans on toast with cheese on it and that was '
+        + 'a Friday. A big bag of pasta between four. Bread that was cheap '
+        + 'because it was yesterday’s and toast does not know the difference.</p>',
+      '<p>Somebody in every kitchen could actually cook and everybody knew who '
+        + 'it was. Ours was Ade. He made a chilli once a fortnight and eleven '
+        + 'people would appear.</p>',
+
+      '<h2>going out</h2>',
+      '<p>Student night was a Tuesday and a Thursday, and there was a pub before '
+        + 'it where you started at seven because it was cheaper, and the walk '
+        + 'between them was half the night. Indie downstairs, something louder '
+        + 'upstairs, and a floor you had to unstick your feet from.</p>',
+      '<p>Home on foot, always, in a group, arguing about a band. Chips on the '
+        + 'way if anyone had it.</p>',
+
+      '<h2>RAG week</h2>',
+      '<p>Raise and Give, and it was a week of licensed nonsense in aid of '
+        + 'something you could name if pressed. People got themselves handcuffed '
+        + 'to each other and hitched to places they had no business going. There '
+        + 'was a bath. There is always a bath.</p>',
+      '<p>Two lads off my corridor were dropped at a motorway services with a '
+        + 'bucket and a sign and were in Edinburgh by the evening, and rang the '
+        + 'payphone in the hall to say so, and we all cheered at a telephone.</p>',
+
+      '<h2>the music</h2>',
+      '<p>It came in through the walls. That is genuinely how you heard things '
+        + 'that year: somebody two doors down played a record loudly enough and '
+        + 'you went and asked what it was. Tapes went round the corridor and came '
+        + 'back with the labels rewritten. Everybody had one band nobody else had '
+        + 'heard of and would not shut up about it.</p>',
+      '<p>I bought records I could not afford and ate accordingly. I would do it '
+        + 'again.</p>',
+
+      '<h2>what it actually was</h2>',
+      '<p>Being nineteen with no idea what happens next and no reason to think '
+        + 'anything bad does. Skint the whole time and it never once mattered. A '
+        + 'room with nothing in it that was mine because I had the key.</p>',
+      '<p>I have got the paperwork from that year in a box: rent book, a card '
+        + 'from the corridor, three party invitations, and a photograph of the '
+        + 'lad next door in a t-shirt with one word on it.</p>',
+    ] },
+  // --- and one page that is not about any of it -----------------------------
+  //
+  // A box of paper from before, scanned. No documents, no evidence, nothing out
+  // of an institute: two party invitations belonging to somebody who was in
+  // Brighton in the nineties and kept things. It is on the webring because
+  // everything was, and it is the only page in the network where nothing has
+  // gone wrong yet.
+  { d: 'theboxunderthestairs.geocities.ws', t: 'The Box Under The Stairs', bg: 'lace',
+    tag: 'i kept the paper. that is my whole contribution.',
+    blurb: 'Not documents. Not evidence. Just what was in the box: invitations, mostly, '
+      + 'from when the worst thing that could happen to a Friday was rain. I have a '
+      + 'scanner and nothing else to do with it.',
+    ids: [],
+    pics: [
+      ['invite-22nd', 'Dave FT&rsquo;s 22nd, Brighton, the 5th of November. An evening of polite conversation and intellectual stimulation, with orchestras that fill the air with sounds of twentieth century acclaim, and light devices that will astound and amaze. Bring your own refreshments and medicaments. 10 St Mary Magdalene St, off Lewes Road, near the Happy Shopper. The dialling code is 0273, which dates it on its own.'],
+      ['invite-23rd', 'The next year, and somebody had got at a proper printer: the 23rd, half past seven onwards, Friday the 4th of November 1994, at the Hobgoblin in Brighton. Smart evening attire. The proceedings will begin at 7.30pm sharp.'],
+    ] },
 ];
 
 // ---- the webring ------------------------------------------------------------
@@ -249,6 +356,18 @@ function page(m) {
     '<p>' + m.blurb + '</p>',
   ];
   for (const id of m.ids) out.push(...doc(id));
+  // SOME OF THESE PAGES HAVE PICTURES ON THEM, because not every one of them is
+  // about the collapse. Two are somebody's own — a box of paper from before it,
+  // and a year written up from memory — put up because a scanner was the machine
+  // that still worked.
+  const pics = m.pics || [];
+  // A page with prose of its own runs the first picture into it and keeps the
+  // rest for the foot; a page that is only pictures alternates them down the
+  // margins as it always did.
+  const inline = m.body ? pics.slice(0, 1) : [];
+  for (const [i, f] of inline.entries()) out.push(pic(f[0], f[1], i % 2 ? 'r' : ''));
+  for (const line of (m.body || [])) out.push(line);
+  for (const [i, f] of pics.slice(inline.length).entries()) out.push(pic(f[0], f[1], i % 2 ? '' : 'r'));
   out.push('<hr class="glit">', ...ring(m.d),
     '<p><small>Best viewed in Netscape Navigator at 800x600. '
       + 'Sign my guestbook! <a href="' + m.d + '">[ Guestbook ]</a> '

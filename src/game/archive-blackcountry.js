@@ -1,0 +1,707 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
+// The Black Country and Birmingham, in the nineties, as pages.
+//
+// These are not thirteen new strangers. blackcountryboard.co.uk has been in the
+// archive for a while with a rolling thread called "things that are not there
+// any more", and the people posting on it — hagley_rd_regular, quinton_gary,
+// brumbrumbrum, margaret_h, stourbridge_steve — are the people who keep these
+// sites. The board is the pub and these are their front rooms. Where a page
+// argues with the board, or the board with a page, that is the point.
+//
+// The spine is THE ROAD. The Hagley Road runs out of Birmingham through
+// Edgbaston and Quinton towards Halesowen, and every other place here is on it,
+// off it, or at one end of it. hagleyroad.geocities.ws is written as the index
+// the rest of the cluster hangs from, so a player who finds any one of these
+// can walk to all of them.
+//
+// The register throughout: people writing about the place they are from, for
+// other people from there, in about 2001. Nobody explains the West Midlands to
+// an outsider. Distances are in bus routes. Nothing is nostalgic on purpose —
+// the schools are described as they were, including the parts that were bad.
+//
+// WHAT IS NOT CLAIMED. Where a keeper does not know something, the page says
+// so and asks. That is not a stylistic tic, it is the only honest way to write
+// a page about a school somebody else went to, and it is how every one of these
+// handles a date, a name or a closure it cannot stand behind.
+
+import { pic } from './archive-pic.js';
+
+export const BLACK_COUNTRY_SITES = [
+  // ---- the road ------------------------------------------------------------
+  {
+    domain: 'hagleyroad.geocities.ws',
+    name: 'THE HAGLEY ROAD',
+    title: 'The Hagley Road',
+    body: [
+      '<!--bg:parch-->',
+      '<h1>The Hagley Road</h1>',
+      '<p><small>A456. Birmingham to Halesowen, and everything on either side',
+      'of it.</small></p>',
+      '<hr>',
+      '<p>This is a page about a road. I have been told that is a strange thing',
+      'to make a page about and I do not accept it, because if you are from round',
+      'here the road is how you say where anything is. Nobody says Edgbaston.',
+      'They say <i>off the Hagley Road</i>, and then they say which end.</p>',
+      '<p>It goes from the middle of Birmingham, out through Five Ways, out past',
+      'the hotels, out along the long straight bit where the big houses were cut',
+      'into flats, up to Quinton, and then it is not the Hagley Road any more, it',
+      'is the road to Halesowen and eventually to Hagley, which is the whole',
+      'explanation of the name and takes most people about thirty years to',
+      'notice.</p>',
+
+      '<h2>The long straight bit</h2>',
+      '<p>Between Five Ways and Bearwood Road it is hotels and what used to be',
+      'houses. Big Victorian villas built for people who wanted to be out of the',
+      'smoke, and by the time I was on it every third one was six flats, a dental',
+      'practice or a place that did conferences. There are more hotel signs on',
+      'that stretch than on any road I have been on, and I have never met anyone',
+      'who has stayed in one.</p>',
+      '<p>It is dual carriageway for a lot of it and the buses are constant. You',
+      'can stand at a stop on the Hagley Road at nine at night with nobody else',
+      'there and a bus will still come.</p>',
+
+      '<h2>Off it, in order, going out</h2>',
+      '<pre class="jb-list">',
+      '  city end      New Street, the Bull Ring, Digbeth for the coaches',
+      '  Five Ways     where it starts properly',
+      '  Bearwood      down Bearwood Road on the left',
+      '  Smethwick     further down and to the right',
+      '  Quinton       top end, where it stops being city',
+      '  Halesowen     carry on and drop down the hill',
+      '  Oldbury       off to the right the whole way along',
+      '</pre>',
+      '<p>Pages for most of those, kept by people off the board:</p>',
+      '<p><a href="brum.geocities.ws">Birmingham</a> &middot;',
+      '<a href="newstreet.geocities.ws">New Street</a> &middot;',
+      '<a href="bullring.geocities.ws">the Bull Ring Centre</a> &middot;',
+      '<a href="digbethcoach.geocities.ws">Digbeth Coach Station</a> &middot;',
+      '<a href="bearwood.geocities.ws">Bearwood</a> &middot;',
+      '<a href="halesowentown.geocities.ws">Halesowen town centre</a></p>',
+      '<p>And the schools, which is what people actually write in about:',
+      '<a href="uplands.geocities.ws">Uplands</a> &middot;',
+      '<a href="bristnallhall.geocities.ws">Bristnall Hall</a> &middot;',
+      '<a href="smethwickhigh.geocities.ws">Smethwick High</a> &middot;',
+      '<a href="leasowes.geocities.ws">Leasowes</a> &middot;',
+      '<a href="halesowencollege.ac.uk">Halesowen College</a> &middot;',
+      '<a href="sandwellcollege.ac.uk">Sandwell College</a></p>',
+
+      '<h2>The thing about the border</h2>',
+      '<p>Halfway along, without any sign to tell you, you stop being in',
+      'Birmingham and start being in Sandwell. The road does not change. The',
+      'houses do not change. The bins get emptied by a different council and the',
+      'schools answer to a different authority, and that is the entire',
+      'difference, and people will argue about which side of it they grew up on',
+      'for the whole of an evening.</p>',
+      '<p>There is a thread about this on',
+      '<a href="blackcountryboard.co.uk">the board</a> that has been running for',
+      'four years.</p>',
+      '<hr>',
+      '<p><small>— <b>hagley_rd_regular</b>. Been on it or near it since 1971.',
+      'Corrections to the board, I read it every day.</small></p>',
+    ],
+  },
+
+  // ---- Uplands -------------------------------------------------------------
+  //
+  // The board already has this school in it twice: hagley_rd_regular saying it
+  // was good and falling down at the same time, and margaret_h saying she
+  // taught there and Room 14 had a bucket in it from 1988. Both of those are
+  // load-bearing and both get answered here, hers in her own words.
+  {
+    domain: 'uplands.geocities.ws',
+    name: 'UPLANDS SCHOOL',
+    title: 'Uplands School — the old pupils’ page',
+    body: [
+      '<!--bg:lace-->',
+      '<h1>Uplands School</h1>',
+      '<p><small>Smethwick. For people who went, and one who taught.</small></p>',
+      '<hr>',
+      '<p>It was a good school in a bad building. Those two facts sat on top of',
+      'each other for about fifteen years and everyone who went there knows it,',
+      'and everyone who did not went round saying one or the other of them on its',
+      'own, which is how a school gets a reputation it does not deserve in either',
+      'direction.</p>',
+
+      '<h2>The building</h2>',
+      '<p>Cold in a way that a modern building cannot manage. Corridors with',
+      'quarry tile that had been polished so many times it had a shine you could',
+      'see the windows in. Radiators that were either off or too hot to lean on,',
+      'and everybody leaned on them.</p>',
+      '<p>And the roof. The roof leaked from before I got there until after I',
+      'left.</p>',
+      '<h2>Room 14</h2>',
+      '<p>Mrs H. taught in it and has written this bit herself, because when I',
+      'put a version up she emailed me to say I had got it wrong:</p>',
+      '<p><i>"There was a bucket in Room 14 from 1988 until the day it shut. It',
+      'was not a joke and it was not charming. It was on the timetable: whoever',
+      'had the room last on a Friday emptied it, and that was written on a card',
+      'by the door in my handwriting because nobody official would write it down.',
+      'I asked for the roof eleven times. I have the letters. What I want said on',
+      'this page is that the children were not the problem and never were, and',
+      'the reason I stayed twenty-two years is that they were the best part of',
+      'every day I had in that building." — <b>margaret_h</b></i></p>',
+
+      '<h2>What it was like</h2>',
+      '<p>Strict without being nasty. You got told off properly and then it was',
+      'over, which is a thing I did not appreciate until I met people who had',
+      'been to schools where it was never over.</p>',
+      '<p>Music was good. Art was very good, and out of proportion to the size of',
+      'the place, and I have never worked out why except that one person made it',
+      'so and then left.</p>',
+      '<h2>What I do not know</h2>',
+      '<p>The dates. When it opened, when it changed its name if it did, and',
+      'exactly when it shut. I have three different years off three different',
+      'people and I am not putting any of them up until somebody sends me',
+      'something with a date printed on it.</p>',
+      '<hr>',
+      '<p><small>Kept by <b>hagley_rd_regular</b>. Also:',
+      '<a href="hagleyroad.geocities.ws">the road</a>,',
+      '<a href="blackcountryboard.co.uk">the board</a>.</small></p>',
+    ],
+  },
+
+  // ---- Bristnall Hall ------------------------------------------------------
+  {
+    domain: 'bristnallhall.geocities.ws',
+    name: 'BRISTNALL HALL',
+    title: 'Bristnall Hall High School, Oldbury',
+    body: [
+      '<!--bg:teal-->',
+      '<h1>Bristnall Hall High School</h1>',
+      '<p><small>Oldbury. 1990–1995, which is the only bit I can speak for.</small></p>',
+      '<hr>',
+      '<p>Bristnall Hall Road, Oldbury, up the hill from Warley. Big comp, mixed,',
+      'and the kind of school where the year you were in mattered more than the',
+      'school did.</p>',
+      '<h2>The five years, briefly</h2>',
+      '<pre class="jb-list">',
+      '  1990-91   first year. Enormous. Got lost for a fortnight.',
+      '  1991-92   found out which teachers meant it.',
+      '  1992-93   options. Everybody did the same options.',
+      '  1993-94   mocks, and the year the sixth form question came up.',
+      '  1994-95   GCSEs, and then everybody went to college.',
+      '</pre>',
+      '<p>That last line is the important one. Nearly everybody I knew went off',
+      'to <a href="sandwellcollege.ac.uk">Sandwell</a> or',
+      '<a href="halesowencollege.ac.uk">Halesowen</a> at sixteen, and the year',
+      'group that had been together since eleven came apart in about a fortnight',
+      'in September. Nobody warned us that was going to happen and I do not think',
+      'anybody realised it needed warning about.</p>',
+
+      '<h2>Things I remember and will not be talked out of</h2>',
+      '<p>The walk up from the bus. The smell of the corridor by the science',
+      'block, which was gas and something else. The field, which was enormous and',
+      'sloped, so half of every football match was uphill and the teams changed',
+      'ends and complained anyway.</p>',
+      '<p>The music that got played was indie, all of it, from about 1992,',
+      'because two lads in the year above got into it and that was that. Half of',
+      'us ended up at <a href="jbs-dudley.org.uk">JB’s</a> on a Friday within two',
+      'years of leaving, which is not a coincidence, it is a chain of about four',
+      'people.</p>',
+
+      '<h2>Wanted</h2>',
+      '<p>Photographs. Anything. I have three and one of them is of a coach.</p>',
+      '<hr>',
+      '<p><small>Kept by <b>warley_dave</b>. On',
+      '<a href="blackcountryboard.co.uk">the board</a> most nights.</small></p>',
+    ],
+  },
+
+  // ---- Smethwick High ------------------------------------------------------
+  {
+    domain: 'smethwickhigh.geocities.ws',
+    name: 'SMETHWICK HIGH',
+    title: 'Smethwick High School',
+    body: [
+      '<!--bg:parch-->',
+      '<h1>Smethwick High School</h1>',
+      '<p><small>Smethwick, Sandwell. A page that keeps getting the name',
+      'wrong.</small></p>',
+      '<hr>',
+      '<p>Warning before you start: schools in Smethwick have changed name,',
+      'merged, split and moved so many times that people who went to what they',
+      'call the same school were in two different buildings under three different',
+      'names. I get an email about this roughly monthly. I am not the arbiter. I',
+      'went to one of them between 1988 and 1993 and this is that one.</p>',
+
+      '<h2>The place</h2>',
+      '<p>Red brick, tall windows set high enough that you could not see out of',
+      'them sitting down, which I have since learned was on purpose and I have',
+      'never forgiven. A hall with a stage and a piano and a floor marked out for',
+      'three sports at once in three colours.</p>',
+      '<p>Smethwick itself was working, in both senses. Factories still going,',
+      'people still walking to them, and a high street that had everything on it',
+      'you needed and one thing you wanted.</p>',
+
+      '<h2>The register</h2>',
+      '<p>Half the names in my form were families that had come from the Punjab',
+      'or from the Caribbean in the fifties and sixties and were now three',
+      'generations in, and the other half had been in Smethwick since the canal',
+      'was dug, and the entire thing was completely unremarkable to all of us at',
+      'the time. I mention it because I have since been in rooms where people',
+      'talk about Smethwick as though that was a difficulty. It was a register.',
+      'We stood up when our names were read.</p>',
+
+      '<h2>Teachers</h2>',
+      '<p>One who was frightening and fair. One who was frightening and not. One',
+      'who taught geography and had been everywhere on the syllabus and told you',
+      'about the food. One who ran a chess club nobody attended and kept turning',
+      'up to it.</p>',
+      '<hr>',
+      '<p><small>Kept by <b>smethwick_j</b>. Related:',
+      '<a href="uplands.geocities.ws">Uplands</a>,',
+      '<a href="bearwood.geocities.ws">Bearwood</a>,',
+      '<a href="blackcountryboard.co.uk">the board</a>.</small></p>',
+    ],
+  },
+
+  // ---- Leasowes ------------------------------------------------------------
+  //
+  // quinton_gary is already on the board. The Quinton/Halesowen border row is
+  // the page's own subject, which is both true to the geography and the exact
+  // thing the board's rules paragraph tells people not to start.
+  {
+    domain: 'leasowes.geocities.ws',
+    name: 'LEASOWES HIGH',
+    title: 'Leasowes High School',
+    body: [
+      '<!--bg:teal-->',
+      '<h1>Leasowes High School</h1>',
+      '<p><small>Halesowen. Or Quinton. Read on.</small></p>',
+      '<hr>',
+      '<p>Right. Leasowes is in Halesowen. I say that as a Quinton lad who spent',
+      'five years being told he went to a Halesowen school and five years after',
+      'that telling people he went to a Quinton one, and the truth is that it sits',
+      'where the two run into each other and your answer depends on which bus you',
+      'got.</p>',
+      '<p>Nobody who did not grow up on that edge cares. Everybody who did will',
+      'give you twenty minutes on it.</p>',
+
+      '<h2>The name</h2>',
+      '<p>It is off the Leasowes itself, the old estate and the landscape garden',
+      'down the hill, which is a genuinely famous thing that none of us knew was',
+      'famous. We went there to sit about. It turns out to be one of the first of',
+      'its kind in the country and people come from a long way to walk round it.',
+      'We ate chips in it.</p>',
+
+      '<h2>School</h2>',
+      '<p>Comp. Big. Sixties buildings with the flat roofs and the window walls,',
+      'boiling in June and unheatable in January. Long low blocks with covered',
+      'walks between them so that moving lessons in the rain was a thing you did',
+      'four times a day.</p>',
+      '<p>Good at sport in a way that was slightly out of hand. Good at music. The',
+      'usual proportion of teachers who were serving out time and the usual small',
+      'number who were not, and those ones you can still name.</p>',
+
+      '<h2>After</h2>',
+      '<p>Sixth form was <a href="halesowencollege.ac.uk">Halesowen College</a>',
+      'for most people, down the hill and along, which is why the college page has',
+      'half my year on it.</p>',
+      '<hr>',
+      '<p><small>Kept by <b>quinton_gary</b>. Also on',
+      '<a href="blackcountryboard.co.uk">the board</a>, arguing about the border.',
+      'See also <a href="halesowentown.geocities.ws">Halesowen town centre</a>.',
+      '</small></p>',
+    ],
+  },
+
+  // ---- Halesowen College ---------------------------------------------------
+  //
+  // An institution's own site, not somebody's page about it. The register
+  // changes accordingly: prospectus voice, third person, and a phone number.
+  {
+    domain: 'halesowencollege.ac.uk',
+    name: 'HALESOWEN COLLEGE',
+    title: 'Halesowen College',
+    body: [
+      '<!--bg:navy-->',
+      '<h1>Halesowen College</h1>',
+      '<p><small>Whittingham Road, Halesowen, West Midlands</small></p>',
+      '<hr>',
+      '<p>Halesowen College is a tertiary college serving Halesowen, Quinton,',
+      'Cradley, Stourbridge and the surrounding area. The College offers A Level,',
+      'GNVQ, BTEC and adult education programmes.</p>',
+
+      '<h2>Courses</h2>',
+      '<pre class="jb-list">',
+      '  A Level          full two-year programme, 30+ subjects',
+      '  GNVQ             Intermediate and Advanced',
+      '  BTEC National    Business, Engineering, Art & Design',
+      '  Access           mature students, one year, full or part time',
+      '  Adult evening    over 200 courses, September and January starts',
+      '</pre>',
+
+      '<h2>Applying</h2>',
+      '<p>Application forms are available from the Admissions Office and from',
+      'your school’s careers officer. Open evenings are held in November and',
+      'February. Prospective students are welcome to visit at any time by',
+      'arrangement.</p>',
+
+      '<h2>Getting here</h2>',
+      '<p>The College is served by bus routes from Halesowen bus station,',
+      'Quinton, Cradley Heath and Stourbridge. There is limited parking on site;',
+      'students are asked not to park on the surrounding residential roads.</p>',
+
+      '<h2>Computing</h2>',
+      '<p>The College maintains a computer room of networked 486 machines for',
+      'the use of students on all programmes. Supervised access is available at',
+      'lunchtime and after timetabled sessions.</p>',
+
+      '<h2>Contact</h2>',
+      '<p>Halesowen College<br>Whittingham Road<br>Halesowen<br>West Midlands',
+      '<br>B63</p>',
+      '<hr>',
+      '<p><small>This page is maintained by the College. Last updated',
+      'September.</small></p>',
+    ],
+  },
+
+  // ---- Sandwell College ----------------------------------------------------
+  //
+  // Thinner on purpose. A big FE college's site in about 2000 really was four
+  // paragraphs and a phone number, and half of it under construction.
+  {
+    domain: 'sandwellcollege.ac.uk',
+    name: 'SANDWELL COLLEGE',
+    title: 'Sandwell College',
+    body: [
+      '<!--bg:navy-->',
+      '<h1>Sandwell College</h1>',
+      '<p><small>West Bromwich &middot; Smethwick &middot; Wednesbury</small></p>',
+      '<hr>',
+      '<p>Sandwell College is one of the largest providers of further education',
+      'in the West Midlands, with sites across the borough and over 15,000',
+      'students enrolled on full and part time programmes.</p>',
+
+      '<h2>Sites</h2>',
+      '<pre class="jb-list">',
+      '  West Bromwich     main campus, administration and admissions',
+      '  Smethwick         vocational and adult provision',
+      '  Wednesbury        engineering, construction and motor vehicle',
+      '</pre>',
+      '<p>Provision moves between sites from year to year. Please telephone',
+      'Admissions before travelling to confirm where a course is running.</p>',
+
+      '<h2>Areas of study</h2>',
+      '<p>Business and Administration. Engineering. Construction. Motor Vehicle.',
+      'Health and Social Care. Hairdressing and Beauty. Catering. Art and Design.',
+      'Information Technology. Access to Higher Education. Basic Skills. English',
+      'for Speakers of Other Languages.</p>',
+
+      '<h2>Student services</h2>',
+      '<p>Advice on fees, childcare, transport and hardship funds is available',
+      'from Student Services at each site. Many students pay no fee.</p>',
+
+      '<p><small>Prospectus, term dates and staff pages: under construction.',
+      '</small></p>',
+      '<hr>',
+      '<p><small>Sandwell College. Enquiries to the Admissions Office.</small></p>',
+    ],
+  },
+
+  // ---- Bearwood ------------------------------------------------------------
+  {
+    domain: 'bearwood.geocities.ws',
+    name: 'BEARWOOD',
+    title: 'Bearwood',
+    body: [
+      '<!--bg:parch-->',
+      '<h1>Bearwood</h1>',
+      '<p><small>Off the Hagley Road, on the line, and nobody can agree which',
+      'side.</small></p>',
+      '<hr>',
+      '<p>Bearwood is a road with a place attached. Bearwood Road runs from the',
+      '<a href="hagleyroad.geocities.ws">Hagley Road</a> down to Bearwood, and',
+      'the shops are on it, and that is the town.</p>',
+      '<p>It is in Sandwell. The bit at the top of the road is in Birmingham. The',
+      'boundary runs down the middle of things in a way that means two people who',
+      'grew up four hundred yards apart went to schools in different boroughs and',
+      'this has been argued about on <a href="blackcountryboard.co.uk">the',
+      'board</a> since the board started.</p>',
+
+      '<h2>The road</h2>',
+      '<p>Everything on it, twice. Two of most kinds of shop, which is the sign',
+      'of a high street that is still working. Butcher, baker, the chemist, the',
+      'places that sold everything, the bookies, the chip shop everyone said was',
+      'the good one and the chip shop that was actually the good one.</p>',
+      '<p>And the record shop by the bus stop. Not the big one. The one that was',
+      'mostly reggae where the bloke never looked up, which somebody put on the',
+      'board’s missing-things thread and got forty replies to inside a day.</p>',
+
+      '<h2>The parks</h2>',
+      '<p>Lightwoods at one end and Warley Woods over the way, and between them',
+      'more green than a place like this has any business having. Warley Woods',
+      'has a golf course in it and always has, and people who did not play golf',
+      'walked across it anyway and were shouted at.</p>',
+
+      '<h2>Buses</h2>',
+      '<p>The whole of Bearwood is arranged around the fact that you can get into',
+      'town easily and out to Halesowen easily and to almost nowhere else without',
+      'changing. That shapes where people go on a Saturday for about three',
+      'generations.</p>',
+      '<hr>',
+      '<p><small>Kept by <b>brumbrumbrum</b>. See also',
+      '<a href="smethwickhigh.geocities.ws">Smethwick</a> and',
+      '<a href="halesowentown.geocities.ws">Halesowen</a>.</small></p>',
+    ],
+  },
+
+  // ---- Halesowen town centre -----------------------------------------------
+  {
+    domain: 'halesowentown.geocities.ws',
+    name: 'HALESOWEN',
+    title: 'Halesowen town centre',
+    body: [
+      '<!--bg:lace-->',
+      '<h1>Halesowen town centre</h1>',
+      '<p><small>The precinct, the bus station, the church, and the hill.</small></p>',
+      '<hr>',
+      '<p>Halesowen is a town that was going about its business for eight hundred',
+      'years and then had a ring road put round it, and everything about the',
+      'centre now is a negotiation between those two facts.</p>',
+      '<p>The church is medieval and has a spire you can see from a long way out,',
+      'and it is sat there in the middle with a dual carriageway going round it.',
+      'Both of those things are true at once and you get used to it.</p>',
+
+      '<h2>The precinct</h2>',
+      '<p>Sixties. Concrete, covered walkways, the units all the same width so',
+      'the shopfronts had to fit the building rather than the other way round.',
+      'Cold in the wind because of how the gaps between the blocks work, which',
+      'nobody who designed it had to stand in.</p>',
+      '<p>It had what you needed. Woolworths. The market. A record shop that had',
+      'a chart rack and a rack of everything else and no middle.</p>',
+
+      '<h2>The bus station</h2>',
+      '<p>Where everything from Quinton, Cradley, Stourbridge and the villages',
+      'came in and where you stood for twenty minutes in the rain. It is the',
+      'single most-used building in the town and it is the one nobody has ever',
+      'photographed on purpose.</p>',
+      '<p>Getting to Birmingham from here is a straight run up the',
+      '<a href="hagleyroad.geocities.ws">Hagley Road</a> and takes as long as it',
+      'takes.</p>',
+
+      '<h2>The hill</h2>',
+      '<p>Halesowen is on a slope and you never stop noticing. Everything is',
+      'either up to the town or down from it, and people describe where they live',
+      'in those terms and not by street name.</p>',
+      '<p>Down the hill is <a href="leasowes.geocities.ws">the Leasowes</a>, and',
+      'the school named after it, and the college is along from there.</p>',
+      '<hr>',
+      '<p><small>Kept by <b>quinton_gary</b>, who is not from Halesowen and has',
+      'been told so.</small></p>',
+    ],
+  },
+
+  // ---- Birmingham ----------------------------------------------------------
+  {
+    domain: 'brum.geocities.ws',
+    name: 'BIRMINGHAM',
+    title: 'Birmingham in the nineties',
+    body: [
+      '<!--bg:grey-->',
+      '<h1>Birmingham</h1>',
+      '<p><small>In the nineties, while it was being pulled up.</small></p>',
+      '<hr>',
+      '<p>The thing to understand about Birmingham in the nineties is that it was',
+      'a city built in the sixties for cars, being taken apart by people who had',
+      'decided that was a mistake, while everybody carried on living in it.</p>',
+      '<p>Half of what I am about to describe has already gone. That is not me',
+      'being maudlin, it is why I made the page.</p>',
+
+      '<h2>The concrete collar</h2>',
+      '<p>There was a ring road round the middle and you could not get into town',
+      'across it, only under it. Subways. Miles of subways, tiled, lit yellow,',
+      'smelling of wet, with signs pointing at exits numbered rather than named.',
+      'Everybody has a story about coming up the wrong one.</p>',
+      '<p>They started taking them out in the nineties and putting crossings on',
+      'the surface, and the first time you walked across the road at Paradise',
+      'Circus at street level it felt like the city had been given back.</p>',
+
+      '<h2>What you actually did</h2>',
+      '<pre class="jb-list">',
+      '  arrive        New Street, or Digbeth if it was a coach',
+      '  records       the independents, and the market for the cheap stuff',
+      '  clothes       the Bull Ring markets and the Oasis in the Rag Market end',
+      '  food          the markets, always the markets',
+      '  night         out to Dudley for JB’s, or stay in for the clubs',
+      '</pre>',
+      '<p>Pages: <a href="newstreet.geocities.ws">New Street</a>,',
+      '<a href="digbethcoach.geocities.ws">Digbeth Coach Station</a>,',
+      '<a href="bullring.geocities.ws">the Bull Ring Centre</a>.</p>',
+
+      '<h2>The canals</h2>',
+      '<p>More than Venice, and everybody from Birmingham says so within ten',
+      'minutes of meeting you, and it is true and it is tiresome and we will not',
+      'stop. In the eighties they were behind fences. By the end of the nineties',
+      'you could walk them and there were bars on them, and the same water that',
+      'had had shopping trolleys in it had people eating next to it.</p>',
+
+      '<h2>Music</h2>',
+      '<p>Constant, and mostly ignored by anybody outside it at the time. The',
+      'bands that came out of the wider area in that decade came out of pub back',
+      'rooms in places like Kings Heath, and there is a page about one of them at',
+      '<a href="calvadosbeamtrio.fanpages.org.uk">calvadosbeamtrio</a>, and the',
+      'label that put a lot of that out was <b>Bearos</b>.</p>',
+      '<hr>',
+      '<p><small>Kept by <b>brumbrumbrum</b>. Also',
+      '<a href="bearwood.geocities.ws">Bearwood</a> and',
+      '<a href="blackcountryboard.co.uk">the board</a>.</small></p>',
+    ],
+  },
+
+  // ---- New Street ----------------------------------------------------------
+  {
+    domain: 'newstreet.geocities.ws',
+    name: 'NEW STREET',
+    title: 'Birmingham New Street',
+    body: [
+      '<!--bg:grey-->',
+      '<h1>Birmingham New Street</h1>',
+      '<p><small>The station with a shopping centre on the lid.</small></p>',
+      '<hr>',
+      '<p>New Street is not a building. It is a hole with a slab over it, and the',
+      'slab is a shopping centre, and the station is what is left underneath.</p>',
+      '<p>They knocked down a Victorian station with a roof on it and put this',
+      'here in the sixties. I am not going to pretend to be even-handed about',
+      'that. But it is the busiest interchange outside London and it does the job',
+      'every day, and the people who work in it are working in a basement.</p>',
+
+      '<h2>Down there</h2>',
+      '<p>Low ceilings. No daylight anywhere on the platforms, at any hour, in',
+      'any weather. Orange light. Diesel that has nowhere to go and hangs at the',
+      'far ends. The noise of a train arriving comes at you off the concrete',
+      'rather than past you.</p>',
+      '<p>Twelve platforms and every one of them worked from both ends, so a',
+      'train can be sat at the a-end while another one comes into the b-end of',
+      'the same platform, which is efficient and is also why the announcements',
+      'are the length they are.</p>',
+
+      '<h2>The Pallasades</h2>',
+      '<p>The shopping centre on top. Escalators up out of the concourse into a',
+      'mall, and the strange fact of standing among shoe shops with a hundred and',
+      'fifty thousand people a day going under your feet.</p>',
+
+      '<h2>Practical, for anybody who has not done it</h2>',
+      '<pre class="jb-list">',
+      '  for the Bull Ring     out the far end and follow the ramp',
+      '  for the coaches       walk to Digbeth, fifteen minutes, or the bus',
+      '  for the Hagley Road   any bus out of the middle going west',
+      '  changing here         allow more than you think, it is a long walk',
+      '                        from one end of a platform to the other',
+      '</pre>',
+      '<hr>',
+      '<p><small>Kept by <b>brumbrumbrum</b>. See also',
+      '<a href="brum.geocities.ws">Birmingham</a> and',
+      '<a href="digbethcoach.geocities.ws">Digbeth</a>.</small></p>',
+    ],
+  },
+
+  // ---- Digbeth -------------------------------------------------------------
+  {
+    domain: 'digbethcoach.geocities.ws',
+    name: 'DIGBETH COACH STATION',
+    title: 'Digbeth Coach Station',
+    body: [
+      '<!--bg:grey-->',
+      '<h1>Digbeth Coach Station</h1>',
+      '<p><small>Where the country changes coaches.</small></p>',
+      '<hr>',
+      '<p>Every coach in England goes through Digbeth. Not most of them. It is',
+      'how the network is built: you do not get a coach from Newcastle to Bristol,',
+      'you get a coach to Birmingham and then a coach to Bristol, and the middle',
+      'of that sentence happens here.</p>',
+      '<p>Which means that at any hour there are people in this building who did',
+      'not want to come to Birmingham and are not going to see any of it.</p>',
+
+      '<h2>The building</h2>',
+      '<p>Low, dark, and about a third the size the traffic through it deserves.',
+      'A row of stands out the back with the coaches nose-in. Departure boards',
+      'that flip. Plastic seats bolted in rows to a rail, so that nobody can move',
+      'one, and every one of them taken by half past nine at night.</p>',
+      '<p>It smells of diesel and it is loud and the doors are always open to the',
+      'yard, so in February it is the same temperature inside as out.</p>',
+
+      '<h2>The two in the morning problem</h2>',
+      '<p>The overnight services connect here, which means there is a stretch',
+      'between about half twelve and half four where the place is full of people',
+      'with two hours to wait and nowhere to go. Nothing is open. You cannot walk',
+      'into town and back safely in the gap and you would lose your seat.</p>',
+      '<p>Everyone who has been a student in this country has done one of these',
+      'and they all describe it the same way.</p>',
+
+      '<h2>Fair enough, though</h2>',
+      '<p>It is the cheapest way to move about this country by a long way, and',
+      'that is not nothing. A coach from here to almost anywhere for less than a',
+      'train would charge you for a third of it. The building is grim. The thing',
+      'the building does is the reason a lot of people got anywhere at all.</p>',
+      '<hr>',
+      '<p><small>Kept by <b>brumbrumbrum</b>. Fifteen minutes on foot from',
+      '<a href="newstreet.geocities.ws">New Street</a>, and do not believe',
+      'anybody who tells you ten.</small></p>',
+    ],
+  },
+
+  // ---- the Bull Ring Centre ------------------------------------------------
+  //
+  // The 1964 centre, written while it is coming down. The page is dated by its
+  // own tense: the keeper is describing a building that is being demolished
+  // around the sentences.
+  {
+    domain: 'bullring.geocities.ws',
+    name: 'THE BULL RING CENTRE',
+    title: 'The Bull Ring Centre',
+    body: [
+      '<!--bg:grey-->',
+      '<h1>The Bull Ring Centre</h1>',
+      '<p><small>1964 to now. Ramps, markets, the Rotunda, and a bull.</small></p>',
+      '<hr>',
+      '<p>They are taking it down while I am typing this, so some of what follows',
+      'is already in the past tense and I have not been through and changed it',
+      'all. It went up in 1964 as the first big covered shopping centre in the',
+      'country and everybody was proud of it, and by the time I was going in it',
+      'everybody said it was awful, and both of those are the same building.</p>',
+
+      '<h2>What it was like inside</h2>',
+      '<p>Ramps. That is the thing people forget. It is on a slope, so the levels',
+      'do not line up, and the way you got between them was long concrete ramps',
+      'rather than stairs. Prams and trolleys went up them and so did everybody',
+      'else and it was always slightly further than you expected.</p>',
+      '<p>Brown and orange tiling. Low ceilings with the lights recessed in.',
+      'Small units, so there were a lot of shops and none of them big.</p>',
+
+      '<h2>The markets</h2>',
+      '<p>This is the part I will defend to anybody. The Bull Ring markets are',
+      'older than the centre by about seven hundred years and were only ever',
+      'housed by it. The Rag Market for cloth and clothes, the market hall, the',
+      'outdoor market with the stalls, and a fish market where the fish were',
+      'shouted at you.</p>',
+      '<p>Cheapest food in the city. Best food in the city. The one place where',
+      'the whole of Birmingham was in the same room, which sounds like something',
+      'off a council leaflet and was simply the case on a Saturday morning.</p>',
+
+      '<h2>The Rotunda</h2>',
+      '<p>The round tower on the corner, which is the only bit everyone agrees',
+      'about. It is a cylinder of offices and it has been on every postcard of',
+      'this city for forty years and it is staying, and I am glad, because a city',
+      'needs one shape people can draw from memory.</p>',
+
+      '<h2>The bull</h2>',
+      '<p>There has been a bull, in one form or another, and there will be',
+      'another one. Everybody meets at it. Nobody has to be told which one.</p>',
+      '<hr>',
+      '<p><small>Kept by <b>brumbrumbrum</b>. If you have photographs of the',
+      'inside, please send them, because I have realised nobody photographed the',
+      'inside of a shopping centre they used every week.</small></p>',
+      '<p><small>See also <a href="brum.geocities.ws">Birmingham</a>,',
+      '<a href="newstreet.geocities.ws">New Street</a>.</small></p>',
+    ],
+  },
+];

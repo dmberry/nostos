@@ -484,6 +484,11 @@ function makeBuiltins(station) {
       return { colour: name };
     }),
     flash: EFFECT('flash', 1, ([n]) => {
+      // The range stays 0..10 so a program written before the cap still runs;
+      // the machine clamps what it will actually blink at (robots.js,
+      // LAMP_FLASH_MAX), because a lamp above 3 Hz is a health question rather
+      // than a taste one. Said here so a player reading `help` is not surprised
+      // by a lamp slower than the number they typed.
       const hz = Number(n && n.v);
       if (!Number.isFinite(hz) || hz < 0 || hz > 10) throw new RonmlError('flash takes a rate from 0 to 10 (0 is steady)');
       return { hz };
@@ -772,6 +777,21 @@ function makeBuiltins(station) {
         return { tag: 'unit' };
       },
     },
+    // MAINTENANCE MODE (#191). Not an attack: a work order. The node takes
+    // itself off the network for the window because that is the procedure, and
+    // it stands its own credential check down for the same reason — there is an
+    // engineer coming. There is not. The board is the part the order books out.
+    maint: {
+      arity: 1,
+      fn: ([node], ctx) => {
+        if (!node || node.tag !== 'node') throw new RonmlError('maint needs a node — try: maint OB_XXXX');
+        const label = node.id || 'OB_XXXX';
+        if (!ctx.nodeExists(node.id)) throw new RonmlError(`no node ${label} on the wire`);
+        const r = ctx.scheduleMaintenance(node.id);
+        if (!r || !r.ok) throw new RonmlError(`${label}: ${(r && r.why) || 'the work order will not file'}`);
+        return { tag: 'unit' };
+      },
+    },
     sleep: {
       arity: 1,
       fn: ([num], ctx) => {
@@ -971,7 +991,7 @@ function makeBuiltins(station) {
 // (work at both an obelisk and a HERMES relay). A verb tagged for one station is
 // refused at the other; the file verbs must move files at either terminal, and
 // `save` must write a checkpoint from whichever one you are logged into.
-const OB_VERBS = ['upload', 'play', 'post', 'ls', 'scan', 'garrison', 'g', 'soul', 'nearest', 'keys', 'name', 'tag', 'checkin', 'timer', 'echo', 'not', 'hack', 'crash', 'loop', 'sleep', 'rewind', 'repel', 'sing', 'map', 'print', 'decrypt', 'unlock', 'eliza', 'retire', 'read', 'cat', 'get', 'sz',
+const OB_VERBS = ['upload', 'play', 'post', 'ls', 'scan', 'garrison', 'g', 'soul', 'nearest', 'keys', 'name', 'tag', 'checkin', 'timer', 'echo', 'not', 'hack', 'crash', 'loop', 'maint', 'sleep', 'rewind', 'repel', 'sing', 'map', 'print', 'decrypt', 'unlock', 'eliza', 'retire', 'read', 'cat', 'get', 'sz',
   // The control verbs, all of which want a decrypted AI key.
   'fog', 'poseidon', 'robots', 'net', 'spread', 'explorer'];
 // Note: HERMES's `print` is added as an override in makeBuiltins (it takes a
@@ -1258,7 +1278,7 @@ function helpText(topic, station, hasManual) {
   // they nest in `let`/pipes/functions. Both forms still run; this just teaches the
   // split by how the reference presents them.
   const IMPERATIVE = new Set([
-    'scan', 'garrison', 'g', 'soul', 'keys', 'name', 'timer', 'map', 'print', 'sleep', 'rewind', 'repel', 'sing', 'loop', 'retire',
+    'scan', 'garrison', 'g', 'soul', 'keys', 'name', 'timer', 'map', 'print', 'sleep', 'rewind', 'repel', 'sing', 'loop', 'maint', 'retire',
     'read', 'cat', 'get', 'sz', 'make', 'archive', 'records', 'drive', 'backup', 'restore',
     // Arity-0 and nothing comes back: `explorer` opens a window, `save` writes a
     // checkpoint, `drives` prints what is attached. They belong with `map` and
@@ -1280,7 +1300,7 @@ function helpText(topic, station, hasManual) {
   // group, so adding a verb can never make it vanish from the list.
   const GROUPS = [
     ['LOOK', ['scan', 'garrison', 'soul', 'nearest', 'name', 'keys', 'tag', 'timer', 'map', 'explorer']],
-    ['ONE NODE', ['hack', 'crash', 'loop']],
+    ['ONE NODE', ['hack', 'crash', 'loop', 'maint']],
     ['THE ISLAND — needs a decrypted AI key', ['fog', 'poseidon', 'robots', 'net', 'spread', 'checkin']],
     ['THE KEY', ['copy', 'decrypt', 'unlock', 'print']],
   ];

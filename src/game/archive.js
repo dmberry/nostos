@@ -55,6 +55,11 @@ import { BOOK_SITES } from './archive-books.js';
 import { PLACE_SITES } from './archive-places.js';
 import { FORUM_SITES } from './archive-forums.js';
 import { GEO_SITES } from './archive-geocities.js';
+import { PASCAL_SITES } from './archive-pascal.js';   // #193: Turbo Pascal, MATILDA, Mr Mind
+import { VENUE_SITES } from './archive-music.js';    // venues, labels, bands
+import { BLACK_COUNTRY_SITES } from './archive-blackcountry.js';  // schools, roads, stations
+import { MACHINE_SITES } from './archive-machines.js';  // the computers, and PageMaker
+import { MEMORY_SITES } from './archive-memory.js';    // the record, and what seems
 import { CACHE_SUB, pic } from './archive-pic.js';
 import {
   UNIVERSITIES, DEPARTMENTS, universityAt, deptPagesFor, departmentPage,
@@ -77,6 +82,11 @@ export const ARCHIVED_SITES = [
   ...PLACE_SITES,
   ...FORUM_SITES,
   ...GEO_SITES,
+  ...PASCAL_SITES,
+  ...VENUE_SITES,
+  ...BLACK_COUNTRY_SITES,
+  ...MACHINE_SITES,
+  ...MEMORY_SITES,
 ];
 
 // The long tail. A player will type these, and a named damaged record reads far
@@ -155,6 +165,47 @@ const CATEGORY_OF = {
   'digg.com': 'News & Media',
   'geocities.com/siliconvalley/heights/4412': 'Society & Culture',
   'blackcountryboard.co.uk': 'Society & Culture',
+  // The music corner. Three rooms and a broadcaster, all filed where a 1990s
+  // directory would have filed them, so they turn up by browsing the categories
+  // and not only by knowing the address.
+  'jbs-dudley.org.uk': 'Arts & Entertainment',
+  'loca-tapes.org.uk': 'Arts & Entertainment',
+  'calvadosbeamtrio.fanpages.org.uk': 'Arts & Entertainment',
+  'peelacres.fanpages.org.uk': 'Arts & Entertainment',
+  'homepage.mac.com/mirrordisc': 'Arts & Entertainment',
+  'homepage.mac.com/mirrordisc/about': 'Arts & Entertainment',
+  'homepage.mac.com/mirrordisc/artists': 'Arts & Entertainment',
+  'hagleyroad.geocities.ws': 'Society & Culture',
+  'uplands.geocities.ws': 'Education',
+  'bristnallhall.geocities.ws': 'Education',
+  'smethwickhigh.geocities.ws': 'Education',
+  'leasowes.geocities.ws': 'Education',
+  'halesowencollege.ac.uk': 'Education',
+  'sandwellcollege.ac.uk': 'Education',
+  'bearwood.geocities.ws': 'Society & Culture',
+  'halesowentown.geocities.ws': 'Society & Culture',
+  'brum.geocities.ws': 'Society & Culture',
+  'newstreet.geocities.ws': 'Society & Culture',
+  'digbethcoach.geocities.ws': 'Society & Culture',
+  'bullring.geocities.ws': 'Society & Culture',
+  'itwasnotlikethat.geocities.ws': 'Computers & Internet',
+  'whatishistory.geocities.ws': 'Reference',
+  'eliza.geocities.ws': 'Computers & Internet',
+  'unreliablenarrator.geocities.ws': 'Reference',
+  'amiga.fanpages.org.uk': 'Computers & Internet',
+  'atarist.fanpages.org.uk': 'Computers & Internet',
+  'spectrum48.geocities.ws': 'Computers & Internet',
+  'bbcmicro.geocities.ws': 'Computers & Internet',
+  'pagemaker.geocities.ws': 'Computers & Internet',
+  'winchester.geocities.ws': 'Computers & Internet',
+  'theheartandhand.geocities.ws': 'Arts & Entertainment',
+  'ward.fanpages.org.uk': 'Arts & Entertainment',
+  'locarecords.com': 'Arts & Entertainment',
+  'firstyear.geocities.ws': 'Society & Culture',
+  // The chatbot corner (#193), which was never filed either.
+  'pascal.hansotten.com': 'Computers & Internet',
+  'dmb.demon.co.uk': 'Computers & Internet',
+  'mrmind.com': 'Computers & Internet',
   'sussex.ac.uk': 'Education',
   'pcplus.co.uk': 'Computers & Internet',
   'soundonsound.com': 'Arts & Entertainment',

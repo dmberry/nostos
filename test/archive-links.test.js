@@ -207,3 +207,20 @@ test('every picture a cached page names is a file that exists', () => {
   }
   assert.deepEqual(missing, []);
 });
+
+// The game has a soundtrack of its own. A film on a cached page that started
+// itself would talk over it, and the player would be hunting through a browser
+// window for whatever was making the noise. Nothing autoplays, nothing loops,
+// and nothing pulls five megabytes for a page you were only passing through.
+test('no film on the cached web starts itself', () => {
+  const bad = [];
+  for (const site of ARCHIVED_SITES) {
+    for (const m of site.body.join('\n').matchAll(/<video[^>]*>/g)) {
+      const tag = m[0];
+      if (/autoplay|loop/.test(tag)) bad.push(`${site.domain}: starts itself: ${tag}`);
+      if (!/controls/.test(tag)) bad.push(`${site.domain}: no controls: ${tag}`);
+      if (!/preload="none"/.test(tag)) bad.push(`${site.domain}: preloads: ${tag}`);
+    }
+  }
+  assert.deepEqual(bad, []);
+});

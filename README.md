@@ -50,7 +50,7 @@ Restrictions page names the departure and says why.
 
 Character and animal art: [Kenney](https://kenney.nl), CC0.
 
-## Current build (v1.557)
+## Current build (v1.577)
 
 **The archipelago.** The game is now an **Odyssey across five islands**, not one map. You wake washed ashore on **OGYGIA** — Calypso's island, where you are kept, well and completely — and hers is the one daemon you do not kill: her core is indestructible and her guards **detain** rather than finish you. The win there is *leaving*, which is harder. Refunction her at the terminal on her own core and she hands you her shipwright's recipe, the **golden axe**; with it you build a sea-worthy **greek ship** from wood and three found parts (a **sail** at a beached wreck, an **oar** and a **rope** in the fishermen's huts). A raft lashed together without the recipe is always thrown back by Poseidon. Board a boat and you don't pick a destination off a menu — you **row out** until there is no land in any direction, and only then does the **chart** open, each landfall listed with its Homeric epithet. Beyond Ogygia lie **AEGILIA** (the Cyclopes' goat isle: POLYPHEMUS is a single vast eye that watches by genuine line of sight, under a great mountain with a patchy snow-cap in cloud), **AEAEA** (CIRCE does not kill what she takes, she rewrites it — **moly** holds you as you are), **THRINACIA** (HELIOS's cattle graze golden and forbidden), and **ITHACA**, home. Each island generates from its own terrain profile, ground palette and signature landform, carries its own daemon, its own obelisk colour, and its own virus payload, so one card never opens the whole archipelago. Landing somewhere new sets a **checkpoint**. The **Backspace** is an alternative crossing road: its ways up are labelled doors, one per island. **Win** by felling all four martial daemons — leaving Calypso rather than killing her — then sailing home to Ithaca, where Argos lifts his grey head and knows you.
 
@@ -107,11 +107,11 @@ recent are below; the **complete history, every version back to v0.32, lives in
 
 | Release | Date | What it was |
 |---|---|---|
+| [v1.577](https://github.com/dmberry/nostos/releases/tag/v1.577) | 2026-08-17 | **The world becomes columns, and the night gets something to look at.** The heightmap is gone: a tile is a stack of blocks now, drawn as a prism, so you can build on it, break it back, walk under a deck, and put a pane of glass in a wall. Five game modes, a campfire you cook on, a stealth path for a run that kills nothing, and every machine on the island casting light on the ground it stands on after dark. |
 | [v1.547](https://github.com/dmberry/nostos/releases/tag/v1.547) | 2026-08-15 | **The first browser gets its editor back, and the repo gets one plan.** WorldWideWeb's Open / Info / Mark-and-link panels, a forged check-in as the hacking answer to AWOL, and thirty planning documents consolidated into one. |
 | [v1.546](https://github.com/dmberry/nostos/releases/tag/v1.546) | 2026-08-15 | **The B-1 becomes a fight you cannot skip.** The hull gate holds from the first blow, the great shield actually blocks, the king carries a weapon and shoots your escorts first, and the M-class learns a unit has turned by the tower it stopped reporting to. |
 | [v1.545](https://github.com/dmberry/nostos/releases/tag/v1.545) | 2026-08-15 | **The archipelago, the desktop and the kings.** 291 versions on from AI-ML 1.0: CALYPSO's core is a NeXT cube running a live NeXTSTEP desktop, the cached web grew a GeoCities network, the B-class became AGAMEMNON with a king to each island, and the save stopped losing reprogrammed machines. |
 | [v1.254](https://github.com/dmberry/nostos/releases/tag/v1.254) | 2026-07-26 | **AI-ML 1.0.** The in-game language reached its first complete form: a real Standard ML lexer and evaluator, the Basis, and machines you program rather than configure. |
-| [v1.236](https://github.com/dmberry/nostos/releases/tag/v1.236) | 2026-07-26 | Stable. |
 
 ## Running
 

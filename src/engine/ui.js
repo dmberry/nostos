@@ -32,6 +32,7 @@ import {
 } from '../game/narrows.js'; // the Scylla/Charybdis arcade run
 import { PADDLE_H, calypsoVoice } from '../game/calypso-pong.js'; // Calypso's un-winnable pong
 import * as CB from '../game/console-buffer.js'; // #145 V1b: the canvas console model
+import { APP_INFO } from '../game/workspace.js'; // what the program in the window IS
 // #165 Grove.app — the emulated floor. Aliased on import so the draw code reads
 // as what it is rather than as three more bare names in a 4000-line file.
 import { corePos as GROVE_CORE, population as GROVE_POP, SIM_NOTE as GROVE_SIM_NOTE }
@@ -2506,6 +2507,24 @@ export const uiMethods = {
     }
     if (player.food <= 0) { ctx.fillStyle = '#e05548'; ctx.fillText('STARVING', cx, top + 57); }
     else if (player.food < 25) { ctx.fillStyle = '#d8a04f'; ctx.fillText('HUNGRY', cx, top + 57); }
+    // WHAT TO DO NEXT (#190, David 2026-08-17: "so the user KNOWS WHAT TO DO").
+    //
+    // ONE LINE, AND IT IS THE NEXT UNFINISHED TASK, not a list. A list on the
+    // dashboard is a list nobody reads, and the question a player stuck on an
+    // island is actually asking has one answer at a time. The n/m says how much
+    // of the island is left.
+    //
+    // Here rather than beside ISLAND / AI because that block is anchored to the
+    // right edge and this line is long enough to run under the score.
+    if (hud && hud.task) {
+      const doneAll = hud.task.done >= hud.task.total;
+      ctx.font = 'bold 9px system-ui, sans-serif';
+      ctx.fillStyle = doneAll ? 'rgba(127,216,138,0.8)' : 'rgba(207,216,195,0.5)';
+      ctx.fillText(`TASK ${hud.task.done}/${hud.task.total}`, cx + 78, top + 21);
+      ctx.font = '10px system-ui, sans-serif';
+      ctx.fillStyle = doneAll ? '#7fd88a' : 'rgba(232,226,205,0.9)';
+      ctx.fillText(hud.task.text, cx + 78, top + 36);
+    }
     // The status card: where you are, who holds it, and how you are doing —
     // boxed and tight so it reads as one panel rather than three loose lines
     // floating over the terrain.
@@ -3236,6 +3255,18 @@ export const uiMethods = {
     ctx.fillText('✕', cbx + 7, wy + 14);
     ctx.textAlign = 'left';
     this._dgButtons.push({ x: cbx, y: wy + 3, w: 14, h: 14, id: 'close' });
+    // The `i`, beside the close box: what this game is, and which machines got
+    // here first (David, 2026-08-16). Same button, same place, as Grove.app's.
+    const ibx = cbx - 18;
+    ctx.fillStyle = '#bdbdbd';
+    ctx.fillRect(ibx, wy + 3, 14, 14);
+    this._nextBevel(ibx, wy + 3, 14, 14);
+    ctx.fillStyle = '#242424';
+    ctx.font = 'bold 10px Times, Georgia, serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('i', ibx + 7, wy + 14);
+    ctx.textAlign = 'left';
+    this._dgButtons.push({ x: ibx, y: wy + 3, w: 14, h: 14, id: 'info' });
     // With Calypso Self-Learn set (Preferences), the start button reads
     // SELF-PLAY and starts her playing herself, so the switch is picked up on
     // the very button the player presses (David, 2026-08-13).
@@ -3311,6 +3342,32 @@ export const uiMethods = {
       const y0 = by0 + side / 2 - 70;
       for (const l of lines) { ctx.font = l.f; ctx.fillStyle = l.c; ctx.fillText(l.t, cxp, y0 + l.dy); }
       ctx.textAlign = 'left';
+    }
+
+    // THE INFO PANEL, over the whole window. Draughts is where machine learning
+    // starts and this cabinet never said so; the `i` in the title bar is where
+    // it does. Click anywhere to put it away.
+    if (cab.info) {
+      ctx.fillStyle = '#e8e8e8';
+      ctx.fillRect(wx + 6, wy + barH + 4, winW - 12, winH - barH - 12);
+      this._nextBevel(wx + 6, wy + barH + 4, winW - 12, winH - barH - 12, false);
+      ctx.save();
+      ctx.beginPath(); ctx.rect(wx + 8, wy + barH + 6, winW - 16, winH - barH - 16); ctx.clip();
+      const info = APP_INFO.draughts || [];
+      let iy = wy + barH + 24;
+      for (let i = 0; i < info.length; i++) {
+        ctx.font = i === 0 ? 'bold 13px Helvetica, system-ui, sans-serif' : '11px Helvetica, system-ui, sans-serif';
+        ctx.fillStyle = i === 0 ? '#141414' : '#2a2a2a';
+        ctx.fillText(info[i], wx + 18, iy);
+        iy += i === 0 ? 19 : 13;
+      }
+      ctx.font = 'italic 10px Helvetica, system-ui, sans-serif';
+      ctx.fillStyle = '#5a5a5a';
+      ctx.fillText('Click to close.', wx + 18, wy + winH - 20);
+      ctx.restore();
+      // Nothing behind the panel is clickable while it is up, and the whole
+      // panel is one button.
+      this._dgButtons = [{ x: wx, y: wy, w: winW, h: winH, id: 'info' }];
     }
 
     ctx.restore();
@@ -4089,10 +4146,173 @@ export const uiMethods = {
     ctx.fillRect(x, top + gridH, W, barH);
     ctx.font = '10px Helvetica, system-ui, sans-serif';
     ctx.fillStyle = '#333';
-    ctx.fillText(GROVE_SIM_NOTE, x + 6, top + gridH + 11);
+    // The INFO button, on the strip that already carries the disclaimer. A
+    // player watching cells blink has no way to know they are looking at
+    // Conway; this is where it says so (David, 2026-08-16).
+    this._wsInfoButton(x + 4, top + gridH + 3, w.id, 'grove');
+    ctx.font = '10px Helvetica, system-ui, sans-serif';
+    ctx.fillStyle = '#333';
+    ctx.fillText(GROVE_SIM_NOTE, x + 22, top + gridH + 11);
     const pop = GROVE_POP(g);
     const right = `gen ${g.gen}   pop ${pop}${g.restamps ? `   rewritten ${g.restamps}` : ''}`;
     ctx.fillText(right, x + W - 6 - ctx.measureText(right).width, top + gridH + 11);
+  },
+
+  /**
+   * The small `i` that opens a panel about the program in the window.
+   *
+   * Drawn where a NeXT app would put it: on the window's own status strip, not
+   * in a menu two levels down. One helper so every app that grows a panel gets
+   * the same button in the same place.
+   */
+  _wsInfoButton(x, y, id, topic) {
+    const ctx = this.ctx;
+    const S = 12;
+    ctx.fillStyle = '#c6c6c6';
+    ctx.fillRect(x, y, S, S);
+    this._nextBevel(x, y, S, S);
+    ctx.fillStyle = '#141414';
+    ctx.font = 'bold 9px Times, Georgia, serif';
+    ctx.fillText('i', x + 5, y + 9);
+    this._wsHit(x, y, S, S, { act: 'appinfo', id, topic, pri: 3 });
+  },
+
+  /**
+   * A panel about the program: what it is, who wrote it, what came of it.
+   *
+   * Plain lines, no wrapping — the text in APP_INFO is already broken to a
+   * width, which is what a document written for a 1990s panel looks like and
+   * means the panel never has to reflow.
+   */
+  _wsAppInfo(w, ws, api) {
+    const ctx = this.ctx;
+    const x = w.x + 3, W = w.w - 6;
+    const top = w.y + this._WS_BAR_H + 2;
+    const H = w.h - this._WS_BAR_H - 10;
+    ctx.fillStyle = '#e8e8e8'; ctx.fillRect(x, top, W, H);
+    this._nextBevel(x, top, W, H, false);
+    const lines = api.appInfo(w.topic) || [];
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x + 2, top + 2, W - 4, H - 4); ctx.clip();
+    let ty = top + 18;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      // The first line is the title, and a line that is short and followed by
+      // a blank one is a heading. Everything else is body.
+      ctx.font = i === 0 ? 'bold 13px Helvetica, system-ui, sans-serif' : '11px Helvetica, system-ui, sans-serif';
+      ctx.fillStyle = i === 0 ? '#141414' : '#2a2a2a';
+      ctx.fillText(line, x + 12, ty);
+      ty += i === 0 ? 18 : 14;
+    }
+    ctx.restore();
+  },
+
+  // ---- the desk accessories (#203) -----------------------------------------
+
+  /**
+   * Clock.app. The round face NeXT shipped: a dark dial, a light rim, four
+   * ticks, two hands, and the hour written under it in case you want the number.
+   *
+   * It reads the island's own clock through `api.islandHour()`, so the hands
+   * agree with the sky. There is no second hand — nothing here needs one, and a
+   * sweep would be one more thing animating at 60fps for no reason.
+   */
+  _wsClock(w, ws, api) {
+    const ctx = this.ctx;
+    const x = w.x + 3, W = w.w - 6;
+    const top = w.y + this._WS_BAR_H + 2;
+    const H = w.h - this._WS_BAR_H - 10;
+    ctx.fillStyle = '#aaaaaa'; ctx.fillRect(x, top, W, H);
+    this._nextBevel(x, top, W, H);
+    const cx = x + W / 2, cy = top + H / 2 - 8;
+    const R = Math.min(W, H - 16) / 2 - 8;
+    // The dial.
+    ctx.fillStyle = '#1b1b1f';
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#e6e6e6'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = '#8a8a90'; ctx.lineWidth = 1.5;
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      const inner = i % 3 === 0 ? R * 0.78 : R * 0.88;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * inner, cy + Math.sin(a) * inner);
+      ctx.lineTo(cx + Math.cos(a) * (R * 0.95), cy + Math.sin(a) * (R * 0.95));
+      ctx.stroke();
+    }
+    const now = api.islandHour ? api.islandHour() : { h: 0, m: 0 };
+    const hands = api.clockHands(now.h, now.m);
+    ctx.strokeStyle = '#f0f0f4'; ctx.lineCap = 'round';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(hands.hour) * R * 0.5, cy + Math.sin(hands.hour) * R * 0.5);
+    ctx.stroke();
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(hands.minute) * R * 0.76, cy + Math.sin(hands.minute) * R * 0.76);
+    ctx.stroke();
+    ctx.lineCap = 'butt';
+    ctx.fillStyle = '#f0f0f4';
+    ctx.beginPath(); ctx.arc(cx, cy, 2.5, 0, Math.PI * 2); ctx.fill();
+    // The reading, under the face.
+    ctx.font = 'bold 12px Helvetica, system-ui, sans-serif';
+    ctx.fillStyle = '#141414';
+    ctx.textAlign = 'center';
+    const hh = String(now.h).padStart(2, '0'), mm = String(now.m).padStart(2, '0');
+    ctx.fillText(`${hh}:${mm}`, cx, top + H - 8);
+    ctx.textAlign = 'left';
+  },
+
+  /**
+   * Calculator.app. A display and a grid of keys, drawn as bevelled NeXT
+   * buttons; the arithmetic is `calcKey` in workspace.js and none of it is here.
+   *
+   * The key rects are recorded as hits so a click reaches the same function a
+   * keystroke does.
+   */
+  _wsCalc(w, ws, api) {
+    const ctx = this.ctx;
+    const x = w.x + 3, W = w.w - 6;
+    const top = w.y + this._WS_BAR_H + 2;
+    const H = w.h - this._WS_BAR_H - 10;
+    ctx.fillStyle = '#aaaaaa'; ctx.fillRect(x, top, W, H);
+    this._nextBevel(x, top, W, H);
+    // The display: sunk, pale green, right-aligned, monospaced.
+    const dh = 26;
+    ctx.fillStyle = '#c8d4c0';
+    ctx.fillRect(x + 6, top + 6, W - 12, dh);
+    this._nextBevel(x + 6, top + 6, W - 12, dh, false);
+    ctx.font = '15px ui-monospace, "Courier New", monospace';
+    ctx.fillStyle = '#141c14';
+    ctx.textAlign = 'right';
+    ctx.fillText(String(w.shown ?? '0'), x + W - 12, top + 6 + 18);
+    ctx.textAlign = 'left';
+    // The keys.
+    const KEYS = [
+      ['C', '±', 'M+', 'MR'],
+      ['7', '8', '9', '÷'],
+      ['4', '5', '6', '×'],
+      ['1', '2', '3', '-'],
+      ['0', '.', '=', '+'],
+    ];
+    const gy = top + 6 + dh + 6;
+    const bw = (W - 12 - 3 * 4) / 4;
+    const bh = (H - (gy - top) - 8 - 4 * 4) / 5;
+    ctx.font = 'bold 12px Helvetica, system-ui, sans-serif';
+    for (let r = 0; r < KEYS.length; r++) {
+      for (let c = 0; c < 4; c++) {
+        const label = KEYS[r][c];
+        const bx = x + 6 + c * (bw + 4), by = gy + r * (bh + 4);
+        ctx.fillStyle = /[0-9.]/.test(label) ? '#c6c6c6' : '#b4b4b8';
+        ctx.fillRect(bx, by, bw, bh);
+        this._nextBevel(bx, by, bw, bh);
+        ctx.fillStyle = '#141414';
+        ctx.textAlign = 'center';
+        ctx.fillText(label, bx + bw / 2, by + bh / 2 + 4);
+        ctx.textAlign = 'left';
+        this._wsHit(bx, by, bw, bh, { act: 'calckey', id: w.id, key: label, pri: 3 });
+      }
+    }
   },
 
   _wsRecycler(w, ws, api) {
@@ -4342,6 +4562,9 @@ export const uiMethods = {
       else if (w.kind === 'mail') this._wsMail(w, ws, api);
       else if (w.kind === 'grab') this._wsGrab(w, ws, api);
       else if (w.kind === 'grabinfo') this._wsGrabInfo(w, ws, api);
+      else if (w.kind === 'appinfo') this._wsAppInfo(w, ws, api);
+      else if (w.kind === 'clock') this._wsClock(w, ws, api);
+      else if (w.kind === 'calc') this._wsCalc(w, ws, api);
       else if (w.kind === 'about') this._wsAbout(w, ws, api);
       else if (w.kind === 'recycler') this._wsRecycler(w, ws, api);
       else if (w.kind === 'grove') this._wsGrove(w, ws, api);

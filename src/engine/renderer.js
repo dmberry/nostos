@@ -12,8 +12,10 @@ import { tileHash, fogNoise, FOG_BANK, FOG_WIND_X, FOG_WIND_Y, FOG_STEP } from '
 import { runDrawWorld, runDrawScreen } from './systems.js';
 import { uiMethods, DASH_H } from './ui.js';
 import { FLOORS, OBJECTS } from '../game/tiles.js';
-import { slabs as columnSlabs } from '../game/terrain.js';   // the prism pass reads columns, not heights
+import { slabs as columnSlabs, solidAt as columnSolidAt, surfaceBelow as columnSurfaceBelow } from '../game/terrain.js';   // the prism pass reads columns, not heights
 import { fireStrength, COOK_TIME } from '../game/cooking.js';   // #180: the flame rides the fuel
+import { lightsNear, flickerAt } from '../game/lights.js';
+import { obeliskLive } from '../game/blight.js';   // one answer to "is this node on the net"       // #189: the machines light the ground
 import { fieldAt, lumenOf } from '../game/spiralism.js';
 // Below this the light is off and the tile is bare deck — see drawFloor's lumen.
 const OFF = 0.07;
@@ -22,7 +24,7 @@ import { ITEMS, WEAPON_ORDER } from '../game/items.js';
 import { armourTint } from '../game/armour.js';
 import { drawAnimal } from '../game/animals.js';
 import { drawBird } from '../game/birds.js';
-import { drawRobot, beginUnitTags } from '../game/robots.js';
+import { drawRobot, beginUnitTags, setRobotNight } from '../game/robots.js';
 import { drawWaterDroid } from '../game/waterdroids.js';
 import { drawUnderworldCreature } from '../game/underworld.js';
 import { FLOOR_TEXTURES, WALL_TEXTURES, GRASS_PATCH_TEXTURE, ROCK_TEXTURES, BOX_TEXTURES, BOAT_TEXTURES, SHIP_SPRITES, PART_SPRITES, CHARACTER_SPRITE_SETS, CHAR_COMPASS_DIRS, TREE_SHEET, TREE_SPRITES, EDGE_TEXTURE, SEA_TEXTURE, CAR_SPRITES, CAR_MODEL_KEYS, CAR_DIR_KEYS, CAR_RUIN_TEXTURE, FACTORY_TEXTURE, MARBLE_TEXTURE, PAPER_TEXTURE, GRAFFITI_TEXTURES } from './textures.js';
@@ -128,6 +130,59 @@ function shadeHex(hex, amount) {
 
 function rgbScale([r, g, b], f) {
   return `rgb(${(r * f) | 0},${(g * f) | 0},${(b * f) | 0})`;
+}
+
+// A pool of light lies on the GROUND, and the ground in this projection is two
+// wide to one deep — so every cast pool is flattened by this before it is
+// drawn. A circle on screen is the shape a hovering ball would make, not a lit
+// patch of floor (David, 2026-08-17: "too spherical and unnatural looking").
+// A DECK OVER YOUR HEAD goes further than a wall in your way. A wall only has
+// to stop hiding you; a span you have walked under has to say that you are
+// under it, and at the ordinary fade an arch still reads as a wall you are
+// standing in front of.
+const OVERHEAD_FADE = 0.3;
+
+// Below this ambient alpha a block stops drawing the seams that separate it
+// from its neighbours. See `skirt` for why: two tiles each stroke the shared
+// edge, and at a fade that doubled line is the only solid thing left.
+const SEAM_FADE_BELOW = 0.75;
+
+// AND THE FACES INSIDE A FADED COLUMN GO FURTHER DOWN than the column itself
+// (Henrik, via David 2026-08-16). A ghosted wall is a stack of cubes and every
+// cube carries two shaded faces; at the ordinary fade those faces are still
+// dark enough to read as planes, so what should be one soft mass reads as a
+// pile of boxes drawn in front of the thing you were trying to see past. The
+// LID keeps the column's own alpha — that is the surface a player has to judge
+// a step by — and only the sides are taken down.
+const FACE_FADE = 0.42;
+
+// What a faded column is seen against.
+//
+// NOT SOIL, IN THE END. Dark earth behind a 30% block turned the whole arch
+// into a shadow — the hole was gone and what replaced it was a black slab.
+// What you would see if the block were not there is the ground beyond it, so
+// the backdrop is the tile's own ground tone: the arch ghosts pale and you read
+// straight through it.
+const GHOST_BEHIND = '#7d8a6a';
+
+const GROUND_SQUASH = 0.52;
+
+// HOW A POOL FADES (David, 2026-08-17: "light is still even - its should soften
+// and diffuse further out"). Two stops make a cone, and a cone has an edge you
+// can point at: the pool reads as a disc laid on the grass rather than as light
+// getting weaker. So the falloff is sampled as a smooth kernel — (1-t²)², bright
+// and nearly flat at the middle, most of its decay in the outer half, reaching
+// zero with no slope at all — and the pool is thrown half again as far as its
+// nominal radius so the thin end has somewhere to go.
+const SOFT_REACH = 1.45;
+const SOFT_STOPS = 10;
+
+function softStops(grad, peak, colour, pow = 2, stops = SOFT_STOPS) {
+  for (let i = 0; i <= stops; i++) {
+    const t = i / stops;
+    const k = 1 - t * t;
+    grad.addColorStop(t, colour((peak * Math.pow(k, pow)).toFixed(4)));
+  }
 }
 
 function hexRgb(hex) {
@@ -459,7 +514,16 @@ export class Renderer {
     // walls flicker as you walk past them.
     const pBox = { x0: pIso.x - 9, x1: pIso.x + 9, y0: pFeetY - 40, y1: pFeetY - 6 };
     const playerDepth = onTile(player.x, player.y) + climbRaise;
-    const FADE = 0.32;
+    // NOT SO FAR (David, 2026-08-18: "maybe don't fade the trees so much?
+    // perhaps the opacity is too strongly reduced?"). At a third the canopy
+    // read as gone rather than as glass, and the point is to see yourself
+    // THROUGH it, not instead of it.
+    const FADE = 0.55;
+    // How tall the player is, in levels. Terrain must reach at least this far
+    // above their feet before it can hide them; anything shorter is scenery they
+    // can see over. Kept in step with PLAYER_HEIGHT in game/player.js, which is
+    // the same fact told to the movement code.
+    const PLAYER_BLOCKS = 2;
     // The screen box of a thing standing on a tile, given how many levels tall
     // it is. Generous sideways, because a tile is 64 wide and the art overhangs.
     const hides = (depth, tx, ty, levels) => {
@@ -470,9 +534,120 @@ export class Renderer {
       return !(c.x + 34 < pBox.x0 || c.x - 34 > pBox.x1 || y1 < pBox.y0 || y0 > pBox.y1);
     };
 
+    // A WALL FADES AS ONE THING, not block by block (David, 2026-08-17: "can we
+    // get the transparency on blocks to remove - say an entire contiguous wall
+    // when we are behind it so that it doesn't do that jumpy effect of
+    // transparency per block?"). Testing each block on its own means the two or
+    // three that happen to overlap you go see-through while their neighbours
+    // stay solid, and the hole travels along the wall as you walk. A wall is one
+    // object to the eye and should answer as one.
+    //
+    // So: find the blocks that genuinely occlude, then flood out from them
+    // across everything they are joined to, and fade the whole run. Objects
+    // spread to objects and terrain to terrain — a wall standing on a hill does
+    // not take the hill with it.
+    const wKey = (x, y) => y * map.w + x;
+    const fadeTiles = new Set();
+    {
+      // GLASS IS ALREADY SEE-THROUGH, so it is never faded (David, 2026-08-17:
+      // "don't make glass cube wireframe vanish/transparent when you walk behind
+      // it - otherwise it just looks like other blocks"). Fading it takes the
+      // one thing that told you it was glass — the frame — and leaves a pale
+      // rectangle indistinguishable from any other faded stone. It is also
+      // pointless: you can see yourself through it already.
+      const seeThrough = (x, y) => {
+        const f = FLOORS[map.floorAt(x, y)];
+        return !!(f && f.alpha);
+      };
+      const isObjOccluder = (x, y) => {
+        const o = map.objectAt ? map.objectAt(x, y) : null;
+        const def = o && OBJECTS[o.type];
+        return !!(def && (def.climbHeight || def.solid));
+      };
+      const isTerOccluder = (x, y) => {
+        if (!map.inBounds(x, y) || seeThrough(x, y)) return false;
+        const th = map.heightAt(x, y);
+        return th - (player.footZ != null ? player.footZ : 0) - PLAYER_BLOCKS >= 0;
+      };
+      // THE CONE APPLIES TO THE SEEDS TOO (David, 2026-08-18, with a
+      // screenshot: "#195 fade cone still too big"). v1.585 put the cone on the
+      // SPREAD and left the seeds alone, and the seeds are most of the patch: a
+      // tree's sprite is tall and wide, so `hides` — a rectangle overlap
+      // against your box — says yes for a trunk two tiles to the side and one
+      // behind, neither of which is between you and the camera. One rule for
+      // both halves, and it is the same rule: in front of you, and close.
+      const REACH = 2.0, REACH2 = REACH * REACH;
+      const mySum = player.x + player.y;
+      const inCone = (x, y) => {
+        const dx = x + 0.5 - player.x, dy = y + 0.5 - player.y;
+        if (dx * dx + dy * dy > REACH2) return false;
+        return (x + 0.5) + (y + 0.5) > mySum;   // in front of you, not beside or behind
+      };
+      const seeds = [];
+      for (const d of drawables) {
+        if (d.obj) {
+          const def = OBJECTS[d.obj.type];
+          const tall = def && (def.climbHeight || (def.solid ? 2 : 0));
+          if (tall && inCone(d.obj.x, d.obj.y) && hides(d.depth, d.obj.x, d.obj.y, tall)) seeds.push([d.obj.x, d.obj.y, 'o']);
+        } else if (d.terrain) {
+          const [ttx, tty] = d.terrain;
+          if (ttx === Math.floor(player.x) && tty === Math.floor(player.y)) continue;
+          if (seeThrough(ttx, tty)) continue;
+          if (!inCone(ttx, tty)) continue;
+          const th = map.heightAt(ttx, tty);
+          if (th - (player.footZ != null ? player.footZ : 0) - PLAYER_BLOCKS >= 0
+            && hides(d.depth, ttx, tty, 0)) seeds.push([ttx, tty, 't']);
+        }
+      }
+      // A generous cap, not a design choice: a flood over a whole fortress is
+      // still only a few hundred tiles, and the cap is here so a pathological
+      // map cannot turn one frame into a map-wide walk.
+      // ONLY WHAT IS ACTUALLY NEAR YOU (David, 2026-08-17: "trees (and blocks)
+      // should only go transparent in a close area - at moment whole forests
+      // vanish disconcertingly"). The spread exists so a wall goes see-through
+      // as one wall rather than flickering block by block; it was never meant
+      // to reach the far side of a wood. In a forest every tree touches the
+      // next, so a flood with only a tile cap on it walks the whole canopy and
+      // the island opens up around you.
+      //
+      // So the fill is bounded by DISTANCE FROM YOU, not by how many tiles it
+      // has eaten. Anything past this is not hiding you and has no business
+      // going transparent.
+      // TIGHTER STILL (David, 2026-08-18: "reduce the cone for trees
+      // transparency as it is far too big"). v1.577 stopped whole forests
+      // vanishing by bounding the flood to five and a half tiles, and the patch
+      // that was left is still wider than the problem: what can actually hide
+      // you is the tile or two BETWEEN you and the camera, not everything
+      // within arm's reach in every direction.
+      //
+      // So it is a cone rather than a circle. In this projection the camera
+      // looks from the south-east, so the only things in front of you are the
+      // ones with a greater tile sum — anything at or behind your own diagonal
+      // is drawn before you and cannot cover you whatever its height.
+      const nearMe = inCone;
+      const CAP = 64;
+      const queue = seeds.slice();
+      for (const [sx, sy] of seeds) fadeTiles.add(wKey(sx, sy));
+      while (queue.length && fadeTiles.size < CAP) {
+        const [cx, cy, kind] = queue.shift();
+        for (const [nx, ny] of [[cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]]) {
+          if (!map.inBounds(nx, ny) || !nearMe(nx, ny)) continue;
+          const k = wKey(nx, ny);
+          if (fadeTiles.has(k)) continue;
+          const joined = kind === 'o' ? isObjOccluder(nx, ny) : isTerOccluder(nx, ny);
+          if (!joined) continue;
+          fadeTiles.add(k);
+          queue.push([nx, ny, kind]);
+        }
+      }
+    }
+
     // The sniffer's name tags are collected as they are drawn, so the click
     // handler can hit-test them next frame. Cleared here, once per pass.
     beginUnitTags();
+    // How dark it is, for the machines' eyes (#189). The underworld has no sky,
+    // so it carries its own level rather than reading one off the clock.
+    setRobotNight(hud.underworld ? 0.6 : (hud.light != null ? 1 - hud.light : 0));
     for (const d of drawables) {
       const lift = d.player ? playerElev
         : d.animal ? elevOf(d.animal.x, d.animal.y)
@@ -506,19 +681,52 @@ export class Renderer {
       // the game cheating, and you are meant to lose sight of it if it is behind
       // something.
       let faded = false;
+      let overhead = null;   // the level above which this column is an arch over your head
       if (d.obj) {
-        const def = OBJECTS[d.obj.type];
-        const tall = def && (def.climbHeight || (def.solid ? 2 : 0));
-        if (tall && hides(d.depth, d.obj.x, d.obj.y, tall)) faded = true;
+        faded = fadeTiles.has(wKey(d.obj.x, d.obj.y));
       } else if (d.terrain) {
-        const th = map.heightAt(d.terrain[0], d.terrain[1]);
-        const overFeet = th - (player.footZ != null ? player.footZ : 0);
-        if (overFeet >= 1 && hides(d.depth, d.terrain[0], d.terrain[1], 0)) faded = true;
+        // GROUND IS NOT AN OCCLUDER. A tile has to rise above your HEAD before it
+        // can hide you, and you are two blocks tall — so a one-step kerb, which
+        // is what `>= 1` caught, is 16 pixels of terrain that never hid anybody
+        // and had no business going see-through under your feet (David,
+        // 2026-08-17: "floor tiles under the player should not fade").
+        //
+        // And the tile you are STANDING ON is exempt whatever its height: it is
+        // beneath you by definition, and fading the floor out from under a
+        // character is the one thing that can never be right.
+        const [ttx, tty] = d.terrain;
+        const onIt = ttx === Math.floor(player.x) && tty === Math.floor(player.y);
+        if (!onIt) faded = fadeTiles.has(wKey(ttx, tty));
+        // AND THE THING YOU HAVE WALKED UNDER (David, 2026-08-17: "when
+        // entering the tile directly underneath ! it should fade back
+        // somewhat"). Your own tile is exempt from the ordinary fade — a floor
+        // that vanishes under a character never reads right — but an arch is
+        // the one case where your own tile carries something OVER your head,
+        // and there the exemption hides you under your own bridge. It fades
+        // harder than a wall does, because the whole of what it has to say is
+        // that you have gone underneath.
+        if (onIt && map.columnAt) {
+          const feet = player.footZ != null ? player.footZ : 0;
+          const col = map.columnAt(ttx, tty);
+          for (let k = 1; k <= 4; k++) {
+            if (columnSolidAt(col, feet + k)) { overhead = feet + 1; break; }
+          }
+        }
       }
-      if (faded) { ctx.save(); ctx.globalAlpha = FADE; }
+      if (faded) {
+        if (d.terrain) this.prismSilhouette(map, d.terrain[0], d.terrain[1]);
+        ctx.save();
+        ctx.globalAlpha = FADE;
+      }
 
       if (d.edgeRock) { if (!hud.underworld) this.drawSeaTile(d.edgeRock[0], d.edgeRock[1]); }
-      else if (d.terrain) this.drawPrism(map, d.terrain[0], d.terrain[1], d.terrain[2], map.shadeAt(d.terrain[0], d.terrain[1]));
+      else if (d.terrain) {
+        // The arch over your own head fades INSIDE the prism (per slab, so the
+        // floor under you stays solid), which means the outer `faded` branch
+        // above never ran and never laid the soil down behind it.
+        if (overhead != null) this.prismSilhouette(map, d.terrain[0], d.terrain[1]);
+        this.drawPrism(map, d.terrain[0], d.terrain[1], d.terrain[2], map.shadeAt(d.terrain[0], d.terrain[1]), overhead);
+      }
       else if (d.player) this.drawPlayer(d.player);
       else if (d.animal) { drawAnimal(this.ctx, d.animal, worldToScreen); this.creatureHealthBar(d.animal, player, 44); }
       else if (d.bird) drawBird(this.ctx, d.bird, worldToScreen);
@@ -699,23 +907,131 @@ export class Renderer {
     // torch opens a pool of light around the player; without one you get
     // only a faint arm's-length glimmer. Goggles replace the dark with green sight.
     if (hud.light != null && hud.light < 1 && !nvOn) {
-      const dark = (1 - hud.light) * 0.78;
+      // NIGHT IS DARK (David, 2026-08-17: "night doesn't feel dark enough - and
+      // I cast a light a bit too strong even if I am not carrying a torch").
+      // Two numbers, and they pull against each other: the veil is heavier, and
+      // the pool you open WITHOUT a torch is smaller and much shallower — an
+      // arm's length of grey rather than a lamp you did not light. Carrying a
+      // torch is meant to be the difference between moving and not moving, and
+      // it cannot be if the dark is furnished for you.
+      // 0.90 at deep night, which is nearly the whole scene gone (David asked
+      // twice: "night doesn't feel dark enough", then "not dark enough.."). The
+      // clamp is there so it never reaches full black — a frame with nothing in
+      // it at all is not atmosphere, it is a lost player.
+      const dark = Math.min(0.9, (1 - hud.light) * 1.08);
       const z = camera.zoom || 1;
       const p = this.playerScreen(map, player, camera);
       const px = p.x, py = p.y;
-      const radius = (hud.torch ? 200 : 70) * z;
-      const veil = ctx.createRadialGradient(px, py, radius * 0.25, px, py, radius);
-      veil.addColorStop(0, `rgba(8,12,28,${Math.max(0, dark - (hud.torch ? 0.72 : 0.3))})`);
-      veil.addColorStop(1, `rgba(8,12,28,${dark})`);
-      ctx.fillStyle = veil;
-      ctx.fillRect(0, 0, this.w, this.h - DASH_H);
+      const hh = this.h - DASH_H;
+      // A little wider and a good deal softer than it was (David, 2026-08-17:
+      // "players torch should diffuse a bit more further away.. it is maybe too
+      // strong at present"). A torch is not a spotlight: what it does at range
+      // is take the edge off the dark, so the reach grows while the strength at
+      // the middle comes down and most of the falloff moves outward.
+      // SMALLER AND SOFTER AGAIN (David, 2026-08-18: "the torch throws way too
+      // much light -- it should be smaller and diffuse more"). A torch is a
+      // stick you are carrying, not a lamp post: what it gives you is a few
+      // paces of ground and a suggestion beyond that.
+      const radius = (hud.torch ? 150 : 46) * z;
+
+      // THE MACHINES LIGHT THE GROUND THEY STAND ON (#189, David 2026-08-17:
+      // "could the lights of the ob and factory etc. cast light into the
+      // scene?"). Parallel Realities part 10 sums a falloff per source into a
+      // per-tile light level and multiplies it into each sprite's colour; a
+      // canvas has compositing instead, so the veil is built ONCE as a flat
+      // dark on a buffer, every source ERASES its own falloff out of it
+      // (`destination-out`, which accumulates over overlapping pools exactly as
+      // that sum does), and the colour goes back over the world afterwards.
+      // The torch is one more source rather than a case of its own.
+      //
+      // AND A POOL IS AN ELLIPSE, NOT A CIRCLE (David: "the light cast is too
+      // spherical and unnatural looking"). Light falls on the GROUND, and the
+      // ground in this projection is 2:1 — a round pool reads as a sphere
+      // hanging in the air in front of the scene, because a circle on screen is
+      // what a ball would be, not what a lit patch of floor would be.
+      // THE POOLS ARE SMOOTH, AND THAT IS ALL THEY ARE (David, 2026-08-17:
+      // "block based light is awful … the original diffusion circles was much
+      // nicer", then "I think you might be overcomplicating this"). Two other
+      // shapes were tried and thrown away: a per-tile mosaic, which reads as a
+      // chequerboard and cost enough line-of-sight work to be felt as lag, and
+      // ray-cast shadow polygons, which gave every fixture a spiky starburst
+      // wherever a tree stood near it. What is left is one flattened, softly
+      // falling ellipse per source. Walls do not stop it. That is a real loss
+      // and a fair price: the two ways of buying it both looked worse than the
+      // thing they fixed.
+      const lights = this._sceneLights(map, player, camera);
+      if (!this._veilBuf) { this._veilBuf = document.createElement('canvas'); this._veilCtx = this._veilBuf.getContext('2d'); }
+      const buf = this._veilBuf, bx = this._veilCtx;
+      const bw = Math.ceil(this.w * this.dpr), bhh = Math.ceil(hh * this.dpr);
+      if (buf.width !== bw || buf.height !== bhh) { buf.width = bw; buf.height = bhh; }
+      bx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+      bx.globalCompositeOperation = 'source-over';
+      bx.clearRect(0, 0, this.w, hh);
+      bx.fillStyle = `rgba(8,12,28,${dark.toFixed(3)})`;
+      bx.fillRect(0, 0, this.w, hh);
+      bx.globalCompositeOperation = 'destination-out';
+      const punch = (cx, cy, r, cut, pow, coarse) => {
+        if (cut <= 0.01 || r <= 0) return;
+        bx.save();
+        bx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+        bx.translate(cx, cy);
+        bx.scale(1, GROUND_SQUASH);
+        const R = r * SOFT_REACH;
+        const g = bx.createRadialGradient(0, 0, 0, 0, 0, R);
+        softStops(g, cut, (a) => `rgba(0,0,0,${a})`, pow, coarse ? 3 : SOFT_STOPS);
+        bx.fillStyle = g;
+        bx.beginPath(); bx.arc(0, 0, R, 0, Math.PI * 2); bx.fill();
+        bx.restore();
+      };
+      punch(px, py, radius, Math.min(1, (hud.torch ? 0.5 : 0.1) / Math.max(0.01, dark)), hud.torch ? 3.6 : 2.4);
+      for (const L of lights) punch(L.sx, L.sy, L.r, L.a, L.pow, L.coarse);
+      bx.globalCompositeOperation = 'source-over';
+      // THE UNLIT-FACE PASS IS GONE, and the reason is worth keeping. v1.577
+      // gave each vertical face a rule — no source on its own side, so keep the
+      // night — by painting the veil back over that face on the buffer. It went
+      // wrong twice. First it composited dark ON dark and drew a black band
+      // along every terrain step (v1.578). Then, painting the shape correctly,
+      // it still drew a wall's face over the TREE standing in front of that
+      // wall, because the veil is one flat screen-space layer and has no idea
+      // what the world pass drew on top of what.
+      //
+      // There is no fix inside this layer: correcting it needs the depth the
+      // draw order carries and the veil does not have. So the pools spill a
+      // little onto the faces they pass, which reads as light falling on a
+      // wall — and is a great deal better than a black rectangle over a tree.
+      ctx.drawImage(buf, 0, 0, this.w, hh);
+      // And the colour back in, on the same flattened footprint. Dimmer than the
+      // hole it came from: a lamp lights the ground more than it stains it.
+      if (lights.length) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        for (const L of lights) {
+          const [r, g2, b] = L.rgb;
+          ctx.save();
+          ctx.translate(L.sx, L.sy);
+          ctx.scale(1, GROUND_SQUASH);
+          const R = L.r * SOFT_REACH;
+          const g = ctx.createRadialGradient(0, 0, 0, 0, 0, R);
+          softStops(g, 0.3 * L.a * dark, (a) => `rgba(${r},${g2},${b},${a})`, L.pow, L.coarse ? 3 : SOFT_STOPS);
+          ctx.fillStyle = g;
+          ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.fill();
+          ctx.restore();
+        }
+        ctx.restore();
+      }
       if (hud.torch && dark > 0.2) {
         // Warm flicker-free glow on top of the opened pool.
-        const glow = ctx.createRadialGradient(px, py, 0, px, py, radius * 0.8);
-        glow.addColorStop(0, 'rgba(255,170,70,0.14)');
+        const R = radius * 1.05;
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.scale(1, GROUND_SQUASH);
+        const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, R);
+        glow.addColorStop(0, 'rgba(255,170,70,0.10)');
+        glow.addColorStop(0.45, 'rgba(255,170,70,0.045)');
         glow.addColorStop(1, 'rgba(255,170,70,0)');
         ctx.fillStyle = glow;
-        ctx.fillRect(0, 0, this.w, this.h - DASH_H);
+        ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
       }
     }
 
@@ -1411,6 +1727,44 @@ export class Renderer {
     return [top, right, bottom, left];
   }
 
+  /**
+   * The white wireframe of one glass block, whose lid is at level `z`.
+   *
+   * THIN ON PURPOSE (David, 2026-08-17: "make the wireframe on glass thin"): a
+   * hairline reads as a glazing bar, a fat one as a painted frame.
+   */
+  glassBox(tx, ty, z) {
+    const ctx = this.ctx;
+    const t = this.tileCorners(tx, ty, z * ELEV);          // N, E, S, W
+    const b = t.map((p) => ({ x: p.x, y: p.y + ELEV }));   // the same, a block down
+    ctx.lineWidth = 0.6;
+    // Near: the lid, the three arrises the camera has a clear line to, and the
+    // two bottom edges under the faces it can see.
+    ctx.strokeStyle = 'rgba(255,255,255,0.52)';
+    ctx.beginPath();
+    ctx.moveTo(t[0].x, t[0].y);
+    ctx.lineTo(t[1].x, t[1].y);
+    ctx.lineTo(t[2].x, t[2].y);
+    ctx.lineTo(t[3].x, t[3].y);
+    ctx.closePath();
+    for (const i of [1, 2, 3]) { ctx.moveTo(t[i].x, t[i].y); ctx.lineTo(b[i].x, b[i].y); }
+    ctx.moveTo(b[3].x, b[3].y);
+    ctx.lineTo(b[2].x, b[2].y);
+    ctx.lineTo(b[1].x, b[1].y);
+    ctx.stroke();
+    // Far: the back corner and the two bottom edges behind it, seen through two
+    // panes of glass, so drawn as if they were.
+    ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+    ctx.beginPath();
+    ctx.moveTo(t[0].x, t[0].y);
+    ctx.lineTo(b[0].x, b[0].y);
+    ctx.moveTo(b[1].x, b[1].y);
+    ctx.lineTo(b[0].x, b[0].y);
+    ctx.lineTo(b[3].x, b[3].y);
+    ctx.stroke();
+    ctx.lineWidth = 1;
+  }
+
   diamondPath(corners) {
     const ctx = this.ctx;
     ctx.beginPath();
@@ -1454,6 +1808,7 @@ export class Renderer {
     // Canvas sources (e.g. pre-rendered graffiti text) are always ready to
     // draw immediately, unlike an Image that may still be loading.
     const ready = img && (img instanceof HTMLCanvasElement || (img.complete && img.naturalWidth));
+    const amb = ctx.globalAlpha;   // whatever the caller wants everything drawn at
     ctx.save();
     const ex = p1.x - p0.x, ey = p1.y - p0.y;
     const fx = p3.x - p0.x, fy = p3.y - p0.y;
@@ -1463,9 +1818,16 @@ export class Renderer {
       ctx.fillRect(0, 0, 1, 1);
     }
     if (ready) {
-      ctx.globalAlpha = textureAlpha;
+      // COMPOSE WITH THE AMBIENT ALPHA, never overwrite it. This used to set the
+      // alpha outright and then reset it to 1, which silently threw away
+      // whatever the caller had set — so the occlusion fade worked on plain
+      // fills and did nothing at all on a textured face. A wall's SW and SE
+      // sides are textured quads and its top is not, which is exactly the shape
+      // of the report: "walls are not transparent on SW and SE sides" (David,
+      // 2026-08-17).
+      ctx.globalAlpha = amb * textureAlpha;
       ctx.drawImage(img, 0, 0, 1, 1);
-      ctx.globalAlpha = 1;
+      ctx.globalAlpha = amb;
       if (tintColor) {
         ctx.globalCompositeOperation = tintMode || 'multiply';
         ctx.fillStyle = tintColor;
@@ -1476,12 +1838,77 @@ export class Renderer {
     ctx.restore();
   }
 
-  // The player sprite's actual on-screen pixel, accounting for the camera's
-  // elevation lift and the player's own height (the sprite is drawn raised by
-  // effectiveHeightAt * ELEV). Used by the night veil so the
-  // light pool tracks the sprite up the mountain instead of staying on its feet
-  // at sea level. Mirrors the drawables lift, minus the camera lift the transform
-  // already applied.
+  /** The camera transform, as a function from world point to screen point. */
+  _worldToScreenFn(camera) {
+    const z = camera.zoom || 1;
+    const cw = worldToScreen(camera.x, camera.y);
+    const lift = camera.screenLift || 0;
+    return (qx, qy) => {
+      const w = worldToScreen(qx, qy);
+      return { x: (w.x - cw.x) * z + this.w / 2, y: (w.y - cw.y + lift) * z + this.h / 2 - 16 * z };
+    };
+  }
+
+  /**
+   * The lights near the player, projected to screen (#189).
+   *
+   * Each pool is centred on its fixture's TILE, at ground level — the light
+   * lands on the floor around a tower, not up where its screen is, which is
+   * what the per-tile model in the tutorial says and what the underworld lamp
+   * pools have always done.
+   *
+   * The obelisks and their terminals take the island's own daemon colour when
+   * one is set, so a green estate lights green and Calypso's lights hers.
+   *
+   */
+  _sceneLights(map, player, camera) {
+    if (!player || !map || !map.objects) return [];
+    const to = this._worldToScreenFn(camera);
+    const t = performance.now() / 1000;
+    const tint = this.obBodyTint ? hexRgb(this.obBodyTint) : null;
+    const out = [];
+    // CULL BY WHAT IS ON SCREEN, NOT BY A FIXED RADIUS (David, 2026-08-18: "the
+    // lights on the obs are set to turn on/off in dark too far - so you have a
+    // strange effect of zooming out and far away obs are turned off"). Twenty-
+    // six tiles is inside the view once the camera pulls back, so zooming out
+    // visibly switched distant towers off. The reach is now derived from the
+    // viewport and the zoom, with a margin so a pool whose centre is just past
+    // the edge still spills in — which is exactly the case a fixed radius got
+    // wrong in the other direction.
+    const halfW = (this.w / 2) / ((camera.zoom || 1) * TILE_W * 0.5);
+    const halfH = (this.h / 2) / ((camera.zoom || 1) * TILE_H * 0.5);
+    const reach = Math.min(96, Math.max(26, Math.hypot(halfW, halfH) * 0.5 + 10));
+    for (const L of lightsNear(map, player.x, player.y, reach)) {
+      const bright = flickerAt(L.flicker, L.seed, t);
+      const a = L.level * bright;
+      if (a <= 0.02) continue;
+      const s = to(L.x, L.y);
+      const elev = (map.heightAt ? map.heightAt(Math.floor(L.x), Math.floor(L.y)) : 0) * ELEV;
+      const z = camera.zoom || 1;
+      const sx = s.x, sy = s.y - elev * z;
+      const r = L.radius * TILE_W * 0.5 * z;
+      if (sx + r < 0 || sx - r > this.w || sy + r < 0 || sy - r > this.h) continue;
+      let rgb = L.rgb;
+      if (tint && L.flicker === 'screen') rgb = [
+        Math.min(255, Math.round(rgb[0] * 0.4 + tint[0] * 1.1)),
+        Math.min(255, Math.round(rgb[1] * 0.4 + tint[1] * 1.1)),
+        Math.min(255, Math.round(rgb[2] * 0.4 + tint[2] * 1.1)),
+      ];
+      // A SMALL SOURCE FALLS OFF HARDER (David: "when the radius is smaller
+      // (e.g. fire) - the diffusion of light out should be similarly more
+      // aggressive"). One kernel scaled by its own radius gives every source
+      // the same shape, so a campfire read like a small floodlight.
+      const pow = 2 + Math.max(0, Math.min(2, (6 - L.radius) / 2));
+      // AND FAR IS CHEAP RATHER THAN ABSENT. A pool only a few pixels across
+      // cannot show a ten-stop falloff, so past this it is drawn with three —
+      // the cost of a gradient is its stops, and nobody can see the difference
+      // at that size. The pool is still there, which is the whole point.
+      out.push({ sx, sy, r, a: Math.min(1, a), rgb, pow, wx: L.x, wy: L.y, tiles: L.radius,
+        coarse: r < 48 });
+    }
+    return out;
+  }
+
   playerScreen(map, player, camera) {
     const z = camera.zoom || 1;
     const cw = worldToScreen(camera.x, camera.y);
@@ -1515,22 +1942,103 @@ export class Renderer {
    * two agreed by luck until v1.560, and stopped agreeing the moment terrain
    * could be six steps tall.
    */
-  drawPrism(map, tx, ty, type, shade) {
+  /**
+   * The same column, filled flat in the soil colour (#186/#188 follow-up).
+   *
+   * A FADE NEEDS SOMETHING BEHIND IT. Terrain is painted back to front and
+   * nothing is drawn behind a raised block — there is nothing there to draw —
+   * so fading one to see the player under it opened a hole onto the clear
+   * colour, which reads as a black diamond punched in the ground (David,
+   * 2026-08-17, with a screenshot of exactly that under an arch).
+   *
+   * So a faded column is laid over its own silhouette in earth. It fades
+   * against soil instead of against the void, which is both what it looks like
+   * from inside an arch and the only thing available: the pixels behind a wall
+   * were never drawn and cannot be recovered here.
+   */
+  prismSilhouette(map, tx, ty) {
+    const ctx = this.ctx;
+    const runs = map.columnAt ? columnSlabs(map.columnAt(tx, ty)) : null;
+    if (!runs || !runs.length) return;
+    const amb = ctx.globalAlpha;
+    ctx.globalAlpha = 1;
+    // The tile's own ground, where the palette has one, so a faded block on
+    // sand ghosts sandy and one in the grove ghosts green.
+    const pal = map.palette || null;
+    const under = columnSlabs(map.columnAt(tx, ty))[0];
+    ctx.fillStyle = (pal && pal.grass) || (under && FLOORS[under.mat] && FLOORS[under.mat].color) || GHOST_BEHIND;
+    for (let si = 0; si < runs.length; si++) {
+      const slab = runs[si];
+      const lid = this.tileCorners(tx, ty, slab.to * ELEV);
+      // No overhang below the column's own bottom: the plinth is four deep
+      // now, so there is nothing under it left to cover.
+      const drop = (slab.to - slab.from) * ELEV;
+      ctx.beginPath();
+      ctx.moveTo(lid[0].x, lid[0].y);
+      ctx.lineTo(lid[1].x, lid[1].y);
+      ctx.lineTo(lid[1].x, lid[1].y + drop);
+      ctx.lineTo(lid[2].x, lid[2].y + drop);
+      ctx.lineTo(lid[3].x, lid[3].y + drop);
+      ctx.lineTo(lid[3].x, lid[3].y);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.globalAlpha = amb;
+  }
+
+  drawPrism(map, tx, ty, type, shade, fadeAbove = null) {
+    const ctx = this.ctx;
     const runs = map.columnAt ? columnSlabs(map.columnAt(tx, ty)) : null;
     if (!runs || !runs.length) { this.drawFloor(map, tx, ty, type, shade); return; }
 
     const top = runs[runs.length - 1].to;
     // What the neighbours' ground stands at: a face is only worth painting
     // down to the point where the tile in front of it takes over.
-    const hs = map.heightAt(tx, ty + 1);
-    const he = map.heightAt(tx + 1, ty);
+    // WHAT THE NEIGHBOUR'S GROUND STANDS AT, AT THIS SLAB'S OWN LEVEL — not the
+    // top of its column. `heightAt` answers with the top, so a pier standing
+    // beside an arch saw its neighbour as three levels tall (the span) and drew
+    // no face at all below it: the whole opening under the arch came out as raw
+    // canvas, which is black (David, 2026-08-17, with a screenshot).
+    //
+    // The neighbour's surface BELOW this slab is what a face has to reach, and
+    // for an ordinary tile that is the same number `heightAt` gave. Only a
+    // column with air in it — an arch, a bridge, a doorway — can differ, and
+    // those are exactly the ones that were wrong.
+    const groundBeside = (nx, ny, atZ) => {
+      if (!map.columnAt || !map.inBounds(nx, ny)) return map.heightAt(nx, ny);
+      const s = columnSurfaceBelow(map.columnAt(nx, ny), atZ);
+      return s == null ? map.heightAt(nx, ny) : s;
+    };
     const pal = map.palette || null;
 
+    const amb = ctx.globalAlpha;
+    // WHAT IS OVER YOUR HEAD FADES; THE FLOOR UNDER YOUR FEET DOES NOT (David,
+    // 2026-08-17: "when entering the tile directly underneath ! it should fade
+    // back somewhat"). Fading the whole column dropped the ground out from
+    // under the character along with the span above them, which is the one
+    // thing a fade can never do. So the alpha is per slab: everything from
+    // `fadeAbove` up is the arch you have walked under, everything below it is
+    // where you are standing.
+    const dim = (from) => (fadeAbove != null && from >= fadeAbove ? amb * OVERHEAD_FADE : amb);
+    // A face inside a column that is already ghosting is taken further down
+    // still. Full-strength columns are untouched, so nothing you are meant to
+    // be looking at changes.
+    const faceDim = (from) => {
+      const a = dim(from);
+      return a < SEAM_FADE_BELOW ? a * FACE_FADE : a;
+    };
+    const glassAt = [];
     for (let si = 0; si < runs.length; si++) {
       const slab = runs[si];
+      ctx.globalAlpha = dim(slab.from);
       const col = (pal && pal[slab.mat]) || (FLOORS[slab.mat] && FLOORS[slab.mat].color) || '#6b6f63';
       const faceTex = (slab.mat === 'blight' || slab.mat === 'blight_sick') ? 'grass' : slab.mat;
       const lid = this.tileCorners(tx, ty, slab.to * ELEV);
+      // A TRANSLUCENT MATERIAL DRAWS THROUGH. Composed with whatever alpha is
+      // already set rather than replacing it, so a glass block behind an
+      // occlusion fade is faded AND glassy instead of one or the other.
+      const matA = FLOORS[slab.mat] && FLOORS[slab.mat].alpha;
+      if (matA) ctx.globalAlpha = amb * matA;
       // South face, then east: the two an isometric camera can see.
       //
       // THE BOTTOM SLAB IS THE GROUND, AND GROUND HAS NO UNDERSIDE. Its face
@@ -1542,14 +2050,34 @@ export class Renderer {
       // abyss under the tiles" (David, 2026-08-16): a tile that lives in the two
       // arrays rather than the column store synthesises as ONE level thick, so a
       // natural three-step drop drew one level of hillside and two of raw canvas.
+      const hs = groundBeside(tx, ty + 1, slab.to);
+      const he = groundBeside(tx + 1, ty, slab.to);
       const floorS = si === 0 ? hs : Math.max(slab.from, hs);
       if (floorS < slab.to) {
-        this.skirt(lid[3], lid[2], (slab.to - floorS) * ELEV, shadeHex(col, shade - 0.3), faceTex, tx, ty);
+        const d = (slab.to - floorS) * ELEV;
+        ctx.globalAlpha = matA ? faceDim(slab.from) * matA : faceDim(slab.from);
+        this.skirt(lid[3], lid[2], d, shadeHex(col, shade - 0.3), faceTex, tx, ty);
+        // THE FACE GOES IN THE HIT LIST TOO (#186). Pointing at the top of a
+        // block puts the next one on top of it; pointing at its SIDE should put
+        // one beside it, at that side's own level, which is the only way an
+        // arch or a doorway gets built. Recorded in the same iso space and
+        // under the same matrix as the lids, so the picker needs no second
+        // notion of where anything is.
+        this._tileHits.push({ tx, ty, z: slab.to, face: 's',
+          quad: [lid[3], lid[2], { x: lid[2].x, y: lid[2].y + d }, { x: lid[3].x, y: lid[3].y + d }] });
       }
       const floorE = si === 0 ? he : Math.max(slab.from, he);
       if (floorE < slab.to) {
-        this.skirt(lid[1], lid[2], (slab.to - floorE) * ELEV, shadeHex(col, shade - 0.45), faceTex, tx, ty);
+        const d = (slab.to - floorE) * ELEV;
+        ctx.globalAlpha = matA ? faceDim(slab.from) * matA : faceDim(slab.from);
+        this.skirt(lid[1], lid[2], d, shadeHex(col, shade - 0.45), faceTex, tx, ty);
+        this._tileHits.push({ tx, ty, z: slab.to, face: 'e',
+          quad: [lid[1], lid[2], { x: lid[2].x, y: lid[2].y + d }, { x: lid[1].x, y: lid[1].y + d }] });
       }
+      // A LIT FACE. The pools lie flat on the ground; a block standing beside a
+      // fire has two faces out of that plane, and they stayed black with the
+      // grass at their feet lit. The south face takes more than the east, the
+      // same way the flat shading already has them.
     }
 
     // EVERY LID THE CAMERA CAN SEE, not just the column's top.
@@ -1569,8 +2097,32 @@ export class Renderer {
       // blades and the wear and anything written on it. A lid down in a gap is
       // ground seen from underneath a structure, so it draws as its own
       // material and nothing more.
-      this.drawFloor(map, tx, ty, isTop ? type : slab.mat, shade, isTop ? null : slab.to);
+      const lidMat = isTop ? type : slab.mat;
+      const lidA = FLOORS[lidMat] && FLOORS[lidMat].alpha;
+      const lidAmb = dim(slab.from);
+      ctx.globalAlpha = lidA ? lidAmb * lidA : lidAmb;
+      this.drawFloor(map, tx, ty, lidMat, shade, isTop ? null : slab.to);
+      ctx.globalAlpha = amb;
     }
+    // GLASS IS A WIREFRAMED CUBE, and you can see all of it (David, 2026-08-17:
+    // "you need to draw all sides of the glass cube... to give the effect of a
+    // glass cube"). The fill goes straight through, so the edges are the only
+    // thing that says a pane is there — and a pane drawn with only its two near
+    // arrises is a flat sheet, not a block. So every one of the twelve edges is
+    // drawn, the far three dimmer because you are looking at them THROUGH the
+    // glass. Last of all, after the lids, or the top face would paint over the
+    // frame it belongs to.
+    //
+    // ONE BOX PER BLOCK, not per run: `pushBlock` merges a stack of glass into a
+    // single run, and a two-high pane framed as one tall box has no line where
+    // the two blocks meet.
+    if (glassAt.length) {
+      ctx.globalAlpha = amb;
+      for (const slab of glassAt) {
+        for (let z = slab.from + 1; z <= slab.to; z++) this.glassBox(tx, ty, z);
+      }
+    }
+
     // The centre of the top face, in the same iso space the draw used. The
     // camera matrix is stamped once per pass (see `beginTileHits`), so the
     // picker transforms these by exactly what painted them.
@@ -1891,7 +2443,9 @@ export class Renderer {
   _lampFlicker(seed) {
     const now = performance.now() / 1000;
     const slow = Math.sin(now * 0.7 + seed) * Math.sin(now * 0.13 + seed * 1.7);
-    if (slow > 0.85) return (Math.sin(now * 32 + seed) > 0) ? 0.22 : 0.9; // stutter window
+    // Under 2 Hz, deliberately: `sin(now * 32)` square-waved at about 5 Hz,
+    // inside the band photosensitive epilepsy guidance says to stay out of.
+    if (slow > 0.85) return (Math.sin(now * 11 + seed) > 0) ? 0.45 : 0.9; // stutter window
     return 1;
   }
 
@@ -2119,6 +2673,17 @@ export class Renderer {
     // THE LIP along the top edge, and the two SIDE EDGES that make the seam
     // between neighbouring blocks. Drawn outside the clip so they land on the
     // boundary itself rather than half inside it.
+    //
+    // A FADED WALL DOES NOT GET ITS SEAMS (Henrik, via David 2026-08-18: "the
+    // transparency leaves the face between the cubes too strong ... it should
+    // be made a bit more transparent"). Each tile strokes its own left and
+    // right edge, so where two blocks meet, two lines land on the same pixels
+    // — at full strength that is what makes a run of blocks read as blocks,
+    // and at a fade it is the one thing that stays solid while everything
+    // around it goes see-through, so a ghosted wall reads as a row of outlined
+    // boxes. Below the threshold the seams come off and the wall ghosts as one
+    // mass; the courses inside the clip are already faded with the fill.
+    if (ctx.globalAlpha < SEAM_FADE_BELOW) return;
     ctx.strokeStyle = 'rgba(255,255,255,0.18)';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -2955,6 +3520,67 @@ export class Renderer {
   // v runs UP the wall (D sits above A). Both core bodies place things on their
   // faces through this, so a panel is positioned in the same (u, v) terms
   // whichever shape it is sitting on.
+  /**
+   * A word painted ON a face rather than floating in front of it (#205).
+   *
+   * David, 2026-08-17: "the name of calypso and Factory should be properly
+   * placed in isometric on the sides of the boxes". Both labels were
+   * `ctx.fillText` in screen space, so they stayed upright while the box they
+   * belonged to sheared away under them — the same fault the graffiti had
+   * before it was warped, and it reads the same way: a caption, not a marking.
+   *
+   * So the word is rendered once into a small offscreen canvas and warped onto
+   * the face quad, exactly as `drawMeander` does. The bitmap is cached on the
+   * object under `_labelCv`, keyed by the text and the colour, because the only
+   * thing that changes frame to frame is where the face is.
+   *
+   * `A, B, D` are three corners of the face in the order `subQuad` wants:
+   * origin, +u edge, +v edge. `band` places it down the face (0 at the top).
+   */
+  drawFaceLabel(obj, A, B, D, text, colour, opts = {}) {
+    const word = String(text || '');
+    if (!word) return;
+    const { band = 0.5, height = 0.26, pad = 0.10, alpha = 1 } = opts;
+    const key = `${word}|${colour}`;
+    if (obj._labelKey !== key) {
+      // Rendered BIG and scaled down by the warp: a 14px face drawn at 14px and
+      // then sheared is a mess of half-lit pixels, and the warp is a resample
+      // either way, so the source may as well have something to resample.
+      const FS = 64;
+      const c = document.createElement('canvas');
+      const probe = c.getContext('2d');
+      probe.font = `bold ${FS}px Helvetica, system-ui, sans-serif`;
+      c.width = Math.max(8, Math.ceil(probe.measureText(word).width) + 16);
+      c.height = Math.ceil(FS * 1.35);
+      const g = c.getContext('2d');
+      g.font = `bold ${FS}px Helvetica, system-ui, sans-serif`;
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      // A stencil, not a sticker: the letters are painted straight onto the
+      // panel, so they carry a little of the dark under them the way stencilled
+      // lettering on a metal cabinet does.
+      g.fillStyle = 'rgba(0,0,0,0.45)';
+      g.fillText(word, c.width / 2 + 2, c.height / 2 + 2);
+      g.fillStyle = colour;
+      g.fillText(word, c.width / 2, c.height / 2);
+      obj._labelKey = key;
+      obj._labelCv = c;
+    }
+    const cv = obj._labelCv;
+    if (!cv) return;
+    // Keep the word's own proportions: pick the width from the height so the
+    // letters are not stretched along the face.
+    const wSpan = Math.min(1 - pad * 2, height * (cv.width / cv.height) * 0.5);
+    const u0 = 0.5 - wSpan / 2, u1 = 0.5 + wSpan / 2;
+    const v0 = Math.max(0.02, band - height / 2);
+    const quad = this.subQuad(A, B, D, u0, u1, v0, Math.min(0.98, v0 + height));
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    this.drawTexturedQuad(quad, cv, null, null, null, 1);
+    ctx.restore();
+  }
+
   faceMap(A, B, C, D) {
     return (u, v) => ({
       x: A.x * (1 - u) * (1 - v) + B.x * u * (1 - v) + D.x * (1 - u) * v + C.x * u * v,
@@ -3262,15 +3888,18 @@ export class Renderer {
 
     if (obj.hasTerminal && !dead) this.drawCoreScreen(obj, g.bottom, g.right, r.right, r.bottom);
 
-    // The name goes ABOVE the cube, not across it: the monolith wears its label
-    // on the face because there is nothing else on that face, and here it
-    // landed squarely on the logo. Centred on the body's own screen midpoint —
-    // worldToScreen of the footprint centre is NOT that, it sits a half-depth
-    // to the left, which is why the first attempt hung off the cube's shoulder.
-    ctx.font = 'bold 14px system-ui, sans-serif'; ctx.textAlign = 'center';
-    ctx.fillStyle = dead ? '#6a6a72' : '#cfd8f0';
-    ctx.fillText((obj.ai || 'CALYPSO').toUpperCase(), (g.left.x + g.right.x) / 2, r.top.y - 10);
-    ctx.textAlign = 'left';
+    // THE NAME IS ON THE BOX (#205). It used to sit above the cube in flat
+    // screen text, because the SE face was full — logo, drive slot, lamp,
+    // screen — and a label across that landed on the mark. The answer was the
+    // OTHER visible face, not a caption: the SW side is bare, and a machine of
+    // this shape wears its ports on one cheek and its name on the other.
+    //
+    // Warped onto the face, so it shears with the cube instead of standing up
+    // in front of it while the camera moves.
+    this.drawFaceLabel(obj, g.left, g.bottom, r.left,
+      (obj.ai || 'CALYPSO').toUpperCase(), dead ? '#6a6a72' : '#cfd8f0',
+      { band: 0.30, height: 0.17 });
+
     this.drawCoreDamage(obj, cx, cy, H, '#7a8ae0');
   }
 
@@ -3337,13 +3966,13 @@ export class Renderer {
       ctx.globalAlpha = 1;
     }
     ctx.restore();
-    // Label on the near face.
-    const labelC = worldToScreen(cx, obj.y + fh);
-    ctx.font = 'bold 13px system-ui, sans-serif';
-    ctx.fillStyle = '#c8ccd2';
-    ctx.textAlign = 'center';
-    ctx.fillText('W-FACTORY', labelC.x, labelC.y - H * 0.55);
-    ctx.textAlign = 'left';
+    // THE NAME IS ON THE SHED (#205). Stencilled onto the SE face — the darker
+    // of the two, which is the one a foundry would letter because it is the one
+    // the road comes past — and warped onto it rather than floated in front, so
+    // it shears with the building instead of sitting up straight while the
+    // building leans away.
+    this.drawFaceLabel(obj, g.right, g.bottom, r.right, 'W-FACTORY', '#c8ccd2',
+      { band: 0.26, height: 0.15, alpha: 0.92 });
 
     // Damage bar above the roof when it's been hit and the player is near.
     const p = this.hudPlayer;
@@ -3964,21 +4593,25 @@ export class Renderer {
   // network announcing itself before the 30-second purge plays out.
   drawSkylinkNetwork(obeliskObjs) {
     const ctx = this.ctx;
-    const live = (obeliskObjs || []).filter((o) => !o.destroyed);
+    // A NODE THAT IS OUT IS OFF THE WEB (David, 2026-08-17: "when a node is
+    // taken out - e.g. an OB the idea is the network is down - blue light
+    // cut"). This filtered on `destroyed` alone, so a tower you had jammed,
+    // frozen or crashed went on trading lasers with its neighbours — the one
+    // picture on the island that says the network is up, saying it about a
+    // machine you had just taken off it. `obeliskLive` is the same test the
+    // blight and the light pools use.
+    const live = (obeliskObjs || []).filter(obeliskLive);
     if (live.length < 2) return;
     this._skylinkT = (this._skylinkT || 0) + 0.06;
-    const pulse = 0.55 + 0.45 * Math.sin(this._skylinkT * 3);
+    const T = this._skylinkT;
     const towerTop = (o) => {
-      const H = Math.round(96 * (1 - (o.obDamage || 0) * 0.13));
+      const H = Math.round(96 * (o.cls === 'eye' ? 1.7 : 1) * (1 - (o.obDamage || 0) * 0.13));
       const c = worldToScreen(o.x + 0.5, o.y + 0.5);
       return { x: c.x, y: c.y - H + 8 };
     };
-    ctx.save();
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = `rgba(70,170,255,${pulse.toFixed(2)})`;
-    ctx.shadowColor = 'rgba(70,170,255,0.9)';
-    ctx.shadowBlur = 16;
-    const drawn = new Set();
+    // The links, worked out once so the packets can ride the same lines.
+    const links = [];
+    const seen = new Set();
     for (const a of live) {
       const nearest = live.filter((b) => b !== a)
         .map((b) => ({ b, d: Math.hypot(a.x - b.x, a.y - b.y) }))
@@ -3987,14 +4620,60 @@ export class Renderer {
       for (const { b } of nearest) {
         const ka = `${a.x},${a.y}`, kb = `${b.x},${b.y}`;
         const key = ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
-        if (drawn.has(key)) continue;
-        drawn.add(key);
-        const p1 = towerTop(a), p2 = towerTop(b);
-        ctx.beginPath();
-        ctx.moveTo(p1.x, p1.y);
-        ctx.lineTo(p2.x, p2.y);
-        ctx.stroke();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        links.push({ p1: towerTop(a), p2: towerTop(b), phase: (a.x * 7 + a.y * 13 + b.x * 3) % 10 });
       }
+    }
+    ctx.save();
+    ctx.lineCap = 'round';
+    // IT IS A NETWORK, SO SHOW TRAFFIC ON IT (David: "the blue network … looks
+    // a bit lame - make it more interestingly lit?"). One flat pulsing line
+    // says "laser"; three passes say "carrier". A wide dim haze for the glow in
+    // the air, a hard bright core for the beam itself, and packets running the
+    // wire — because what makes this frightening is not that the towers are
+    // lit, it is that they are TALKING, and about you.
+    for (const L of links) {
+      const { p1, p2 } = L;
+      // 1. the haze the beam throws into the air around it
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.lineWidth = 9;
+      ctx.strokeStyle = `rgba(40,120,220,${(0.10 + 0.05 * Math.sin(T * 2 + L.phase)).toFixed(3)})`;
+      ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+      // 2. the beam, breathing on its own phase so the web is never in step
+      const beat = 0.5 + 0.5 * Math.sin(T * 1.7 + L.phase);
+      ctx.lineWidth = 1.6;
+      ctx.strokeStyle = `rgba(120,205,255,${(0.34 + 0.3 * beat).toFixed(3)})`;
+      ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+      // 3. PACKETS. Three bright motes per link, evenly spaced and running the
+      // wire end to end; the direction alternates by phase so the traffic is
+      // not all flowing one way like a conveyor.
+      const dir = L.phase % 2 ? -1 : 1;
+      for (let k = 0; k < 3; k++) {
+        let u = ((T * 0.14 + k / 3 + L.phase * 0.07) % 1);
+        if (dir < 0) u = 1 - u;
+        const x = p1.x + (p2.x - p1.x) * u, y = p1.y + (p2.y - p1.y) * u;
+        // Fading in at one end and out at the other, so a mote never pops.
+        const edge = Math.min(1, Math.min(u, 1 - u) * 6);
+        const g = ctx.createRadialGradient(x, y, 0, x, y, 7);
+        g.addColorStop(0, `rgba(220,245,255,${(0.85 * edge).toFixed(3)})`);
+        g.addColorStop(0.35, `rgba(120,205,255,${(0.4 * edge).toFixed(3)})`);
+        g.addColorStop(1, 'rgba(70,170,255,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    // And a node lamp where each line is anchored, so the towers read as the
+    // things the web hangs from rather than as places lines happen to meet.
+    for (const o of live) {
+      const p = towerTop(o);
+      const pulse = 0.6 + 0.4 * Math.sin(T * 2.2 + (o.x + o.y) * 0.6);
+      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 13);
+      g.addColorStop(0, `rgba(230,248,255,${(0.7 * pulse).toFixed(3)})`);
+      g.addColorStop(0.4, `rgba(90,185,255,${(0.34 * pulse).toFixed(3)})`);
+      g.addColorStop(1, 'rgba(60,150,255,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(p.x, p.y, 13, 0, Math.PI * 2); ctx.fill();
     }
     ctx.restore();
   }
@@ -4530,11 +5209,17 @@ export class Renderer {
     const c = worldToScreen(obj.x + 0.5, obj.y + 0.5);
     const k = fireStrength(obj);                 // 0 out, 1 well fed
     const t = obj.flick || 0;
-    const flick = 0.82 + Math.sin(t * 11) * 0.1 + Math.sin(t * 27 + 1.3) * 0.08;
+    // Slower than a flame moves, for the same two reasons as the light pool:
+    // it reads as a fire rather than a strobe, and the fast term here was
+    // `sin(t * 27)`, about 4.3 Hz — inside the band photosensitive epilepsy
+    // guidance says to stay out of (see `flickerAt` and its rate test).
+    const flick = 0.85 + Math.sin(t * 6.5) * 0.09 + Math.sin(t * 13 + 1.3) * 0.06;
 
-    // The pool of light on the ground.
+    // The pool of light on the ground. Small: the light this fire actually
+    // throws is the night pass's business now (#189), and two pools on top of
+    // each other made the fire look twice the size it is.
     if (k > 0) {
-      const rr = 22 + 26 * k;
+      const rr = 14 + 14 * k;
       const g = ctx.createRadialGradient(c.x, c.y, 2, c.x, c.y, rr);
       g.addColorStop(0, `rgba(255,190,90,${0.30 * k * flick})`);
       g.addColorStop(1, 'rgba(255,150,50,0)');
@@ -4564,18 +5249,20 @@ export class Renderer {
     if (k <= 0) return;
     // The flame: two lobes, the outer orange and the inner white-yellow, both
     // scaled by fuel so a fire nearly out is visibly nearly out.
-    const h = (9 + 16 * k) * flick;
+    // SMALLER (David, 2026-08-17: "or at least the flames smaller"). It was a
+    // bonfire on a tile you can stand beside; three logs make a cooking fire.
+    const h = (6 + 10 * k) * flick;
     ctx.fillStyle = `rgba(230,110,40,${0.75 + 0.2 * k})`;
     ctx.beginPath();
-    ctx.moveTo(c.x - 6 * k - 2, c.y - 4);
-    ctx.quadraticCurveTo(c.x - 3, c.y - h * 0.7, c.x, c.y - h);
-    ctx.quadraticCurveTo(c.x + 3, c.y - h * 0.7, c.x + 6 * k + 2, c.y - 4);
+    ctx.moveTo(c.x - 4 * k - 1.4, c.y - 4);
+    ctx.quadraticCurveTo(c.x - 2, c.y - h * 0.7, c.x, c.y - h);
+    ctx.quadraticCurveTo(c.x + 2, c.y - h * 0.7, c.x + 4 * k + 1.4, c.y - 4);
     ctx.closePath(); ctx.fill();
     ctx.fillStyle = `rgba(255,226,150,${0.7 + 0.3 * k})`;
     ctx.beginPath();
-    ctx.moveTo(c.x - 3 * k - 1, c.y - 4);
-    ctx.quadraticCurveTo(c.x - 1, c.y - h * 0.5, c.x, c.y - h * 0.62);
-    ctx.quadraticCurveTo(c.x + 1, c.y - h * 0.5, c.x + 3 * k + 1, c.y - 4);
+    ctx.moveTo(c.x - 2 * k - 0.7, c.y - 4);
+    ctx.quadraticCurveTo(c.x - 0.7, c.y - h * 0.5, c.x, c.y - h * 0.62);
+    ctx.quadraticCurveTo(c.x + 0.7, c.y - h * 0.5, c.x + 2 * k + 0.7, c.y - 4);
     ctx.closePath(); ctx.fill();
 
     // A roast in progress: a bar over the fire, because six seconds of standing

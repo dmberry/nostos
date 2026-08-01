@@ -439,12 +439,30 @@ const BEEP_EARSHOT = 20;        // tiles: an island of beeping units would be un
 // program that sets the lamp inside an `if` branch means the lamp to stay that
 // way until another branch says otherwise) — but a fault puts it back, because
 // a machine running on its reflexes should not be wearing your colours.
+/**
+ * The fastest a lamp may blink, whatever a program asks for.
+ *
+ * Under 3 Hz, with room to spare, and it is a square wave — the lamp is gated
+ * off for half the cycle rather than dimmed — so the number is the flash rate
+ * exactly, not a sine to be argued about. See `flickerAt` and its rate test,
+ * which measures every flicker the engine drives; this is the one a player
+ * writes.
+ */
+export const LAMP_FLASH_MAX = 2.5;
+
 function applyEffects(r, effects, playerDist) {
   for (const e of (effects || [])) {
     if (e.k === 'eye' && LAMP_COLOURS.includes(e.colour)) {
       r.lamp = e.colour === 'off' ? 'off' : e.colour;
     } else if (e.k === 'flash') {
-      r.lampFlash = e.hz;
+      // CLAMPED, NOT REFUSED. `flash` accepts 0..10 and always has, so a saved
+      // program that asks for 6 must keep running — but 6 Hz on a lamp is
+      // squarely inside the band photosensitive epilepsy guidance says to stay
+      // out of, and every flicker the engine itself drives was taken under 3 Hz
+      // in v1.574. This was the one rate a PLAYER could set, and it was the one
+      // left out. A program that asks for more gets the ceiling, and its page
+      // reports the rate the lamp is actually running at.
+      r.lampFlash = Math.min(LAMP_FLASH_MAX, Math.max(0, e.hz));
     } else if (e.k === 'beep') {
       if ((r.beepT || 0) <= 0 && playerDist <= BEEP_EARSHOT) {
         r.beepT = BEEP_MIN_GAP;
@@ -595,8 +613,15 @@ const M6_PACK_MIN = 3;          // this many aggro'd M6 near you before the pack
 const M6_PACK_RADIUS = 11;      // how near (of the player) an aggro'd M6 counts toward the pack
 const M6_ATTACK_TIME = 5;       // seconds in the "attack" phase closing + striking...
 const M6_WITHDRAW_TIME = 3.2;   // ...then this long falling back before the next wave
-const M6_ATTACK_STANDOFF = 0.5; // how close it presses during an attack wave
-const M6_WITHDRAW_RANGE = 6;    // how far it falls back between waves (also a lone one's holding distance)
+// IT HAS LASERS AND DOES NOT NEED TO BE IN YOUR FACE (David, 2026-08-18: "make
+// the M6 less close - it has lasers - it doesn't need to come so close!"). At
+// half a tile it pressed into melee, which is a W-1's job: it fought at the
+// range its rifle makes pointless, and — the reason this surfaced — pushing
+// that close is what wedged it into a stand of trees in the first place. It
+// holds outside its own hit range now and inside its firing range, which is
+// where a shooter belongs.
+const M6_ATTACK_STANDOFF = 3.2; // how close it presses during an attack wave
+const M6_WITHDRAW_RANGE = 7;    // how far it falls back between waves (also a lone one's holding distance)
 const M6_LONE_PATIENCE = 6;     // seconds a lone guard waits for a pack before pressing anyway
 const M6_ORBIT_SPIN = 0.55;     // rad/s: fast enough to read as circling, not as following
 // IT IS MILITARY, SO IT IS ARMED (David, 2026-08-15: "M6 should shoot. It is
@@ -1073,6 +1098,10 @@ const BUMP_DAMAGE = 1;
 // that stays crowded. Two machines genuinely stuck together still wear down;
 // two that brush past each other in a corridor now cost nothing much.
 const BUMP_COOLDOWN = 2.5; // seconds before the same machine can be bump-hurt again
+// What a bump between two machines on the same network costs instead of HP: a
+// beat of standing still while they sort themselves out. Short enough to read
+// as a stumble rather than a fault.
+const BUMP_YIELD = 0.35;
 // CPU budget: robots this far (in tiles) from the player skip their AI and the
 // pairwise separation entirely — they're well off-screen, can't affect the
 // player, and simply freeze until the player comes near again. This is what
@@ -1844,22 +1873,43 @@ function collidesT1(map, r, nx, ny, allowSoft) {
     const tx = Math.floor(nx + ox);
     const ty = Math.floor(ny + oy);
     if (isBlocked(map, tx, ty, allowSoft)) return true;
-    if (map.heightAt(tx, ty) > map.heightAt(Math.floor(r.x + ox), Math.floor(r.y + oy))) {
-      return true;
-    }
+    const from = surfaceUnder(map, Math.floor(r.x + ox), Math.floor(r.y + oy), r.footZ, 1);
+    const to = surfaceUnder(map, tx, ty, from, 1);
+    if (to == null || to > from) return true;
   }
   return false;
+}
+
+/**
+ * The level a machine of `body` blocks' height would stand on at this tile,
+ * coming from `fromZ` (#188).
+ *
+ * COLUMNS, NOT THE FLAT HEIGHT. `heightAt` answers with the top of the column,
+ * so a machine standing under a walkway read the DECK as the ground and found
+ * itself three levels below where the map said it was — which is a wall it
+ * cannot see and cannot get round. The player has walked on `standingHeightAt`
+ * since the terrain rewrite's stage 5; this is the other half of that stage,
+ * which the machines never got.
+ *
+ * `null` means there is nothing to stand on within a step, which the callers
+ * read as blocked.
+ */
+function surfaceUnder(map, tx, ty, fromZ, body) {
+  if (!map.standingHeightAt) return map.heightAt(tx, ty);
+  const z = fromZ == null ? Infinity : fromZ;
+  return map.standingHeightAt(tx, ty, z, 1, body);
 }
 
 // T2 height rule: same scheme as Player.collides — steps of one level either
 // way are fine, anything steeper blocks.
 function collidesT2(map, r, nx, ny, allowSoft) {
-  const h = map.heightAt(Math.floor(r.x), Math.floor(r.y));
+  const h = r.footZ != null ? r.footZ : surfaceUnder(map, Math.floor(r.x), Math.floor(r.y), null, 2);
   for (const [ox, oy] of CORNERS) {
     const tx = Math.floor(nx + ox);
     const ty = Math.floor(ny + oy);
     if (isBlocked(map, tx, ty, allowSoft)) return true;
-    if (Math.abs(map.heightAt(tx, ty) - h) > 1) return true;
+    const s = surfaceUnder(map, tx, ty, h, 2);
+    if (s == null || Math.abs(s - h) > 1) return true;
   }
   return false;
 }
@@ -1874,6 +1924,11 @@ function moveAxis(r, dx, dy, map, allowSoft) {
   if (!collides(map, r, nx, ny, allowSoft)) {
     r.x = nx;
     r.y = ny;
+    // WHICH LEVEL IT IS ON, remembered (#188). Without this a machine under a
+    // deck asks the column afresh every frame with no feet to ask from, gets
+    // the deck, and is walled in by a structure it is standing beneath.
+    const s = surfaceUnder(map, Math.floor(nx), Math.floor(ny), r.footZ, isWheeled(r) ? 1 : 2);
+    if (s != null) r.footZ = s;
   }
 }
 
@@ -1890,8 +1945,31 @@ const SOFT_PUSH_BURST = 0.5;
 // still meaningfully far away is a stall — count it; any real progress resets it.
 function trackSoftStuck(r, moved, step, len, dt, allowSoft) {
   if (allowSoft && moved > step * 0.5) { r._softPushBurst = SOFT_PUSH_BURST; r._softStuckT = 0; return; }
-  if (len > 0.6 && moved < step * 0.35) r._softStuckT = (r._softStuckT || 0) + dt;
-  else r._softStuckT = 0;
+  // A STALL IS A MOVE THAT DID NOT HAPPEN, however short it was going to be.
+  // The gate used to be `len > 0.6`, so a machine aiming at a point less than
+  // two-thirds of a tile away and covering none of it counted as arrived rather
+  // than as stuck — and the soft-push escape, which is the only thing that gets
+  // a walker out of a copse, never fired. Measured on an M-6 in a dense stand:
+  // it stood perfectly still for five seconds with the stall clock at zero, and
+  // moved the instant its standoff angle drifted far enough to clear 0.6
+  // (David, 2026-08-18: "M6 gets stuck in trees").
+  //
+  // `step` is `min(speed * dt, len)`, so a machine standing ON its target has a
+  // step of about nothing and is not counted — which is the case the old gate
+  // was reaching for and caught far too much else with.
+  // AND ONE GOOD FRAME DOES NOT CLEAR THE RECORD. Measured after the first fix:
+  // the clock climbed to 0.5 and reset, over and over, never reaching the 0.6
+  // threshold, because a machine wedged in a copse gets one decent frame in
+  // five as it grinds along a trunk — and a hard reset threw the other four
+  // away. It DECAYS instead, at twice the rate it builds: a machine genuinely
+  // walking clears it almost at once, and one that is mostly stuck accumulates
+  // no matter how it jitters.
+  //
+  // (An absolute floor was tried first and was wrong: a limping unit at 0.55
+  // tiles a second covers nine thousandths of a tile in a frame, so any fixed
+  // distance calls honest slow walking a stall.)
+  if (step > 1e-4 && moved < step * 0.35) r._softStuckT = (r._softStuckT || 0) + dt;
+  else r._softStuckT = Math.max(0, (r._softStuckT || 0) - dt * 2);
 }
 
 // Step towards a point; axis-separated so robots slide along walls and
@@ -2627,8 +2705,24 @@ function separateRobots(robots, map, dt, player) {
         // apart — nothing overlaps — but two units both under your command
         // killing each other by walking is a squad destroying itself for
         // obeying you, which is not a difficulty anybody chose.
-        const bothYours = isEscorting(a) && isEscorting(b);
-        if (pass === 0 && !bothYours && a.bumpCooldown <= 0 && b.bumpCooldown <= 0) {
+        // MACHINES ON THE SAME NETWORK DO NOT WRECK EACH OTHER (#189, David
+        // 2026-08-17: "T1w should not crash into each other. They are aware of
+        // each other and work together as a swarm.. if they bump they can pause
+        // with no damage... otherwise they just destroy each other in
+        // seconds"). A swarm is a dozen machines converging on one point by
+        // design; at 1 HP a bump and 2.5 seconds between them, the pack ground
+        // itself down on the walk in and the player never touched it.
+        //
+        // The old rule exempted only YOUR units from each other, which is the
+        // same argument seen from the other side: two machines under one
+        // command killing each other by walking is not a difficulty anybody
+        // chose. It is not a difficulty POSEIDON chose either. So the test is
+        // now whether they are on the same side at all — and a converted unit
+        // shouldering an estate machine still costs both, because those two
+        // genuinely are fighting.
+        const sameSide = isEscorting(a) === isEscorting(b);
+        if (sameSide) { a.yieldT = Math.max(a.yieldT || 0, BUMP_YIELD); b.yieldT = Math.max(b.yieldT || 0, BUMP_YIELD); }
+        if (pass === 0 && !sameSide && a.bumpCooldown <= 0 && b.bumpCooldown <= 0) {
           a.hp -= BUMP_DAMAGE; a.hurt = true; a._lastHitBy = 'machine';
           b.hp -= BUMP_DAMAGE; b.hurt = true; b._lastHitBy = 'machine';
           a.bumpCooldown = BUMP_COOLDOWN;
@@ -3341,8 +3435,45 @@ function hashName(s) {
   return h >>> 0;
 }
 
+// How close two machines of the same class get before they start steering
+// around each other. Well outside the 0.62 at which they touch, so the
+// avoidance does its work before the shove has to.
+const SWARM_PERSONAL = 1.25;
+
+/**
+ * Nudge a move target away from the machines crowding this one (#189).
+ *
+ * THE SEPARATION PASS IS THE LAST RESORT, NOT THE PLAN. It shoves two machines
+ * apart after they have already overlapped, which looks like what it is. A
+ * swarm that is aware of itself steers around its own before it gets there —
+ * so this is `avoidScouts`, which the M-4 scouts have had since they were
+ * written, generalised to any machine of the same chassis.
+ *
+ * `crowd` (0..1) comes back so the caller can also ease off: steering alone
+ * cannot win when two machines close head-on, because they cover the gap inside
+ * one frame whatever their targets say.
+ */
+function avoidOwnKind(r, robots, tx, ty) {
+  let ax = 0, ay = 0, crowd = 0;
+  for (const o of robots) {
+    if (o === r || o.dead || o.fused || o.drained) continue;
+    if (o.type !== r.type) continue;
+    const dx = r.x - o.x, dy = r.y - o.y;
+    const d = Math.hypot(dx, dy);
+    if (d >= SWARM_PERSONAL) continue;
+    const nx = d > 1e-4 ? dx / d : 1, ny = d > 1e-4 ? dy / d : 0;
+    const strength = (SWARM_PERSONAL - d) / SWARM_PERSONAL;
+    if (strength > crowd) crowd = strength;
+    ax += nx * strength * 2.6;
+    ay += ny * strength * 2.6;
+  }
+  return { x: tx + ax, y: ty + ay, crowd };
+}
+
 function updateT1(r, dt, player, map) {
   r.attackTimer = Math.max(0, r.attackTimer - dt);
+  // A bump with one of its own: stand for a beat and let the other through.
+  if (r.yieldT > 0) { r.yieldT = Math.max(0, r.yieldT - dt); if (r.yieldT > 0) return; }
 
   const d = distTo(r, player);
   const ease = player.threatEase ? player.threatEase() : 1;
@@ -3378,7 +3509,11 @@ function updateT1(r, dt, player, map) {
   if (r.aggro) {
     const expected = Math.min(T.chase * dt, d);
     const tgt = chaseTarget(r, player.x, player.y, map); // route via a bridge if the river is in the way
-    const moved = moveToward(r, tgt.x, tgt.y, T.chase, dt, map);
+    // Steer around its own on the way in, and slow as it closes on one: a pack
+    // converging on a single point is the whole shape of a swarm attack, and
+    // the only thing that keeps it from being a pile-up.
+    const clear = r.swarm !== false ? avoidOwnKind(r, _liveRobots || [], tgt.x, tgt.y) : { x: tgt.x, y: tgt.y, crowd: 0 };
+    const moved = moveToward(r, clear.x, clear.y, T.chase * (1 - 0.55 * clear.crowd), dt, map);
     // Progress bookkeeping for the stuck tell: a chaser pinned by terrain
     // for a couple of seconds admits it (the renderer shows its confusion).
     if (moved < expected * PROGRESS_FRACTION) r.noProgressT += dt;
@@ -4931,6 +5066,75 @@ let tagRects = [];
 let tagClickable = false;
 export function setUnitTagsClickable(on) { tagClickable = !!on; }
 export function beginUnitTags() { tagRects = []; }
+
+// EYES IN THE DARK (David, 2026-08-17: "would be good if robots eyes glow a bit
+// in the dark - so we can see them in the night... scary").
+//
+// The sensor is the one part of a machine that is a light rather than a
+// surface, so it is the one part the night does not take. Set once a frame from
+// the renderer's ambient level; at noon it is zero and nothing here draws.
+//
+// It is a fair warning as well as a fright: a hunter you cannot see is the game
+// cheating, and before this the only thing that gave a machine away at night
+// was walking into it.
+let robotNight = 0;
+export function setRobotNight(v) { robotNight = Math.max(0, Math.min(1, v || 0)); }
+
+/** `rgb(...)`, `rgba(...)` or `#rrggbb` to a triple, for the glow behind it. */
+function eyeRGB(col) {
+  if (!col) return null;
+  if (col[0] === '#') return [parseInt(col.slice(1, 3), 16), parseInt(col.slice(3, 5), 16), parseInt(col.slice(5, 7), 16)];
+  const m = col.match(/-?\d+(\.\d+)?/g);
+  return m && m.length >= 3 ? [Number(m[0]), Number(m[1]), Number(m[2])] : null;
+}
+
+/**
+ * The glow around a machine's sensor at night, drawn over the finished sprite.
+ *
+ * Where the eyes ARE is per chassis, because the sprites are hand-drawn and
+ * there is no rig to ask: the T-1's single eye rides ahead of the hull in the
+ * direction it is facing, the T-3 has the twin emitters it shoots from, the
+ * B-1 wears a visor across a helm half again the size of anything else, and
+ * everything else in the T-2 family has one horizontal visor on a small head.
+ *
+ * A wreck's eye is out, which is the whole reason a wreck reads as a wreck.
+ */
+function drawEyeGlow(ctx, r, c, worldToScreen) {
+  if (robotNight <= 0.06 || r.fused) return;
+  const s = r.type === 't3' ? t3SensorStyle(r) : sensorStyle(r);
+  const rgb = s && eyeRGB(s.fill);
+  if (!rgb) return;
+  // A drained machine's socket is dark grey; it should stay dark rather than
+  // glowing grey at you.
+  if (r.drained) return;
+  const spots = [];
+  if (isWheeled(r) && r.type !== 't3' && worldToScreen) {
+    const f = worldToScreen(r.x + r.facing.x * 0.3, r.y + r.facing.y * 0.3);
+    spots.push([f.x, f.y - 9, 1]);
+  } else if (r.type === 't3') {
+    spots.push([c.x - 2.4, c.y - 34.5, 0.8], [c.x + 2.4, c.y - 34.5, 0.8]);
+  } else if (r.type === 'b1') {
+    spots.push([c.x, c.y - 33, 1.5]);
+  } else {
+    spots.push([c.x, c.y - 30, 0.9]);
+  }
+  const [rr, gg, bb] = rgb;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (const [x, y, k] of spots) {
+    const R = 13 * k * (0.55 + 0.45 * robotNight);
+    const g = ctx.createRadialGradient(x, y, 0, x, y, R);
+    g.addColorStop(0, `rgba(${rr},${gg},${bb},${(0.5 * robotNight).toFixed(3)})`);
+    g.addColorStop(0.4, `rgba(${rr},${gg},${bb},${(0.18 * robotNight).toFixed(3)})`);
+    g.addColorStop(1, `rgba(${rr},${gg},${bb},0)`);
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.fill();
+    // A hard core, so it is a point of light and not only a smudge.
+    ctx.fillStyle = `rgba(255,255,255,${(0.3 * robotNight).toFixed(3)})`;
+    ctx.beginPath(); ctx.arc(x, y, 0.9 * k, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
 export function unitTagAt(sx, sy) {
   if (!tagClickable) return null;
   for (const t of tagRects) {
@@ -5064,6 +5268,7 @@ export function drawRobot(ctx, robot, worldToScreen) {
   else if (robot.type === 'b1') drawB1(ctx, robot, jc);
   else if (robot.type === 't3') drawT3(ctx, robot, jc);
   else drawT2(ctx, robot, jc);
+  drawEyeGlow(ctx, robot, jc, worldToScreen);
   if (robot.ubikConfusedT > 0) {
     // Tell: violet dizzy dots circling the head, PKD's reality-static
     // rather than the boars' plain grey — same idea, different cause.

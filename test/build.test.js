@@ -20,7 +20,7 @@ import { GameMap } from '../src/game/map.js';
 import {
   TOOLS, PROTECTED, toolOf, canBuildAt, applyBuild, BUILD_MAX,
 } from '../src/game/build.js';
-import { slabs } from '../src/game/terrain.js';
+import { slabs, solidAt } from '../src/game/terrain.js';
 import { FLOORS, OBJECTS } from '../src/game/tiles.js';
 
 const mk = () => new GameMap(12, 12, 'grass');
@@ -30,8 +30,8 @@ test('every tool names something that exists', () => {
     if (t.kind === 'block') assert.ok(FLOORS[t.floor], `${t.key} names a material that does not exist`);
     if (t.kind === 'object') assert.ok(OBJECTS[t.object], `${t.key} names an object that does not exist`);
   }
-  assert.equal(TOOLS.length, 10, 'ten tools, one per number key');
-  assert.equal(new Set(TOOLS.map((t) => t.key)).size, 10, 'and no duplicate keys');
+  assert.ok(TOOLS.length <= 12, 'short enough that the palette never scrolls');
+  assert.equal(new Set(TOOLS.map((t) => t.key)).size, TOOLS.length, 'and no duplicate keys');
 });
 
 test('an unknown tool is refused, not guessed at', () => {
@@ -64,7 +64,8 @@ test('a material tool PLACES A BLOCK — the thing you could not do before', () 
   // And underneath it, the sand and the grass are still there — which is the
   // whole of what the heightmap could not say.
   const mats = slabs(m.columnAt(4, 4)).map((sl) => sl.mat);
-  assert.deepEqual(mats, ['grass', 'sand', 'stone']);
+  assert.deepEqual(mats, ['dirt', 'grass', 'sand', 'stone'],
+    'the plinth, the ground it was, and the two you put on it');
 });
 
 test('a stack cannot be built past the ceiling, measured from its own ground', () => {
@@ -194,4 +195,62 @@ test('you cannot bury yourself', () => {
   assert.equal(applyBuild(m, 8, 8, 'wall', { player }).ok, false);
   assert.equal(applyBuild(m, 8, 8, 'lotus', { player }).ok, false, 'unknown tools stay refused too');
   assert.equal(applyBuild(m, 9, 8, 'wall', { player }).ok, true, 'the tile beside you is fine');
+});
+
+// ---- #186: a block against a face, which is what makes an arch -------------
+
+test('A BLOCK GOES AGAINST A SIDE FACE, AT THAT FACE\'S OWN LEVEL', () => {
+  // Placing only ever grew a column upward, so there was no way to put a block
+  // at a height with air under it — and without that there are no arches, no
+  // doorways, and no bridge you built yourself.
+  const m = mk();
+  for (let i = 0; i < 3; i++) applyBuild(m, 5, 5, 'stone');   // a pier, top at 3
+  assert.equal(m.heightAt(5, 5), 3);
+
+  const r = applyBuild(m, 5, 5, 'stone', { face: 's', z: 3 });
+  assert.equal(r.ok, true, r.why);
+  assert.deepEqual(r.at, { x: 5, y: 6, z: 3 });
+  const col = m.columnAt(5, 6);
+  assert.equal(solidAt(col, 3), true, 'the span is up at the pier\'s level');
+  assert.equal(solidAt(col, 1), false, 'and there is a doorway under it');
+  assert.equal(solidAt(col, 2), false);
+});
+
+test('the east face builds east, the south face south', () => {
+  const m = mk();
+  applyBuild(m, 4, 4, 'stone');
+  assert.deepEqual(applyBuild(m, 4, 4, 'stone', { face: 'e', z: 1 }).at, { x: 5, y: 4, z: 1 });
+  assert.deepEqual(applyBuild(m, 4, 4, 'stone', { face: 's', z: 1 }).at, { x: 4, y: 5, z: 1 });
+});
+
+test('an arch: two piers and a span you can walk under', () => {
+  const m = mk();
+  for (const x of [3, 6]) for (let i = 0; i < 3; i++) applyBuild(m, x, 3, 'stone');
+  // walk the span out from each pier and close it in the middle
+  assert.equal(applyBuild(m, 3, 3, 'stone', { face: 'e', z: 3 }).ok, true);   // span onto 4
+  assert.equal(applyBuild(m, 4, 3, 'stone', { face: 'e', z: 3 }).ok, true);   // and onto 5, meeting the far pier
+  assert.equal(applyBuild(m, 5, 3, 'stone', { face: 'e', z: 3 }).ok, false,
+    'the far pier is already there — the arch is closed');
+  for (const x of [4, 5]) {
+    const col = m.columnAt(x, 3);
+    assert.equal(solidAt(col, 3), true, `span at ${x}`);
+    assert.equal(solidAt(col, 1), false, `open under ${x}`);
+  }
+  assert.equal(m.standingHeightAt(4, 3, 0, 1, 2), 0, 'and a two-block walker fits underneath');
+});
+
+test('the face rule keeps every rule the top rule had', () => {
+  const m = mk();
+  applyBuild(m, 7, 7, 'stone');
+  assert.equal(applyBuild(m, 7, 7, 'stone', { face: 'e', z: 1 }).ok, true);
+  assert.equal(applyBuild(m, 7, 7, 'stone', { face: 'e', z: 1 }).ok, false, 'nothing lands twice');
+  // the ceiling is still six above the ground
+  assert.equal(applyBuild(m, 7, 7, 'stone', { face: 's', z: BUILD_MAX + 1 }).ok, false);
+  // the sea is still not yours to move
+  m.setFloor(1, 2, 'sea');
+  assert.equal(applyBuild(m, 1, 1, 'stone', { face: 's', z: 1 }).ok, false);
+  // and you still cannot close a block over your own head
+  const player = { x: 9.5, y: 9.5, footZ: 0 };
+  assert.equal(applyBuild(m, 9, 8, 'stone', { face: 's', z: 1, player }).ok, false);
+  assert.equal(applyBuild(m, 9, 8, 'stone', { face: 's', z: 5, player }).ok, true, 'but a ceiling well overhead is fine');
 });
