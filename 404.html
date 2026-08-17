@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>404 Not Found</title>
+<meta name="robots" content="noindex">
+<meta property="og:title" content="404 Not Found">
+<meta property="og:description" content="The requested URL was not found on this server. The request was logged.">
+<meta property="og:image" content="https://nostos-ai.vercel.app/assets/share-card-cache.jpg">
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; }
+  body { font: 17px/1.5 "Times New Roman", Times, serif; color: #cfcfcf; }
+  canvas { display: block; position: fixed; inset: 0; z-index: 1; background: #000;
+    image-rendering: pixelated; image-rendering: crisp-edges; }
+  /* The cover is what makes it a reveal: they are already open behind it. */
+  #veil { position: fixed; inset: 0; z-index: 2; background: #000; pointer-events: none; }
+  #say { position: fixed; left: 0; right: 0; bottom: 34px; z-index: 3; text-align: center;
+    opacity: 0; transition: opacity 0.7s ease 0.7s; padding: 0 20px; }
+  /* The 404 as a server of the period served it: Times, a bold heading, and
+     the sentence about the requested URL underneath. */
+  #say h1 { margin: 0 0 14px; font: bold 34px/1.15 "Times New Roman", Times, serif;
+    color: #f0f0f0; letter-spacing: 0; }
+  #say p { margin: 5px 0; font: 17px/1.5 "Times New Roman", Times, serif; color: #cfcfcf; }
+  #say a { color: #cfcfcf; }
+  #say.show { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) {
+    #say { transition: none; opacity: 1; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+<div id="veil"></div>
+<div id="say">
+  <h1>404 Not Found</h1>
+  <p id="req">The requested URL was not found on this server.</p>
+  <p>The request was logged.</p>
+  <p><a href="/">NostOS</a></p>
+</div>
+
+<script>
+/*
+ * The 404 for anything outside the game: a dark screen that turns out to have
+ * been watching before the cover lifted.
+ *
+ * IT IS GRAB'S OWN ICON, whole, blown up with smoothing off. I drew an eye in
+ * vectors first and then cropped one out of the icon, and both were worse than
+ * the thing itself: a camera watching you is worse than an eye watching you,
+ * because a camera is a record. The original is an 8-bit sprite and the pixels
+ * are what make it that icon rather than a picture of one. Three frames, pupil
+ * left, centre and right, which is how the original followed you and is how
+ * these do.
+ *
+ * Inspired by Hakim El Hattab's eyes-in-the-dark 404 (hakim.se). None of his
+ * code is here: everything that drew an eye went when this started blitting the
+ * icon instead, and what is left is a sequence, a blit and a fade. A hat tip,
+ * not an attribution.
+ *
+ * The big one at the centre is hers and never leaves. The other is somewhere
+ * else every few seconds, which is what makes the centre one feel permanent.
+ */
+(function () {
+  var W = 0, H = 0;
+  var canvas = document.getElementById('c');
+  var ctx = canvas.getContext('2d');
+  var veil = document.getElementById('veil');
+  var say = document.getElementById('say');
+
+  var REVEAL = 0.55;       // seconds the cover stays up before it starts to go
+  var SW = 64, SH = 64;    // Grab's icon, whole and untouched
+
+  var frames = ['grab-eye1', 'grab-eye2', 'grab-eye3'].map(function (n) {
+    var i = new Image();
+    i.src = 'assets/media/grab/' + n + '.png';
+    return i;
+  });
+
+  var pointer = { x: 0, y: 0, has: false };
+  var start = Date.now();
+  var eyes = [];
+
+  function size() {
+    W = window.innerWidth; H = window.innerHeight;
+    // Deliberately NOT scaled by devicePixelRatio. The icon is 64 pixels across
+    // and the point is that you can see them, so it is blitted at whole
+    // multiples of its own size and nothing resamples it.
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    canvas.width = W; canvas.height = H;
+    ctx.imageSmoothingEnabled = false;
+    if (!pointer.has) { pointer.x = W / 2; pointer.y = H / 2; }
+    layout();
+  }
+
+  // ONE AT A TIME. A crowd of them is a picture of surveillance; one is the
+  // thing itself, because you cannot tell where it will be when it comes back.
+  // The positions are a fixed sequence seeded off the index rather than
+  // Math.random, so the order is the same on every load, and it CUTS rather
+  // than moves: a camera that slides is one camera, and a camera that appears
+  // somewhere else is a different one.
+  var SPOTS = 8, spot = 0, spotAt = 0, HOLD = 3.4;
+
+  function layout() {
+    eyes = [];
+    // HERS IS ALWAYS THERE, centred and largest, and never part of the
+    // sequence. It is the one watching; the others are only where it has also
+    // been. Held at index 0 so the loop can skip it.
+    eyes.push({
+      x: W / 2, y: H * 0.36,
+      zoom: Math.max(3, Math.floor(Math.min(W, H) * 0.46 / SW))
+    });
+    for (var n = 0; n < SPOTS; n++) {
+      // QUADRANTS IN TURN, jitter only inside them. Seeding both axes off sin()
+      // put seven of eight on the right; tying the side to parity then paired
+      // left with top and gave a diagonal. The quadrant is chosen, and the
+      // jitter decides only where within it.
+      var qx = n % 2, qy = (n >> 1) % 2;
+      var jx = (qx ? 0.56 : 0.04) + (Math.sin(n * 12.9898) * 0.5 + 0.5) * 0.36;
+      var jy = (qy ? 0.54 : 0.04) + (Math.sin(n * 78.233) * 0.5 + 0.5) * 0.40;
+      // THE ROAMER STAYS SMALL. It was reaching 3x against hers at 4x, near
+      // enough in size that the two read as a pair rather than as one thing
+      // watching and one further off. Capped at a third of hers, and never
+      // more than 2x whatever the screen.
+      var zoom = Math.max(1, Math.min(2, Math.floor(eyes[0].zoom / 3)));
+      var x = jx * W, y = jy * (H * 0.60);
+      // Never so close to hers that the two read as a pair. Measured from the
+      // edges, not the centres: the first version compared centre distance to a
+      // fixed box and let a 64px one sit right against a 256px one.
+      var keep = (eyes[0].zoom * SW) / 2 + (zoom * SW) / 2 + Math.min(W, H) * 0.10;
+      var dx = x - eyes[0].x, dy = y - eyes[0].y;
+      var dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < keep) {
+        var a = Math.atan2(dy || (n % 2 ? 1 : -1), dx || 1);
+        x = eyes[0].x + Math.cos(a) * keep;
+        y = eyes[0].y + Math.sin(a) * keep;
+      }
+      // And back inside the screen, clear of the type.
+      var m = zoom * SW * 0.6;
+      x = Math.max(m, Math.min(W - m, x));
+      y = Math.max(m, Math.min(H * 0.62 - m, y));
+      eyes.push({ x: x, y: y, zoom: zoom });
+    }
+  }
+
+  // Which of the three the pupil is in. The original had three positions and
+  // that is all it had; interpolating would invent something Ohlfs did not draw.
+  function lookAt(eye) {
+    var dx = pointer.x - eye.x;
+    var span = Math.max(120, eye.zoom * SW * 1.4);
+    if (dx < -span * 0.35) return 0;
+    if (dx > span * 0.35) return 2;
+    return 1;
+  }
+
+  function frame() {
+    var t = (Date.now() - start) / 1000;
+    ctx.clearRect(0, 0, W, H);
+    ctx.imageSmoothingEnabled = false;
+
+    function put(e) {
+      if (!e) return;
+      var img = frames[lookAt(e)];
+      if (!img.complete || !img.naturalWidth) return;
+      var w = SW * e.zoom, h = SH * e.zoom;
+      // Rounded to whole pixels, or the blit resamples and the edges soften.
+      ctx.drawImage(img, Math.round(e.x - w / 2), Math.round(e.y - h / 2), w, h);
+    }
+
+    if (t > REVEAL) {
+      put(eyes[0]);                       // hers, always
+      if (spotAt === 0) spotAt = t;
+      if (t - spotAt > HOLD) { spot = (spot + 1) % SPOTS; spotAt = t; }
+      put(eyes[1 + spot]);                // and one other, moving
+    }
+
+    // A black floor under the type. Painted after the cameras so the sentence
+    // is readable no matter which of them woke up near it.
+    var grad = ctx.createLinearGradient(0, H * 0.62, 0, H);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(0.45, 'rgba(0,0,0,0.86)');
+    grad.addColorStop(1, 'rgba(0,0,0,1)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, H * 0.62, W, H * 0.38);
+
+    if (veil && t > REVEAL) {
+      var o = parseFloat(veil.style.opacity || 1) - 0.035;
+      if (o <= 0) { veil.parentNode.removeChild(veil); veil = null; }
+      else veil.style.opacity = o;
+    }
+    requestAnimationFrame(frame);
+  }
+
+  document.addEventListener('mousemove', function (e) {
+    pointer.x = e.clientX; pointer.y = e.clientY; pointer.has = true;
+  }, { passive: true });
+  document.addEventListener('touchmove', function (e) {
+    if (e.touches && e.touches[0]) {
+      pointer.x = e.touches[0].clientX; pointer.y = e.touches[0].clientY; pointer.has = true;
+    }
+  }, { passive: true });
+
+  // With no pointer at all, a phone nobody has touched, they look slowly around
+  // rather than staring ahead, which reads as dead.
+  setInterval(function () {
+    if (!pointer.has) { pointer.x = W * (0.2 + Math.random() * 0.6); }
+  }, 2800);
+
+  // Say which address was asked for, the way a server does.
+  try {
+    var path = location.pathname + location.search;
+    if (path && path !== '/') {
+      document.getElementById('req').innerHTML =
+        'The requested URL <b>' + path.replace(/[<>&"]/g, '') + '</b> was not found on this server.';
+    }
+  } catch (e) { /* the sentence stands without it */ }
+
+  window.addEventListener('resize', size);
+  size();
+  setTimeout(function () { say.className = 'show'; }, 50);
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

@@ -102,6 +102,7 @@ export const HISTORY_SITES = [
       '<hr>',
       '<p><small>mail me: checkersbot at aol dot com. I do not have the 1959 paper',
       'scanned and please stop asking, it is forty pages.</small></p>',
+      '<p><small>The reading list for all of this, which is better than mine, is at <a href="gamehist.cs.uiuc.edu">gamehist.cs.uiuc.edu</a>. And the summer where the field got its name is at <a href="dartmouth56.geocities.ws">dartmouth56</a>, although Samuel had been at it for years by then.</small></p>',
     ],
   },
 
@@ -159,6 +160,7 @@ export const HISTORY_SITES = [
       '<p>Strachey, "The "Thinking" Machine", 1954. There is a copy in',
       'the departmental library. The link to the scan on this page has been broken',
       'since the server was rebuilt and I have not had time.</p>',
+      '<p><small>Strachey\u2019s draughts programme belongs with the other one: <a href="checkersbot.org">Samuel at IBM</a> was doing the same game on the other side of the Atlantic, and the two of them are the whole of games research in that decade.</small></p>',
     ],
   },
 
@@ -196,6 +198,13 @@ export const HISTORY_SITES = [
       '<p><small>maintained by the seminar convenor. Page last touched a while',
       'ago; the Franklin Institute page numbers are from my own offprint so they',
       'should be right.</small></p>',
+      '<hr>',
+      '<p><small>Boellstorff and Soderman are giving &ldquo;Artificial',
+      'Intellivision: Gaming Histories of AI&rdquo; at',
+      '<a href="dept:usc.edu/retroai">Retro AI: Archaeologies of A.I.</a> at USC,',
+      'and bringing an Intellivision to play on between sessions. Add them to the',
+      'list above when there is something to cite.</small></p>',
+      '<p><small>Two pages that cover the practical end better than a reading list can: <a href="checkersbot.org">the Samuel program</a>, and <a href="history.cs.man.ac.uk">Strachey on the Manchester machine</a>.</small></p>',
     ],
   },
 
@@ -230,6 +239,12 @@ export const HISTORY_SITES = [
       'will, and the ones who do still fall for it.</p>',
       '<hr>',
       '<p><small>[digest ends] [4 messages in this thread] [next thread]</small></p>',
+      '<hr>',
+      '<p><small>ADMIN: several on this list are speaking at',
+      '<a href="dept:usc.edu/retroai">Retro AI: Archaeologies of A.I.</a>, USC,',
+      'end of July. Two days on the genealogies rather than the next thing. The',
+      'thread above is thirty years old and the argument has not moved.</small></p>',
+      '<p><small>For anybody arriving at this thread cold, the program itself is described at <a href="eliza.geocities.ws">eliza.geocities.ws</a>, and what its author spent the next forty years saying about it is at <a href="weizenbaum.geocities.ws">weizenbaum.geocities.ws</a>.</small></p>',
     ],
   },
 
@@ -264,6 +279,7 @@ export const HISTORY_SITES = [
       '<hr>',
       '<p><small>[HOME] [LINKS] [SIGN MY GUESTBOOK] · guestbook is broken,',
       'sorry, the CGI host went away</small></p>',
+      '<p><small>There is another page about this film at <a href="wargames.fanpages.org.uk">wargames.fanpages.org.uk</a>. We disagree about the ending and agree about everything else.</small></p>',
     ],
   },
 
@@ -299,6 +315,7 @@ export const HISTORY_SITES = [
       '<p>Given the transition table overleaf, list the states reachable from the',
       'initial state. Then list the ones that are not, and say for each one what',
       'you think it was for.</p>',
+      '<p><small>Where this turns up in a language you might actually use: <a href="sml.geocities.ws">Standard ML</a>, whose pattern matching is this idea with the compiler checking you have covered every state.</small></p>',
     ],
   },
 
@@ -337,6 +354,7 @@ export const HISTORY_SITES = [
       '<h2>Other</h2>',
       '<p>Notes, a mailing list I run, and a long piece on how to help somebody',
       'use a computer. [index — 403]</p>',
+      '<p><small>Somebody has been applying this to source code line by line at <a href="criticalcode.geocities.ws">criticalcode.geocities.ws</a>, which is the practical end of the same argument.</small></p>',
     ],
   },
 
@@ -446,6 +464,7 @@ export const HISTORY_SITES = [
       'to be cut off, and do not conclude you have typed it in wrong.</p>',
       '<p>[IMAGE: rpent.gif — 1103 generations, animated, 400K. You do not want',
       'this on a modem and I do not want the bandwidth bill.]</p>',
+      '<p><small>If you want it in one line rather than in a pattern file, it is the standard demonstration of <a href="apl.geocities.ws">APL</a>, and it genuinely is one line.</small></p>',
     ],
   },
 ];

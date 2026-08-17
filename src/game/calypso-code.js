@@ -244,6 +244,8 @@ FILED. ACKNOWLEDGED. NO ACTION.
 }
 
 /** Everything her machine serves, as a flat name → text map. */
+import { WARNING_FILE, WARNING_OPENER, NOTE_OPENER } from './seals.js';
+
 export function calypsoFiles(extra = {}) {
   return {
     'constitution.ml': constitutionFile(),
@@ -251,6 +253,12 @@ export function calypsoFiles(extra = {}) {
     'guest.log': guestLog(),
     'MEMO-appearing-intelligent.txt': weizenbaumMemo(),
     'MEMO-capture.txt': agreMemo(),
+    // NOT HERS. Three files that were on this machine before she was, and which
+    // she has never opened, because opening the second one destroys it and she
+    // has no instruction covering what to do about that.
+    'warning.asc': WARNING_FILE,
+    'thamus.py': WARNING_OPENER,
+    'DECRYPT.ML': NOTE_OPENER,
     ...extra,
   };
 }

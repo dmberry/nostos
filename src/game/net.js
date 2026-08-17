@@ -43,7 +43,13 @@
 import { CHECKPOINTS } from './v-model.js';
 import { islandProfile } from './islands.js';
 import { docsPage, docTitle, DOC_TOPICS } from './ml-docs.js';
-import { CACHE_SUB, ARCHIVED_SITES, archivedSite, archivedDomains, stubBody, CATEGORIES, categoryOf } from './archive.js';
+import { NOTE_FILE, SESSION_OPENER } from './seals.js';
+
+// The riddle sits in its own file rather than in the box's general readme,
+// because somebody standing at a drive looks at the thing NEXT TO the file
+// they cannot open, not at the machine's front matter.
+const NOTE_README = "note.asc — what it is, and where the way in went\n\nWe did not seal this and we cannot open it. It was on the box when the box\nwas found and we have served it ever since without being asked to.\n\nWhat opens it is not here. A drop that carried both the locked thing and the\nkey to it would be a drop worth raiding, and this one has never been worth\nraiding, which is the only reason it is still standing.\n\nThere are two copies of the way in still out there. This is as much as we\nworked out.\n\n  ONE sits in a page that will tell you, in so many words, that it is safe\n  and checked and nothing to worry about. It is not in what that page SAYS.\n  It is in what the page is MADE of. You can have it by looking and not by\n  reading, which is a thing pages could do then, and a habit worth keeping.\n\n  THE OTHER is on the machine of somebody who keeps things and does not\n  throw them away. She has it filed beside a note about SEEMING to be\n  clever. Whether that is her joke or nobody\'s we have never settled, and\n  we have stopped asking her.\n\nEither will do. You only need it once, and then you have it.\n\n-- RON\n";
+import { CACHE_SUB, ARCHIVED_SITES, archivedSite, archivedDomains, stubBody, CATEGORIES, categoryOf, DEPARTMENTS } from './archive.js';
 import { pressDomains, pressPaper, isPaper, pressIndexBody, pressEditionBody } from './press.js';
 import { wikiArticle, departmentPage } from './archive.js';
 import { towerProgram, towerConstitution, towerCan, factoryProgram, FACTORY_CONSTITUTION } from './tower-code.js';
@@ -823,14 +829,30 @@ export function searchResults(hosts, query) {
     ].filter(Boolean).join(' ').toLowerCase();
     return words.every((w) => hay.includes(w));
   };
+  // THE UNIVERSITIES' INNER PAGES ARE DOCUMENTS TOO. The crawl walked `hosts`
+  // and nothing else, so anything hanging off a university — a department, a
+  // research group, a person's own faculty page — could not be found by a word
+  // written on it. Somebody named on such a page was unreachable except by
+  // knowing which university to open and reading down the list (David,
+  // 2026-08-17: "his name didn't come up directly in search results ... maybe
+  // this affects other pages too?"). It affected every one of them, not one.
+  const deptHit = ([key, page]) => {
+    const hay = [key, page.title, page.name, page.body.join(' ').replace(/<[^>]+>/g, ' ')]
+      .filter(Boolean).join(' ').toLowerCase();
+    return words.every((w) => hay.includes(w));
+  };
+  const depts = words.length ? Object.entries(DEPARTMENTS).filter(deptHit) : [];
   const found = words.length ? hosts.filter(hit) : [];
+  const total = found.length + depts.length;
   return [
     '<h1>ALTAVISTA</h1>',
     `<p>Results for: ${q || '(nothing)'}</p>`,
-    `<p>About ${found.length} document(s) found. Index last rebuilt 14/03.</p>`,
+    `<p>About ${total} document(s) found. Index last rebuilt 14/03.</p>`,
     '<hr>',
-    ...(found.length ? found.map((h) => link(h, `${h.name} — ${h.host}${h.down ? '  [host not responding]' : ''}`))
-      : ['<p>No documents match the query.</p>',
+    ...(total ? [
+      ...found.map((h) => link(h, `${h.name} — ${h.host}${h.down ? '  [host not responding]' : ''}`)),
+      ...depts.map(([key, page]) => `<a href="dept:${key}">${page.title || key} — ${key}</a>`),
+    ] : ['<p>No documents match the query.</p>',
         '<p>Try fewer words, or a place name.</p>']),
     '<hr>',
     '<small>altavista.com (198.51.100.200) · results retained after a host goes dark</small>',
@@ -1479,8 +1501,20 @@ const RELAY_README = [
   'sniffer.ml   names every machine the card can hear',
   'watch.ml     names only the ones inside ten metres',
   '',
-  'Both run on a NostBook: ml sniffer.ml. They read the same air `arp -a`',
-  'reads. Read them before you run them; they are short on purpose.',
+  'note.asc      sealed. it is not ours and we did not open it.',
+  '',
+  'THIS BOX DOES NOT RUN ANY OF THEM. It has no ml. It holds files and hands',
+  'them over, and that is the whole of what it is: somewhere to leave a thing',
+  'and somewhere to come and get one. A box that only ever gives is a box',
+  'nobody has to trust.',
+  '',
+  'To take one:',
+  '  `ls` here to see what is on the disk, `cat <file>` to read it where it',
+  '  stands. To have it on YOUR machine, put Netscape on this relay and click',
+  '  the file under Software. It lands in /home/download.',
+  '',
+  'What opens it is NOT ON THIS BOX. See note_readme.txt, which is what we',
+  'worked out and as far as we got.',
   '',
   '-- RON',
 ].join('\n');
@@ -1517,6 +1551,14 @@ export const RELAY_FILES = [
     blurb: 'the same ear, narrowed to ten metres' },
   { name: 'readme', body: RELAY_README,
     blurb: 'what this box is for, in RON\'s own words' },
+  // Not RON's. It was on the box when the box was found, and RON has served it
+  // ever since without being asked to and without saying where it came from.
+  { name: 'note_readme.txt', body: NOTE_README,
+    blurb: 'what note.asc is, and the two places the way into it went' },
+  { name: 'open.ml', body: SESSION_OPENER,
+    blurb: 'opens a sealed thing that is not on this box. short on purpose' },
+  { name: 'note.asc', body: NOTE_FILE,
+    blurb: 'sealed. five-byte xor. the key is the name at the foot of it' },
 ];
 
 export function relayFile(name) {
@@ -1838,13 +1880,35 @@ const ANCHOR = /<a href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
 export function renderPage(html) {
   const links = [];
   const out = [];
-  for (const raw of String(html || '').split('\n')) {
+  // AN ANCHOR MAY WRAP. The scan below is line by line, so a link whose opening
+  // tag is on one line and whose </a> is on the next was never matched at all:
+  // it printed as prose and could not be followed, exactly like the bug this
+  // file already records. A page author should not have to keep a link on one
+  // line any more than they should have to put it alone on one, so the lines
+  // are rejoined here before anything looks at them. 66 links across the corpus
+  // (test/cached-web.test.js).
+  const joined = String(html || '').split('\n');
+  for (let i = 0; i < joined.length - 1; i++) {
+    // An unclosed <a on this line: pull the next one up until it closes.
+    while (i < joined.length - 1
+      && (joined[i].match(/<a\s[^>]*>/gi) || []).length > (joined[i].match(/<\/a>/gi) || []).length) {
+      joined[i] = joined[i] + ' ' + joined[i + 1].trim();
+      joined.splice(i + 1, 1);
+    }
+  }
+  for (const raw of joined) {
     const line = raw.trim();
     if (!line) continue;
 
     // An anchor alone on its line keeps its own indented row, which is what the
     // index and menu pages are written against.
-    const solo = line.match(/^<a href="([^"]+)"[^>]*>([\s\S]*)<\/a>$/i);
+    // The content must contain no </a> of its own. This was ([\s\S]*), which is
+    // greedy: on a line of three anchors it matched from the first <a> to the
+    // LAST </a> and took the whole line for one link, keeping the first address
+    // and swallowing the other two labels into its own. Every webring strip in
+    // the GeoCities network is that shape, so Prev worked and Random and Next
+    // were text. 177 links across 112 pages, found by test/cached-web.test.js.
+    const solo = line.match(/^<a href="([^"]+)"[^>]*>((?:(?!<\/a>)[\s\S])*)<\/a>$/i);
     if (solo) {
       links.push({ n: links.length + 1, addr: solo[1], label: strip(solo[2]) });
       out.push(`  [${links.length}] ${strip(solo[2])}`);
@@ -1914,7 +1978,7 @@ export function pressPage(domain, editionId, hosts) {
 export function wikiPage(key, hosts) {
   const art = wikiArticle(key);
   const cache = (hosts || []).find((h) => h.kind === 'archive' && !h.cached);
-  if (!art) return ['<h1>Not in store</h1>', `<p>No article "${key}" was crawled.</p>`].join('\n');
+  if (!art) return notInStore(key, null);
   return [
     `<small>X-Cache: HIT from ${cache ? cache.host : 'cache'}</small>`,
     '<!--bg:grey-->',
@@ -1925,12 +1989,86 @@ export function wikiPage(key, hosts) {
   ].join('\n');
 }
 
+/**
+ * Is this address a department page rather than a host? A shared cache link of
+ * the form ?cache=usc.edu/retroai names a page, not a server, and opening it as
+ * a hostname fails DNS and answers "Not Found". Callers need to know which of
+ * the two they are holding before they choose a view.
+ */
+export const isDept = (key) => !!departmentPage(key);
+
+/**
+ * WHAT A MISS LOOKS LIKE IN A CACHE.
+ *
+ * Netscape's own 404 talks about DNS entries, which is the wrong machine
+ * answering: the player is not on the live web and there is no DNS. They are
+ * reading a crawl somebody took on one night, and a miss means the crawler did
+ * not get there, or nobody thought to fetch it, or it was behind a password.
+ * That is a different fact from the address not existing, and the difference is
+ * the whole subject of the game.
+ *
+ * `near` is the closest thing in store, offered without being clicked, because
+ * an archive index that knows what it nearly has is more use than one that says
+ * no. Used for a mistyped address, a dead internal link, and a shared link that
+ * names something the cache never held.
+ */
+export function notInStore(addr, near) {
+  const a = String(addr || '').replace(/[<>&]/g, '');
+  const out = [
+    '<h1>404 Not Found</h1>',
+    `<p>The requested URL <b>${a}</b> was not found on this server.</p>`,
+  ];
+  if (near) {
+    out.push(`<p>Did you mean <a href="${near}">${near}</a>?</p>`);
+  }
+  // The server line is where the fiction sits, because it is where it sat on a
+  // real page of the period: a MISS from the cache, not a live host refusing.
+  // Nothing is on the live web here and nothing has been for a long time.
+  out.push(`<hr>`, `<p><small>X-Cache: MISS from ${SERVER.archive}</small></p>`);
+  return out.join('\n');
+}
+
+/**
+ * The closest known address to what was typed, or null if nothing is close.
+ * Cheap edit distance, capped: a suggestion that is not nearly right is worse
+ * than none because it sends the reader somewhere they did not ask for.
+ */
+export function nearestHost(addr, hosts) {
+  const a = String(addr || '').toLowerCase().trim();
+  if (!a) return null;
+  const names = (hosts || []).map((h) => h.host).filter(Boolean);
+  let best = null, bestD = Infinity;
+  for (const n of names) {
+    const b = n.toLowerCase();
+    if (b === a) return null;
+    // A containment match wins outright: a truncated or over-typed address.
+    let d;
+    if (b.includes(a) || a.includes(b)) d = Math.abs(b.length - a.length);
+    else {
+      // Levenshtein, small and iterative.
+      const m = a.length, k = b.length;
+      let prev = Array.from({ length: k + 1 }, (_, j) => j);
+      for (let i = 1; i <= m; i++) {
+        const cur = [i];
+        for (let j = 1; j <= k; j++) {
+          cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+        }
+        prev = cur;
+      }
+      d = prev[k];
+    }
+    if (d < bestD) { bestD = d; best = n; }
+  }
+  // Four edits is a typo. More than that is a different address.
+  return bestD <= 4 ? best : null;
+}
+
 // A university department that survived as its own page: `dept:<domain>/<key>`.
 export function deptPage(key, hosts) {
   const art = departmentPage(key);
   const cache = (hosts || []).find((h) => h.kind === 'archive' && !h.cached);
   const domain = String(key).split('/')[0];
-  if (!art) return ['<h1>Not in store</h1>', `<p>No department "${key}" was crawled.</p>`].join('\n');
+  if (!art) return notInStore(key, null);
   return [
     `<small>X-Cache: HIT from ${cache ? cache.host : 'cache'}</small>`,
     ...art.body,
@@ -1977,6 +2115,7 @@ export const CACHE_ALIASES = {
   ward: 'ward.fanpages.org.uk',
   loca: 'locarecords.com',
   schnews: 'schnews.org.uk',
+  retroai: 'usc.edu/retroai',
 };
 
 // Pure: search string in, hostname out, or null. Takes the two pieces rather

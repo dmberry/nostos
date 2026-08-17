@@ -1021,6 +1021,7 @@ export const DELETED_BOOKS = [
   ['book-covers/postdigital.jpg', 'Postdigital', 'David M. Berry', 'Berry on life after the digital’s novelty wears off, when computation stops being new and becomes the ground.'],
   ['book-covers/Cover CriticalTheory_Berry.jpg', 'Critical Theory and the Digital', 'David M. Berry', 'Berry brings the Frankfurt School to bear on software, code, and the computational condition.'],
   ['book-covers/Cover - DH .png', 'Digital Humanities', 'David M. Berry', 'Berry on what becomes of the humanities once they compute — method, knowledge, and the machine.'],
+  ['book-covers/hallucinate-this.jpg', 'Hallucinate This!', 'Mark C. Marino', 'Marino prompts a chatbot into producing its own autobiography and publishes it under the machine\u2019s name, crediting himself only as the one who prompted. Read the cover slowly. Authoritized is authorised with authority pushed into the middle of it and not quite fitting. Autobotography is autobiography with the bot put in and the life taken out. Neither is a misprint and both are the argument: a life story with no life in it, authorised by nobody who could authorise anything.'],
   // These five exist as WHOLE TEXTS (books.js) and had no physical copy, so the
   // only way to reach them was the laptop — which is the digital library, not
   // this one. Find the book and you can read all of it.
@@ -1035,6 +1036,13 @@ export const DELETED_BOOKS = [
 // shows: what the book argues, one thing it actually says, and a line about THIS
 // copy — the last is what makes it a found object rather than a catalogue entry.
 export const PBOOK_PAGES = {
+  'Hallucinate This!': `Marino prompts a chatbot into writing its own autobiography, and publishes it under the machine's name. He is credited on the cover only as the one who prompted, which is either modesty or the sharpest claim in the book.
+
+Read the cover slowly, because both errors on it are deliberate. Authoritized is authorised with authority pushed into the middle of it, not quite fitting, doing too much work. Autobotography is autobiography with the bot put in and the life taken out. Neither is a misprint and both are the argument.
+
+What comes out is fluent, confident, and about a life nobody lived. It gives reasons for things it did not do and feelings it did not have, in good prose, at length, and never once hesitates. There is no deception in it because there is nobody in there to deceive you.
+
+The same demonstration was made sixty years earlier with two hundred lines of pattern matching, and its author spent the rest of his life objecting to how well it had worked. Marino is one of the people who went back and wrote that program's history. This is the joke told again, at length, with the machine given the byline.`,
   'The Republic': `Plato asks what justice is and cannot get a straight answer, so he builds a city instead — on the argument that justice is easier to read written large in a state than small in a person, and that whatever it turns out to be there it will be here too.
 
 The famous parts are pictures. Prisoners in a cave who have only ever seen shadows on a wall and take them for the world. A line divided between what you can see and what you can only think. A ship whose crew fight over the tiller while nobody studies navigation.

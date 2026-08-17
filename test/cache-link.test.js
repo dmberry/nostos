@@ -17,7 +17,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { cacheLink, CACHE_ALIASES } from '../src/game/net.js';
-import { ARCHIVED_SITES } from '../src/game/archive.js';
+import { ARCHIVED_SITES, departmentPage, universityAt } from '../src/game/archive.js';
 
 test('the query form resolves a host', () => {
   assert.equal(cacheLink('?cache=whatishistory.geocities.ws', '/'),
@@ -47,9 +47,15 @@ test('EVERY ALIAS POINTS AT A PAGE THAT EXISTS', () => {
   // The reason this test is here: an alias is quoted in prose that cannot be
   // edited afterwards. Renaming a page in the corpus must fail the build
   // rather than break a printed link.
+  //
+  // Widened 2026-08-17: an alias may point at a DEPARTMENT page as well as an
+  // archived site (`retroai -> usc.edu/retroai`), which the game resolves and
+  // this test did not know about. The intent is unchanged; the set of things
+  // that count as a page is now the set the game can actually open.
   const domains = new Set(ARCHIVED_SITES.map((s) => s.domain));
+  const resolves = (host) => domains.has(host) || !!departmentPage(host) || !!universityAt(host);
   const dead = Object.entries(CACHE_ALIASES)
-    .filter(([, host]) => !domains.has(host))
+    .filter(([, host]) => !resolves(host))
     .map(([k, host]) => `${k} -> ${host}`);
   assert.deepEqual(dead, []);
 });

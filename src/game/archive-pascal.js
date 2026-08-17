@@ -229,6 +229,11 @@ export const PASCAL_SITES = [
       '<hr>',
       '<p><small>see also: the DOCTOR script, and <a href="dmb.demon.co.uk">dmb.demon.co.uk</a>, which is',
       'the same joke with the honesty taken out.</small></p>',
+      '<hr>',
+      '<p><small>Weil is giving a paper on this &mdash; &ldquo;Looking Back on',
+      'MrMind&rdquo; &mdash; at <a href="dept:usc.edu/retroai">Retro AI:',
+      'Archaeologies of A.I.</a>, Mudd Hall, USC. Twenty-five years after the',
+      'test opened. It is still taking answers.</small></p>',
     ],
   },
 ];

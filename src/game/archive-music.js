@@ -841,12 +841,6 @@ export const VENUE_SITES = [
   // arrive later, which is also what happened to every page like it, and is why
   // the pictures on it are of a room that has already changed.
   //
-  // Sourcing. The exterior and the interiors are photographs of the building.
-  // Bert Read the landlord, his daughter Lara Read the landlady, and the death
-  // of the old jukebox come from a press caption filed in Brighton in January
-  // 2007; the stained glass is on record too. Everything else on the page is
-  // the room in the pictures — the green glaze, the gold lettering, the wall of
-  // framed bills, the Harvey's, the two cats — described and not invented.
   {
     domain: 'theheartandhand.geocities.ws',
     name: 'THE HEART & HAND',

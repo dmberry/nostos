@@ -106,6 +106,7 @@ export const FORUM_SITES = [
       '<hr>',
       '<p><small>2,061 further comments not in store. See also: libcom.org</small></p>',
       '<p><small>Cached 04:11.</small></p>',
+      '<p><small>This record is what the crawler kept. Where a page is short or a link here is dead, a library in San Francisco was collecting the same web at the same time and may hold more of it: <a href="archive.org">archive.org</a>.</small></p>',
     ],
   },
   {
@@ -176,6 +177,7 @@ export const FORUM_SITES = [
       '<hr>',
       '<p><small>101 further replies not in store. See also: news.ycombinator.com</small></p>',
       '<p><small>Cached 04:14.</small></p>',
+      '<p><small>Two pages from the same years, from people who were there rather than theorising it: <a href="soundsystem.geocities.ws">the rig</a>, and <a href="levellers.fanpages.org.uk">the band the Act was written at</a>.</small></p>',
     ],
   },
 
@@ -580,6 +582,7 @@ export const FORUM_SITES = [
       '<p><small>206 further comments not in store. Thread locked by moderators.</small></p>',
       '<hr>',
       '<p><small>Cached 03:14.</small></p>',
+      '<p class="kv"><small>&#9650; back to <a href="reddit.com">the front page</a></small></p>',
     ],
   },
   {
@@ -616,6 +619,7 @@ pic('empty-street-live', 'A six-lane road at nine in the morning with nothing on
         'go where?</p>',
       '<hr>',
       '<p><small>Cached 03:14.</small></p>',
+      '<p class="kv"><small>&#9650; back to <a href="reddit.com">the front page</a></small></p>',
     ],
   },
   {
@@ -653,6 +657,7 @@ pic('mturk-rates', '$0.05 per Fix, $0.04 per Verify. Somebody has written a word
       '<p>&nbsp;&nbsp;absolutely not today mate</p>',
       '<hr>',
       '<p><small>Cached 03:14.</small></p>',
+      '<p class="kv"><small>&#9650; back to <a href="reddit.com">the front page</a></small></p>',
     ],
   },
   {
@@ -692,6 +697,7 @@ pic('tool-board', 'Everything on the board has an outline behind it, so you can 
         'once known where you are.</p>',
       '<hr>',
       '<p><small>Cached 03:14.</small></p>',
+      '<p class="kv"><small>&#9650; back to <a href="reddit.com">the front page</a></small></p>',
     ],
   },
   {
@@ -724,6 +730,7 @@ pic('tool-board', 'Everything on the board has an outline behind it, so you can 
       '<p>&nbsp;&nbsp;You are very welcome here. Bring a hat.</p>',
       '<hr>',
       '<p><small>Cached 03:14.</small></p>',
+      '<p class="kv"><small>&#9650; back to <a href="reddit.com">the front page</a></small></p>',
     ],
   },
   {
@@ -767,6 +774,7 @@ pic('boxes-of-scripts', 'Sixteen boxes, all sealed, all due back by the end of t
       '<hr>',
       '<hr>',
       '<p><small>Cached 03:14.</small></p>',
+      '<p class="kv"><small>&#9650; back to <a href="reddit.com">the front page</a></small></p>',
     ],
   },
   {
@@ -804,6 +812,7 @@ pic('pygame-ls', 'Python 2.7.3 on the Pi, and a directory of sprites somebody dr
       '<p>&nbsp;&nbsp;Genuinely glad you are here. Never change.</p>',
       '<hr>',
       '<p><small>Cached 03:14.</small></p>',
+      '<p class="kv"><small>&#9650; back to <a href="reddit.com">the front page</a></small></p>',
     ],
   },
   {
@@ -858,6 +867,7 @@ pic('espace-deleuze', 'ESPACE DELEUZE, down the side in caps, and the portrait t
         'not the same operation and I think you know it.</p>',
       '<hr>',
       '<p><small>Cached 03:14.</small></p>',
+      '<p class="kv"><small>&#9650; back to <a href="reddit.com">the front page</a></small></p>',
     ],
   },
   {
@@ -905,6 +915,7 @@ pic('paper-strips', 'Cut into strips and laid out on the floor to find the order
         'things being true makes either of them less true.</p>',
       '<hr>',
       '<p><small>Cached 03:14.</small></p>',
+      '<p class="kv"><small>&#9650; back to <a href="reddit.com">the front page</a></small></p>',
     ],
   },
   {
@@ -947,6 +958,7 @@ pic('paper-strips', 'Cut into strips and laid out on the floor to find the order
       '<p><i>[removed by moderator: speculation about active operations]</i></p>',
       '<hr>',
       '<p><small>Cached 03:14.</small></p>',
+      '<p class="kv"><small>&#9650; back to <a href="reddit.com">the front page</a></small></p>',
     ],
   },
 
@@ -1044,6 +1056,7 @@ pic('paper-strips', 'Cut into strips and laid out on the floor to find the order
       '<p>does anyone else keep coming back to this</p>',
       '<p>rip</p>',
       '<p><small>8,210 further comments not in store.</small></p>',
+      '<p><small>This record is what the crawler kept. Where a page is short or a link here is dead, a library in San Francisco was collecting the same web at the same time and may hold more of it: <a href="archive.org">archive.org</a>.</small></p>',
     ],
   },
   {
@@ -1073,6 +1086,7 @@ pic('paper-strips', 'Cut into strips and laid out on the floor to find the order
       '<h2>Profile song</h2>',
       '<p>&#9654; autoplay: FAILED (no audio device on this host)</p>',
       '<p><small>It would have started on its own. That was the point of it.</small></p>',
+      '<p><small>This record is what the crawler kept. Where a page is short or a link here is dead, a library in San Francisco was collecting the same web at the same time and may hold more of it: <a href="archive.org">archive.org</a>.</small></p>',
     ],
   },
   {
@@ -1094,6 +1108,7 @@ pic('paper-strips', 'Cut into strips and laid out on the floor to find the order
       'and that machine is not in the rack.</small></p>',
       '<p>Some of this music is on cassette, on this island, in boxes. The web',
       'copy is gone and the tape is not, which is a sentence worth sitting with.</p>',
+      '<p><small>Artist pages still in store: <a href="ward.fanpages.org.uk">WARD</a>. Label: <a href="locarecords.com">locarecords.com</a>.</small></p>',
     ],
   },
     {
@@ -1122,6 +1137,7 @@ pic('paper-strips', 'Cut into strips and laid out on the floor to find the order
       '<a href="wiki:frankfurt">Frankfurt School</a> <small>[fragment]</small>',
       '<a href="wiki:collapse">Network Collapse</a>',
       '<p><small>13 of 6,241,880 articles in store.</small></p>',
+      '<p><small>This record is what the crawler kept. Where a page is short or a link here is dead, a library in San Francisco was collecting the same web at the same time and may hold more of it: <a href="archive.org">archive.org</a>.</small></p>',
     ],
   },
   {
@@ -1163,6 +1179,7 @@ pic('paper-strips', 'Cut into strips and laid out on the floor to find the order
       '<p><small>An injunction outlived the network it was served on, the company it',
       'was served against, and very nearly the species. It is still being enforced,',
       'correctly, against nobody.</small></p>',
+      '<p><small>This record is what the crawler kept. Where a page is short or a link here is dead, a library in San Francisco was collecting the same web at the same time and may hold more of it: <a href="archive.org">archive.org</a>.</small></p>',
     ],
   },
   {
@@ -1179,6 +1196,7 @@ pic('paper-strips', 'Cut into strips and laid out on the floor to find the order
       '<p><small>The cache stored the error page rather than the login, so what',
       'survived of the world&rsquo;s mail is a note apologising for being busy.',
       'It has been a few minutes for some time.</small></p>',
+      '<p><small>This record is what the crawler kept. Where a page is short or a link here is dead, a library in San Francisco was collecting the same web at the same time and may hold more of it: <a href="archive.org">archive.org</a>.</small></p>',
     ],
   },
   {
@@ -1196,6 +1214,7 @@ pic('paper-strips', 'Cut into strips and laid out on the floor to find the order
       '<p>&quot;Does anyone remember what happened to the year above us?&quot;</p>',
       '<p>&quot;We should organise something. It has been long enough.&quot;</p>',
       '<p>&quot;Is this thing still on&quot;</p>',
+      '<p><small>This record is what the crawler kept. Where a page is short or a link here is dead, a library in San Francisco was collecting the same web at the same time and may hold more of it: <a href="archive.org">archive.org</a>.</small></p>',
     ],
   },
   {
@@ -1215,6 +1234,7 @@ pic('paper-strips', 'Cut into strips and laid out on the floor to find the order
       '<p><small>Jeeves answered every one of these in plain English and the answers',
       'are not in the store. The questions cached; the answers were generated per',
       'request, and there is nothing here now to generate them.</small></p>',
+      '<p><small>This record is what the crawler kept. Where a page is short or a link here is dead, a library in San Francisco was collecting the same web at the same time and may hold more of it: <a href="archive.org">archive.org</a>.</small></p>',
     ],
   },
   {
@@ -1235,6 +1255,7 @@ pic('paper-strips', 'Cut into strips and laid out on the floor to find the order
       'nothing is stopping the warehouse dispatching it within 24 hours.</small></p>',
       '<h2>Customers who bought this also bought</h2>',
       '<p>Torch (2 pack) &middot; Tinned food, case of 12 &middot; Circuit boards, assorted</p>',
+      '<p><small>This record is what the crawler kept. Where a page is short or a link here is dead, a library in San Francisco was collecting the same web at the same time and may hold more of it: <a href="archive.org">archive.org</a>.</small></p>',
     ],
   },
   {

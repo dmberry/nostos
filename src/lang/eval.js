@@ -73,6 +73,46 @@ export function takeIn() {
   if (!IN || IN_POS >= IN.length) throw new RonmlNeedInput();
   return IN[IN_POS++];
 }
+// ---- Reading a file ------------------------------------------------------
+//
+// Same shape as the stdin hook above: a slot the host fills before a run, and a
+// reader the primitive calls. The HOST decides what a filename means, which is
+// the whole point of doing it this way. At the command line it is a real path
+// on a real disk; on the NostBook it is a path in that machine's own tree; on a
+// robot there is no disk at all, so the hook is never installed and the verb is
+// not in its vocabulary.
+//
+// Why this exists: a program that can only be handed text ONE LINE AT A TIME
+// has to remember its place between lines, and every cipher in this game is
+// position-dependent. That bookkeeping is real work, it is easy to get wrong,
+// and it was got wrong. Handing a program the whole file removes the problem
+// rather than documenting it.
+let READ_FILE = null;
+export function setReadFile(fn) { READ_FILE = typeof fn === 'function' ? fn : null; }
+export function readFileHost(name) {
+  if (!READ_FILE) throw new RonmlError('no disk on this machine.');
+  const text = READ_FILE(String(name));
+  if (text == null) throw new RonmlError(`${name}: no such file`);
+  return String(text);
+}
+
+// Writing is the other half, and the half that makes this a language you can
+// keep something in. A first exercise in ML is a library: books in, books out,
+// and the list still there tomorrow. Without a way to put the list down, every
+// program is a calculation that forgets itself.
+//
+// Same shape as the reader. The host decides what a name means and whether the
+// machine has anywhere to put it; a unit in the field has no disk, is never
+// given the hook, and does not have the verb either.
+let WRITE_FILE = null;
+export function setWriteFile(fn) { WRITE_FILE = typeof fn === 'function' ? fn : null; }
+export function writeFileHost(name, text) {
+  if (!WRITE_FILE) throw new RonmlError('no disk on this machine.');
+  const ok = WRITE_FILE(String(name), String(text));
+  if (ok === false) throw new RonmlError(`${name}: cannot write`);
+  return text;
+}
+
 /** How many lines this run has consumed. A host replaying a program uses this
  *  to know the queue was actually read rather than ignored. */
 export function inRead() { return IN_POS; }

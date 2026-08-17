@@ -10,3 +10,9 @@ tools/.isml-cache/
 # into the BML repo by accident in a test run, which then made `bml --examples`
 # refuse in a fresh clone because the directory it wanted to create was there.
 bml-examples/
+
+# The version record and the working plan. Both stay on disk and stay useful;
+# neither ships. A changelog is a reconstruction of the order things were built
+# in, one line per version, and the plan dates its entries and names people.
+CHANGELOG.md
+docs/PLAN.md

@@ -395,6 +395,7 @@ export const MEMORY_SITES = [
       '<hr>',
       '<p><small>— <b>Gibbons</b>. Corrections gratefully received, and dated,',
       'and kept.</small></p>',
+      '<p><small>Somebody is doing this as a discipline rather than as an evening class, and they call it media archaeology, and they keep a working collection of old apparatus so that old material can still be played: <a href="hu-berlin.de/media">the institute in Berlin</a>. Theory of the archive is on their list of research areas, which I found unnerving and then reassuring.</small></p>',
     ],
   },
 
@@ -545,6 +546,15 @@ export const MEMORY_SITES = [
       '<p><small>Kept by <b>latham_room</b>, who is one of the six people off',
       '<a href="blackcountryboard.co.uk">the board</a> with a career because a',
       'technician did not lock a door.</small></p>',
+      '<hr>',
+      '<p><small>Somebody is running a session on this at a symposium in Los',
+      'Angeles: TEAM ELIZA, on the second morning. See',
+      '<a href="dept:usc.edu/retroai">Retro AI: Archaeologies of A.I.</a>. They',
+      'are reconstructing it rather than describing it, which is the only way to',
+      'find out what it did.</small></p>',
+      '<p><small>The test it is always measured against: <a href="turingtest.geocities.ws">the imitation game</a>. And what its author did for the next forty years: <a href="weizenbaum.geocities.ws">here</a>.</small></p>',
+      '<p><small>One of that book’s authors also wrote an autobiography OF a chatbot, prompted out of it and published under its name: <a href="usc.edu/marino">here</a>.</small></p>',
+      '<p><small>There is an argument about this on an old mailing list, archived at <a href="listserv.cmu.edu">listserv.cmu.edu</a>, where somebody points out that his 1962 piece was called HOW TO MAKE A COMPUTER APPEAR INTELLIGENT and that the verb was chosen before the program existed.</small></p>',
     ],
   },
 ];
@@ -702,6 +712,7 @@ const NARRATOR_SITE = {
     'has the second copy and cannot get anybody to look at it.</small></p>',
     '<p><small>Kept by <b>Nell</b>. We meet on the first Tuesday. New people',
     'welcome, no need to have finished it, several of us never do.</small></p>',
+    '<p><small>The modern case, on television: <a href="mrrobot.fanpages.org.uk">Mr Robot</a>. And an institution that removes the author on purpose: <a href="economist.com">The Economist</a>.</small></p>',
   ],
 };
 

@@ -1324,7 +1324,19 @@ test('every .ml file on the relay disk runs on a NostBook', async () => {
       if (r.text && !/^val /.test(r.text)) out.push(r.text);
     }
     // It has to SAY something, or it is a program that runs and does nothing.
-    assert.ok(out.join('\n').includes('t1_03'), `${f.name} named nothing it heard`);
+    //
+    // TWO CONTRACTS, not one. The disk was all sniffers when this was written,
+    // so "did it work" and "did it name a unit" were the same question. They
+    // stopped being the same when the relay started carrying a program that
+    // opens a sealed file: that runs, and says plenty, and hears nothing,
+    // because hearing is not what it is for. A tool offered but not runnable is
+    // still the lie this test exists to catch, so the general check stays on
+    // everything and the aerial check narrows to the programs with an aerial.
+    const said = out.join('\n').trim();
+    assert.ok(said.length > 0, `${f.name} ran and printed nothing at all`);
+    if (/sniff|watch/.test(f.name)) {
+      assert.ok(said.includes('t1_03'), `${f.name} named nothing it heard`);
+    }
   }
 });
 

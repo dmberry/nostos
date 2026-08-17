@@ -16,7 +16,7 @@ import { test } from 'node:test';
 import { newShell, runUnix } from '../src/game/unix.js';
 import assert from 'node:assert/strict';
 import { decide, runRonml, INTENTS, LAMP_COLOURS } from '../src/game/ai_ml.js';
-import { T1_PROGRAM } from '../src/game/robots.js';
+import { T1_PROGRAM, LAMP_FLASH_MAX, applyEffects } from '../src/game/robots.js';
 
 // The program a W4 hunter-killer leaves the foundry carrying.
 const FACTORY_W4 = [
@@ -228,4 +228,20 @@ test('engage.ml on the disk answers correctly in every situation', () => {
   assert.equal(at({ threat: true, sight: true, armed: true, contact: true }), 'flee/fire',
     'grappled: break off and shoot on the way');
   assert.equal(at({ lost_for: 12, armed: true }), 'home/hold', 'lost you: give up and go back');
+});
+
+test('a lamp cannot be driven above the flicker ceiling, whatever the program asks', () => {
+  // `flash` accepts 0..10 and always has, so a saved program asking for 6 must
+  // keep running rather than fault. What it must not do is blink at 6 Hz: that
+  // is inside the band photosensitive epilepsy guidance says to stay out of,
+  // and every other flicker the engine drives was taken under 3 Hz in v1.574.
+  // This was the one rate a PLAYER sets, so it is the one worth pinning.
+  assert.ok(LAMP_FLASH_MAX < 3, 'the ceiling itself must stay under 3 Hz');
+  const r = { type: 't1', animT: 0, rng: () => 0.5 };
+  applyEffects(r, [{ k: 'flash', hz: 10 }]);
+  assert.ok(r.lampFlash <= LAMP_FLASH_MAX, `10 Hz asked for, ${r.lampFlash} Hz set`);
+  applyEffects(r, [{ k: 'flash', hz: -4 }]);
+  assert.equal(r.lampFlash, 0, 'a negative rate is steady, not a reversed blink');
+  applyEffects(r, [{ k: 'flash', hz: 2 }]);
+  assert.equal(r.lampFlash, 2, 'a rate under the ceiling is left exactly alone');
 });

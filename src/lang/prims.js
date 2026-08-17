@@ -47,7 +47,7 @@ const smlNum = (s) => String(s).replace(/^-/, '~');
 function raiseStd(name, why) {
   throw new RonmlRaise({ tag: 'con', name, args: [], why });
 }
-import { describeValue, formatValue, pushOut, takeIn } from './eval.js';
+import { describeValue, formatValue, pushOut, takeIn, readFileHost, writeFileHost } from './eval.js';
 
 const numericTag = (x) => !!x && (x.tag === 'int' || x.tag === 'real');
 /** The BigInt out of an arbitrary-precision value. */
@@ -101,6 +101,29 @@ export const PRIMITIVES = {
   readLine: {
     arity: 1,
     fn: () => ({ tag: 'str', v: takeIn() }),
+  },
+  // `readFile "note.asc"` — the whole thing, newlines and all, as one string.
+  // Deliberately not an option type and not a line iterator: the programs that
+  // want this want the complete text, and anything that hands it over in pieces
+  // pushes the position bookkeeping back onto the caller.
+  // `writeFile "shelf.txt" text` — the whole file, replaced. Not an append and
+  // not a handle: a handle would need closing, and a program that forgets to
+  // close one loses the data it was written to keep.
+  writeFile: {
+    arity: 2,
+    fn: ([f, body]) => {
+      const name = f && (f.v != null ? f.v : f.name != null ? f.name : f.id);
+      const text = body && (body.v != null ? body.v : '');
+      writeFileHost(name, text);
+      return { tag: 'unit' };
+    },
+  },
+  readFile: {
+    arity: 1,
+    fn: ([f]) => {
+      const name = f && (f.v != null ? f.v : f.name != null ? f.name : f.id);
+      return { tag: 'str', v: readFileHost(name) };
+    },
   },
   hd: {
     arity: 1,

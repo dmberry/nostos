@@ -300,6 +300,13 @@ function baseEnv() {
     // readLine : unit -> string. Monomorphic on the way in, unlike echo:
     // there is exactly one thing you can pass it and no reason to be generous.
     readLine: mono(fnOf(UNIT, STR)),
+    // readFile : string -> string. The WHOLE file, newlines and all. Not an
+    // option and not a line iterator: a caller handed a file in pieces has to
+    // track where it is between them, and every position-dependent thing in
+    // this game got that wrong at least once.
+    readFile: mono(fnOf(STR, STR)),
+    // writeFile : string -> string -> unit. Replaces the file.
+    writeFile: mono(fnOf(STR, fnOf(STR, UNIT))),
     // A cell. `ref` makes one, `!` reads it, `:=` writes it — the three of them
     // are the only way anything in this language changes, so they are worth
     // typing properly rather than leaving as "anything".
