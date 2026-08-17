@@ -136,6 +136,7 @@ export const BOOK_SITES = [
       '<hr>',
       '<p><small>17 further books on this shelf not in store. See also: reddit.com</small></p>',
       '<p><small>Cached 04:31.</small></p>',
+      '<p><small>This record is what the crawler kept. Where a page is short or a link here is dead, a library in San Francisco was collecting the same web at the same time and may hold more of it: <a href="archive.org">archive.org</a>.</small></p>',
     ],
   },
 
@@ -215,6 +216,7 @@ export const BOOK_SITES = [
       '<hr>',
       '<p><small>197 further comments not in store. See also: libcom.org, lesswrong.com</small></p>',
       '<p><small>Cached 04:22.</small></p>',
+      '<p><small>Related threads elsewhere: <a href="digitalhumanities.geocities.ws">whether that is a field</a>, and <a href="cultureindustry.geocities.ws">the older version of the same complaint</a>.</small></p>',
     ],
   },
 
@@ -307,6 +309,7 @@ export const BOOK_SITES = [
       '<hr>',
       '<p><small>See also: crookedtimber.org, reddit.com</small></p>',
       '<p><small>Cached 04:26.</small></p>',
+      '<p><small>This record is what the crawler kept. Where a page is short or a link here is dead, a library in San Francisco was collecting the same web at the same time and may hold more of it: <a href="archive.org">archive.org</a>.</small></p>',
     ],
   },
 

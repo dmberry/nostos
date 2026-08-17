@@ -32,8 +32,20 @@ import path from 'node:path';
 import os from 'node:os';
 import {
   createInterpreter, smlEcho, joinProgram, needsMoreInput, continuesPrevious,
-  readlineCompleter, BML_NAME, BML_VERSION, BML_CREDIT,
+  readlineCompleter, setReadFile, setWriteFile, BML_NAME, BML_VERSION, BML_CREDIT,
 } from '../src/lang/index.js';
+
+// `readFile` at the command line means what it says: a path, on this disk,
+// relative to wherever you are standing. BML is a language on a real machine
+// and there is nothing to pretend about. The game installs a different hook
+// that resolves against the NostBook's own tree, which is the whole reason the
+// primitive asks the host rather than reaching for a filesystem itself.
+setReadFile((name) => {
+  try { return fs.readFileSync(name, 'utf8'); } catch { return null; }
+});
+setWriteFile((name, text) => {
+  try { fs.writeFileSync(name, text, 'utf8'); return true; } catch { return false; }
+});
 
 // A closed pipe is not an error. `bml | head -1` shuts stdout while readline is
 // still writing a prompt into it, and node turns that into an unhandled EPIPE

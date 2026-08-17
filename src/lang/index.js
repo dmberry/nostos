@@ -22,7 +22,7 @@ export { createInterpreter, smlEcho, flattenSession } from './interp.js';
 export { RonmlError, RonmlFuelError, RonmlRaise } from './errors.js';
 export { tokenize } from './lex.js';
 export { parse, parseLine, joinProgram, joinProgramLines, needsMoreInput, continuesPrevious, defaultFixity } from './parse.js';
-export { formatValue, showReal, describeValue, setHostValues, CONSOLE_FUEL } from './eval.js';
+export { formatValue, showReal, describeValue, setHostValues, setReadFile, setWriteFile, CONSOLE_FUEL } from './eval.js';
 export { typeOf, remember } from './types.js';
 export { diagnose, NOT_FITTED_SAMPLES } from './diag.js';
 export { PRELUDE } from './basis.js';

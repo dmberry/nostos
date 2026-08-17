@@ -3896,7 +3896,12 @@ export class Renderer {
     //
     // Warped onto the face, so it shears with the cube instead of standing up
     // in front of it while the camera moves.
-    this.drawFaceLabel(obj, g.left, g.bottom, r.left,
+    // CORNER ORDER IS THE WHOLE OF THIS CALL. A(origin) -> B sets the direction
+    // the text runs in, so swapping the first two mirrors the word. On the SW
+    // face the u axis has to run bottom -> left, not left -> bottom, or CALYPSO
+    // reads right to left. The factory below had the same fault and the same
+    // fix, so if one of them is ever mirrored again, check the other.
+    this.drawFaceLabel(obj, g.bottom, g.left, r.bottom,
       (obj.ai || 'CALYPSO').toUpperCase(), dead ? '#6a6a72' : '#cfd8f0',
       { band: 0.30, height: 0.17 });
 

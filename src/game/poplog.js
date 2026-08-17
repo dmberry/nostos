@@ -1219,6 +1219,8 @@ export const POPLOG_BODY = [
   'happened, and who must take the credit for all the most important developments',
   'since 1981, namely John Gibson.</p>',
   '<hr>',
+  '<p><a href="dept:sussex.ac.uk/cogs">School of Cognitive and Computing',
+  'Sciences</a>, Sussex, where it was written.</p>',
   '<p><small>Maintained by Aaron Sloman<br>',
   '<a href="cs.bham.ac.uk">School of Computer Science</a><br>',
   'The University of Birmingham</small></p>',

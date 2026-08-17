@@ -12,6 +12,7 @@
 // Split out of archive.js. Nothing here changed in the move.
 
 import { POPLOG_TITLE, POPLOG_BODY } from './poplog.js';
+import { pic } from './archive-pic.js';
 // THE UNIVERSITIES.
 //
 // Twenty of them, and they are here for a reason beyond furniture: the work that
@@ -68,7 +69,8 @@ const DEPT_PAGES = {
     { key: 'cogs', name: 'Cognitive and Computing Sciences' },
   ],
   'hu-berlin.de': [{ key: 'media', name: 'Institut f\u00fcr Medienwissenschaft' }],
-  'usc.edu': [{ key: 'retroai', name: 'Retro AI: Archaeologies of A.I.' }],
+  'usc.edu': [{ key: 'retroai', name: 'Retro AI: Archaeologies of A.I.' },
+    { key: 'marino', name: 'Mark C. Marino — Writing Program' }],
 };
 export const deptPagesFor = (domain) => DEPT_PAGES[domain] || [];
 
@@ -104,6 +106,9 @@ export const DEPARTMENTS = {
       '<h2>Contact</h2>',
       '<p>Enquiries: the address is on the department front page, which is this',
       'page. There is no other page.</p>',
+      '<p>See also <a href="dept:sussex.ac.uk/cogs">Cognitive and Computing',
+      'Sciences</a>, up the hill, who were building the thing this department',
+      'spent the same years describing.</p>',
       '<hr>',
       '<p><small>Object 88% complete. This record was crawled unusually often;',
       'the reason is not recorded.</small></p>',
@@ -133,6 +138,7 @@ DEPARTMENTS['hu-berlin.de/media'] = {
     '<p><a href="wiki:ernst">Wolfgang Ernst</a> &middot; <a href="wiki:kittler">Friedrich Kittler</a></p>',
     '<hr>',
     '<p><small>Object 64% complete.</small></p>',
+    '<p><small>Two documents that make the case for the Fundus better than a research statement can: <a href="domesday.geocities.ws">a national survey that outlived the machines that could read it</a>, and <a href="whatishistory.geocities.ws">an evening class on who kept the record</a>.</small></p>',
   ],
 };
 
@@ -166,6 +172,8 @@ DEPARTMENTS['sussex.ac.uk/cogs'] = {
     '<h2>Elsewhere</h2>',
     '<p><a href="bham.ac.uk">University of Birmingham</a> &middot;',
     '<a href="wiki:transformer">Transformer (machine learning)</a></p>',
+    '<p>See also <a href="dept:sussex.ac.uk/media">Media and Film</a>, who have',
+    'been writing about this since before it worked.</p>',
     '<hr>',
     '<p><small>Object 91% complete. The teaching timetable and the staff',
     'photographs were generated per visitor and are not in store.</small></p>',
@@ -178,10 +186,84 @@ DEPARTMENTS['sussex.ac.uk/cogs/poplog'] = { title: POPLOG_TITLE, body: POPLOG_BO
 // and its registration link pointing at a shortener that is no longer anything.
 // The programme is the joke and the archive does not have to make it: a meeting
 // about the archaeology of artificial intelligence, dug up.
+// A faculty page. The Writing Program rather than a computer science
+// department, which is the point about him and about the field he named: the
+// argument is that code is writing, so the person making it sits with the
+// writers.
+//
+// Everything here is bibliographic or is on the cover of a book. No opinions
+// are put in his mouth beyond what the titles state, and the titles state a
+// good deal, because he chooses them carefully and two of them contain jokes
+// that are also the thesis.
+DEPARTMENTS['usc.edu/marino'] = {
+  title: 'Mark C. Marino — Writing Program, University of Southern California',
+  body: [
+    '<!--bg:oxford-->',
+    '<h1>Mark C. Marino</h1>',
+    '<p><small>Writing Program &middot; University of Southern California &middot;',
+    'Los Angeles</small></p>',
+    '<hr>',
+    '<p>Teaches writing. Works on <b>electronic literature</b> and on the reading',
+    'of source code as a cultural text, which is a field he has contributed substantially to.</p>',
+    '<h2>Critical code studies</h2>',
+    '<p>The argument, in one line: source code can be read closely, for what it',
+    'says as well as for what it does, and the people best placed to do that are',
+    'people trained to read.</p>',
+    '<p>It was put forward in an essay in 2006, argued about for a decade and a',
+    'half, and set out at length in a book of the same name. The objection it',
+    'always meets is that code is functional and therefore not interpretable, and',
+    'the answer it always gives is that a variable name is a choice, a default is',
+    'a position, and a comment is somebody talking.</p>',
+    '<p>There is <a href="criticalcode.geocities.ws">a page in this archive</a>',
+    'doing exactly that to twelve lines, kept by somebody who is plainly working',
+    'from this.</p>',
+    '<h2>10 PRINT</h2>',
+    '<pre class="jb-list">',
+    '  10 PRINT CHR$(205.5+RND(1)); : GOTO 10',
+    '</pre>',
+    '<p>One line of Commodore 64 BASIC that prints a maze forever, and a book',
+    'about it by ten authors, of which he is one. The book is a demonstration',
+    'rather than an argument: it takes a single line and reads it as code, as',
+    'graphics, as randomness, as a machine, as a culture, and as a maze, for two',
+    'hundred pages, and by the end the case for the method has been made without',
+    'being stated.</p>',
+    '<h2>Hallucinate This!</h2>',
+    pic('hallucinate-this', 'Hallucinate This! An Authoritized Autobotography of ChatGPT, as prompted by Mark C. Marino. A robot at a window looking out at a small town under a heavy sky. Both misspellings on the cover are deliberate and both of them are the joke.', 'r'),
+    '<p>An autobiography of a chatbot, produced by prompting it, published under',
+    'its own name as author with him credited as the one who prompted.</p>',
+    '<p>Read the cover slowly. <i>Authoritized</i>, which is authorised with',
+    'authority pushed into the middle of it and not quite fitting.',
+    '<i>Autobotography</i>, which is autobiography with the bot in it and the',
+    'life taken out. Neither is a typographical error and both are the argument:',
+    'a life story with no life, authorised by nobody who could authorise',
+    'anything.</p>',
+    '<p>Which puts it in a long line. A machine producing a confident account of',
+    'itself, in good prose, with nobody behind the voice, is the oldest',
+    'demonstration in this subject and it is sixty years old:',
+    '<a href="eliza.geocities.ws">ELIZA</a>. He is one of the authors of the',
+    'history of that program too.</p>',
+    '<h2>Elsewhere</h2>',
+    '<p>Director of communication for the Electronic Literature Organization, and',
+    'a regular at <a href="usc.edu/retroai">the symposium down the corridor</a>.</p>',
+    '<hr>',
+    '<p><small>Office hours by appointment. Students asking whether they may',
+    'submit a piece of software as a piece of writing should read the syllabus,',
+    'where the answer is yes and has been for some years.</small></p>',
+    '<p><small>See also <a href="digitalhumanities.geocities.ws">the argument',
+    'about whether any of this is a field</a>, and',
+    '<a href="unreliablenarrator.geocities.ws">on voices with nobody behind',
+    'them</a>.</small></p>',
+  ],
+};
+
 DEPARTMENTS['usc.edu/retroai'] = {
   title: 'Retro AI: Archaeologies of A.I. — University of Southern California',
   body: [
     '<!--bg:grey-->',
+    '<img class="ra-banner" src="assets/media/web/retroai.jpg"',
+    '  alt="RETRO AI: Archaeologies of Artificial Intelligence. An IBM 2094 data',
+    '  processing system, a blue tin robot with a reel-to-reel chest, and a',
+    '  teletype, against a cream wall.">',
     '<h1>Retro AI: Archaeologies of A.I.</h1>',
     '<p><small>Mudd Hall (MHP) 102 &middot; University of Southern California</small></p>',
     '<p><a href="bit.ly">Register Here</a></p>',
@@ -271,5 +353,22 @@ export function universityBody(domain) {
     '<p>Campus network: scheduled maintenance. No end time given.</p>',
     '<h2>Staff directory</h2>',
     '<p>Directory generated per request. Stored copy does not match.</p>',
+    // OTHER INSTITUTIONS. Every university index carried one of these in 1997,
+    // and without it these pages are the only leaves in the corpus a reader can
+    // walk to and not walk on from. Deterministic from the domain so the same
+    // index always names the same two, and self is excluded.
+    '<h2>Other institutions</h2>',
+    '<p>Reciprocal library access and exchange arrangements are held with:</p>',
+    ...siblingsOf(domain, h).map((v) => `<a href="${v.domain}">${v.name}</a>`),
   ];
+}
+
+/** Two other universities, picked deterministically, never this one. */
+function siblingsOf(domain, h) {
+  const rest = UNIVERSITIES.filter((u) => u.domain !== domain);
+  if (rest.length < 2) return rest;
+  const a = h % rest.length;
+  let b = (h * 7 + 3) % rest.length;
+  if (b === a) b = (b + 1) % rest.length;
+  return [rest[a], rest[b]];
 }

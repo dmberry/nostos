@@ -1881,6 +1881,10 @@
   #netscape .ns-page.bg-mdisc figure figcaption { color: #999; }
   #netscape .ns-page.bg-mdisc .md-bar { display: flex; align-items: center; gap: 14px; margin: 2px 0 6px; }
   #netscape .ns-page.bg-mdisc .md-logo { width: 70px; height: 70px; }
+  /* The symposium's own banner, sized to the column rather than to itself so a
+     478px image does not set the width of the page it sits on. */
+  #netscape .ns-page .ra-banner { display: block; width: 100%; max-width: 478px;
+    height: auto; margin: 2px 0 10px; border: 2px solid #444; }
   #netscape .ns-page.bg-mdisc .md-nav { font: bold 13px 'Times New Roman', Times, serif;
     letter-spacing: 1px; color: #fff; }
   #netscape .ns-page.bg-mdisc .md-foot { text-align: center; font: italic 11px 'Times New Roman', Times, serif; }
@@ -2042,6 +2046,23 @@
     color: #33ff33; background: #000; border: 2px inset #999; padding: 1px 6px; letter-spacing: 3px; }
   #netscape .ns-page .geo-ring { margin: 12px 0 2px; padding: 8px; text-align: center;
     border: 3px ridge #c0c0c0; background: rgba(255,255,255,0.12); font: bold 13px Verdana, sans-serif; }
+  /* THE TOPICAL RINGS. A page belonged to several, and each one had its own
+     badge, made by whoever ran it, in whatever colours they had. They sit under
+     the Salvage strip and they are deliberately not a set. */
+  #netscape .ns-page .geo-ring-sys   { border-style: outset; border-color: #7fa7c8;
+    background: rgba(40,80,120,0.22); }
+  #netscape .ns-page .geo-ring-free  { border-style: double; border-color: #8fc98f;
+    background: rgba(30,90,40,0.20); font-family: 'Courier New', monospace; }
+  #netscape .ns-page .geo-ring-prep  { border-style: dashed; border-color: #d0a860;
+    background: rgba(120,80,20,0.20); }
+  #netscape .ns-page .geo-ring-mem   { border-style: solid; border-color: #9a9a9a;
+    background: rgba(0,0,0,0.22); font-style: italic; }
+  #netscape .ns-page .geo-ring-note  { border-style: groove; border-color: #cfc08a;
+    background: rgba(200,180,110,0.16); }
+  #netscape .ns-page .geo-ring-paper { border-style: inset; border-color: #d8c9a8;
+    background: rgba(220,205,170,0.18); font-family: Georgia, serif; }
+  #netscape .ns-page .geo-ring-tower { border-style: ridge; border-color: #b08fd0;
+    background: rgba(70,30,110,0.24); letter-spacing: .04em; }
   #netscape .ns-page .geo-doc { margin: 8px 0; padding: 6px 10px; border: 2px groove #ffffff;
     background: rgba(255,255,255,0.14); }
   #netscape .ns-page marquee { font: bold 14px 'Comic Sans MS', cursive; }

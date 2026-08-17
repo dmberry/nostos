@@ -307,6 +307,74 @@ const MEMBERS = [
 
 const RING = MEMBERS.map((m) => m.d);
 
+// THE OTHER RINGS.
+//
+// One ring over fifty-odd pages is a mailing list with a graphic on it. The
+// real thing was topical and overlapping: a page sat in three or four at once,
+// stacked at the foot, each with its own name and its own badge, and belonging
+// to several was the whole social signal. So the Salvage ring stays as the one
+// everybody is in, and these run across it.
+//
+// Membership is written out rather than matched on keywords, because a ring
+// with a page in it that does not belong is worse than a small ring, and a
+// human can see this list is right. A page may be in any number of them.
+const RINGS = [
+  { name: 'THE SYSADMIN RING', sym: '&#9881;', style: 'geo-ring-sys', members: [
+    'davescorner.geocities.ws', 'racklife.geocities.ws', 'ronbeacon.geocities.ws',
+    'lastcommit.geocities.ws', 'shutdownatlast.geocities.ws', 'legacydoctor.geocities.ws',
+    'thehandshake.geocities.ws', 'gridwatch.geocities.ws', 'band4.geocities.ws',
+    'thesignal.geocities.ws', 'ronmlscraps.geocities.ws', 'oldhandsets.geocities.ws',
+    'plaintext.geocities.ws'] },
+  { name: 'FREE AS IN FREEDOM WEBRING', sym: '&#9884;', style: 'geo-ring-free', members: [
+    'freeasinfreedom.geocities.ws', 'copyleft.geocities.ws', 'plaintext.geocities.ws',
+    'ronmlscraps.geocities.ws', 'lastcommit.geocities.ws', 'theintercepts.geocities.ws'] },
+  { name: '~ THE PREPARED ~', sym: '&#9752;', style: 'geo-ring-prep', members: [
+    'thebugoutbag.geocities.ws', 'shutupshop.geocities.ws', 'thekitchendrawer.geocities.ws',
+    'waymarkers.geocities.ws', 'betweensettlements.geocities.ws', 'thelastledger.geocities.ws',
+    'dearsurvivor.geocities.ws', 'triage.geocities.ws'] },
+  { name: 'IN MEMORIAM &#8212; A RING', sym: '&#10013;', style: 'geo-ring-mem', members: [
+    'thefallen.geocities.ws', 'againstmartyrs.geocities.ws', 'totherebuild.geocities.ws',
+    'ontheburning.geocities.ws', 'forthenextone.geocities.ws', 'ahandshaking.geocities.ws',
+    'theoperatorscoat.geocities.ws', 'dearsurvivor.geocities.ws'] },
+  { name: 'THE NOTICE BOARD RING', sym: '&#9993;', style: 'geo-ring-note', members: [
+    'theschoolgate.geocities.ws', 'theparishnotice.geocities.ws', 'officialchannels.geocities.ws',
+    'thelettersweg0t.geocities.ws', 'betweensettlements.geocities.ws', 'thehousewewalkedto.geocities.ws'] },
+  { name: 'KEEPERS OF PAPER', sym: '&#9998;', style: 'geo-ring-paper', members: [
+    'thecommonplace.geocities.ws', 'theindexcard.geocities.ws', 'insidethecover.geocities.ws',
+    'theboxunderthestairs.geocities.ws', 'thekitchendrawer.geocities.ws', 'spentpads.geocities.ws',
+    'deaddrops.geocities.ws', 'thefaithful.geocities.ws'] },
+  { name: 'WHAT THE TOWERS ARE :: A RING', sym: '&#9650;', style: 'geo-ring-tower', members: [
+    'whatthetowersare.geocities.ws', 'theeidolon.geocities.ws', 'thevampire.geocities.ws',
+    'thespiral.geocities.ws', 'fourdaemons.geocities.ws', 'theseminar.geocities.ws',
+    'thebackspace.geocities.ws', 'therooms.geocities.ws'] },
+];
+
+/** Every topical ring this page is a member of, in declaration order. */
+export function ringsOf(domain) {
+  return RINGS.filter((r) => r.members.includes(domain));
+}
+
+export const ALL_RINGS = RINGS;
+
+/** prev / random / next within one named ring. */
+function strip(r, domain) {
+  const list = r.members;
+  const i = list.indexOf(domain);
+  const h = hash(domain + r.name);
+  const prev = list[(i - 1 + list.length) % list.length];
+  const next = list[(i + 1) % list.length];
+  const rand = list[(h % (list.length - 1) + i + 1) % list.length];
+  return [
+    `<div class="geo-ring ${r.style}">`,
+    `<div>${r.sym} ${r.name} ${r.sym}</div>`,
+    `<a href="${prev}">[ &lt;&lt; Prev ]</a> `
+      + `<a href="${rand}">[ Random ]</a> `
+      + `<a href="${next}">[ Next &gt;&gt; ]</a>`,
+    `<div><small>${list.length} sites. This site is member #${i + 1}.</small></div>`,
+    '</div>',
+  ];
+}
+
 function neighbours(domain) {
   const i = RING.indexOf(domain);
   const h = hash(domain);
@@ -337,6 +405,9 @@ function ring(domain) {
     '<div><small>' + RING.length + ' sites and counting. Add yours!</small></div>',
     '<div style="margin-top:6px"><b>Cool pages by my friends:</b><br>' + friends.join(' &middot; ') + '</div>',
     '</div>',
+    // and every topical ring this page belongs to, stacked under it, which is
+    // what the foot of one of these actually looked like.
+    ...ringsOf(domain).flatMap((r) => strip(r, domain)),
   ];
 }
 

@@ -450,7 +450,7 @@ const BEEP_EARSHOT = 20;        // tiles: an island of beeping units would be un
  */
 export const LAMP_FLASH_MAX = 2.5;
 
-function applyEffects(r, effects, playerDist) {
+export function applyEffects(r, effects, playerDist) {
   for (const e of (effects || [])) {
     if (e.k === 'eye' && LAMP_COLOURS.includes(e.colour)) {
       r.lamp = e.colour === 'off' ? 'off' : e.colour;
@@ -623,6 +623,13 @@ const M6_WITHDRAW_TIME = 3.2;   // ...then this long falling back before the nex
 const M6_ATTACK_STANDOFF = 3.2; // how close it presses during an attack wave
 const M6_WITHDRAW_RANGE = 7;    // how far it falls back between waves (also a lone one's holding distance)
 const M6_LONE_PATIENCE = 6;     // seconds a lone guard waits for a pack before pressing anyway
+const M6_ORBIT_COMMIT = 2.5;    // after reversing round an obstacle, hold that way this long
+const M6_BOXED_TIME = 4;        // trees both ways: press at the player for this long instead
+const M6_BOXED_STANDOFF = 1.9;  // how close 'boxed' presses. outside arm's length on purpose
+const M6_PERSONAL = 1.7;        // a guard's own space. two inside this is a stack, not a pack
+const M6_RING_GAP = 0.8;        // radians two crowding guards want between their places on the ring
+const M6_RING_SHOVE = 1.1;      // rad/s a crowded guard slides round to get that gap
+const M6_GIVE_UP = 2.5;         // it reacts to a tree in this, not in the general 7
 const M6_ORBIT_SPIN = 0.55;     // rad/s: fast enough to read as circling, not as following
 // IT IS MILITARY, SO IT IS ARMED (David, 2026-08-15: "M6 should shoot. It is
 // military"). The M-6 was written as a melee pack animal — one blow at 0.65
@@ -936,6 +943,36 @@ function avoidScouts(r, robots, tx, ty) {
   // matter where their targets point. Slowing as they close is what actually
   // keeps them out of each other.
   return { x: tx + ax, y: ty + ay, crowd };
+}
+
+// The same idea for the household guard. Its own bubble is wider than a
+// scout's, because an M-6 is a bigger object and two of them at 0.62 tiles
+// read as one machine with two heads.
+function avoidGuards(r, robots, tx, ty) {
+  let ax = 0, ay = 0, crowd = 0, spread = 0;
+  for (const o of robots) {
+    if (o === r || o.dead || o.fused || o.type !== 'm6') continue;
+    const dx = r.x - o.x, dy = r.y - o.y;
+    const d = Math.hypot(dx, dy);
+    if (d >= M6_PERSONAL) continue;
+    const nx = d > 1e-4 ? dx / d : 1, ny = d > 1e-4 ? dy / d : 0;
+    const strength = (M6_PERSONAL - d) / M6_PERSONAL;
+    if (strength > crowd) crowd = strength;
+    ax += nx * strength * 2.6;
+    ay += ny * strength * 2.6;
+    // Steering alone only fights the ring: two guards holding nearly the same
+    // angle are steered apart and then walk straight back, because the place
+    // each is going has not moved. Repel on the RING as well, so they end up
+    // wanting different points rather than the same point from either side.
+    if (o.swarmAngle === undefined) continue;
+    let gap = r.swarmAngle - o.swarmAngle;
+    while (gap > Math.PI) gap -= 2 * Math.PI;
+    while (gap < -Math.PI) gap += 2 * Math.PI;
+    if (Math.abs(gap) < M6_RING_GAP) {
+      spread += (gap === 0 ? (r.x > o.x ? 1 : -1) : Math.sign(gap)) * strength;
+    }
+  }
+  return { x: tx + ax, y: ty + ay, crowd, spread };
 }
 
 // Turn a heading toward a new one at a bounded rate, so the arrowhead swings
@@ -1974,6 +2011,11 @@ function trackSoftStuck(r, moved, step, len, dt, allowSoft) {
 
 // Step towards a point; axis-separated so robots slide along walls and
 // ledges. Returns the distance actually covered this step.
+// Straight-line distance to the player. The M-6's boxed-in clause needs to
+// know when it has actually arrived rather than when its orbit point says it
+// should have.
+function realDist(r, player) { return Math.hypot(player.x - r.x, player.y - r.y); }
+
 function moveToward(r, tx, ty, speed, dt, map) {
   const dx = tx - r.x;
   const dy = ty - r.y;
@@ -4804,9 +4846,28 @@ function updateM6Pack(r, dt, player, map, robots, ease, facX = null, facY = null
   // you (`seenX`/`seenY`, which the dispatch above already keeps), so breaking
   // line of sight leaves it going to a place you have left, and the orbit is
   // quick enough to read as circling rather than as following.
-  r.swarmAngle = (r.swarmAngle ?? 0) + (r.swarmSpin ?? M6_ORBIT_SPIN) * dt;
-  const standoff = r.m6Phase === 'attack' ? M6_ATTACK_STANDOFF : M6_WITHDRAW_RANGE;
+  // THE ORBIT HAS A DIRECTION, and it keeps it. See the give-up clause below:
+  // reversing is how it gets round a tree, so that has to be a decision which
+  // sticks rather than a value redrawn from a random each time.
+  if (r.m6OrbitDir === undefined) r.m6OrbitDir = r.rng() < 0.5 ? -1 : 1;
+  // AND A PLACE ON IT. `r.swarmAngle ?? 0` meant every guard that was never
+  // given an angle started at zero and advanced at the same rate, so a pack
+  // held one point on the ring and stood inside each other for the whole
+  // fight (David, 2026-08-17: "M6's now go ontop of each other"). The T-1
+  // swarm has always dealt its members around the circle; the guards never
+  // got it. Seeded once, from the machine's own generator, so it survives a
+  // save and two guards do not agree.
+  if (r.swarmAngle === undefined) r.swarmAngle = r.rng() * Math.PI * 2;
+  if (r.m6Spin === undefined) r.m6Spin = M6_ORBIT_SPIN * (0.8 + r.rng() * 0.45);
+  r.m6CommitT = Math.max(0, (r.m6CommitT ?? 0) - dt);
+  r.swarmAngle += (r.swarmSpin ?? r.m6Spin) * r.m6OrbitDir * dt;
+  // Boxed in (set below): stop holding a ring and press, which is the wanted
+  // behaviour anyway. A guard that cannot circle you should close.
+  const standoff = r.m6Boxed ? M6_BOXED_STANDOFF
+    : r.m6Phase === 'attack' ? M6_ATTACK_STANDOFF : M6_WITHDRAW_RANGE;
   const aimX = r.seenX ?? player.x, aimY = r.seenY ?? player.y;
+  const near = avoidGuards(r, robots, 0, 0);
+  if (near.spread) r.swarmAngle += Math.sign(near.spread) * M6_RING_SHOVE * dt;
   const wantX = aimX + Math.cos(r.swarmAngle) * standoff;
   const wantY = aimY + Math.sin(r.swarmAngle) * standoff;
   // AND IT ROUTES. This branch was a bare moveToward with no progress
@@ -4814,17 +4875,46 @@ function updateM6Pack(r, dt, player, map, robots, ease, facX = null, facY = null
   // (Hedda: "keeps trying to escape through calypso's wall of trees but it
   // cant"). The T-1 has had the give-up clause for months; the M-class never
   // got it. Same rule, same constants.
-  const expect = Math.min(M6_CHASE_SPEED * dt, Math.hypot(wantX - r.x, wantY - r.y));
-  const tgt = chaseTarget(r, wantX, wantY, map);
-  const went = moveToward(r, tgt.x, tgt.y, M6_CHASE_SPEED, dt, map);
+  // KEEP OUT OF EACH OTHER. The global separation pass shoves two machines
+  // apart only once they are already inside 0.62 tiles, which is well past the
+  // point where they read as one object. Steering the target is what stops
+  // them arriving there, and easing the throttle is what stops two closing
+  // head-on from covering the gap inside a single frame anyway.
+  const clearX = wantX + (near.x), clearY = wantY + (near.y);
+  const speed = M6_CHASE_SPEED * (1 - 0.55 * near.crowd);
+  const expect = Math.min(speed * dt, Math.hypot(clearX - r.x, clearY - r.y));
+  const tgt = chaseTarget(r, clearX, clearY, map);
+  const went = moveToward(r, tgt.x, tgt.y, speed, dt, map);
   if (went < expect * PROGRESS_FRACTION) r.noProgressT += dt;
   else r.noProgressT = 0;
   r.stuck = r.noProgressT > STUCK_AFTER;
-  if (r.noProgressT > STUCK_GIVE_UP) {
-    // Pinned on terrain: take a fresh bearing rather than keep pushing at it.
-    r.swarmAngle += Math.PI * (0.5 + r.rng() * 0.5);
+  if (r.noProgressT > M6_GIVE_UP && r.m6CommitT <= 0) {
+    // PINNED, WHICH IN PRACTICE MEANS A TREE. This used to add a random half to
+    // full turn to the orbit angle, which throws the standoff point across to
+    // the far side of you. Wedged again on the way there it threw again, and
+    // the two throws were independent, so it could come straight back.
+    //
+    // Reverse the way round instead, once, and commit to it: back the way it
+    // came is a route it has just proved is open, and the commit window stops
+    // the decision being retaken while it is still carrying it out.
+    r.m6OrbitDir = -r.m6OrbitDir;
+    r.m6CommitT = M6_ORBIT_COMMIT;
+    r.m6Blocked = (r.m6Blocked ?? 0) + 1;
     r.noProgressT = 0;
     r.stuck = false;
+    // Reversing did not free it either: trees both ways, or a wall it is trying
+    // to hold a ring against. Close on the player rather than shuffle.
+    if (r.m6Blocked >= 2) { r.m6Boxed = true; r.m6BoxedT = M6_BOXED_TIME; }
+  }
+  // The box clears itself and takes the count with it, so the next obstacle
+  // gets the cheap fix first rather than going straight to a charge.
+  if (r.m6Boxed) {
+    r.m6BoxedT -= dt;
+    if (r.m6BoxedT <= 0 || realDist(r, player) < M6_HIT_RANGE) {
+      r.m6Boxed = false; r.m6Blocked = 0;
+    }
+  } else if (r.noProgressT === 0) {
+    r.m6Blocked = 0;
   }
 
   // No `jackedIn` check here, unlike the W1 swarm above, and deliberately: the

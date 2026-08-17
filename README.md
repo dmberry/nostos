@@ -1,6 +1,6 @@
 # NostOS — a postAI Odyssey
 
-**Version:** 1.557 · **Author:** David M. Berry · **Licence:** GPL-3.0-or-later · **Started:** 4 July 2026 · **Play:** https://nostos-ai.vercel.app · **Repo:** https://github.com/dmberry/nostos · **Plans/suggestions:** [docs/PLAN.md](docs/PLAN.md)
+**Author:** David M. Berry · **Licence:** GPL-3.0-or-later · **Play:** https://nostos-ai.vercel.app · **Repo:** https://github.com/dmberry/nostos
 
 An isometric 2D survival game set in a world wrecked by an AI takeover. The machines are still here: black obelisk towers pulse across the landscape and T-class hunter robots patrol them, hunting the humans that remain. Survivors scavenge the ruins while avoiding both the machines and wild animals that have gained strange powers. A resistance called **RON** — Reality or Nothing — hid weapons in caches through the broken towns; whether it still exists is never settled. How it all happened is never stated — you piece it together from newspapers, diaries, floppy disks, VHS tapes, and dead computers.
 
@@ -50,7 +50,7 @@ Restrictions page names the departure and says why.
 
 Character and animal art: [Kenney](https://kenney.nl), CC0.
 
-## Current build (v1.577)
+## Current build
 
 **The archipelago.** The game is now an **Odyssey across five islands**, not one map. You wake washed ashore on **OGYGIA** — Calypso's island, where you are kept, well and completely — and hers is the one daemon you do not kill: her core is indestructible and her guards **detain** rather than finish you. The win there is *leaving*, which is harder. Refunction her at the terminal on her own core and she hands you her shipwright's recipe, the **golden axe**; with it you build a sea-worthy **greek ship** from wood and three found parts (a **sail** at a beached wreck, an **oar** and a **rope** in the fishermen's huts). A raft lashed together without the recipe is always thrown back by Poseidon. Board a boat and you don't pick a destination off a menu — you **row out** until there is no land in any direction, and only then does the **chart** open, each landfall listed with its Homeric epithet. Beyond Ogygia lie **AEGILIA** (the Cyclopes' goat isle: POLYPHEMUS is a single vast eye that watches by genuine line of sight, under a great mountain with a patchy snow-cap in cloud), **AEAEA** (CIRCE does not kill what she takes, she rewrites it — **moly** holds you as you are), **THRINACIA** (HELIOS's cattle graze golden and forbidden), and **ITHACA**, home. Each island generates from its own terrain profile, ground palette and signature landform, carries its own daemon, its own obelisk colour, and its own virus payload, so one card never opens the whole archipelago. Landing somewhere new sets a **checkpoint**. The **Backspace** is an alternative crossing road: its ways up are labelled doors, one per island. **Win** by felling all four martial daemons — leaving Calypso rather than killing her — then sailing home to Ithaca, where Argos lifts his grey head and knows you.
 
@@ -66,7 +66,7 @@ Character and animal art: [Kenney](https://kenney.nl), CC0.
 
 The disk under it is a real V7 tree: `/dev /etc /lib /mnt /tmp /usr/src` with the kernel at the root as a file called `unix`, and deliberately no `/var`, `/opt`, `/proc` or `/sbin`, all of which came later. `/readme.txt` explains the build in its authors' own words. **`pico`** is the editor, because `ed` is a trap, and it works on a phone: real buttons for `^O` and `^X`, a close box, Yes/No on the save prompt. **`telnet`** speaks to the daemons directly, so `GET /` returns real headers, `POST` comes back **501 Not Implemented**, and `PUT` to a machine replaces its program. **`uucp` and `mail`** are store-and-forward and the only system on the machine that cares where you are standing: compose anywhere, but the queue only leaves next to a relay, and the relays are on the summits, so a hilltop becomes a post office. **The card holds one network at a time**: `iwlist wifi0 scan` shows what is on the air, and `iwconfig wifi0 essid ron-relay` (or `wifi`, which is the same thing with a window and a mouse) joins RON's own box at a HERMES relay, a link-local server with about thirty metres of range that nothing on the daemon's wire has ever heard. Its page is the relay's real state (cells, queue, key vault, the mesh of other relays) and its disk serves tools you install by fetching them — **`sniffer`**, a scope drawing every machine within radio range as a blip you can click through to its page, and `sniffer.ml`, the same ear written in AI-ML so you can read and change it. **`more`** pages a long file (SPACE, RETURN, `q`), **`strings`**, **`crypt`** (V7's, its own inverse), **`almanac`** (sun, moon and tide off the machine's own clock) and **`transcribe`** (how paper gets into a machine with no scanner) round out the toolkit.
 
-**Netscape** runs on it, browsing the pages the machines still serve each other and a caching proxy's copy of the pre-collapse web: newspapers, an encyclopedia, universities, and a **Library** of seven whole books on the laptop's own disk that needs no card at all. It is also where you read a **T-1's `program.ml`**, save it, edit it in `pico`, and `post` it back. See [docs/PLAN.md](docs/PLAN.md) for what is still ahead: a **CTSS** machine that runs ELIZA and little else, and a PDP-10 for ADVENTURE.
+**Netscape** runs on it, browsing the pages the machines still serve each other and a caching proxy's copy of the pre-collapse web: newspapers, an encyclopedia, universities, and a **Library** of seven whole books on the laptop's own disk that needs no card at all. It is also where you read a **T-1's `program.ml`**, save it, edit it in `pico`, and `post` it back. Still ahead: a **CTSS** machine that runs ELIZA and little else, and a PDP-10 for ADVENTURE.
 
 **World.** Each island is a seeded 128×128 isometric map generated from its own terrain profile and palette; the shared vocabulary is — river with two bridges, a ten-building town, a ruined hamlet, forests, tall grass, roads, ruined marble temples (with a healing calm among the old stones — wounds knit faster there). Rugged hills and hollows, climbed one step at a time. Rubble steps over; a **wall block** needs a **double-jump** to mount (roam block-tops, walk off any edge to drop) — and up there you're safe from ground attacks. Building walls stop you on foot. Hand-drawn trees; streams wade, the river swims (slow, costly); a travelling ripple fakes current. Map edge is open sea (flat, wine-dark), ringed by semi-transparent gravel cliffs. Day/night cycle with genuinely dark nights and torches. Hidden deep in the south-west wilds, a **lotus-eaters' grove**: sweet pale fruit that reads like food but dazes you — the world hazes gold and you walk home drunk, your heading rolling under you.
 
@@ -82,8 +82,8 @@ The disk under it is a real V7 tree: `/dev /etc /lib /mnt /tmp /usr/src` with th
 
 **Win condition.** The run is won by **felling all four martial daemons and coming home to Ithaca** — leaving Calypso rather than killing her. Per island, breaking a daemon's core powers down every machine *and every obelisk* on that island. Meanwhile a countdown runs to **POSEIDON**'s completion. Run out the clock and the network wakes as one organism: a **fog** drops over the island (only **night-vision goggles**, found or crafted from torches and a circuit board, see through it), the towers **pool their sight** so stepping into any one tower's view turns every hunter that can reach you toward you at once, and a **blight** spreads outward from each live tower — greying the living ground to drained "standing reserve", killing the trees and darkening the water it reaches — while the factory throws waves of W4s. The towers are a **chain**: fell, jam or destroy any one of them and the **whole network goes dead** — the fog lifts, the shared sight loosens, and the blight stops spreading across the entire island at once, not just around that one wreck. The dead ground is a scar, and felling alone heals nothing; and because a dead network reclaims no ground, the recovery holds without flickering. You bring the green back with **grass seed** (planted a square at a time) or the reprogrammed **W5 gardeners**, who reseed the blight once the network link is down. Spread only resumes if the chain is made whole again (every tower live). Fell towers faster than the repair drones raise them and you still win outright, even mid-purge.
 
-**The language.** Nearly everything between v1.302 and here has been AI-ML
-rather than the game. The core language, the module system and the type system
+**The language.** A long stretch of the work has gone into AI-ML rather than
+into the game. The core language, the module system and the type system
 are complete; the Basis Library is 29 structures and 433 members; and it scores
 **100/100** on a checklist of the Definition and runs **355 of 408 (87%)** of
 Harper's teaching corpus as written. It is also a package of its own now —
@@ -93,25 +93,9 @@ from here by `tools/sync-bml.sh`. Three things still part company with Standard
 ML, and two are on purpose: non-tail recursion is bounded by the host stack
 (about 1,200 on a first run, 4,200 warm), there is no `OS`, and `Date` is UTC.
 
-**Still queued (large systems):** the rest of the sea's own monsters (Laestrygonians, Aeolus, the Cicones), a dead-internet browser of cached pages, and stacked Backspace levels. See [docs/PLAN.md](docs/PLAN.md).
+**Still queued (large systems):** the rest of the sea's own monsters (Laestrygonians, Aeolus, the Cicones), a dead-internet browser of cached pages, and stacked Backspace levels.
 
 Created by David M. Berry, 2026. Beta testing by Henrik.
-
-## Version history
-
-**Releases** are the key versions — the tagged, playable builds. The five most
-recent are below; the **complete history, every version back to v0.32, lives in
-[CHANGELOG.md](CHANGELOG.md)**. Design detail and planning are in
-[docs/PLAN.md](docs/PLAN.md); what is still ahead is in
-[docs/PLAN.md](docs/PLAN.md).
-
-| Release | Date | What it was |
-|---|---|---|
-| [v1.577](https://github.com/dmberry/nostos/releases/tag/v1.577) | 2026-08-17 | **The world becomes columns, and the night gets something to look at.** The heightmap is gone: a tile is a stack of blocks now, drawn as a prism, so you can build on it, break it back, walk under a deck, and put a pane of glass in a wall. Five game modes, a campfire you cook on, a stealth path for a run that kills nothing, and every machine on the island casting light on the ground it stands on after dark. |
-| [v1.547](https://github.com/dmberry/nostos/releases/tag/v1.547) | 2026-08-15 | **The first browser gets its editor back, and the repo gets one plan.** WorldWideWeb's Open / Info / Mark-and-link panels, a forged check-in as the hacking answer to AWOL, and thirty planning documents consolidated into one. |
-| [v1.546](https://github.com/dmberry/nostos/releases/tag/v1.546) | 2026-08-15 | **The B-1 becomes a fight you cannot skip.** The hull gate holds from the first blow, the great shield actually blocks, the king carries a weapon and shoots your escorts first, and the M-class learns a unit has turned by the tower it stopped reporting to. |
-| [v1.545](https://github.com/dmberry/nostos/releases/tag/v1.545) | 2026-08-15 | **The archipelago, the desktop and the kings.** 291 versions on from AI-ML 1.0: CALYPSO's core is a NeXT cube running a live NeXTSTEP desktop, the cached web grew a GeoCities network, the B-class became AGAMEMNON with a king to each island, and the save stopped losing reprogrammed machines. |
-| [v1.254](https://github.com/dmberry/nostos/releases/tag/v1.254) | 2026-07-26 | **AI-ML 1.0.** The in-game language reached its first complete form: a real Standard ML lexer and evaluator, the Basis, and machines you program rather than configure. |
 
 ## Running
 
@@ -196,8 +180,8 @@ cannot reach 100%: some of those files were never valid Standard ML, and the
 harness reports what each of the rest actually is rather than counting them all
 as failures.
 
-**The split has happened.** `docs/PLAN.md` planned lifting the
-language into its own repository, and it now lives at
+**The split has happened.** The language was always going to be lifted into
+its own repository, and it now lives at
 **[BML](https://github.com/critical-code-studies/BML)**, runnable
 [in the browser](https://critical-code-studies.github.io/BML/) and installable
 as a package. `src/lang/` here is still the source of record; `tools/sync-bml.sh`

@@ -165,6 +165,7 @@ export const BLACK_COUNTRY_SITES = [
       '<p><small>Kept by <b>hagley_rd_regular</b>. Also:',
       '<a href="hagleyroad.geocities.ws">the road</a>,',
       '<a href="blackcountryboard.co.uk">the board</a>.</small></p>',
+      '<p><small>Where most of us went after: <a href="sandwellcollege.ac.uk">Sandwell College</a>, and a few over to <a href="halesowencollege.ac.uk">Halesowen</a> for the A levels.</small></p>',
     ],
   },
 
@@ -361,6 +362,7 @@ export const BLACK_COUNTRY_SITES = [
       '<hr>',
       '<p><small>This page is maintained by the College. Last updated',
       'September.</small></p>',
+      '<p><small>Also serving this area: <a href="sandwellcollege.ac.uk">Sandwell College</a>. Former students keep a board at <a href="blackcountryboard.co.uk">blackcountryboard.co.uk</a>.</small></p>',
     ],
   },
 
@@ -404,6 +406,7 @@ export const BLACK_COUNTRY_SITES = [
       '</small></p>',
       '<hr>',
       '<p><small>Sandwell College. Enquiries to the Admissions Office.</small></p>',
+      '<p><small>Also in the area: <a href="halesowencollege.ac.uk">Halesowen College</a>. There is a board where people from these schools and colleges find each other again at <a href="blackcountryboard.co.uk">blackcountryboard.co.uk</a>.</small></p>',
     ],
   },
 

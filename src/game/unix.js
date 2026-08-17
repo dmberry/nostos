@@ -27,6 +27,7 @@
 import { PDFS, pdfStub } from './pdfs.js';
 import { ELIZA_README, DOCTOR_SCRIPT, DOCTOR_TABLES, ELIZA_PROGRAM, ELIZA_LOOP_LEGACY } from './eliza-src.js';
 import { BOOKS, bookFileName, bookStub } from './books.js';
+import { LETTER_FILE, LETTER_OPENER, CATALOGUE_NOTE, WARNING_FILE } from './seals.js';
 import { SPOOL, MAILBOX, NODENAME, KNOWN_NODES, OWNER_MAIL, jobText, parseJob,
   routeOf, statusReport, deliver, formatMailbox, formatMessage } from './uucp.js';
 
@@ -1458,6 +1459,29 @@ export function makeDisk() {
         'doctor.script': file(DOCTOR_SCRIPT),
         'doctor.tables': file(DOCTOR_TABLES),
         'eliza.ml': file(ELIZA_PROGRAM),
+      }),
+      // SOMEBODY ELSE'S FOLDER, three deep and named after a year, which is how
+      // a thing gets left on a machine rather than filed on one. The letter is
+      // from 1952 and was written by a computer at Manchester out of a table of
+      // words and a random number, which its author thought was funny and which
+      // stopped being funny at some point between then and now.
+      misc: dir({
+        '1952': dir({
+          'letter.asc': file(LETTER_FILE),
+          'open.py': file(LETTER_OPENER),
+          // A librarian's note about two copies of one book, which is here
+          // because whoever kept this folder kept things that were about the
+          // same problem rather than things that were about the same subject.
+          'catalogue.txt': file(CATALOGUE_NOTE),
+          // THE SECOND COPY, and the reason the first one can be allowed to
+          // destroy itself. Hers opens once and is gone, which is the argument
+          // the passage makes and worth keeping. A text that can be lost for
+          // good because somebody read it once is a different thing from a
+          // performance of that idea, and this is a game. So: a duplicate,
+          // three folders deep on another machine, filed by whoever wrote the
+          // note above and consistent with everything they thought about it.
+          'warning.asc': file(WARNING_FILE),
+        }),
       }),
       demos: dir({
         'life.ml': file(LIFE_ML),

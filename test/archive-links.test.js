@@ -31,6 +31,7 @@ import {
 } from '../src/game/archive.js';
 import { FRAGMENTS } from '../src/game/lore.js';
 import { isPaper } from '../src/game/press.js';
+import { searchResults } from '../src/game/net.js';
 
 /** Every page in the archive, with a name to report it by. */
 function allPages() {
@@ -89,7 +90,11 @@ test('every bare domain link is one the archive can answer for', () => {
   for (const [name, page] of allPages()) {
     for (const href of hrefsIn(page)) {
       if (/^(wiki|dept|http|#):/.test(href) || href.includes(':')) continue;
-      const known = archivedSite(href) || universityAt(href) || KNOWN_DOMAINS.includes(href);
+      // A department page is a real destination the cache answers for, at
+      // <domain>/<key>, and the bare form is what the corpus uses for internal
+      // links. Without this the test rejects a link that works.
+      const known = archivedSite(href) || universityAt(href)
+        || departmentPage(href) || KNOWN_DOMAINS.includes(href);
       assert.ok(known,
         `${name} links to ${href}, which is neither written out, nor a ` +
         'university, nor in KNOWN_DOMAINS: it will answer "unable to locate".');
@@ -223,4 +228,26 @@ test('no film on the cached web starts itself', () => {
     }
   }
   assert.deepEqual(bad, []);
+});
+
+// A page hanging off a university has to be findable by a word written on it.
+// The crawl walked the host table and nothing else, so every one of them —
+// departments, research groups, a person's own faculty page — was invisible to
+// the search box, and the only route in was knowing which university to open
+// and reading down its list. Nothing reported it: the search returned results,
+// they were simply never these.
+test('the search finds pages that hang off a university, not only hosts', () => {
+  
+  const hosts = [];
+  for (const key of Object.keys(DEPARTMENTS)) {
+    const page = DEPARTMENTS[key];
+    // A word that is on this page and is not the key itself.
+    const words = page.body.join(' ').replace(/<[^>]+>/g, ' ')
+      .split(/\s+/).filter((w) => /^[a-z]{6,}$/i.test(w));
+    if (!words.length) continue;
+    const html = searchResults(hosts, words[0]);
+    assert.ok(html.includes(`dept:${key}`),
+      `searching "${words[0]}" should offer dept:${key}, and the results were:\n${html}`);
+    break;   // one is enough to pin the behaviour; the loop is to find a page with prose
+  }
 });

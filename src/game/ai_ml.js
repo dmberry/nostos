@@ -33,6 +33,8 @@
 //   {tag:'list', items}  {tag:'unit'}   {tag:'fn', name, builtin, args}
 
 import { typeOf, remember, setHostKnowsName } from '../lang/types.js';
+import { setReadFile, setWriteFile } from '../lang/eval.js';
+export { setReadFile, setWriteFile };
 import {
   evalNode, applyValue, formatValue, describeValue, combineOutput,
   beginRun, setHostNameHint, setHostUnbound, setHostValues, setOut, pushOut,
@@ -944,6 +946,17 @@ function makeBuiltins(station) {
   // maintenance store. A verb can name more than one station, and the filter
   // below reads the list — a store you can `ls` and cannot open is not a store.
   if (B.read) B.read.station = ['ob', 'hermes'];
+  // AND SO ARE THE OTHER TWO WAYS INTO A DRIVE. `ls` and `cat` each appear in a
+  // station list, and the tagging above is last-write-wins, so `cat` (in both
+  // lists) came out hermes-only and was refused at the obelisk it was written
+  // for (#196), while `ls` was ob-only and refused at the relay — where the
+  // filesystem from #107 sits, with `cat`'s own usage hint telling you to run
+  // the command that station does not have (David, 2026-08-17: "I can't see
+  // files"). A list cannot say "both", so the tag has to, exactly as `read`
+  // already does. The comment on OB_VERBS has always claimed these are neutral;
+  // this is the line that finally makes that true.
+  if (B.ls) B.ls.station = ['ob', 'hermes'];
+  if (B.cat) B.cat.station = ['ob', 'hermes'];
   if (!station) return B;
   // The laptop is the language WITHOUT the world: hand back only its own short
   // list, so no verb that needs a wire (or a drive, or a card) is even present.
@@ -1012,7 +1025,12 @@ const LAPTOP_VERBS = ['echo', 'not', 'hd', 'tl', 'length', 'abs', 'sqrt', 'min',
   // line needs somebody there to answer. A unit carrying a program that called
   // it would suspend in a field with nobody to type, which is why it is not in
   // ROBOT_VERBS and must not be added there.
-  'readLine', 'fetch'];
+  'readLine',
+  // `readFile` for the same reason and with the same limit: this is the one
+  // machine on the island with a disk you own. A unit in the field has no
+  // filesystem to read from, so the verb is not in its vocabulary and the hook
+  // behind it is never installed for one.
+  'readFile', 'writeFile', 'fetch'];
 // A MACHINE'S OWN STATION. Its program runs here: senses in, an intent out, and
 // nothing else within reach — no network, no files, no console verbs. That is
 // not a restriction bolted on, it is what a unit actually has.

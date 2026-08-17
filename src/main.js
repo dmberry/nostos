@@ -65,7 +65,7 @@ import { GEO_FRAGMENT_IDS } from './game/archive-geocities.js';
 import { ITEMS, TAPES } from './game/items.js';
 import { sfx } from './engine/sound.js';
 import { worldToScreen, ELEV } from './engine/iso.js';
-import { runRonml, decide, smlEcho, joinProgramLines, needsMoreInput, continuesPrevious, diagnose, joinProgram, typeReport, aimlVersion, aimlFull, AIML_VERSION, loadPrelude, flattenSession } from './game/ai_ml.js';
+import { runRonml, decide, smlEcho, joinProgramLines, needsMoreInput, continuesPrevious, diagnose, joinProgram, typeReport, aimlVersion, aimlFull, AIML_VERSION, loadPrelude, flattenSession, setReadFile, setWriteFile } from './game/ai_ml.js';
 import { createEliza } from './game/eliza.js';
 import { placeTors, HERMES_DOCS, hermesTopics, virusFor, virusFilesFor, virusDocsFor, hermesTree, hermesReadIn, hermesIsDir, HERMES_DIRS } from './game/hermes.js';
 import { credentialText, FACTORY_BOAST, FACTORY_GRANT } from './game/credentials.js';   // #196: the card's files have bodies
@@ -103,7 +103,7 @@ import { mountSettingsPanel, storedMode, storeMode, setFill } from './game/setti
 import { keeperLs, keeperRead, keeperIsDir } from './game/keeper.js';
 import { buildingName, buildingLook } from './game/buildings.js';
 import { initAchievements, achieveEvent, achieveProfile, achieveRunState, achieveModel, achieveTick, resetRun, setAchieveSink } from './game/achieve.js';
-import { hostTable, findHost, pageFor, renderPage, searchResults, bookmarksPage, favouritesPage, obLibraryPage, obDocPage, whatsNewPage, docsPage, docTitle, programPage, pressPage, wikiPage, deptPage, spoofedAddr, islandSubnet, networksInRange, relayHosts, RELAY_ESSID, RELAY_IP, relayFile, RELAY_FILES, relayBundle, RELAY_BUNDLES, relayBookmarksPage, IFACE, REPORT_HOLD, REPORT_COOLDOWN, HTTPD_PATH, httpdBinary, httpdToken, cacheLink, CACHE_ALIASES } from './game/net.js';
+import { hostTable, findHost, pageFor, renderPage, searchResults, bookmarksPage, favouritesPage, obLibraryPage, obDocPage, whatsNewPage, docsPage, docTitle, programPage, pressPage, wikiPage, deptPage, spoofedAddr, islandSubnet, networksInRange, relayHosts, RELAY_ESSID, RELAY_IP, relayFile, RELAY_FILES, relayBundle, RELAY_BUNDLES, relayBookmarksPage, IFACE, REPORT_HOLD, REPORT_COOLDOWN, HTTPD_PATH, httpdBinary, httpdToken, cacheLink, CACHE_ALIASES, isDept, notInStore, nearestHost } from './game/net.js';
 import { CROSSINGS, islandProfile } from './game/islands.js';
 import { canSchedule, schedule, tickWindows, windowLeft, isOpenToHack, statusLine as maintLine, serviceLog, PART_COST, BOARDS_PER_TOWER } from './game/maintenance.js';
 import { awolList, dueForRecovery, standDown, DETAIL_SIZE } from './game/awol.js';
@@ -7508,6 +7508,24 @@ function compass(dx, dy) {
 }
 
 function laptopCtx() {
+  // WHAT A FILENAME MEANS ON THIS MACHINE. Installed here because this is the
+  // only station that has a disk of its own; the language asks the host rather
+  // than reaching for a filesystem, so the same `readFile` is a real path at
+  // the command line and a path in this tree here.
+  //
+  // It goes through the shell's own reader, so `cat note.asc` and
+  // `readFile "note.asc"` cannot disagree about what is in a file.
+  setReadFile((name) => {
+    if (!laptopShell) return null;
+    try { return runUnixRead(laptopShell, String(name)); } catch { return null; }
+  });
+  setWriteFile((name, text) => {
+    if (!laptopShell) return false;
+    try {
+      writeFile({ root: laptopShell.root, cwd: laptopShell.cwd }, String(name), String(text));
+      return true;
+    } catch { return false; }
+  });
   return {
     station: 'laptop',
     // The card's own ear, handed to the language. Same table `arp -a` prints,
@@ -7816,9 +7834,13 @@ function nsRender() {
     if (dh && dh.kind === 'docs') { web.view = { kind: 'docs', topic: 'index' }; nsRender(); return; }
     const host = findHost(hosts, v.addr);
     if (!host) {
-      html = `<h1>Not Found</h1><p>${ieOn ? IE_TITLE : 'Netscape'} is unable to locate the server:</p><p><b>${escapeHtml(String(v.addr))}</b></p>`
-        + '<p>The server does not have a DNS entry. Check the name and try again.</p>';
-      title = `${ieOn ? IE_TITLE : 'Netscape'}: Not Found`; loc = `http://${v.addr}/`;
+      // Not the live web and no DNS to be missing from: this is a crawl, and a
+      // miss is a fact about the crawl. notInStore says so and offers the
+      // nearest address it does hold, which covers a typo in the Location bar,
+      // a dead link inside a page, and a shared ?cache= link for something the
+      // cache never had.
+      html = notInStore(v.addr, nearestHost(v.addr, hosts));
+      title = `${ieOn ? IE_TITLE : 'Netscape'}: Not in store`; loc = `http://${v.addr}/`;
     } else if (host.down) {
       // A dark host is still a RESULT: it confirms the machine is really down.
       html = `<h1>No Response</h1><p>The server <b>${host.host}</b> is not responding.</p>`
@@ -9662,6 +9684,14 @@ nsUrlEl.addEventListener('keydown', (e) => {
   if (!raw) return;
   // A search box and a location bar in one, as everyone actually used it.
   const s = raw.match(/^(?:search|find)\s+(.+)$/i);
+  // The address as the store holds it: no scheme, no trailing slash.
+  //
+  // The scheme is stripped REPEATEDLY, not once. Paste an address that already
+  // carries `http://` and the bar redisplays it with another one bolted on the
+  // front, so a second paste reads `http://http://usc.edu/marino/` and nothing
+  // resolves (David, 2026-08-17, with the screenshot). One `+` in the pattern
+  // is the whole fix: however many the player pastes, the store sees none.
+  const bare = raw.replace(/^(?:https?:\/\/)+/i, '').replace(/\/+$/, '');
   // Typing the document's own path fetches it, the way you would have.
   const p = raw.replace(/^https?:\/\//, '').match(/^(.+?)\/program\.ml$/i);
   // en.wikipedia.org/wiki/Transformer_(deep_learning) and friends: a player
@@ -9677,7 +9707,17 @@ nsUrlEl.addEventListener('keydown', (e) => {
             : /collapse/.test(slug) ? 'collapse' : slug;
     nsSetView({ kind: 'wiki', article: key });
   } else if (p) nsSetView({ kind: 'prog', addr: p[1] });
-  else nsSetView({ kind: 'host', addr: raw });
+  // usc.edu/marino, and every other page that hangs off a university — a
+  // department, a faculty member, a project. They share a store with the
+  // departments and they are not all departments; what they have in common is
+  // that they are pages UNDER a host rather than hosts themselves. So the
+  // fall-through below asked the cache for a host called `usc.edu/marino`, got
+  // nothing, and served a 404 for a page sitting right there (David,
+  // 2026-08-17, with the screenshot). The trailing slash goes first: a person
+  // types a directory the way a person types a directory, and the key in the
+  // store has no slash on the end.
+  else if (isDept(bare)) nsSetView({ kind: 'dept', dept: bare });
+  else nsSetView({ kind: 'host', addr: bare });
   nsUrlEl.blur();
 });
 
@@ -9921,24 +9961,78 @@ function shareOrigin() {
   return local ? `${location.protocol}//${location.host}` : SHARE_ORIGIN;
 }
 
-function shareThisPage() {
+// WHAT ADDRESS IS SHOWING, if the outside can be pointed at it at all.
+//
+// TWO KINDS OF PAGE ANSWER TO A NAME, not one. A site is `host`; a department
+// hanging off a university is `dept`, and the deep-link parser has always
+// understood both (see the boot block: `isDept(target)` picks the branch).
+// This function knew only about `host`, so every department page reported
+// itself as local and the menu item did nothing — while the very same page
+// opens perfectly from `?cache=usc.edu/marino`.
+//
+// It only shows on the pages you arrive at by SEARCHING, because the deep link
+// and the bookmarks both land you on sites. Reported by David (2026-08-17):
+// reached Marino through AltaVista by way of USC, and the item stopped working;
+// altavista.com itself, being a site, shared fine.
+//
+// Bookmarks, What's New and a local document have nothing on the other end of
+// a link, so they still answer null and the menu greys the item, the way Save
+// As and Print are greyed. A line in the status bar was the old answer and
+// nobody reads the status bar, which is why doing nothing looked like a fault.
+function sharableAddr() {
   const v = web && web.view;
-  const h = v && v.kind === 'host' ? findHost(webHosts(), v.addr) : null;
-  if (!h) { nsMsgEl.textContent = 'This document is local to the browser.'; return; }
+  if (!v) return null;
+  if (v.kind === 'dept') return isDept(v.dept) ? v.dept : null;
+  if (v.kind !== 'host') return null;
+  const h = findHost(webHosts(), v.addr);
+  return h ? h.host : null;
+}
+
+function shareThisPage() {
+  const addr = sharableAddr();
+  if (!addr) { nsMsgEl.textContent = 'This document is local to the browser.'; return; }
   // The query form, not a path: /www/ is the outside site's own folder and a
   // link that collided with it would be served the wrong file. This form needs
   // nothing from the server and works from any host the game is on.
-  const link = `${shareOrigin()}/?cache=${encodeURIComponent(h.host)}`;
+  const link = `${shareOrigin()}/?cache=${encodeURIComponent(addr)}`;
   const done = () => { nsMsgEl.textContent = `Copied: ${link}`; };
+  // THREE WAYS, IN ORDER, because the first one refuses more often than its
+  // documentation suggests. `navigator.clipboard` needs a secure context, a
+  // live user gesture AND the document to hold focus; Safari is stricter again.
+  // When it refuses it REJECTS RATHER THAN THROWING, so the old code took the
+  // rejection branch, printed the address in the status bar and reported
+  // nothing wrong — you clicked, you pasted, and there was nothing there
+  // (David, 2026-08-17: "is broken ... it stopped working recently").
   try {
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(link).then(done, () => { nsMsgEl.textContent = link; });
+      navigator.clipboard.writeText(link).then(done, () => { shareFallback(link); });
       return;
     }
+  } catch (e) { /* fall through */ }
+  shareFallback(link);
+}
+
+// The old way, which works in the places the new one will not: put the text in
+// a field, select it, and let the document copy its own selection. Kept out of
+// `shareThisPage` so the promise rejection above can reach it too.
+function shareFallback(link) {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = link;
+    // Off-screen rather than hidden: a field with `display:none` cannot hold a
+    // selection, so it cannot be copied from.
+    ta.style.cssText = 'position:fixed;top:-1000px;left:-1000px;opacity:0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand && document.execCommand('copy');
+    document.body.removeChild(ta);
+    if (ok) { nsMsgEl.textContent = `Copied: ${link}`; return; }
   } catch (e) { /* fall through to showing it */ }
-  // No clipboard: put it where it can be read and selected by hand, which is
-  // what this browser's own vintage would have made you do anyway.
-  nsMsgEl.textContent = link;
+  // Neither way worked. Say so, and put the address where it can be read off
+  // the screen and typed — which is what this browser's own vintage would have
+  // made you do anyway. Silence here is what read as the feature being broken.
+  nsMsgEl.textContent = `Copy this: ${link}`;
 }
 
 const NS_MENUS = {
@@ -9949,7 +10043,7 @@ const NS_MENUS = {
     ['Save As…', 'Ctrl+S', null],
     ['Print…', 'Ctrl+P', null],
     null,
-    ['Share this webpage…', '', shareThisPage],
+    ['Share this webpage…', '', sharableAddr() ? shareThisPage : null],
     null,
     ['Close', 'Ctrl+W', closeNetscape],
     ['Exit', 'Ctrl+Q', closeNetscape],
@@ -13013,7 +13107,12 @@ player.aboard = null;
     // for a cached domain that answers with the cache SERVER rather than the
     // page, so a link to one site landed on the cache index every time.
     const r = openNetscape();
-    if (r && r.ok) nsSetView({ kind: 'host', addr: target }, false);
+    // A shared link can name a DEPARTMENT page (?cache=retroai resolves to
+    // usc.edu/retroai) as well as a host. Opening a department as a hostname
+    // fails DNS and lands on Not Found, which is what it did.
+    if (r && r.ok) {
+      nsSetView(isDept(target) ? { kind: 'dept', dept: target } : { kind: 'host', addr: target }, false);
+    }
   }
 }
 
