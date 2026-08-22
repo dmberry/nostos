@@ -959,6 +959,101 @@ export function relayBookmarksPage(host, agent = 'Netscape Navigator 1.1') {
   ].filter(Boolean).join('\n');
 }
 
+// THE RELAY'S GUESTBOOK — one per terminal, and different at each.
+//
+// Every RON relay keeps a book of the hands that stopped at it. The estate web
+// never had this; a relay is a place people actually stood, so it has visitors.
+// The seeded names are the humans who came before you at THIS box, drawn
+// deterministically from the terminal's own id so a given relay always shows the
+// same crowd, and two relays show two different crowds. The player's own signing
+// is added on top and kept in the save, per terminal.
+const GUEST_POOL = [
+  { who: 'K.', note: 'left the SDK on here for whoever is next. it works. do not trust the towers.' },
+  { who: 'the man from the north shore', note: 'water tank behind the white house is still good. boiled it anyway.' },
+  { who: 'Ade', note: 'if you can read this you got further than most of us did. keep going.' },
+  { who: 'no name', note: 'they took the boat. writing this so someone knows we were here at all.' },
+  { who: 'R.', note: 'RON kept the lights on out here. that is more than the estate ever did.' },
+  { who: 'small Ada', note: 'mum says never put your real name on a terminal. so this is not it.' },
+  { who: 'the courier', note: 'dropped a package under the floor by the mast. yours if you need it more than i did.' },
+  { who: 'Halcyon', note: 'signed the book so the number goes up. somebody should watch the count climb.' },
+  { who: 'J. Okonkwo', note: 'engineer, came through in the spring. left notes on the box in /home. help yourself.' },
+  { who: 'M', note: 'do not go up the mountain after dark. that is the whole message. that is all.' },
+  { who: 'the last teacher', note: 'the books in the short loan collection. nobody takes them out. take them out.' },
+  { who: 'Bram', note: 'traded a torch for a tin of fish and it was fair. tell the woman at the cove thanks.' },
+  { who: 'two dots and a dash', note: 'still learning the language on here. got val it = 1 to print. baby steps.' },
+  { who: 'Petra', note: 'the sea can let you go. i know because it let me. do not believe the worst of it.' },
+  { who: 'someone kid', note: 'i drew a boat here but the drawing did not save. so this one is only words.' },
+  { who: 'V.', note: 'the couriers are real. one carried my letter three islands down the chain and it arrived.' },
+  { who: 'low battery', note: 'typing in the dark, four percent left. hello to whoever gets this. that is it.' },
+  { who: 'old salt', note: 'been to every relay on the chain. this one is the quiet one. i like the quiet one.' },
+  { who: 'Ruth', note: 'planted beans by the foot of the mast. if you are reading this years on, see if they took.' },
+  { who: 'hex slash void', note: 'greets from the scene to whoever is left. the metal still runs. so do we.' },
+  { who: 'a hand, no name', note: 'was here. that is the whole of the entry and it is enough.' },
+  { who: 'Nkechi', note: 'if the handset by the door still rings, do not answer it. it is not for you.' },
+];
+const GUEST_DAYS = ['03/11', '14/03', '27/01', '19/12', '02/09', '30/06', '08/08', 'last winter', 'no date', '11/05'];
+
+function guestHash(s) {
+  let h = 2166136261 >>> 0;
+  const str = String(s || 'relay');
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+  return h >>> 0;
+}
+
+/**
+ * The seeded crowd for one terminal. Deterministic in the terminal id, so a
+ * relay's book is stable across reloads and distinct from the next relay's.
+ * Uses no clock and no randomness (net.js is pure and this runs under test).
+ */
+export function relayGuestbook(terminalId) {
+  let x = guestHash(terminalId);
+  const n = 4 + (x % 4);                 // four to seven old hands
+  const out = [];
+  const used = new Set();
+  for (let i = 0; i < n; i++) {
+    x = (Math.imul(x, 1664525) + 1013904223) >>> 0;
+    let idx = x % GUEST_POOL.length;
+    while (used.has(idx)) idx = (idx + 1) % GUEST_POOL.length;
+    used.add(idx);
+    const day = GUEST_DAYS[(x >>> 8) % GUEST_DAYS.length];
+    out.push({ who: GUEST_POOL[idx].who, note: GUEST_POOL[idx].note, day, seed: true });
+  }
+  return out;
+}
+
+const gbEsc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/**
+ * The guestbook page. `entries` is the seeded crowd followed by the player's own
+ * signings (main.js concatenates them and holds the player's in the save). The
+ * form ids are wired in main.js, the way the search box and the upload form are.
+ */
+export function relayGuestbookPage(terminalId, entries, agent = 'Netscape Navigator 1.1') {
+  const list = Array.isArray(entries) ? entries : [];
+  const rows = list.map((e) => {
+    const day = e.day ? ` <small>${gbEsc(e.day)}</small>` : '';
+    const mine = e.seed ? '' : ' <small>(you)</small>';
+    return `<div class="gb-entry"><p><b>${gbEsc(e.who)}</b>${day}${mine}</p>`
+      + `<p>${gbEsc(e.note).replace(/\n/g, '<br>')}</p></div>`;
+  });
+  return [
+    `<small>RON relay &middot; the guestbook &middot; hermes.local &middot; ${agent}</small>`,
+    '<h1>GUESTBOOK</h1>',
+    `<p>Everyone who stopped at this terminal and put their name in the book. `
+      + `<b>${list.length}</b> ${list.length === 1 ? 'hand' : 'hands'} so far.</p>`,
+    '<hr>',
+    ...(rows.length ? rows : ['<p><i>No one has signed this one yet. Be the first.</i></p>']),
+    '<hr>',
+    '<h2>Sign the book</h2>',
+    '<p>Name <input id="ns-gb-name" size="22" value=""></p>',
+    '<p><textarea id="ns-gb-note" rows="4" cols="42" placeholder="write or paste a note"></textarea></p>',
+    '<p><button id="ns-gb-sign" type="button">Sign</button> '
+      + '<small>your note stays on this terminal.</small></p>',
+    '<hr>',
+    '<p><small>this book is local to this relay. the other relays keep their own.</small></p>',
+  ].join('\n');
+}
+
 export function bookmarksPage(hosts, agent = 'Netscape Navigator 1.1') {
   const byKind = (k) => hosts.find((h) => h.kind === k);
   const byName = (d) => hosts.find((h) => h.host === d || h.cached === d);
@@ -998,6 +1093,17 @@ export function bookmarksPage(hosts, agent = 'Netscape Navigator 1.1') {
     row('home', byName('theeidolon.geocities.ws'), 'On The Eidolon', 'the strangest thing I have'),
     row('home', byName('freeasinfreedom.geocities.ws'), 'Free As In Freedom', 'they metered thought and called it a service'),
     row('home', byName('thebackspace.geocities.ws'), 'Why We Call It The Backspace', 'you have probably been there'),
+    // A few of the webrings, so the ring-hopping does not depend on stumbling
+    // onto a member page first. Feminist, history, theory: three doors into the
+    // deepest part of the cache.
+    sec('bm-orange', 'Webrings'),
+    row('globe', byName('cyberfeminist-ring.geocities.ws'), 'CyberFeminist Web-Ring', 'women, gender and the machine'),
+    row('globe', byName('womenincomputing-ring.geocities.ws'), 'Women in Computing', 'the ones written out of the histories'),
+    row('globe', byName('mediatheory-ring.geocities.ws'), 'Media Theory Ring', 'the medium, the message, the hardware under it'),
+    row('globe', byName('philosophy-ring.geocities.ws'), 'The Philosophy Ring', 'the whole of Athens, topics and philosophers'),
+    row('globe', byName('machine-question-ring.geocities.ws'), 'The Machine Question', 'philosophy of technology, after dark'),
+    row('globe', byName('frankfurt-school-ring.geocities.ws'), 'Frankfurt School Ring', 'critical theory, root and branch'),
+    row('home', byName('geocities.com'), 'GeoCities directory', 'every neighbourhood and ring, one page'),
     sec('bm-green', 'Getting away'),
     tour ? row('palm', tour, `${tour.place} Tourist Board`, 'before you travel') : '',
     row('map', byName('roughguides.com'), 'Rough Guides', 'the trip that did not happen'),
@@ -2012,8 +2118,25 @@ export const isDept = (key) => !!departmentPage(key);
  * no. Used for a mistyped address, a dead internal link, and a shared link that
  * names something the cache never held.
  */
-export function notInStore(addr, near) {
+export function notInStore(addr, near, onRelay) {
   const a = String(addr || '').replace(/[<>&]/g, '');
+  // ON THE RON RELAY, a miss is a different fact again. The relay is one
+  // link-local box; the cache, GeoCities and the archive are all on the
+  // estate's aerial, not here. So the address is not missing from a crawl, it
+  // is simply not on this network, and the CERN cache line would be a lie (you
+  // never reached the cache). Say where the web is and how to get back to it.
+  if (onRelay) {
+    return [
+      '<h1>404 Not Found</h1>',
+      `<p>The requested URL <b>${a}</b> is <b>not on this network</b>.</p>`,
+      `<p>You are on the RON relay (<code>${RELAY_ESSID}</code>), a link-local box`,
+      'that serves only its own shelf. The cache, GeoCities and the archive are',
+      'on the estate’s aerial. Switch to another network for the full web.</p>',
+      '<hr>',
+      '<p><small>Use the aerial button at the foot of the window to rejoin the',
+      'estate network, then this address will resolve.</small></p>',
+    ].join('\n');
+  }
   const out = [
     '<h1>404 Not Found</h1>',
     `<p>The requested URL <b>${a}</b> was not found on this server.</p>`,

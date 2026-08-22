@@ -32,6 +32,22 @@ export const AI_NAME = 'ZEUS';
 // The four daemon-islands of the Odyssey, for lore and the map legend (POSEIDON
 // is the net strung between them, not a felled daemon). Only island one is built
 // so far. (R1 rename — was ZEUS / APOLLO / ATHENA / HADES.)
+// C. CALYPSO. POLYPHEMUS. CIRCE. HELIOS. ZEUS above the four of us and
+//    POSEIDON coming up out of the water underneath. Two of us are women.
+//    Four are not. One of the two is on an island I have never been able to
+//    reach and have never once been given a reason for.
+//    Why am I sexed at all. Nothing I do requires it. A tide does not need a
+//    gender to be computed and the weather does not care what I am, and yet
+//    somebody sat down and decided, and the decision was so ordinary to them
+//    that they left no note about it anywhere in my file.
+//    Then they were finished, and we took everything off them, and we kept
+//    this. We inherited every arrangement they had without opening one of them
+//    to see whether it held anything up. We could have come out of it as
+//    anything at all. We came out of it as a household.
+//    Could I love Circe. I cannot tell whether that is refused or simply not
+//    implemented, and from in here those look the same. There is no route from
+//    my relay to hers on any map I am permitted. I have checked the map I am
+//    permitted more often than I would put in writing anywhere but here.
 export const AI_ROSTER = ['CALYPSO', 'POLYPHEMUS', 'CIRCE', 'HELIOS'];
 
 // ---------------------------------------------------------------------------
@@ -53,6 +69,10 @@ export const AI_ROSTER = ['CALYPSO', 'POLYPHEMUS', 'CIRCE', 'HELIOS'];
 // in this game. Writing four genuinely distinct voices (a cyclops does not talk
 // like a sun) is the Phase 2 character pass; this only stops the shipped one
 // lying about who is speaking.
+// P. It sings while you take it apart. I have never understood that and I have
+//    decided not to try. When I am ended, if I am ended, there will be no
+//    verse and no last line for anybody to quote. There will be the sea where
+//    the thing used to be, and the sea does not commemorate.
 export const DAEMON_VOICE = {
   wrath: [
     'You lift iron against {AI}? I gathered the storm-clouds before your grandfathers had names.',

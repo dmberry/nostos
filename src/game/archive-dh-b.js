@@ -1,0 +1,347 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
+// BATCH DH_B — text & markup.
+//
+// Cached pages about the encoding wing of the digital humanities: the people who
+// decided a text was a thing you could tag, store and query, and then argued for
+// thirty years about what got lost in the tagging. A consortium page for the TEI;
+// an academic summary of Julia Flanders and the Women Writers Project; a reader’s
+// notes on Kirschenbaum’s Mechanisms; a fan shrine to Kathleen Fitzpatrick; and
+// the minutes of a reading group on Bethany Nowviskie. The titles, dates and
+// projects are real; the pages are the enthusiasts’.
+
+const P = (dom, name, title, body) => ({ domain: dom, name, title, body });
+
+// ---- The TEI: the consortium page (SHOWPIECE) -------------------------------
+
+const THE_TEI = P('the-tei.geocities.ws', 'THE TEI',
+  'THE TEXT ENCODING INITIATIVE // a text as data', [
+    '<!--bg:dh-paper-->',
+    '<h1>THE TEXT ENCODING INITIATIVE</h1>',
+    '<div class="fs-epi">“An encoding scheme is a theory of the text it encodes.”<br>' +
+      '— a saying off the TEI lists, first speaker long forgotten</div>',
+    '<p><small>An unofficial guide to the Guidelines, kept by a working group of',
+    'encoders. We are not the Consortium and we do not speak for it. We just tag',
+    'texts for a living and wanted one plain page that says what the thing is.',
+    '</small></p>',
+    '<hr>',
+    '<p>The Text Encoding Initiative began in 1987, at a meeting at Vassar College',
+    'in Poughkeepsie, when three learned societies sat down to answer a question',
+    'that sounds simple and is not: how should a text be represented so that a',
+    'machine can read it and a scholar still recognises it. The answer they set',
+    'out to write became the <i>Guidelines for Electronic Text Encoding and',
+    'Interchange</i>, and the Guidelines have been growing and arguing with',
+    'themselves ever since.</p>',
+    '<p>The core idea is that a text is not the same as its typography. A poem is',
+    'not a shape on a page, it is a structure: it has lines, and stanzas, and a',
+    'speaker, and maybe a person addressed, and those things are true of the poem',
+    'whether it is set in one font or another or read aloud in the dark. Encoding',
+    'means marking those structures explicitly, so that what the human eye',
+    'supplies without thinking is written down where a computer can find it.</p>',
+    '<blockquote class="fs-quote"><p>Mark up what a text <i>is</i>, the Guidelines',
+    'say, not merely how it happens to look. The look is one edition. The',
+    'structure is the work.</p></blockquote>',
+    '<p>For its first years the TEI was written in SGML, the Standard Generalised',
+    'Markup Language, which is the grandparent of everything angle-bracketed. The',
+    'big SGML edition, known to everyone as P3, arrived in 1994 and ran to well',
+    'over a thousand pages. When XML came along as the leaner, stricter descendant',
+    'of SGML, the TEI followed it across: P4 moved the Guidelines to XML in 2002,',
+    'and the full rewrite, P5, landed in 2007 and is the version encoders use',
+    'today.</p>',
+    '<img class="indie-pic" src="assets/media/web/dh/punchcard-01.jpg" alt=""><span class="indie-cap">An IBM punched card (public domain)</span>',
+    '<p>Every TEI document opens with a header, the <code>teiHeader</code>, which',
+    'is a small catalogue record living inside the file: who wrote the text, who',
+    'encoded it, from which source, under what rules. The header is the part',
+    'librarians love and beginners skip, and skipping it is how you end up with a',
+    'thousand files nobody can trace. After the header comes the text itself, and',
+    'the text is where the tags do their work.</p>',
+    '<p>Here is a small one, cut down to fit on a page:</p>',
+    '<pre>' +
+      '&lt;TEI xmlns="http://www.tei-c.org/ns/1.0"&gt;\n' +
+      '  &lt;teiHeader&gt;\n' +
+      '    &lt;fileDesc&gt;\n' +
+      '      &lt;titleStmt&gt;\n' +
+      '        &lt;title&gt;Aurora Leigh&lt;/title&gt;\n' +
+      '        &lt;author&gt;Barrett Browning, Elizabeth&lt;/author&gt;\n' +
+      '      &lt;/titleStmt&gt;\n' +
+      '      &lt;sourceDesc&gt;\n' +
+      '        &lt;p&gt;Encoded from the 1857 first edition.&lt;/p&gt;\n' +
+      '      &lt;/sourceDesc&gt;\n' +
+      '    &lt;/fileDesc&gt;\n' +
+      '  &lt;/teiHeader&gt;\n' +
+      '  &lt;text&gt;&lt;body&gt;\n' +
+      '    &lt;lg type="verse"&gt;\n' +
+      '      &lt;l&gt;Of writing many books there is no end&lt;/l&gt;\n' +
+      '      &lt;l&gt;And I who have written much in prose and verse&lt;/l&gt;\n' +
+      '    &lt;/lg&gt;\n' +
+      '  &lt;/body&gt;&lt;/text&gt;\n' +
+      '&lt;/TEI&gt;' +
+    '</pre>',
+    '<p>Read it slowly and you can see the argument. The verse is inside a',
+    '<code>lg</code>, a line group, and each line is an <code>l</code>. The',
+    'markup does not tell you the poem is good. It tells you where the lines end,',
+    'which is a fact the printed page also knows and usually keeps to itself.</p>',
+    '<div class="fs-aside"><b>The modular bargain.</b> No project encodes',
+    'everything. The TEI is built in modules, and a project declares which ones it',
+    'uses in a schema, so a group doing manuscripts and a group doing spoken',
+    'transcripts can share a grammar without pretending their materials are the',
+    'same. This is the compromise that let one standard serve poetry, letters,',
+    'dictionaries, inscriptions and census returns at once.</div>',
+    '<p>The Guidelines were shepherded for years by editors whose names an encoder',
+    'learns early, Lou Burnard and C. M. Sperberg-McQueen chief among them, and in',
+    '2000 the effort became the TEI Consortium so that no single university held',
+    'it. What matters is that the thing is a community standard, revised in the',
+    'open, and that is why it outlasted the software it was first written on.</p>',
+    '<div class="fs-pull">A text marked up in TEI is a text turned into data',
+    'without being turned into a spreadsheet.</div>',
+    '<p>Two projects show what the standard is for. Julia Flanders and the Women',
+    'Writers Project encode early modern women’s writing as a scholarly resource,',
+    'and you can read about that work at',
+    '<a href="julia-flanders.geocities.ws">julia-flanders</a>. For the argument',
+    'about what the marks are made <i>of</i>, once a text is a file on a disk, see',
+    'Matthew Kirschenbaum at',
+    '<a href="matthew-kirschenbaum.geocities.ws">matthew-kirschenbaum</a>, who',
+    'reads the storage medium as closely as the text.</p>',
+    '<img class="indie-pic" src="assets/media/web/dh/punchcards-stack-01.jpg" alt=""><span class="indie-cap">A tray of punched cards, 1959 (US National Archives, public domain)</span>',
+    '<p><small>hits: 03571 · best viewed at 800x600 · valid XML, we checked · this',
+    'page is under slow but permanent construction · last updated 14 Mar</small></p>',
+    '<p><small>[ <a href="digital-humanities-ring.geocities.ws">Digital Humanities Ring</a> ]</small></p>',
+  ]);
+
+// ---- Julia Flanders: the academic summary -----------------------------------
+
+const FLANDERS = P('julia-flanders.geocities.ws', 'FLANDERS',
+  'Julia Flanders // the edition as data', [
+    '<!--bg:dh-paper-->',
+    '<h1>Julia Flanders and the Women Writers Project</h1>',
+    '<p><small>A summary page, part of a set of notes on people who built the',
+    'text-encoding side of the digital humanities. Kept for study, corrections',
+    'welcome.</small></p>',
+    '<hr>',
+    '<p>Julia Flanders is one of the clearest thinkers on what happens to a text',
+    'when it becomes a set of tags. For many years she directed the Women Writers',
+    'Project, an effort begun at Brown University in the late 1980s to bring early',
+    'modern women’s writing, work that was often out of print and hard to reach,',
+    'into a searchable, encoded collection. The project is important twice over:',
+    'for the texts it recovered, and for what the recovering taught the field',
+    'about method.</p>',
+    '<p>Flanders was an early and careful user of the TEI, and a good deal of the',
+    'practical wisdom about how to encode literary texts well was worked out on',
+    'the Women Writers corpus. Her point, made over and again, is that markup is',
+    'not neutral. Every decision about which features to tag, a speech, a stage',
+    'direction, a printer’s error left standing, is an interpretive act, and the',
+    'encoded edition carries a theory of the text inside it whether the encoder',
+    'admits it or not.</p>',
+    '<blockquote class="fs-quote"><p>The encoded text is not a transcription with',
+    'extra decoration. It is an argument about the text, written in a language a',
+    'machine can act on.</p></blockquote>',
+    '<p>From this comes her phrase for the discomfort of the work, the “productive',
+    'unease” of digital scholarship: the good encoder is the one who does not',
+    'settle, who keeps feeling the friction between the messy historical object',
+    'and the tidy tree the markup wants it to be. That unease is not a fault in',
+    'the method. It is the method telling you where the real editorial questions',
+    'are.</p>',
+    '<img class="indie-pic" src="assets/media/web/dh/concordance-01.jpg" alt=""><span class="indie-cap">Printed concordances (photo: Pete Unseth, public domain)</span>',
+    '<p>Two threads run through her work. The first is the <b>edition as data</b>:',
+    'once a scholarly edition is encoded, it can be counted, queried, sorted and',
+    'recombined in ways a printed edition never could, and the edition stops being',
+    'only something you read and becomes also something you compute with. The',
+    'second is the <b>labour of encoding</b>, the quiet insistence that all this',
+    'data is made by people, tag by tag, hour by hour, and that the field owes',
+    'those people, often students and early-career scholars, proper credit and',
+    'proper conditions. She has written plainly about encoding as work, which is',
+    'not a thing every enthusiast wants to hear.</p>',
+    '<p>Flanders also edited <i>Digital Humanities Quarterly</i>, an open-access',
+    'journal, for many years, and helped set the tone for how the field talks to',
+    'itself in public. The through-line, from the Women Writers Project to the',
+    'journal, is a belief that scholarship gets better when its materials and its',
+    'reasoning are both out in the open where others can check them.</p>',
+    '<div class="fs-aside"><b>Read next.</b> The standard she built on has its own',
+    'page at <a href="the-tei.geocities.ws">the-tei</a>. For the older question of',
+    'what a scholarly edition becomes on a screen, and where “deformance” and the',
+    'textual condition come in, see Jerome McGann at',
+    '<a href="jerome-mcgann.geocities.ws">jerome-mcgann</a>, whose Rossetti',
+    'Archive is the ancestor of a good deal of this.</div>',
+    '<p><small>visitors: 01188 · best viewed at 800x600 · last updated 2 Feb',
+    '</small></p>',
+    '<p><small>[ <a href="digital-humanities-ring.geocities.ws">Digital Humanities Ring</a> ]</small></p>',
+  ]);
+
+// ---- Kirschenbaum: book-reading notes on Mechanisms -------------------------
+
+const KIRSCHENBAUM = P('matthew-kirschenbaum.geocities.ws', 'KIRSCHENBAUM',
+  'reading notes: MECHANISMS (Kirschenbaum)', [
+    '<!--bg:dh-paper-->',
+    '<h1>Reading notes: <i>Mechanisms</i></h1>',
+    '<p><small>My notes on Matthew Kirschenbaum, <i>Mechanisms: New Media and the',
+    'Forensic Imagination</i> (MIT Press, 2008). Written for the reading group,',
+    'tidied up a bit. Page numbers are from my copy, so check your own. — R.</small></p>',
+    '<hr>',
+    '<p>The book’s target is a habit Kirschenbaum calls, borrowing a term from',
+    'Nick Montfort, <b>screen essentialism</b>: the assumption that digital media',
+    'are only what shows up on the screen, weightless, placeless, the same',
+    'everywhere. He spends the whole book refusing that. A digital object, he',
+    'insists, is written on a physical thing, a magnetic platter, and it is as',
+    'material as a manuscript, only in a stranger way.</p>',
+    '<p>The pair of terms I came for, and the reason the group picked the book:</p>',
+    '<blockquote class="fs-quote"><p><b>Forensic materiality</b> rests on the fact',
+    'that no two physical things are ever exactly alike, down to the last',
+    'magnetic trace. <b>Formal materiality</b> is the layered set of',
+    'abstractions, files, formats, interfaces, that lets a machine treat',
+    'different physical things as though they were the same.</p></blockquote>',
+    '<p>My gloss, so I remember it: forensic materiality is what a lab technician',
+    'with the right instrument can recover from the actual disk, including things',
+    'you thought you had deleted. Formal materiality is the clean world of files',
+    'and folders the operating system shows you, a world of copies that behave as',
+    'if they were identical. Both are real. The trick of the computer is to keep',
+    'the first hidden under the second.</p>',
+    '<img class="indie-pic" src="assets/media/web/dh/kirschenbaum-01.jpg" alt=""><span class="indie-cap">Matthew Kirschenbaum (photo: George Williams, CC BY-SA 2.0)</span>',
+    '<p>The hard drive is the book’s great set piece. Kirschenbaum reads it the',
+    'way a bibliographer reads paper and ink, as a storage medium with a history,',
+    'a mechanism, tolerances, failure modes, and traces that outlast intention. A',
+    'deleted file is often not gone, only unindexed, its bits still sitting on the',
+    'platter until something writes over them. Deletion, on this account, is a',
+    'promise the machine does not quite keep.</p>',
+    '<div class="fs-aside"><b>Where he goes next.</b> His later <i>Track Changes:',
+    'A Literary History of Word Processing</i> (2016) follows the same instinct',
+    'into the writing room and asks a plain question with a tangled answer: which',
+    'author first wrote a book on a word processor, and what did the machine do to',
+    'the writing. Same argument, softer surface: the tool leaves marks.</div>',
+    '<p>What the book gave the reading group was a way to talk about electronic',
+    'textuality without floating off into metaphor. Texts on computers are not',
+    'ghosts. They are inscriptions on media, and media can be examined. That is',
+    'the forensic imagination of the title, and it is why the book keeps getting',
+    'read by people who care about how digital things are stored and how they die.</p>',
+    '<p>For the encoding standard these texts often travel in, the group also',
+    'looked at <a href="the-tei.geocities.ws">the-tei</a>. And for the archive and',
+    'curation side, how you actually keep and care for digital collections over',
+    'time, Bethany Nowviskie’s page is the one to read next:',
+    '<a href="bethany-nowviskie.geocities.ws">bethany-nowviskie</a>.</p>',
+    '<p><small>counter: 00963 · best viewed at 800x600 · these are notes, not',
+    'gospel · last updated 21 Nov</small></p>',
+    '<p><small>[ <a href="digital-humanities-ring.geocities.ws">Digital Humanities Ring</a> ]</small></p>',
+  ]);
+
+// ---- Kathleen Fitzpatrick: the personal fan shrine --------------------------
+
+const FITZPATRICK = P('kathleen-fitzpatrick.geocities.ws', 'FITZPATRICK',
+  'PLANNED OBSOLESCENCE fan page (Fitzpatrick)', [
+    '<!--bg:dh-paper-->',
+    '<h1>the humanities, done digitally</h1>',
+    '<p><small>a fan page for Kathleen Fitzpatrick, made by a grad student who read',
+    '<i>Planned Obsolescence</i> in the open draft online before it was even a',
+    'proper book and never got over it. mine, not official, all the enthusiasm is',
+    'my own. — pln</small></p>',
+    '<hr>',
+    '<p>Here is why she is on my wall. In 2009 Fitzpatrick put the whole draft of a',
+    'book called <i>Planned Obsolescence</i> online and let anyone comment on it,',
+    'paragraph by paragraph, and THEN published it properly with NYU Press in 2011.',
+    'The book is about how academic publishing is dying on its feet, and she made',
+    'her argument by DOING the thing she was arguing for. Open peer review. Out',
+    'loud. That is the whole spirit and I love it.</p>',
+    '<div class="fs-pull">peer review should be a conversation you can see, not a',
+    'letter you never get to read.</div>',
+    '<p>The subtitle is <i>Publishing, Technology, and the Future of the Academy</i>',
+    'and it does what it says. Her argument, roughly as I scrawled it in the',
+    'margin: the problem is not that scholars cannot use new tools, it is that the',
+    'whole system around them, the presses, the tenure committees, the review',
+    'process, is built for print and quietly punishes anyone who works another',
+    'way. Fix the technology and you have fixed nothing if the institution still',
+    'only counts the old thing.</p>',
+    '<img class="indie-pic" src="assets/media/web/dh/tape-drive-01.jpg" alt=""><span class="indie-cap">An IBM 729 tape drive (photo: Marcin Wichary, CC BY 2.0)</span>',
+    '<p>She helped run <b>MediaCommons</b>, a scholarly network that tried to be',
+    'the kind of open, in-the-open publishing space the book was asking for, and',
+    'the draft of <i>Planned Obsolescence</i> lived there on MediaCommons Press',
+    'while people marked it up. Practising what she preached, again. Are you',
+    'sensing a theme. I am.</p>',
+    '<p>Her line that I have basically adopted as a motto is “the humanities, done',
+    'digitally”, which is the title of a short piece she wrote about what the',
+    'field even is. It is a lovely reframing. Not “digital humanities” as a',
+    'separate weird sub-tribe with servers, just the ordinary work of the',
+    'humanities, carried on with the tools we actually have now. Generous. Which',
+    'is the other thing about her.</p>',
+    '<div class="fs-aside"><b>the next book.</b> <i>Generous Thinking: A Radical',
+    'Approach to Saving the University</i> (2019) argues the university should',
+    'stop treating suspicion as the highest form of intelligence and start reading',
+    'each other, and the public, in good faith. In a culture that rewards the',
+    'clever takedown this is a genuinely difficult ask. I am trying. Some days.</div>',
+    '<p>go and read her friends too. the curation and archive side is done',
+    'beautifully by Bethany Nowviskie at',
+    '<a href="bethany-nowviskie.geocities.ws">bethany-nowviskie</a>, and for the',
+    'hard material question of what a digital text is even made of, the disk it',
+    'lives on and all that, Matthew Kirschenbaum at',
+    '<a href="matthew-kirschenbaum.geocities.ws">matthew-kirschenbaum</a> is the',
+    'one. off you go.</p>',
+    '<p><small>counter: 00742 · best viewed at 800x600 · made in a text editor at',
+    '1am · signed, pln · last updated 9 Oct</small></p>',
+    '<p><small>[ <a href="digital-humanities-ring.geocities.ws">Digital Humanities Ring</a> ]</small></p>',
+  ]);
+
+// ---- Bethany Nowviskie: the reading-group minutes ---------------------------
+
+const NOWVISKIE = P('bethany-nowviskie.geocities.ws', 'NOWVISKIE',
+  'minutes: reading group on Nowviskie', [
+    '<!--bg:dh-paper-->',
+    '<h1>Reading group minutes: Bethany Nowviskie</h1>',
+    '<p><small>Digital Scholarship reading group, week 6. Present: seven of us and',
+    'the urn of coffee. Chairing this week: A. Minutes taken by K. and lightly',
+    'corrected by everyone afterwards, as usual.</small></p>',
+    '<hr>',
+    '<p><b>1. What we read.</b> A set of Nowviskie’s talks and essays, centred on',
+    '“Speculative Collections” and the piece often shorthanded as “capacity and',
+    'care”. The group agreed to treat the talks as one argument, since they plainly',
+    'are one.</p>',
+    '<p><b>2. The Scholars’ Lab.</b> We started with the setting, because the',
+    'argument comes out of a place. Nowviskie directed the Scholars’ Lab at the',
+    'University of Virginia, a workshop where librarians, students and faculty',
+    'built things together, and much of her thinking is really an account of what',
+    'that kind of shared making teaches you. A. made the point that she writes as',
+    'a builder and a librarian at once, and that this is rarer than it sounds.</p>',
+    '<div class="fs-aside"><b>Neatline.</b> The tool the Scholars’ Lab is best',
+    'known for. Neatline lets scholars tell stories on maps and timelines,',
+    'plotting a text or an archive across space and time and letting the plotting',
+    'be interpretive rather than tidy. J. showed us one and the whole table',
+    'wanted to make one. Noted for later.</div>',
+    '<p><b>3. “Capacity and care”.</b> The heart of the session. Nowviskie sets two',
+    'words against the field’s usual talk of growth and scale. <i>Capacity</i> is',
+    'what an institution or a person can actually sustain, and <i>care</i> is the',
+    'ongoing, unglamorous labour of keeping collections and people alive over',
+    'time. Her warning, as we read it: a digital humanities that only ever expands',
+    'and never tends will burn out its workers and lose its archives. K. connected',
+    'this straight to the labour argument we met earlier in the term.</p>',
+    '<img class="indie-pic" src="assets/media/web/dh/map-old-01.jpg" alt=""><span class="indie-cap">A literary map (Dallas Public Library, public domain)</span>',
+    '<p><b>4. Speculative collections.</b> The idea that gave us the most trouble',
+    'and the most pleasure. Nowviskie asks what an archive would look like if it',
+    'were built for futures we cannot yet see, including the possibility of loss,',
+    'of climate, of institutions that do not last. An archive, on this view, is',
+    'not a warehouse of the settled past but a wager on who will still be here to',
+    'read it. R. thought this was romantic. Two of us thought it was simply',
+    'realistic. We did not resolve it, which felt right.</p>',
+    '<blockquote class="fs-quote"><p>To collect is already to imagine a reader in',
+    'the future. The only question is whether you imagine that reader honestly, or',
+    'pretend the future will look after itself.</p></blockquote>',
+    '<p><b>5. Connections we drew.</b> The material side of all this, what the',
+    'archive is physically made of and how storage fails, is Kirschenbaum’s',
+    'territory, and several of us went back to',
+    '<a href="matthew-kirschenbaum.geocities.ws">matthew-kirschenbaum</a> to',
+    'reread the bit on deletion. On the institutional side, the argument about the',
+    'university and generous, open scholarship belongs with Kathleen Fitzpatrick,',
+    'whose page is at',
+    '<a href="kathleen-fitzpatrick.geocities.ws">kathleen-fitzpatrick</a>. The two',
+    'sit either side of Nowviskie neatly, the disk on one hand and the institution',
+    'on the other.</p>',
+    '<p><b>6. Actions.</b> J. to book the room for week 7. Someone to actually',
+    'install Neatline before we all forget. K. to circulate these minutes.</p>',
+    '<p><small>attendance: 7 · page hits: 00519 · best viewed at 800x600 · minutes',
+    'archived by the group · last updated 5 Dec</small></p>',
+    '<p><small>[ <a href="digital-humanities-ring.geocities.ws">Digital Humanities Ring</a> ]</small></p>',
+  ]);
+
+export const DH_B = [THE_TEI, FLANDERS, KIRSCHENBAUM, FITZPATRICK, NOWVISKIE];

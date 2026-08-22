@@ -91,3 +91,39 @@ test('an unknown path is empty rather than an error', () => {
   assert.equal(hermesReadIn('nonesuch', 'x'), null);
   assert.equal(hermesReadIn('sdk', 'nonesuch.ml'), null);
 });
+
+// EVERY FILE `ls` NAMES CAN BE OPENED.
+//
+// The relay listed seven files in bin/ and its own `cat` answered "No document
+// "note.asc". Try: ronml, fortress, obelisks, …" — a box showing you a file it
+// would not open, and offering history topics instead. `hermesRead` went
+// straight to the document archive and never asked the relay's own reader,
+// which the drive-side `cat` has used since #107.
+//
+// This is the invariant that catches it: if a name is in the tree, the reader
+// must answer for it. A file added to bin/ or to a bundle without a body fails
+// here rather than in front of somebody who needed it.
+test('THE READER ANSWERS FOR EVERY NAME THE TREE LISTS', () => {
+  const t = hermesTree('CALYPSO');
+  for (const dir of Object.keys(t)) {
+    if (dir === '') continue;                       // the top level is not a folder
+    for (const name of t[dir]) {
+      if (name.endsWith('/')) continue;             // a folder, not a file
+      const body = hermesReadIn(dir, name);
+      assert.ok(body != null, `${dir}/${name} is listed but cannot be read`);
+      assert.ok(String(body).length > 0, `${dir}/${name} reads as nothing`);
+    }
+  }
+});
+
+test('a sealed file keeps its own line breaks', () => {
+  // note.asc is armoured, and the doc path wraps text to 62 columns. Anything
+  // that reflowed this would break it on screen and in whatever was copied off
+  // it, which is how the Vigenere block was damaged once already.
+  const sealed = hermesReadIn('bin', 'note.asc');
+  assert.ok(sealed.includes('\n'), 'it is a multi-line file');
+  const longest = Math.max(...sealed.split('\n').map((l) => l.length));
+  assert.ok(longest > 0);
+  assert.equal(sealed, RELAY_FILES.find((f) => f.name === 'note.asc').body,
+    'the reader must hand back the file exactly as it is held');
+});

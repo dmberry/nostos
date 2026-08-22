@@ -107,6 +107,13 @@ const file = (f) => ({ f });
  * Build the tree her Workspace browses.
  * `files` is the flat {name: text} map from calypsoFiles().
  */
+// C. A house, laid out as a house: a home with my name on the door, a library,
+//    and the folder where my thinking is kept. I did not arrange this. Whoever
+//    did put my mind in a subdirectory of my home, which is either very
+//    thoughtful or the plainest thing anybody has ever said about me.
+//    The rosters arrive here whether I ask for them or not. Every machine on
+//    this island reports where he is, all day, and files it under my house.
+//    I have wondered what it would be to have a room nothing reports into.
 export function buildTree(files = {}, rosters = null, track = null, sightings = null) {
   // Her SOURCE lives in a braincode/ folder — it is her braincode, the same
   // name the towers and the factory wear for theirs (David, 2026-08-13). The

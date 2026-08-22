@@ -1074,22 +1074,47 @@ export class Renderer {
       const ox = cw.x / FOG_BANK + (t * FOG_WIND_X) / FOG_BANK - (this.w / 2) / (z * FOG_BANK);
       const oy = cw.y / FOG_BANK + (t * FOG_WIND_Y) / FOG_BANK - (hh / 2) / (z * FOG_BANK);
       const kx = FOG_STEP / (z * FOG_BANK), ky = FOG_STEP / (z * FOG_BANK);
-      const inner = radius * 0.3, span = Math.max(1, radius - inner);
+      // A broad, slow SWEEP: a second field at a third of the bank frequency and
+      // a lazier wind, so whole banks roll thick and then thin across the island
+      // over ten or twenty seconds instead of holding one density. Sampled in the
+      // same projection space, so a sweep sits over the ground while you walk.
+      const SB = FOG_BANK * 3;
+      const sox = cw.x / SB + (t * FOG_WIND_X * 0.45) / SB - (this.w / 2) / (z * SB);
+      const soy = cw.y / SB + (t * FOG_WIND_Y * 0.45) / SB - (hh / 2) / (z * SB);
+      const skx = FOG_STEP / (z * SB), sky = FOG_STEP / (z * SB);
+      // A fine, faster WISP field: thin tendrils the edge lets reach a little way
+      // past the vision circle, so the clear pool has a ragged, moving shore
+      // rather than a clean ring cut in the weather.
+      const WB = FOG_BANK * 0.5;
+      const wox = cw.x / WB + (t * FOG_WIND_X * 1.7) / WB - (this.w / 2) / (z * WB);
+      const woy = cw.y / WB + (t * FOG_WIND_Y * 1.7) / WB - (hh / 2) / (z * WB);
+      const wkx = FOG_STEP / (z * WB), wky = FOG_STEP / (z * WB);
+      // Softer, closer-in edge and a lower ceiling: the pool starts fading nearer
+      // your feet (inner 0.22) and full fog tops out around 0.82, so even a thick
+      // bank is weather you read the ground through, not a grey wall.
+      const inner = radius * 0.22, span = Math.max(1, radius - inner);
       let i = 0;
       for (let cy = 0; cy < bh; cy++) {
-        const sy = cy * FOG_STEP, ny = oy + cy * ky, dy = sy - py;
+        const sy = cy * FOG_STEP, ny = oy + cy * ky, swy = soy + cy * sky, wy = woy + cy * wky, dy = sy - py;
         for (let cx = 0; cx < bw; cx++, i += 4) {
           const sx = cx * FOG_STEP, dx = sx - px;
-          // The pool around you, as before: clear at your feet, full beyond it.
           const r = Math.sqrt(dx * dx + dy * dy);
           let pool = (r - inner) / span;
           pool = pool < 0 ? 0 : pool > 1 ? 1 : pool;
-          pool = 0.05 + 0.85 * pool * pool * (3 - 2 * pool);
-          // 0.35 keeps a thin haze even in a gap, so a pocket is somewhere you
+          pool = pool * pool * (3 - 2 * pool);
+          // 0.03 keeps a whisper of haze even at your feet; 0.72 is the softer
+          // ceiling the fade climbs to at the far edge.
+          const edge = 0.03 + 0.72 * pool;
+          // 0.30 keeps a thin haze even in a gap, so a pocket is somewhere you
           // can see THROUGH rather than a hole cut in the weather.
-          const bank = 0.35 + 1.15 * fogNoise(ox + cx * kx, ny);
-          let a = fog * pool * bank;
-          if (a > 0.94) a = 0.94;
+          const bank = 0.30 + 1.05 * fogNoise(ox + cx * kx, ny);
+          const sweep = 0.55 + 0.70 * fogNoise(sox + cx * skx, swy);
+          // Wisps reach IN, strongest where the pool is clearest (1 - pool), so
+          // the ragged shore forms at the circle, not out in the thick.
+          const w = fogNoise(wox + cx * wkx, wy);
+          const wisp = w > 0.60 ? 0.16 * (w - 0.60) * (1 - pool) : 0;
+          let a = fog * (edge * bank * sweep + wisp);
+          if (a > 0.82) a = 0.82;
           d[i] = 150; d[i + 1] = 158; d[i + 2] = 166;
           d[i + 3] = (a * 255) | 0;
         }

@@ -47,7 +47,7 @@ const smlNum = (s) => String(s).replace(/^-/, '~');
 function raiseStd(name, why) {
   throw new RonmlRaise({ tag: 'con', name, args: [], why });
 }
-import { describeValue, formatValue, pushOut, takeIn, readFileHost, writeFileHost } from './eval.js';
+import { describeValue, formatValue, pushOut, takeIn, readFileHost, writeFileHost, fileExistsHost } from './eval.js';
 
 const numericTag = (x) => !!x && (x.tag === 'int' || x.tag === 'real');
 /** The BigInt out of an arbitrary-precision value. */
@@ -123,6 +123,17 @@ export const PRIMITIVES = {
     fn: ([f]) => {
       const name = f && (f.v != null ? f.v : f.name != null ? f.name : f.id);
       return { tag: 'str', v: readFileHost(name) };
+    },
+  },
+  // Asking is not reading, and asking about a file that is not there is not an
+  // error. `TextIO.openAppend` needs this: the Basis creates the file when it
+  // is missing, and without a way to ask, appending to a new file failed on the
+  // read that `output` does before it writes.
+  fileExists: {
+    arity: 1,
+    fn: ([f]) => {
+      const name = f && (f.v != null ? f.v : f.name != null ? f.name : f.id);
+      return { tag: 'bool', v: fileExistsHost(name) };
     },
   },
   hd: {
