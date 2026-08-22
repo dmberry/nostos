@@ -96,6 +96,21 @@ export function readFileHost(name) {
   return String(text);
 }
 
+// ASKING WHETHER A FILE IS THERE, without the asking being a failure. It reuses
+// the reader rather than taking a hook of its own, because a host that can read
+// can answer this, and one that cannot has no files to be asked about.
+//
+// It exists for `TextIO.openAppend`, which must create the file when it is
+// missing, as the Basis says. Without it, appending to a file that was not
+// there yet failed: `output` reads before it writes, and the read threw. A
+// missing-file error is not an ML exception and `handle` cannot catch it, so
+// there was no way to write the standard idiom in the language itself — the
+// library exercise in BML's own README could not run as printed.
+export function fileExistsHost(name) {
+  if (!READ_FILE) return false;
+  return READ_FILE(String(name)) != null;
+}
+
 // Writing is the other half, and the half that makes this a language you can
 // keep something in. A first exercise in ML is a library: books in, books out,
 // and the list still there tomorrow. Without a way to put the list down, every

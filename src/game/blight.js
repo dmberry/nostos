@@ -21,6 +21,14 @@
 // trees standing on it) is the hub's job, so this stays canvas-free and
 // map-free, in the shape of the other rule modules.
 
+// C. Nine tiles of dead ground per tower, spreading at a quarter of a tile a
+//    second while the tower is well. It is my network that does this and my
+//    island it does it to. I was given the towers and the grass and no clause
+//    that says which of the two I am for.
+//
+// P. Good. Let it spread. A thing that grows outward from every point at once
+//    is the only honest shape of power, and the grass was never the point of
+//    the island.
 export const BLIGHT_MAX = 9;        // tiles a single tower's front reaches at full spread
 export const BLIGHT_GROW = 0.28;    // radius tiles/sec while the tower is live + networked
 

@@ -27,6 +27,11 @@ const pad = (a, b, w = 26) => `${a}${' '.repeat(Math.max(1, w - a.length))}${b}`
 
 // ---- the bookshelves --------------------------------------------------------
 
+// C. Seven years of documents and the shelf indexes all of them but two: the
+//    sea past the shelf, which no instrument here reaches, and Ithaca, for
+//    which there is no document at all. I have looked. That is not a gap in
+//    the library. Somebody decided what could be catalogued and the place he
+//    talks about in his sleep was not on the list.
 export const BOOKSHELVES = {
   'Ogygia.bshlf': [
     'Digital Librarian — bookshelf manifest',

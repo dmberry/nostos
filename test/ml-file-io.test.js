@@ -143,3 +143,140 @@ test('a machine with no disk cannot write either', async () => {
   const { last } = await run('val _ = writeFile "a.txt" "x"', { station: 'robot', disk: null });
   assert.ok(!last.ok, 'a unit in the field has nowhere to put anything');
 });
+
+// ---- TextIO, as the Definition has it --------------------------------------
+//
+// The primitives above are this project's own. TextIO is Standard ML's, and a
+// program written from the Basis has to run here unchanged or the conformance
+// claim is decoration. These exercise the interface rather than the plumbing:
+// streams opened and closed, output accumulating, openOut truncating where
+// openAppend does not.
+//
+// A stream here IS its filename. Standard ML hides that behind an abstract
+// type, and hiding it is the only reason a program must close one; nothing is
+// held open underneath, so closeIn and closeOut are honest no-ops. These tests
+// therefore check what a Basis program OBSERVES, never how it is represented.
+
+test('TextIO: openOut, output, closeOut, then read it back', async () => {
+  const disk = {};
+  const src = [
+    'val g = TextIO.openOut "shelf.txt"',
+    'val _ = TextIO.output (g, "Technics and Civilization")',
+    'val _ = TextIO.closeOut g',
+    'val f = TextIO.openIn "shelf.txt"',
+    'val text = TextIO.inputAll f',
+    'val _ = TextIO.closeIn f',
+  ].join('\n');
+  const { last } = await run(src, { disk });
+  assert.match(String(last.text), /\(\)|unit/, 'closeIn returns unit');
+  assert.equal(disk['shelf.txt'], 'Technics and Civilization');
+});
+
+test('TextIO: two outputs to one stream both arrive, in order', async () => {
+  const disk = {};
+  const src = [
+    'val nl = str (chr 10)',
+    'val g = TextIO.openOut "shelf.txt"',
+    'val _ = TextIO.output (g, "Giant Brains" ^ nl)',
+    'val _ = TextIO.output (g, "The Myth of the Machine" ^ nl)',
+    'val _ = TextIO.closeOut g',
+    'val text = TextIO.inputAll (TextIO.openIn "shelf.txt")',
+  ].join('\n');
+  const { last } = await run(src, { disk });
+  const got = String(last.text);
+  assert.match(got, /Giant Brains/);
+  assert.match(got, /The Myth of the Machine/, 'the second output must not replace the first');
+  assert.ok(got.indexOf('Giant Brains') < got.indexOf('The Myth'), 'and they keep their order');
+});
+
+test('TextIO: openOut truncates an existing file', async () => {
+  const disk = { 'a.txt': 'what was there before' };
+  const src = [
+    'val g = TextIO.openOut "a.txt"',
+    'val _ = TextIO.output (g, "after")',
+    'val _ = TextIO.closeOut g',
+  ].join('\n');
+  await run(src, { disk });
+  assert.equal(disk['a.txt'], 'after', 'openOut starts the file again');
+});
+
+test('TextIO: openAppend does not truncate', async () => {
+  const disk = { 'a.txt': 'kept ' };
+  const src = [
+    'val g = TextIO.openAppend "a.txt"',
+    'val _ = TextIO.output (g, "and added")',
+    'val _ = TextIO.closeOut g',
+  ].join('\n');
+  await run(src, { disk });
+  assert.equal(disk['a.txt'], 'kept and added',
+    'this is the difference between openAppend and openOut, and the only one');
+});
+
+test('TextIO: openAppend creates the file when it is not there', async () => {
+  // The Basis creates it. This build did not, and `output` reads before it
+  // writes, so appending to a new file failed on the read. It was found by
+  // running the library exercise out of BML's own README, which could not do
+  // what it was printed doing: every textbook writes append WITHOUT an openOut
+  // in front of it, because in Standard ML none is needed.
+  //
+  // `handle` is no help here: a missing file is a host error rather than an ML
+  // exception, so it cannot be caught in the language. Hence `fileExists`.
+  const disk = {};
+  const src = [
+    'val g = TextIO.openAppend "new.txt"',
+    'val _ = TextIO.output (g, "first")',
+    'val _ = TextIO.closeOut g',
+  ].join('\n');
+  await run(src, { disk });
+  assert.equal(disk['new.txt'], 'first', 'the file should have been made, then written');
+});
+
+test('fileExists answers rather than failing', async () => {
+  const { last } = await run('val a = fileExists "there.txt"\nval b = fileExists "not.txt"',
+    { disk: { 'there.txt': 'x' } });
+  assert.match(String(last.text), /false/, 'a missing file is an answer, not an error');
+  const yes = await run('val a = fileExists "there.txt"', { disk: { 'there.txt': 'x' } });
+  assert.match(String(yes.last.text), /true/);
+});
+
+test('TextIO: output1 writes a single character', async () => {
+  const disk = {};
+  const src = [
+    'val g = TextIO.openOut "c.txt"',
+    'val _ = TextIO.output1 (g, #"R")',
+    'val _ = TextIO.output1 (g, #"O")',
+    'val _ = TextIO.output1 (g, #"N")',
+    'val _ = TextIO.closeOut g',
+  ].join('\n');
+  await run(src, { disk });
+  assert.equal(disk['c.txt'], 'RON');
+});
+
+test('TextIO: inputAll on a file that is not there says which', async () => {
+  const { last } = await run('val t = TextIO.inputAll (TextIO.openIn "gone.txt")',
+    { disk: { 'a.txt': 'x' } });
+  assert.ok(!last.ok);
+  assert.match(String(last.text), /gone\.txt/);
+});
+
+test('the library exercise, written from the Basis alone', async () => {
+  // No readFile, no writeFile: everything a first-year would have been taught.
+  const disk = {};
+  const src = [
+    'val nl = str (chr 10)',
+    'fun shelve title =',
+    '  let val g = TextIO.openAppend "library.txt"',
+    '  in TextIO.output (g, title ^ nl); TextIO.closeOut g end',
+    'val g0 = TextIO.openOut "library.txt"',
+    'val _ = TextIO.closeOut g0',
+    'val _ = shelve "Giant Brains"',
+    'val _ = shelve "Technics and Civilization"',
+    'val _ = shelve "Ficciones"',
+    'val shelf = TextIO.inputAll (TextIO.openIn "library.txt")',
+  ].join('\n');
+  const { last } = await run(src, { disk });
+  const got = String(last.text);
+  for (const title of ['Giant Brains', 'Technics and Civilization', 'Ficciones']) {
+    assert.match(got, new RegExp(title), `${title} should still be on the shelf`);
+  }
+});

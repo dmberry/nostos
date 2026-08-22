@@ -40,6 +40,7 @@ export const MEMORY_SITES = [
     name: 'IT WAS NOT LIKE THAT',
     title: 'It was not like that',
     body: [
+      '<!-- “We live, as we dream, alone.” Marlow says it, and Marlow is the whole problem: his tale reaches us at second hand, told at dusk on a boat to men who may have dozed, about events he admits he could not make plain. Heart of Darkness is a revision history that will not hold still. Every record kept by one voice has a Marlow in it. (Conrad, 1899) -->',
       '<!--bg:grey-->',
       '<h1>It was not like that</h1>',
       '<p><small>A page about revision histories that do not stay still. Kept',
@@ -419,6 +420,7 @@ export const MEMORY_SITES = [
     name: 'ELIZA',
     title: 'ELIZA — the program that listens',
     body: [
+      '<!-- Lucy Suchman took ELIZA’s children as her case. What looks like the machine understanding you is a coherence you are supplying, turn by turn, from your own side of the exchange. Plans, she argued, are a resource for action and not the thing that produces it. The intelligence is in the interaction, and you are half of it. (Plans and Situated Actions, 1987) -->',
       '<!--bg:black-->',
       '<h1>ELIZA</h1>',
       '<p><small>A page about two hundred lines of pattern matching that people',

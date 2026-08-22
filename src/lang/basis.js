@@ -586,14 +586,26 @@ export const PRELUDE = [
   '  val print = print',
   '  val stdOut = "" val stdErr = "" val stdIn = ""',
   '  fun flushOut _ = ()',
-  '  fun openIn name = name',
-  '  fun closeIn _ = ()',
-  '  fun inputAll f = if f = "" then readLine () else readFile f',
+  // ANNOTATED because a stream here IS its filename, so `openIn` is honestly
+  // the identity and infers 'a -> 'a. An instream that unifies with anything
+  // then makes `inputAll` report 'a and print its contents unquoted, the
+  // printer having lost the fact that it holds a string. The annotation states
+  // the Basis signature rather than leaving it to be recovered from a body
+  // that happens to be trivial.
+  '  fun openIn (name : string) : string = name',
+  '  fun closeIn (_ : string) = ()',
+  '  fun inputAll (f : string) : string = if f = "" then readLine () else readFile f',
   '  (* Standard ML gives back the line WITH its newline, in an option. *)',
   '  fun inputLine _ = SOME (readLine () ^ "\\n")',
   '  (* openOut truncates on open, as it does everywhere; openAppend does not. *)',
   '  fun openOut name = (writeFile name ""; name)',
-  '  fun openAppend name = name',
+  '  (* openAppend CREATES the file when it is not there, as the Basis says. It',
+  '     used to be the identity, and appending to a file that did not exist yet',
+  '     failed on the read that `output` does before it writes — so the library',
+  '     exercise, which is the first thing anyone writes with append, could not',
+  '     be run as it is printed in every textbook. *)',
+  '  fun openAppend name =',
+  '    (if fileExists name then () else writeFile name ""; name)',
   '  fun output (f, s) = if f = "" then print s else writeFile f (readFile f ^ s)',
   '  fun output1 (f, c) = output (f, str c)',
   '  fun outputSubstr (f, s) = output (f, s)',

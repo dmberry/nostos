@@ -38,6 +38,14 @@ const RADIUS = 0.3;             // collision radius in tiles (both classes)
 const SLOPE_SPEED_MULT = 0.55;  // effort penalty crossing a height step, either way
 
 const REPEL_FLEE_SPEED = 3.4;   // AI-ML `repel`/`sing`: fleeing or lining up
+// C. Ten. A number small enough that a man with an axe gets through it, and I
+//    have never adjusted it upward, and nobody has ever asked me why not.
+//    They are mine. I would rather they came back than that they held.
+//
+// P. Ten is sentiment. Mine do not have a number in this file because mine do
+//    not stop, and the difference between us is not temperament. She was given
+//    a garden to keep and I was given the sea, and one of those can be walked
+//    across by anybody with a boat.
 const T1_HP = 10;
 const T1_PATROL_SPEED = 1.4;    // tiles per second
 const T1_CHASE_SPEED = 5.0;     // faster than a walk (4.2), slower than a sprint (7.5)

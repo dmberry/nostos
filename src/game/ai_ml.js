@@ -67,9 +67,9 @@ import { RonmlError, RonmlFuelError, RonmlRaise } from '../lang/errors.js';
 // adapter RE-EXPORTS and never copies. Two definitions of the same thing is how
 // the diagnostic list went stale six times.
 import { tokenize } from '../lang/lex.js';
-import { parse, parseLine, joinProgram, joinProgramLines, needsMoreInput, continuesPrevious, defaultFixity } from '../lang/parse.js';
+import { parse, parseLine, joinProgram, joinProgramLines, splitProgram, needsMoreInput, continuesPrevious, defaultFixity } from '../lang/parse.js';
 
-export { parseLine, joinProgram, joinProgramLines, needsMoreInput, continuesPrevious, defaultFixity };
+export { parseLine, joinProgram, joinProgramLines, splitProgram, needsMoreInput, continuesPrevious, defaultFixity };
 
 // What a unit's lamp can be set to. A machine of this vintage has one LED and
 // a handful of drive levels, not a colour picker, so the set is short and named.
@@ -1030,7 +1030,7 @@ const LAPTOP_VERBS = ['echo', 'not', 'hd', 'tl', 'length', 'abs', 'sqrt', 'min',
   // machine on the island with a disk you own. A unit in the field has no
   // filesystem to read from, so the verb is not in its vocabulary and the hook
   // behind it is never installed for one.
-  'readFile', 'writeFile', 'fetch'];
+  'readFile', 'writeFile', 'fileExists', 'fetch'];
 // A MACHINE'S OWN STATION. Its program runs here: senses in, an intent out, and
 // nothing else within reach — no network, no files, no console verbs. That is
 // not a restriction bolted on, it is what a unit actually has.
@@ -1762,6 +1762,13 @@ export function typeReport(source, ctx) {
   return createInterpreter({
     session: (ctx && ctx.session) || {},
     typecheck: 'report',
+    // FOLDED, exactly as `loadPrelude` above folds. The prelude is loaded by an
+    // interpreter built with names:'fold', so every structure member is filed
+    // under a folded key (`string.size`). Reading them back with an unfolded
+    // interpreter looked up `String.size`, missed, and took the unbound-name
+    // fallback, which is a fresh variable — so EVERY qualified name reported
+    // `'a` at the NostBook while the CLI, which does not fold, was correct.
+    names: 'fold',
   }).typeReport(source);
 }
 

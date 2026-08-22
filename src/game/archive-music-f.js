@@ -1,0 +1,207 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
+// PUNK, POST-PUNK, INDUSTRIAL — FOUR PAGES OFF A FANZINE DESK.
+//
+// Written by the people who taped the Peel sessions and photocopied the sleeve
+// notes: a cut-up crank, a taper who worships the desk, a discography obsessive,
+// a tape-music romantic. None of them is the band. They quote titles and the
+// stray line they are sure of, and they get the studio facts right because the
+// studio is the point — the home-built box, the digital delay, the meat locker,
+// the drums sent up onto the roof. The look is xerox: hard rules, caps, the
+// smell of toner. Dated by day and month, the way a fanzine is dated.
+
+const P = (dom, name, title, body) => ({ domain: dom, name, title, body });
+
+// ---- throbbing gristle: the cut-up crank ------------------------------------
+
+const THROBBING_GRISTLE = P('throbbing-gristle.geocities.ws', 'T.G.',
+  'INDUSTRIAL RECORDS // throbbing gristle', [
+    '<!--bg:punk-->',
+    '<h1>THROBBING GRISTLE</h1>',
+    '<p><small>a page cut and pasted and photocopied until the letters go grey.',
+    'kept by the person who runs the tape stall. no logo, they never had one you',
+    'could trust twice.</small></p>',
+    '<hr>',
+    '<p>Start with the slogan because everybody does. Industrial Records sold',
+    'itself as “industrial music for industrial people”, and that phrase did more',
+    'damage than any of the records, because it launched a whole genre of men in',
+    'combat trousers who missed the joke. T.G. came out of COUM Transmissions, a',
+    'performance-art outfit, and they never stopped being an art prank that',
+    'happened to make a noise.</p>',
+    '<p>THE POINT IS THE BOX. They did not buy their sound off a shelf. The',
+    'central instrument was the Gristleizer, a home-built effects unit wired up',
+    'and passed around, so a guitar or a voice or a tape went in one end and came',
+    'out the other bent out of shape. This is the whole industrial idea in one',
+    'lump of solder: not the factory as subject matter, the workshop as method.',
+    'They were four people, Genesis P-Orridge, Cosey Fanni Tutti, Chris Carter and',
+    'Peter Christopherson, building the means of production in a room.</p>',
+    '<p>The record everyone points at is “20 Jazz Funk Greats” (1979). The cover',
+    'is the four of them on a green clifftop looking like a soft-rock sleeve, and',
+    'the clifftop is Beachy Head, which is where people go to jump. The prettiness',
+    'is the ambush. You are meant to shelve it next to the easy-listening and get',
+    'a shock. I have watched it work on people, so it still works.</p>',
+    '<p>Where does the cut-up come in. P-Orridge took it straight from Burroughs',
+    'and Gysin — chop the tape, chop the text, splice it back wrong, and the wrong',
+    'order tells you what the right order was hiding. Run that through the theory',
+    'shelf and it lands on control: Burroughs said language is a virus and the tape',
+    'recorder is how you fight back, cut the official recording up and play it back',
+    'scrambled. That is why I keep a link out to',
+    '<a href="societies-of-control.geocities.ws">the control page</a> next door.',
+    'T.G. are what a cut-up sounds like when it learns to solder.</p>',
+    '<!-- folded, no page of their own: Cabaret Voltaire, SPK, the whole first wave. and Roy Gwinn, who drew up the Gristleizer circuit in the first place. -->',
+    '<p>What comes after them is cleaner and colder and better recorded. For that',
+    'you want <a href="joy-division-hannett.geocities.ws">Joy Division and Martin',
+    'Hannett</a>, where a producer does to a proper rock band what the Gristleizer',
+    'did to a signal. Same instinct, a real studio.</p>',
+    '<hr>',
+    '<p><small>xeroxed and re-xeroxed. best viewed at 800x600 with the contrast up.',
+    'trades welcome, send a blank C90 and a stamp. last redone 3 Feb.</small></p>',
+    '<p><small>— kept at the tape stall, no fixed name</small></p>',
+    '<p><small><a href="studio-as-instrument-ring.geocities.ws">« The Studio as',
+    'Instrument »</a> · <a href="electronic-tape-ring.geocities.ws">« Electronic',
+    '&amp; Tape Music »</a></small></p>',
+  ]);
+
+// ---- joy division / hannett: the taper who worships the desk -----------------
+
+const JOY_DIVISION_HANNETT = P('joy-division-hannett.geocities.ws', 'HANNETT',
+  'Unknown Pleasures // what Martin Hannett did', [
+    '<!--bg:punk-->',
+    '<h1>JOY DIVISION &amp; MARTIN HANNETT</h1>',
+    '<p><small>this page is really about the producer. the band you know. the man',
+    'at the desk is the one nobody puts on a t-shirt, so here.</small></p>',
+    '<hr>',
+    '<p>“Unknown Pleasures” came out in 1979 on Factory (FACT 10). Live, Joy',
+    'Division were a loud, fast, ordinary-shaped rock band. On the record they',
+    'sound like they are playing at the bottom of a well. That gap is Martin',
+    'Hannett, and the gap is the subject of this page.</p>',
+    '<p>How he did it, as far as a taper can reconstruct it. First, space. Hannett',
+    'treated the studio as an instrument and silence as a material, so he pulled',
+    'the parts apart and hung reverb in the holes. Second, the delay. He had one',
+    'of the first commercially available digital delay units, the AMS DMX, built',
+    'up in Burnley, and a digital delay does something a tape echo cannot: it',
+    'holds a sound dead still and drops it back a few milliseconds later, clean, so',
+    'a snare gets a hard metallic shadow. That tick you hear all over the record is',
+    'the machine.</p>',
+    '<p>Third, and this is the story tapers tell each other, he recorded the drums',
+    'separately from the band and reputedly sent the kit up onto the roof of the',
+    'studio, one drum at a time, so nothing bled and every hit sat in its own',
+    'pocket of air. Whether it was literally the roof or just as good as, the',
+    'result is a drum sound with no room around it that you did not choose.</p>',
+    '<p>THE SLEEVE. Peter Saville put a white line-drawing on black on the front:',
+    'a stack of wiggly lines. Those lines are real data. They are the radio pulses',
+    'of a pulsar, CP 1919, the first one ever found, plotted one sweep under',
+    'another so you can see the signal is regular. Somebody lifted it out of an',
+    'astronomy encyclopaedia. A dead band, named after the worst thing in the',
+    'century, wearing the heartbeat of a dead star on the cover. Nobody planned',
+    'that it would read like an epitaph, and it does.</p>',
+    '<p>Hannett went on to produce half of Manchester and fell out with most of',
+    'them. If you want the band he could not tame, go and read',
+    '<a href="the-fall.geocities.ws">The Fall</a>, who recorded live and mean and',
+    'refused to be made to sound haunted. And if you want the other end of the',
+    'post-punk studio, the people who built the room instead of hiring it, that is',
+    '<a href="this-heat.geocities.ws">This Heat</a> and the meat locker.</p>',
+    '<hr>',
+    '<p><small>generation-two tape, from a friend of the desk. best on headphones,',
+    'the whole argument is in the stereo. last checked 11 Jan.</small></p>',
+    '<p><small>— R., taper, keeps the reels flat and cold</small></p>',
+    '<p><small><a href="studio-as-instrument-ring.geocities.ws">« The Studio as',
+    'Instrument »</a> · <a href="electronic-tape-ring.geocities.ws">« Electronic',
+    '&amp; Tape Music »</a></small></p>',
+  ]);
+
+// ---- the fall: the discography obsessive, fanzine sneer ----------------------
+
+const THE_FALL = P('the-fall.geocities.ws', 'THE FALL',
+  'THE FALL — the Peel sessions and the list', [
+    '<!--bg:punk-->',
+    '<h1>THE FALL</h1>',
+    '<p><small>a fanzine page that never became a fanzine. i have the sessions on',
+    'cassette and i have opinions. you have been warned.</small></p>',
+    '<hr>',
+    '<p>Rule one, from the man himself: “if it’s me and your granny on bongos,',
+    'it’s the Fall.” Mark E. Smith meant it. The lineup changed constantly, dozens',
+    'of members over the years, sacked in car parks, and the band stayed the Fall',
+    'because the Fall was whoever Smith was pointing at that week plus the sneer.',
+    'People who need a fixed lineup to love a group never get it and that is fine,',
+    'more sessions for us.</p>',
+    '<p>Because that is where they live: the Peel Sessions. John Peel taped them',
+    'more than anyone, again and again, and the sessions are better than most of',
+    'the LPs because they were cut fast, in a day, no producer smoothing the edges.',
+    'This is the anti-Hannett position, which is why I keep the argument going with',
+    'the <a href="joy-division-hannett.geocities.ws">Hannett page</a> across the',
+    'ring. Over there a producer makes a band sound like the inside of a cathedral.',
+    'The Fall would have walked out. They wanted it flat, loud and wrong, tracking',
+    'live with the mistakes left in.</p>',
+    '<p>If you buy one, buy “Hex Enduction Hour” (1982). Long, hard, two drummers',
+    'in places, the words half-shouted half-muttered so you catch one line in',
+    'four and the one you catch is a warning. It is the sound of a xerox fanzine',
+    'set to music: cheap, dense, printed too dark, and completely certain of',
+    'itself.</p>',
+    '<!-- folded, deserve their own page: the Peel show itself, and Cabaret Voltaire again over in Sheffield. -->',
+    '<p>What did they matter, in a stopped world. The Fall are the proof that you',
+    'do not need the good studio, the digital delay or the pulsar sleeve. You need',
+    'a room, a session, and somebody who will not be produced. When everything',
+    'polished has rotted, the sessions taped off the radio are still readable.</p>',
+    '<hr>',
+    '<p><small>C90s, real-time dubbed, no Dolby. best viewed at 800x600, under',
+    'construction forever like the band. last updated 27 Jan.</small></p>',
+    '<p><small>— M., 2nd year, should be revising</small></p>',
+    '<p><small><a href="vinyl-collectors-ring.geocities.ws">« Vinyl Collectors',
+    '»</a> · <a href="studio-as-instrument-ring.geocities.ws">« The Studio as',
+    'Instrument »</a></small></p>',
+  ]);
+
+// ---- this heat: the tape-music romantic, the meat locker ---------------------
+
+const THIS_HEAT = P('this-heat.geocities.ws', 'THIS HEAT',
+  'THIS HEAT — recorded in a meat locker', [
+    '<!--bg:punk-->',
+    '<h1>THIS HEAT</h1>',
+    '<p><small>for the people who love a tape loop more than a chorus. a quiet',
+    'page, kept carefully, because the room this is about was cold and specific',
+    'and gone.</small></p>',
+    '<hr>',
+    '<p>This Heat were three people, Charles Bullen, Charles Hayward and Gareth',
+    'Williams, and the first thing to say about them is the room. They worked in a',
+    'place they called Cold Storage: a disused refrigerated meat locker in Brixton,',
+    'a real cold store, tiled and dead and acoustically strange. They did not book',
+    'a studio and go home. They lived in the fridge and built it into an instrument.</p>',
+    '<p>The materiality is the music. They strung tape loops across the cold room,',
+    'long physical loops of magnetic tape held out on stands and mic-stands so a',
+    'single phrase would go round and round the space and come back. That is a',
+    'direct inheritance from the tape studios, from musique concrete, cutting and',
+    'looping recorded sound until the sound is an object in its own right. If you',
+    'want the parent of it, read <a href="pierre-schaeffer-grm.geocities.ws">Pierre',
+    'Schaeffer</a> and the whole <a href="british-radiophonic-ring.geocities.ws">',
+    'radiophonic</a> tape tradition. This Heat took that method out of the',
+    'institution and into a squat-cold fridge, which is the punk move.</p>',
+    '<p>The record to start with is the first one, “This Heat” (1979), assembled',
+    'from sessions taped in that room over a couple of years, so a fierce live',
+    'drum piece sits next to a slab of drone next to a loop, and the joins are left',
+    'showing. It is post-punk and it is concrete music and it refuses to pick one.</p>',
+    '<!-- folded: Faust and the German tape people; and Bruce Gilbert / Wire on the drier side of the same idea. -->',
+    '<p>Set them against <a href="throbbing-gristle.geocities.ws">Throbbing',
+    'Gristle</a> and you get the two halves of the thing. T.G. built a box to',
+    'wreck a signal; This Heat built a room to hold a loop. One is electronics as',
+    'sabotage, the other is tape as architecture. I love the fridge more, because',
+    'when I put the record on I can hear the cold in it, and that is a place you',
+    'can still visit even though it has been demolished.</p>',
+    '<hr>',
+    '<p><small>vinyl rip to reel to this cassette, kept flat and out of the sun.',
+    'best in a cold room, appropriately. last updated 6 Mar.</small></p>',
+    '<p><small>— kept by someone who tapes the loops back</small></p>',
+    '<p><small><a href="electronic-tape-ring.geocities.ws">« Electronic &amp; Tape',
+    'Music »</a> · <a href="british-radiophonic-ring.geocities.ws">« British',
+    'Radiophonic »</a> · <a href="studio-as-instrument-ring.geocities.ws">« The',
+    'Studio as Instrument »</a></small></p>',
+  ]);
+
+export const MUSIC_F = [THROBBING_GRISTLE, JOY_DIVISION_HANNETT, THE_FALL, THIS_HEAT];

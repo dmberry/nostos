@@ -1,0 +1,215 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
+// FOUR FANS ON THE MACHINE POP.
+//
+// Batch MD of the cached music web: Kraftwerk, Brian Eno, the Moroder/Summer
+// disco machine, and Bowie's Low. Each page is kept by a different amateur — a
+// synth-pop archivist with a discography, a nocturnal ambient listener, a club
+// DJ crate-digger, a vinyl pressing bore — and they argue with each other and
+// with the neighbouring rings across the domains. The records, dates and
+// catalogue facts are real; the opinions and the layout are the keepers' own.
+// Dated by day and month, never year, the way a listening file is.
+
+const P = (dom, name, title, body) => ({ domain: dom, name, title, body });
+
+// ---- Kraftwerk: the man-machine ---------------------------------------------
+
+const KRAFTWERK = P('kraftwerk.geocities.ws', 'KRAFTWERK',
+  'KRAFTWERK — a listening file (Kling Klang)', [
+    '<!--bg:rave-->',
+    '<h1>KRAFTWERK</h1>',
+    '<p><small>A listening file kept by the two of us who run the Tuesday synth',
+    'night. Not a fan shrine. A file. If you only know “the robots” from the',
+    'telly, read to the end before you decide what they were. — last updated',
+    '11 Feb.</small></p>',
+    '<hr>',
+    '<p>First, the room, because the room is the point. Kling Klang, their studio',
+    'in Düsseldorf. They did not go to a big commercial studio and rent time on',
+    'somebody else’s desk. They built the place, and to a large extent they built',
+    'the instruments in it — sequencers, drum machines, a lot of it home-made and',
+    'soldered together, wheeled out later so the studio itself went on tour. Ralf',
+    'Hütter and Florian Schneider ran it like a workshop. When people say Kraftwerk',
+    'were cold, they mean the machines. But those machines were made by hand, in a',
+    'shed, by two men who cared enormously.</p>',
+    '<p>The discography, the four that matter, in order:</p>',
+    '<pre class="jb-list">',
+    'Autobahn ................ 1974   (the long motorway piece, side one)',
+    'Trans-Europe Express .... 1977   (the train, the mirror, Europe)',
+    'The Man-Machine ......... 1978   (Die Roboter / We Are the Robots)',
+    'Computer World .......... 1981   (numbers, home computer, the future)',
+    '</pre>',
+    '<p>The robots come in with The Man-Machine. They had mannequins built to look',
+    'like themselves, sent them to photo calls, put them on stage while they stood',
+    'behind the machines. It reads as a joke and it is not a joke. The record is a',
+    'serious argument that the human and the machine had already merged, that the',
+    '“man-machine” was not coming, it was here, and that the honest thing was to',
+    'stand still behind a console and admit it. Everyone else in 1978 was proving',
+    'how much they FELT. Kraftwerk turned that off on purpose.</p>',
+    '<p>Then Computer World, and this is the one people skip and shouldn’t. Home',
+    'computers, numbers, data, a machine in the house that knows your business —',
+    'in 1981, before most of us had touched one. That whole question of what the',
+    'machine wants from us runs straight out of this record. The people who keep',
+    'the <a href="machine-question-ring.geocities.ws">« Machine Question »</a> ring',
+    'have Computer World near the top of their list and they are right to.</p>',
+    '<p>What I want understood is the seed. Kraftwerk did not stay a European art',
+    'project. In New York, Afrika Bambaataa took the melody straight off',
+    'Trans-Europe Express and built <a href="afrika-bambaataa-planet-rock.geocities.ws">Planet',
+    'Rock</a> on it, and electro was born. In Detroit, the techno lot',
+    '(<a href="detroit-techno.geocities.ws">Atkins, May, Saunderson</a>) took the',
+    'man-machine plus Parliament and made a whole city sound. Two German men in a',
+    'workshop are the common ancestor of most of what you dance to now. That is not',
+    'a fan’s exaggeration, you can trace the samples.</p>',
+    '<p>My colleague thinks the later stuff got precious and I half agree, they',
+    'refined one idea for decades. But the idea was correct. Kraftwerk are the',
+    'record collection you keep for after the lights go out, because they already',
+    'wrote music for a world run by the machines and did not pretend it was warm.</p>',
+    '<hr>',
+    '<p><small>Nods to the Düsseldorf people with no page here: Conny Plank at the',
+    'desk on the early sides, and Neu! and Cluster in the same scene. Somebody',
+    'should write them up.</small></p>',
+    '<p><small><a href="electronic-tape-ring.geocities.ws">« Electronic &amp; Tape Music »</a> ·',
+    '<a href="machines-beat-ring.geocities.ws">« Machines That Made the Beat »</a></small></p>',
+  ]);
+
+// ---- Brian Eno: ambient and the studio --------------------------------------
+
+const ENO = P('brian-eno-ambient.geocities.ws', 'BRIAN ENO',
+  'Brian Eno — the studio as an instrument', [
+    '<!--bg:radiophonic-->',
+    '<h1>Brian Eno</h1>',
+    '<p><small>Written at night, usually with a record on very quietly. I am not a',
+    'musician and neither, famously, is he, which is part of why I keep coming',
+    'back. — maintained since 3 Jan, added the Bowie bit 9 Feb.</small></p>',
+    '<hr>',
+    '<p>People file Eno under “ambient” and stop there. Start earlier. Another',
+    'Green World (1975) is the record where it tips over: half of it is odd little',
+    'songs, half of it is instrumentals with names like weather, and you cannot',
+    'always tell which you are in. He was already treating the studio not as a',
+    'place to capture a band but as the thing you compose WITH. The tape, the',
+    'desk, the effects — those were the instrument. The guitar was a guest.</p>',
+    '<p>Around then he and the painter Peter Schmidt made Oblique Strategies, a',
+    'deck of cards, each with an instruction on it. You get stuck, you draw a card,',
+    'it tells you to do something oblique — honour your mistake, use an old idea,',
+    'change instrument roles. A physical deck. You hold the thing in your hand. I',
+    'love that the cure for a creative deadlock was a small stack of printed',
+    'cardboard, not a theory.</p>',
+    '<p>Then Music for Airports (1978), which is Ambient 1, and which gave the',
+    'word its meaning. The sleeve note is where he defines it: ambient music should',
+    'reward attention but not demand it, it must be, in his words, “as ignorable as',
+    'it is interesting”. He built it from tape loops of different lengths running',
+    'against each other, so the piece never quite repeats. Put it on at the volume',
+    'of a fridge and it changes the room without asking anything of you. In the',
+    'quiet we live in now that is not background music, it is almost company.</p>',
+    '<p>This is the same instinct that <a href="suzanne-ciani.geocities.ws">Suzanne',
+    'Ciani</a> had on the Buchla over on the machines side — let the machine run a',
+    'process and shape it, rather than play every note. Different box, same faith:',
+    'the studio, or the synth, does part of the composing.</p>',
+    '<p>And he took it to work for other people. The instrumental second half of',
+    '<a href="bowie-low.geocities.ws">Bowie’s Low</a> is Eno’s fingerprint on a rock',
+    'record — go read the Low page, the collector who keeps it gets the production',
+    'detail right. He did the Berlin records with Bowie, then Talking Heads, then',
+    'later U2 with Daniel Lanois. The through-line is always the same: he is the',
+    'person in the room asking what the room can do.</p>',
+    '<p>My conclusion, after a lot of late nights: Eno matters because he moved the',
+    'author from the instrument to the situation. You do not have to be able to',
+    'play to make music like this. You have to be able to set something going and',
+    'listen honestly to what it does.</p>',
+    '<hr>',
+    '<p><small><a href="studio-as-instrument-ring.geocities.ws">« The Studio as Instrument »</a> ·',
+    '<a href="electronic-tape-ring.geocities.ws">« Electronic &amp; Tape Music »</a></small></p>',
+  ]);
+
+// ---- Moroder & Donna Summer: I Feel Love ------------------------------------
+
+const IFEELLOVE = P('moroder-donna-summer.geocities.ws', 'I FEEL LOVE',
+  'Moroder / Donna Summer — I Feel Love (1977)', [
+    '<!--bg:rave-->',
+    '<h1>I FEEL LOVE</h1>',
+    '<p><small>DJ page. I have played this record in every room I have ever worked',
+    'and it has never once failed. If the floor is dead, put this on. — kept by a',
+    'working DJ, updated 6 Feb.</small></p>',
+    '<hr>',
+    '<p>“I Feel Love”, 1977. Giorgio Moroder and Pete Bellotte producing, Donna',
+    'Summer singing, cut at Musicland Studios in Munich. It came off the album I',
+    'Remember Yesterday, where every track was done in a different era’s style, and',
+    'the last one was meant to sound like the future. It did. It still does.</p>',
+    '<p>Here is why it is not just another disco record. There is no band. The',
+    'whole thing is built on a Moog modular synthesiser running a sequencer — one',
+    'repeating electronic pulse, bar after bar, the bassline and the pattern that',
+    'never tires and never quite lands the same twice because the tuning drifts.',
+    'The drums are basically the machine too. Over the top of all that hardware',
+    'Donna Summer’s voice floats up, soft and human and endless. Machine underneath,',
+    'human on top. That is the whole record and it is perfect.</p>',
+    '<p>The famous story: Brian Eno was in Berlin making Low with Bowie, heard this',
+    'single, and reportedly ran in saying he had heard the sound of the future and',
+    'it would run club music for years. He was not wrong, and he does not usually',
+    'over-egg it.</p>',
+    '<p>Now the connections, because this record is a hinge.',
+    '<a href="kraftwerk.geocities.ws">Kraftwerk</a> were doing the machine over in',
+    'Düsseldorf at exactly the same time, the man-machine, but as art. Moroder did',
+    'it as a pop single you could snog to. Same discovery, two doors. And this — a',
+    'machine pulse with a four-on-the-floor kick, running long — is the exact',
+    'template that becomes house a few years later. Put this next to what',
+    '<a href="frankie-knuckles-house.geocities.ws">Frankie Knuckles</a> was doing in',
+    'Chicago, laying a drum machine under an extended disco edit, and you can hear',
+    'the DNA. He built house on this bassline whether he meant to or not.</p>',
+    '<p>My hobby-horse: everyone says Moroder and forgets Pete Bellotte, who',
+    'co-wrote and co-produced the lot. Give the man his credit. And do not let',
+    'anyone tell you disco was disposable. This is the record that turned dance',
+    'music into a machine you could programme, and we have all been dancing inside',
+    'it since.</p>',
+    '<hr>',
+    '<p><small><a href="machines-beat-ring.geocities.ws">« Machines That Made the Beat »</a> ·',
+    '<a href="studio-as-instrument-ring.geocities.ws">« The Studio as Instrument »</a></small></p>',
+  ]);
+
+// ---- Bowie: Low -------------------------------------------------------------
+
+const LOW = P('bowie-low.geocities.ws', 'BOWIE LOW',
+  'David Bowie — Low (RCA, 1977)', [
+    '<!--bg:vinyl-->',
+    '<h1>David Bowie — <i>Low</i></h1>',
+    '<p><small>A pressing note more than a review. RCA, 1977. I collect the',
+    'variants and I will bore you about the snare drum given half a chance. —',
+    'compiled 4 Jan, corrected 8 Feb.</small></p>',
+    '<hr>',
+    '<p>Low is the first of the three Berlin records (Low, then “Heroes”, then',
+    'Lodger). Started at the Château d’Hérouville outside Paris, finished and mixed',
+    'in Berlin at Hansa. Tony Visconti at the desk, Brian Eno in the room. RCA',
+    'wanted a follow-up hit and were handed this. You can imagine the phone call.</p>',
+    '<p>The album is really two records, one a side. Side one is short, fractured,',
+    'nervy pop — “Speed of Life”, “Breaking Glass”, “Sound and Vision”, “Always',
+    'Crashing in the Same Car” — songs that keep starting and refusing to resolve.',
+    'Side two is long ambient instrumentals: “Warszawa”, “Art Decade”, “Weeping',
+    'Wall”, “Subterraneans”. That second side is where <a href="brian-eno-ambient.geocities.ws">Eno’s</a>',
+    'hand shows plainest, and if you want the argument for treating the studio as an',
+    'instrument, his page makes it — this is that idea let loose on a pop star’s',
+    'record.</p>',
+    '<p>Now the snare, which is the reason this record sounds like nothing before',
+    'it. Visconti ran the drums through an Eventide Harmonizer, a new bit of kit',
+    'that shifted the pitch down in real time. His own description of what the box',
+    'did was that it “f***s with the fabric of time”. That gated, dropped, heavy',
+    'snap you hear all over side one is the Harmonizer. It is one of the most',
+    'copied drum sounds in the history of the form, and it started as an engineer',
+    'playing with a machine nobody quite understood yet.</p>',
+    '<p>On the object itself: first UK RCA pressings turn up often enough, later',
+    'cuts vary, and the dead wax will tell you which mastering you are holding if',
+    'you know the matrix codes. The label thought they had bought a disaster. What',
+    'they had bought was the record every gloomy clever band spent the next decade',
+    'trying to reverse-engineer.</p>',
+    '<p>Why it lasts: Low is the sound of a very famous man deciding to stop',
+    'performing himself and go quiet and strange instead, and building the room to',
+    'do it in. Play side one loud and side two low. Then start it again.</p>',
+    '<hr>',
+    '<p><small><a href="studio-as-instrument-ring.geocities.ws">« The Studio as Instrument »</a> ·',
+    '<a href="vinyl-collectors-ring.geocities.ws">« Vinyl Collectors »</a></small></p>',
+  ]);
+
+export const MUSIC_D = [KRAFTWERK, ENO, IFEELLOVE, LOW];

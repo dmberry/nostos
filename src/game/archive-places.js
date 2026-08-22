@@ -1076,6 +1076,7 @@ export const PLACE_SITES = [
     name: 'SCHNEWS',
     title: 'SchNEWS \u2014 free weekly direct action newsheet, Brighton',
     body: [
+      '<!-- Foucault on precisely this. “Visibility is a trap,” he wrote of the panopticon: the one inside is seen but does not see, the object of information, never a subject in communication, so the power runs by itself with no one at the switch. Fourteen cameras, a list of the streets, ending please say hello. (Discipline and Punish, 1975) -->',
       '<h1>SchNEWS</h1>',
       '<p><small>free weekly direct action newsheet &middot; Brighton &middot; ' +
         'issue 1,041</small></p>',

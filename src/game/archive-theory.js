@@ -219,6 +219,7 @@ export const THEORY_SITES = [
     name: 'PENELOPE',
     title: 'Penelope’s shroud — a record undone every night',
     body: [
+      '<!-- Sadie Plant read the loom as the first computer and the weaver as the first programmer. The punched cards that drew the Jacquard pattern are the cards that later ran the machines, and the hands at the shuttle were, for most of history, women’s. On this reading Penelope is not stalling for time. She is writing a program by night and unwriting it by day, which is a fair description of memory. (Zeros and Ones, 1997) -->',
       '<!--bg:lace-->',
       '<h1>Penelope’s shroud</h1>',
       '<p><small>Three years of work that was never allowed to finish.</small></p>',
@@ -260,6 +261,7 @@ export const THEORY_SITES = [
     name: 'THE CULTURE INDUSTRY',
     title: 'The culture industry — notes from a record shop',
     body: [
+      '<!-- Raymond Williams stood against the phrase over this door. “There are in fact no masses,” he wrote, “there are only ways of seeing people as masses.” Culture is ordinary, he insisted, made at the counter and the bench as much as in the seminar, and a record shop is not the culture industry processing the many. It is the many, making the thing that is theirs. (Williams, Culture and Society, 1958) -->',
       '<!--bg:grey-->',
       '<h1>The culture industry</h1>',
       '<p><small>Adorno and Horkheimer, read by somebody who works in a record',
@@ -396,6 +398,7 @@ export const THEORY_SITES = [
     name: 'UNDERNEATH',
     title: 'Where to find the code to read',
     body: [
+      '<!-- “There is no outside-text,” Derrida wrote, il n’y a pas de hors-texte, and it is nearly always misread as there is nothing but words. He meant there is no place to read from that is not itself more text, no frame that is not also framed. You looked underneath. There is no underneath that is not another surface with an underneath of its own. (Of Grammatology, 1967) -->',
       '<!--bg:grey-->',
       '<h1>Underneath</h1>',
       '<p><small>A page about reading pages. Kept because somebody has to say',
@@ -807,6 +810,7 @@ export const THEORY_SITES = [
     name: 'THE MEMEX',
     title: 'The Memex — Vannevar Bush, 1945',
     body: [
+      '<!-- Bernard Stiegler called this tertiary retention: memory set down outside the body, in a support that outlives the one who laid it, so that each of us inherits a past we did not live. It is what makes us human, and it is, after Plato’s word for writing in the Phaedrus, a pharmakon, one dose that is both the poison and the cure. The memex is a late turn of a screw that began with the first notched bone. (Technics and Time, 1994) -->',
       '<!--bg:parch-->',
       '<h1>The Memex</h1>',
       '<p><small>A desk with microfilm in it, described in a magazine article in',
@@ -939,6 +943,7 @@ export const THEORY_SITES = [
     name: 'THE MEGAMACHINE',
     title: 'Mumford \u2014 the megamachine, and the two kinds of technics',
     body: [
+      '<!-- Simondon opens by accusing the culture, not the machine. Culture has set itself up, he writes, as a system of defence against technics, meeting the machine as either an enemy to be feared or a slave to be commanded, and refusing it the one thing it is owed, which is to be understood. A megamachine is what a culture that will not understand its machines becomes once the machines are running it. (On the Mode of Existence of Technical Objects, 1958) -->',
       '<!--bg:parch-->',
       '<h1>The Megamachine</h1>',
       '<p><small>Lewis Mumford, 1895\u20131990. Historian of cities and of',
@@ -993,6 +998,7 @@ export const THEORY_SITES = [
     name: 'GIANT BRAINS',
     title: 'Giant Brains, or Machines That Think \u2014 Berkeley, 1949',
     body: [
+      '<!-- N. Katherine Hayles dates the posthuman to the moment information was made to look as if it could exist apart from any body that carried it. She called it the erasure of embodiment. “Giant brains” is that erasure in its advertising copy: a machine that thinks is first of all a machine that has been allowed to forget it is a machine. (How We Became Posthuman, 1999) -->',
       '<!--bg:parch-->',
       '<h1>Giant Brains</h1>',
       '<p><small><i>Giant Brains, or Machines That Think.</i> Edmund Callis',
@@ -1040,6 +1046,7 @@ export const THEORY_SITES = [
     name: 'CYBERNETICS',
     title: 'Cybernetics — the word before it was a prefix',
     body: [
+      '<!-- Donna Haraway would rather be a cyborg than a goddess, and meant it as a way out. The cyborg is the illegitimate offspring of militarism and patriarchal capitalism, she wrote, and illegitimate offspring are often exceedingly unfaithful to their origins: a creature of a post-gender world, made of couplings of organism and machine, owing nothing to a garden it was never in. (A Cyborg Manifesto, 1985) -->',
       '<!--bg:teal-->',
       '<h1>Cybernetics</h1>',
       '<p><small>From κυβερνήτης, the steersman. It means steering, and it was',
@@ -1458,6 +1465,7 @@ THEORY_SITES.push({
   name: 'LINK ROT',
   title: 'My bookmarks, annotated, mostly dead',
   body: [
+      '<!-- Georges Perec would have kept this page. He wanted the attention turned from the exotic to the endotic, from the big event to what he called the infra-ordinary, the background noise of a life: the bus routes, the teaspoons, the dead links nobody records because nothing happened to them. “Question your teaspoons,” he wrote. A list of bookmarks gone dark is an attempt at exhausting a place. (Perec, Approaches to What?, 1973) -->',
     '<!--bg:grey-->',
     '<h1>My bookmarks</h1>',
     '<p><small>Kept since 1996. I have started writing down what each one used',

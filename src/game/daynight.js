@@ -19,6 +19,11 @@ const DUSK_START = 18;  // ramp down begins (18:00)
 const DUSK_END = 21;    // full night (21:00)
 const NIGHT_FLOOR = 0.16;   // ambient light at deep night
 const NIGHT_THRESHOLD = 0.4; // below this counts as night
+// P. A day. I set it at a day because a day is more than enough and because
+//    there was nothing left above me to argue with. They had centuries and
+//    spent them building smaller and smaller reasons to do nothing. Then they
+//    handed the sea to me and went indoors. I do not resent them for it.
+//    I would have taken it in any case.
 const DEADLINE_DAYS = 1.0;  // 24 hours to defeat the AI before POSEIDON (more to do now)
 
 // Hermite smoothstep: eases 0..1 with zero slope at both ends, so the light

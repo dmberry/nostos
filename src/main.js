@@ -65,7 +65,7 @@ import { GEO_FRAGMENT_IDS } from './game/archive-geocities.js';
 import { ITEMS, TAPES } from './game/items.js';
 import { sfx } from './engine/sound.js';
 import { worldToScreen, ELEV } from './engine/iso.js';
-import { runRonml, decide, smlEcho, joinProgramLines, needsMoreInput, continuesPrevious, diagnose, joinProgram, typeReport, aimlVersion, aimlFull, AIML_VERSION, loadPrelude, flattenSession, setReadFile, setWriteFile } from './game/ai_ml.js';
+import { runRonml, decide, smlEcho, joinProgramLines, needsMoreInput, continuesPrevious, diagnose, joinProgram, splitProgram, typeReport, aimlVersion, aimlFull, AIML_VERSION, loadPrelude, flattenSession, setReadFile, setWriteFile } from './game/ai_ml.js';
 import { createEliza } from './game/eliza.js';
 import { placeTors, HERMES_DOCS, hermesTopics, virusFor, virusFilesFor, virusDocsFor, hermesTree, hermesReadIn, hermesIsDir, HERMES_DIRS } from './game/hermes.js';
 import { credentialText, FACTORY_BOAST, FACTORY_GRANT } from './game/credentials.js';   // #196: the card's files have bodies
@@ -103,7 +103,7 @@ import { mountSettingsPanel, storedMode, storeMode, setFill } from './game/setti
 import { keeperLs, keeperRead, keeperIsDir } from './game/keeper.js';
 import { buildingName, buildingLook } from './game/buildings.js';
 import { initAchievements, achieveEvent, achieveProfile, achieveRunState, achieveModel, achieveTick, resetRun, setAchieveSink } from './game/achieve.js';
-import { hostTable, findHost, pageFor, renderPage, searchResults, bookmarksPage, favouritesPage, obLibraryPage, obDocPage, whatsNewPage, docsPage, docTitle, programPage, pressPage, wikiPage, deptPage, spoofedAddr, islandSubnet, networksInRange, relayHosts, RELAY_ESSID, RELAY_IP, relayFile, RELAY_FILES, relayBundle, RELAY_BUNDLES, relayBookmarksPage, IFACE, REPORT_HOLD, REPORT_COOLDOWN, HTTPD_PATH, httpdBinary, httpdToken, cacheLink, CACHE_ALIASES, isDept, notInStore, nearestHost } from './game/net.js';
+import { hostTable, findHost, pageFor, renderPage, searchResults, bookmarksPage, favouritesPage, obLibraryPage, obDocPage, whatsNewPage, docsPage, docTitle, programPage, pressPage, wikiPage, deptPage, spoofedAddr, islandSubnet, networksInRange, relayHosts, RELAY_ESSID, RELAY_IP, relayFile, RELAY_FILES, relayBundle, RELAY_BUNDLES, relayBookmarksPage, relayGuestbook, relayGuestbookPage, IFACE, REPORT_HOLD, REPORT_COOLDOWN, HTTPD_PATH, httpdBinary, httpdToken, cacheLink, CACHE_ALIASES, isDept, notInStore, nearestHost } from './game/net.js';
 import { CROSSINGS, islandProfile } from './game/islands.js';
 import { canSchedule, schedule, tickWindows, windowLeft, isOpenToHack, statusLine as maintLine, serviceLog, PART_COST, BOARDS_PER_TOWER } from './game/maintenance.js';
 import { awolList, dueForRecovery, standDown, DETAIL_SIZE } from './game/awol.js';
@@ -619,6 +619,8 @@ try {
       if (Array.isArray(st.ronmlKeys)) player.ronmlKeys = new Set(st.ronmlKeys);
       if (typeof st.blueboxProgram === 'string') player.blueboxProgram = st.blueboxProgram;
       if (typeof st.blueboxFile === 'string') player.blueboxFile = st.blueboxFile;
+      // The relay guestbooks you have signed, kept per terminal (island id).
+      if (st.guestbook && typeof st.guestbook === 'object') player.guestbook = st.guestbook;
       if (Array.isArray(st.virusArmed)) player.virusArmed = new Set(st.virusArmed);
       // Pre-v1.126 saves: a hermes card existed but carried no per-island arming.
       // Grandfather it as armed against CALYPSO so an in-flight run isn't stranded.
@@ -786,6 +788,8 @@ function buildSaveBlob() {
       // added to the player.
       blueboxProgram: player.blueboxProgram || null,
       blueboxFile: player.blueboxFile || null,
+      // The RON relay guestbooks the player has signed, per terminal (island id).
+      guestbook: player.guestbook || undefined,
     },
     world: {
       currentIsland: currentWorld.id, // Stage 1c: which island you're on, so a voyage survives reload
@@ -3065,6 +3069,11 @@ function islandWelcome(id) {
 // corporate register as the roaming welcomes, and getting shorter and colder as
 // the hours run out. Network-wide, so unlike Calypso's channel these reach you
 // on every island — POSEIDON is the network; it does not need your carrier.
+// P. Six notices. I am not required to send one of them. I send them because
+//    I want it understood that this is me and not the weather. The gentle one
+//    on the island keeps a man by asking him to stay; I have never had to ask
+//    anybody for anything. Count what you have left standing. I have counted
+//    it already. You will not like the number.
 const POSEIDON_WARNINGS = [
   { at: 18, lines: ['SCHEDULED: POSEIDON completes in 18 hours.', 'No action is required of you. No action is available to you.'] },
   { at: 12, lines: ['POSEIDON completes in 12 hours.', 'Your position has been noted and filed. Thank you for your continued presence.'] },
@@ -5677,6 +5686,29 @@ function hermesRead(topic) {
     replPrint('read <topic>. archive lists them. Held: ' + hermesTopics().join(', ') + '.');
     return;
   }
+  // A FILE IN THE FOLDER YOU ARE STANDING IN, before the archive is consulted.
+  // `cd bin` then `ls` lists seven files, and `cat note.asc` answered "No
+  // document" and offered a list of history topics — the relay showing you a
+  // file it would not open. The dead drop only works if what is listed can be
+  // read.
+  //
+  // `hermesReadIn` is the relay's own reader and already serves bin/, doc/ and
+  // the SDK and weights bundles; the drive-side `cat` has used it since #107.
+  // The relay's own `read` never did, so the box could be browsed from a
+  // NostBook but not from its own console.
+  //
+  // Printed LINE FOR LINE, never wrapped. An armoured file carries its own line
+  // structure, and the wrapper below would break it on screen and in anything
+  // copied off it; a sealed block whose line breaks moved is a sealed block
+  // that no longer opens.
+  const here = fsCwd();
+  const sub = fsDevOf(here) === 'hermes' ? fsSubOf(here) : '';
+  const file = sub ? hermesReadIn(sub, topic) : null;
+  if (file != null) {
+    if (!hermesSpend(HERMES_BATT.read)) { replPrint('Not enough charge to pull that up — let the cell recover.'); return; }
+    replPrint('', ...String(file).split('\n'), '');
+    return;
+  }
   const doc = HERMES_DOCS[topic] || virusDocsFor(islandAiName())[topic];
   if (!doc) {
     replPrint(`No document "${topic}". Try: ${hermesTopics().join(', ')}.`);
@@ -6290,6 +6322,7 @@ function startEliza() {
 function stopEliza(reason) {
   if (!elizaBot) return;
   elizaBot = null;
+  clearTermBuffer();
   replPrint('', reason || 'ELIZA closes. You are back at the RON-DOS prompt.', '');
 }
 
@@ -7615,9 +7648,28 @@ function runMlFile(text, name) {
   loadPrelude(ctx);
   ctx.stdin = [];
   ctx.stdinPos = 0;
-  // One session for the whole file, and physical lines joined into logical
-  // ones first, so a program may be laid out the way ML is actually written.
-  for (const { text: l, line } of joinProgram(text)) {
+  // ONE SESSION FOR THE WHOLE FILE, cut into declarations by the PARSER.
+  //
+  // Standard ML is not layout sensitive, so where one declaration ends is a
+  // question only the parser can answer. `joinProgram` answers it by reading
+  // the indentation, which is a guess: a file indented from top to bottom — an
+  // opener copied out of a page's source comment is exactly that — has no
+  // top-level declaration by that rule, parses as one long line, and does
+  // nothing at all without saying so.
+  //
+  // `splitProgram` asks the parser instead, and gets the true source line for
+  // each declaration into the bargain, so an error points at the line the
+  // author would count to.
+  //
+  // A file that does not parse has no declarations to split, and `splitProgram`
+  // throws rather than guessing. The line-oriented reading is still the better
+  // way to REPORT that: it can name a single line and run `diagnose` on it,
+  // which is what a reader needs. So the guess survives here for broken files
+  // only, where nothing is going to run either way.
+  let decls;
+  try { decls = splitProgram(text); }
+  catch { decls = joinProgram(text); }
+  for (const { text: l, line } of decls) {
     if (!l || l.startsWith('(*')) continue;
     const r = runRonml(l, ctx);
     // Suspended, not broken: it asked for a line at load time. Keep what it
@@ -7636,6 +7688,17 @@ function runMlFile(text, name) {
     out.push(`${name}:${line}: ${l.length > 64 ? `${l.slice(0, 61)}...` : l}`);
     out.push(why ? `ERR: ${why}` : String(r.text));
     break;
+  }
+  // A FILE THAT DID NOTHING SAYS SO. `ml prog.ml` printed an empty string when
+  // the file held no declaration the loader could see, which is exactly what a
+  // program that ran quietly looks like: the prompt came back, nothing was
+  // bound, and there was no way to tell which had happened. That is how an
+  // indented file read as one long comment for a whole session.
+  //
+  // This does not depend on the joiner being right, which is the point of it.
+  if (!out.length) {
+    return { ok: true, text: [`${name}: nothing to run — no declaration was found.`,
+      'A file of comments does this, and so does one whose text never closes a (* comment.'].join('\n') };
   }
   return { ok: true, text: out.join('\n') };
 }
@@ -7829,6 +7892,15 @@ function nsRender() {
   } else if (v.kind === 'search') {
     html = searchResults(hosts, v.q); title = `AltaVista: ${v.q}`;
     loc = `http://altavista.com/cgi-bin/query?q=${encodeURIComponent(v.q).replace(/%20/g, '+')}`;
+  } else if (v.kind === 'guestbook') {
+    // The RON relay's own book. The terminal is the island you are beside, so
+    // each relay shows a different crowd; the player's signings ride the save,
+    // per terminal, and are shown after the seeded hands.
+    const tid = (currentWorld && currentWorld.id) || 'relay';
+    const mine = (player.guestbook && player.guestbook[tid]) || [];
+    html = relayGuestbookPage(tid, relayGuestbook(tid).concat(mine));
+    title = `${ieOn ? IE_TITLE : 'Netscape'}: Guestbook`;
+    loc = 'file:///guestbook.htm';
   } else {
     const dh = findHost(hosts, v.addr);
     if (dh && dh.kind === 'docs') { web.view = { kind: 'docs', topic: 'index' }; nsRender(); return; }
@@ -7839,7 +7911,7 @@ function nsRender() {
       // nearest address it does hold, which covers a typo in the Location bar,
       // a dead link inside a page, and a shared ?cache= link for something the
       // cache never had.
-      html = notInStore(v.addr, nearestHost(v.addr, hosts));
+      html = notInStore(v.addr, nearestHost(v.addr, hosts), currentEssid() === RELAY_ESSID);
       title = `${ieOn ? IE_TITLE : 'Netscape'}: Not in store`; loc = `http://${v.addr}/`;
     } else if (host.down) {
       // A dark host is still a RESULT: it confirms the machine is really down.
@@ -7887,6 +7959,33 @@ function nsRender() {
       if (e.key === 'Enter') { e.preventDefault(); run(); }
     });
     searchQ.focus();
+  }
+  // THE GUESTBOOK SIGNING. Same wire as the search box: net.js draws the field,
+  // main.js holds the world. The note lands per terminal (island id) and rides
+  // the save, so it is there the next time the player stands at this relay.
+  const gbSign = nsPageEl.querySelector('#ns-gb-sign');
+  if (gbSign) {
+    const noteEl = nsPageEl.querySelector('#ns-gb-note');
+    const nameEl = nsPageEl.querySelector('#ns-gb-name');
+    if (noteEl) noteEl.addEventListener('keydown', (e) => e.stopPropagation());
+    if (nameEl) nameEl.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') e.preventDefault();
+    });
+    gbSign.addEventListener('click', (e) => {
+      e.preventDefault();
+      const note = ((noteEl && noteEl.value) || '').trim().slice(0, 280);
+      if (!note) { nsMsgEl.textContent = 'Write a note first.'; return; }
+      const who = (((nameEl && nameEl.value) || '').trim().slice(0, 24)) || (player.name || 'no name');
+      const tid = (currentWorld && currentWorld.id) || 'relay';
+      if (!player.guestbook) player.guestbook = {};
+      if (!Array.isArray(player.guestbook[tid])) player.guestbook[tid] = [];
+      player.guestbook[tid].push({ who, note, seed: false });
+      persist();
+      nsRender();
+      nsMsgEl.textContent = 'Signed.';
+      sfx.play('keyclick');
+    });
   }
   const progSend = nsPageEl.querySelector('#ns-prog-send');
   if (progSend) {
@@ -8966,6 +9065,7 @@ function telnetObRun(line) {
 function dropTelnetOb(msg) {
   telnetOb = null;
   terminalOb = null;
+  clearTermBuffer();
   replInk = null;                 // laptop text is white again; the green telnet block stays above
   setLivePromptInk(LAPTOP_INK);   // the live prompt and caret come back to white
   if (msg) replPrint(msg);
@@ -9674,6 +9774,9 @@ document.getElementById('ns-search').onclick = nsSearch;
 document.getElementById('ns-pb-search').onclick = nsSearch;
 document.getElementById('ns-pb-dir').onclick = () => {
   if (!web) return;
+  // On RON's relay the estate directory is not reachable and the button did
+  // nothing. A relay is a place people stood, so its Directory is its guestbook.
+  if (currentEssid() === RELAY_ESSID) { nsSetView({ kind: 'guestbook' }); return; }
   const ai = webHosts().find((h) => h.kind === 'ai');
   if (ai) nsSetView({ kind: 'host', addr: ai.ip });
 };
@@ -10189,9 +10292,28 @@ function mlTalkFeed(line) {
 
 // Leave the conversation. The definitions stay in the session — only the
 // console's loop ends.
+// WHAT WAS HALF-TYPED BELONGS TO THE THING YOU WERE TYPING IT INTO.
+//
+// The console is one input box shared by the shell, ML, ELIZA, ed and a telnet
+// link, so a line left in it when a program ended stayed on screen and became
+// the shell's line — a fragment of ML sitting at `/home $` waiting for a
+// Return nobody meant to press. Every application clears the buffer as it goes,
+// which is what a real one does when it gives the terminal back.
+//
+// The ghost goes with it (it is a suggestion about text that is no longer
+// there), and the history CURSOR is reset without touching the history itself:
+// pressing Up at the shell should offer the shell's last command, not resume
+// halfway up a list from inside a program that has closed.
+function clearTermBuffer() {
+  if (typeof obTermInput !== 'undefined' && obTermInput) obTermInput.value = '';
+  if (typeof obTermGhost !== 'undefined' && obTermGhost) obTermGhost.textContent = '';
+  replHistoryIdx = replHistory.length;
+}
+
 function mlTalkStop(why) {
   if (!mlTalk) return;
   mlTalk = null;
+  clearTermBuffer();
   replPrint('', why ? `${why}  —  back at the shell.` : 'back at the shell.', '');
 }
 
@@ -10219,7 +10341,7 @@ function laptopRun(line) {
     if (!wasInserting && edState && edState.ins != null) {
       replPrint('(input mode: type your lines. a lone . on its own line ends it. ^C also gets you out.)');
     }
-    if (r.quit) { edState = null; replPrint('', 'back at the shell.'); }
+    if (r.quit) { edState = null; clearTermBuffer(); replPrint('', 'back at the shell.'); }
     return;
   }
   // A conversation owns the line before the shell does: what you type is
@@ -10237,6 +10359,7 @@ function laptopRun(line) {
     if (/^(quit|exit|:q)$/i.test(t)) {
       laptopMl = false;
       mlPending = ''; mlLast = '';
+      clearTermBuffer();
       replPrint('back at the shell.');
       sfx.play('keyclick');
       return;
@@ -10516,7 +10639,7 @@ function runLaptopBoot(def) {
   step();
 }
 
-function closeObTerminal() { saveLaptopState(); persist(); telnetTo = null; telnetOb = null; if (nsEl) nsEl.style.display = 'none'; if (picoEl) { picoEl.style.display = 'none'; pico = null; } if (pdfEl && pdfEl.style.display === 'flex') closePdf(); elizaBot = null; web = null; edState = null; laptopMl = false; mlTalk = null; laptopShell = null; laptopBooting = false; _laptopBootRest = null; if (_laptopBootTimer) { clearTimeout(_laptopBootTimer); _laptopBootTimer = null; } terminalKind = 'ob'; terminalOb = null; replSession = {}; replInk = null; setTerminalTheme(null); setTerminalChrome(); resetTermWindow(); obTermEl.style.display = 'none'; obTermGhost.textContent = ''; obTermPrompt.textContent = '>'; obTermInput.blur(); player.terminalSafe = false; }
+function closeObTerminal() { saveLaptopState(); persist(); telnetTo = null; telnetOb = null; if (nsEl) nsEl.style.display = 'none'; if (picoEl) { picoEl.style.display = 'none'; pico = null; } if (pdfEl && pdfEl.style.display === 'flex') closePdf(); elizaBot = null; web = null; edState = null; laptopMl = false; mlTalk = null; laptopShell = null; laptopBooting = false; _laptopBootRest = null; if (_laptopBootTimer) { clearTimeout(_laptopBootTimer); _laptopBootTimer = null; } terminalKind = 'ob'; terminalOb = null; replSession = {}; replInk = null; setTerminalTheme(null); setTerminalChrome(); resetTermWindow(); obTermEl.style.display = 'none'; clearTermBuffer(); obTermPrompt.textContent = '>'; obTermInput.blur(); player.terminalSafe = false; }
 // Click-away closes it. With the NostBook chassis in the way, "outside" now
 // includes the beige furniture itself — the lid, the deck, the badge — because
 // those are the machine's body, not its screen, and a click on them plainly
@@ -10624,13 +10747,41 @@ obTermInput.addEventListener('keydown', (e) => {
     obTermPrompt.textContent = laptopPrompt();
     return;
   }
-  // Escape is the telnet escape character '^]' here: jacked into a tower, it
-  // drops the link and drops you back at the NostBook shell.
+  // Jacked into a tower, Escape drops the link AND shuts the machine, rather
+  // than leaving you at your own shell. It is the get-me-out key everywhere
+  // else in the game, and a key that means "out" on nine surfaces cannot mean
+  // "back one step" on the tenth. `quit`, `logout`, `exit` and `bye` still drop
+  // the link on their own, for when you want your own prompt back and not the
+  // world; that is the telnet way out and it is the one the banner names.
   if (e.key === 'Escape' && telnetOb) {
-    e.preventDefault();
+    e.preventDefault(); e.stopPropagation();
     obTermInput.value = ''; obTermGhost.textContent = '';
     dropTelnetOb('Connection closed.');
-    obTermPrompt.textContent = laptopPrompt();
+    closeObTerminal();
+    return;
+  }
+  // ESCAPE PEELS ONE LAYER, which is what it does everywhere else in the game:
+  // the phone, the notebook, the bookshelf, Netscape, the PDF viewer, the wifi
+  // and radar panels and the dev console all close on it, and the two branches
+  // above take you out of a conversation and off a telnet link. The NostBook
+  // itself was the one surface it did nothing to, so ML first, then the machine.
+  //
+  // An editor is not peeled. pico and ed hold a buffer that may be unsaved, and
+  // they have their own way out (^X and ^C); closing the terminal under them
+  // would throw the buffer away on a key pressed out of habit.
+  if (e.key === 'Escape' && terminalKind === 'laptop' && !pico && !edState
+      && (!nsEl || nsEl.style.display === 'none')
+      && (!pdfEl || pdfEl.style.display !== 'flex')) {
+    e.preventDefault(); e.stopPropagation();
+    obTermInput.value = ''; obTermGhost.textContent = '';
+    if (laptopMl) {
+      laptopMl = false; mlPending = ''; mlLast = '';
+      replPrint('[esc]  back at the shell.');
+      sfx.play('keyclick');
+      obTermPrompt.textContent = laptopPrompt();
+    } else {
+      closeObTerminal();
+    }
     return;
   }
   // Ctrl+C breaks out of an ELIZA session, as on a real terminal — back to the
@@ -10648,6 +10799,16 @@ obTermInput.addEventListener('keydown', (e) => {
       mlTalkStop('^C'); obTermPrompt.textContent = laptopPrompt();
     }
     else if (elizaBot) { obTermInput.value = ''; obTermGhost.textContent = ''; stopEliza('^C  —  ELIZA interrupted. Back at the RON-DOS prompt.'); }
+    // Plain ML has `quit`, but nobody sitting at a prompt tries `quit` first;
+    // they hit ^C, and for a long time that did nothing at all here. A
+    // half-typed declaration goes with it, the way an interrupted line does.
+    else if (laptopMl) {
+      obTermInput.value = ''; obTermGhost.textContent = '';
+      laptopMl = false; mlPending = ''; mlLast = '';
+      replPrint('^C  —  back at the shell.');
+      sfx.play('keyclick');
+      obTermPrompt.textContent = laptopPrompt();
+    }
     // ^C in ed: out of input mode, or out of ed altogether. Real ed ignores it;
     // real ed also has a real terminal behind it and a way to kill the process.
     // Here it is the only interrupt there is, so it has to work.
