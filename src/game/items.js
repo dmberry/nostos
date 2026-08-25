@@ -103,6 +103,11 @@ export const ITEMS = {
   seatbelt: {
     name: 'Seatbelt',
     kind: 'tool',
+    // POCKETS ONLY. It is a length of webbing cut out of a car, and having it
+    // come up in your hand every time you tidied the pack was just irritating
+    // (David, 2026-08-25). `noHold` keeps it a tool everywhere else — the chart,
+    // the classes, the damage numbers — while barring the one slot.
+    noHold: true,
     tier: 1,
     treeDamage: 0,
     animalDamage: 4,

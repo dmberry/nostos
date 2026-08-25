@@ -156,6 +156,7 @@ import { MYTH_C } from './archive-myth-c.js'; // Egyptian & Mesopotamian
 import { MYTH_D } from './archive-myth-d.js'; // Asian & African
 import { MYTH_E } from './archive-myth-e.js'; // the Americas & Oceania
 import { MYTH_F } from './archive-myth-f.js'; // the study of myth
+import { MYTH_G } from './archive-myth-g.js'; // the hybrids
 import { MYTH_RINGS } from './archive-myth-hubs.js'; // the mythology webrings
 import { CRYP_A } from './archive-cryp-a.js'; // classical ciphers
 import { CRYP_B } from './archive-cryp-b.js'; // stream & symmetric
@@ -165,6 +166,15 @@ import { CRYP_E } from './archive-cryp-e.js'; // the crypto wars
 import { CRYP_F } from './archive-cryp-f.js'; // the seals of this machine
 import { CRYP_G } from './archive-cryp-g.js'; // the cryptographers & Agrippa
 import { CRYP_RINGS } from './archive-cryp-hubs.js'; // the cryptography webrings
+import { MAC_A } from './archive-mac-a.js'; // the languages
+import { MAC_B } from './archive-mac-b.js'; // the founders
+import { MAC_C } from './archive-mac-c.js'; // the lab & the institution
+import { MAC_D } from './archive-mac-d.js'; // the machines
+import { MAC_E } from './archive-mac-e.js'; // the hacks
+import { MAC_F } from './archive-mac-f.js'; // the ideas & the winter
+import { MAC_RINGS } from './archive-mac-hubs.js'; // the Project MAC webrings
+import { STUNLAW_SITES } from './archive-stunlaw.js'; // a weblog, on the thing it is inside
+import { SELF_GUIDE } from './archive-selfguide.js'; // the guide, as the outside serves it
 import { INDIE_A } from './archive-indie-a.js';   // Madchester, baggy, the crossover
 import { INDIE_B } from './archive-indie-b.js';   // shoegaze
 import { INDIE_C } from './archive-indie-c.js';   // Britpop
@@ -417,10 +427,14 @@ export const ARCHIVED_SITES = [
   ...ARCH_RINGS,
   ...PHOT_A, ...PHOT_B, ...PHOT_C, ...PHOT_D, ...PHOT_E, ...PHOT_F,
   ...PHOT_RINGS,
-  ...MYTH_A, ...MYTH_B, ...MYTH_C, ...MYTH_D, ...MYTH_E, ...MYTH_F,
+  ...MYTH_A, ...MYTH_B, ...MYTH_C, ...MYTH_D, ...MYTH_E, ...MYTH_F, ...MYTH_G,
   ...MYTH_RINGS,
   ...CRYP_A, ...CRYP_B, ...CRYP_C, ...CRYP_D, ...CRYP_E, ...CRYP_F, ...CRYP_G,
   ...CRYP_RINGS,
+  ...MAC_A, ...MAC_B, ...MAC_C, ...MAC_D, ...MAC_E, ...MAC_F,
+  ...MAC_RINGS,
+  ...STUNLAW_SITES,
+  ...SELF_GUIDE,
   ...INDIE_A, ...INDIE_B, ...INDIE_C, ...INDIE_D,
   ...INDIE_E, ...INDIE_F, ...INDIE_G,
   ...INDIE_RINGS,

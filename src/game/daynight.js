@@ -34,8 +34,8 @@ function smoothstep(t) {
 }
 
 export class DayNight {
-  constructor(dayLengthSeconds = 480, startHour = 9) {
-    this.dayLength = dayLengthSeconds; // real seconds per 24 game hours
+  constructor(dayLengthSeconds = 2700, startHour = 9) {
+    this.dayLength = dayLengthSeconds; // real seconds per 24 game hours (45 min: a gentler run to POSEIDON for new players)
     this.startHour = startHour;
     this.elapsed = 0;     // real seconds since start
     this.rate = 1;        // game-mode clock multiplier; 1 is Medium

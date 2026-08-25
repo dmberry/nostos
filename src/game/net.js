@@ -43,7 +43,8 @@
 import { CHECKPOINTS } from './v-model.js';
 import { islandProfile } from './islands.js';
 import { docsPage, docTitle, DOC_TOPICS } from './ml-docs.js';
-import { NOTE_FILE, SESSION_OPENER } from './seals.js';
+import { NOTE_FILE, SESSION_OPENER, FOURTH_FILE } from './seals.js';
+import { LEDGER_ML } from './relay-store.js';
 
 // The riddle sits in its own file rather than in the box's general readme,
 // because somebody standing at a drive looks at the thing NEXT TO the file
@@ -1606,8 +1607,10 @@ const RELAY_README = [
   '',
   'sniffer.ml   names every machine the card can hear',
   'watch.ml     names only the ones inside ten metres',
+  'ledger.ml    six counters in, six words out. arithmetic and a list.',
   '',
   'note.asc      sealed. it is not ours and we did not open it.',
+  'fourth.asc    sealed, and worse. none of the keys we have touch it.',
   '',
   'THIS BOX DOES NOT RUN ANY OF THEM. It has no ml. It holds files and hands',
   'them over, and that is the whole of what it is: somewhere to leave a thing',
@@ -1665,6 +1668,16 @@ export const RELAY_FILES = [
     blurb: 'opens a sealed thing that is not on this box. short on purpose' },
   { name: 'note.asc', body: NOTE_FILE,
     blurb: 'sealed. five-byte xor. the key is the name at the foot of it' },
+  // Packed on the disk, plain by the time you have it. It reads nothing and
+  // sends nothing: six numbers in, six words out, and the arithmetic is on the
+  // face of it. What the words are for is not on this box.
+  { name: 'ledger.ml', body: LEDGER_ML,
+    blurb: 'turns six counters into six words. arithmetic and a list' },
+  // The courier's fourth. Served for the same reason as note.asc: it is not
+  // ours, we cannot open it, and a thing nobody can read is still a thing
+  // somebody wrote.
+  { name: 'fourth.asc', body: FOURTH_FILE,
+    blurb: 'sealed. not the letter\'s cipher and not the warning\'s' },
 ];
 
 export function relayFile(name) {

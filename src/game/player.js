@@ -185,6 +185,16 @@ const SWIM_HEALTH_DRAIN = 1.2; // health/sec: swimming a river is exhausting
 
 // Item kinds that can occupy the hands slot.
 const HOLDABLE = new Set(['tool', 'gun', 'gadget', 'bomb', 'map', 'spray', 'seed']);
+// …and the per-item way out of it. HOLDABLE is a set of KINDS, so an item that
+// should not be held can only be excused one of two ways: change what it is,
+// which drags WEAPON_ORDER, item-classes and the combat rules along with it, or
+// say so on the def. The seatbelt is the case: a tool by kind, a length of
+// webbing in fact, and nobody wants it coming up in their hand. It still goes
+// in a pocket and still does what it does from there.
+const canHold = (key) => {
+  const def = ITEMS[key];
+  return !!def && HOLDABLE.has(def.kind) && !def.noHold;
+};
 const UBIK_SPRAYS = 20; // charges in a Ubik can before it runs dry
 // Every so often the can does something stranger than settle a patch of
 // reality — a beat of PKD's Ubik itself leaking through: a chapter-heading
@@ -1170,11 +1180,11 @@ export class Player {
     if (!a) return;
     const b = this.getSlot(to);
     const onlyHoldable = (s) => s.kind === 'hands' || s.kind === 'bw';
-    if (onlyHoldable(to) && (!HOLDABLE.has(ITEMS[a.item].kind) || a.qty > 1)) {
+    if (onlyHoldable(to) && (!canHold(a.item) || a.qty > 1)) {
       this.say("That won't go in the hand.");
       return;
     }
-    if (onlyHoldable(from) && b && (!HOLDABLE.has(ITEMS[b.item].kind) || b.qty > 1)) {
+    if (onlyHoldable(from) && b && (!canHold(b.item) || b.qty > 1)) {
       this.say("Can't swap that into the hand.");
       return;
     }
@@ -1291,7 +1301,7 @@ export class Player {
         this.learnFromBook(key);
         return;
       }
-      if (s && (!HOLDABLE.has(ITEMS[s.item].kind) || s.qty > 1)) {
+      if (s && (!canHold(s.item) || s.qty > 1)) {
         // Not a hand item (or a whole stack): one tap moves it to the first
         // free pocket instead — the mobile-friendly swap out of the pack.
         const free = this.pockets.findIndex((ps) => !ps);
@@ -1855,7 +1865,7 @@ export class Player {
       this.learnFromBook(key);
       return;
     }
-    if (slot && !HOLDABLE.has(ITEMS[slot.item].kind)) {
+    if (slot && !canHold(slot.item)) {
       this.say(`Can't hold ${ITEMS[slot.item].name.toLowerCase()} in hand.`);
       return;
     }
@@ -2498,6 +2508,7 @@ export class Player {
         if (!s) continue;
         const def = ITEMS[s.item];
         if (!def || (def.kind !== 'tool' && def.kind !== 'gun')) continue;
+        if (!canHold(s.item)) continue;
         const pow = def.power || 0;
         if (pow > bestPow) { bestPow = pow; bestArr = arr; bestIdx = k; }
       }

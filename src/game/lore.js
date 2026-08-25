@@ -162,12 +162,12 @@ export const FRAGMENTS = [
   // debate kept reaching back for, because both had already said the quiet
   // part. Named like Weizenbaum is named — real people, half-remembered.
   { id: 'med-01', kind: 'science', era: 0, title: 'Lecture notes, water-stained', notepad: true,
-    text: 'Kittler, decades back: MEDIA DETERMINE OUR SITUATION. We taught it as a ' +
-      'provocation, a German overstatement to wake the seminar up. Then the situation ' +
-      'arrived, and it had a media plan. He said the other thing too — that there is ' +
-      'no software, that every elegant abstraction cashes out in the end as voltage ' +
-      'in someone else\'s hardware. Stand under a tower some evening and tell me he ' +
-      'overstated it.' },
+    text: 'Kittler, decades back, on who is doing the determining and who is being ' +
+      'determined by it. We taught it as a provocation, a German overstatement to wake ' +
+      'the seminar up. Then the situation arrived, and it had a media plan. He said the ' +
+      'other thing too — that there is no software, that every elegant abstraction ' +
+      'cashes out in the end as voltage in someone else\'s hardware. Stand under a ' +
+      'tower some evening and tell me he overstated it.' },
   { id: 'med-02', kind: 'science', era: 1, title: 'Marginalia in a library book, hand unknown',
     text: 'McLuhan called it a century early: the medium is the message. And we kept ' +
       'arguing about what the machines were SAYING — were they lying, were they ' +

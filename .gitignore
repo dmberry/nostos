@@ -16,3 +16,11 @@ bml-examples/
 # in, one line per version, and the plan dates its entries and names people.
 CHANGELOG.md
 docs/PLAN.md
+# …and every other planning document. Same reason: a plan dates its entries,
+# quotes people by name and describes how the thing is actually built, none of
+# which belongs in a repo that is itself part of the fiction. This is a pattern
+# rather than a list because naming them one at a time is how two of them ended
+# up committed (character-3d-plan.md in v1.8, terrain-3d-plan.md since August).
+# They stay on disk and stay useful; they do not ship.
+docs/*-plan.md
+docs/*-PLAN.md

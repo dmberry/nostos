@@ -25,11 +25,12 @@ import {
   cabinetSave, cabinetView, readyToThink, cabinetAuto, cabinetSelfTick, HER_LINE,
 } from './game/draughts-cabinet.js';
 import { blightStep, tileBlighted, blightDepth, obeliskLive, BLIGHT_SICK_BAND, BLIGHTABLE } from './game/blight.js';
+import { makeGardenerState, gardenerOrder, calypsoStamp } from './game/gardeners.js';
 import { makeRng } from './game/rng.js';
 import { DayNight } from './game/daynight.js';
 import { Minimap } from './game/minimap.js';
 import { spawnBirds, updateBirds } from './game/birds.js';
-import { spawnRobots, registerRobotsSystem, spawnW1s, spawnW3, spawnW4, spawnW5, spawnM4, spawnM5, spawnM6, spawnGuard, drawRobot, setUnitTagger, setUnitTagsClickable, unitTagAt, W5_PROGRAM, v1BuildName, reviveUnit } from './game/robots.js';
+import { spawnRobots, registerRobotsSystem, spawnW1s, spawnW3, spawnW4, spawnW5, spawnM4, spawnM5, spawnM6, spawnV5, spawnGuard, drawRobot, setUnitTagger, setUnitTagsClickable, unitTagAt, W5_PROGRAM, v1BuildName, reviveUnit } from './game/robots.js';
 import { makeVModel } from './game/v-model.js';
 // #141: the permission POSEIDON's net has to be shown.
 import { permissionFile, readPermission, permissionBanner, PERMISSION_FILE,
@@ -180,6 +181,37 @@ registerRobotsSystem(); // robots' AI ticks via systems.runUpdate (order 30); se
 // HUD untouched) and the W-factory throws a W4 toward the doorway. `calm` clears
 // the flare when the fortress stands down. (Severing the link before it fires is
 // a terminal hack — the adjacent-possible that replaced the old smashable mast.)
+
+// The malformed build orders. The rule is in game/gardeners.js, which is pure
+// and tested; this end owns the world: what is standing, what the works can
+// answer, and where a new unit is seated.
+//
+// A V-5 is a v1 wearing the gardener flag; a W-5 is its own type and carries no
+// flag, so the cap has to ask about both.
+const _gardeners = makeGardenerState();
+
+function gardenerFault(dt, obs, blightRunning) {
+  const kind = gardenerOrder(_gardeners, dt, {
+    worksLive: factoryLive(),
+    alarm: !!map.holdAlarm,
+    ended: !!player._ended,
+    blightRunning,
+    front: obs.reduce((m, o) => Math.max(m, o.blightR || 0), 0),
+    live: robots.filter((r) => r && !r.dead && (r.hp == null || r.hp > 0)
+      && (r.gardener || r.type === 'w5')).length,
+  });
+  if (!kind) return;
+  const seed = Math.floor(Math.random() * 0x7fffffff);
+  const g = kind === 'w5'
+    ? spawnW5(map, seed, factoryCx(), factoryCy())
+    : spawnV5(map, seed, factoryCx(), factoryCy());
+  if (!g) return;
+  g.program = calypsoStamp(g.program, kind);
+  g.authored = 'CALYPSO';
+  robots.push(g);
+  kleos('gardenerMade', { from: 'works', mark: kind });
+}
+
 const worldStir = {
   stir() {
     for (const o of obeliskObjs) if (!o.destroyed) o.stirred = true;
@@ -11515,8 +11547,10 @@ function updateBlight(dt) {
   const linkDown = networkLinkDown(obs, liveObs);
   // Grow every tower's front every frame (smooth) while the chain is whole, but only
   // re-paint the grid a few times a second.
-  blightStep(obs, dt, !!player.skylinkActive && !player._ended && !linkDown);
+  const blightRunning = !!player.skylinkActive && !player._ended && !linkDown;
+  blightStep(obs, dt, blightRunning);
   updateFog(dt, obs);
+  gardenerFault(dt, obs, blightRunning);
   _blightClock += dt;
   if (_blightClock < 0.4) return;
   _blightClock = 0;
