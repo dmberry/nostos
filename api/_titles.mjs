@@ -9,6 +9,7 @@ export const TITLES = {
   "a-history-of-ai.geocities.ws": "A HISTORY OF AI // one student’s survey",
   "a-history-of-home-computers.geocities.ws": "A HISTORY OF THE HOME COMPUTER // Altair to Windows 95",
   "abraham-lincoln.geocities.ws": "a shrine to Abraham Lincoln (1809–1865)",
+  "abstraction-and-writing.geocities.ws": "ABSTRACTION AND WRITING // from the novel to the model (Healey)",
   "acid-house.geocities.ws": "ACID HOUSE // the 303 and the Second Summer of Love",
   "acorn-archimedes.geocities.ws": "THE ACORN ARCHIMEDES // the fastest machine nobody bought",
   "ada-language.geocities.ws": "ADA // big, careful, and named for the right person",

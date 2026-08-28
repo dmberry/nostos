@@ -291,6 +291,8 @@ const DHALIWAL = P('the-computational.geocities.ws', 'THE COMPUTATIONAL',
     'is Basel, and i am told the difference is not a small one, and that saying',
     'otherwise in the wrong bar would be a mistake. noted, and corrected, and i',
     'am sorry.]</small></p>',
+    '<p><small>[there is somebody else in that lab worth reading and he now has',
+    'a page too: <a href="abstraction-and-writing.geocities.ws">Healey</a>.]</small></p>',
     '<hr>',
     '<p>Dhaliwal works on computation as a cultural object, not only a technical',
     'one. His wager is that the computer, the program, the neural network and even',
@@ -328,6 +330,106 @@ const DHALIWAL = P('the-computational.geocities.ws', 'THE COMPUTATIONAL',
     '[ <a href="mediatheory-ring.geocities.ws">Media Theory Ring</a> ]',
     '[ <a href="digital-humanities-ring.geocities.ws">Digital Humanities</a> ]',
     '[ <a href="codestudies-ring.geocities.ws">Critical Code &amp; Software Studies</a> ]<br>',
+    'a ring member. « prev · random · next »',
+    '</small></p>',
+  ]);
+
+
+// ---- Healey: abstraction, from the novel to the model ------------------------
+//
+// Same lab as Dhaliwal, in Basel, and the same student keeps both pages. She
+// found him through a footnote, which is how anybody finds a postdoc.
+//
+// THE SPINE IS THE SPAN. Seventeenth century to now, early English novel to
+// large language model, treated as one history of abstraction rather than as a
+// before and an after. That is the claim worth getting right, and it is a more
+// interesting one than either of the two things usually said about models.
+//
+// The employment history is not decoration either. Verso, the Graeber
+// institute, and IBM Research, which is a set of rooms most people only get
+// into one of. The page notices and does not editorialise.
+//
+// He is also the man who wrote in about Bern. That is not on this page. It is
+// on two Swiss pages that have never heard of him professionally and quote one
+// line of his as though it were scripture, each in support of the opposite
+// case.
+
+const HEALEY = P('abstraction-and-writing.geocities.ws', 'ABSTRACTION',
+  'ABSTRACTION AND WRITING // from the novel to the model (Healey)', [
+    '<!--bg:mediatheory-->',
+    '<h1>ABSTRACTION AND WRITING</h1>',
+    '<p><small>a page for Ryan Healey, kept by the same person who keeps',
+    '<a href="the-computational.geocities.ws">the Dhaliwal page</a>. they are in',
+    'the same lab in Basel, which i found out after making both pages, and i have',
+    'decided that is fine. — s.</small></p>',
+    '<hr>',
+    '<p>The project, in his own framing, is a literary history of abstraction in',
+    'writing and computation, from the seventeenth century to today, from the',
+    'early English novel to the large language model.</p>',
+    '<p>Read that again, because the span is the argument. Not the novel, and',
+    'then later and separately the machine. One history, with abstraction as the',
+    'thing being tracked through it.</p>',
+    '<h2>What that means</h2>',
+    '<p>Abstraction here is not a mood or a difficulty. It is a technique. It is',
+    'what you do when you take particular things and make them stand for a class',
+    'of things, so that they can be sorted, compared, indexed, counted and',
+    'operated on without being individually attended to.</p>',
+    '<p>And it is something writing does, not something a mind does privately',
+    'and then writes down. The novel was a machine for it. So was the periodical,',
+    'the encyclopedia, the classification, the index. So is the model.</p>',
+    '<p>Which is why he can put the seventeenth century and the present in the',
+    'same study without it being a stunt. The question is the same question in',
+    'both places: what has this equipment made abstraction able to look like, and',
+    'what has it made information able to do.</p>',
+    '<h2>Genre</h2>',
+    '<p>His work on eighteenth-century genres came out in <i>Representations</i>,',
+    'and genre is exactly the right test case, because genre is a sorting',
+    'problem.</p>',
+    '<p>It is people deciding which pile a book goes in, at scale, by rules they',
+    'cannot fully state and would argue about if pressed. Which is the same',
+    'problem a classifier has, three hundred years later, with the same',
+    'difficulty about the rules and rather less candour concerning it. The',
+    'approach in that paper is itself computational, which i take to be the',
+    'point: a method that does the thing it is describing.</p>',
+    '<h2>Where he has been</h2>',
+    '<pre class="jb-list">',
+    '  Cambridge     M.Phil., and worked with the Concept Lab,',
+    '                who were doing conceptual history by',
+    '                computation before it was a field',
+    '',
+    '  New York      Ph.D. in English at NYU. Fellow at the',
+    '                Center for the Humanities, and a founding',
+    '                member of the Digital Theory Lab',
+    '',
+    '  Basel         the Digital Humanities Lab, now',
+    '</pre>',
+    '<p>And before or alongside that: <b>Verso</b>, the <b>David Graeber',
+    'Institute</b>, and <b>IBM Research</b>.</p>',
+    '<p>I have read that list several times. A left publisher, an anthropologist\u2019s',
+    'estate, and the research arm of the company that sold the mainframes. Most',
+    'people who write about computation have been in one of those three rooms.</p>',
+    '<h2>The essays</h2>',
+    '<p>He writes outside the journals too, in <i>Bookforum</i>, the',
+    '<i>Los Angeles Review of Books</i> and the <i>New Inquiry</i>, and that is',
+    'where to start if the journal work looks steep. It is where mine started.</p>',
+    '<h2>How i got here</h2>',
+    '<p>A footnote. That is how you find a postdoc. There is no other route: the',
+    'book is not out, they are not on the reading list, and the only way you',
+    'learn they exist is that somebody senior has cited them and you were the one',
+    'person who went and looked it up.</p>',
+    '<hr>',
+    '<p>Neighbours. <a href="the-computational.geocities.ws">Dhaliwal</a>, same',
+    'lab, on reading computation as culture.',
+    '<a href="latent-space.geocities.ws">Offert</a> on what the machine actually',
+    'sees. And <a href="software-studies.geocities.ws">Fuller</a>, because',
+    'somebody had to say software was a thing you could study at all.</p>',
+    '<hr>',
+    '<p><small>counter: 00038 · under construction · i have three of the essays',
+    'and none of the journal work, which is behind a paywall my library does not',
+    'have</small></p>',
+    '<p><small>',
+    '[ <a href="mediatheory-ring.geocities.ws">Media Theory Ring</a> ]',
+    '[ <a href="digital-humanities-ring.geocities.ws">Digital Humanities</a> ]<br>',
     'a ring member. « prev · random · next »',
     '</small></p>',
   ]);
@@ -391,4 +493,4 @@ const MBEMBE = P('necropolitics.geocities.ws', 'NECROPOLITICS',
     '</small></p>',
   ]);
 
-export const MT_H = [FAZI, PARISI, FULLER, DHALIWAL, MBEMBE];
+export const MT_H = [FAZI, PARISI, FULLER, DHALIWAL, HEALEY, MBEMBE];

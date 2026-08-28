@@ -24,6 +24,12 @@
 // here already holding the joke. Nothing here points at that page. It does not
 // need to.
 //
+// BOTH KEEPERS QUOTE THE SAME LINE, by Ryan Healey, who is on the media theory
+// ring as a scholar of writing systems and is not connected to either of them
+// there. Each takes it as vindication. Neither notices that a sentence about an
+// ontological gap works equally well from either side of one, which is the
+// property that made it worth quoting.
+//
 // Facts checked: Basel into the Confederation 1501, university 1460, Erasmus
 // dead there 1536 and buried in the Minster, the Amerbach cabinet bought by the
 // city in 1661, Nietzsche in the chair of classical philology 1869 to 1879,
@@ -119,6 +125,19 @@ const BASEL = P('basel.geocities.ws', 'BASEL',
     '<p>They will tell you they are the largest something-or-other of the',
     'sixteenth century. They tell everybody. Ask a Berner a question and take a',
     'seat.</p>',
+    '<h2>The sentence</h2>',
+    '<p>An academic wrote to me last year, an American at the university here,',
+    'having got into an argument somewhere on the internet about a machine that',
+    'could not tell the two cities apart. He put it better in one line than I',
+    'have managed on this whole page:</p>',
+    '<blockquote>',
+    '<p>the vast ontological gap between the Berner and the Basler</p>',
+    '<p><small>Ryan Healey</small></p>',
+    '</blockquote>',
+    '<p>Ontological. Not cultural, not historical, not a matter of taste.',
+    'Ontological, meaning a difference in what a thing <i>is</i>. He is quite',
+    'right and I have had it printed out and put on the wall of the office.</p>',
+    '<p>I understand the gentleman in Bern has also printed it out.</p>',
     '<p>He has written a reply. It is <a href="bern.geocities.ws">here</a>. He is',
     'a decent man and he is wrong.</p>',
     '<hr>',
@@ -204,6 +223,17 @@ const BERN = P('bern.geocities.ws', 'BERN',
     'you he is European before he tells you he is Swiss. This is not an',
     'accusation. He would agree with every word of it and take it as a',
     'compliment, which is exactly my point.</p>',
+    '<p>He has put a line on his page from an academic at the university there,',
+    'an American, who wrote to us both. I have it as well:</p>',
+    '<blockquote>',
+    '<p>the vast ontological gap between the Berner and the Basler</p>',
+    '<p><small>Ryan Healey</small></p>',
+    '</blockquote>',
+    '<p>Exactly so. It is a gap in what a person <i>is</i>, and I am glad it took',
+    'somebody from outside to say it plainly, because within the country it is',
+    'thought impolite.</p>',
+    '<p>I notice he is pleased with the sentence too. I would point out that a',
+    'gap has two sides and he has only ever stood on one of them.</p>',
     '<p>Twice a year the argument is conducted properly, by Young Boys and FC',
     'Basel, and I am not going to discuss the results.</p>',
     '<hr>',
