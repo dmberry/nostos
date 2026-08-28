@@ -233,6 +233,7 @@ export const TITLES = {
   "boolean-logic.geocities.ws": "GEORGE BOOLE // the laws of thought",
   "boomers.geocities.ws": "A reply, from somebody born in 1951",
   "boundary-objects.geocities.ws": "Susan Leigh Star — boundary objects &amp; infrastructure",
+  "bovisand.geocities.ws": "bovisands, devon",
   "bowie-low.geocities.ws": "David Bowie — Low (RCA, 1977)",
   "boxing-ring-webring.geocities.ws": "The Boxing Ring",
   "br-ambedkar.geocities.ws": "reading Annihilation of Caste // notes (Ambedkar)",
