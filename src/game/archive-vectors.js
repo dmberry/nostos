@@ -632,7 +632,7 @@ VECTOR_SITES.push({
   name: 'PLYMOUTH BRETHREN',
   title: 'The Plymouth Brethren — what I remember, set down carefully',
   body: [
-    '<!--bg:lace-->',
+    '<!--bg:grey-->',
     '<h1>The Plymouth Brethren</h1>',
     '<p><small>Written by somebody brought up in it, who is not in it now, and',
     'who is trying to be accurate rather than even.</small></p>',
@@ -804,7 +804,7 @@ VECTOR_SITES.push({
   name: 'BEARWOOD GOSPEL HALL',
   title: 'Bearwood Gospel Hall — a history of the building',
   body: [
-    '<!--bg:lace-->',
+    '<!--bg:grey-->',
     '<h1>Bearwood Gospel Hall</h1>',
     '<p><small>A history of the building and the assembly in it. Two years of',
     'evenings, the county history, a newspaper cutting from 1896, and four',
