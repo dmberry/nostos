@@ -84,6 +84,7 @@ import { ENGINEERS_E } from './archive-engineers-e.js';   // interaction, graphi
 import { ENGINEERS_F } from './archive-engineers-f.js';   // networks
 import { ENGINEERS_G } from './archive-engineers-g.js';   // storage, languages, systems
 import { ENGINEERS_H } from './archive-engineers-h.js';   // materiality & the makers left out
+import { ENGINEERS_I } from './archive-engineers-i.js';   // Licklider, OLIVER, Alan Kay
 import { ENGINEER_RINGS } from './archive-engineers-hubs.js'; // the retrocomputing webrings
 import { MUSIC_A } from './archive-music-a.js';   // jazz & the recorded voice
 import { MUSIC_B } from './archive-music-b.js';   // the LP & the studio as instrument
@@ -128,6 +129,7 @@ import { SFF_C } from './archive-sff-c.js'; // the new wave
 import { SFF_D } from './archive-sff-d.js'; // cyberpunk
 import { SFF_E } from './archive-sff-e.js'; // fantasy & the epic
 import { SFF_F } from './archive-sff-f.js'; // the fandom & culture
+import { SFF_I } from './archive-sff-i.js'; // Olaf Stapledon
 import { SFF_RINGS } from './archive-sff-hubs.js'; // the SF & fantasy webrings
 import { SPRT_A } from './archive-sprt-a.js'; // football
 import { SPRT_B } from './archive-sprt-b.js'; // boxing
@@ -236,7 +238,11 @@ import { AIH_E } from './archive-ai-e.js';   // transformers & the LLM era
 import { AIH_F } from './archive-ai-f.js';   // the critics & the philosophy
 import { AIH_G } from './archive-ai-g.js';   // people, places, landmarks
 import { AIH_H } from './archive-ai-h.js';   // the timeline & the big questions
+import { AIH_I } from './archive-ai-i.js';   // Serbelloni 1972
 import { AIH_RINGS } from './archive-ai-hubs.js'; // the history-of-AI webrings
+import { PSB_A } from './archive-psb-a.js';       // public service broadcasting
+import { PSB_B } from './archive-psb-b.js';       // Marconi, the Literacy Project
+import { PSB_RINGS } from './archive-psb-hubs.js'; // the public service ring
 import { HOME_A } from './archive-home-a.js';   // the kit era, 1975
 import { HOME_B } from './archive-home-b.js';   // the 1977 trinity & 6502
 import { HOME_C } from './archive-home-c.js';   // the 8-bit boom
@@ -282,6 +288,12 @@ import { LIT_C } from './archive-lit-c.js';   // modernism
 import { LIT_D } from './archive-lit-d.js';   // the fantastic & metafiction
 import { LIT_E } from './archive-lit-e.js';   // American letters
 import { LIT_F } from './archive-lit-f.js';   // gothic, romance & the wide world
+import { LIT_G } from './archive-lit-g.js';   // the poetry
+import { REL_A } from './archive-rel-a.js';   // scripture & transmission
+import { REL_B } from './archive-rel-b.js';   // schisms & neoplatonism
+import { REL_RINGS } from './archive-rel-hubs.js'; // the religion webrings
+import { VEC_SITES } from './archive-vec.js';  // the Centre for Vector Media
+import { SMETHWICK_SITES } from './archive-smethwick.js'; // Smethwick, the brewery, the schools
 import { LIT_RINGS } from './archive-lit-hubs.js'; // the literature webrings
 import { MATH_A } from './archive-math-a.js';   // antiquity & geometry
 import { MATH_B } from './archive-math-b.js';   // the calculus
@@ -406,7 +418,7 @@ export const ARCHIVED_SITES = [
   ...THINKERS_E, ...THINKERS_F, ...THINKERS_G, ...THINKERS_H,
   ...THINKER_RINGS, ...ENDING_PAGES,
   ...ENGINEERS_A, ...ENGINEERS_B, ...ENGINEERS_C, ...ENGINEERS_D,
-  ...ENGINEERS_E, ...ENGINEERS_F, ...ENGINEERS_G, ...ENGINEERS_H,
+  ...ENGINEERS_E, ...ENGINEERS_F, ...ENGINEERS_G, ...ENGINEERS_H, ...ENGINEERS_I,
   ...ENGINEER_RINGS,
   ...MUSIC_A, ...MUSIC_B, ...MUSIC_C, ...MUSIC_D,
   ...MUSIC_E, ...MUSIC_F, ...MUSIC_G, ...MUSIC_H,
@@ -419,7 +431,7 @@ export const ARCHIVED_SITES = [
   ...PARA_RINGS,
   ...CINE_A, ...CINE_B, ...CINE_C, ...CINE_D, ...CINE_E, ...CINE_F,
   ...CINE_RINGS,
-  ...SFF_A, ...SFF_B, ...SFF_C, ...SFF_D, ...SFF_E, ...SFF_F,
+  ...SFF_A, ...SFF_B, ...SFF_C, ...SFF_D, ...SFF_E, ...SFF_F, ...SFF_I,
   ...SFF_RINGS,
   ...SPRT_A, ...SPRT_B, ...SPRT_C, ...SPRT_D, ...SPRT_E, ...SPRT_F,
   ...SPRT_RINGS,
@@ -453,8 +465,9 @@ export const ARCHIVED_SITES = [
   ...BOTS_E, ...BOTS_F, ...BOTS_G, ...BOTS_H,
   ...BOTS_RINGS,
   ...AIH_A, ...AIH_B, ...AIH_C, ...AIH_D,
-  ...AIH_E, ...AIH_F, ...AIH_G, ...AIH_H,
+  ...AIH_E, ...AIH_F, ...AIH_G, ...AIH_H, ...AIH_I,
   ...AIH_RINGS,
+  ...PSB_A, ...PSB_B, ...PSB_RINGS,
   ...HOME_A, ...HOME_B, ...HOME_C, ...HOME_D,
   ...HOME_E, ...HOME_F, ...HOME_G, ...HOME_H,
   ...HOME_RINGS,
@@ -467,8 +480,11 @@ export const ARCHIVED_SITES = [
   ...LAB_RINGS,
   ...PE_A, ...PE_B, ...PE_C, ...PE_D, ...PE_E, ...PE_F,
   ...PE_RINGS,
-  ...LIT_A, ...LIT_B, ...LIT_C, ...LIT_D, ...LIT_E, ...LIT_F,
+  ...LIT_A, ...LIT_B, ...LIT_C, ...LIT_D, ...LIT_E, ...LIT_F, ...LIT_G,
   ...LIT_RINGS,
+  ...REL_A, ...REL_B, ...REL_RINGS,
+  ...VEC_SITES,
+  ...SMETHWICK_SITES,
   ...MATH_A, ...MATH_B, ...MATH_C, ...MATH_D, ...MATH_E, ...MATH_F,
   ...MATH_RINGS,
   ...AA_A, ...AA_B, ...AA_C, ...AA_D, ...AA_E, ...AA_F,

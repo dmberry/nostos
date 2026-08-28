@@ -92,7 +92,9 @@ export const ENGINEER_RINGS = [
      ['metcalfe-ethernet.geocities.ws', 'Metcalfe &amp; Boggs / Ethernet'],
      ['engelbart-nls.geocities.ws', 'Engelbart / NLS &amp; the mouse'],
      ['xerox-alto-parc.geocities.ws', 'Xerox PARC / the Alto'],
-     ['sutherland-sketchpad.geocities.ws', 'Sutherland / Sketchpad']]),
+     ['sutherland-sketchpad.geocities.ws', 'Sutherland / Sketchpad'],
+     ['licklider.geocities.ws', 'Licklider / who paid for it'],
+     ['oliver-1968.geocities.ws', 'OLIVER, 1968']]),
 
   ring('british-computing-ring.geocities.ws', 'BRITISH COMPUTING RING',
     'British Computing', 'valve',
@@ -117,6 +119,7 @@ export const ENGINEER_RINGS = [
       + 'systems, algorithms. The machine did nothing until somebody told it '
       + 'how, and the telling turned out to be the hard part.</p>'],
     [['edsac-wilkes.geocities.ws', 'Wilkes / the first programming textbook'],
+     ['alan-kay.geocities.ws', 'Alan Kay / Smalltalk &amp; the Dynabook'],
      ['backus-fortran.geocities.ws', 'Backus / FORTRAN'],
      ['mccarthy-lisp.geocities.ws', 'McCarthy / LISP'],
      ['dijkstra.geocities.ws', 'Dijkstra'],

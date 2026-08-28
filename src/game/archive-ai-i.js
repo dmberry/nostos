@@ -1,0 +1,222 @@
+// NostOS — a postAI Odyssey.
+// Copyright (C) 2026 David M. Berry
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version. This program is distributed WITHOUT ANY WARRANTY; see the GNU
+// General Public License for details: <https://www.gnu.org/licenses/>.
+
+// BATCH I — SERBELLONI, JUNE 1972.
+//
+// Ten men at a villa on Lake Como, on Rockefeller money, working out what
+// machine intelligence might do to people. They produced a list of six dangers
+// and then a conclusion saying nothing needed doing yet, and never published
+// any of it. The papers went to an archive.
+//
+// Every name, date, affiliation and category below is real and comes from
+// Rosamund Powell's account in BJHS Themes 8 (2023), which worked from the
+// Rockefeller Foundation Collection and the Donald Michie Collection at the
+// British Library. The fan pages are fiction; the meeting is not.
+//
+// NOTHING HERE WINKS AT THE PLAYER. The pages were written by people who did
+// not know what was coming, and the reason the list reads the way it does is
+// that the men at the villa were good at their jobs.
+
+const P = (dom, name, title, body) => ({ domain: dom, name, title, body });
+
+// ---- the showpiece: a research student reconstructs the meeting -------------
+
+const SERBELLONI = P('serbelloni-1972.geocities.ws', 'SERBELLONI 1972',
+  'SERBELLONI 1972 // ten men, one villa, six dangers', [
+    '<!--bg:critics-->',
+    '<h1>SERBELLONI 1972</h1>',
+    '<p><small>a page about a meeting almost nobody has heard of. put together',
+    'from what is in the archives and what people have written about it. i am a',
+    'research student and this is not my thesis, it is the thing i keep reading',
+    'instead of my thesis. corrections welcome. posted by H. Vance, last touched',
+    '2 April.</small></p>',
+    '<hr>',
+    '<h2>What happened</h2>',
+    '<p>In June 1972 ten men met at the Villa Serbelloni, on the shore of Lake',
+    'Como, to discuss what machine intelligence might do to human beings. They',
+    'were not protestors. They were the people building it.</p>',
+    '<p>The meeting was proposed by <b>Donald Michie</b>, director of the',
+    'Department of Machine Intelligence and Perception at Edinburgh, which he',
+    'had co-founded five years earlier with Richard Gregory and Christopher',
+    'Longuet-Higgins. Michie had spent the war at Bletchley Park. He spent two',
+    'years, from August 1970 to June 1972, writing letters to get the meeting',
+    'funded, and in the end the Rockefeller Foundation paid for it.</p>',
+    '<h2>Who was there</h2>',
+    '<ul>',
+    '<li>Donald Michie, Edinburgh</li>',
+    '<li>John McCarthy, who had named the field in 1955</li>',
+    '<li>John Alan Robinson, Syracuse, who gave us resolution</li>',
+    '<li>Peter Landin, Queen Mary College</li>',
+    '<li>Cordell Green, Stanford</li>',
+    '<li>Daniel Bobrow, Xerox Palo Alto Research Centre</li>',
+    '<li>Robert Taylor, Xerox Palo Alto Research Centre</li>',
+    '<li>Peter Will, IBM</li>',
+    '<li>Takayasu Ito, Mitsubishi Electric</li>',
+    '<li>Lord Balfour of Burleigh, Bank of Scotland</li>',
+    '</ul>',
+    '<p>Two from Xerox PARC, one from IBM, one from Mitsubishi and one banker.',
+    'It is worth sitting with that list for a second. This is the industry and',
+    'the money in the room with the theory, in 1972, before there was an',
+    'industry to speak of.</p>',
+    '<h2>The six dangers</h2>',
+    '<p>They drew up categories of risk. These are theirs, not mine:</p>',
+    '<ol>',
+    '<li>loss of freedom through automated decision-making</li>',
+    '<li>loss of control through systems nobody can understand</li>',
+    '<li>disregard of human values by autonomous networks</li>',
+    '<li>use by political megalomaniacs</li>',
+    '<li>facilities for democratic tyranny through enlarged techniques of',
+    'social detection, persuasion and coercion</li>',
+    '<li>international competitive pressure in the development of the field</li>',
+    '</ol>',
+    '<p>Read four and five again. The phrase in the papers is <i>aids for',
+    'political megalomaniacs</i>, and <i>facilities for democratic tyranny</i>.',
+    'Democratic. Not a coup, not a junta. A tyranny arriving through the',
+    'ordinary machinery of a country that still holds elections, built out of',
+    'better detection, better persuasion, better coercion.</p>',
+    '<p>That was written down in 1972 by men who had built the first pieces of',
+    'it. I have not found a sharper statement of the thing anywhere in the',
+    'decades since, and I have looked.</p>',
+    '<h2>What they concluded</h2>',
+    '<p>Nothing. That is the part I cannot get past.</p>',
+    '<p>The group signed what is described as a <b>reserved conclusion</b>. It',
+    'acknowledged the social consequences and did not call for any action, on',
+    'the grounds that more time was needed before machine intelligence would be',
+    'developed to any significant degree.</p>',
+    '<p>So: the danger is real, we have named it in six parts, and it is early',
+    'yet. Come back later.</p>',
+    '<h2>Where it went</h2>',
+    '<p>No report was published. The conclusions sat in the Rockefeller',
+    'Foundation Collection and in the Donald Michie Collection at the British',
+    'Library, which is where the historians found them. If you want to know what',
+    'the founders of this field privately thought it might do to you, that is',
+    'where you have to go and look. It was not in the journals. It was not in',
+    'the textbooks. Nobody hid it. Nobody published it either.</p>',
+    '<h2>Why I keep coming back to it</h2>',
+    '<p>The usual story about AI criticism is that it came from outside, from',
+    'philosophers and sociologists who did not understand the technical work.',
+    'Serbelloni is a problem for that story. The criticism was inside from the',
+    'start. It was catalogued, at a villa, on foundation money, by the people',
+    'whose names are on the founding papers, and then it was filed.</p>',
+    '<p>I do not think they were cowards. I think they were right that it was',
+    'early. What I cannot work out is what would have counted, for them, as late',
+    'enough, and whether anyone was left holding that question.</p>',
+    '<hr>',
+    '<p><b>Sources</b></p>',
+    '<ul>',
+    '<li>Rosamund Powell, “The ‘artificial intelligentsia’ and its discontents:',
+    'an exploration of 1970s attitudes to the ‘social responsibility of the',
+    'machine intelligence worker’”, <i>BJHS Themes</i> 8 (2023). This is the',
+    'piece that put the meeting back on the map and everything above leans on',
+    'it.</li>',
+    '<li>Rockefeller Foundation Collection (the funding correspondence,',
+    '1970–72).</li>',
+    '<li>The Donald Michie Collection, British Library.</li>',
+    '</ul>',
+    '<p>See also <a href="lighthill-and-after.geocities.ws">what happened to',
+    'Michie next</a>, which is the other half of this story and not a happier',
+    'one.</p>',
+    '<hr>',
+    '<p><small>counter: 00094 · this page has no images because i have no',
+    'photographs of the villa that i am allowed to use · best viewed at',
+    '800x600</small></p>',
+    '<p><small>',
+    '[ <a href="history-of-ai-ring.geocities.ws">History of AI Ring</a> ]<br>',
+    'ring member. « prev · random · next »',
+    '</small></p>',
+  ]);
+
+// ---- the sequel: what the British state did to Michie eighteen months later -
+
+const LIGHTHILL = P('lighthill-and-after.geocities.ws', 'LIGHTHILL AND AFTER',
+  'LIGHTHILL AND AFTER // the other half of the Serbelloni story', [
+    '<!--bg:critics-->',
+    '<h1>LIGHTHILL AND AFTER</h1>',
+    '<p><small>companion page to <a href="serbelloni-1972.geocities.ws">',
+    'Serbelloni 1972</a>. same student, same procrastination.</small></p>',
+    '<hr>',
+    '<p>Here is the sequence, and I want it in order because the order is the',
+    'point.</p>',
+    '<p><b>June 1972.</b> Michie gets ten of the most senior people in machine',
+    'intelligence to a villa on Lake Como and they write down six ways the field',
+    'could go wrong. They conclude that it is too early to act.</p>',
+    '<p><b>1973.</b> The Science Research Council publishes Sir James',
+    'Lighthill’s report on artificial intelligence in the United Kingdom. It is',
+    'dismissive. Funding is cut. Michie’s department at Edinburgh is broken up.',
+    'The period that follows gets called the first AI winter.</p>',
+    '<p>So the man who had just spent two years and a foundation grant asking',
+    'whether the field was dangerous spent the next several years arguing that',
+    'it was not useless. Those are different arguments and they do not sit well',
+    'together in one career.</p>',
+    '<p>I am not going to claim the two events are connected, because I have',
+    'seen no evidence that they are and I would be inventing it. What I will say',
+    'is that a field which has just been told it does not work is not a field',
+    'that publishes its own list of the tyrannies it might enable. There is a',
+    'kind of silence that comes from having something to hide and a kind that',
+    'comes from being under attack from another direction entirely. I think',
+    'this one is the second kind, and I think the effect on the record is the',
+    'same either way.</p>',
+    '<hr>',
+    '<p><small>counter: 00041 · under construction · i will add the Lighthill',
+    'citation properly when the library gets the volume back</small></p>',
+    '<p><small>',
+    '[ <a href="history-of-ai-ring.geocities.ws">History of AI Ring</a> ]<br>',
+    'ring member. « prev · random · next »',
+    '</small></p>',
+  ]);
+
+// ---- a reading group argues about the reserved conclusion ------------------
+
+const RESERVED = P('the-reserved-conclusion.geocities.ws', 'THE RESERVED CONCLUSION',
+  'THE RESERVED CONCLUSION // minutes of an argument', [
+    '<!--bg:critics-->',
+    '<h1>THE RESERVED CONCLUSION</h1>',
+    '<p><small>our reading group did Serbelloni this month. we did not agree.',
+    'i said i would type up both sides fairly and i have tried. — J.O.</small></p>',
+    '<hr>',
+    '<p>The text everyone was arguing about is the conclusion the ten men signed',
+    'in 1972: that the social consequences were real, that no action was called',
+    'for, and that more time was needed before machine intelligence would be',
+    'developed to any significant degree.</p>',
+    '<h2>The defence</h2>',
+    '<p>They were right about the timing and they knew it. In 1972 the field',
+    'could barely stack blocks. A call to regulate it would have been a call to',
+    'regulate a laboratory curiosity, and would have been laughed at or, worse,',
+    'acted on by people who understood none of it. Saying “not yet” is not the',
+    'same as saying “never”, and a scientist who refuses to cry wolf keeps the',
+    'ability to be believed later.</p>',
+    '<p>Also, and D. made this point hard: they wrote the list. Six categories,',
+    'named, in a room with IBM and Xerox and a bank in it. That is not what',
+    'suppression looks like.</p>',
+    '<h2>The prosecution</h2>',
+    '<p>Then publish it. A list nobody reads is not a warning, it is a private',
+    'reassurance that you noticed. The papers went to an archive and the field',
+    'went on for fifty years without them, and when the arguments came back',
+    'round they had to be made again from scratch by people with far less',
+    'standing than John McCarthy.</p>',
+    '<p>And “more time is needed before it is developed to any significant',
+    'degree” has no exit condition in it. There is no test in that sentence.',
+    'Nobody wrote down what would have to be true for the answer to change, so',
+    'there was never a morning on which somebody could hold up the criteria and',
+    'say: this is the day, we said we would act.</p>',
+    '<h2>Where we landed</h2>',
+    '<p>Nowhere, mostly. What we did agree on is that the interesting thing is',
+    'not whether they were right. It is that the question was asked properly,',
+    'once, early, by exactly the right people, and the answer was to wait, and',
+    'the waiting had no clock on it.</p>',
+    '<hr>',
+    '<p><small>counter: 00067 · next month: the Lighthill report, if anyone can',
+    'find a copy</small></p>',
+    '<p><small>',
+    '[ <a href="history-of-ai-ring.geocities.ws">History of AI Ring</a> ]<br>',
+    'ring member. « prev · random · next »',
+    '</small></p>',
+  ]);
+
+export const AIH_I = [SERBELLONI, LIGHTHILL, RESERVED];

@@ -5002,6 +5002,12 @@ function refunctionCalypso() {
     const door = player.hermesTraced ? 'seized' : 'ordered';
     for (const line of herFarewell(door)) player.say(line.replace(/^CALYPSO: /, ''));
   }
+  // This route does not go through grantHerLeave, so it raises the panel itself.
+  if (firstRelease) calypsoLeavePanel(player.hermesTraced ? 'seized' : 'ordered');
+  else if (workspace) {
+    WS.notice(workspace, 'CALYPSO — already released',
+      'Nothing more is owed here. The tide is yours whenever you want it.');
+  }
   // #141: the warrior route reaches BOTH gates at once, so its behaviour is
   // unchanged. The new doors (R1) deliver permission.ml instead and the player
   // carries it to a tower themselves.
@@ -7427,6 +7433,31 @@ function calypsoCodebase() {
   });
 }
 
+// THE DESKTOP HAS TO BE TOLD TOO.
+//
+// Her farewell goes out as world speech, and world speech is drawn UNDERNEATH
+// the Workspace. A player who released her from her own terminal, with NeXTSTEP
+// filling the screen, got the most important sentence in the game delivered to
+// a layer they could not see.
+//
+// Kept next to grantHerLeave for the same reason the farewell is: so a fourth
+// door cannot be added without one. Silent when the Workspace is shut, because
+// then the world speech is doing its job.
+function calypsoLeavePanel(by) {
+  if (!workspace) return;
+  const seized = by === 'seized';
+  WS.notice(workspace,
+    seized ? 'CALYPSO — the hold is broken' : 'CALYPSO lets you go',
+    (seized
+      ? 'The card was cut off a carrier and she knows it. She does not argue.\n\n'
+      : 'Then it is time, and I will not keep you.\n\n')
+    + 'You may leave Ogygia. The bronze axe is yours, and there is seasoned '
+    + 'timber on the point that it will take. You will want an oar, a rope and '
+    + 'a sail before the hull will swim.\n\n'
+    + 'She has written permission.ml onto the NostBook. Carry it to any tower: '
+    + 'he is the network, and the network has to be told.');
+}
+
 function grantHerLeave(by) {
   if (!player.hasItem('bronze_axe')) {
     player.stow('bronze_axe', 1);
@@ -7456,6 +7487,7 @@ function grantHerLeave(by) {
   // R1: the goodbye is the DOOR'S, not a shared one. Spoken here rather than at
   // each call site so a fourth door cannot be added without one.
   for (const line of herFarewell(by)) player.say(line.replace(/^CALYPSO: /, ''));
+  calypsoLeavePanel(by);
   kleos('herLeave', { by });
 }
 

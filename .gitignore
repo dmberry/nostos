@@ -24,3 +24,10 @@ docs/PLAN.md
 # They stay on disk and stay useful; they do not ship.
 docs/*-plan.md
 docs/*-PLAN.md
+# Image provenance records. They exist for licence compliance and they stay on
+# disk, but they do not belong in the repo: they call the cached web a
+# "feature", date the build, and one of them printed a home directory path.
+# The licences are still honoured — every CC BY and CC BY-SA image is credited
+# in the caption on the page that uses it, in the voice of the page, which is
+# where a GeoCities author would have put it anyway.
+assets/media/web/*/PROVENANCE.md
