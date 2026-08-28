@@ -1366,6 +1366,7 @@ export const TITLES = {
   "qalb-arabic.geocities.ws": "QALB (قلب) // programming in Arabic, right to left (Nasser)",
   "quetzalcoatl.geocities.ws": "QUETZALCOATL — the Feathered Serpent // a shrine",
   "quine.geocities.ws": "Quine circle // minutes, week 5",
+  "quintonpetrol.geocities.ws": "Petrol stations of Quinton",
   "rabindranath-tagore.geocities.ws": "GURUDEV — a shrine to Rabindranath Tagore",
   "racklife.geocities.ws": "Rack Life",
   "racter.geocities.ws": "RACTER // did a program write a book? (coursework)",

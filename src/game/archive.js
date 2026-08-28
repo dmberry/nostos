@@ -787,6 +787,7 @@ const CATEGORY_OF = {
   // wrong heading cannot be browsed to, and browsing is how this archive is
   // meant to be walked. Filed as a directory of the period would have filed
   // them.
+  'quintonpetrol.geocities.ws': 'Society & Culture',
   'bovisand.geocities.ws': 'Society & Culture',
   'smethwick.geocities.ws': 'Society & Culture',
   'capehill.geocities.ws': 'Society & Culture',
