@@ -813,8 +813,31 @@ function searchPage(host, hosts) {
 
 // A results page built from the live host table. Stale on purpose: hosts that
 // are dark still come back as hits, with the note the engine always printed.
+// HTML ENTITIES WERE IN THE HAYSTACK. The index stripped tags and left the
+// entities alone, so a page that writes Who&rsquo;s could not be found by
+// anybody typing who's, and a page with &ldquo;quoted&rdquo; words could not be
+// found by the quoted word with its punctuation. There are thousands of these
+// across the corpus. Decoded here, on both sides, so the crawl sees what a
+// reader sees.
+const SEARCH_ENT = {
+  nbsp: ' ', amp: '&', lt: '<', gt: '>', quot: '"', apos: "'",
+  rsquo: "'", lsquo: "'", ldquo: '"', rdquo: '"', mdash: ' ', ndash: '-',
+  middot: ' ', hellip: '...', deg: ' ', pound: '£', trade: ' ', copy: ' ',
+  eacute: 'e', egrave: 'e', ecirc: 'e', agrave: 'a', aacute: 'a', acirc: 'a',
+  ouml: 'o', uuml: 'u', auml: 'a', ntilde: 'n', ccedil: 'c', oslash: 'o',
+  aring: 'a', szlig: 'ss', iacute: 'i', oacute: 'o', uacute: 'u', tau: 'tau',
+  Lambda: 'lambda', sigma: 'sigma', rarr: ' ', larr: ' ', times: 'x',
+};
+export function searchText(s) {
+  return String(s || '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&#(\d+);/g, (_m, n) => String.fromCharCode(Number(n)))
+    .replace(/&([A-Za-z]+);/g, (_m, k) => (SEARCH_ENT[k] !== undefined ? SEARCH_ENT[k] : ' '))
+    .toLowerCase();
+}
+
 export function searchResults(hosts, query) {
-  const q = String(query || '').trim().toLowerCase();
+  const q = searchText(String(query || '')).trim();
   const words = q.split(/\s+/).filter(Boolean);
   const hit = (h) => {
     // THE TEXT OF THE PAGE COUNTS. Matching only the host, the name and the
@@ -824,7 +847,7 @@ export function searchResults(hosts, query) {
     // answers for the words somebody actually read.
     const cached = h.cached ? archivedSite(h.cached) : null;
     const hay = [h.host, h.name, h.title, h.kind, h.type, h.homeCode, h.cat,
-      cached && cached.body.join(' ').replace(/<[^>]+>/g, ' '),
+      cached && searchText(cached.body.join(' ')),
       h.tour && [h.tour.place, h.tour.tag, h.tour.welcome, h.tour.culture, h.tour.climate, ...(h.tour.tips || []), ...(h.tour.facts || [])].join(' '),
       h.legacy && [h.legacy.org, h.legacy.was, ...(h.legacy.frags || []), ...(h.legacy.notices || [])].join(' '),
     ].filter(Boolean).join(' ').toLowerCase();
@@ -838,8 +861,8 @@ export function searchResults(hosts, query) {
   // 2026-08-17: "his name didn't come up directly in search results ... maybe
   // this affects other pages too?"). It affected every one of them, not one.
   const deptHit = ([key, page]) => {
-    const hay = [key, page.title, page.name, page.body.join(' ').replace(/<[^>]+>/g, ' ')]
-      .filter(Boolean).join(' ').toLowerCase();
+    const hay = searchText([key, page.title, page.name, page.body.join(' ')]
+      .filter(Boolean).join(' '));
     return words.every((w) => hay.includes(w));
   };
   const depts = words.length ? Object.entries(DEPARTMENTS).filter(deptHit) : [];
