@@ -1664,7 +1664,7 @@ export const TITLES = {
   "tetris-pajitnov.geocities.ws": "TETRIS // the falling blocks (Pajitnov)",
   "tetris.geocities.ws": "TETRIS // seven pieces, one line at a time",
   "textile-design-ring.geocities.ws": "Textiles &amp; Rugs Ring",
-  "textprovenance.io": "Text Provenance — analysis result",
+  "textprovenance.io": "Text Provenance — machine-text attribution",
   "the-abduction.geocities.ws": "THE ABDUCTION // from the Hills onward // a chronology",
   "the-african-myths.geocities.ws": "THE AFRICAN MYTHS // a continent of living traditions",
   "the-ai-lab-ring.geocities.ws": "The Lab &amp; the Institution Ring",

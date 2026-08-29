@@ -104,7 +104,7 @@ import { mountSettingsPanel, storedMode, storeMode, setFill } from './game/setti
 import { keeperLs, keeperRead, keeperIsDir } from './game/keeper.js';
 import { buildingName, buildingLook } from './game/buildings.js';
 import { initAchievements, achieveEvent, achieveProfile, achieveRunState, achieveModel, achieveTick, resetRun, setAchieveSink } from './game/achieve.js';
-import { hostTable, findHost, pageFor, renderPage, searchResults, bookmarksPage, favouritesPage, obLibraryPage, obDocPage, whatsNewPage, docsPage, docTitle, programPage, pressPage, wikiPage, deptPage, spoofedAddr, islandSubnet, networksInRange, relayHosts, RELAY_ESSID, RELAY_IP, relayFile, RELAY_FILES, relayBundle, RELAY_BUNDLES, relayBookmarksPage, relayGuestbook, relayGuestbookPage, IFACE, REPORT_HOLD, REPORT_COOLDOWN, HTTPD_PATH, httpdBinary, httpdToken, cacheLink, CACHE_ALIASES, isDept, notInStore, nearestHost } from './game/net.js';
+import { hostTable, findHost, pageFor, renderPage, searchResults, detectorReport, bookmarksPage, favouritesPage, obLibraryPage, obDocPage, whatsNewPage, docsPage, docTitle, programPage, pressPage, wikiPage, deptPage, spoofedAddr, islandSubnet, networksInRange, relayHosts, RELAY_ESSID, RELAY_IP, relayFile, RELAY_FILES, relayBundle, RELAY_BUNDLES, relayBookmarksPage, relayGuestbook, relayGuestbookPage, IFACE, REPORT_HOLD, REPORT_COOLDOWN, HTTPD_PATH, httpdBinary, httpdToken, cacheLink, CACHE_ALIASES, isDept, notInStore, nearestHost } from './game/net.js';
 import { CROSSINGS, islandProfile } from './game/islands.js';
 import { canSchedule, schedule, tickWindows, windowLeft, isOpenToHack, statusLine as maintLine, serviceLog, PART_COST, BOARDS_PER_TOWER } from './game/maintenance.js';
 import { awolList, dueForRecovery, standDown, DETAIL_SIZE } from './game/awol.js';
@@ -7953,6 +7953,13 @@ function nsRender() {
   } else if (v.kind === 'local') {
     // A view of the browser itself: source, document info, the About box.
     html = v.html; title = v.title; loc = `about:${v.title.toLowerCase().replace(/[^a-z]+/g, '-')}`;
+  } else if (v.kind === 'detect') {
+    // THE DETECTOR'S ANSWER. net.js does the whole thing from the text and the
+    // run number, so the same paste at the same run always renders the same
+    // report, and "Analyse again" bumps the run and does not.
+    html = detectorReport(v.text, v.run) || '<h1>TEXT PROVENANCE</h1><p>No text submitted.</p>';
+    title = 'Text Provenance: result';
+    loc = 'http://textprovenance.io/analyse';
   } else if (v.kind === 'search') {
     html = searchResults(hosts, v.q); title = `AltaVista: ${v.q}`;
     loc = `http://altavista.com/cgi-bin/query?q=${encodeURIComponent(v.q).replace(/%20/g, '+')}`;
@@ -8023,6 +8030,39 @@ function nsRender() {
       if (e.key === 'Enter') { e.preventDefault(); run(); }
     });
     searchQ.focus();
+  }
+  // THE DETECTOR. Same wire again: the archived page draws a textarea, this is
+  // the thing with a browser attached. Whatever the player pastes goes straight
+  // to net.js, which decides, arbitrarily, and says so in four significant
+  // figures.
+  const tpGo = nsPageEl.querySelector('#tp-go');
+  const tpInput = nsPageEl.querySelector('#tp-input');
+  if (tpGo && tpInput) {
+    const run = () => {
+      const t = tpInput.value.trim();
+      if (!t) return;
+      nsSetView({ kind: 'detect', text: t, run: 1 });
+      sfx.play('keyclick');
+    };
+    tpGo.addEventListener('click', (e) => { e.preventDefault(); run(); });
+    tpInput.addEventListener('keydown', (e) => { e.stopPropagation(); });
+  }
+  // On the result page: analyse the same text again and get a different answer.
+  const tpAgain = nsPageEl.querySelector('#tp-again');
+  if (tpAgain && web && web.view && web.view.kind === 'detect') {
+    const v0 = web.view;
+    tpAgain.addEventListener('click', (e) => {
+      e.preventDefault();
+      nsSetView({ kind: 'detect', text: v0.text, run: (Number(v0.run) || 1) + 1 });
+      sfx.play('keyclick');
+    });
+  }
+  const tpNew = nsPageEl.querySelector('#tp-new');
+  if (tpNew) {
+    tpNew.addEventListener('click', (e) => {
+      e.preventDefault();
+      nsSetView({ kind: 'host', addr: 'textprovenance.io' });
+    });
   }
   // THE GUESTBOOK SIGNING. Same wire as the search box: net.js draws the field,
   // main.js holds the world. The note lands per terminal (island id) and rides

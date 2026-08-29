@@ -2282,3 +2282,154 @@ export function cacheLink(search, pathname) {
   if (!host || /[\s@]/.test(host)) return null;
   return host;
 }
+
+// ---------------------------------------------------------------------------
+// TEXT PROVENANCE. The detector on textprovenance.io.
+//
+// A player pastes anything into it and gets back a verdict, a confidence, and
+// sentence-level highlighting of the kind the real tools produce.
+//
+// THE VERDICT IS ARBITRARY AND THE PAGE NEVER SAYS SO. It is a hash of the
+// text and the run number, which gives two properties that matter. Same text,
+// same run: the same answer, so it does not read as a coin toss and a player
+// who re-opens the page finds what they left. Same text, NEXT run: a different
+// answer, because "analyse again" increments the run.
+//
+// That divergence is the whole point and it is not invented. It is the
+// documented behaviour: different iterations of a real detector produced
+// materially different results for the same articles, and when asked to
+// explain the discrepancy the people who made it declined to answer.
+//
+// Pure, so it is testable: no clock, no Math.random, nothing from the world.
+const TP_ESC = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+// A cheap stable hash. Same string, same number, every time, on every machine.
+function tpHash(s) {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+  return h >>> 0;
+}
+
+const TP_FEATURES = [
+  'balanced clause structure',
+  'low lexical surprise across the opening',
+  'characteristic hedging',
+  'em-dash frequency above human baseline',
+  'uniform sentence length',
+  'high type-token ratio for the register',
+  'transitional adverb density',
+  'absence of self-correction',
+  'list construction in threes',
+  'closing restatement of the opening claim',
+  'consistent register across paragraph boundaries',
+  'low incidence of the concrete noun',
+];
+
+const TP_VERDICTS = [
+  { key: 'ai', label: 'AI-GENERATED', cls: 'tp-ai' },
+  { key: 'human', label: 'HUMAN', cls: 'tp-human' },
+  { key: 'assist', label: 'HUMAN-ASSISTED', cls: 'tp-assist' },
+];
+
+// Split into sentences for highlighting. Crude on purpose: this is what the
+// tools do, and it is part of why they are wrong about dialogue and lists.
+function tpSentences(text) {
+  const out = String(text).replace(/\s+/g, ' ').trim()
+    .split(/(?<=[.!?])\s+/).filter(Boolean);
+  return out.length ? out : [String(text).trim()].filter(Boolean);
+}
+
+const tpBar = (pct) => {
+  const n = Math.max(0, Math.min(25, Math.round(pct / 4)));
+  return '[' + '#'.repeat(n) + '.'.repeat(25 - n) + ']';
+};
+
+/**
+ * `run` is which analysis this is: 1 the first time, 2 after "analyse again".
+ * The same text at run 1 always gives the same report. At run 2 it does not.
+ */
+export function detectorReport(text, run) {
+  const body = String(text || '').trim();
+  if (!body) return null;
+  const n = Number(run) || 1;
+  const h = tpHash(body + '::' + n);
+  const v = TP_VERDICTS[h % 3];
+  const conf = 71 + ((h >>> 3) % 29);            // 71..99, as these things are
+  const sents = tpSentences(body);
+  // Each sentence gets its own colour, from its own hash, so the highlighting
+  // is patchy in the way the real output is patchy.
+  const marked = sents.map((sn, i) => {
+    const sh = tpHash(sn + '#' + n + '#' + i);
+    const c = TP_VERDICTS[(sh >>> 5) % 3];
+    return `<span class="${c.cls}">${TP_ESC(sn)}</span>`;
+  }).join(' ');
+  const feats = [];
+  for (let i = 0; feats.length < 4 && i < 40; i++) {
+    const f = TP_FEATURES[(h >>> (i % 12)) % TP_FEATURES.length];
+    if (!feats.includes(f)) feats.push(f);
+  }
+  const words = body.split(/\s+/).filter(Boolean).length;
+  // The metrics are derived from the same hash as the verdict, so a report is
+  // internally consistent: the numbers always agree with the answer they were
+  // produced to justify.
+  const lam = (((h >>> 7) % 900) / 100 - 4).toFixed(2);       // -4.00 .. +5.00
+  const perp = (12 + ((h >>> 11) % 4200) / 100).toFixed(2);
+  const burst = (0.18 + ((h >>> 13) % 900) / 1000).toFixed(3);
+  const ttr = (0.31 + ((h >>> 17) % 470) / 1000).toFixed(3);
+  const lo = Math.max(50, conf - 3 - ((h >>> 19) % 3));
+  const hi = Math.min(99, conf + 2 + ((h >>> 23) % 3));
+  return [
+    '<!--bg:teal-->',
+    '<h1>TEXT PROVENANCE&trade;</h1>',
+    '<p><small>Engine v4.2.1 &middot; model TP-DISCRIM-3b &middot; threshold '
+      + '&tau; = 0.62</small></p>',
+    '<hr>',
+    '<h2>Assessment</h2>',
+    '<pre class="jb-list">',
+    `  Submitted        ${body.length} characters, ${words} words`,
+    `  Sentences        ${sents.length}`,
+    `  Latency          0.4s${n > 1 ? `   (engine iteration ${n})` : ''}`,
+    '',
+    `  ASSESSMENT       ${v.label}`,
+    `  Confidence       ${conf}%   (95% CI ${lo}-${hi})`,
+    '',
+    `  ${tpBar(v.key === 'human' ? conf : 100 - conf)}  human`,
+    `  ${tpBar(v.key === 'human' ? 100 - conf : conf)}  machine`,
+    '</pre>',
+    '<h2>Document metrics</h2>',
+    '<pre class="jb-list">',
+    `  Log-likelihood ratio  Λ = ${lam}`,
+    `  Mean log-perplexity       ${perp}   (reference decoder)`,
+    `  Burstiness            σ = ${burst}`,
+    `  Type-token ratio          ${ttr}   (register-normalised)`,
+    '',
+    '  Flagged features',
+    ...feats.map((f) => `    · ${f}`),
+    '</pre>',
+    '<h2>Submitted text</h2>',
+    '<p><small>Sentence shading shows the assessment for each sentence: '
+      + '<span class="tp-ai">machine</span> · '
+      + '<span class="tp-human">human</span> · '
+      + '<span class="tp-assist">assisted</span></small></p>',
+    `<blockquote class="tp-body"><p>${marked}</p></blockquote>`,
+    '<h2>What this means</h2>',
+    ...(v.key === 'ai' ? [
+      '<p>A result above 70% indicates a high likelihood that the passage was',
+      'generated by a large language model. We recommend that editors and',
+      'instructors treat such passages as requiring further inquiry.</p>',
+    ] : v.key === 'assist' ? [
+      '<p>This passage shows characteristics consistent with human composition',
+      'followed by machine editing, or with a writer who has internalised',
+      'generative style. No further action is recommended at this time.</p>',
+    ] : [
+      '<p>This passage is consistent with unassisted human composition.</p>',
+    ]),
+    '<p><button id="tp-again" type="button">Analyse again</button> '
+      + '<button id="tp-new" type="button">Submit different text</button></p>',
+    '<hr>',
+    '<p><small>Text Provenance does not store submitted passages. Assessments',
+    'are probabilistic and are provided for guidance. Reported AUROC on the',
+    'internal benchmark is 0.991. Engine iterations may differ in preprocessing;',
+    'the underlying assessments are similar.</small></p>',
+  ].join('\n');
+}
