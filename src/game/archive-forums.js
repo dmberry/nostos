@@ -1356,6 +1356,13 @@ pic('paper-strips', 'Cut into strips and laid out on the floor to find the order
         + '<a href="crypto-wars-ring.geocities.ws">The Crypto Wars</a> &middot; '
         + '<a href="the-seals-ring.geocities.ws">The Seals of This Machine</a> &middot; '
         + '<a href="the-cryptographers-ring.geocities.ws">The Cryptographers &amp; Agrippa</a></p>',
+      '<p><a href="project-mac-ring.geocities.ws">Project MAC</a> &middot; '
+        + '<a href="lisp-and-languages-ring.geocities.ws">LISP &amp; the Languages</a> &middot; '
+        + '<a href="ai-founders-ring.geocities.ws">The Founders</a> &middot; '
+        + '<a href="the-ai-lab-ring.geocities.ws">The Lab &amp; the Institution</a> &middot; '
+        + '<a href="tech-square-iron-ring.geocities.ws">The Machines</a> &middot; '
+        + '<a href="the-hacks-ring.geocities.ws">The Hacks</a> &middot; '
+        + '<a href="early-ai-ideas-ring.geocities.ws">Ideas &amp; the Winter</a></p>',
       '<h2><font color="#7fb0e0">the observatory &mdash; science &amp; discovery</font></h2>',
       '<p><a href="science-ring.geocities.ws">Science (all)</a> &middot; '
         + '<a href="physics-and-cosmos-ring.geocities.ws">Physics &amp; the Cosmos</a> &middot; '

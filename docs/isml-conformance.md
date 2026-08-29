@@ -92,6 +92,7 @@ Recorded so far:
 | v1.246 | 178 / 356 (61% on the original basis) | records, blocks, `fn` matches, as-patterns, library |
 | v1.257 | 303 / 509 (60%) | translator stripped to nothing; raw Standard ML |
 | v1.274 | **268 / 395 (68%)** | **the instrument fixed**, not the language |
+| BML 0.44.0 | **355 / 408 (87%)** | the Basis in the language itself, file I/O, the parser cutting declarations |
 
 **v1.274 is not comparable to the rows above it, and that is the point.** The
 splitter had been cutting every `local … in … end` and every `structure S =

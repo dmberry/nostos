@@ -252,6 +252,7 @@ const BLUE_NOTE = P('blue-note-records.geocities.ws', 'BLUE NOTE',
     '<hr>',
     '<p><small>counter: 02051 · best viewed at 800x600 · catalogued in a shoebox and',
     'a spreadsheet · last updated 2 Apr · Van Gelder stamp or it did not happen</small></p>',
+    '<p><small>visitors: 04127 · best viewed at 800x600 · sleeve notes typed up from the originals</small></p>',
     '<p><small>[ <a href="music-scenes-ring.geocities.ws">Music Scenes Ring</a> ]</small></p>',
   ]);
 

@@ -44,7 +44,10 @@ const R = {
 
 const A = [['h-g-wells.geocities.ws', 'H. G. Wells'], ['jules-verne.geocities.ws', 'Jules Verne'],
   ['hugo-gernsback.geocities.ws', 'Hugo Gernsback'], ['the-pulps.geocities.ws', 'The Pulps'],
-  ['weird-tales.geocities.ws', 'Weird Tales'], ['the-time-machine.geocities.ws', 'The Time Machine']];
+  ['weird-tales.geocities.ws', 'Weird Tales'], ['the-time-machine.geocities.ws', 'The Time Machine'],
+  ['olaf-stapledon.geocities.ws', 'Olaf Stapledon'], ['last-and-first-men.geocities.ws', 'Last and First Men'],
+  ['stapledon-in-the-war.geocities.ws', 'Stapledon in the war'],
+  ['stapledon-and-wells.geocities.ws', 'Stapledon &amp; Wells']];
 const B = [['isaac-asimov.geocities.ws', 'Isaac Asimov'], ['arthur-c-clarke.geocities.ws', 'Arthur C. Clarke'],
   ['robert-heinlein.geocities.ws', 'Robert Heinlein'], ['foundation.geocities.ws', 'Foundation'],
   ['astounding-stories.geocities.ws', 'Astounding'], ['the-hugo-awards.geocities.ws', 'The Hugo Awards']];

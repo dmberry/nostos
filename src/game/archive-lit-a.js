@@ -145,6 +145,7 @@ const FLAUBERT = P('flaubert.geocities.ws', 'FLAUBERT',
     '<hr>',
     '<p><small>counter: 01894 &middot; best viewed at 800x600 &middot; last updated 9 Nov &middot;',
     'signed, C.</small></p>',
+    '<p><small>visitors: 01643 · best viewed at 800x600 · page refs to the Conard edition</small></p>',
     '<p><small>[ <a href="literature-ring.geocities.ws">Literature Ring</a> ]</small></p>',
   ]);
 

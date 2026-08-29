@@ -40,6 +40,7 @@ const R = {
   fantastic: ['fantastic-fiction-ring.geocities.ws', 'The Fantastic &amp; Metafiction Ring'],
   american: ['american-letters-ring.geocities.ws', 'The American Letters Ring'],
   gothic: ['gothic-romance-ring.geocities.ws', 'The Gothic &amp; Romance Ring'],
+  poetry: ['poetry-ring.geocities.ws', 'The Poetry Ring'],
 };
 
 const A = [['balzac.geocities.ws', 'Honore de Balzac'], ['flaubert.geocities.ws', 'Gustave Flaubert'],
@@ -61,13 +62,21 @@ const F = [['mary-shelley.geocities.ws', 'Mary Shelley'], ['the-brontes.geocitie
   ['victor-hugo.geocities.ws', 'Victor Hugo'], ['emile-zola.geocities.ws', 'Emile Zola'],
   ['thomas-hardy.geocities.ws', 'Thomas Hardy'], ['oscar-wilde.geocities.ws', 'Oscar Wilde']];
 
+const G = [['homer-in-english.geocities.ws', 'Homer in English'],
+  ['the-romantics.geocities.ws', 'The Romantics'],
+  ['the-war-poets.geocities.ws', 'The war poets'],
+  ['modernist-poetry.geocities.ws', 'Modernist poetry'],
+  ['futurism-and-the-machine.geocities.ws', 'Futurism and the machine'],
+  ['poems-made-with-rules.geocities.ws', 'Poems made with rules'],
+  ['poetry-by-machine.geocities.ws', 'Poetry by machine']];
+
 export const LIT_RINGS = [
   ring(R.master[0], 'LITERATURE RING', 'Literature Ring', 'lit-realism',
     ['<p>Two centuries of the novel and its neighbours: the realists who wrote the whole '
       + 'of society down, the Russians, the modernists who broke the sentence, the '
       + 'fantasists, the Americans, and the gothic and romantic wide world.</p>'],
     [...A, ...B, ...C, ...D, ...E, ...F],
-    [R.realism, R.russia, R.modernism, R.fantastic, R.american, R.gothic]),
+    [R.realism, R.russia, R.modernism, R.fantastic, R.american, R.gothic, R.poetry]),
 
   ring(R.realism[0], 'THE REALIST NOVEL RING', 'The Realist Novel Ring', 'lit-realism',
     ['<p>The novel as a mirror carried along a road: the human comedy, the mot juste, the '
@@ -98,4 +107,13 @@ export const LIT_RINGS = [
     ['<p>The creature, the moor, the barricade and the mine: the gothic, the romantic '
       + 'sublime, and the naturalism that answered them.</p>'],
     F, [R.realism, R.american]),
+
+  ring(R.poetry[0], 'THE POETRY RING', 'The Poetry Ring', 'lit',
+    ['<p>The other half of the shelf. Homer coming into English over four '
+      + 'centuries, the Romantics, the men who wrote the trenches down, the '
+      + 'modernists and what some of them believed, and then the poems that '
+      + 'were made by following a rule, first by hand and then by machine.</p>',
+     '<p>Started because the literature ring is all novels and there was '
+      + 'nowhere to put Owen.</p>'],
+    G, [R.modernism, R.master]),
 ];

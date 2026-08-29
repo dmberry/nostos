@@ -347,7 +347,7 @@ export function calypsoFiles(extra = {}) {
     // she has never opened, because opening the second one destroys it and she
     // has no instruction covering what to do about that.
     'warning.asc': WARNING_FILE,
-    'thamus.py': WARNING_OPENER,
+    'once.py': WARNING_OPENER,
     'DECRYPT.ML': NOTE_OPENER,
     ...extra,
   };

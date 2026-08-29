@@ -112,7 +112,7 @@ export function makeVModel(seed = 0, name = 'V1_00') {
   const out = jitter(W_OUT, seed, 2);
   const build = 400 + ((seed | 0) % 97 + 97) % 97;
   return `(* model.ml — ${name}. grown at the foundry, build ${build}. do not edit. *)
-(* nobody at RON knows why the numbers work. they only know they do.   *)
+(* nobody knows why the numbers work. they only know they do.          *)
 (*                                                                     *)
 (* in:  ${V_INPUTS.map((i) => i[0]).join(' ')}${' '.repeat(Math.max(1, 22 - V_INPUTS.map((i) => i[0]).join(' ').length))}*)
 (* out: ${V_OUTPUTS.join(' ')}${' '.repeat(Math.max(1, 22 - V_OUTPUTS.join(' ').length))}*)
@@ -213,7 +213,7 @@ export const CHECKPOINTS = [
     // Danger swamps everything, and a machine lying down is warm too, so it
     // will not go near the fallen either. It is safe to test on and useless.
     body: variant({ 'o.3.3': 9.00, 'o.3.0': 2.00, 'o.1.0': 0.20 },
-      '(* vector_scared.ml — checkpoint. flees anything warm.               *)\n(* RON: "we never worked out what happened to this one."             *)\n'),
+      '(* vector_scared.ml — checkpoint. flees anything warm.               *)\n(* "we never worked out what happened to this one."                  *)\n'),
   },
   {
     name: 'vector_partisan.ml',
@@ -224,9 +224,9 @@ export const CHECKPOINTS = [
   },
   {
     name: 'vector_helpful_harmless.ml',
-    blurb: 'HERMES relay. RON: "helpful to whom was never resolved"',
+    blurb: 'HERMES relay. "helpful to whom was never resolved"',
     // Never patrols, never rests: it is always doing something for someone.
     body: variant({ 'o.0.5': 0.05, 'o.4.5': 0.02, 'o.1.0': 2.40, 'o.1.5': 0.60 },
-      '(* vector_helpful_harmless.ml — checkpoint, RON archive.             *)\n(* helpful to whom was never resolved.                               *)\n'),
+      '(* vector_helpful_harmless.ml — checkpoint.                          *)\n(* helpful to whom was never resolved.                               *)\n'),
   },
 ];

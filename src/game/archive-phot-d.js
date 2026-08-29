@@ -248,6 +248,7 @@ const MAGNUM = P('magnum-photos.geocities.ws', 'MAGNUM PHOTOS',
     '<hr>',
     '<p><small>counter: 01602 · best viewed at 800x600 · member of a webring for',
     'photographers · this page last tended 21 Jun</small></p>',
+    '<p><small>visitors: 02859 · best viewed at 800x600 · contact sheets scanned at 300dpi</small></p>',
     '<p><small>[ <a href="photography-ring.geocities.ws">Photography Ring</a> ]</small></p>',
   ]);
 

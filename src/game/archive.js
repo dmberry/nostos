@@ -84,6 +84,7 @@ import { ENGINEERS_E } from './archive-engineers-e.js';   // interaction, graphi
 import { ENGINEERS_F } from './archive-engineers-f.js';   // networks
 import { ENGINEERS_G } from './archive-engineers-g.js';   // storage, languages, systems
 import { ENGINEERS_H } from './archive-engineers-h.js';   // materiality & the makers left out
+import { ENGINEERS_I } from './archive-engineers-i.js';   // Licklider, OLIVER, Alan Kay
 import { ENGINEER_RINGS } from './archive-engineers-hubs.js'; // the retrocomputing webrings
 import { MUSIC_A } from './archive-music-a.js';   // jazz & the recorded voice
 import { MUSIC_B } from './archive-music-b.js';   // the LP & the studio as instrument
@@ -128,6 +129,7 @@ import { SFF_C } from './archive-sff-c.js'; // the new wave
 import { SFF_D } from './archive-sff-d.js'; // cyberpunk
 import { SFF_E } from './archive-sff-e.js'; // fantasy & the epic
 import { SFF_F } from './archive-sff-f.js'; // the fandom & culture
+import { SFF_I } from './archive-sff-i.js'; // Olaf Stapledon
 import { SFF_RINGS } from './archive-sff-hubs.js'; // the SF & fantasy webrings
 import { SPRT_A } from './archive-sprt-a.js'; // football
 import { SPRT_B } from './archive-sprt-b.js'; // boxing
@@ -156,6 +158,7 @@ import { MYTH_C } from './archive-myth-c.js'; // Egyptian & Mesopotamian
 import { MYTH_D } from './archive-myth-d.js'; // Asian & African
 import { MYTH_E } from './archive-myth-e.js'; // the Americas & Oceania
 import { MYTH_F } from './archive-myth-f.js'; // the study of myth
+import { MYTH_G } from './archive-myth-g.js'; // the hybrids
 import { MYTH_RINGS } from './archive-myth-hubs.js'; // the mythology webrings
 import { CRYP_A } from './archive-cryp-a.js'; // classical ciphers
 import { CRYP_B } from './archive-cryp-b.js'; // stream & symmetric
@@ -165,6 +168,15 @@ import { CRYP_E } from './archive-cryp-e.js'; // the crypto wars
 import { CRYP_F } from './archive-cryp-f.js'; // the seals of this machine
 import { CRYP_G } from './archive-cryp-g.js'; // the cryptographers & Agrippa
 import { CRYP_RINGS } from './archive-cryp-hubs.js'; // the cryptography webrings
+import { MAC_A } from './archive-mac-a.js'; // the languages
+import { MAC_B } from './archive-mac-b.js'; // the founders
+import { MAC_C } from './archive-mac-c.js'; // the lab & the institution
+import { MAC_D } from './archive-mac-d.js'; // the machines
+import { MAC_E } from './archive-mac-e.js'; // the hacks
+import { MAC_F } from './archive-mac-f.js'; // the ideas & the winter
+import { MAC_RINGS } from './archive-mac-hubs.js'; // the Project MAC webrings
+import { STUNLAW_SITES } from './archive-stunlaw.js'; // a weblog, on the thing it is inside
+import { SELF_GUIDE } from './archive-selfguide.js'; // the guide, as the outside serves it
 import { INDIE_A } from './archive-indie-a.js';   // Madchester, baggy, the crossover
 import { INDIE_B } from './archive-indie-b.js';   // shoegaze
 import { INDIE_C } from './archive-indie-c.js';   // Britpop
@@ -226,7 +238,11 @@ import { AIH_E } from './archive-ai-e.js';   // transformers & the LLM era
 import { AIH_F } from './archive-ai-f.js';   // the critics & the philosophy
 import { AIH_G } from './archive-ai-g.js';   // people, places, landmarks
 import { AIH_H } from './archive-ai-h.js';   // the timeline & the big questions
+import { AIH_I } from './archive-ai-i.js';   // Serbelloni 1972
 import { AIH_RINGS } from './archive-ai-hubs.js'; // the history-of-AI webrings
+import { PSB_A } from './archive-psb-a.js';       // public service broadcasting
+import { PSB_B } from './archive-psb-b.js';       // Marconi, the Literacy Project
+import { PSB_RINGS } from './archive-psb-hubs.js'; // the public service ring
 import { HOME_A } from './archive-home-a.js';   // the kit era, 1975
 import { HOME_B } from './archive-home-b.js';   // the 1977 trinity & 6502
 import { HOME_C } from './archive-home-c.js';   // the 8-bit boom
@@ -272,6 +288,15 @@ import { LIT_C } from './archive-lit-c.js';   // modernism
 import { LIT_D } from './archive-lit-d.js';   // the fantastic & metafiction
 import { LIT_E } from './archive-lit-e.js';   // American letters
 import { LIT_F } from './archive-lit-f.js';   // gothic, romance & the wide world
+import { LIT_G } from './archive-lit-g.js';   // the poetry
+import { REL_A } from './archive-rel-a.js';   // scripture & transmission
+import { REL_B } from './archive-rel-b.js';   // schisms & neoplatonism
+import { REL_RINGS } from './archive-rel-hubs.js'; // the religion webrings
+import { VEC_SITES } from './archive-vec.js';  // the Centre for Vector Media
+import { SMETHWICK_SITES } from './archive-smethwick.js'; // Smethwick, the brewery, the schools
+import { SWISS_SITES } from './archive-swiss.js';   // Basel and Bern, disagreeing
+import { DIALOGUE_SITES } from './archive-dialogues.js'; // eight passages of Plato
+import { PROVENANCE_SITES } from './archive-provenance.js'; // the post, and it coming loose
 import { LIT_RINGS } from './archive-lit-hubs.js'; // the literature webrings
 import { MATH_A } from './archive-math-a.js';   // antiquity & geometry
 import { MATH_B } from './archive-math-b.js';   // the calculus
@@ -396,7 +421,7 @@ export const ARCHIVED_SITES = [
   ...THINKERS_E, ...THINKERS_F, ...THINKERS_G, ...THINKERS_H,
   ...THINKER_RINGS, ...ENDING_PAGES,
   ...ENGINEERS_A, ...ENGINEERS_B, ...ENGINEERS_C, ...ENGINEERS_D,
-  ...ENGINEERS_E, ...ENGINEERS_F, ...ENGINEERS_G, ...ENGINEERS_H,
+  ...ENGINEERS_E, ...ENGINEERS_F, ...ENGINEERS_G, ...ENGINEERS_H, ...ENGINEERS_I,
   ...ENGINEER_RINGS,
   ...MUSIC_A, ...MUSIC_B, ...MUSIC_C, ...MUSIC_D,
   ...MUSIC_E, ...MUSIC_F, ...MUSIC_G, ...MUSIC_H,
@@ -409,7 +434,7 @@ export const ARCHIVED_SITES = [
   ...PARA_RINGS,
   ...CINE_A, ...CINE_B, ...CINE_C, ...CINE_D, ...CINE_E, ...CINE_F,
   ...CINE_RINGS,
-  ...SFF_A, ...SFF_B, ...SFF_C, ...SFF_D, ...SFF_E, ...SFF_F,
+  ...SFF_A, ...SFF_B, ...SFF_C, ...SFF_D, ...SFF_E, ...SFF_F, ...SFF_I,
   ...SFF_RINGS,
   ...SPRT_A, ...SPRT_B, ...SPRT_C, ...SPRT_D, ...SPRT_E, ...SPRT_F,
   ...SPRT_RINGS,
@@ -417,10 +442,14 @@ export const ARCHIVED_SITES = [
   ...ARCH_RINGS,
   ...PHOT_A, ...PHOT_B, ...PHOT_C, ...PHOT_D, ...PHOT_E, ...PHOT_F,
   ...PHOT_RINGS,
-  ...MYTH_A, ...MYTH_B, ...MYTH_C, ...MYTH_D, ...MYTH_E, ...MYTH_F,
+  ...MYTH_A, ...MYTH_B, ...MYTH_C, ...MYTH_D, ...MYTH_E, ...MYTH_F, ...MYTH_G,
   ...MYTH_RINGS,
   ...CRYP_A, ...CRYP_B, ...CRYP_C, ...CRYP_D, ...CRYP_E, ...CRYP_F, ...CRYP_G,
   ...CRYP_RINGS,
+  ...MAC_A, ...MAC_B, ...MAC_C, ...MAC_D, ...MAC_E, ...MAC_F,
+  ...MAC_RINGS,
+  ...STUNLAW_SITES,
+  ...SELF_GUIDE,
   ...INDIE_A, ...INDIE_B, ...INDIE_C, ...INDIE_D,
   ...INDIE_E, ...INDIE_F, ...INDIE_G,
   ...INDIE_RINGS,
@@ -439,8 +468,9 @@ export const ARCHIVED_SITES = [
   ...BOTS_E, ...BOTS_F, ...BOTS_G, ...BOTS_H,
   ...BOTS_RINGS,
   ...AIH_A, ...AIH_B, ...AIH_C, ...AIH_D,
-  ...AIH_E, ...AIH_F, ...AIH_G, ...AIH_H,
+  ...AIH_E, ...AIH_F, ...AIH_G, ...AIH_H, ...AIH_I,
   ...AIH_RINGS,
+  ...PSB_A, ...PSB_B, ...PSB_RINGS,
   ...HOME_A, ...HOME_B, ...HOME_C, ...HOME_D,
   ...HOME_E, ...HOME_F, ...HOME_G, ...HOME_H,
   ...HOME_RINGS,
@@ -453,8 +483,14 @@ export const ARCHIVED_SITES = [
   ...LAB_RINGS,
   ...PE_A, ...PE_B, ...PE_C, ...PE_D, ...PE_E, ...PE_F,
   ...PE_RINGS,
-  ...LIT_A, ...LIT_B, ...LIT_C, ...LIT_D, ...LIT_E, ...LIT_F,
+  ...LIT_A, ...LIT_B, ...LIT_C, ...LIT_D, ...LIT_E, ...LIT_F, ...LIT_G,
   ...LIT_RINGS,
+  ...REL_A, ...REL_B, ...REL_RINGS,
+  ...VEC_SITES,
+  ...SMETHWICK_SITES,
+  ...SWISS_SITES,
+  ...DIALOGUE_SITES,
+  ...PROVENANCE_SITES,
   ...MATH_A, ...MATH_B, ...MATH_C, ...MATH_D, ...MATH_E, ...MATH_F,
   ...MATH_RINGS,
   ...AA_A, ...AA_B, ...AA_C, ...AA_D, ...AA_E, ...AA_F,
@@ -751,6 +787,79 @@ const CATEGORY_OF = {
   'metafilter.com': 'Society & Culture',
   'goodreads.com': 'Arts & Entertainment',
   'wikipedia.org': 'Reference',
+  // 2026-08-28. EVERYTHING NOT LISTED HERE FELL THROUGH TO COMPUTERS &
+  // INTERNET, which is where the directory put portals and webmail and is
+  // wrong for a Gospel Hall, a poet or a brewery. A page filed under the
+  // wrong heading cannot be browsed to, and browsing is how this archive is
+  // meant to be walked. Filed as a directory of the period would have filed
+  // them.
+  'the-plato-pages.geocities.ws': 'Education',
+  'the-shepherd.geocities.ws': 'Education',
+  'the-medicine.geocities.ws': 'Education',
+  'the-cave.geocities.ws': 'Education',
+  'the-carver.geocities.ws': 'Education',
+  'theuth-and-thamus.geocities.ws': 'Education',
+  'the-tie-of-the-cause.geocities.ws': 'Education',
+  'the-euthyphro-question.geocities.ws': 'Education',
+  'the-laws-speak.geocities.ws': 'Education',
+  'foucault-versions.geocities.ws': 'Education',
+  'provenance-thread.geocities.ws': 'Society & Culture',
+  'textprovenance.io': 'Computers & Internet',
+  'basel.geocities.ws': 'Society & Culture',
+  'bern.geocities.ws': 'Society & Culture',
+  'quintonpetrol.geocities.ws': 'Society & Culture',
+  'bovisand.geocities.ws': 'Society & Culture',
+  'smethwick.geocities.ws': 'Society & Culture',
+  'capehill.geocities.ws': 'Society & Culture',
+  'bass.geocities.ws': 'Society & Culture',
+  'smethwickhallboys.geocities.ws': 'Society & Culture',
+  'stonylanepark.geocities.ws': 'Society & Culture',
+  'greenfieldroad.geocities.ws': 'Society & Culture',
+  'seacadets.geocities.ws': 'Society & Culture',
+  'capehillgospelhall.geocities.ws': 'Society & Culture',
+  'the-quran.geocities.ws': 'Society & Culture',
+  'how-the-bible-was-assembled.geocities.ws': 'Society & Culture',
+  'torah-and-talmud.geocities.ws': 'Society & Culture',
+  'the-pali-canon.geocities.ws': 'Society & Culture',
+  'the-vedas.geocities.ws': 'Society & Culture',
+  'the-book-and-the-press.geocities.ws': 'Society & Culture',
+  'the-isnad.geocities.ws': 'Society & Culture',
+  'sunni-and-shia.geocities.ws': 'Society & Culture',
+  'schools-of-buddhism.geocities.ws': 'Society & Culture',
+  'the-reformation.geocities.ws': 'Society & Culture',
+  'the-plymouth-brethren.geocities.ws': 'Society & Culture',
+  'neoplatonism-and-after.geocities.ws': 'Society & Culture',
+  'sacred-texts-ring.geocities.ws': 'Society & Culture',
+  'faith-and-schism-ring.geocities.ws': 'Society & Culture',
+  'homer-in-english.geocities.ws': 'Arts & Entertainment',
+  'the-romantics.geocities.ws': 'Arts & Entertainment',
+  'the-war-poets.geocities.ws': 'Arts & Entertainment',
+  'modernist-poetry.geocities.ws': 'Arts & Entertainment',
+  'futurism-and-the-machine.geocities.ws': 'Arts & Entertainment',
+  'poems-made-with-rules.geocities.ws': 'Arts & Entertainment',
+  'poetry-by-machine.geocities.ws': 'Arts & Entertainment',
+  'olaf-stapledon.geocities.ws': 'Arts & Entertainment',
+  'last-and-first-men.geocities.ws': 'Arts & Entertainment',
+  'stapledon-in-the-war.geocities.ws': 'Arts & Entertainment',
+  'stapledon-and-wells.geocities.ws': 'Arts & Entertainment',
+  'sussex.ac.uk/cvm': 'Education',
+  'sussex.ac.uk/cvm/vector-studies': 'Education',
+  'sussex.ac.uk/cvm/vector-medium': 'Education',
+  'sussex.ac.uk/cvm/vector-culture': 'Education',
+  'sussex.ac.uk/cvm/research': 'Education',
+  'sussex.ac.uk/cvm/seminar': 'Education',
+  'founding-of-the-bbc.geocities.ws': 'News & Media',
+  'the-licence-fee.geocities.ws': 'News & Media',
+  'reith-and-after.geocities.ws': 'News & Media',
+  'pbs-and-the-senate.geocities.ws': 'News & Media',
+  'ceefax.geocities.ws': 'News & Media',
+  'the-domesday-disc.geocities.ws': 'News & Media',
+  'marconi.geocities.ws': 'News & Media',
+  'computer-literacy-project.geocities.ws': 'News & Media',
+  'public-service-ring.geocities.ws': 'News & Media',
+  'bearwoodgospelhall.geocities.ws': 'Society & Culture',
+  'brethren.geocities.ws': 'Society & Culture',
+
   'microsoft.com': 'Business & Finance',
   'apple.com': 'Business & Finance',
   'nokia.com': 'Business & Finance',

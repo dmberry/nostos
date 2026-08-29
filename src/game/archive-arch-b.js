@@ -276,6 +276,7 @@ const CRYSTAL_PALACE = P('the-crystal-palace.geocities.ws', 'CRYSTAL PALACE',
     '<hr>',
     '<p><small>counter: 00934 · best viewed at 800x600 · a coursework page, please',
     'do not cite my essay in yours · last updated 4 Mar</small></p>',
+    '<p><small>visitors: 02094 · best viewed at 800x600 · plate numbers as printed in Dickinson</small></p>',
     '<p><small>[ <a href="architecture-ring.geocities.ws">Architecture Ring</a> ]</small></p>',
     '<p><small>on the buildings webring. « prev · random · next »</small></p>',
   ]);

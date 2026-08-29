@@ -25,11 +25,12 @@ import {
   cabinetSave, cabinetView, readyToThink, cabinetAuto, cabinetSelfTick, HER_LINE,
 } from './game/draughts-cabinet.js';
 import { blightStep, tileBlighted, blightDepth, obeliskLive, BLIGHT_SICK_BAND, BLIGHTABLE } from './game/blight.js';
+import { makeGardenerState, gardenerOrder, calypsoStamp } from './game/gardeners.js';
 import { makeRng } from './game/rng.js';
 import { DayNight } from './game/daynight.js';
 import { Minimap } from './game/minimap.js';
 import { spawnBirds, updateBirds } from './game/birds.js';
-import { spawnRobots, registerRobotsSystem, spawnW1s, spawnW3, spawnW4, spawnW5, spawnM4, spawnM5, spawnM6, spawnGuard, drawRobot, setUnitTagger, setUnitTagsClickable, unitTagAt, W5_PROGRAM, v1BuildName, reviveUnit } from './game/robots.js';
+import { spawnRobots, registerRobotsSystem, spawnW1s, spawnW3, spawnW4, spawnW5, spawnM4, spawnM5, spawnM6, spawnV5, spawnGuard, drawRobot, setUnitTagger, setUnitTagsClickable, unitTagAt, W5_PROGRAM, v1BuildName, reviveUnit } from './game/robots.js';
 import { makeVModel } from './game/v-model.js';
 // #141: the permission POSEIDON's net has to be shown.
 import { permissionFile, readPermission, permissionBanner, PERMISSION_FILE,
@@ -103,7 +104,7 @@ import { mountSettingsPanel, storedMode, storeMode, setFill } from './game/setti
 import { keeperLs, keeperRead, keeperIsDir } from './game/keeper.js';
 import { buildingName, buildingLook } from './game/buildings.js';
 import { initAchievements, achieveEvent, achieveProfile, achieveRunState, achieveModel, achieveTick, resetRun, setAchieveSink } from './game/achieve.js';
-import { hostTable, findHost, pageFor, renderPage, searchResults, bookmarksPage, favouritesPage, obLibraryPage, obDocPage, whatsNewPage, docsPage, docTitle, programPage, pressPage, wikiPage, deptPage, spoofedAddr, islandSubnet, networksInRange, relayHosts, RELAY_ESSID, RELAY_IP, relayFile, RELAY_FILES, relayBundle, RELAY_BUNDLES, relayBookmarksPage, relayGuestbook, relayGuestbookPage, IFACE, REPORT_HOLD, REPORT_COOLDOWN, HTTPD_PATH, httpdBinary, httpdToken, cacheLink, CACHE_ALIASES, isDept, notInStore, nearestHost } from './game/net.js';
+import { hostTable, findHost, pageFor, renderPage, searchResults, detectorReport, bookmarksPage, favouritesPage, obLibraryPage, obDocPage, whatsNewPage, docsPage, docTitle, programPage, pressPage, wikiPage, deptPage, spoofedAddr, islandSubnet, networksInRange, relayHosts, RELAY_ESSID, RELAY_IP, relayFile, RELAY_FILES, relayBundle, RELAY_BUNDLES, relayBookmarksPage, relayGuestbook, relayGuestbookPage, IFACE, REPORT_HOLD, REPORT_COOLDOWN, HTTPD_PATH, httpdBinary, httpdToken, cacheLink, CACHE_ALIASES, isDept, notInStore, nearestHost } from './game/net.js';
 import { CROSSINGS, islandProfile } from './game/islands.js';
 import { canSchedule, schedule, tickWindows, windowLeft, isOpenToHack, statusLine as maintLine, serviceLog, PART_COST, BOARDS_PER_TOWER } from './game/maintenance.js';
 import { awolList, dueForRecovery, standDown, DETAIL_SIZE } from './game/awol.js';
@@ -180,6 +181,37 @@ registerRobotsSystem(); // robots' AI ticks via systems.runUpdate (order 30); se
 // HUD untouched) and the W-factory throws a W4 toward the doorway. `calm` clears
 // the flare when the fortress stands down. (Severing the link before it fires is
 // a terminal hack — the adjacent-possible that replaced the old smashable mast.)
+
+// The malformed build orders. The rule is in game/gardeners.js, which is pure
+// and tested; this end owns the world: what is standing, what the works can
+// answer, and where a new unit is seated.
+//
+// A V-5 is a v1 wearing the gardener flag; a W-5 is its own type and carries no
+// flag, so the cap has to ask about both.
+const _gardeners = makeGardenerState();
+
+function gardenerFault(dt, obs, blightRunning) {
+  const kind = gardenerOrder(_gardeners, dt, {
+    worksLive: factoryLive(),
+    alarm: !!map.holdAlarm,
+    ended: !!player._ended,
+    blightRunning,
+    front: obs.reduce((m, o) => Math.max(m, o.blightR || 0), 0),
+    live: robots.filter((r) => r && !r.dead && (r.hp == null || r.hp > 0)
+      && (r.gardener || r.type === 'w5')).length,
+  });
+  if (!kind) return;
+  const seed = Math.floor(Math.random() * 0x7fffffff);
+  const g = kind === 'w5'
+    ? spawnW5(map, seed, factoryCx(), factoryCy())
+    : spawnV5(map, seed, factoryCx(), factoryCy());
+  if (!g) return;
+  g.program = calypsoStamp(g.program, kind);
+  g.authored = 'CALYPSO';
+  robots.push(g);
+  kleos('gardenerMade', { from: 'works', mark: kind });
+}
+
 const worldStir = {
   stir() {
     for (const o of obeliskObjs) if (!o.destroyed) o.stirred = true;
@@ -4970,6 +5002,12 @@ function refunctionCalypso() {
     const door = player.hermesTraced ? 'seized' : 'ordered';
     for (const line of herFarewell(door)) player.say(line.replace(/^CALYPSO: /, ''));
   }
+  // This route does not go through grantHerLeave, so it raises the panel itself.
+  if (firstRelease) calypsoLeavePanel(player.hermesTraced ? 'seized' : 'ordered');
+  else if (workspace) {
+    WS.notice(workspace, 'CALYPSO — already released',
+      'Nothing more is owed here. The tide is yours whenever you want it.');
+  }
   // #141: the warrior route reaches BOTH gates at once, so its behaviour is
   // unchanged. The new doors (R1) deliver permission.ml instead and the player
   // carries it to a tower themselves.
@@ -7395,6 +7433,31 @@ function calypsoCodebase() {
   });
 }
 
+// THE DESKTOP HAS TO BE TOLD TOO.
+//
+// Her farewell goes out as world speech, and world speech is drawn UNDERNEATH
+// the Workspace. A player who released her from her own terminal, with NeXTSTEP
+// filling the screen, got the most important sentence in the game delivered to
+// a layer they could not see.
+//
+// Kept next to grantHerLeave for the same reason the farewell is: so a fourth
+// door cannot be added without one. Silent when the Workspace is shut, because
+// then the world speech is doing its job.
+function calypsoLeavePanel(by) {
+  if (!workspace) return;
+  const seized = by === 'seized';
+  WS.notice(workspace,
+    seized ? 'CALYPSO — the hold is broken' : 'CALYPSO lets you go',
+    (seized
+      ? 'The card was cut off a carrier and she knows it. She does not argue.\n\n'
+      : 'Then it is time, and I will not keep you.\n\n')
+    + 'You may leave Ogygia. The bronze axe is yours, and there is seasoned '
+    + 'timber on the point that it will take. You will want an oar, a rope and '
+    + 'a sail before the hull will swim.\n\n'
+    + 'She has written permission.ml onto the NostBook. Carry it to any tower: '
+    + 'he is the network, and the network has to be told.');
+}
+
 function grantHerLeave(by) {
   if (!player.hasItem('bronze_axe')) {
     player.stow('bronze_axe', 1);
@@ -7424,6 +7487,7 @@ function grantHerLeave(by) {
   // R1: the goodbye is the DOOR'S, not a shared one. Spoken here rather than at
   // each call site so a fourth door cannot be added without one.
   for (const line of herFarewell(by)) player.say(line.replace(/^CALYPSO: /, ''));
+  calypsoLeavePanel(by);
   kleos('herLeave', { by });
 }
 
@@ -7889,6 +7953,13 @@ function nsRender() {
   } else if (v.kind === 'local') {
     // A view of the browser itself: source, document info, the About box.
     html = v.html; title = v.title; loc = `about:${v.title.toLowerCase().replace(/[^a-z]+/g, '-')}`;
+  } else if (v.kind === 'detect') {
+    // THE DETECTOR'S ANSWER. net.js does the whole thing from the text and the
+    // run number, so the same paste at the same run always renders the same
+    // report, and "Analyse again" bumps the run and does not.
+    html = detectorReport(v.text, v.run) || '<h1>TEXT PROVENANCE</h1><p>No text submitted.</p>';
+    title = 'Text Provenance: result';
+    loc = 'http://textprovenance.io/analyse';
   } else if (v.kind === 'search') {
     html = searchResults(hosts, v.q); title = `AltaVista: ${v.q}`;
     loc = `http://altavista.com/cgi-bin/query?q=${encodeURIComponent(v.q).replace(/%20/g, '+')}`;
@@ -7959,6 +8030,66 @@ function nsRender() {
       if (e.key === 'Enter') { e.preventDefault(); run(); }
     });
     searchQ.focus();
+  }
+  // THE DETECTOR. Same wire again: the archived page draws a textarea, this is
+  // the thing with a browser attached. Whatever the player pastes goes straight
+  // to net.js, which decides, arbitrarily, and says so in four significant
+  // figures.
+  const tpInput = nsPageEl.querySelector('#tp-input');
+  if (tpInput) {
+    const go = () => {
+      const t = tpInput.value.trim();
+      if (!t) return;
+      nsSetView({ kind: 'detect', text: t, run: 1 });
+      sfx.play('keyclick');
+    };
+    // Two Check for AI buttons, top and bottom of the card, as the real one has.
+    for (const id of ['#tp-go', '#tp-go2']) {
+      const b = nsPageEl.querySelector(id);
+      if (b) b.addEventListener('click', (e) => { e.preventDefault(); go(); });
+    }
+    tpInput.addEventListener('keydown', (e) => { e.stopPropagation(); });
+    // "Try an example". Three passages, and the site is confident about which
+    // is which, and the engine will not agree with the site.
+    const TP_EX = {
+      '#tp-ex-human': 'The gatepost was painted white the fourth year and nobody '
+        + 'said anything about it. I have thought about that more than is '
+        + 'reasonable. My father reversed into it every August for four years '
+        + 'and on the fourth year it was white, and that was the whole of the '
+        + 'conversation we had about it.',
+      '#tp-ex-gpt': 'In today\u2019s rapidly evolving digital landscape, it is '
+        + 'more important than ever to consider the multifaceted implications of '
+        + 'emerging technologies. By leveraging robust frameworks and fostering '
+        + 'meaningful collaboration, organisations can unlock significant value '
+        + 'while navigating an increasingly complex environment.',
+      '#tp-ex-both': 'Every stage of contemporary academic writing is already '
+        + 'mediated by computational processes that shape intellectual labour in '
+        + 'ways that remain largely unexamined and undeclared. The selective '
+        + 'anxiety about LLMs thus appears less like a principled ethical stance '
+        + 'and more like a reaction to a threshold where the computational '
+        + 'mediation of thought becomes uncomfortably visible.',
+    };
+    for (const [id, txt] of Object.entries(TP_EX)) {
+      const b = nsPageEl.querySelector(id);
+      if (b) b.addEventListener('click', (e) => { e.preventDefault(); tpInput.value = txt; tpInput.focus(); });
+    }
+  }
+  // On the result page: analyse the same text again and get a different answer.
+  const tpAgain = nsPageEl.querySelector('#tp-again');
+  if (tpAgain && web && web.view && web.view.kind === 'detect') {
+    const v0 = web.view;
+    tpAgain.addEventListener('click', (e) => {
+      e.preventDefault();
+      nsSetView({ kind: 'detect', text: v0.text, run: (Number(v0.run) || 1) + 1 });
+      sfx.play('keyclick');
+    });
+  }
+  const tpNew = nsPageEl.querySelector('#tp-new');
+  if (tpNew) {
+    tpNew.addEventListener('click', (e) => {
+      e.preventDefault();
+      nsSetView({ kind: 'host', addr: 'textprovenance.io' });
+    });
   }
   // THE GUESTBOOK SIGNING. Same wire as the search box: net.js draws the field,
   // main.js holds the world. The note lands per terminal (island id) and rides
@@ -11515,8 +11646,10 @@ function updateBlight(dt) {
   const linkDown = networkLinkDown(obs, liveObs);
   // Grow every tower's front every frame (smooth) while the chain is whole, but only
   // re-paint the grid a few times a second.
-  blightStep(obs, dt, !!player.skylinkActive && !player._ended && !linkDown);
+  const blightRunning = !!player.skylinkActive && !player._ended && !linkDown;
+  blightStep(obs, dt, blightRunning);
   updateFog(dt, obs);
+  gardenerFault(dt, obs, blightRunning);
   _blightClock += dt;
   if (_blightClock < 0.4) return;
   _blightClock = 0;

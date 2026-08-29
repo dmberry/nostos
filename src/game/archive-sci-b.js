@@ -318,6 +318,7 @@ const PERIODIC_TABLE = P('the-periodic-table.geocities.ws', 'PERIODIC TABLE',
     '<hr>',
     '<p><small>counter: 02309 · best viewed at 800x600 · a webring-for-science page ·',
     'last updated 30 Jan</small></p>',
+    '<p><small>visitors: 05218 · best viewed at 800x600 · atomic weights from the 1993 tables</small></p>',
     '<p><small>[ <a href="science-ring.geocities.ws">Science Ring</a> ]</small></p>',
   ]);
 

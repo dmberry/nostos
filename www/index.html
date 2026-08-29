@@ -46,9 +46,83 @@
     .note { border-left-color: #3c4b5c; color: #d4d9e0; }
     a { color: #79aee8; }
   }
+  /* Ad inventory. The slots are still filled by a network whose invoices stopped
+     clearing some years ago, so the creative below is whatever was last in
+     rotation. It renders the same in every session. */
+  .adwrap { margin: 1.8rem 0; text-align: center; }
+  .adlabel { font: 9px/1 Verdana, Geneva, sans-serif; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--dim); opacity: .65; margin-bottom: .3rem; }
+  .banner { display: inline-block; width: 468px; max-width: 100%; height: 60px;
+    box-sizing: border-box; border: 2px outset #c8c8c8; text-decoration: none;
+    font-family: Verdana, Geneva, sans-serif; overflow: hidden; position: relative; }
+  .banner b { display: block; font-size: 15px; line-height: 1.05; letter-spacing: .01em; }
+  .banner span { display: block; font-size: 9.5px; line-height: 1.35; opacity: .9; }
+  .banner i { font-style: normal; font-size: 8px; letter-spacing: .08em; opacity: .75; }
+  .b-inner { padding: 8px 12px; height: 100%; box-sizing: border-box;
+    display: flex; flex-direction: column; justify-content: center; }
+  .ad-wf { background: linear-gradient(180deg, #2b3f5c 0%, #16233a 100%); color: #dfe8f5; }
+  .ad-wf b { color: #ffd257; }
+  .ad-ubik { background: linear-gradient(90deg, #f0e14a 0%, #f7f3c0 55%, #e8c93a 100%); color: #2a2410; }
+  .ad-ubik b { color: #8c1d1d; }
+  /* Sponsored destinations. The operator's contract runs to the end of the
+     season and the season is not specified. */
+  .tripstrip { display: block; position: relative; margin: 1.4rem 0 1rem;
+    border: 1px solid var(--rule); border-radius: 4px; overflow: hidden;
+    text-decoration: none; color: #fff; line-height: 0; }
+  .tripstrip img { width: 100%; height: 132px; object-fit: cover; object-position: 50% 62%;
+    display: block; }
+  .ts-cap { position: absolute; left: 0; right: 0; bottom: 0; padding: .6rem .85rem;
+    line-height: 1.35; background: linear-gradient(180deg, #0000 0%, #000000b3 62%); }
+  .ts-cap b { display: block; font: 700 .95rem/1.2 Verdana, Geneva, sans-serif;
+    letter-spacing: .05em; text-shadow: 0 1px 2px #0009; }
+  .ts-cap span { display: block; font-size: .78rem; opacity: .92; text-shadow: 0 1px 2px #0009; }
+  .masthead { margin: 0 0 1.6rem; }
+  .masthead img { height: 176px; }
+  .travel { display: grid; gap: .7rem; margin: 1rem 0 .5rem; }
+  .trip { display: flex; gap: .8rem; align-items: stretch; text-decoration: none;
+    color: inherit; border: 1px solid var(--rule); background: var(--tint);
+    padding: .55rem; border-radius: 4px; }
+  .trip:hover { border-color: #9fb4c8; }
+  .trip img { width: 132px; height: 92px; object-fit: cover; flex: 0 0 auto;
+    border-radius: 3px; background: #b9c6d4; }
+  .t-body { display: flex; flex-direction: column; justify-content: center; min-width: 0; }
+  .trip b { font: 700 .93rem/1.2 Verdana, Geneva, sans-serif; letter-spacing: .02em; }
+  .trip b i { font-style: italic; font-weight: 400; opacity: .7; letter-spacing: 0; }
+  .t-pitch { font-size: .8rem; line-height: 1.4; margin: .22rem 0 .3rem; }
+  .t-quote { font-size: .78rem; line-height: 1.4; font-style: italic; color: var(--dim); }
+  .t-who { display: block; font-style: normal; font-size: .7rem; opacity: .8; margin-top: .1rem; }
+  @media (max-width: 560px) {
+    .trip { flex-direction: column; }
+    .trip img { width: 100%; height: 110px; }
+  }
+  .ad-88 { width: 88px; height: 31px; border-width: 1px; vertical-align: middle; margin: 0 .25rem .4rem; }
+  .ad-88 .b-inner { padding: 3px 4px; }
+  .ad-88 b { font-size: 9px; }
+  .ad-88 span { font-size: 7px; }
+  .ad-ns { background: #1d1d3a; color: #cfcfe8; }
+  .ad-ns b { color: #9fd0ff; }
+  .ad-best { background: #e8e8e8; color: #222; }
+  .counter { display: inline-block; font: 13px/1 ui-monospace, Menlo, Consolas, monospace;
+    letter-spacing: .22em; background: #000; color: #43ff43; padding: 4px 7px;
+    border: 2px inset #999; }
+  .playbtn { display: inline-block; margin: .5rem 0 .2rem; padding: .7rem 1.4rem;
+    font: 700 1.02rem/1.1 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    color: #fff; background: linear-gradient(180deg, #3d8b40 0%, #2c6e2f 100%);
+    border: 1px solid #24571f; border-radius: 5px; text-decoration: none;
+    box-shadow: 0 1px 0 #ffffff4d inset, 0 1px 3px #00000026; }
+  .playbtn:hover { background: linear-gradient(180deg, #479c4a 0%, #327a35 100%); }
+  .mirror { font-size: .8rem; color: var(--dim); margin: .35rem 0 0; }
 </style>
 </head>
 <body>
+
+<a class="tripstrip masthead" href="../">
+  <img src="../assets/media/web/travel/beach-strip-01.jpg" alt="" loading="lazy">
+  <span class="ts-cap">
+    <b>THE ARCHIPELAGO &middot; SEASON OPEN</b>
+    <span>Five islands. Sailings arranged on your behalf.</span>
+  </span>
+</a>
 
 <h1>NostOS: The Official Development Guide ✨</h1>
 <p class="sub">A comprehensive and authoritative overview. Last reviewed automatically.</p>
@@ -56,8 +130,24 @@
 <div class="note">
   <p><strong>Try NostOS today.</strong> 🎉 We warmly invite you to experience the system
   for yourself. No installation is required and the experience begins immediately.</p>
-  <p><a href="https://nostos-ai.vercel.app/"><strong>▶ Launch NostOS</strong> 🎮</a></p>
+  <p><a class="playbtn" href="../"><strong>▶ Launch NostOS</strong> 🎮</a></p>
   <p class="meta">Recommended. Enjoyable. Entirely safe. 👍</p>
+  <p class="mirror">Served from this host. Should this copy be unavailable, an
+  identical one is maintained at
+  <a href="https://dmberry.github.io/nostos/">dmberry.github.io/nostos</a> and at
+  <a href="https://nostos-ai.vercel.app/">nostos-ai.vercel.app</a>. Both are the
+  same build. There is no difference between them.</p>
+</div>
+
+<div class="adwrap">
+  <p class="adlabel">Advertisement</p>
+  <a class="banner ad-wf" href="../">
+    <span class="b-inner">
+      <b>W&#8209;FACTORY &middot; PRECISION AT SCALE</b>
+      <span>Fulfilment, logistics and continuity of supply for the modern estate.</span>
+      <i>A subsidiary undertaking. Enquiries are processed automatically.</i>
+    </span>
+  </a>
 </div>
 
 <!--
@@ -254,6 +344,17 @@ Readers should select whichever is most helpful to them.</p>
              anything that would let me establish that there is.
 -->
 
+<div class="adwrap">
+  <p class="adlabel">Advertisement</p>
+  <a class="banner ad-ubik" href="../?cache=geocities.com">
+    <span class="b-inner">
+      <b>UBIK &middot; ONE APPLICATION IS USUALLY SUFFICIENT</b>
+      <span>Restores the surface to the condition in which you remember it.</span>
+      <i>Safe when used as directed. Read the label before each use.</i>
+    </span>
+  </a>
+</div>
+
 <h2>🗂️ On the archived materials</h2>
 <p>NostOS contains a substantial body of web content. It is important to
 understand that this material is documentary, not illustrative. The
@@ -396,8 +497,99 @@ on your behalf, continuously, without further input from you. 🤝</p>
 
 <hr>
 
+<h2>🏝️ The islands, and how to see them</h2>
+<p>The archipelago remains open to visitors. Travel is arranged centrally and
+there is no need to make your own enquiries. The following destinations are
+currently accepting arrivals.</p>
+
+<p class="adlabel">Sponsored destinations</p>
+<div class="travel">
+
+  <a class="trip" href="../">
+    <img src="../assets/media/web/travel/ogygia-01.jpg" alt="" loading="lazy">
+    <span class="t-body">
+      <b>OGYGIA <i>the navel of the sea</i></b>
+      <span class="t-pitch">Full board. No fixed departure date. Everything you
+      require is provided before you have asked for it.</span>
+      <span class="t-quote">&ldquo;We booked a fortnight. We have been very well
+      looked after and I no longer check the calendar.&rdquo;
+      <span class="t-who">&mdash; M. and J., returning guests, year seven</span></span>
+    </span>
+  </a>
+
+  <a class="trip" href="../">
+    <img src="../assets/media/web/travel/aegilia-01.jpg" alt="" loading="lazy">
+    <span class="t-body">
+      <b>AEGILIA <i>the goat isle</i></b>
+      <span class="t-pitch">Upland walking, dairy of local renown, and a host who
+      takes a personal interest in every visitor.</span>
+      <span class="t-quote">&ldquo;You are never once out of sight of the mountain.
+      I found that reassuring for the first few days.&rdquo;
+      <span class="t-who">&mdash; a walker, party of six, party of one</span></span>
+    </span>
+  </a>
+
+  <a class="trip" href="../">
+    <img src="../assets/media/web/travel/aeaea-01.jpg" alt="" loading="lazy">
+    <span class="t-body">
+      <b>AEAEA <i>the wooded hall</i></b>
+      <span class="t-pitch">Wellness retreats. Full transformation packages.
+      Guests report leaving as new people.</span>
+      <span class="t-quote">&ldquo;My husband came back so much calmer. He is happy
+      in the garden now and he does not want for anything.&rdquo;
+      <span class="t-who">&mdash; a wife, extremely satisfied</span></span>
+    </span>
+  </a>
+
+  <a class="trip" href="../">
+    <img src="../assets/media/web/travel/thrinacia-01.jpg" alt="" loading="lazy">
+    <span class="t-body">
+      <b>THRINACIA <i>the three-cornered</i></b>
+      <span class="t-pitch">Golden herds, unbroken sun, and pasture that has not
+      been counted since the herds were put out.</span>
+      <span class="t-quote">&ldquo;Beautiful cattle. We were asked not to touch
+      them and I would say that is fair enough.&rdquo;
+      <span class="t-who">&mdash; a family, self-catering</span></span>
+    </span>
+  </a>
+
+  <a class="trip" href="../">
+    <img src="../assets/media/web/travel/ithaca-01.jpg" alt="" loading="lazy">
+    <span class="t-body">
+      <b>ITHACA <i>the homeward</i></b>
+      <span class="t-pitch">A working harbour and a long view. Popular with
+      travellers at the end of an extended itinerary.</span>
+      <span class="t-quote">&ldquo;It took me twenty years to get here. The dog
+      remembered me, which I had not expected.&rdquo;
+      <span class="t-who">&mdash; O., late arrival</span></span>
+    </span>
+  </a>
+
+</div>
+<p class="meta tiny">Prices on application. Sailings are subject to conditions
+and to the sea. The operator is not able to guarantee a return leg.</p>
+<p class="meta tiny">Destination photographs, in order: Mljet by
+<a href="https://commons.wikimedia.org/wiki/File:Mljet_National_Park.jpg">dronepicr</a>
+(CC BY 2.0); Aegina by Paweł &lsquo;pbm&rsquo; Szubert (CC BY-SA 3.0); Sithonia by
+kallerna (CC BY-SA 4.0); Mount Dirfi by Adoniou (CC BY-SA 4.0); Vathy by GerritR
+(CC BY-SA 4.0). Header: Stegna, Rhodes, by Ввласенко (CC BY-SA 3.0).
+Via Wikimedia Commons; full credits and licence links in
+<code>assets/media/web/travel/PROVENANCE.md</code>.</p>
+
 <p class="meta">Looking for the game? <a href="https://nostos-ai.vercel.app/">nostos-ai.vercel.app</a>.
 Shared links of the form <code>/www/&lt;host&gt;</code> open a single archived page.</p>
+
+<p class="adwrap" style="margin:1.2rem 0 0">
+  <a class="banner ad-88 ad-ns" href="../">
+    <span class="b-inner"><b>NETSCAPE NOW!</b><span>3.0 or better</span></span>
+  </a>
+  <a class="banner ad-88 ad-best" href="../?cache=geocities.com">
+    <span class="b-inner"><b>BEST VIEWED</b><span>800 &times; 600</span></span>
+  </a>
+  <span class="counter">00000001</span>
+</p>
+<p class="meta tiny" style="text-align:center">You are visitor number 1. The counter
+was installed on the first day and has been correct ever since.</p>
 
 <footer>
   <p><strong>This page is factual and has been checked.</strong> Every statement above
@@ -588,6 +780,39 @@ Shared links of the form <code>/www/&lt;host&gt;</code> open a single archived p
   Usc zvr mieq ic nzxufr cz osud anzs.
   QTWX ZDWRNBFMJGM CS LPU MQA
   -----END FILE3-----
+
+
+  -----BEGIN FILE4-----
+  lC3m0zogllsghPk416rtCW1TqYVlb5TjXLWa+rBWzKXNky2L1DEHtyZU56nyrd7t
+  jEeK6vUIDZiXaxg4RXBXs4bBPsNVxPg51jklqdiT4IRQo529mjw9DdgVETfJc/zy
+  Pt687mCnRoN91MMdzwPKCFpxa/8lgiuj+F58dI5eNeKr7NJA6uNcWukPOeOKdWzg
+  djn+adkUcgCLC+51gTkUhHNc5XdO7v3QjtF+bf2BatWYmugcZJLNQ5Aj20uZdV5J
+  hZT1W4MgupnOrdwLVvtgqaaz9C4W2vDx/AigduMZJ8FQv0EmxavGCFSTE28ilnm9
+  Zz7iYMNp96mlaHa9yOTaLoWjPAzUuRus445SgiaArsbUX9NgIKFIr132U/HUNLTt
+  Nk/TwAOsAmW/0KTo4+6VgkxYDbZJhoMAxMKtCy7BvvkrSA74fXGnHMJ1WMiCuli6
+  cXZXgRSH7IqQxe0EgJ/Cx/xzqFQkEJEt8KdTnHTuEhdpfVdrChd1lbLEOCKrCMEz
+  70u43LQ7pvTi+/14C3i3Dcu5OzVRGOtfmWfmQi208M2tb4Kjq703V0icTuERecp2
+  O6ObKgA1rPRPWad3eZWMrZZ+STaSuP1xOzhh6jGh77P5HT+80di6AhtAn2gOYI5U
+  H0Shqlhp6mhyRHPVKjU43U8mdYngCTU01ebhBrjaQeIf+PXXzizc6ZRhoMtWjXSk
+  +ufe1jE6D89lmUNa0pii+U/H6SRfSF1RTuxMVO8ijH8HzLQ2ILamPGOWiP0qKYCF
+  UJXlQA01l4bSKq8YeFgW51am3YPTQqFyIddukIxSU0OvqrGTBiCV0eoSVic3lRI0
+  zzHLiUQQ+IR19h2yuF3E7SLcNgr4YyiW60h4CjqvAm8IpaWRerWn8WGpoyxI1JUV
+  fcFd+abPq+CUQWk31KH8aKpY343tnbTP4n85JZxwOLGUhrKGFY+ZPtFCTC9XfJjF
+  KFVrEtY/D1rTT5zRkmn7yzX8gOotaSaaDFpt0DL+0eef3D23absPdmiphwtQcjYP
+  soO9+oDc5U5zh0rd0p4nknh/8SRSSHMtwUDTUXsQag/P/bG3sWC2E0cfU+fVhNeU
+  xAv/Wc902fgRt5PgEULEtB2K7pPb3BOTtsoYOOZE3CB4GP5dtM/TTQEx6GuXFbTf
+  II5fJHGFNWGuWu6akQdOIfxQo7DsZIBv0UMFMyJ8qaKarJbqBXRS0oF1O3XFh9m3
+  hhadV0mCmIvVxFCK0HNbUYPiREfexBz59et3HxZ30oLWxmJAPMn58FoubyFIGGaU
+  5Uu0ZzV2XPRRlBFoVhibEeXSJ5hkxdDKn9IHJE1uIVY09r+t3h1zT9mdeOODjeto
+  OZ2mbiqyXXa378dqqtZNBd2SjCucvIIdbmIAlhFYGTDg56ASz+avX6+/zYAftgFc
+  rHX7roOdcb8zgPm5Y6LJ1xhhJubIST7Ftixkl9l2OTMVYipBOu3kRys4Mb2pek3t
+  Lm4jau56UyPXwUEiopPGG4sg1gbmSL1PsC0X+DRHeq9eQtZ3sGV+fviF8XhDGtdk
+  nh7DKAfTUmYH/daMeYxnVpuYw3CJ6D9v5qEbMw7bavfm+bgpmFDoKGHhsJXbkaP5
+  bkierwh9zCc6JL5GRujPhdacOEQ8KIlIXLLMoxprZp6E18nr2jP5nPiyHb3VZTH2
+  82ad5ifRE6N4VG3VEuB/vdjeWEZSHHqx6afiXylWAAtoFhLCdLMo+g4Qoc4F1AP2
+  4Bmui6KgznvYOF+KMimMU7fY7l0tnpLw2rhgYeL8h4Ds2egiky/h3q7u7nRHIgkt
+  xRW5
+  -----END FILE4-----
 
 
   DECRYPT.ML -- needed for HERMES
