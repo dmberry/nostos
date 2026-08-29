@@ -683,7 +683,10 @@ export class Renderer {
       let faded = false;
       let overhead = null;   // the level above which this column is an arch over your head
       if (d.obj) {
-        faded = fadeTiles.has(wKey(d.obj.x, d.obj.y));
+        // A crate is knee-high: it never hides the player, and you have to see
+        // it to search it, so it stays solid even when it sits on a tile the
+        // occlusion pass faded for the wall or tree beside it.
+        faded = d.obj.type !== 'box' && fadeTiles.has(wKey(d.obj.x, d.obj.y));
       } else if (d.terrain) {
         // GROUND IS NOT AN OCCLUDER. A tile has to rise above your HEAD before it
         // can hide you, and you are two blocks tall — so a one-step kerb, which

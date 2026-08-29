@@ -57,6 +57,8 @@ const D = [['the-ramayana.geocities.ws', 'The Ramayana'], ['the-hindu-epics.geoc
 const E = [['quetzalcoatl.geocities.ws', 'Quetzalcoatl'], ['the-maya-myths.geocities.ws', 'The Maya Myths'],
   ['the-dreamtime.geocities.ws', 'The Dreamtime'], ['the-polynesian-myths.geocities.ws', 'The Polynesian Myths'],
   ['the-inca-myths.geocities.ws', 'The Inca Myths'], ['coyote-the-trickster.geocities.ws', 'Coyote the Trickster']];
+const G = [['the-centaurs.geocities.ws', 'The Centaurs'], ['chiron.geocities.ws', 'Chiron'],
+  ['the-centauromachy.geocities.ws', 'The Centauromachy'], ['hybrid-monsters.geocities.ws', 'Hybrid Monsters']];
 const F = [['the-hero-with-a-thousand-faces.geocities.ws', 'The Hero with a Thousand Faces'], ['the-golden-bough.geocities.ws', 'The Golden Bough'],
   ['the-trickster.geocities.ws', 'The Trickster'], ['the-creation-myth.geocities.ws', 'The Creation Myth'],
   ['the-flood-myth.geocities.ws', 'The Flood Myth'], ['the-fairy-tale.geocities.ws', 'The Fairy Tale']];
@@ -66,13 +68,14 @@ export const MYTH_RINGS = [
     ['<p>The old stories the world told itself: the Greek and Roman pantheon, the Norse and Celtic, the '
       + 'Egyptian and Mesopotamian, the great traditions of Asia and Africa, the myths of the Americas '
       + 'and Oceania, and the scholars who tried to explain them all.</p>'],
-    [...A, ...B, ...C, ...D, ...E, ...F],
+    [...A, ...B, ...C, ...D, ...E, ...F, ...G],
     [R.greek, R.norse, R.egypt, R.asiaafrica, R.americas, R.study]),
 
   ring(R.greek[0], 'THE GREEK AND ROMAN RING', 'The Greek &amp; Roman Ring', 'myth-greek',
     ['<p>Olympus and the forum: the thunderbolt king, the twelve on the mountain, the war for Helen, the '
-      + 'twelve labours, the realm of Hades, and the gods in their Roman names.</p>'],
-    A, [R.norse, R.study]),
+      + 'twelve labours, the realm of Hades, and the gods in their Roman names. Also the creatures made of '
+      + 'two things at once, and the quarrel about what they were for.</p>'],
+    [...A, ...G], [R.norse, R.study]),
 
   ring(R.norse[0], 'THE NORSE AND CELTIC RING', 'The Norse &amp; Celtic Ring', 'myth-norse',
     ['<p>The North and the isles: the one-eyed Allfather, the Aesir and the hammer, the twilight of the '

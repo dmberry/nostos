@@ -59,24 +59,18 @@ const files = argv.filter((a) => !a.startsWith('-'));
 
 // ---- Is there a newer one? --------------------------------------------------
 //
-// WHAT THIS DOES AND DOES NOT DO, because a tool that quietly contacts a server
-// is the opposite of the thing this repository argues for.
+// ONLY WHEN ASKED. Starting a session used to reach for the network on its own
+// to see whether a newer build existed, and a tool that quietly contacts a
+// server is the opposite of the thing this repository argues for. Nothing is
+// fetched now unless you type `bml --version`, which asks the question out loud
+// and is the only place that answers it.
 //
-// It fetches one file, package.json, from the public repository, and compares
-// its version to this one. It sends no identity, no telemetry and no arguments;
-// what a web server can infer is that some IP asked for a public file, which is
-// true of reading the README.
-//
-// It runs ONLY in an interactive session: not for `bml file.ml`, not in a
-// pipe, not in CI, not under a test. It caches for a day, times out after a
-// second and a half, and fails silently, so it can never delay or break a
-// session. `BML_NO_UPDATE_CHECK=1` turns it off entirely.
+// That lookup fetches one file, package.json, from the public repository, and
+// compares its version to this one. It sends no identity, no telemetry and no
+// arguments; what a web server can infer is that some IP asked for a public
+// file, which is true of reading the README. `BML_NO_UPDATE_CHECK=1` turns even
+// that off.
 const VERSION_URL = 'https://raw.githubusercontent.com/critical-code-studies/BML/main/package.json';
-// The cache path is overridable, and the tests override it. They used to write
-// the REAL one: a test planted a cache claiming 99.0.0 was out, to prove a
-// piped session stays quiet, and every later interactive session read it and
-// announced an update that did not exist. Test fixtures must not be able to
-// reach into the thing they are testing.
 // THE STEP BUDGET AT A PROMPT. Every run counts steps so a program that never
 // comes back faults instead of hanging. The default is the GAME's, 200,000,
 // picked so a machine's program cannot stall a render loop — and a command line
@@ -87,18 +81,6 @@ const VERSION_URL = 'https://raw.githubusercontent.com/critical-code-studies/BML
 // 50 million: a runaway faults in about a second, and `sum (1000000, 0)` runs.
 const REPL_FUEL = 50000000;
 
-const CACHE = process.env.BML_VERSION_CACHE || path.join(os.tmpdir(), 'bml-version-check.json');
-const DAY = 24 * 60 * 60 * 1000;
-
-function cached() {
-  try {
-    const c = JSON.parse(fs.readFileSync(CACHE, 'utf8'));
-    if (c && typeof c.at === 'number' && Date.now() - c.at < DAY
-        && /^\d+\.\d+\.\d+$/.test(String(c.latest || ''))) return c.latest;
-  } catch { /* no cache, or unreadable: check again */ }
-  return null;
-}
-
 // "0.10.0" is newer than "0.9.0", which a string comparison gets wrong.
 function isNewer(latest, mine) {
   const a = String(latest).split('.').map(Number);
@@ -108,25 +90,6 @@ function isNewer(latest, mine) {
     if ((a[i] || 0) < (b[i] || 0)) return false;
   }
   return false;
-}
-
-async function checkForUpdate() {
-  if (process.env.BML_NO_UPDATE_CHECK) return null;
-  if (!process.stdin.isTTY) return null;          // scripts, pipes, CI, tests
-  const hit = cached();
-  if (hit !== null) return isNewer(hit, BML_VERSION) ? hit : null;
-  try {
-    const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), 1500);
-    const res = await fetch(VERSION_URL, { signal: ctl.signal });
-    clearTimeout(timer);
-    if (!res.ok) return null;
-    const latest = String((await res.json()).version || '');
-    try { fs.writeFileSync(CACHE, JSON.stringify({ at: Date.now(), latest })); } catch { /* cache is a nicety */ }
-    return isNewer(latest, BML_VERSION) ? latest : null;
-  } catch {
-    return null;    // offline, blocked, slow, moved: none of it is your problem
-  }
 }
 
 // `bml --examples [dir]` copies the example programs somewhere you can edit
@@ -365,14 +328,6 @@ for (const f of files) { if (!runFile(f)) failed = true; }
 if (files.length && !forceRepl) process.exit(failed ? 1 : 0);
 
 console.log(banner());
-
-// Interactive only, cached, silent on failure. See checkForUpdate above.
-const newer = await checkForUpdate();
-if (newer) {
-  console.log(`  A newer BML is out: ${newer} (you have ${BML_VERSION}).`);
-  console.log('  npm install github:critical-code-studies/BML');
-  console.log('');
-}
 
 // TAB COMPLETES. The rule is in the language (src/lang/complete.js) so that the
 // page's prompt and this one cannot drift apart, and so it can be tested

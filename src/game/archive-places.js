@@ -72,7 +72,9 @@ export const PLACE_SITES = [
       pic('ponies-eiffel', 'Brought back from the trip. The tower is four inches tall.'),
       '<p>every year, <b>Bovisands</b>, <b>Devon</b>. the same field above the same ' +
         'beach. my dad reversed a caravan into the same gatepost four years running ' +
-        'and on the fourth year the farmer had painted it white.</p>',
+        'and on the fourth year the farmer had painted it white. there is a ' +
+        'whole page for it now: <a href="bovisand.geocities.ws">bovisands</a>, ' +
+        'including the fort and the summer of 76.</p>',
       '<p>one year we went to <b>Telford</b> instead because of the money. i have ' +
         'never said a bad word about Telford and i am not starting now, but it is ' +
         'not Bovisands.</p>',

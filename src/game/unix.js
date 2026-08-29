@@ -27,7 +27,8 @@
 import { PDFS, pdfStub } from './pdfs.js';
 import { ELIZA_README, DOCTOR_SCRIPT, DOCTOR_TABLES, ELIZA_PROGRAM, ELIZA_LOOP_LEGACY } from './eliza-src.js';
 import { BOOKS, bookFileName, bookStub } from './books.js';
-import { LETTER_FILE, LETTER_OPENER, CATALOGUE_NOTE, WARNING_FILE } from './seals.js';
+import { LETTER_FILE, LETTER_OPENER, CATALOGUE_NOTE, WARNING_FILE, FOURTH_SEALED } from './seals.js';
+import { openSigned, fromBase64 } from './digest.js';
 import { SPOOL, MAILBOX, NODENAME, KNOWN_NODES, OWNER_MAIL, jobText, parseJob,
   routeOf, statusReport, deliver, formatMailbox, formatMessage } from './uucp.js';
 
@@ -233,6 +234,8 @@ const MAN = {
   ifconfig: 'ifconfig [iface] [up|down]\n  Configure a network interface.\n\n  With no arguments, report every interface and its state. The wireless\n  card is built into this machine, and it comes up DOWN — nothing is on\n  the air until you say so:\n\n    ifconfig wifi0 up\n\n  The card forges its address and hardware id on every association,\n  so the network answers it and nothing can follow the answer home. It\n  reaches the WEB only. There is no route to the control wire from here.',
   ping: 'ping <host>\n  Ask a host whether it is there. Takes an address (10.1.1.2) or a name.',
   arp: 'arp -a\n  What is on the wire within radio range, nearest first.\n\n  The card hears every machine near enough to associate and keeps what it\n  heard in a table. Each line is one machine: the name it answers to, its\n  address, and where it was when it last spoke — bearing and range from\n  where you are standing.\n\n  This is how you find out WHICH machine you are looking at. Four T-1s on a\n  hillside are four identical machines until you sweep them, and posting a\n  program to the wrong one is the sort of mistake that walks over and finds\n  you. Range is about 24 metres; walk closer and more of them answer.',
+  unseal: 'unseal <file> <word> <word> ...\n  Read a signed block back.\n\n  The words after the filename are the key. There is no list of them on\n  this machine and nothing here will guess them for you.\n\n    unseal fourth.asc one two three four five six\n\n  It checks the signature before it turns a single byte, so a phrase that\n  is nearly right gets exactly what a phrase that is nothing like it\n  gets: nothing. There is no warmer or colder. It takes about a second\n  either way, on purpose, because a check that is cheap is a check that\n  can be run a hundred million times by somebody who is not you.\n\n  Files that answer to it are base-64 with a sixteen-byte head. The old\n  sealed things on this disk are not that shape and will refuse.',
+
   watermark: 'watermark <file>\n  Say whether a file was written by the machines or by a person.\n\n  Everything the estate pressed carries RON content credentials; nothing\n  you write does. So in this world the detector detects HUMANS, and the\n  reading is the other way round from the one it was built for:\n\n    VALID   machine-generated, byte-for-byte what the foundry pressed\n    NONE    human-made, or edited since — filed: suspiciously human\n\n  Useful on salvage: in a pile of recovered files the unmarked ones are\n  the ones somebody actually wrote, and those are the ones worth reading.\n  A program you post to a unit fails the check, and the unit\'s own page\n  says so on its provenance line. It has never stopped anybody.',
   scan: 'scan\n  The obelisks on the network you are associated with: each tower\'s code\n  and address, and any operator tag hung on it.\n\n  Where arp hears the machines within radio range, scan reads the whole\n  subnet off the wire, the same list Netscape shows — so you can find a\n  tower\'s code to telnet or ping without opening the browser. A tower that\n  has been felled or jammed shows [down].\n\n    scan\n    telnet ob_5d33',
   iwlist: 'iwlist [iface] scan\n  Scan for wireless networks in range.\n\n  Reports one Cell per network with its ESSID, mode and signal quality.\n  The estate network is wherever its towers stand. Anything else is\n  somebody standing close enough to be heard, which is rare and worth\n  looking at.',
@@ -652,8 +655,8 @@ const README_V = [
   'Every other unit carries a few lines of ML you can read, argue with and',
   'replace. A V-class carries WEIGHTS: a small neural net, floating point,',
   'evaluated as a forward pass four times a second. The header on the file',
-  'says outright that nobody at RON knows why the numbers work, only that',
-  'they do. That is not a joke the estate made. It is a maintenance note.',
+  'says outright that nobody knows why the numbers work, only that they',
+  'do. That is not a joke the estate made. It is a maintenance note.',
   '',
   '  V-1   courier. Walks to flat machines and gives them a cell. Cut it and',
   '        the fallen stay down.',
@@ -2513,6 +2516,31 @@ const COMMANDS = {
     const w = Math.max(4, ...obs.map((o) => String(o.code || o.host || '').length));
     const rows = obs.map((o) => `  ${String(o.code || '?').padEnd(w)}  ${String(o.ip || '?').padEnd(12)}${o.tag ? `  «${o.tag}»` : ''}${o.down ? '  [down]' : ''}`);
     return [`obelisks on ${net.essid || 'the wire'}:`, ...rows].join('\n');
+  },
+
+  // `unseal <file> <word> ...` — read a signed block back.
+  //
+  // The words are the key and there is no list of them on this machine. It
+  // checks the signature before it turns a single byte, so a phrase that is
+  // nearly right gets exactly what a phrase that is nothing like it gets. It
+  // takes a second either way; that is the stretch, and it is deliberate.
+  unseal: (args, _in, env) => {
+    const name = args[0] && String(args[0]);
+    if (!name) throw new UnixError('unseal <file> <word> <word> ...');
+    const words = args.slice(1).map(String).filter(Boolean);
+    if (!words.length) throw new UnixError('unseal: no phrase given');
+    const parts = resolvePath(name, env.cwd);
+    const n = lookup(env.root, parts);
+    if (!n) throw new UnixError(`unseal: ${name}: no such file`);
+    if (!isFile(n)) throw new UnixError(`unseal: ${name}: is a directory`);
+    const text = openSigned(words.join(' ').toLowerCase(), fromBase64(n.f));
+    if (text == null) {
+      return [`unseal: ${name}: the phrase does not open this file.`,
+              'Nothing was turned back. A near miss and a wild guess look the',
+              'same from here, which is the point of the signature.'].join('\n');
+    }
+    if (env.onAchieve) env.onAchieve('sealOpened', { file: parts.join('/') });
+    return text;
   },
 
   // `watermark <file>` — is this file machine-made or human-made?

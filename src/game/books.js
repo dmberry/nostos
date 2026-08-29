@@ -11,8 +11,8 @@
 //
 // Whole works, in HTML, sitting in the laptop's own storage. They are the
 // longest things in the game by an enormous margin and the only ones nobody
-// wrote for it: Homer, Plato, Aurelius, Shelley, Melville, the King James
-// translators and Shakespeare, all out of copyright and out of anyone's
+// wrote for it: Homer, Plato, Aurelius, Shelley, Melville, Stapledon, the King
+// James translators and Shakespeare, all out of copyright and out of anyone's
 // control, which is exactly why a Torite would keep them. A machine that holds
 // the whole of Shakespeare and needs nothing from anybody to show it to you is
 // the argument the readme makes, in the one form nobody can dispute.
@@ -100,6 +100,16 @@ export const BOOKS = [
     author: 'William Shakespeare',
     trans: '',
     note: 'All of it. Seven megabytes, which on a disk this size is a decision.',
+  },
+  {
+    key: 'lastfirstmen',
+    dir: 'Last and First Men by Olaf Stapledon',
+    file: 'Last and First Men by Olaf Stapledon.html',
+    cover: 'images/cover.jpg',
+    title: 'Last and First Men',
+    author: 'Olaf Stapledon',
+    trans: 'a story of the near and far future',
+    note: 'A history of the eighteen kinds of people, written by the last of them.',
   },
 ];
 

@@ -298,7 +298,13 @@ export function createIsland(seed) {
       [{ item: 'bomb_medium', qty: 1 }],
       // Late-game weapons: previously defined in ITEMS but never actually
       // placed anywhere in the world, so they were unobtainable in play.
-      [{ item: 'bow', qty: 1 }, { item: 'arrow', qty: 24 }],
+      // THE BOW, AND NO ARROWS. It is the only place arrows were ever placed, so
+      // dropping them here makes the bow permanently dead weight — you can find
+      // it, carry it and never draw it, and the game already has the line for
+      // that ("dead weight without arrows"). Kept rather than deleted because
+      // the item, its class and its tests all still stand, and because a bow
+      // nobody can use is not the worst thing to find on this particular island.
+      [{ item: 'bow', qty: 1 }],
       [{ item: 'katana', qty: 1 }],
       [{ item: 'sledgehammer', qty: 1 }],
       [{ item: 'railgun', qty: 1 }, { item: 'battery', qty: 14 }],

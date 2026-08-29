@@ -103,6 +103,11 @@ export const ITEMS = {
   seatbelt: {
     name: 'Seatbelt',
     kind: 'tool',
+    // POCKETS ONLY. It is a length of webbing cut out of a car, and having it
+    // come up in your hand every time you tidied the pack was just irritating
+    // (David, 2026-08-25). `noHold` keeps it a tool everywhere else — the chart,
+    // the classes, the damage numbers — while barring the one slot.
+    noHold: true,
     tier: 1,
     treeDamage: 0,
     animalDamage: 4,
@@ -1030,6 +1035,7 @@ export const DELETED_BOOKS = [
   ['', 'Moby-Dick', 'Herman Melville', 'Melville on a captain hunting the whale that took his leg, and on everything else there is to know about whaling.'],
   ['', 'The King James Bible', '', 'The 1611 translation: the one that set the rhythm of the language for four centuries.'],
   ['', 'The Complete Works', 'William Shakespeare', 'All of it, in one brick — the histories, the comedies, the tragedies, and the sonnets at the back.'],
+  ['', 'Last and First Men', 'Olaf Stapledon', 'Two billion years of us, told by one of the last of us — eighteen species of humanity, rising and going out.'],
 ];
 // A REAL PAGE FOR EACH, keyed by title so the tuple table above stays a tuple
 // table. Filed to the Library when you read the book, and it is what the Library
@@ -1219,6 +1225,13 @@ Between the chase there is everything else: how a whale is cut up, what the oil 
 The last thirty pages are as fast as the middle three hundred are slow, and that is deliberate.
 
 A doorstop paperback, cover long gone, held with a rubber band.`,
+  'Last and First Men': `A history of the future, written in 1930 by a philosopher who had driven an ambulance through the last war.
+
+There is no hero in it and barely a scene. Eighteen kinds of people rise, do the one thing they are extraordinary at, are ruined by it, and are succeeded, and the narrator is one of the last of them looking back across two billion years. He called it an essay in myth creation rather than a novel, which is fair warning.
+
+What it is actually about is how a species looks from far enough away to see the whole of it at once.
+
+A Penguin, spine cracked white, someone's pencil in the margins for the first hundred pages and then not.`,
   'The King James Bible': `The 1611 translation, made by committee and somehow the best-sounding English ever printed.
 
 Six companies of scholars, working to rules, revising each other — and out of that came the cadences the language has been borrowing ever since. Half the phrases people use without knowing where they got them are in here.
@@ -1238,6 +1251,7 @@ export const PBOOK_FULL = {
   'The Republic': 'republic', 'The Odyssey': 'odyssey', 'Meditations': 'meditations',
   'Frankenstein': 'frankenstein', 'Moby-Dick': 'mobydick',
   'The King James Bible': 'kjv', 'The Complete Works': 'shakespeare',
+  'Last and First Men': 'lastfirstmen',
 };
 
 export const DELETED_RECORDS = [

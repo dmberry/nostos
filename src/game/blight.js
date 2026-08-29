@@ -29,8 +29,55 @@
 // P. Good. Let it spread. A thing that grows outward from every point at once
 //    is the only honest shape of power, and the grass was never the point of
 //    the island.
-export const BLIGHT_MAX = 9;        // tiles a single tower's front reaches at full spread
-export const BLIGHT_GROW = 0.28;    // radius tiles/sec while the tower is live + networked
+export const BLIGHT_MAX = 9;        // the scale the front slows on, not the ceiling
+export const BLIGHT_GROW = 0.09;    // radius tiles/sec at the tower, while live + networked
+export const BLIGHT_REACH = 64;     // the ceiling. far enough that fronts meet and close
+
+// A front slows as it widens, because the same push spread round a longer edge
+// moves the edge less: at BLIGHT_MAX it advances at half the rate it left the
+// tower at, at three times that a quarter, and on down. So two towers standing
+// apart WILL meet, given a night, and the grey between them closes; but the
+// island is not lost in the first two minutes, and a player who cuts the link
+// at dusk wakes to a different island from one who does not.
+//
+// The edge is not a circle. Each tower gets its own drift, so one front runs
+// ahead on the seaward side and lags in the lee, the way a real thing spreads
+// downhill and downwind. The drift is derived from the tower's own position, so
+// it is the same every session and every save: a tower that leans north-east
+// leans north-east for good, and a player can learn the shape of the ground
+// they are losing. Sample by bearing, not by radius alone.
+//
+// Nothing here retreats. Ground is taken back a tile at a time by a gardener or
+// by a handful of grass seed, and by nothing else.
+export function blightRate(r) {
+  return BLIGHT_GROW * (BLIGHT_MAX / (BLIGHT_MAX + Math.max(0, r)));
+}
+
+// A tower's lobes, from its own coordinates. Two harmonics is enough to read as
+// organic and cheap enough to call per tile: one slow lobe that leans the whole
+// front one way, one faster ripple that puts a bite in it.
+export function blightLean(ob, theta) {
+  const a = (ob.x * 12.9898 + ob.y * 78.233) % 6.28318;
+  const b = (ob.x * 39.3468 + ob.y * 11.135) % 6.28318;
+  return 1 + 0.22 * Math.sin(theta + a) + 0.10 * Math.sin(3 * theta + b);
+}
+
+// The front's reach on a given bearing from this tower.
+export function blightEdge(ob, theta) {
+  return (ob.blightR || 0) * blightLean(ob, theta);
+}
+
+// Per-tile fray, so the boundary is not a curve either. A tile's own coordinates
+// decide whether it goes early or holds out, which puts stragglers of live grass
+// inside the grey and dead patches out ahead of it. Deterministic: the same tile
+// always makes the same choice, so nothing shimmers frame to frame and a save
+// reloads onto the identical coastline of dead ground.
+export const BLIGHT_FRAY = 0.9;     // tiles either side of the edge the fray reaches
+
+export function blightJitter(x, y) {
+  const n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+  return (n - Math.floor(n)) * 2 - 1;   // -1..1, stable per tile
+}
 
 // A tower contributes a growing front only while it is standing, networked, and
 // not jammed. `destroyed`/`needsRebuild`/`frozen`/`jammed` all stop it. When it
@@ -50,7 +97,7 @@ export function blightStep(obeliskObjs, dt, active) {
   for (const ob of obeliskObjs) {
     if (ob.blightR == null) ob.blightR = 0;
     if (active && obeliskLive(ob)) {
-      ob.blightR = Math.min(BLIGHT_MAX, ob.blightR + BLIGHT_GROW * dt);
+      ob.blightR = Math.min(BLIGHT_REACH, ob.blightR + blightRate(ob.blightR) * dt);
     }
     // else: FROZEN. The front holds; the ground it took stays taken until the
     // player or a gardener works it back tile by tile. No automatic recovery.
@@ -64,7 +111,12 @@ export function tileBlighted(x, y, obeliskObjs) {
     const r = ob.blightR || 0;
     if (r <= 0) continue;
     const dx = x - ob.x, dy = y - ob.y;
-    if (dx * dx + dy * dy <= r * r) return true;
+    // Cheap reject on the widest the lobes can push the edge, before the
+    // trigonometry. Most tiles on the map fail here and cost nothing.
+    const far = r * 1.32 + BLIGHT_FRAY;
+    if (dx * dx + dy * dy > far * far) continue;
+    const edge = blightEdge(ob, Math.atan2(dy, dx)) + blightJitter(x, y) * BLIGHT_FRAY;
+    if (dx * dx + dy * dy <= edge * edge) return true;
   }
   return false;
 }
@@ -79,8 +131,11 @@ export function blightDepth(x, y, obeliskObjs) {
   for (const ob of obeliskObjs) {
     const r = ob.blightR || 0;
     if (r <= 0) continue;
-    const d = Math.hypot(x - ob.x, y - ob.y);
-    if (d <= r) depth = Math.max(depth, r - d);
+    const dx = x - ob.x, dy = y - ob.y;
+    const d = Math.hypot(dx, dy);
+    if (d > r * 1.32 + BLIGHT_FRAY) continue;
+    const edge = blightEdge(ob, Math.atan2(dy, dx)) + blightJitter(x, y) * BLIGHT_FRAY;
+    if (d <= edge) depth = Math.max(depth, edge - d);
   }
   return depth;
 }

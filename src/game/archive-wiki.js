@@ -447,9 +447,10 @@ export const WIKI_ARTICLES = {
       'for people.</p>',
       '<p>[ record ends ]</p>',
       '<hr>',
-      '<p><small>&ldquo;MEDIA DETERMINE OUR SITUATION&rdquo; is recorded as a wall',
-      'inscription in several districts. See also <a href="wiki:mcluhan">Marshall',
-      'McLuhan</a>, <a href="wiki:ernst">Wolfgang Ernst</a>.</small></p>',
+      '<p><small>The six words this book opens with are recorded as a wall',
+      'inscription in several districts, usually without attribution and usually',
+      'shortened. See also <a href="wiki:mcluhan">Marshall McLuhan</a>,',
+      '<a href="wiki:ernst">Wolfgang Ernst</a>.</small></p>',
     ],
   },
   ernst: {
