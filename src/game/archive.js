@@ -295,6 +295,7 @@ import { REL_RINGS } from './archive-rel-hubs.js'; // the religion webrings
 import { VEC_SITES } from './archive-vec.js';  // the Centre for Vector Media
 import { SMETHWICK_SITES } from './archive-smethwick.js'; // Smethwick, the brewery, the schools
 import { SWISS_SITES } from './archive-swiss.js';   // Basel and Bern, disagreeing
+import { DIALOGUE_SITES } from './archive-dialogues.js'; // eight passages of Plato
 import { LIT_RINGS } from './archive-lit-hubs.js'; // the literature webrings
 import { MATH_A } from './archive-math-a.js';   // antiquity & geometry
 import { MATH_B } from './archive-math-b.js';   // the calculus
@@ -487,6 +488,7 @@ export const ARCHIVED_SITES = [
   ...VEC_SITES,
   ...SMETHWICK_SITES,
   ...SWISS_SITES,
+  ...DIALOGUE_SITES,
   ...MATH_A, ...MATH_B, ...MATH_C, ...MATH_D, ...MATH_E, ...MATH_F,
   ...MATH_RINGS,
   ...AA_A, ...AA_B, ...AA_C, ...AA_D, ...AA_E, ...AA_F,
@@ -789,6 +791,15 @@ const CATEGORY_OF = {
   // wrong heading cannot be browsed to, and browsing is how this archive is
   // meant to be walked. Filed as a directory of the period would have filed
   // them.
+  'the-plato-pages.geocities.ws': 'Education',
+  'the-shepherd.geocities.ws': 'Education',
+  'the-medicine.geocities.ws': 'Education',
+  'the-cave.geocities.ws': 'Education',
+  'the-carver.geocities.ws': 'Education',
+  'theuth-and-thamus.geocities.ws': 'Education',
+  'the-tie-of-the-cause.geocities.ws': 'Education',
+  'the-euthyphro-question.geocities.ws': 'Education',
+  'the-laws-speak.geocities.ws': 'Education',
   'basel.geocities.ws': 'Society & Culture',
   'bern.geocities.ws': 'Society & Culture',
   'quintonpetrol.geocities.ws': 'Society & Culture',
