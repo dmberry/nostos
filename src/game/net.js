@@ -2378,9 +2378,13 @@ export function detectorReport(text, run) {
   const ttr = (0.31 + ((h >>> 17) % 470) / 1000).toFixed(3);
   const lo = Math.max(50, conf - 3 - ((h >>> 19) % 3));
   const hi = Math.min(99, conf + 2 + ((h >>> 23) % 3));
+  // bg:corp, the same ground as the landing page. This was bg:teal, which put
+  // the theme's pale-yellow body text on the near-white <pre> the metrics are
+  // printed in: the whole document-metrics block rendered invisible (David,
+  // with the screenshot).
   return [
-    '<!--bg:teal-->',
-    '<h1>TEXT PROVENANCE&trade;</h1>',
+    '<!--bg:corp-->',
+    '<h1>Text Provenance</h1>',
     '<p><small>Engine v4.2.1 &middot; model TP-DISCRIM-3b &middot; threshold '
       + '&tau; = 0.62</small></p>',
     '<hr>',
@@ -2424,8 +2428,8 @@ export function detectorReport(text, run) {
     ] : [
       '<p>This passage is consistent with unassisted human composition.</p>',
     ]),
-    '<p><button id="tp-again" type="button">Analyse again</button> '
-      + '<button id="tp-new" type="button">Submit different text</button></p>',
+    '<p><button class="tp-cta" id="tp-again" type="button">Analyse again</button> '
+      + '&nbsp;<button class="tp-alt" id="tp-new" type="button">Check another passage</button></p>',
     '<hr>',
     '<p><small>Text Provenance does not store submitted passages. Assessments',
     'are probabilistic and are provided for guidance. Reported AUROC on the',

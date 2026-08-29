@@ -8035,17 +8035,44 @@ function nsRender() {
   // the thing with a browser attached. Whatever the player pastes goes straight
   // to net.js, which decides, arbitrarily, and says so in four significant
   // figures.
-  const tpGo = nsPageEl.querySelector('#tp-go');
   const tpInput = nsPageEl.querySelector('#tp-input');
-  if (tpGo && tpInput) {
-    const run = () => {
+  if (tpInput) {
+    const go = () => {
       const t = tpInput.value.trim();
       if (!t) return;
       nsSetView({ kind: 'detect', text: t, run: 1 });
       sfx.play('keyclick');
     };
-    tpGo.addEventListener('click', (e) => { e.preventDefault(); run(); });
+    // Two Check for AI buttons, top and bottom of the card, as the real one has.
+    for (const id of ['#tp-go', '#tp-go2']) {
+      const b = nsPageEl.querySelector(id);
+      if (b) b.addEventListener('click', (e) => { e.preventDefault(); go(); });
+    }
     tpInput.addEventListener('keydown', (e) => { e.stopPropagation(); });
+    // "Try an example". Three passages, and the site is confident about which
+    // is which, and the engine will not agree with the site.
+    const TP_EX = {
+      '#tp-ex-human': 'The gatepost was painted white the fourth year and nobody '
+        + 'said anything about it. I have thought about that more than is '
+        + 'reasonable. My father reversed into it every August for four years '
+        + 'and on the fourth year it was white, and that was the whole of the '
+        + 'conversation we had about it.',
+      '#tp-ex-gpt': 'In today\u2019s rapidly evolving digital landscape, it is '
+        + 'more important than ever to consider the multifaceted implications of '
+        + 'emerging technologies. By leveraging robust frameworks and fostering '
+        + 'meaningful collaboration, organisations can unlock significant value '
+        + 'while navigating an increasingly complex environment.',
+      '#tp-ex-both': 'Every stage of contemporary academic writing is already '
+        + 'mediated by computational processes that shape intellectual labour in '
+        + 'ways that remain largely unexamined and undeclared. The selective '
+        + 'anxiety about LLMs thus appears less like a principled ethical stance '
+        + 'and more like a reaction to a threshold where the computational '
+        + 'mediation of thought becomes uncomfortably visible.',
+    };
+    for (const [id, txt] of Object.entries(TP_EX)) {
+      const b = nsPageEl.querySelector(id);
+      if (b) b.addEventListener('click', (e) => { e.preventDefault(); tpInput.value = txt; tpInput.focus(); });
+    }
   }
   // On the result page: analyse the same text again and get a different answer.
   const tpAgain = nsPageEl.querySelector('#tp-again');

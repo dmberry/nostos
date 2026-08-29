@@ -802,7 +802,6 @@ const CATEGORY_OF = {
   'the-tie-of-the-cause.geocities.ws': 'Education',
   'the-euthyphro-question.geocities.ws': 'Education',
   'the-laws-speak.geocities.ws': 'Education',
-  'stunlaw.blogspot.com/provenance': 'Society & Culture',
   'foucault-versions.geocities.ws': 'Education',
   'provenance-thread.geocities.ws': 'Society & Culture',
   'textprovenance.io': 'Computers & Internet',
