@@ -624,6 +624,7 @@ export const TITLES = {
   "forth.geocities.ws": "Forth — the stack, and the whole system in 8K",
   "forthenextone.geocities.ws": "For The Next One",
   "fortran-backus.geocities.ws": "FORTRAN // the compiler that had to beat the men (Backus)",
+  "foucault-versions.geocities.ws": "Which version of \"What is an Author?\" are you citing?",
   "foucault.geocities.ws": "Coursework: power/knowledge in Foucault",
   "foundation-models.geocities.ws": "FOUNDATION MODELS // one model, adapted to everything",
   "foundation.geocities.ws": "FOUNDATION — a reading guide // psychohistory",
