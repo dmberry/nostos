@@ -296,6 +296,7 @@ import { VEC_SITES } from './archive-vec.js';  // the Centre for Vector Media
 import { SMETHWICK_SITES } from './archive-smethwick.js'; // Smethwick, the brewery, the schools
 import { SWISS_SITES } from './archive-swiss.js';   // Basel and Bern, disagreeing
 import { DIALOGUE_SITES } from './archive-dialogues.js'; // eight passages of Plato
+import { PROVENANCE_SITES } from './archive-provenance.js'; // the post, and it coming loose
 import { LIT_RINGS } from './archive-lit-hubs.js'; // the literature webrings
 import { MATH_A } from './archive-math-a.js';   // antiquity & geometry
 import { MATH_B } from './archive-math-b.js';   // the calculus
@@ -489,6 +490,7 @@ export const ARCHIVED_SITES = [
   ...SMETHWICK_SITES,
   ...SWISS_SITES,
   ...DIALOGUE_SITES,
+  ...PROVENANCE_SITES,
   ...MATH_A, ...MATH_B, ...MATH_C, ...MATH_D, ...MATH_E, ...MATH_F,
   ...MATH_RINGS,
   ...AA_A, ...AA_B, ...AA_C, ...AA_D, ...AA_E, ...AA_F,
@@ -800,6 +802,9 @@ const CATEGORY_OF = {
   'the-tie-of-the-cause.geocities.ws': 'Education',
   'the-euthyphro-question.geocities.ws': 'Education',
   'the-laws-speak.geocities.ws': 'Education',
+  'stunlaw.blogspot.com/provenance': 'Society & Culture',
+  'provenance-thread.geocities.ws': 'Society & Culture',
+  'textprovenance.io': 'Computers & Internet',
   'basel.geocities.ws': 'Society & Culture',
   'bern.geocities.ws': 'Society & Culture',
   'quintonpetrol.geocities.ws': 'Society & Culture',
