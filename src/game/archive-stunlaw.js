@@ -96,11 +96,84 @@ const img = (f, cap) =>
   '<img class="indie-pic" src="assets/media/web/stunlaw/' + f + '" alt="">'
   + '<span class="indie-cap">' + cap + '</span>';
 
-const STUNLAW = P('stunlaw.blogspot.com', 'STUNLAW',
-  'The "Development Guide" for Nostos', [
+// ---- the weblog -------------------------------------------------------------
+//
+// A blog is an index and its posts, not one enormous page. It was one enormous
+// page until it was pointed out that this is not how a weblog works, and the
+// front page is where a reader lands, so the front page is now a front page:
+// title, tagline, the posts in reverse order with their dates and a paragraph
+// each, the labels, the archive by month, and the about box down the side that
+// every one of these had.
+//
+// The posts are at their own addresses, which is also how a permalink works and
+// is why anybody could ever link to one.
+
+const MASTHEAD = [
   '<h1>Stunlaw</h1>',
   '<p><small>philosophy and critique for a digital age</small></p>',
-  '<hr>',
+];
+
+// ---- the front page ----------------------------------------------------------
+
+const INDEX = P('stunlaw.blogspot.com', 'STUNLAW',
+  'Stunlaw — philosophy and critique for a digital age', [
+    ...MASTHEAD,
+    '<hr>',
+    '<h2><a href="stunlaw.blogspot.com/development-guide">The &ldquo;Development Guide&rdquo; for Nostos</a></h2>',
+    '<p><small>David M. Berry &middot; August 2026</small></p>',
+    '<p>Over the past six weeks I have been experimenting with a computable',
+    'literary artefact that explores the trajectory and limitations of Large',
+    'Language Models through vibe coding a large-scale vector-medium artefact.',
+    'The aim was to explore scale limitations on a complex programming project,',
+    'and to create a literary object particular to the vector medium I',
+    'theorise.',
+    '<a href="stunlaw.blogspot.com/development-guide">Read more &rarr;</a></p>',
+    '<p><small>Labels: vector theory, critical code studies, computational',
+    'culture, LLMs, games.</small></p>',
+    '<hr>',
+    '<h2><a href="stunlaw.blogspot.com/what-matter-whos-speaking">What Matter Who&rsquo;s Speaking?</a></h2>',
+    '<p><small>David M. Berry &middot; 20 December 2025, revised 22 August',
+    '2026</small></p>',
+    '<p>Academics are currently debating what is being called the',
+    '&ldquo;provenance problem&rdquo; in regard to Large Language Models. In',
+    'these discussions there seems to be an underlying anxiety that there will',
+    'be some sort of breakdown in chains of scholarly citation and',
+    'acknowledgement caused by artificial intelligence. In other words, there is',
+    'a &ldquo;chain of custody&rdquo; for information, and we trust information',
+    'because we know who said it and where it came from.',
+    '<a href="stunlaw.blogspot.com/what-matter-whos-speaking">Read more &rarr;</a></p>',
+    '<p><small>Labels: provenance, authorship, LLMs, diffusionisation, the',
+    'Inversion, jagged frontier, critical theory.</small></p>',
+    '<hr>',
+    '<h3>Blog archive</h3>',
+    '<pre class="jb-list">',
+    '  2026',
+    '    August      <a href="stunlaw.blogspot.com/development-guide">The &ldquo;Development Guide&rdquo; for Nostos</a>',
+    '                <a href="stunlaw.blogspot.com/what-matter-whos-speaking">What Matter Who&rsquo;s Speaking? (revised)</a>',
+    '  2025',
+    '    December    <a href="stunlaw.blogspot.com/what-matter-whos-speaking">What Matter Who&rsquo;s Speaking?</a>',
+    '</pre>',
+    '<h3>Labels</h3>',
+    '<p><small>authorship &middot; computational culture &middot; critical',
+    'theory &middot; critical code studies &middot; diffusionisation &middot;',
+    'games &middot; the Inversion &middot; jagged frontier &middot; LLMs',
+    '&middot; provenance &middot; vector theory</small></p>',
+    '<h3>About</h3>',
+    '<p><small>David M. Berry is Professor of Digital Humanities at the',
+    'University of Sussex. This weblog is where the thinking happens first.',
+    'Longer versions of most of it end up somewhere with a peer review',
+    'attached.</small></p>',
+    '<hr>',
+    '<p><small>Subscribe: <b>Posts (Atom)</b> &middot; Comments (Atom)</small></p>',
+  ]);
+
+// ---- post: the development guide ---------------------------------------------
+
+const GUIDE = P('stunlaw.blogspot.com/development-guide', 'STUNLAW: NOSTOS',
+  'The "Development Guide" for Nostos — Stunlaw', [
+    ...MASTHEAD,
+    '<p><small><a href="stunlaw.blogspot.com">&#9664; Home</a></small></p>',
+    '<hr>',
   '<h2>The &ldquo;Development Guide&rdquo; for Nostos</h2>',
   '<p><small>David M. Berry &middot; August 2026</small></p>',
   '<blockquote class="fs-epi"><p>&ldquo;Welcome to my Island.&rdquo;</p><p><small>&mdash; Calypso</small></p></blockquote>',
@@ -149,9 +222,19 @@ const STUNLAW = P('stunlaw.blogspot.com', 'STUNLAW',
   '<hr>',
   '<p><small>More at <a href="the-philosophy-of-software.geocities.ws">the philosophy of software</a>, which somebody else keeps and which is kinder about the books than they deserve.</small></p>',
   '<p><small>Posted by David M. Berry. Labels: vector theory, critical code studies, computational culture, LLMs, games.</small></p>',
-  '<hr>',
-  '<p><small>&#9664; Older post</small></p>',
-  '<hr>',
+    '<hr>',
+    '<p><small><a href="stunlaw.blogspot.com">&#9664; Home</a> &middot; Older post:',
+    '<a href="stunlaw.blogspot.com/what-matter-whos-speaking">What Matter',
+    'Who&rsquo;s Speaking?</a></small></p>',
+  ]);
+
+// ---- post: the provenance problem ---------------------------------------------
+
+const PROVENANCE = P('stunlaw.blogspot.com/what-matter-whos-speaking', 'STUNLAW: PROVENANCE',
+  'What Matter Who\u2019s Speaking? — Stunlaw', [
+    ...MASTHEAD,
+    '<p><small><a href="stunlaw.blogspot.com">&#9664; Home</a></small></p>',
+    '<hr>',
   '<h2>What Matter Who&rsquo;s Speaking?</h2>',
   '<p><small>David M. Berry &middot; first published 20 December 2025,',
   'revised 22 August 2026 to take account of recent advances in AI detection',
@@ -403,6 +486,10 @@ const STUNLAW = P('stunlaw.blogspot.com', 'STUNLAW',
   '',
   '     what the six words are FOR he did not write down, and he is dead, so',
   '     that is as far as this goes. -->',
-]);
+    '<hr>',
+    '<p><small><a href="stunlaw.blogspot.com">&#9664; Home</a> &middot; Newer post:',
+    '<a href="stunlaw.blogspot.com/development-guide">The &ldquo;Development',
+    'Guide&rdquo; for Nostos</a></small></p>',
+  ]);
 
-export const STUNLAW_SITES = [STUNLAW];
+export const STUNLAW_SITES = [INDEX, GUIDE, PROVENANCE];
