@@ -294,6 +294,7 @@ import { REL_B } from './archive-rel-b.js';   // schisms & neoplatonism
 import { REL_RINGS } from './archive-rel-hubs.js'; // the religion webrings
 import { VEC_SITES } from './archive-vec.js';  // the Centre for Vector Media
 import { SMETHWICK_SITES } from './archive-smethwick.js'; // Smethwick, the brewery, the schools
+import { MAP_SITES } from './archive-maps.js';    // five people mapping something
 import { SWISS_SITES } from './archive-swiss.js';   // Basel and Bern, disagreeing
 import { DIALOGUE_SITES } from './archive-dialogues.js'; // eight passages of Plato
 import { PROVENANCE_SITES } from './archive-provenance.js'; // the post, and it coming loose
@@ -488,6 +489,7 @@ export const ARCHIVED_SITES = [
   ...REL_A, ...REL_B, ...REL_RINGS,
   ...VEC_SITES,
   ...SMETHWICK_SITES,
+  ...MAP_SITES,
   ...SWISS_SITES,
   ...DIALOGUE_SITES,
   ...PROVENANCE_SITES,
@@ -807,6 +809,12 @@ const CATEGORY_OF = {
   'foucault-versions.geocities.ws': 'Education',
   'provenance-thread.geocities.ws': 'Society & Culture',
   'textprovenance.io': 'Computers & Internet',
+  'halesowen-shropshire.geocities.ws': 'Reference',
+  'the-twenty-five-inch.geocities.ws': 'Reference',
+  'mapping-the-courts.geocities.ws': 'Reference',
+  'the-twittens.geocities.ws': 'Reference',
+  'lower-swansea-valley.geocities.ws': 'Reference',
+  'mapping-ring.geocities.ws': 'Reference',
   'basel.geocities.ws': 'Society & Culture',
   'bern.geocities.ws': 'Society & Culture',
   'quintonpetrol.geocities.ws': 'Society & Culture',
