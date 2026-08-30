@@ -828,12 +828,20 @@ const SEARCH_ENT = {
   aring: 'a', szlig: 'ss', iacute: 'i', oacute: 'o', uacute: 'u', tau: 'tau',
   Lambda: 'lambda', sigma: 'sigma', rarr: ' ', larr: ' ', times: 'x',
 };
+// DIACRITICS TOO. A page that says Sunnmøre, Ørskog or Bjørnson could not be
+// found by anybody typing sunnmore, orskog or bjornson, which is what a person
+// with an English keyboard types. Folded on both sides: the query and the
+// index. Costs nothing and fixes the whole corpus at once, including Dvořák,
+// Kraftwerk's umlauts and every French title in the cinema web.
+const FOLD = { æ: 'ae', ø: 'o', å: 'a', ð: 'd', þ: 'th', ß: 'ss', œ: 'oe', ł: 'l' };
 export function searchText(s) {
   return String(s || '')
     .replace(/<[^>]+>/g, ' ')
     .replace(/&#(\d+);/g, (_m, n) => String.fromCharCode(Number(n)))
     .replace(/&([A-Za-z]+);/g, (_m, k) => (SEARCH_ENT[k] !== undefined ? SEARCH_ENT[k] : ' '))
-    .toLowerCase();
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')   // é -> e, ř -> r, ü -> u
+    .replace(/[æøåðþßœł]/g, (c) => FOLD[c] || c);          // the ones NFD will not split
 }
 
 export function searchResults(hosts, query) {
