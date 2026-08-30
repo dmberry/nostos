@@ -1272,7 +1272,11 @@ export const PLACE_SITES = [
         '<a href="forskningsradet.no">forskningsradet.no</a>' +
         '<a href="norskeord.no">norskeord.no</a>' +
         '<a href="roughguides.com">roughguides.com</a></small></p>',
-    ],
+          '<hr>',
+      '<p><small>Departments: <a href="uio.no/imk">Institutt for medier og kommunikasjon</a>.'
+        + ' New here? <a href="oslo-guide.geocities.ws">a guide to Oslo</a> by somebody who arrived'
+        + ' three years ago and is still getting it wrong.</small></p>',
+],
   },
   {
     domain: 'forskningsradet.no',
