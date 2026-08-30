@@ -816,6 +816,8 @@ const CATEGORY_OF = {
   'norsk-drikke.geocities.ws': 'Society & Culture',
   'bergensbanen.geocities.ws': 'Society & Culture',
   'uio.no/imk': 'Education',
+  'sunnmorsbunad.geocities.ws': 'Society & Culture',
+  'syttende-mai.geocities.ws': 'Society & Culture',
   'henrik-ibsen.geocities.ws': 'Arts & Entertainment',
   'hedda-gabler.geocities.ws': 'Arts & Entertainment',
   'halesowen-shropshire.geocities.ws': 'Reference',
