@@ -1632,6 +1632,7 @@ export const TITLES = {
   "stockhausen.geocities.ws": "Karlheinz Stockhausen — the Cologne studio",
   "stone-roses.geocities.ws": "The Stone Roses, and the wait",
   "stonylanepark.geocities.ws": "Stony Lane park",
+  "stos-basic.geocities.ws": "STOS BASIC — the game creator",
   "stravinsky.geocities.ws": "THE RIOT AT THE THEATRE DES CHAMPS-ELYSEES // 29 May 1913 (Stravinsky)",
   "stream-and-symmetric-ring.geocities.ws": "The Stream &amp; Symmetric Ring",
   "structures-of-feeling.geocities.ws": "STRUCTURES OF FEELING // Raymond Williams",

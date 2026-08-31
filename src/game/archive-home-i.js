@@ -344,4 +344,83 @@ const WHYFAILED = P('why-the-archimedes-failed.geocities.ws', 'WHY IT FAILED',
     ...RING,
   ]);
 
-export const HOME_I = [BASIC, STAR, DISC, WHYFAILED];
+
+// ---- STOS --------------------------------------------------------------------
+//
+// The other side of the same coin as the BBC BASIC page: a language sold to
+// people who wanted to make a game rather than learn to program, and which
+// therefore put sprites, scrolling and music in as verbs. Its author went on to
+// do it again on the Amiga.
+//
+// Checked: Jawx, being François Lionet and Constantin Sotiropoulos; Mandarin
+// Software, 1988, Atari ST, after an earlier French release; 2.3 shipping with
+// Orbit, Zoltar and Bullet Train; the compiler arriving after the interpreter;
+// AMOS in 1990 dropping line numbers; the source released via Clickteam around
+// 2001.
+
+const STOS = P('stos-basic.geocities.ws', 'STOS',
+  'STOS BASIC — the game creator', [
+    '<!--bg:eightbit-->',
+    '<h1>STOS</h1>',
+    '<p><small>Atari ST, 1988. A BASIC with sprites in the language, sold to',
+    'people who wanted to finish something.</small></p>',
+    '<hr>',
+    '<p>Written by <b>Jawx</b>, which is François Lionet and Constantin',
+    'Sotiropoulos, published in Britain by Mandarin Software in 1988 after a',
+    'French release, and subtitled <i>The Game Creator</i>, which is an honest',
+    'description of what it was for.</p>',
+    '<h2>What was different about it</h2>',
+    '<p>Every other BASIC treated graphics as something you did to a screen',
+    'a pixel at a time. STOS put the things a game is made of into the language',
+    'itself, as commands, with the hard parts already done.</p>',
+    '<pre class="jb-list">',
+    '  sprites      a real sprite system: define, move,',
+    '               animate, and collision detection you',
+    '               did not have to write',
+    '  screens      several of them, swapped and copied',
+    '  scrolling    as a command, not as an exercise',
+    '  music        composed in an editor and played from',
+    '               the program',
+    '</pre>',
+    '<p>Which means a fifteen-year-old could have something moving about the',
+    'screen and colliding with something else on the first evening, on a machine',
+    'where doing that properly otherwise meant knowing the ST&rsquo;s insides.</p>',
+    '<h2>What was in the box</h2>',
+    '<p>Version 2.3 came with three finished games, Orbit, Zoltar and Bullet',
+    'Train, and the point of them was not that they were good. It was that they',
+    'were <b>written in STOS and you had the source</b>, so you could open one,',
+    'see how it worked, and take it apart.</p>',
+    '<p>And a sprite editor, and a music editor, and the accessory disc.</p>',
+    '<h2>The extensions</h2>',
+    '<p>It was extensible and a small industry grew round that: <b>Maestro</b>',
+    'for sampled sound, a 3D extension, an STE extension for the later machines,',
+    'Control, Extra, Ninja Tracker. Some official, some not.</p>',
+    '<p>And a <b>compiler</b>, which arrived after the interpreter and mattered',
+    'enormously, because the standard complaint about STOS was that it was slow',
+    'once you stepped outside the high-level commands.</p>',
+    '<h2>The fair criticisms</h2>',
+    '<p>Two, and both are true.</p>',
+    '<p>It was slow when you were not using the commands it was built around.',
+    'The sprite routines are quick because somebody wrote them in assembler; your',
+    'own loop is a BASIC loop.</p>',
+    '<p>And it encouraged bad structure. Line numbers, GOTO, and no real',
+    'procedures, so a STOS program that got past a certain size became the same',
+    'swamp as every other BASIC. It gave you the graphics of a modern language',
+    'and the shape of an old one.</p>',
+    '<h2>AMOS</h2>',
+    '<p>Lionet did it again on the Amiga, in 1990, and the two years in between',
+    'were spent well: <b>AMOS</b> dropped line numbers and had proper structured',
+    'constructs, and is the better language, and is the one people who had both',
+    'machines remember with real affection.</p>',
+    '<p>The source of STOS was released around 2001, through Clickteam, which is',
+    'the company Lionet ended up at, still making tools for people who want to',
+    'produce something without first becoming programmers. That is one straight',
+    'line from 1988 to now.</p>',
+    '<hr>',
+    '<p>See also <a href="bbc-basic.geocities.ws">BBC BASIC</a>, which is the',
+    'opposite argument: a language that taught structure and made you do the',
+    'graphics yourself.</p>',
+    ...RING,
+  ]);
+
+export const HOME_I = [BASIC, STAR, DISC, WHYFAILED, STOS];

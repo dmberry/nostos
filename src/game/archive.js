@@ -819,6 +819,7 @@ const CATEGORY_OF = {
   'provenance-thread.geocities.ws': 'Society & Culture',
   'textprovenance.io': 'Computers & Internet',
   'bbc-basic.geocities.ws': 'Computers & Internet',
+  'stos-basic.geocities.ws': 'Computers & Internet',
   'star-commands.geocities.ws': 'Computers & Internet',
   'the-disc-drive.geocities.ws': 'Computers & Internet',
   'why-the-archimedes-failed.geocities.ws': 'Computers & Internet',
