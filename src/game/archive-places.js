@@ -787,6 +787,8 @@ export const PLACE_SITES = [
       '<p><small>Out of town and up: <a href="blackcap.geocities.ws">Blackcap</a>,'
         + ' the hill above Lewes with the clump on it, and'
         + ' <a href="hiking-dos-and-donts.geocities.ws">the rules</a> before you go.</small></p>',
+      '<p><small>Online, locally: <a href="brighton-board.geocities.ws">the board</a>'
+        + ' before the web, and <a href="fastnet.geocities.ws">Fastnet</a> after it.</small></p>',
 ],
   },
 
