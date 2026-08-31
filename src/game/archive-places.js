@@ -783,7 +783,11 @@ export const PLACE_SITES = [
         '<a href="ukclimbing.com">ukclimbing.com</a>' +
         '<a href="sussex.ac.uk">sussex.ac.uk</a>' +
         '<a href="nme.com">nme.com</a></small></p>',
-    ],
+          '<hr>',
+      '<p><small>Out of town and up: <a href="blackcap.geocities.ws">Blackcap</a>,'
+        + ' the hill above Lewes with the clump on it, and'
+        + ' <a href="hiking-dos-and-donts.geocities.ws">the rules</a> before you go.</small></p>',
+],
   },
 
   // ---- the road, the hills, and the machines under the desk ----------------

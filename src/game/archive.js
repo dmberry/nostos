@@ -294,6 +294,7 @@ import { REL_B } from './archive-rel-b.js';   // schisms & neoplatonism
 import { REL_RINGS } from './archive-rel-hubs.js'; // the religion webrings
 import { VEC_SITES } from './archive-vec.js';  // the Centre for Vector Media
 import { SMETHWICK_SITES } from './archive-smethwick.js'; // Smethwick, the brewery, the schools
+import { DOWNS_SITES } from './archive-downs.js';   // Blackcap, and how to walk
 import { NORWAY_SITES } from './archive-norway.js'; // Oslo, the food, the drink, Ibsen
 import { MAP_SITES } from './archive-maps.js';    // five people mapping something
 import { SWISS_SITES } from './archive-swiss.js';   // Basel and Bern, disagreeing
@@ -490,6 +491,7 @@ export const ARCHIVED_SITES = [
   ...REL_A, ...REL_B, ...REL_RINGS,
   ...VEC_SITES,
   ...SMETHWICK_SITES,
+  ...DOWNS_SITES,
   ...NORWAY_SITES,
   ...MAP_SITES,
   ...SWISS_SITES,
@@ -811,6 +813,8 @@ const CATEGORY_OF = {
   'foucault-versions.geocities.ws': 'Education',
   'provenance-thread.geocities.ws': 'Society & Culture',
   'textprovenance.io': 'Computers & Internet',
+  'blackcap.geocities.ws': 'Society & Culture',
+  'hiking-dos-and-donts.geocities.ws': 'Reference',
   'oslo-guide.geocities.ws': 'Society & Culture',
   'norsk-mat.geocities.ws': 'Society & Culture',
   'norsk-drikke.geocities.ws': 'Society & Culture',
