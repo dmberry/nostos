@@ -251,6 +251,7 @@ import { HOME_E } from './archive-home-e.js';   // the 16-bit generation
 import { HOME_F } from './archive-home-f.js';   // the IBM PC & the clones
 import { HOME_G } from './archive-home-g.js';   // the home-computer culture
 import { HOME_H } from './archive-home-h.js';   // the survey & the wars
+import { HOME_I } from './archive-home-i.js';   // BASIC, the star commands, the drives
 import { HOME_RINGS } from './archive-home-hubs.js'; // the home-computer webrings
 import { PHIL_A } from './archive-phil-a.js';   // the Greeks
 import { PHIL_B } from './archive-phil-b.js';   // Hellenistic & the medieval opening
@@ -478,7 +479,7 @@ export const ARCHIVED_SITES = [
   ...AIH_RINGS,
   ...PSB_A, ...PSB_B, ...PSB_RINGS,
   ...HOME_A, ...HOME_B, ...HOME_C, ...HOME_D,
-  ...HOME_E, ...HOME_F, ...HOME_G, ...HOME_H,
+  ...HOME_E, ...HOME_F, ...HOME_G, ...HOME_H, ...HOME_I,
   ...HOME_RINGS,
   ...PHIL_A, ...PHIL_B, ...PHIL_C, ...PHIL_D,
   ...PHIL_E, ...PHIL_F, ...PHIL_G, ...PHIL_H,
@@ -817,6 +818,10 @@ const CATEGORY_OF = {
   'foucault-versions.geocities.ws': 'Education',
   'provenance-thread.geocities.ws': 'Society & Culture',
   'textprovenance.io': 'Computers & Internet',
+  'bbc-basic.geocities.ws': 'Computers & Internet',
+  'star-commands.geocities.ws': 'Computers & Internet',
+  'the-disc-drive.geocities.ws': 'Computers & Internet',
+  'why-the-archimedes-failed.geocities.ws': 'Computers & Internet',
   'fastnet.geocities.ws': 'Business & Finance',
   'brighton-board.geocities.ws': 'Computers & Internet',
   'the-well.geocities.ws': 'Computers & Internet',
