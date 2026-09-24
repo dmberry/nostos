@@ -534,7 +534,6 @@ const RUNSHEET = P('stunlaw.blogspot.com/elit-monthly-run-sheet', 'STUNLAW: RUN 
   <p>In the game: <kbd>H</kbd> → Save to disc → Import run… In the file dialog press <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> and paste the path.</p>
 <h2>Pages to open</h2>
 <p>Each opens here, in this browser.</p>
-    <p><a href="stunlaw.blogspot.com/elit-monthly-run-sheet">This run sheet, in the game</a> &middot; The same sheet, posted on Stunlaw inside Nostos &middot; <code>stunlaw.blogspot.com/elit-monthly-run-sheet</code></p>
     <p><a href="stunlaw.blogspot.com">Stunlaw</a> &middot; The blog inside the game, with this run sheet at the top &middot; <code>stunlaw.blogspot.com</code></p>
     <p><a href="hack_nostos.geocities.ws">hack_nostos</a> &middot; Ronnie's brain code: a bodyguard with a white eye, and five more &middot; <code>hack_nostos.geocities.ws</code></p>
     <p><a href="nostos.geocities.ws">Nostos</a> &middot; The homecoming, and why it is not arriving &middot; <code>nostos.geocities.ws</code></p>
@@ -547,6 +546,7 @@ const RUNSHEET = P('stunlaw.blogspot.com/elit-monthly-run-sheet', 'STUNLAW: RUN 
     <p><a href="the-plato-pages.geocities.ws">The Plato Pages</a> &middot; Eight passages from Jowett on the life worth living &middot; <code>the-plato-pages.geocities.ws</code></p>
     <p><a href="elite.geocities.ws">Elite</a> &middot; Braben and Bell, the loading screen and the docking music &middot; <code>elite.geocities.ws</code></p>
     <p><a href="thevampire.geocities.ws">The AI Vampire</a> &middot; Who keeps the hours an agent saves &middot; <code>thevampire.geocities.ws</code></p>
+    <p><a href="stunlaw.blogspot.com/elit-monthly-run-sheet">RUN SHEET, in the game</a> &middot; The same sheet, posted on Stunlaw inside Nostos &middot; <code>stunlaw.blogspot.com/elit-monthly-run-sheet</code></p>
 <h2>Rehearsal notes</h2>
   <p>Obelisk code: <code>OB_69B0</code></p>
   <p>Unit to reprogram: <code>v1_04</code></p>
