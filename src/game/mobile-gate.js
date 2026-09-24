@@ -26,6 +26,7 @@ import { drawRobot } from './robots.js';
 import { worldToScreen } from '../engine/iso.js';
 import { showBootLoader } from './boot-loader.js';
 import { mountSettingsPanel } from './settings-panel.js';
+import { validateSaveFile, describeSaveFile, applySaveFile } from './savefile.js';
 // The game's own sound singleton, imported for the SETTINGS PANEL only. The
 // title screen's walkman has its own little AudioContext (it plays before the
 // game exists); this is the object whose levels the sliders set, and it keeps
@@ -68,6 +69,166 @@ function mkRobot(type) {
     ubikConfusedT: 0, _confuseHopT: 0, tremor: 0, home: { x: 0, y: 0 },
     losLostT: 0, loseInterestT: 0, repelledT: 0, singing: false, knockT: 0,
   };
+}
+
+// ---- the Load shelf -------------------------------------------------------
+//
+// Whole runs, as save files, kept in this browser so that loading one is a row
+// you press rather than a trip through a file dialog. Deliberately NOT one of
+// the keys a save file carries (savefile.js): a shelf of runs inside a run
+// would contain itself.
+const SHELF_KEY = 'nostos-shelf';
+// The bin, drawn once for the checkpoint rows and the shelf rows alike.
+const BIN_SVG = '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.7 8.5h5.6l.7-8.5M7 7v4M9 7v4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const SHELF_ARM_MS = 3000;
+function readShelf() {
+  try { const v = JSON.parse(localStorage.getItem(SHELF_KEY) || '[]'); return Array.isArray(v) ? v : []; }
+  catch (e) { return []; }
+}
+function writeShelf(list) {
+  if (list.length) localStorage.setItem(SHELF_KEY, JSON.stringify(list));
+  else localStorage.removeItem(SHELF_KEY);
+}
+function escHtml(t) {
+  return String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+// Wire Load, the shelf under it, "Add from file…", and each row's two presses.
+// Pressing a row once arms it ("Load: replaces this run"); pressing it again
+// writes the run into storage and starts it, as Continue would. The
+// bin beside it arms and deletes the same way. No window.confirm anywhere.
+function wireShelf(el, start) {
+  const btn = el.querySelector('#mg-load');
+  const shelf = el.querySelector('#mg-shelf');
+  const listEl = el.querySelector('#mg-shelf-list');
+  const addBtn = el.querySelector('#mg-shelf-add');
+  const fileIn = el.querySelector('#mg-shelf-file');
+  const msgEl = el.querySelector('#mg-loadmsg');
+  if (!btn || !shelf || !listEl) return;
+  const msg = (text, kind) => {
+    if (!msgEl) return;
+    msgEl.textContent = text || '';
+    msgEl.className = `mg-loadmsg${kind ? ` ${kind}` : ''}`;
+    msgEl.hidden = !text;
+  };
+  const arm = (b, label, act) => {
+    let timer = null;
+    const rest = b.innerHTML;
+    b.addEventListener('click', () => {
+      if (!b.classList.contains('armed')) {
+        el.querySelectorAll('.mg-shelf .armed').forEach((o) => { if (o !== b) o.dispatchEvent(new Event('disarm')); });
+        b.classList.add('armed'); label(b);
+        timer = setTimeout(() => b.dispatchEvent(new Event('disarm')), SHELF_ARM_MS);
+        return;
+      }
+      clearTimeout(timer); act();
+    });
+    b.addEventListener('disarm', () => { clearTimeout(timer); b.classList.remove('armed'); b.innerHTML = rest; });
+  };
+  // Write a run into the keys the game resumes from, then reload into it.
+  const loadDoc = (doc) => {
+    const res = applySaveFile(doc, (k, v) => localStorage.setItem(k, v), (k) => localStorage.removeItem(k));
+    if (!res.ok) { msg(`Not loaded: ${res.error}.`, 'bad'); return; }
+    msg('Loading…', 'ok');
+    // Straight into the run, the way Continue goes: the keys it resumes from
+    // now hold this one. A reload would only land back on this screen.
+    if (start) start(); else location.reload();
+  };
+  // The game's own checkpoints (milestones, and `save` at a terminal) are the
+  // other half of this list, below the runs from disc.
+  const readStages = () => {
+    try { return sortStages(JSON.parse(localStorage.getItem('postai-stages') || '{}')); } catch (e) { return []; }
+  };
+  const render = () => {
+    const list = readShelf();
+    const stages = readStages();
+    const stageRows = stages.map((st) => `<div class="mg-shelf-row">`
+      + `<button class="mg-shelf-go mg-shelf-stage" data-id="${escHtml(st.id)}"><b>${escHtml(st.label)}</b><small>checkpoint · score ${st.score || 0}</small></button>`
+      + `<button class="mg-shelf-del mg-shelf-stagedel" data-id="${escHtml(st.id)}" title="Delete this checkpoint" aria-label="Delete checkpoint: ${escHtml(st.label)}">${BIN_SVG}</button></div>`).join('');
+    listEl.innerHTML = (list.length || stages.length) ? list.map((r, i) => `<div class="mg-shelf-row">`
+      + `<button class="mg-shelf-go" data-i="${i}"><b>${escHtml(r.name)}</b><small>${escHtml(r.desc || '')}</small></button>`
+      + `<button class="mg-shelf-del" data-i="${i}" title="Remove from the shelf" aria-label="Remove ${escHtml(r.name)} from the shelf">${BIN_SVG}</button></div>`).join('') + stageRows
+      : '<p class="mg-shelf-empty">No runs kept here yet. Open a save file from disk; pick several and they all stay on this shelf.</p>';
+    listEl.querySelectorAll('.mg-shelf-go:not(.mg-shelf-stage)').forEach((b) => arm(b,
+      (x) => { x.innerHTML = `<b>Load ${escHtml(list[+x.dataset.i].name)}?</b><small>Replaces the run in this browser</small>`; },
+      () => {
+        const r = readShelf()[+b.dataset.i];
+        if (!r) { render(); return; }
+        let doc = null;
+        try { doc = JSON.parse(r.doc); } catch (e) { msg('That run is damaged. Remove it and open the file again.', 'bad'); return; }
+        loadDoc(doc);
+      }));
+    listEl.querySelectorAll('.mg-shelf-del:not(.mg-shelf-stagedel)').forEach((b) => arm(b,
+      (x) => { x.textContent = 'Delete?'; },
+      () => { const l = readShelf(); l.splice(+b.dataset.i, 1); try { writeShelf(l); } catch (e) { /* storage blocked */ } render(); }));
+    wireStages();
+  };
+  const wireStages = () => {
+    listEl.querySelectorAll('.mg-shelf-stage').forEach((b) => arm(b,
+      (x) => { x.innerHTML = `<b>Load ${x.querySelector('b').textContent}?</b><small>Replaces the run in this browser</small>`; },
+      () => {
+        try {
+          const st = JSON.parse(localStorage.getItem('postai-stages') || '{}')[b.dataset.id];
+          if (!st) { render(); return; }
+          if (st.seed != null) localStorage.setItem('postai-seed', st.seed);
+          localStorage.setItem('postai-character', JSON.stringify(st.save));
+        } catch (e) { msg('That checkpoint could not be read.', 'bad'); return; }
+        msg('Loading…', 'ok');
+        if (start) start(); else location.reload();
+      }));
+    listEl.querySelectorAll('.mg-shelf-stagedel').forEach((b) => arm(b,
+      (x) => { x.textContent = 'Delete?'; },
+      () => {
+        try {
+          const all = JSON.parse(localStorage.getItem('postai-stages') || '{}');
+          delete all[b.dataset.id];
+          if (Object.keys(all).length) localStorage.setItem('postai-stages', JSON.stringify(all));
+          else localStorage.removeItem('postai-stages');
+        } catch (e) { /* storage blocked */ }
+        render();
+      }));
+  };
+  btn.addEventListener('click', () => {
+    shelf.hidden = !shelf.hidden;
+    btn.setAttribute('aria-expanded', String(!shelf.hidden));
+    if (!shelf.hidden) { msg(''); render(); }
+  });
+  addBtn?.addEventListener('click', () => { fileIn.value = ''; fileIn.click(); });
+  fileIn?.addEventListener('change', async () => {
+    const files = [...(fileIn.files || [])];
+    if (!files.length) return;
+    const list = readShelf();
+    const added = [], refused = [];
+    let last = null;
+    for (const f of files) {
+      let doc = null;
+      try { doc = JSON.parse(await f.text()); } catch (e) { refused.push(`${f.name} (not JSON)`); continue; }
+      const v = validateSaveFile(doc);
+      if (!v.ok) { refused.push(`${f.name} (${v.error})`); continue; }
+      const name = f.name.replace(/\.json$/i, '');
+      const entry = { name, desc: describeSaveFile(doc), doc: JSON.stringify(doc) };
+      const at = list.findIndex((r) => r.name === name);
+      if (at >= 0) list[at] = entry; else list.push(entry);
+      added.push(name);
+      last = doc;
+    }
+    list.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    // ONE FILE is "open this": it loads now, and keeps a copy on the shelf for
+    // next time. A shelf that is full is no reason not to load it.
+    let kept = true;
+    try { writeShelf(list); } catch (e) { kept = false; }
+    if (files.length === 1 && last) { loadDoc(last); return; }
+    // SEVERAL FILES is "keep these": they go on the shelf, ready to press.
+    if (!kept) { msg('Not enough room in this browser for all of those. Remove some runs and try again.', 'bad'); return; }
+    render();
+    msg([added.length ? `Added ${added.length}.` : '', refused.length ? `Not added: ${refused.join(', ')}.` : ''].filter(Boolean).join(' '),
+      refused.length ? 'bad' : 'ok');
+  });
+}
+
+// The Load list's heading, which also has to be rewritten when a row is binned.
+function stagesHeading(n) {
+  return `Load a checkpoint${n > 3 ? ` &middot; ${n} saved, scroll for the rest` : ''}`;
 }
 
 export function initMobileGate(mode = 'gate') {
@@ -146,12 +307,24 @@ export function initMobileGate(mode = 'gate') {
   // data-saver or slow-network visitor issues ZERO requests for it and sees the
   // themed backdrop alone. A GIF loops on its own — nothing to autoplay.
   const videoHtml = `<img class="mg-bgvideo" alt="" aria-hidden="true">`;
+  // LOAD: runs kept on a shelf in this browser, loaded with two presses and no
+  // file dialog. Files go on the shelf once, several at a time, with "Add from
+  // file…"; after that a run is a row you press. Import run… in Settings still
+  // does the one-off from disc. (David, 2026-09-24: CONTINUE | LOAD | NEW GAME.)
+  const loadHtml = '<button id="mg-load" class="mg-btn" aria-expanded="false" aria-controls="mg-shelf">Load</button>';
+  const loadMsgHtml = `<div class="mg-shelf" id="mg-shelf" hidden>
+         <div class="mg-shelf-list" id="mg-shelf-list"></div>
+         <div class="mg-shelf-foot"><button id="mg-shelf-add" class="mg-btn quiet">Open from disk…</button>
+           <input id="mg-shelf-file" type="file" accept=".json,application/json" multiple hidden></div>
+         <p class="mg-loadmsg" id="mg-loadmsg" hidden></p>
+       </div>`;
   const copyHtml = isTitle
     ? `<p class="mg-sub">The machines made the world standing reserve. Only a God can save you.<span class="mg-sub2">A keyboard-and-mouse survival game.<br>Here's the soundtrack while you decide.</span></p>
        <div class="mg-actions">
          ${hasSave ? '<button id="mg-continue" class="mg-btn primary">Continue</button>' : ''}
+         ${loadHtml}
          <button id="mg-start" class="mg-btn ${hasSave ? '' : 'primary'}">${hasSave ? 'New game' : 'Start'}</button>
-       </div>
+       </div>${loadMsgHtml}
        <div class="mg-actions mg-actions-aux">
          <button id="mg-settings-open" class="mg-btn quiet">Settings</button>
          <button id="mg-help-open" class="mg-btn quiet">Help</button>
@@ -159,19 +332,22 @@ export function initMobileGate(mode = 'gate') {
     : `<p class="mg-sub">It's the end of the world.<span class="mg-sub2">This is a beta — playable end to end, and still growing. You can play it right here with touch controls (hold to move, tap to act), or grab a laptop for the full keyboard-and-mouse game. Either way, here's the soundtrack.</span></p>
        <div class="mg-actions">
          ${hasSave ? '<button id="mg-continue" class="mg-btn primary">Continue</button>' : ''}
+         ${loadHtml}
          <button id="mg-start" class="mg-btn ${hasSave ? '' : 'primary'}">${hasSave ? 'New game' : '▶ Play (beta)'}</button>
-       </div>
+       </div>${loadMsgHtml}
        <div class="mg-actions mg-actions-aux">
          <button id="mg-settings-open" class="mg-btn quiet">Settings</button>
          <button id="mg-help-open" class="mg-btn quiet">Help</button>
        </div>`;
   // The checkpoint list is not a desktop feature. A phone player who has died
   // wants to drop back to a rung they earned exactly as much as anybody else.
-  const checkpointHtml = (stageEntries.length)
+  // RETIRED from the title (David, 2026-09-24): Load now does this job, with
+  // runs from disc, so the checkpoint list doubled it. The checkpoints are
+  // still written; they are just no longer offered here.
+  const checkpointHtml = (false && stageEntries.length)
     ? `<div class="mg-stages">
-         <div class="mg-stages-h">Load a checkpoint${stageEntries.length > 3
-           ? ` &middot; ${stageEntries.length} saved, scroll for the rest` : ''}</div>
-         <div class="mg-stage-wrap${stageEntries.length > 3 ? ' more' : ''}"><div class="mg-stage-list">${stageEntries.map((s) => `<button class="mg-stage-btn" data-id="${s.id}"><span class="mg-stage-name">${s.label}</span><span class="mg-stage-score">${s.score || 0}</span></button>`).join('')}</div></div>
+         <div class="mg-stages-h">${stagesHeading(stageEntries.length)}</div>
+         <div class="mg-stage-wrap${stageEntries.length > 3 ? ' more' : ''}"><div class="mg-stage-list">${stageEntries.map((s) => `<div class="mg-stage-row" data-id="${s.id}"><button class="mg-stage-btn" data-id="${s.id}"><span class="mg-stage-name">${s.label}</span><span class="mg-stage-score">${s.score || 0}</span></button><button class="mg-stage-del" data-id="${s.id}" title="Delete this checkpoint" aria-label="Delete checkpoint: ${s.label}">${BIN_SVG}</button></div>`).join('')}</div></div>
        </div>`
     : '';
   const bodyHtml = isTitle
@@ -254,6 +430,24 @@ export function initMobileGate(mode = 'gate') {
       .mg-btn:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); }
       .mg-btn.primary:hover { background: color-mix(in srgb, var(--accent) 88%, white); }
       .mg-btn:active { transform: scale(0.96); }
+      /* The Load shelf: runs kept in this browser, one row each. */
+      .mg-shelf { width: min(300px, 88vw); margin: 4px auto 6px; display: grid; gap: 6px; }
+      #mobile-gate[data-mode="title"] .mg-hero .mg-shelf { margin-left: 0; }
+      .mg-shelf-list { display: flex; flex-direction: column; gap: 4px; max-height: 150px; overflow-y: auto; scrollbar-width: thin; }
+      .mg-shelf-empty { font-size: 12px; opacity: 0.7; margin: 0; text-align: left; }
+      .mg-shelf-row { display: flex; gap: 4px; }
+      .mg-shelf-go { flex: 1 1 auto; min-width: 0; display: grid; gap: 1px; text-align: left; cursor: pointer; font-family: inherit;
+        padding: 6px 10px; border-radius: 6px; color: var(--accent);
+        background: rgba(255,255,255,0.06); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); }
+      .mg-shelf-go:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+      .mg-shelf-go b { font: 600 12px system-ui, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .mg-shelf-go small { font-size: 10px; opacity: 0.65; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .mg-shelf-go.armed { color: #10130d; background: var(--accent); border-color: var(--accent); }
+      .mg-shelf-go.armed small { opacity: 0.85; }
+      .mg-shelf-foot { display: flex; justify-content: flex-start; }
+      #mobile-gate[data-mode] .mg-shelf-foot .mg-btn { font-size: 12px; padding: 6px 12px; min-width: 0; }
+      .mg-loadmsg { margin: 0; font-size: 12px; color: var(--accent); opacity: 0.85; text-align: left; }
+      .mg-loadmsg.bad { color: #e8a08f; opacity: 1; }
       /* stage checkpoints (Load list) */
       .mg-stages { margin: 10px 0 2px; text-align: center; flex: 0 0 auto; }
       .mg-stages-h { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); opacity: 0.7;
@@ -283,6 +477,17 @@ export function initMobileGate(mode = 'gate') {
         background: rgba(255,255,255,0.06); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); }
       .mg-stage-btn:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
       .mg-stage-btn:active { transform: scale(0.95); }
+      /* A row is the load button and its bin. Two buttons side by side rather
+         than one inside the other, which HTML does not allow. */
+      .mg-stage-row { display: flex; gap: 4px; flex: 0 0 auto; }
+      .mg-stage-row .mg-stage-btn { flex: 1 1 auto; min-width: 0; }
+      .mg-stage-del, .mg-shelf-del { flex: 0 0 30px; display: grid; place-items: center; cursor: pointer; padding: 0;
+        border-radius: 6px; color: var(--accent); opacity: 0.55;
+        background: rgba(255,255,255,0.04); border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+        font: 600 10px system-ui, sans-serif; }
+      .mg-stage-del:hover, .mg-stage-del:focus-visible, .mg-shelf-del:hover, .mg-shelf-del:focus-visible { opacity: 1; }
+      /* Armed: the first press asks, the second deletes. */
+      .mg-stage-del.armed, .mg-shelf-del.armed { flex-basis: 58px; opacity: 1; color: #f1d7d2; background: #8c2f25; border-color: #c4523f; }
       /* theme switch (under the tape rack) */
       .mg-themes { display: flex; gap: 6px; margin-top: 18px; justify-content: center; flex: 0 0 auto; }
       .mg-themes button { font: 600 11px system-ui, sans-serif; letter-spacing: 0.06em; text-transform: uppercase;
@@ -624,6 +829,7 @@ export function initMobileGate(mode = 'gate') {
     el.querySelector('#mg-start')?.addEventListener('click', () => boot(true));
     const cont = el.querySelector('#mg-continue');
     if (cont) cont.addEventListener('click', () => boot(false));
+    wireShelf(el, () => boot(false));
     // Load a checkpoint: restore its seed + save into the run keys, then boot the
     // resume path (main.js's restore reads them, exactly like Continue).
     // One loader, whichever row in the list you press.
@@ -641,6 +847,40 @@ export function initMobileGate(mode = 'gate') {
     };
     el.querySelectorAll('.mg-stage-btn').forEach((btn) => {
       btn.addEventListener('click', () => loadStage(btn.dataset.id));
+    });
+    // The bin beside each row. A checkpoint holds a whole run, so the first
+    // press only arms it ("Delete?") and a second press within three seconds
+    // removes it from the store. The row goes, the heading recounts, and the
+    // list goes altogether when the last one does.
+    const binStage = (id) => {
+      try {
+        const stages = JSON.parse(localStorage.getItem('postai-stages') || '{}');
+        delete stages[id];
+        if (Object.keys(stages).length) localStorage.setItem('postai-stages', JSON.stringify(stages));
+        else localStorage.removeItem('postai-stages');
+      } catch (e) { return; /* storage blocked: leave the row, since nothing was deleted */ }
+      el.querySelectorAll('.mg-stage-row').forEach((row) => { if (row.dataset.id === id) row.remove(); });
+      const left = el.querySelectorAll('.mg-stage-row').length;
+      if (!left) { el.querySelector('.mg-stages')?.remove(); return; }
+      const h = el.querySelector('.mg-stages-h');
+      if (h) h.innerHTML = stagesHeading(left);
+      el.querySelector('.mg-stage-wrap')?.classList.toggle('more', left > 3);
+    };
+    el.querySelectorAll('.mg-stage-del').forEach((bin) => {
+      const icon = bin.innerHTML;
+      let timer = null;
+      const disarm = () => { clearTimeout(timer); timer = null; bin.classList.remove('armed'); bin.innerHTML = icon; };
+      bin.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!bin.classList.contains('armed')) {
+          bin.classList.add('armed');
+          bin.textContent = 'Delete?';
+          timer = setTimeout(disarm, 3000);
+          return;
+        }
+        disarm();
+        binStage(bin.dataset.id);
+      });
     });
 
     // Escape hatch, where the gate still offers one: dismiss and boot anyway.

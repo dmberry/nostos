@@ -304,6 +304,7 @@ const ARCHIMEDES = P('acorn-archimedes.geocities.ws', 'ARCHIMEDES',
     '[ <a href="home-computers-ring.geocities.ws">Home Computers Ring</a> ]<br>',
     'ring member. « prev · random · next »',
     '</small></p>',
+    '<p><small>The long answer: <a href="why-the-archimedes-failed.geocities.ws">why it failed</a>.</small></p>',
   ]);
 
 // ---- Jay Miner: the man who signed the silicon ------------------------------

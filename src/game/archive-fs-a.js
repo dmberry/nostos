@@ -17,6 +17,8 @@
 // Minima Moralia. The authors, titles, dates and quotations are real; the
 // warmth and the grudges are the fans'.
 
+import { fileBlock } from './files.js';
+
 const P = (dom, name, title, body) => ({ domain: dom, name, title, body });
 
 // ---- Horkheimer: the sober tutorial -----------------------------------------
@@ -83,6 +85,7 @@ const HORKHEIMER = P('horkheimer-critical-theory.geocities.ws', 'HORKHEIMER',
     '[ <a href="frankfurt-school-ring.geocities.ws">Frankfurt School Ring</a> ]<br>',
     'a member page. « prev · random · next »',
     '</small></p>',
+    fileBlock(25),
   ]);
 
 // ---- Adorno: the devotee's shrine (SHOWPIECE) -------------------------------
@@ -310,6 +313,11 @@ const DIALECTIC = P('dialectic-of-enlightenment.geocities.ws', 'DIALECTIC OF ENL
     '<hr>',
     '<p><small>counter: 01144 · best viewed at 800x600 · under construction, the',
     'anti-Semitism notes need another pass · last updated 2 Nov</small></p>',
+    fileBlock(14),
+    fileBlock(15),
+    fileBlock(16),
+    fileBlock(17),
+    fileBlock(18),
     '<p><small>',
     '[ <a href="frankfurt-school-ring.geocities.ws">Frankfurt School Ring</a> ]<br>',
     'a member page. « prev · random · next »',

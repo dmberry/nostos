@@ -110,7 +110,10 @@ export const BLACK_COUNTRY_SITES = [
       '<hr>',
       '<p><small>— <b>hagley_rd_regular</b>. Been on it or near it since 1971.',
       'Corrections to the board, I read it every day.</small></p>',
-    ],
+          '<p><small>And the bus itself: <a href="the-number-9.geocities.ws">the No. 9</a>.'
+        + ' And what everybody drank: <a href="mild-in-the-midlands.geocities.ws">mild</a>.'
+        + ' And on the CB: <a href="cb-radio-brum.geocities.ws">breaker one nine</a>.</small></p>',
+],
   },
 
   // ---- Uplands -------------------------------------------------------------

@@ -84,6 +84,17 @@ export const MODES = [
 
 export const DEFAULT_MODE = 'medium';
 
+// CREATIVE IS RETIRED from play (David, 2026-09-24: "it is never used"). It
+// stays defined so the grade and the tests can still name it, but no picker
+// offers it and nothing adopts it: a stored or saved Creative loads as Medium.
+export const RETIRED_MODES = ['creative'];
+export const OFFERED_MODES = MODES.filter((m) => !RETIRED_MODES.includes(m.key));
+/** A mode key a run may actually be played on. Retired or unknown is Medium. */
+export function playableMode(key) {
+  const k = String(key || '').toLowerCase();
+  return isMode(k) && !RETIRED_MODES.includes(k) ? k : DEFAULT_MODE;
+}
+
 /** The mode record for a key. Anything unrecognised is Medium, never a crash. */
 export function modeOf(key) {
   return MODES.find((m) => m.key === String(key || '').toLowerCase()) || MODES[2];
