@@ -1641,6 +1641,7 @@ export const TITLES = {
   "study-of-myth-ring.geocities.ws": "The Study of Myth Ring",
   "stunlaw.blogspot.com": "Stunlaw — philosophy and critique for a digital age",
   "stunlaw.blogspot.com/development-guide": "The \"Development Guide\" for Nostos — Stunlaw",
+  "stunlaw.blogspot.com/elit-monthly-run-sheet": "Nostos at the E-Lit Monthly Reading Group: run sheet — Stunlaw",
   "stunlaw.blogspot.com/what-matter-whos-speaking": "What Matter Who’s Speaking? — Stunlaw",
   "stunt-car-crammond.geocities.ws": "GEOFF CRAMMOND // the physics man",
   "sub-pop.geocities.ws": "SUB POP // Seattle, grunge, and the loser (Pavitt)",
