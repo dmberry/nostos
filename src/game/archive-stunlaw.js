@@ -119,6 +119,14 @@ const INDEX = P('stunlaw.blogspot.com', 'STUNLAW',
   'Stunlaw — philosophy and critique for a digital age', [
     ...MASTHEAD,
     '<hr>',
+    '<h2><a href="stunlaw.blogspot.com/elit-monthly-run-sheet">Nostos at the E-Lit Monthly Reading Group: run sheet</a></h2>',
+    '<p><small>David M. Berry &middot; Thursday 24 September 2026, 9pm (BST)</small></p>',
+    '<p>The run sheet for tonight&rsquo;s demonstration of Nostos to Mark',
+    'Marino&rsquo;s E-Lit Monthly Reading Group: seven stops, forty-six minutes,',
+    'and the pages worth opening.',
+    '<a href="stunlaw.blogspot.com/elit-monthly-run-sheet">Read more &rarr;</a></p>',
+    '<p><small>Labels: Nostos, electronic literature, games, vector theory.</small></p>',
+    '<hr>',
     '<h2><a href="stunlaw.blogspot.com/development-guide">The &ldquo;Development Guide&rdquo; for Nostos</a></h2>',
     '<p><small>David M. Berry &middot; August 2026</small></p>',
     '<p>Over the past six weeks I have been experimenting with a computable',
@@ -148,6 +156,7 @@ const INDEX = P('stunlaw.blogspot.com', 'STUNLAW',
     '<h3>Blog archive</h3>',
     '<pre class="jb-list">',
     '  2026',
+    '    September   <a href="stunlaw.blogspot.com/elit-monthly-run-sheet">Nostos at the E-Lit Monthly Reading Group: run sheet</a>',
     '    August      <a href="stunlaw.blogspot.com/development-guide">The &ldquo;Development Guide&rdquo; for Nostos</a>',
     '                <a href="stunlaw.blogspot.com/what-matter-whos-speaking">What Matter Who&rsquo;s Speaking? (revised)</a>',
     '  2025',
@@ -492,4 +501,205 @@ const PROVENANCE = P('stunlaw.blogspot.com/what-matter-whos-speaking', 'STUNLAW:
     'Guide&rdquo; for Nostos</a></small></p>',
   ]);
 
-export const STUNLAW_SITES = [INDEX, GUIDE, PROVENANCE];
+// A run sheet, posted the afternoon of the talk it is for.
+// The run sheet for the E-Lit Monthly talk, posted the afternoon of it. The body
+// is the published sheet itself with its live parts (clock, buttons, inputs)
+// taken out, so the two read the same.
+const RUNSHEET = P('stunlaw.blogspot.com/elit-monthly-run-sheet', 'STUNLAW: RUN SHEET',
+  'Nostos at the E-Lit Monthly Reading Group: run sheet — Stunlaw', [
+    ...MASTHEAD,
+    '<p><small><a href="stunlaw.blogspot.com">&#9664; Home</a></small></p>',
+    '<hr>',
+    `<h2>Nostos: a walk through the machines</h2>
+<p><small>David M. Berry &middot; Thursday 24 September 2026, 9pm (BST)</small></p>
+  <p>E-Lit Monthly Reading Group, hosted by Mark Marino. Forty-six minutes of play in seven stops, then questions. Every machine is reached by walking to it. The same web page is opened in three browsers from three decades.</p>
+      <h3>Time</h3>
+      <p><b>48</b> &nbsp; days, 4 July to 20 August 2026</p>
+      <p><b>301</b> &nbsp; hours at the keyboard, 76 sittings</p>
+      <p><b>635</b> &nbsp; versions shipped, 961 commits</p>
+      <h3>Made</h3>
+      <p><b>208,088</b> &nbsp; lines of source, 432 files</p>
+      <p><b>1,990</b> &nbsp; pages in the cached web, about a million words</p>
+      <p><b>1,709</b> &nbsp; tests, all passing</p>
+      <h3>Compute</h3>
+      <p><b>17.77 bn tokens</b> &nbsp; through the models, about 134,000 paperback novels</p>
+      <p><b>36,578</b> &nbsp; model calls, one every 30 seconds at the keyboard</p>
+      <p><b>254 kWh</b> &nbsp; 181 H100-hours of underlying compute</p>
+      <h3>Cost</h3>
+        <p><b>£209,881</b> &nbsp; if every token were billed fresh</p>
+        <p><b>£24,237</b> &nbsp; API list price with caching ($30,781)</p>
+        <p><b>£142</b> &nbsp; paid: a £90/month subscription, 0.59% of list</p>
+    <p>Run 4, measured 20 August 2026 from the session transcripts and the pre-rewrite mirror (<code>CANONICAL-HISTORY.md</code>). 59% of the lines are page copy for the cached web. Every figure has grown since.</p>
+  <h3>Save files</h3><code>~/Projects/nostos/_tmp/demo-saves</code>
+  <p>In the game: <kbd>H</kbd> → Save to disc → Import run… In the file dialog press <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> and paste the path.</p>
+<h2>Pages to open</h2>
+<p>Each opens here, in this browser.</p>
+    <p><a href="stunlaw.blogspot.com/elit-monthly-run-sheet">This run sheet, in the game</a> &middot; The same sheet, posted on Stunlaw inside Nostos &middot; <code>stunlaw.blogspot.com/elit-monthly-run-sheet</code></p>
+    <p><a href="stunlaw.blogspot.com">Stunlaw</a> &middot; The blog inside the game, with this run sheet at the top &middot; <code>stunlaw.blogspot.com</code></p>
+    <p><a href="hack_nostos.geocities.ws">hack_nostos</a> &middot; Ronnie's brain code: a bodyguard with a white eye, and five more &middot; <code>hack_nostos.geocities.ws</code></p>
+    <p><a href="nostos.geocities.ws">Nostos</a> &middot; The homecoming, and why it is not arriving &middot; <code>nostos.geocities.ws</code></p>
+    <p><a href="nostos-ai.vercel.app/www">The Official Development Guide</a> &middot; The game’s own guide, inside its own web &middot; <code>nostos-ai.vercel.app/www</code></p>
+    <p><a href="textprovenance.io">TEXT PROVENANCE</a> &middot; The Pangram parody: paste text, then Analyse again &middot; <code>textprovenance.io</code></p>
+    <p><a href="mediatheory-ring.geocities.ws">Media Theory Ring</a> &middot; The media theorists, one webring &middot; <code>mediatheory-ring.geocities.ws</code></p>
+    <p><a href="sussex.ac.uk/cvm">Centre for Vector Media</a> &middot; Vector studies, vector medium, vector culture &middot; <code>sussex.ac.uk/cvm</code></p>
+    <p><a href="stunlaw.blogspot.com">Stunlaw</a> &middot; The blog, in the cache &middot; <code>stunlaw.blogspot.com</code></p>
+    <p><a href="eliza-weizenbaum.geocities.ws">ELIZA</a> &middot; Weizenbaum’s program and what he made of it &middot; <code>eliza-weizenbaum.geocities.ws</code></p>
+    <p><a href="the-plato-pages.geocities.ws">The Plato Pages</a> &middot; Eight passages from Jowett on the life worth living &middot; <code>the-plato-pages.geocities.ws</code></p>
+    <p><a href="elite.geocities.ws">Elite</a> &middot; Braben and Bell, the loading screen and the docking music &middot; <code>elite.geocities.ws</code></p>
+    <p><a href="thevampire.geocities.ws">The AI Vampire</a> &middot; Who keeps the hours an agent saves &middot; <code>thevampire.geocities.ws</code></p>
+<h2>Rehearsal notes</h2>
+  <p>Obelisk code: <code>OB_69B0</code></p>
+  <p>Unit to reprogram: <code>v1_04</code></p>
+  <p>Class glob: <code>v1_*</code></p>
+  <p>Game address for links: <code>https://nostos-ai.vercel.app</code></p>
+  <p>Line you will change: <code>else if k = 3 then flee</code></p>
+<p>Pre-filled from the save files. Overwrite them if you choose a different machine; they stay in this browser only. Addresses marked ↗ open that page in Nostos; the links use the game address above.</p>
+    <h2>00:00 &nbsp; Wake and walk</h2>
+  <code>load: nostos-0-wake.json</code> &nbsp; <code>6 min</code> &nbsp; <code>CALYPSO's island</code> &nbsp; 
+    <ol>
+      <li>Game already running, Nobody lying on the shore. Pause on the first frame, then move: the first step stands you up.</li>
+      <li>Walk inland. Let the ambient machines pass on screen. No menus.</li>
+      <li>Find CALYPSO's voice. Let one exchange play out in full.</li>
+      <li>Open the phone with <kbd>O</kbd> if a thread is waiting; close it with <kbd>O</kbd>.</li>
+      <li>Head toward the nearest green obelisk on the skyline.</li>
+    </ol>
+      <h3>Point</h3><p>A postAI Odyssey. Each island is a daemon; this one is CALYPSO, whose philosophy is care. Everything that follows is reached on foot.</p>
+      <h3>If it goes wrong</h3><p>The Wi-Fi block keeps the machines off you. If one does come for you, the block is flat: check there are batteries in the pack. Lost: the obelisk is the tallest thing on screen.</p>
+    <h2>06:00 &nbsp; An obelisk</h2>
+  <code>load if needed: nostos-1-obelisk.json</code> &nbsp; <code>7 min</code> &nbsp; <code>OB_69B0 · access chip in pocket</code> &nbsp; 
+    <ol>
+      <li>Stand within about four tiles of the obelisk and click it. The channel bar fills.</li>
+      <li>Green console, AI-ML prompt. Say that while you are jacked in, the tower hides you from the machines.</li>
+      <li>Open the tower's web from the console: pages print as text with numbered links. Type a number to follow one. Go to <a href="cern-www.geocities.ws"><code>cern-www.geocities.ws</code></a>.</li>
+      <li>From the console list, open one unit's page and read its <code>program.ml</code> on screen. Do not change it here.</li>
+      <li>Close the console with its <kbd>×</kbd>.</li>
+    </ol>
+      <h3>Point</h3><p>The estate's own console is Berners-Lee's Line Mode Browser of 1991. First of three views of the same CERN page.</p>
+      <h3>Without a chip</h3><p>Clicking an obelisk shows the AI's own OS, busy and unusable. Worth three seconds if you want the contrast.</p>
+    <h2>13:00 &nbsp; The NostBook</h2>
+  <code>load: nostos-2-nostbook.json</code> &nbsp; <code>10 min</code> &nbsp; <code>ELIZA cut first</code> &nbsp; 
+    <ol>
+      <li>The broken NostBook, a battery and a chip fragment are in the pockets and pack. Press <kbd>C</kbd> to repair it.</li>
+      <li>Press <kbd>L</kbd>. It boots to a shell.
+        ls
+book
+        Pick a book from the library window and scroll one page.</li>
+      <li>ELIZA:
+        cd eliza
+ml eliza.ml
+        Type two lines to her. Mention that the source is on the disk and GPL.</li>
+      <li>Bring the card up and open the browser:
+        ifconfig wifi0 up
+netscape
+        In the Location bar type <code>search cern</code> for AltaVista, then open <a href="cern-www.geocities.ws"><code>cern-www.geocities.ws</code></a>.</li>
+    </ol>
+      <h3>Point</h3><p>The laptop you carry is a 1990s Unix box with Netscape on it. Second view of the same page, now with images and a search engine nobody has updated since.</p>
+      <h3>If it goes wrong</h3><p><code>C</code> does nothing: open the HERMES console (type <code>lyre</code>) and press the “Kit (laptop, card, gun, pack)” button. Back to the home directory before Netscape: <code>cd</code>.</p>
+    <h2>23:00 &nbsp; Refunction a robot</h2>
+  <code>load: nostos-3-robot.json</code> &nbsp; <code>7 min</code> &nbsp; <code>never cut</code> &nbsp; 
+    <ol>
+      <li>V1_04, T1_02 and T2_03 are in radio range (about 24 m). In the NostBook shell:
+        arp -a
+        Point at the name that matches the machine on screen: <code>v1_04</code></li>
+      <li>Pull its mind onto the disk and open it:
+        get v1_04 &gt; u.ml
+pico u.ml</li>
+      <li>Show the V-class <code>model.ml</code> header: <em>grown at the foundry … do not edit</em>. Scroll the weights and the final <code>if k = …</code> chain.</li>
+      <li>Change one outcome (your rehearsed line: <code>else if k = 3 then flee</code>). Save and exit pico.</li>
+      <li>Post it back and watch the machine:
+        post u.ml v1_04
+        Close the laptop with <kbd>L</kbd> so the room sees it change.</li>
+      <li>If time: the whole class at once, only those in range:
+        post u.ml v1_*</li>
+    </ol>
+      <h3>Point</h3><p>Everything the machines wrote is signed. What you post is filed as unsigned, and the unit's own page says so afterwards. In this world the detector's finding is the player.</p>
+      <h3>If it goes wrong</h3><p><code>403 foundry-sealed</code>: that one is a guard, pick a worker. <code>wifi0 is down</code>: <code>ifconfig wifi0 up</code>. Nothing in <code>arp</code>: walk closer.</p>
+    <h2>30:00 &nbsp; CALYPSO's core</h2>
+  <code>load: nostos-4-core.json</code> &nbsp; <code>8 min</code> &nbsp; <code>seal cut second · Draughts cut third</code> &nbsp; <code>Ubik in hand</code> &nbsp; 
+    <ol>
+      <li>Standing a few steps from the core, gate and sanctum open. Walk the last steps so the NeXT cube fills the frame.</li>
+      <li>Click the screen on the cube. It boots NeXTSTEP: let the boot run, then the Workspace.</li>
+      <li>Open <code>WorldWideWeb.app</code> from the dock and go to <a href="cern-www.geocities.ws"><code>cern-www.geocities.ws</code></a>. Third view of the same page, in the browser that was also an editor.</li>
+      <li>Open <code>Terminal.app</code>: her prompt is one program among others on her machine.</li>
+      <li>The seal: in the File Viewer, her files include <code>warning.asc</code> and <code>once.py</code>, which she has never opened. Open <code>once.py</code> to show the note at the top. Running it spends it; check in rehearsal how it runs on her machine.</li>
+      <li><code>Draughts.app</code>: one move against her.</li>
+      <li>Close the Workspace. Backspace: spray Ubik at the ground with <kbd>E</kbd> three times without moving. The third spray tears it open. Step onto the tear. The doors in Backspace lead back to each island.</li>
+    </ol>
+      <h3>Point</h3><p>The other daemons answer at a green prompt. Hers is a workstation somebody chose and admired, so it comes up in NeXTSTEP. The Web was written on one of these.</p>
+      <h3>If it goes wrong</h3><p>Click misses the screen: step closer and click the panel on the cube's face, not the ground. Ubik does nothing: it must be in the hands (it is in this save), and all three sprays must land on the same spot.</p>
+    <h2>38:00 &nbsp; View source</h2>
+  <code>any save after the NostBook</code> &nbsp; <code>5 min</code> &nbsp; <code>in-game Netscape</code> &nbsp; 
+    <ol>
+      <li>Netscape: <a href="underneath.geocities.ws"><code>underneath.geocities.ws</code></a>. Read the acrostic's message aloud, then View Source.</li>
+      <li><a href="textprovenance.io"><code>textprovenance.io</code></a>. Paste one line of CALYPSO's dialogue, run the analysis.</li>
+      <li>Press <em>Analyse again</em> on the same text. Let the verdict change.</li>
+    </ol>
+      <h3>Point</h3><p>The web is written to be read from underneath as well as on the surface. The detector is a parody of Pangram and its kin: same text, a different report each run.</p>
+    <h2>43:00 &nbsp; The repo</h2>
+  <code>editor or GitHub tab</code> &nbsp; <code>3 min</code> &nbsp; 
+    <ol>
+      <li>Switch the shared window to the source. Show one comment signed <code>op: CALYPSO</code>.</li>
+      <li>Show the commit log: the messages are written in-world.</li>
+      <li>Back to the game for the last frame, then questions.</li>
+    </ol>
+      <h3>Point</h3><p>The fiction runs into the source and the version history. Code as a site of writing.</p>
+<h2>Running long</h2>
+<table>
+  <thead><tr><th>Cut</th><th>Saves</th><th>Where</th></tr></thead>
+  <tbody>
+    <tr><td>1. ELIZA</td><td>2 min</td><td>NostBook, step 3</td></tr>
+    <tr><td>2. The seal</td><td>1 min</td><td>CALYPSO's core, step 5</td></tr>
+    <tr><td>3. Draughts</td><td>1 min</td><td>CALYPSO's core, step 6</td></tr>
+    <tr><td>4. Backspace</td><td>2 min</td><td>CALYPSO's core, step 7</td></tr>
+    <tr><td>Class-wide post</td><td>1 min</td><td>Robot, step 6</td></tr>
+  </tbody>
+</table>
+<p>Refunctioning the robot is never cut. If you are more than five minutes behind at the core, skip WorldWideWeb's navigation and show the page already open.</p>
+<h2>Save states</h2>
+  <p>The five files are made and tested. They are all from one run, so the island, the obelisk and the robots match across them:</p>
+  ~/Projects/nostos/_tmp/demo-saves/
+  <p>To load one: <kbd>H</kbd> → <strong>Save to disc</strong> → <em>Import run…</em> → in the file dialog press <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd>, paste the path, choose the file → confirm the dialog. The page reloads to the title; press <strong>Continue</strong>. It works from the title screen too.</p>
+    <h4>nostos-0-wake.json <small>(Stop 1)</small></h4>
+    <p>Nobody on Ogygia's north shore, just woken. Pockets: the note from home, the broken NostBook, a Wi-Fi block. Penknife in hand. No access chip yet.</p>
+    <h4>nostos-1-obelisk.json <small>(Stop 2)</small></h4>
+    <p>Three tiles from OB_69B0, which is standing. The chip opens its console from here. A T-1 (T1_14) patrols a couple of metres away and ignores you.</p>
+    <h4>nostos-2-nostbook.json <small>(Stops 3 and 6)</small></h4>
+    <p>Near the same obelisk. Broken NostBook plus one battery and one chip fragment, which is the whole repair. Backpack worn. Press <kbd>C</kbd> and it boots.</p>
+    <h4>nostos-3-robot.json <small>(Stop 4)</small></h4>
+    <p>NostBook working, wifi up. About 10 m from V1_04, with T1_02 and T2_03 further off, all answering <code>arp -a</code>, no guards among them. Ubik in hand.</p>
+    <h4>nostos-4-core.json <small>(Stop 5 and Backspace)</small></h4>
+    <p>In the grove, south-east of the NeXT cube with its name in frame, one or two steps outside click range. Ubik in hand, 20 sprays.</p>
+  <p><strong>Every file carries a charged Wi-Fi block and 8 batteries.</strong> Hunters cannot find you while it has charge. Each cell lasts 10 minutes, and the block takes a fresh one whenever a machine comes near. No creative mode.</p>
+  <p>Loading replaces whatever run is in the browser. To keep a rehearsal run, export it first.</p>
+<h2>On the day</h2>
+    <h3>Thirty minutes before</h3>
+    <ul>
+      <li>[ ] Fresh-port preview running, game at the title.</li>
+      <li>[ ] The five files in <code>_tmp/demo-saves/</code>, reachable from the file picker.</li>
+      <li>[ ] Import <code>nostos-0-wake.json</code>.</li>
+      <li>[ ] Music low or off (<kbd>M</kbd>). Zoom set so text is readable on a shared screen.</li>
+      <li>[ ] Repo tab open at an <code>op: CALYPSO</code> comment; second tab at the commit log.</li>
+      <li>[ ] Fallback screen recording of stops 3 to 5 on the desktop.</li>
+      <li>[ ] Share the browser window, not the whole screen.</li>
+    </ul>
+    <h3>Not on screen</h3>
+    <ul>
+      <li>[ ] The hidden FILE blocks in page source. Show View Source only on <a href="underneath.geocities.ws"><code>underneath.geocities.ws</code></a>.</li>
+      <li>[ ] The Ward and Hume Street pages.</li>
+      <li>[ ] The HERMES console, unless something breaks.</li>
+    </ul>
+    <h3>Keys</h3>
+    <table>
+      <tbody>
+        <tr><td><kbd>L</kbd></td><td>NostBook shell</td></tr>
+        <tr><td><kbd>C</kbd></td><td>Craft / repair</td></tr>
+        <tr><td><kbd>O</kbd></td><td>Phone</td></tr>
+        <tr><td><kbd>H</kbd></td><td>Help, settings, save to disc</td></tr>
+        <tr><td><kbd>M</kbd></td><td>Music</td></tr>
+        <tr><td><kbd>P</kbd></td><td>Pause</td></tr>
+        <tr><td><code>lyre</code></td><td>HERMES test console</td></tr>
+      </tbody>
+    </table>`,
+  ]);
+
+export const STUNLAW_SITES = [INDEX, GUIDE, PROVENANCE, RUNSHEET];
