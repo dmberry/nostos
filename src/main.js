@@ -13424,6 +13424,16 @@ player.aboard = null;
     if (r && r.ok) {
       nsSetView(isDept(target) ? { kind: 'dept', dept: target } : { kind: 'host', addr: target }, false);
     }
+    // SPEND THE LINK. Leaving to the title is a reload, and a reload of this
+    // address opened the linked page again instead of the title (David,
+    // 2026-09-24). The page is open now, so the address bar goes back to the
+    // plain game and every later reload lands where it should.
+    try {
+      const u = new URL(loc.href);
+      u.searchParams.delete('cache');
+      if (/^\/c\//.test(u.pathname)) u.pathname = '/';
+      history.replaceState(history.state, '', u.pathname + u.search + u.hash);
+    } catch (e) { /* no history API: the link simply stays */ }
   }
 }
 
