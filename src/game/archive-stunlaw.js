@@ -549,7 +549,7 @@ const RUNSHEET = P('stunlaw.blogspot.com/elit-monthly-run-sheet', 'STUNLAW: RUN 
     <p><a href="stunlaw.blogspot.com/elit-monthly-run-sheet">RUN SHEET, in the game</a> &middot; The same sheet, posted on Stunlaw inside Nostos &middot; <code>stunlaw.blogspot.com/elit-monthly-run-sheet</code></p>
 <h2>Rehearsal notes</h2>
   <p>Obelisk code: <code>OB_69B0</code></p>
-  <p>Unit to reprogram: <code>v1_04</code></p>
+  <p>Unit to reprogram: <code>friend-v</code></p>
   <p>Class glob: <code>v1_*</code></p>
   <p>Game address for links: <code>https://nostos-ai.vercel.app</code></p>
   <p>Line you will change: <code>else if k = 3 then flee</code></p>
@@ -598,16 +598,16 @@ netscape
     <h2>23:00 &nbsp; Refunction a robot</h2>
   <code>load: nostos-3-robot.json</code> &nbsp; <code>7 min</code> &nbsp; <code>never cut</code> &nbsp; 
     <ol>
-      <li>V1_04, T1_02 and T2_03 are in radio range (about 24 m). In the NostBook shell:
+      <li>Three units are already tagged and in radio range: <code>friend-v</code> (a V-1), <code>friend-1</code> (a T-1) and <code>friend-2</code> (a T-2). Tags work in place of names. In the NostBook shell:
         arp -a
-        Point at the name that matches the machine on screen: <code>v1_04</code></li>
+        Point at the name that matches the machine on screen: <code>friend-v</code></li>
       <li>Pull its mind onto the disk and open it:
-        get v1_04 &gt; u.ml
+        get friend-v &gt; u.ml
 pico u.ml</li>
       <li>Show the V-class <code>model.ml</code> header: <em>grown at the foundry … do not edit</em>. Scroll the weights and the final <code>if k = …</code> chain.</li>
       <li>Change one outcome (your rehearsed line: <code>else if k = 3 then flee</code>). Save and exit pico.</li>
       <li>Post it back and watch the machine:
-        post u.ml v1_04
+        post u.ml friend-v
         Close the laptop with <kbd>L</kbd> so the room sees it change.</li>
       <li>If time: the whole class at once, only those in range:
         post u.ml v1_*</li>
@@ -666,9 +666,11 @@ pico u.ml</li>
     <h4>nostos-2-nostbook.json <small>(Stops 3 and 6)</small></h4>
     <p>Near the same obelisk. Broken NostBook plus one battery and one chip fragment, which is the whole repair. Backpack worn. Press <kbd>C</kbd> and it boots.</p>
     <h4>nostos-3-robot.json <small>(Stop 4)</small></h4>
-    <p>NostBook working, wifi up. About 10 m from V1_04, with T1_02 and T2_03 further off, all answering <code>arp -a</code>, no guards among them. Ubik in hand.</p>
+    <p>NostBook working, wifi up. Tagged and in range: <code>friend-v</code> (V-1, about 10 m), <code>friend-1</code> (T-1) and <code>friend-2</code> (T-2). No guards among them. Ubik in hand.</p>
     <h4>nostos-4-core.json <small>(Stop 5 and Backspace)</small></h4>
     <p>In the grove, south-east of the NeXT cube with its name in frame, one or two steps outside click range. Ubik in hand, 20 sprays.</p>
+    <h4>nostos-5-bodyguard.json <small>(Stop 4, bodyguard version)</small></h4>
+    <p>Save 3 with <code>bodyguard.ml</code> and <code>dog.ml</code> already on the NostBook. Same tagged units. <code>post bodyguard.ml friend-1</code>, then <code>post bodyguard.ml friend-2</code>, close with <kbd>L</kbd>, then <kbd>4</kbd> and Backspace to drop the Wi-Fi block and let them fight.</p>
   <p><strong>Every file carries a charged Wi-Fi block and 8 batteries.</strong> Hunters cannot find you while it has charge. Each cell lasts 10 minutes, and the block takes a fresh one whenever a machine comes near. No creative mode.</p>
   <p>Loading replaces whatever run is in the browser. To keep a rehearsal run, export it first.</p>
 <h2>On the day</h2>
