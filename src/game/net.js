@@ -286,7 +286,11 @@ export function findHost(hosts, addr) {
   const a = String(addr || '').trim().toLowerCase()
     .replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/+$/, '');
   if (!a) return null;
-  return hosts.find((h) => h.ip === a || h.host === a || h.host.split('.')[0] === a) || null;
+  return hosts.find((h) => h.ip === a || h.host === a || h.host.split('.')[0] === a)
+    // An operator tag answers too, so `post mine.ml friend-1` reaches the unit
+    // you tagged without first reading its serial off `arp`. Name and address
+    // win over a tag, in case somebody tags a unit with another unit's name.
+    || hosts.find((h) => h.tag && String(h.tag).toLowerCase() === a) || null;
 }
 
 // ---- The pages ----------------------------------------------------------
