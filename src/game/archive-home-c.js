@@ -160,6 +160,9 @@ const BBC_MICRO = P('bbc-micro.geocities.ws', 'BBC MICRO',
     '[ <a href="home-computers-ring.geocities.ws">Home Computers Ring</a> ]<br>',
     'ring member. « prev · random · next »',
     '</small></p>',
+    '<p><small>In more detail: <a href="bbc-basic.geocities.ws">the BASIC</a>,'
+      + ' <a href="star-commands.geocities.ws">the star commands</a>, and'
+      + ' <a href="the-disc-drive.geocities.ws">the drives and the noises they made</a>.</small></p>',
   ]);
 
 // ---- The Commodore 64: the sound-chip love letter ---------------------------

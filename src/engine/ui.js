@@ -2495,7 +2495,7 @@ export const uiMethods = {
     if (player.venom > 0) { ctx.fillStyle = '#b07fd8'; ctx.fillText('POISON', cx, top + 21); }
     if (player.isSwine()) { ctx.fillStyle = '#e0a0b0'; ctx.fillText('SWINE', cx, top + 39); }
     else if (player.swine >= 0.3) { ctx.fillStyle = '#e0a0b0'; ctx.fillText('TURNING', cx, top + 39); }
-    else if (player.invisibleToRobots) { ctx.fillStyle = '#4fd8c3'; ctx.fillText(`HID ${Math.ceil((player.wifiPower || 0) / 60)}m`, cx, top + 39); }
+    else if (player.invisibleToRobots) { ctx.fillStyle = '#4fd8c3'; ctx.fillText(player._wifiOn ? `HID ${Math.ceil((player.wifiPower || 0) / 60)}m` : 'HID', cx, top + 39); }
     // #179 — the stealth word. The mechanic is free and has no key, so this
     // line is the only way a player finds out that the grass does anything;
     // LOUD is here for the same reason, since a system that only ever praises
@@ -2829,7 +2829,7 @@ export const uiMethods = {
       ctx.fillText(`TURNING ${Math.round(player.swine * 100)}%`, 92, top + 32);
     } else if (player.invisibleToRobots) {
       ctx.fillStyle = '#4fd8c3';
-      ctx.fillText(player.terminalSafe ? 'HIDDEN' : `HIDDEN ${Math.ceil((player.wifiPower || 0) / 60)}m`, 92, top + 32);
+      ctx.fillText(player._wifiOn ? `HIDDEN ${Math.ceil((player.wifiPower || 0) / 60)}m` : 'HIDDEN', 92, top + 32);
     }
     if (player.food <= 0) { ctx.fillStyle = '#e05548'; ctx.fillText('STARVING', 92, top + 55); }
     else if (player.food < 25) { ctx.fillStyle = '#d8a04f'; ctx.fillText('HUNGRY', 92, top + 55); }

@@ -251,6 +251,8 @@ import { HOME_E } from './archive-home-e.js';   // the 16-bit generation
 import { HOME_F } from './archive-home-f.js';   // the IBM PC & the clones
 import { HOME_G } from './archive-home-g.js';   // the home-computer culture
 import { HOME_H } from './archive-home-h.js';   // the survey & the wars
+import { HOME_I } from './archive-home-i.js';   // BASIC, the star commands, the drives
+import { ESCORT } from './archive-escort.js';   // hack_nostos: brain code that runs
 import { HOME_RINGS } from './archive-home-hubs.js'; // the home-computer webrings
 import { PHIL_A } from './archive-phil-a.js';   // the Greeks
 import { PHIL_B } from './archive-phil-b.js';   // Hellenistic & the medieval opening
@@ -294,6 +296,12 @@ import { REL_B } from './archive-rel-b.js';   // schisms & neoplatonism
 import { REL_RINGS } from './archive-rel-hubs.js'; // the religion webrings
 import { VEC_SITES } from './archive-vec.js';  // the Centre for Vector Media
 import { SMETHWICK_SITES } from './archive-smethwick.js'; // Smethwick, the brewery, the schools
+import { BOARD_SITES } from './archive-boards.js';  // boards, the WELL, CB
+import { MAC_G } from './archive-mac-g.js';         // the HIG, OS 9, Logic
+import { MISC_H } from './archive-misc-h.js';       // colleges, a dog, mild, the 9
+import { DOWNS_SITES } from './archive-downs.js';   // Blackcap, and how to walk
+import { NORWAY_SITES } from './archive-norway.js'; // Oslo, the food, the drink, Ibsen
+import { MAP_SITES } from './archive-maps.js';    // five people mapping something
 import { SWISS_SITES } from './archive-swiss.js';   // Basel and Bern, disagreeing
 import { DIALOGUE_SITES } from './archive-dialogues.js'; // eight passages of Plato
 import { PROVENANCE_SITES } from './archive-provenance.js'; // the post, and it coming loose
@@ -472,7 +480,8 @@ export const ARCHIVED_SITES = [
   ...AIH_RINGS,
   ...PSB_A, ...PSB_B, ...PSB_RINGS,
   ...HOME_A, ...HOME_B, ...HOME_C, ...HOME_D,
-  ...HOME_E, ...HOME_F, ...HOME_G, ...HOME_H,
+  ...HOME_E, ...HOME_F, ...HOME_G, ...HOME_H, ...HOME_I,
+  ...ESCORT,
   ...HOME_RINGS,
   ...PHIL_A, ...PHIL_B, ...PHIL_C, ...PHIL_D,
   ...PHIL_E, ...PHIL_F, ...PHIL_G, ...PHIL_H,
@@ -488,6 +497,10 @@ export const ARCHIVED_SITES = [
   ...REL_A, ...REL_B, ...REL_RINGS,
   ...VEC_SITES,
   ...SMETHWICK_SITES,
+  ...BOARD_SITES, ...MAC_G, ...MISC_H,
+  ...DOWNS_SITES,
+  ...NORWAY_SITES,
+  ...MAP_SITES,
   ...SWISS_SITES,
   ...DIALOGUE_SITES,
   ...PROVENANCE_SITES,
@@ -807,6 +820,42 @@ const CATEGORY_OF = {
   'foucault-versions.geocities.ws': 'Education',
   'provenance-thread.geocities.ws': 'Society & Culture',
   'textprovenance.io': 'Computers & Internet',
+  'bbc-basic.geocities.ws': 'Computers & Internet',
+  'stos-basic.geocities.ws': 'Computers & Internet',
+  'star-commands.geocities.ws': 'Computers & Internet',
+  'the-disc-drive.geocities.ws': 'Computers & Internet',
+  'why-the-archimedes-failed.geocities.ws': 'Computers & Internet',
+  'fastnet.geocities.ws': 'Business & Finance',
+  'brighton-board.geocities.ws': 'Computers & Internet',
+  'the-well.geocities.ws': 'Computers & Internet',
+  'stewart-brand.geocities.ws': 'Society & Culture',
+  'cb-radio-brum.geocities.ws': 'Society & Culture',
+  'apple-hig.geocities.ws': 'Computers & Internet',
+  'mac-os-9.geocities.ws': 'Computers & Internet',
+  'logic-audio.geocities.ws': 'Arts & Entertainment',
+  'mansfield-college.geocities.ws': 'Education',
+  'lincoln-college.geocities.ws': 'Education',
+  'wolfson-cambridge.geocities.ws': 'Education',
+  'havanese.geocities.ws': 'Society & Culture',
+  'mild-in-the-midlands.geocities.ws': 'Society & Culture',
+  'the-number-9.geocities.ws': 'Society & Culture',
+  'blackcap.geocities.ws': 'Society & Culture',
+  'hiking-dos-and-donts.geocities.ws': 'Reference',
+  'oslo-guide.geocities.ws': 'Society & Culture',
+  'norsk-mat.geocities.ws': 'Society & Culture',
+  'norsk-drikke.geocities.ws': 'Society & Culture',
+  'bergensbanen.geocities.ws': 'Society & Culture',
+  'uio.no/imk': 'Education',
+  'sunnmorsbunad.geocities.ws': 'Society & Culture',
+  'syttende-mai.geocities.ws': 'Society & Culture',
+  'henrik-ibsen.geocities.ws': 'Arts & Entertainment',
+  'hedda-gabler.geocities.ws': 'Arts & Entertainment',
+  'halesowen-shropshire.geocities.ws': 'Reference',
+  'the-twenty-five-inch.geocities.ws': 'Reference',
+  'mapping-the-courts.geocities.ws': 'Reference',
+  'the-twittens.geocities.ws': 'Reference',
+  'lower-swansea-valley.geocities.ws': 'Reference',
+  'mapping-ring.geocities.ws': 'Reference',
   'basel.geocities.ws': 'Society & Culture',
   'bern.geocities.ws': 'Society & Culture',
   'quintonpetrol.geocities.ws': 'Society & Culture',

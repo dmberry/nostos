@@ -18,6 +18,8 @@
 // Same discipline as the rest: short quotations, attributed, and where a thing
 // is disputed the page says who disputes it rather than picking.
 
+import { fileBlock } from './files.js';
+
 export const THEORY_SITES = [
   {
     domain: 'nostos.geocities.ws',
@@ -295,6 +297,12 @@ export const THEORY_SITES = [
       '<hr>',
       '<p><small>See also <a href="arcades.geocities.ws">the other one, who was',
       'nicer about things</a>.</small></p>',
+      fileBlock(19),
+      fileBlock(20),
+      fileBlock(21),
+      fileBlock(22),
+      fileBlock(23),
+      fileBlock(24),
       '<p><small>For the machine that has no metal in it, see <a href="megamachine.geocities.ws">the megamachine</a>.</small></p>',
     ],
   },
@@ -434,6 +442,15 @@ export const THEORY_SITES = [
       'be handed, including the ones that assure you they have nothing in',
       'them.</p>',
       '<hr>',
+      fileBlock(5),
+      fileBlock(6),
+      fileBlock(7),
+      fileBlock(8),
+      fileBlock(9),
+      fileBlock(10),
+      fileBlock(11),
+      fileBlock(12),
+      fileBlock(13),
       '<p><small>See also <a href="decss.geocities.ws">a thing they tried to',
       'take down</a>, and <a href="unreliablenarrator.geocities.ws">how to tell',
       'when you are being told</a>.</small></p>',

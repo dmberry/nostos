@@ -26,7 +26,7 @@
 // localStorage under its own key; main.js reads that at boot for a NEW run, and
 // a run in progress carries its own mode in the save instead.
 
-import { MODES, DEFAULT_MODE, modeOf, isMode } from './modes.js';
+import { MODES, OFFERED_MODES, DEFAULT_MODE, modeOf, isMode, playableMode } from './modes.js';
 import {
   buildSaveFile, describeSaveFile, validateSaveFile, applySaveFile, saveFileName,
 } from './savefile.js';
@@ -38,7 +38,7 @@ export const MODE_KEY = 'postai-mode';
 export function storedMode() {
   try {
     const v = localStorage.getItem(MODE_KEY);
-    return isMode(v) ? v : DEFAULT_MODE;
+    return playableMode(v);
   } catch { return DEFAULT_MODE; }
 }
 
@@ -198,7 +198,7 @@ export function mountSettingsPanel(root, { sfx, getMode, setMode, beforeExport, 
   };
   if (choice && !choice._nostosBound) {
     choice._nostosBound = true;
-    choice.innerHTML = MODES
+    choice.innerHTML = OFFERED_MODES
       .map((m) => `<button type="button" data-mode="${m.key}" aria-pressed="false">${m.name}</button>`)
       .join('');
     choice.addEventListener('click', (e) => {

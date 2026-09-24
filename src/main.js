@@ -97,7 +97,7 @@ import { fillMachineGallery } from './game/machine-icons.js';
 import { fillAboutTapes } from './game/about-tapes.js';
 import { pruneStages, checkpointName, saveStageId } from './game/stages.js';
 import { packFog, unpackFogInto } from './game/fog.js';
-import { MODES, DEFAULT_MODE, modeOf, isMode, lowerMode } from './game/modes.js';
+import { MODES, DEFAULT_MODE, modeOf, isMode, lowerMode, playableMode } from './game/modes.js';
 import { TOOLS as BUILD_TOOLS, applyBuild, canBuildAt } from './game/build.js';   // #182
 import { tickFires } from './game/cooking.js';   // #180
 import { mountSettingsPanel, storedMode, storeMode, setFill } from './game/settings-panel.js';
@@ -545,6 +545,7 @@ function clockElapsed() { return _clockReady ? dayNight.elapsed : (_savedElapsed
 let _savedDocs = null;
 let _docsReady = false;
 function savedDocs() { return _docsReady ? printedDocs : (_savedDocs || []); }
+let _runModeRestored = false;   // set when a save's run is restored; see the mode picker below
 try {
   const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
   if (saved) {
@@ -582,10 +583,12 @@ try {
       if (st.calypsoLeave) player.calypsoLeave = true; // sticky: refunctioning Calypso persists across reload
       // #141: a save from before the permission gate existed has already earned
       // it if she was ever refunctioned, so grant it rather than stranding them.
-      player.creative = !!st.creative;
+      player.creative = false;   // retired: a save's old flag is not honoured (modes.js)
       // The mode rides the save. A run made before modes existed has no key and
       // becomes Medium, which is the game it was played on.
-      if (st.mode) player.setMode(st.mode);
+      if (st.mode) player.setMode(playableMode(st.mode));   // a retired Creative run comes back as Medium
+      else player.setMode(DEFAULT_MODE);
+      _runModeRestored = true;   // the title's picker is for new runs, not this one
       // AFTER setMode, which sets the floor to the mode it adopts. A save that
       // carries a lower floor than its mode was switched UP mid-run, and the
       // floor is the half of that pair that must survive.
@@ -1540,7 +1543,11 @@ const dayNight = new DayNight();
 // is in the temporal dead zone until its own line runs, so reading it earlier
 // is a ReferenceError that kills the boot outright rather than a quiet
 // undefined. It shipped in v1.548 and took the game down (David, 2026-08-15).
-if (player.mode === DEFAULT_MODE) player.setMode(storedMode());
+// ONLY FOR A NEW RUN. A Medium save carries no mode key (the default is left
+// out), so this used to read a restored Medium run as "no mode yet" and hand it
+// whatever the picker said: pick Creative once and every Medium save loaded as
+// Creative (David, 2026-09-24).
+if (!_runModeRestored) player.setMode(storedMode());
 dayNight.rate = player.modeRules().clock;
 // The deadline picks up where the save left it. Without this the clock started
 // over on every reload, so POSEIDON's purge never arrived and its fog never came
@@ -3628,13 +3635,14 @@ const DEV_KITS = [
   // mode: the machines still hunt, the swarm still comes, and you can still
   // kill anything you like. Only the damage to YOU is switched off, so what is
   // being tested still behaves the way it will ship.
-  ['Creative mode', () => {
-    player.creative = !player.creative;
-    if (player.creative) { player.health = player.maxHealth; player.venom = 0; }
-    return player.creative
-      ? 'CREATIVE ON — nothing can hurt you. The machines are unchanged; kill them if you like.'
-      : 'creative off — you can be hurt again';
-  }],
+  // Creative is retired from play (modes.js RETIRED_MODES); its test button went with it.
+  // ['Creative mode', () => {
+  //   player.creative = !player.creative;
+  //   if (player.creative) { player.health = player.maxHealth; player.venom = 0; }
+  //   return player.creative
+  //     ? 'CREATIVE ON — nothing can hurt you. The machines are unchanged; kill them if you like.'
+  //     : 'creative off — you can be hurt again';
+  // }],
   ['Heal + feed', () => { player.health = player.maxHealth; player.stamina = player.maxStamina; player.food = player.maxFood; player.venom = 0; player.torpor = 0; return 'restored'; }],
 ];
 
@@ -7995,6 +8003,7 @@ function nsRender() {
     }
   }
   web.html = html;
+  web.title = title;   // Page Source names the page it is the source of
   // A page of this period could set its own background, and plenty did. The
   // served HTML says so with a marker comment; the browser obeys it, because
   // Navigator did.
@@ -10067,9 +10076,18 @@ function nsHistoryItems() {
 
 // A page can be a view of the browser itself: the source it is showing, what it
 // knows about the host, or the About box every copy of Navigator carried.
-function nsLocalPage(title, html) {
-  web.view = { kind: 'local', title, html };
-  nsRender();
+// A page the browser makes itself (Page Source, Page Info, the About boxes).
+// It goes on the history like any other page, so Back returns to the one you
+// were reading. It used to replace the view outright: the page you came from
+// was gone, and a second View Source showed the source of the source.
+function nsLocalPage(title, html, extra = {}) {
+  nsSetView({ kind: 'local', title, html, ...extra });
+}
+// View Source of a source view shows nothing new, so it stays where it is.
+function nsViewSource() {
+  if (!web || (web.view && web.view.source)) return;
+  nsLocalPage('Source of: ' + (web.title || ''),
+    `<pre>${escapeHtml(web.html || '(no source)')}</pre>`, { source: true });
 }
 function nsPageInfo() {
   const hosts = webHosts();
@@ -10299,8 +10317,7 @@ const NS_MENUS = {
     ['Reload', 'Ctrl+R', () => nsRender()],
     ['Show Images', '', null],
     null,
-    ['Page Source', 'Ctrl+U', () => nsLocalPage('Source of: ' + (web.title || ''),
-      `<pre>${escapeHtml(web.html || '(no source)')}</pre>`)],
+    ['Page Source', 'Ctrl+U', nsViewSource],
     ['Page Info', '', nsPageInfo],
   ],
   Go: () => [

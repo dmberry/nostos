@@ -783,7 +783,13 @@ export const PLACE_SITES = [
         '<a href="ukclimbing.com">ukclimbing.com</a>' +
         '<a href="sussex.ac.uk">sussex.ac.uk</a>' +
         '<a href="nme.com">nme.com</a></small></p>',
-    ],
+          '<hr>',
+      '<p><small>Out of town and up: <a href="blackcap.geocities.ws">Blackcap</a>,'
+        + ' the hill above Lewes with the clump on it, and'
+        + ' <a href="hiking-dos-and-donts.geocities.ws">the rules</a> before you go.</small></p>',
+      '<p><small>Online, locally: <a href="brighton-board.geocities.ws">the board</a>'
+        + ' before the web, and <a href="fastnet.geocities.ws">Fastnet</a> after it.</small></p>',
+],
   },
 
   // ---- the road, the hills, and the machines under the desk ----------------
@@ -1272,7 +1278,11 @@ export const PLACE_SITES = [
         '<a href="forskningsradet.no">forskningsradet.no</a>' +
         '<a href="norskeord.no">norskeord.no</a>' +
         '<a href="roughguides.com">roughguides.com</a></small></p>',
-    ],
+          '<hr>',
+      '<p><small>Departments: <a href="uio.no/imk">Institutt for medier og kommunikasjon</a>.'
+        + ' New here? <a href="oslo-guide.geocities.ws">a guide to Oslo</a> by somebody who arrived'
+        + ' three years ago and is still getting it wrong.</small></p>',
+],
   },
   {
     domain: 'forskningsradet.no',
