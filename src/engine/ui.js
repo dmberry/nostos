@@ -2428,6 +2428,34 @@ export const uiMethods = {
     return null;
   },
 
+  // The deck's three buttons under the walkman: back, play/stop, forward.
+  // Each is its own HUD slot (kind 'wmctl'), so a click is one action and the
+  // deck itself only ever ejects. Replaces the scrolling LCD, which glitched;
+  // the artist and track now show on hover instead.
+  drawWalkmanControls(x, y, w, h, playing) {
+    const ctx = this.ctx;
+    // Play is the wide one in the middle; the skip buttons are narrow and set
+    // apart from it, so a click meant for play does not skip a track.
+    const gap = Math.max(3, Math.round(w * 0.08));
+    const sw = Math.round(w * 0.2), pw = w - sw * 2 - gap * 2;
+    const cells = [['prev', x, sw], ['play', x + sw + gap, pw], ['next', x + sw + gap + pw + gap, sw]];
+    cells.forEach(([act, bx, bw]) => {
+      ctx.fillStyle = 'rgba(10,12,8,0.9)';
+      ctx.fillRect(bx, y, bw, h);
+      ctx.strokeStyle = 'rgba(230,180,34,0.45)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(bx + 0.5, y + 0.5, bw - 1, h - 1);
+      ctx.fillStyle = act === 'play' && playing ? '#e6b422' : 'rgba(207,216,195,0.8)';
+      const cx = bx + bw / 2, cy = y + h / 2, t = act === 'play' ? Math.min(h * 0.28, 3) : Math.min(h * 0.2, 2);
+      const tri = (tx, dir) => { ctx.beginPath(); ctx.moveTo(tx - dir * t, cy - t); ctx.lineTo(tx + dir * t, cy); ctx.lineTo(tx - dir * t, cy + t); ctx.closePath(); ctx.fill(); };
+      if (act === 'prev') { tri(cx - t * 0.2, -1); tri(cx + t * 1.6 - t * 0.2, -1); }
+      else if (act === 'next') { tri(cx + t * 0.2, 1); tri(cx - t * 1.6 + t * 0.2, 1); }
+      else if (playing) ctx.fillRect(cx - t, cy - t, t * 2, t * 2);
+      else tri(cx + t * 0.3, 1);
+      this.uiSlots.push({ x: bx, y, w: bw, h, kind: 'wmctl', act });
+    });
+  },
+
   // A small amber-on-black LCD window under the walkman that scrolls the
   // now-playing text across itself (a marquee) so a long "artist — track"
   // fits the narrow slot. Held still, centred, when the tape isn't playing.
@@ -2574,6 +2602,7 @@ export const uiMethods = {
       ctx2.restore();
     }
     this.uiSlots.push({ x: sx, y: sy, w: P, h: P, kind: 'walkman' });
+    if (player.walkman) this.drawWalkmanControls(sx, sy + P + 2, P, 9, player.walkmanSide != null);
     // The PHONE box, beside the deck (compact strip). Signal bars live next to
     // the label, clear of the handset sprite.
     sx += P + 10;
@@ -2712,7 +2741,7 @@ export const uiMethods = {
     if (player.backpack) {
       const bpX = pocketsX + player.pockets.length * 42 + 10;
       const used = player.backpack.slots.filter(Boolean).length;
-      this.drawLabel('PACK (click or I)', bpX, top + 14);
+      this.drawLabel('PACK', bpX, top + 14);
       this.drawSlot(bpX, top + 20, 36, ITEMS.backpack, 0);
       this.uiSlots.push({ x: bpX, y: top + 20, w: 36, h: 36, kind: 'packbadge' });
       ctx.font = '9px system-ui, sans-serif';
@@ -2753,21 +2782,14 @@ export const uiMethods = {
       this.uiSlots.push({ x: wmX, y: wy, w: ws, h: ws, kind: 'walkman' });
       if (player.walkman && ITEMS[player.walkman.item]) {
         const tapeDef = ITEMS[player.walkman.item];
-        const side = player.walkmanSide
-          ? (player.walkmanSide === 'A' ? tapeDef.sideA : tapeDef.sideB) : null;
         const spinning = !!player.walkmanSide; // a tape is playing whenever a side is loaded
         ctx.save();
         ctx.translate(wmX + 18, top + 38);
         ctx.scale(1.25, 1.25);
         this.drawCassette(tapeDef, spinning ? performance.now() / 300 : 0);
         ctx.restore();
-        // A little LCD "now playing" window under the deck: the artist and
-        // track scroll slowly across so a long name fits the narrow slot.
-        const label = spinning
-          ? `${tapeDef.artist || '?'} — ${side.label}`
-          : 'stopped';
-        this.drawWalkmanTicker(label, wmX - 2, top + 60, ws + 4, spinning);
       }
+      if (player.walkman) this.drawWalkmanControls(wmX - 2, top + 59, ws + 4, 12, !!player.walkmanSide);
       // The PHONE box, right beside the deck: the Nokia 3310 in its cradle.
       // Signal bars sit next to the label, clear of the handset sprite.
       const phX = wmX + ws + 18;

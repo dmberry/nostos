@@ -11200,6 +11200,18 @@ function hoverSlotTip() {
   const hs = renderer.slotAt(input.mouseX, input.mouseY);
   if (!hs) return null;
   if (hs.kind === 'packbadge') return player.backpack ? { text: 'Backpack — press I to open', x: input.mouseX, y: input.mouseY } : null;
+  // THE DECK ON HOVER: what is playing, where the scrolling LCD used to say it.
+  if ((hs.kind === 'walkman' || hs.kind === 'wmctl') && player.walkman && ITEMS[player.walkman.item]) {
+    const def = ITEMS[player.walkman.item];
+    const url = sfx.tapeTrack && sfx.tapeTrack();
+    const track = url ? decodeURIComponent(url.split('/').pop()).replace(/\.[a-z0-9]+$/i, '').replace(/^[\d\s._-]+/, '').replace(/_/g, ' ') : null;
+    const side = player.walkmanSide ? (player.walkmanSide === 'A' ? def.sideA : def.sideB) : null;
+    const text = side ? `${def.artist || '?'} — ${track || side.label}` : `${def.artist || '?'} — stopped`;
+    const sub = hs.kind === 'wmctl'
+      ? ({ prev: 'back a track', play: player.walkmanSide ? 'stop' : 'play', next: 'forward a track' })[hs.act]
+      : `side ${player.walkmanSide || '-'}${side ? `, "${side.label}"` : ''} · click the tape to take it out`;
+    return { text, sub, x: input.mouseX, y: input.mouseY };
+  }
   const held = player.getSlot(hs);
   if (!held || !ITEMS[held.item]) return null;
   const def = ITEMS[held.item];
@@ -12373,7 +12385,8 @@ function update(dt) {
     const slot = renderer.slotAt(press.x, press.y);
     if (slot) {
       input.consumeClick();
-      if (slot.kind === 'packbadge') showBackpack = !showBackpack; // tap the badge to open — and again to close (mobile has no I key)
+      if (slot.kind === 'wmctl') { if (slot.act === 'play') player.walkmanPlayStop(); else player.walkmanSkip(slot.act === 'prev' ? -1 : 1); }
+      else if (slot.kind === 'packbadge') showBackpack = !showBackpack; // tap the badge to open — and again to close (mobile has no I key)
       else if (slot.kind === 'phone') openPhone(); // the Nokia 3310: the screen opens, SMS both ways
       else if (slot.kind === 'laptop') openLaptop(); // the machine you carry: the shell opens (same as L)
       // CLICK A BOOK AND YOU READ IT. It used to pick the book up and say

@@ -531,6 +531,7 @@ const RUNSHEET = P('stunlaw.blogspot.com/elit-monthly-run-sheet', 'STUNLAW: RUN 
         <p><b>£142</b> &nbsp; paid: a £90/month subscription, 0.59% of list</p>
     <p>Run 4, measured 20 August 2026 from the session transcripts and the pre-rewrite mirror (<code>CANONICAL-HISTORY.md</code>). 59% of the lines are page copy for the cached web. Every figure has grown since.</p>
   <h3>Save files</h3><code>~/Projects/nostos/_tmp/demo-saves</code>
+  <p>Development guide: <a href="https://nostos-ai.vercel.app/www">nostos-ai.vercel.app/www</a> &middot; the game: <a href="https://nostos-ai.vercel.app">nostos-ai.vercel.app</a></p>
   <p>In the game: <kbd>H</kbd> → Save to disc → Import run… In the file dialog press <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> and paste the path.</p>
 <h2>Pages to open</h2>
 <p>Each opens here, in this browser.</p>
