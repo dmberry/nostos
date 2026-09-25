@@ -5751,6 +5751,33 @@ export class Renderer {
     ctx.save();
     ctx.translate(cx, cy);
     ctx.scale(s, s);
+    // The Codescope: a dark base and arm, a brass tube angled over the stage,
+    // and one green point on the stage where the sample sits. Drawn, like the
+    // rest of this HUD; at 26px the silhouette is what reads.
+    if (key === 'codescope') {
+      ctx.fillStyle = '#2b2f33';                       // base
+      ctx.fillRect(-9, 8, 16, 3);
+      ctx.fillStyle = '#3a4046';                       // arm, a curve up the back
+      ctx.beginPath();
+      ctx.moveTo(-6, 8); ctx.quadraticCurveTo(-9, -1, -3, -6); ctx.lineTo(-1, -4);
+      ctx.quadraticCurveTo(-5, 0, -3, 8); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#4a5157';                       // stage
+      ctx.fillRect(-4, 2, 11, 2);
+      ctx.fillStyle = '#7fd88a';                       // the sample
+      ctx.fillRect(2, 1, 2, 1.2);
+      ctx.save();                                      // the tube, angled
+      ctx.translate(2, -4); ctx.rotate(0.45);
+      ctx.fillStyle = '#c8a83c';
+      ctx.fillRect(-2, -8, 4, 11);
+      ctx.fillStyle = '#e6d08a';                       // highlight
+      ctx.fillRect(-1.2, -7, 1, 9);
+      ctx.fillStyle = '#2b2f33';                       // eyepiece and objective
+      ctx.fillRect(-2.6, -10, 5.2, 2.4);
+      ctx.fillRect(-1.4, 3, 2.8, 2.2);
+      ctx.restore();
+      ctx.restore();
+      return;
+    }
     // The FSF membership card: a white credit card lying on its side, the gold
     // USB tab folded out of the top-right corner, and the gnu's dark head over
     // a red mark on the left. Drawn rather than sprited because everything in

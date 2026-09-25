@@ -327,7 +327,9 @@ export function createIsland(seed) {
       // The AI-ML manual: teaches the terminal console language.
       [{ item: 'book_ronml', qty: 1 }],
       // A single battered can of Ubik, somewhere in the ruins.
-      [{ item: 'ubik', qty: 1 }],
+      // The Codescope shares the Ubik box: one more guaranteed box would shift
+      // every roll after it and move things in existing saves.
+      [{ item: 'ubik', qty: 1 }, { item: 'codescope', qty: 1 }],
     ];
     const rollLoot = () => {
       const r = rng();

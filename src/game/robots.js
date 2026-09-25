@@ -478,6 +478,9 @@ export function applyEffects(r, effects, playerDist) {
       }
     }
   }
+  // An eye set in the Codescope outlasts whatever the program asks for. It is
+  // a marking, like a tag, so it stays until it is cleared there.
+  if (r.eyeFix && LAMP_COLOURS.includes(r.eyeFix)) r.lamp = r.eyeFix;
 }
 
 const T2_HP = 24;
@@ -2217,17 +2220,28 @@ function updateLimpHome(r, dt, map) {
     r.limping = false;
     r.drained = false;
     r.recharging = true;    // the charger takes it from here, battery and hull
-    r.battery = 1;          // just off the floor: the tower does the rest
+    r.battery = CELL_RESERVE; // the reserve got it here: the tower does the rest
     return;
   }
   moveToward(r, r.home.x, r.home.y, LIMP_SPEED, dt, map);
 }
 
+// A CELL NEVER READS ZERO (David, 2026-09-25). At CELL_RESERVE the machine
+// stops where it is and waits (flat: `drained`), and what is left is the
+// reserve that walks it home when it is sent (updateLimpHome). So "flat" is 5%,
+// not 0%, and the last 5% is the way back.
+const CELL_RESERVE = 5;
+
+// The island's clock, as a label, for stamping when a machine last phoned
+// home. robots.js has no clock of its own; main.js hands it one.
+let clockLabel = () => null;
+export function setRobotClock(fn) { if (typeof fn === 'function') clockLabel = fn; }
+
 function drainBattery(r, rate, dt) {
   if (r.mains) return; // fortress guards run off the fortress: no drain, never flat
-  r.battery = Math.max(0, r.battery - rate * dt);
-  if (r.battery <= 0) {
-    r.battery = 0;
+  r.battery = Math.max(CELL_RESERVE, r.battery - rate * dt);
+  if (r.battery <= CELL_RESERVE && !r.drained) {
+    r.battery = CELL_RESERVE;
     r.drained = true;
     r.aggro = false;
     r.stuck = false;
@@ -2263,6 +2277,13 @@ function updateRecharge(r, dt, map) {
     r.hp = Math.min(r.maxHp, r.hp + REPAIR_RATE * dt);
     if (r.battery >= BATTERY_MAX && r.hp >= r.maxHp) {
       r.recharging = false; // topped up and mended: back to the rounds
+      // THE TOWER RESETS ITS SENSES. Whatever was typed over them in the
+      // Codescope goes at the socket, and it comes off charge reading the
+      // world again. A tower that will not feed (above) never gets this far,
+      // so a machine you have cut off keeps what you gave it.
+      r.spoof = null;
+      // Docked and full: it has synced with its tower.
+      r._phoned = { at: clockLabel(), how: 'docked, full sync' };
     }
     return;
   }
@@ -2559,6 +2580,20 @@ export function updateRobots(dt, robots, player, map, dayNight) {
     if (r.drained && r.limping) { updateLimpHome(r, dt, map); r.animT += dt; continue; }
 
     if (!r.friendly && r.type !== 'w3' && !relentless && !nearPlayer(r, player)) continue;
+
+    // Under the Codescope: held where it stands while its window is open
+    // (main.js sets and clears scopeHeld). It still THINKS, so the window
+    // shows a held reading or a new program taking effect, and its lamp
+    // answers; it does not move, strike or drain.
+    if (r.scopeHeld) {
+      if (!r.powerDown && r.program && CHASSIS[String(r.type || '').toLowerCase()]) botThink(r, distTo(r, player), dt, map, player);
+      r.animT += dt;
+      continue;
+    }
+    // SHUT DOWN from the Codescope: a low-power wait. It stands where it was
+    // left with its lamp dark, and neither thinks, moves nor drains until the
+    // Codescope wakes it.
+    if (r.powerDown) { r.lamp = 'off'; r.lampFlash = 0; r.aggro = false; r.animT += dt; continue; }
 
     // Stunned: frozen in place, battery preserved. Only the timer and the
     // amber flicker phase advance; on expiry normal AI resumes next frame
@@ -3063,6 +3098,12 @@ const CHASSIS = {
   t8: { sense: t8Sense, can: T8_CAN, fire: false },
 };
 
+/** The intents a chassis can carry out, for the Codescope's lookup line. */
+export function chassisIntents(type) {
+  const c = CHASSIS[String(type || '').toLowerCase()];
+  return c && Array.isArray(c.can) ? c.can.slice() : [];
+}
+
 // The network is speaking over this unit's program: a tower's recall (repel),
 // or a spoofer answering with its tower's voice (the unit reads friendly).
 // A bluebox conversion is NOT here — that rewrites the unit into a gardener
@@ -3132,8 +3173,37 @@ export function botThink(r, d, dt, map, player) {
   // recursion read as a fault in that machine. A V-class runs a forward pass
   // instead, which is thousands of reductions of honest arithmetic, so its
   // chassis carries a budget sized to the net with room for a wrapper.
-  const res = decide(r.program, chassis.sense(r, d, map, player),
+  // What the program sees, kept for the Codescope. A value typed over a sense
+  // in the Codescope replaces that sense from then on, until it is cleared
+  // there; the rest keep reading the world.
+  let sense = chassis.sense(r, d, map, player);
+  if (r.spoof) sense = { ...sense, ...r.spoof };
+  // A number typed into the Codescope is a one-off: its sensor keeps
+  // reporting, so the value is read for this one decision and then the real
+  // reading comes back.
+  if (r.spoofOnce) { sense = { ...sense, ...r.spoofOnce }; r.spoofOnce = null; }
+  r.lastSense = sense;
+  const res = decide(r.program, sense,
     chassis.fuel ? { fuel: chassis.fuel } : undefined);
+  r.lastDecision = { ok: res.ok, intent: res.intent || null, fault: res.fault || null, effects: res.effects || [] };
+  r._thinks = (r._thinks || 0) + 1;   // the Codescope's trace pulses on this
+  // Its recent past, for the Codescope's graph: one sample a second (every
+  // fourth think) of cell, whether it saw a threat, and whether it was on
+  // charge, three minutes deep. Only kept while it is thinking, which is to
+  // say while it is near you.
+  if (r._thinks % 4 === 0) {
+    // Proximity: the nearest other machine, or you, as closeness 0..1 over
+    // twelve tiles. What the Codescope's strip draws as its entity trace.
+    let near = Number.isFinite(d) ? d : Infinity;
+    for (const o of (_liveRobots || [])) {
+      if (o === r || o.dead) continue;
+      const od = Math.hypot(o.x - r.x, o.y - r.y);
+      if (od < near) near = od;
+    }
+    const close = Number.isFinite(near) ? Math.max(0, Math.min(1, 1 - near / 12)) : 0;
+    (r._hist ??= []).push([Math.round(r.battery || 0), sense.threat ? 1 : 0, r.recharging ? 1 : 0, Math.round(close * 100) / 100]);
+    if (r._hist.length > 180) r._hist.shift();
+  }
   // Coming out of a fault clears the fault lamp before the program gets to set
   // its own; a program's colours must not be mistaken for a broken machine.
   if (res.ok && r.lampFault) { r.lamp = null; r.lampFlash = 0; r.lampFault = false; }
