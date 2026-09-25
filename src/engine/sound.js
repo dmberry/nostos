@@ -676,6 +676,26 @@ class Sound {
     this._applyMusicGain(0.8);
   }
 
+  // Skip within the side that is loaded: +1 forward, -1 back, wrapping at the
+  // ends. Returns false when there is nothing to skip to (one track, or none
+  // playing), so the caller can flip the tape instead.
+  skipTape(dir) {
+    if (!this._tapePlaying || !this._tapeEl || this._tapeList.length <= 1) return false;
+    const n = this._tapeList.length;
+    this._tapeIdx = (this._tapeIdx + (dir < 0 ? -1 : 1) + n) % n;
+    try {
+      this._tapeEl.src = encodeURI(this._tapeList[this._tapeIdx]);
+      this._tapeEl.currentTime = 0;
+      this._tapeEl.play().catch(() => {});
+    } catch (e) { /* ignore */ }
+    return true;
+  }
+
+  /** The track now loaded on the deck, as its file path, or null. */
+  tapeTrack() {
+    return this._tapePlaying && this._tapeList.length ? this._tapeList[this._tapeIdx] || null : null;
+  }
+
   stopTape() {
     this._tapePlaying = false;
     if (this._tapeEl) { try { this._tapeEl.pause(); } catch (e) { /* ignore */ } }

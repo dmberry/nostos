@@ -1210,28 +1210,49 @@ export class Player {
   // are the exception: clicking either in any slot just arms/disarms it in
   // place — you never need to hold them, since they work the moment they're
   // carried and armed.
+  // The deck's buttons. Play starts the side it was last on (A to begin);
+  // stop returns to the ambient bed. Skip moves a track within the side and
+  // flips the tape when a side has only the one.
+  walkmanPlayStop() {
+    if (!this.walkman || !ITEMS[this.walkman.item]) { this.say('The walkman is empty. A cassette would fit.'); return; }
+    const def = ITEMS[this.walkman.item];
+    if (this.walkmanSide) {
+      this._walkmanLast = this.walkmanSide;
+      this.walkmanSide = null;
+      sfx.stopTape();
+      this.say('The walkman clunks to a stop.');
+    } else {
+      const side = this._walkmanLast || 'A';
+      this.walkmanSide = side;
+      sfx.playTape((side === 'A' ? def.sideA : def.sideB).tracks);
+      this.say(`The spools catch and turn. Side ${side}: "${(side === 'A' ? def.sideA : def.sideB).label}".`);
+    }
+    if (this.onTapeToast) this.onTapeToast(def, this.walkmanSide);
+  }
+
+  walkmanSkip(dir) {
+    if (!this.walkman || !ITEMS[this.walkman.item]) { this.say('The walkman is empty. A cassette would fit.'); return; }
+    if (!this.walkmanSide) { this.walkmanPlayStop(); return; }
+    if (sfx.skipTape(dir)) return;
+    // One track a side: skipping turns the tape over.
+    const def = ITEMS[this.walkman.item];
+    this.walkmanSide = this.walkmanSide === 'A' ? 'B' : 'A';
+    const side = this.walkmanSide === 'A' ? def.sideA : def.sideB;
+    sfx.playTape(side.tracks);
+    this.say(`You flip the tape over. Side ${this.walkmanSide}: "${side.label}".`);
+    if (this.onTapeToast) this.onTapeToast(def, this.walkmanSide);
+  }
+
   equipSlot(slot) {
-    // The walkman is a deck, not a stow slot: a click on the tape in it
-    // cycles play side A -> flip to side B -> stop, driving the same music
-    // system as the M key (which still works, and simply overrides this).
+    // THE DECK EJECTS. Clicking the tape takes it out, to a free pocket or
+    // else the pack; playing it is the three buttons under the deck (walkman
+    // Play / Skip below). One click, one meaning (David, 2026-09-25: the old
+    // cycle of A, B and stop on one click was "glitchy").
     if (slot.kind === 'walkman') {
       if (!this.walkman) { this.say('The walkman is empty. A cassette would fit.'); return; }
-      const def = ITEMS[this.walkman.item];
-      if (this.walkmanSide === 'A') {
-        this.walkmanSide = 'B';
-        sfx.playTape(def.sideB.tracks);
-        this.say(`You flip the tape over. Side B — "${def.sideB.label}".`);
-      } else if (this.walkmanSide === 'B') {
-        this.walkmanSide = null;
-        sfx.stopTape(); // back to the ambient synth bed
-        this.say('The walkman clunks to a stop.');
-      } else {
-        this.walkmanSide = 'A';
-        sfx.playTape(def.sideA.tracks);
-        this.say(`The spools catch and turn. Side A — "${def.sideA.label}".`);
-      }
-      // Liner notes for the HUD toast (main.js): artist, album, side label.
-      if (this.onTapeToast) this.onTapeToast(def, this.walkmanSide);
+      const free = this.pockets.findIndex((ps) => !ps);
+      const to = free >= 0 ? { kind: 'pocket', i: free } : { kind: 'packbadge' };
+      this.moveItem(slot, to);   // it says so itself if the pack is full
       return;
     }
     const held = this.getSlot(slot);
