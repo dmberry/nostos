@@ -30,7 +30,7 @@ import { makeRng } from './game/rng.js';
 import { DayNight } from './game/daynight.js';
 import { Minimap } from './game/minimap.js';
 import { spawnBirds, updateBirds } from './game/birds.js';
-import { spawnRobots, registerRobotsSystem, spawnW1s, spawnW3, spawnW4, spawnW5, spawnM4, spawnM5, spawnM6, spawnV5, spawnGuard, drawRobot, setUnitTagger, setUnitTagsClickable, unitTagAt, W5_PROGRAM, v1BuildName, reviveUnit } from './game/robots.js';
+import { setRobotClock, chassisIntents, spawnRobots, registerRobotsSystem, spawnW1s, spawnW3, spawnW4, spawnW5, spawnM4, spawnM5, spawnM6, spawnV5, spawnGuard, drawRobot, setUnitTagger, setUnitTagsClickable, unitTagAt, W5_PROGRAM, v1BuildName, reviveUnit } from './game/robots.js';
 import { makeVModel } from './game/v-model.js';
 // #141: the permission POSEIDON's net has to be shown.
 import { permissionFile, readPermission, permissionBanner, PERMISSION_FILE,
@@ -104,7 +104,7 @@ import { mountSettingsPanel, storedMode, storeMode, setFill } from './game/setti
 import { keeperLs, keeperRead, keeperIsDir } from './game/keeper.js';
 import { buildingName, buildingLook } from './game/buildings.js';
 import { initAchievements, achieveEvent, achieveProfile, achieveRunState, achieveModel, achieveTick, resetRun, setAchieveSink } from './game/achieve.js';
-import { hostTable, findHost, pageFor, renderPage, searchResults, detectorReport, bookmarksPage, favouritesPage, obLibraryPage, obDocPage, whatsNewPage, docsPage, docTitle, programPage, pressPage, wikiPage, deptPage, spoofedAddr, islandSubnet, networksInRange, relayHosts, RELAY_ESSID, RELAY_IP, relayFile, RELAY_FILES, relayBundle, RELAY_BUNDLES, relayBookmarksPage, relayGuestbook, relayGuestbookPage, IFACE, REPORT_HOLD, REPORT_COOLDOWN, HTTPD_PATH, httpdBinary, httpdToken, cacheLink, CACHE_ALIASES, isDept, notInStore, nearestHost } from './game/net.js';
+import { AI_MODEL, hostTable, findHost, pageFor, renderPage, searchResults, detectorReport, bookmarksPage, favouritesPage, obLibraryPage, obDocPage, whatsNewPage, docsPage, docTitle, programPage, pressPage, wikiPage, deptPage, spoofedAddr, islandSubnet, networksInRange, relayHosts, RELAY_ESSID, RELAY_IP, relayFile, RELAY_FILES, relayBundle, RELAY_BUNDLES, relayBookmarksPage, relayGuestbook, relayGuestbookPage, IFACE, REPORT_HOLD, REPORT_COOLDOWN, HTTPD_PATH, httpdBinary, httpdToken, cacheLink, CACHE_ALIASES, isDept, notInStore, nearestHost } from './game/net.js';
 import { CROSSINGS, islandProfile } from './game/islands.js';
 import { canSchedule, schedule, tickWindows, windowLeft, isOpenToHack, statusLine as maintLine, serviceLog, PART_COST, BOARDS_PER_TOWER } from './game/maintenance.js';
 import { awolList, dueForRecovery, standDown, DETAIL_SIZE } from './game/awol.js';
@@ -565,7 +565,7 @@ try {
     // picks up where you left off. The world itself regenerates from the seed.
     const st = saved.state;
     if (st) {
-      for (const k of ['health', 'stamina', 'food', 'venom', 'wifiPower', 'x', 'y', 'hands']) {
+      for (const k of ['health', 'stamina', 'food', 'venom', 'wifiPower', 'scopeCharge', 'x', 'y', 'hands']) {
         if (st[k] !== undefined) player[k] = st[k];
       }
       if (Array.isArray(st.pockets)) player.pockets = st.pockets;
@@ -757,7 +757,7 @@ function buildSaveBlob() {
       // repair, and a reload that dropped it would be a theft.
       armour: player.armourWorn ? player.armourWorn() : null,
       health: player.health, stamina: player.stamina, food: player.food, venom: player.venom,
-      wifiPower: player.wifiPower, x: player.x, y: player.y, hands: player.hands,
+      wifiPower: player.wifiPower, scopeCharge: player.scopeCharge, x: player.x, y: player.y, hands: player.hands,
       pockets: player.pockets, backpack: player.backpack, walkman: player.walkman,
       laptop: player.laptop,             // model, OS, and the whole disk — your files survive a reload
       salvaged: player.salvaged,         // which dead machines' disks you have already read
@@ -975,6 +975,9 @@ function serializeIslandState() {
           ob: robotHomeCode(r, w.obeliskObjs), type: r.type, gfit: r.gardener ? 1 : undefined,
           tag: r._netTag || null, program: r.program || null,
           unwm: r._unwatermarked ? 1 : undefined,
+          spoof: r.spoof && Object.keys(r.spoof).length ? r.spoof : undefined,   // senses typed over in the Codescope
+          pdown: r.powerDown ? 1 : undefined,                                    // shut down from the Codescope
+          eye: r.eyeFix || undefined,                                            // eye colour set in the Codescope
           // THE STATE THE FIGHT LEFT IT IN. A machine you had worn down to a
           // flat cell coming back charged is the fight being handed back
           // (David, 2026-08-15). Battery is the one that matters; hp too, for
@@ -1183,6 +1186,9 @@ function applyIslandState(w) {
 
     for (const { record: m, unit: r } of pairs) {
       if (m.tag) r._netTag = m.tag;
+      if (m.spoof && typeof m.spoof === 'object') r.spoof = { ...m.spoof };
+      if (m.pdown) r.powerDown = true;
+      if (m.eye) r.eyeFix = m.eye;
       if (m.program) { r.program = m.program; r.fault = null; r.mlT = 0; r.intent = null; }
       if (Number.isFinite(m.batt)) r.battery = m.batt;
       if (Number.isFinite(m.hp)) { r.hp = Math.min(r.maxHp, m.hp); r._lastHp = r.hp; }
@@ -3626,6 +3632,15 @@ const DEV_KITS = [
       player.forcefieldArmed = true;
       player.forcefieldCharge = 60;    // one cell's worth, already burning
     })],
+  // The Codescope, straight into the hands (whatever was held goes to the
+  // pack), so it can be clicked on a machine at once.
+  ['Codescope', () => {
+    if (!player.backpack) player.backpack = { slots: new Array(16).fill(null), weapon: null };
+    if (player.hands === 'codescope') return 'already in your hands';
+    if (player.hands && !player.stow(player.hands, 1)) return 'no room to put down what you are holding';
+    player.hands = 'codescope';
+    return 'Codescope in your hands: click a machine within a few paces';
+  }],
   ['Wi-Fi block + cells', () => devGear('wifiblock', 1, 12,
     'at full charge. Hunters cannot acquire you', () => {
       player.wifiPower = player.wifiMax;
@@ -7228,6 +7243,7 @@ function requestUnitReport(h, r) {
   const bearing = home
     ? `${Math.round(Math.hypot(r.x - (home.x + 0.5), r.y - (home.y + 0.5)))}m ${compass(r.x - (home.x + 0.5), r.y - (home.y + 0.5))} of ${home.code}`
     : 'no tower assigned';
+  r._phoned = { at: dayNight.label, how: 'status report' };
   r.report = [
     `${h.name}  STATUS  ${dayNight.label}`,
     `station ..... ${bearing}`,
@@ -9600,6 +9616,7 @@ function postProgram(hostName, text) {
   if (!unit) return { ok: false, text: `post: ${h.host}: the unit is no longer on the network` };
 
   unit.program = text;
+  unit._phoned = { at: dayNight.label, how: 'program update' };
   unit.intent = null;
   unit.fault = null;
   unit.lamp = null;
@@ -11639,7 +11656,7 @@ let _craftPromptOff = false;
 function craftPromptDismiss() { _craftPromptOff = true; }
 function craftPromptUp(can, p) {
   // The offer's identity, so that swapping which craft is pending re-announces.
-  const key = can ? `${p.canCraftObGun()}${p.canCraftWaveGun()}${p.canCraftChip()}${p.canCraftSword()}${p.canCraftFortressMap()}${p.canCraftGoggles()}` : '';
+  const key = can ? `${p.canCraftObGun()}${p.canCraftWaveGun()}${p.canCraftChip()}${p.canCraftSword()}${p.canCraftFortressMap()}${p.canCraftGoggles()}${p.canCraftCodescope()}` : '';
   if (key !== _craftPromptKey) {
     _craftPromptKey = key;
     _craftPromptAt = performance.now();
@@ -12072,6 +12089,9 @@ function update(dt) {
     // After the NostBook, deliberately: both want a battery, and a sniffer built
     // out of the laptop's last cell would be the wrong trade made silently.
     else if (player.canCraftSniffer()) player.craftSniffer();
+    // After the NostBook and the sniffer, so its chip fragment is never taken
+    // from a laptop repair.
+    else if (player.canCraftCodescope()) player.craftCodescope();
     else if (player.canCraftBoat(map)) player.craftBoat(map);
 
     // Nothing else to make and a dead machine in the pack: let repairLaptop
@@ -13296,7 +13316,7 @@ function frame(now) {
       islandsReached: Object.keys(player._welcomed || {}).length,
       showWeapons,
       craftPrompt: craftPromptUp(
-        (player.canCraftObGun() && player.hands !== 'obgun') || (player.canCraftWaveGun() && player.hands !== 'wavegun') || player.canCraftChip() || player.canCraftSword() || player.canCraftFortressMap() || player.canCraftGreekShip(map) || player.canCraftGoggles() || player.canCraftBoat(map),
+        (player.canCraftObGun() && player.hands !== 'obgun') || (player.canCraftWaveGun() && player.hands !== 'wavegun') || player.canCraftChip() || player.canCraftSword() || player.canCraftFortressMap() || player.canCraftGreekShip(map) || player.canCraftGoggles() || player.canCraftCodescope() || player.canCraftBoat(map),
         player,
       ),
       craftWaveGun: player.canCraftWaveGun() && player.hands !== 'wavegun',
@@ -13403,6 +13423,408 @@ player.aboard = null;
     }
   }
 }
+
+// ---- THE CODESCOPE --------------------------------------------------------
+//
+// Held and clicked on a machine within a few paces, it opens a small window on
+// that machine's mind: the senses its program last read, what it chose, and the
+// program itself. Both can be edited. The machine stands where it is while the
+// window is open (robots.js skips a unit with scopeHeld), and the rest of the
+// island does not wait for you.
+//
+// Costs come off the Codescope's own charge (SCOPE_COST). A SENSE is overwritten by typing over its
+// value: from then on the program reads what you typed, until you clear the
+// box (robots.js botThink, r.spoof; kept in the save with the unit). WRITE
+// sends the edited program down the same path as `post`, so a guard still
+// refuses it and the network still files it as unsigned. A click anywhere
+// outside the window closes it.
+const SCOPE_RANGE = 6;          // paces from you to the machine
+const SCOPE_PICK = 1.6;         // how close the cursor must land to the machine
+// The Codescope runs on its own charge, a fraction of a cell, and draws a
+// fresh battery from your pockets or pack only when that runs low. So a small
+// change costs a small amount: every action is 5%, twenty to a battery.
+const SCOPE_COST = { sense: 0.05, write: 0.05, home: 0.05, down: 0.05 };
+// What each intent does, for the lookup line beside Write and Revert.
+const SCOPE_INTENT_HELP = {
+  patrol: 'walk its beat', hunt: 'close on an enemy and strike', flee: 'get away from the enemy',
+  home: 'go back to its tower', tend: 'do its job: repair, plant, or carry a cell',
+  wait: 'stand still', route: 'walk a set path', follow: 'keep station beside its operator',
+  defend: 'keep station, and go for anything that attacks its operator',
+  usher: 'move a trespasser off the lit floor', stand: 'hold its place on the floor',
+};
+// What each reading means, shown on hover over its name. One line each, in the
+// terms a program uses it.
+const SCOPE_SENSE_HELP = {
+  eye: 'Its lamp colour. Set here, it overrides the colour its program asks for; default leaves it to the program.',
+  charge: 'Its battery, 0 to 100. At 5 it stops and waits; the last 5 is its reserve for the walk home.',
+  integrity: 'Its hull, 0 to 100.',
+  range: 'Distance to enemy.',
+  home_range: 'How far it is from its home tower, in tiles.',
+  threat: 'An enemy is in sight, close enough to act on.',
+  hurt: 'True when its hull is badly damaged.',
+  linked: 'True while its home tower is standing and working (not felled or jammed).',
+  cargo: 'A courier only: true while it carries a spare cell to take to a flat machine.',
+  casualty_range: 'A courier only: how far the nearest flat machine is. 24 means none in reach.',
+  sight: 'An enemy is in line of sight and inside firing range.',
+  armed: 'Its weapon has cooled and can fire now.',
+  shielded: 'The enemy has a shield or forcefield up, so shooting is wasted.',
+  contact: 'An enemy is right on top of it.',
+  lost_for: 'Seconds since it sighted an enemy.',
+  work: 'There is a job within its scan: a tower to repair, or ground to tend.',
+  blight: 'Dead ground within its scan.',
+  daylight: 'True in the daytime.',
+  floorlight: 'How bright the lit floor is under it, 0 to 100.',
+  lit: 'It is standing on the lit floor.',
+  brighter: 'There is a brighter tile within reach.',
+  trespass: 'An enemy is standing on the lit floor it keeps.',
+};
+let scope = null;               // { r, el, timer }
+
+function scopeValue(v) {
+  if (v === true || v === false) return String(v);
+  if (typeof v === 'number') return Number.isInteger(v) ? String(v) : v.toFixed(1);
+  return v == null ? '' : String(v);
+}
+function scopeParse(t) {
+  const s = String(t).trim().toLowerCase();
+  if (s === '') return undefined;
+  if (s === 'true' || s === 'yes') return true;
+  if (s === 'false' || s === 'no') return false;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : undefined;
+}
+function closeScope() {
+  if (!scope) return;
+  // A value still being typed is committed on the way out, not thrown away.
+  if (scope.el.contains(document.activeElement)) document.activeElement.blur();
+  clearInterval(scope.timer);
+  if (scope.timer2) clearInterval(scope.timer2);
+  if (scope.raf) cancelAnimationFrame(scope.raf);
+  scope.r.scopeHeld = false;
+  scope.el.remove();
+  scope = null;
+}
+function openScope(r) {
+  closeScope();
+  r.scopeHeld = true;
+  const id = netIdOf(currentWorld, r);
+  const el = document.createElement('div');
+  el.id = 'scope';
+  el.style.cssText = 'position:fixed;left:16px;bottom:120px;z-index:60;width:min(380px,92vw);max-height:70vh;overflow:auto;'
+    + 'background:#0d120e;border:1px solid #3d5c44;border-radius:6px;box-shadow:0 8px 30px rgba(0,0,0,.6);'
+    + 'color:#cfe3d2;font:12px/1.45 ui-monospace,Menlo,monospace;padding:10px 12px;';
+  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  el.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+      <b style="color:#9fe3b8" id="sc-head"></b>
+      <canvas id="sc-wave" width="160" height="26" style="flex:0 0 auto;width:160px;height:26px" title="green: thinking · cyan: something close to it · blue: on charge · red: enemy in sight · last 3 min"></canvas>
+      <button id="sc-x" type="button" style="background:none;border:0;color:#cfe3d2;font:14px monospace;cursor:pointer">&#10005;</button>
+    </div>
+    <div id="sc-static" style="font-size:10px;line-height:1.35;color:#7f9a84;margin-top:2px"></div>
+    <div id="sc-choice" style="margin:4px 0 6px;color:#b9c7b0"></div>
+    <div style="display:flex;gap:6px;margin:0 0 8px">
+      <button id="sc-home" type="button" class="sc-b sc-sm">Send home</button>
+      <button id="sc-down" type="button" class="sc-b sc-sm">Shut down</button>
+    </div>
+
+    <div style="display:flex;gap:6px;align-items:center;margin:0 0 8px">
+      <span style="color:#7f9a84">tag</span><input id="sc-tag" style="width:130px" maxlength="18" placeholder="none">
+      <button id="sc-tagset" type="button" class="sc-b">Tag</button>
+    </div>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:10px" id="sc-senses"></table>
+    <textarea id="sc-prog" spellcheck="false" style="width:100%;box-sizing:border-box;height:150px;background:#070a08;color:#9fe3b8;border:1px solid #2b3f30;border-radius:4px;font:11px/1.4 ui-monospace,Menlo,monospace;padding:6px;resize:vertical"></textarea>
+    <div style="display:flex;gap:6px;margin-top:6px">
+      <button id="sc-write" type="button" class="sc-b">Write</button>
+      <button id="sc-revert" type="button" class="sc-b">Revert</button>
+      <span id="sc-intents" style="font-size:9px;line-height:1.3;color:#7f9a84;align-self:center"></span>
+    </div>
+    <div id="sc-msg" style="margin-top:6px;color:#e3c27f;min-height:1em"></div>
+    <style>#scope .sc-b{background:#1a2a1e;color:#cfe3d2;border:1px solid #3d5c44;border-radius:4px;padding:4px 10px;font:12px ui-monospace,Menlo,monospace;cursor:pointer}
+    #scope .sc-b:hover{background:#24402b}#scope .sc-sm{padding:1px 7px;font-size:10px;line-height:1.5}#scope td{padding:2px 4px;border-bottom:1px solid #1d2b21}
+    #scope input{width:80px;background:#070a08;color:#cfe3d2;border:1px solid #2b3f30;border-radius:3px;font:11px ui-monospace,Menlo,monospace;padding:1px 4px}
+    #scope input.sc-set,#scope select.sc-set{color:#e3c27f;border-color:#6b5a2c}
+    #scope .sc-name[title]{text-decoration:underline dotted rgba(127,154,132,0.6);text-underline-offset:3px;cursor:help}
+    #scope input[type=checkbox]{width:auto;accent-color:#e3c27f;vertical-align:middle}
+    #scope .sc-live{background:none;border:0;color:#e3c27f;cursor:pointer;font:12px monospace;padding:0 4px}
+    #scope select{background:#070a08;color:#cfe3d2;border:1px solid #2b3f30;border-radius:3px;font:11px ui-monospace,Menlo,monospace}</style>`;
+  document.body.appendChild(el);
+  const $ = (q) => el.querySelector(q);
+  const msg = (t) => { $('#sc-msg').textContent = t || ''; };
+  // WHAT DOES NOT CHANGE, on one small line: home tower, system, model, and a
+  // build stamp that is the same for this machine every time (from its serial).
+  let [aiModel, aiVer] = AI_MODEL[r.type] || ['POSEIDON-generic', '1.0'];
+  const u = Number(r.uid) || 0;
+  let built = `run ${String(100 + ((u * 7919 + String(r.type).charCodeAt(0)) % 900)).padStart(4, '0')}, ${String((u * 37) % 24).padStart(2, '0')}:${String((u * 53) % 60).padStart(2, '0')}`;
+  // A V-class names its own net and build in the header of its model.ml.
+  const vm = /model\.ml\s*[—-]+\s*(\S+?)\.\s*grown at the foundry, build (\d+)/.exec(r.program || '');
+  if (r.type === 'v1' && vm) { aiModel = `${vm[1]} net`; aiVer = ''; built = `at the foundry, build ${vm[2]}`; }
+  const homeCode = robotHomeCode(r, currentWorld.obeliskObjs) || 'unassigned';
+  const staticLine = [`home ${homeCode}`, 'POSEIDON-OS 4.11', `${aiModel}${aiVer ? ` ${aiVer}` : ''}`, `built ${built}`].map(esc).join(' &middot; ');
+  const prog = $('#sc-prog');
+  // The intents this chassis can carry out, tiny, each with its meaning on hover.
+  const can = chassisIntents(r.type);
+  $('#sc-intents').innerHTML = can.length
+    ? 'intents: ' + can.map((k) => `<span title="${esc(SCOPE_INTENT_HELP[k] || '')}" style="cursor:help">${esc(k)}</span>`).join(' ')
+    : 'takes no program';
+  prog.value = r.program || '';
+  // The senses table is built once, from the keys the program last read, so an
+  // input keeps its value while the live column updates beside it.
+  const keys = Object.keys(r.lastSense || {});
+  $('#sc-senses').innerHTML = keys.length
+    ? `<tr><td class="sc-name" title="${esc(SCOPE_SENSE_HELP.eye)}">eye</td><td><select id="sc-eye">${['program', 'red', 'amber', 'green', 'blue', 'white', 'off'].map((c) => `<option value="${c}">${c === 'program' ? 'default' : c}</option>`).join('')}</select></td></tr>`
+      + keys.map((k) => `<tr><td class="sc-name"${SCOPE_SENSE_HELP[k] ? ` title="${esc(SCOPE_SENSE_HELP[k])}"` : ''}>${esc(k)}${k === 'linked' ? ` <span style="color:#7f9a84">(${esc(homeCode)})</span>` : ''}</td><td>${typeof r.lastSense[k] === 'boolean'
+        ? `<input type="checkbox" data-kb="${esc(k)}">`
+        : `<input data-k="${esc(k)}" spellcheck="false">`}<button type="button" class="sc-live" data-live="${esc(k)}" title="back to what it really reads" hidden>&#8634;</button></td></tr>`).join('')
+    : '<tr><td>No readings yet.</td></tr>';
+  const refresh = () => {
+    if (r.dead || Math.hypot(r.x - player.x, r.y - player.y) > SCOPE_RANGE + 4) { closeScope(); return; }
+    $('#sc-head').textContent = `${id} · ${String(r.type).toUpperCase()} · cell ${Math.round(r.battery || 0)}%`;
+    // LAST REPORT TO OB: No Connection while its tower is down or jammed (the
+    // program's own `linked` sense), else when it last reported, else NULL.
+    const linked = r.lastSense && 'linked' in r.lastSense ? r.lastSense.linked : true;
+    const lastReport = linked === false ? 'No Connection' : (r._phoned && r._phoned.at) ? r._phoned.at : 'NULL';
+    const sc = Math.round((Number.isFinite(player.scopeCharge) ? player.scopeCharge : 0) * 100);
+    $('#sc-static').innerHTML = `${staticLine}<br>Last Report to OB: ${esc(lastReport)} &middot; scope charge ${sc}%${sc < 5 ? ' (next change takes a battery)' : ''}`;
+    $('#sc-down').textContent = r.powerDown ? 'Wake' : 'Shut down';
+    if (r.powerDown) { $('#sc-choice').textContent = 'STATUS: shut down'; return; }
+    if (r.limping) { $('#sc-choice').textContent = 'STATUS: limping home'; return; }
+    if (r.drained) { $('#sc-choice').textContent = `STATUS: flat${r.reserveSpent ? ', no reserve' : ''}`; return; }
+    const d = r.lastDecision;
+    const fx = d && d.effects && d.effects.length ? ' · ' + d.effects.map((e) => e.k + (e.colour ? ' ' + e.colour : e.hz != null ? ' ' + e.hz : '')).join(', ') : '';
+    const doing = r.recharging ? 'charging' : d ? (d.ok ? d.intent : `fault: ${d.fault}`) : 'idle';
+    $('#sc-choice').textContent = `STATUS: ${doing}${d && d.ok && !r.recharging ? fx : ''}`;
+    // Each box shows what the program reads now, except the one being typed
+    // in. A value you set is amber and stays until you clear it.
+    for (const inp of el.querySelectorAll('input[data-k]')) {
+      const k = inp.getAttribute('data-k');
+      const set = !!(r.spoof && k in r.spoof);
+      inp.classList.toggle('sc-set', set);
+      if (document.activeElement !== inp) inp.value = scopeValue(set ? r.spoof[k] : (r.lastSense ? r.lastSense[k] : ''));
+    }
+    for (const cb of el.querySelectorAll('input[data-kb]')) {
+      const k = cb.getAttribute('data-kb');
+      const set = !!(r.spoof && k in r.spoof);
+      cb.checked = !!(set ? r.spoof[k] : (r.lastSense && r.lastSense[k]));
+      cb.parentElement.previousElementSibling.style.color = set ? '#e3c27f' : '';
+    }
+    for (const b of el.querySelectorAll('.sc-live')) b.hidden = !(r.spoof && b.getAttribute('data-live') in r.spoof);
+  };
+  // THE HISTORY, drawn behind the heartbeat in the header strip: shaded
+  // bands while on charge, red ticks while an enemy was in sight, and a cyan
+  // rise when anything came close to it, over the last 3 minutes it was near
+  // you (r._hist).
+  function drawHistory(g, W, H) {
+    const h = r._hist || [], N = 180;
+    if (!h.length) return;
+    const x = (i) => W - (h.length - 1 - i) * (W / (N - 1));
+    g.fillStyle = 'rgba(111,143,192,0.25)';
+    h.forEach((s, i) => { if (s[2]) g.fillRect(x(i) - W / N / 2, 0, W / N + 0.5, H); });
+    g.fillStyle = 'rgba(224,101,90,0.9)';
+    h.forEach((s, i) => { if (s[1]) g.fillRect(x(i) - 0.5, H - 3, 1.2, 3); });
+    // Proximity: how close the nearest machine, or you, came. A filled rise.
+    const py = (s) => H - 1 - (s[3] || 0) * (H - 4);
+    g.beginPath(); g.moveTo(x(0), H);
+    h.forEach((s, i) => g.lineTo(x(i), py(s)));
+    g.lineTo(x(h.length - 1), H); g.closePath();
+    g.fillStyle = 'rgba(95,200,220,0.22)'; g.fill();
+    g.strokeStyle = 'rgba(95,200,220,0.8)'; g.lineWidth = 1; g.beginPath();
+    h.forEach((s, i) => { if (i) g.lineTo(x(i), py(s)); else g.moveTo(x(i), py(s)); });
+    g.stroke();
+  }
+  refresh();
+  const spend = (what) => {
+    const cost = SCOPE_COST[what] || 0.05;
+    if (!Number.isFinite(player.scopeCharge)) player.scopeCharge = 0;
+    if (player.scopeCharge < cost) {
+      if (!player.consumeBattery()) { msg('Codescope flat. No battery to draw on.'); return false; }
+      player.scopeCharge += 1;
+    }
+    player.scopeCharge = Math.max(0, player.scopeCharge - cost);
+    return true;
+  };
+  // TAG IT FROM HERE. The same operator label `tag` sets at a console: free,
+  // and read back by arp, the unit's page and `post <tag>`. Empty clears it.
+  $('#sc-tag').value = r._netTag || '';
+  $('#sc-tagset').addEventListener('click', () => {
+    const t = cleanTag($('#sc-tag').value);
+    r._netTag = t || null;
+    $('#sc-tag').value = t;
+    msg(t ? `Tagged ${id} as «${t}».` : `${id} is untagged.`);
+    refresh();
+  });
+  $('#sc-x').addEventListener('click', closeScope);
+  // THE EYE. Free, like a tag: a colour set here overrides the program's own
+  // `eye` from now on; "default" hands it back.
+  const eyeSel = el.querySelector('#sc-eye');
+  if (eyeSel) {
+    eyeSel.value = r.eyeFix || 'program';
+    eyeSel.classList.toggle('sc-set', !!r.eyeFix);
+    eyeSel.addEventListener('change', () => {
+      r.eyeFix = eyeSel.value === 'program' ? null : eyeSel.value;
+      if (r.eyeFix) r.lamp = r.eyeFix;
+      eyeSel.classList.toggle('sc-set', !!r.eyeFix);
+      msg(r.eyeFix ? `Eye set ${r.eyeFix}.` : 'Eye back to default.');
+    });
+  }
+  // TYPE OVER A NUMBER. Enter, or leaving the box, feeds the value to the
+  // machine for one decision (5% of the scope's charge).
+  for (const inp of el.querySelectorAll('input[data-k]')) {
+    const k = inp.getAttribute('data-k');
+    // Numbers are live measurements: a typed value is fed to the machine for
+    // its next decision only, then its sensor reports again and the box goes
+    // back to the live reading. (Yes/no flags, below, stay set until reset.)
+    const commit = () => {
+      const v = scopeParse(inp.value);
+      const live = r.lastSense ? r.lastSense[k] : undefined;
+      if (v === undefined || v === live) { refresh(); return; }
+      if (!spend('sense')) { refresh(); return; }
+      r.spoofOnce = { ...(r.spoofOnce || {}), [k]: v };
+      r.mlT = 0;   // decide on it now, not up to a tick later
+      msg(`${k} read ${scopeValue(v)} for one decision. The ${k === 'charge' ? 'battery' : 'sensor'} is reporting again.`);
+      refresh();
+    };
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } });
+    inp.addEventListener('change', commit);
+  }
+  // Yes/no senses are checkboxes: ticking or clearing one sets it (a cell).
+  for (const cb of el.querySelectorAll('input[data-kb]')) {
+    const k = cb.getAttribute('data-kb');
+    cb.addEventListener('change', () => {
+      const v = cb.checked;
+      if (r.spoof && r.spoof[k] === v) return;
+      if (!spend('sense')) { refresh(); return; }
+      r.spoof = { ...(r.spoof || {}), [k]: v };
+      msg(`${k} now reads ${v}. \u21ba gives it back.`);
+      refresh();
+    });
+  }
+  // The reset beside a set value hands the sense back to the world (free).
+  for (const b of el.querySelectorAll('.sc-live')) {
+    const k = b.getAttribute('data-live');
+    b.addEventListener('click', () => {
+      if (!r.spoof || !(k in r.spoof)) return;
+      delete r.spoof[k];
+      if (!Object.keys(r.spoof).length) r.spoof = null;
+      msg(`${k} reads the world again.`);
+      refresh();
+    });
+  }
+  $('#sc-write').addEventListener('click', () => {
+    if (prog.value === (r.program || '')) { msg('No change to write.'); return; }
+    if (!spend('write')) return;
+    const res = postProgram(id, prog.value);
+    // The reply's LAST line is the outcome; the first is only the request.
+    const lines = res && res.text ? String(res.text).split('\n').map((l) => l.trim()).filter(Boolean) : [];
+    msg(lines.length ? lines[lines.length - 1] : (res && res.ok ? 'Written.' : 'Refused.'));
+    if (!res || !res.ok) prog.value = r.program || '';
+  });
+  $('#sc-revert').addEventListener('click', () => { prog.value = r.program || ''; msg(''); });
+  // SEND HOME: the trip it makes on a low cell, home to its charger to charge
+  // and mend, and the tower clears what was typed over its senses when it is
+  // full. SHUT DOWN: a low-power wait where it stands, until woken here. A
+  // cell each, like the writes; guards take neither.
+  $('#sc-home').addEventListener('click', () => {
+    if (r.hardened) { msg('403: foundry-sealed. It will not take the order.'); return; }
+    if (r.mains) { msg('It runs on mains. It has no charger to go home to.'); return; }
+    // Flat (at its 5% reserve), it goes home on the reserve, once, the same
+    // walk `charge` orders; otherwise it makes the ordinary recharge trip.
+    if (r.drained && r.reserveSpent) { msg('Its reserve is spent. This one has to be reached on foot.'); return; }
+    if (!spend('home')) return;
+    r.powerDown = false;
+    if (r.drained) { r.limping = true; r.reserveSpent = true; }
+    else r.recharging = true;
+    r.aggro = false; r.stuck = false; r.noProgressT = 0; r.returning = false;
+    player.say(`${id} turns for home${r.limping ? ', on its reserve' : ''}.`);
+    closeScope();
+  });
+  $('#sc-down').addEventListener('click', () => {
+    if (r.hardened) { msg('403: foundry-sealed. It will not take the order.'); return; }
+    if (r.powerDown) { r.powerDown = false; r.lamp = null; r.mlT = 0; msg(`${id} wakes.`); refresh(); return; }
+    if (!spend('down')) return;
+    r.powerDown = true;
+    msg(`${id} shuts down where it stands.`);
+    refresh();
+  });
+  scope = { r, el, timer: setInterval(refresh, 250), raf: 0 };
+  // THE TRACE. A strip of scope-green that pulses every time the program runs
+  // and jumps when the choice changes; flat, with a slow z z z, when the
+  // machine is shut down or its cell is flat. Still, for reduced motion.
+  const wave = el.querySelector('#sc-wave');
+  const wctx = wave && wave.getContext('2d');
+  const still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // Calm by design: the strip steps four times a second, a small blip marks
+  // each second of thinking, and only a change of choice draws a full spike.
+  const hist = new Array(40).fill(0);
+  let seen = r._thinks || 0, lastIntent = r.lastDecision && r.lastDecision.intent, t0 = performance.now(), lastStep = 0;
+  const draw = (now) => {
+    if (!scope || scope.el !== el || !wctx) return;
+    const asleep = !!(r.powerDown || r.drained);
+    now = now || performance.now();
+    if (now - lastStep >= 250) {
+      lastStep = now;
+      let v = 0;
+      if (!asleep) {
+        const n = r._thinks || 0;
+        const intent = r.lastDecision && r.lastDecision.intent;
+        if (intent !== lastIntent) { v = 1; lastIntent = intent; }
+        else if (Math.floor(n / 4) !== Math.floor(seen / 4)) v = 0.3;
+        seen = n;
+      }
+      hist.push(v); hist.shift();
+    }
+    const W = wave.width, H = wave.height;
+    wctx.clearRect(0, 0, W, H);
+    wctx.fillStyle = '#070a08'; wctx.fillRect(0, 0, W, H);
+    drawHistory(wctx, W, H);
+    wctx.strokeStyle = asleep ? 'rgba(127,154,132,0.5)' : '#7fd88a';
+    wctx.lineWidth = 1.2;
+    wctx.beginPath();
+    hist.forEach((h, i) => {
+      const x = (i / (hist.length - 1)) * W, y = H - 4 - h * (H - 8);
+      if (i) wctx.lineTo(x, y); else wctx.moveTo(x, y);
+    });
+    wctx.stroke();
+    if (asleep) {
+      const t = ((now || performance.now()) - t0) / 1000;
+      wctx.fillStyle = 'rgba(207,227,210,0.8)';
+      wctx.font = '9px ui-monospace, Menlo, monospace';
+      for (let k = 0; k < 3; k++) {
+        const ph = (t * 0.5 + k / 3) % 1;
+        wctx.globalAlpha = still ? 0.8 : 1 - ph;
+        wctx.fillText('z', W - 30 + k * 8, still ? 12 : H - 4 - ph * (H - 6));
+      }
+      wctx.globalAlpha = 1;
+    }
+    if (!still) scope.raf = requestAnimationFrame(draw);
+  };
+  draw(performance.now());
+  if (still) scope.timer2 = setInterval(() => draw(performance.now()), 500);
+}
+// A click anywhere outside the window closes it. Capture phase, so the game
+// under the click does not act first; the click that opened it has already
+// happened by the time the window exists.
+document.addEventListener('mousedown', (e) => {
+  if (scope && !scope.el.contains(e.target)) closeScope();
+}, true);
+// Escape closes the window before it can reach the leave-to-title gate.
+window.addEventListener('keydown', (e) => {
+  if (!scope || e.key !== 'Escape') return;
+  e.preventDefault(); e.stopImmediatePropagation();
+  closeScope();
+}, true);
+setRobotClock(() => dayNight.label);
+player.onScope = () => {
+  const m = camera.toWorld(input.mouseX, input.mouseY, renderer.w, renderer.h);
+  let best = null, bestD = SCOPE_PICK;
+  for (const r of currentWorld.robots || []) {
+    if (r.dead || r.fused) continue;
+    const dm = Math.hypot(r.x - m.x, r.y - m.y);
+    if (dm < bestD && Math.hypot(r.x - player.x, r.y - player.y) <= SCOPE_RANGE) { bestD = dm; best = r; }
+  }
+  if (!best) { player.say('Nothing under the lens. Click a machine within a few paces.'); return; }
+  if (!map.hasLineOfSight(player.x, player.y, best.x, best.y)) { player.say('Something is in the way. The lens needs a clear line to it.'); return; }
+  openScope(best);
+};
 
 // ---- THE DEEP LINK -------------------------------------------------------
 //

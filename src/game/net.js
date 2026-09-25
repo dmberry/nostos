@@ -469,7 +469,7 @@ function obeliskPage(host, hosts) {
 // The AI models are versioned, and the version numbers do not agree with each
 // other — these units were built over years and never all updated at once, which
 // is the kind of thing a fleet's own status pages give away for free.
-const AI_MODEL = {
+export const AI_MODEL = {
   t1: ['TIRESIAS-pursuit', '1.4'], t2: ['TIRESIAS-pursuit', '2.0'],
   t3: ['TIRESIAS-optic', '2.2'],
   w1: ['HEPHAESTUS-line', '1.1'], w2: ['HEPHAESTUS-line', '1.1'],

@@ -425,6 +425,16 @@ export const ITEMS = {
   // pointers, one per notable thing nearby, colour-coded (see
   // Player.compassTargets). Stays armed until you drop it. A navigation aid,
   // not a weapon.
+  // The Codescope: held, it opens a machine's mind. Click a unit and a window
+  // shows the program it runs, what its senses read and what it chose, and
+  // lets you edit either. The unit stands still while the window is open.
+  codescope: {
+    name: 'Codescope',
+    use: 'Hold it and click a machine to read and edit its program and senses; it stands still while you look. Made (C) from a circuit board, a chip fragment and two scrap.',
+    kind: 'scope',
+    tier: 2,
+    color: '#b9c7d4',
+  },
   compass: {
     name: 'Electro-compass',
     use: 'Click it to arm. Chevrons at the edge of the screen then point at whatever is notable nearby.',

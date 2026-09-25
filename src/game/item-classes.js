@@ -96,6 +96,7 @@ const OVERRIDE = {
   wifiblock: 'device',
   ob_spoofer: 'device',
   goggles: 'device',         // powered optics: worn, but it is a machine
+  codescope: 'device',      // opens a machine's program and senses, and edits them
   // The bow is drawn by hand and takes arrows; it is still a weapon.
   bow: 'weapon',
 };

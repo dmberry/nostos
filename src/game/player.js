@@ -184,7 +184,7 @@ const SWIM_HEALTH_DRAIN = 1.2; // health/sec: swimming a river is exhausting
 
 
 // Item kinds that can occupy the hands slot.
-const HOLDABLE = new Set(['tool', 'gun', 'gadget', 'bomb', 'map', 'spray', 'seed']);
+const HOLDABLE = new Set(['tool', 'gun', 'gadget', 'bomb', 'map', 'spray', 'seed', 'scope']);
 // …and the per-item way out of it. HOLDABLE is a set of KINDS, so an item that
 // should not be held can only be excused one of two ways: change what it is,
 // which drags WEAPON_ORDER, item-classes and the combat rules along with it, or
@@ -626,6 +626,27 @@ export class Player {
     if (!this.stow('goggles', 1)) { this.say('No room for the goggles.'); return false; }
     sfx.play('zap');
     this.say('You strip five torch-heads for their phosphor and wire them to a board: night-vision goggles. Click them to wear them.');
+    return true;
+  }
+
+  // The Codescope, put together from salvage: a circuit board for the
+  // reader, a chip fragment for the handshake, and two pieces of scrap for the
+  // housing and the lens mount. One is enough; the ruins also hold one.
+  canCraftCodescope() {
+    return !this.hasItem('codescope') && this.hasItem('circuit') && this.hasItem('chip_fragment') && this.countItem('scrap') >= 2;
+  }
+
+  craftCodescope() {
+    if (!this.canCraftCodescope()) {
+      this.say(this.hasItem('codescope') ? 'You already carry a Codescope.' : 'A Codescope needs a circuit board, a chip fragment and two pieces of scrap.');
+      return false;
+    }
+    this.removeItem('circuit');
+    this.removeItem('chip_fragment');
+    this.removeItem('scrap'); this.removeItem('scrap');
+    if (!this.stow('codescope', 1)) { this.say('No room for the Codescope.'); return false; }
+    sfx.play('zap');
+    this.say('You fit the board and the fragment into a scrap housing and set the lens: a Codescope. Hold it and click a machine.');
     return true;
   }
 
@@ -2251,6 +2272,14 @@ export class Player {
       else if (tool.kind === 'compass') this.say('The compass needle swings, seeking.');
       else if (tool.kind === 'shield') this.say('You raise the shield.');
       else if (tool.kind === 'map') { if (this.onReadMap) this.onReadMap(); else this.say('You unfold the map.'); }
+      return;
+    }
+
+    // The Codescope looks at a machine; main.js picks the one under the cursor
+    // and opens the window (onScope). Facing a box, it opens the box as usual.
+    if (tool.kind === 'scope') {
+      if (facingBox) this.openBox(obj, map);
+      else if (this.onScope) this.onScope();
       return;
     }
 
