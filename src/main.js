@@ -8076,15 +8076,24 @@ function startReel(reel, host, opts = {}) {
   host.classList.add('reel-host');
   const bar = document.createElement('div');
   bar.className = 'reel-ctl';
-  bar.innerHTML = '<button type="button" data-a="start" title="Back to the start">|&#9664;&#xFE0E;</button>'
-    + '<button type="button" data-a="back" title="Rewind one still">&#9664;&#xFE0E;&#9664;&#xFE0E;</button>'
-    + '<button type="button" data-a="play" title="Play or pause" class="reel-pp">&#10074;&#10074;</button>'
+  // Transport icons drawn, not typed: glyphs from different fonts came out at
+  // three different widths.
+  const ICON = {
+    start: '<rect x="1" y="1" width="2" height="10"/><path d="M11 1v10L4 6z"/>',
+    back: '<path d="M6 1v10L1 6zM11 1v10L6 6z"/>',
+    play: '<path d="M2 1v10l9-5z"/>',
+    pause: '<rect x="2" y="1" width="3" height="10"/><rect x="7" y="1" width="3" height="10"/>',
+  };
+  const svg = (k) => `<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" fill="currentColor">${ICON[k]}</svg>`;
+  bar.innerHTML = `<button type="button" class="reel-t" data-a="start" title="Back to the start">${svg('start')}</button>`
+    + `<button type="button" class="reel-t" data-a="back" title="Rewind one still">${svg('back')}</button>`
+    + `<button type="button" class="reel-t reel-pp" data-a="play" title="Play or pause">${svg('pause')}</button>`
     + '<label title="Volume">vol <input type="range" min="0" max="1" step="0.05"></label>'
     + '<button type="button" data-a="full" title="Full screen">full screen</button>'
     + (closeReel ? '<button type="button" data-a="close" title="Close (Esc)">close &#10005;</button>' : '');
   host.appendChild(bar);
   const pp = bar.querySelector('.reel-pp');
-  const label = () => { pp.innerHTML = playing ? '&#10074;&#10074;' : '&#9654;&#xFE0E;'; pp.title = playing ? 'Pause' : 'Play'; };
+  const label = () => { pp.innerHTML = svg(playing ? 'pause' : 'play'); pp.title = playing ? 'Pause' : 'Play'; };
   const range = bar.querySelector('input');
   range.value = String(vol);
   range.addEventListener('input', () => {

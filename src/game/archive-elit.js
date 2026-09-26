@@ -182,6 +182,7 @@ export const POEMS = [
 ];
 const POETRY = P('ml-poetry.geocities.ws', 'ML POETRY', 'ml poetry :: programs that are poems that run', [
   '<!--bg:codeterm-->',
+  '<div class="ns-prose">',
   '<h1>ml poetry</h1>',
   '<p><small>a page of programs. every one of them runs on a machine. post one',
   'and watch.</small></p>',
@@ -198,6 +199,7 @@ const POETRY = P('ml-poetry.geocities.ws', 'ML POETRY', 'ml poetry :: programs t
   '<code>let</code>. What is left is one aid and one intent. It runs.</p>',
   '<p><small>more combinations: <code>cent</code> in /usr/games on any NostBook.',
   '<a href="hypertext-ring.geocities.ws">the hypertext ring</a></small></p>',
+  '</div>',
 ], 'codeterm');
 
 // ---- the dispensary: a story in blue links ----------------------------------
@@ -258,6 +260,7 @@ const FLASH = P('abstract-machines.geocities.ws', 'ABSTRACT MACHINES', 'ML — A
 // ---- ml war --------------------------------------------------------------
 const WAR = P('mlwar.geocities.ws', 'ML WAR', 'ml war :: king of the hill, east ridge', [
   '<!--bg:codeterm-->',
+  '<div class="ns-prose">',
   '<h1>ml war</h1>',
   '<p><small>two machines, two programs, one field. last one standing keeps',
   'the hill.</small></p>',
@@ -295,11 +298,13 @@ const WAR = P('mlwar.geocities.ws', 'ML WAR', 'ml war :: king of the hill, east 
   'loopy: lamp all over the place, doing whatever it likes. Post it again and it',
   'settles. It only does it the once. -- ronnie</small></p>',
   '<p><small><a href="hack_nostos.geocities.ws">hack_nostos</a> &middot; <a href="hypertext-ring.geocities.ws">the hypertext ring</a></small></p>',
+  '</div>',
 ], 'codeterm');
 
 // ---- pursuit.ml, three witnesses ---------------------------------------------
 const VARIORUM = P('pursuit-variorum.geocities.ws', 'PURSUIT, COLLATED', 'pursuit.ml: a collated text', [
   '<!--bg:ending-->',
+  '<div class="ns-prose">',
   '<center><h1>pursuit.ml</h1><p>the three witnesses, collated</p></center>',
   '<hr>',
   '<h2>Sigla</h2>',
@@ -324,12 +329,14 @@ const VARIORUM = P('pursuit-variorum.geocities.ws', 'PURSUIT, COLLATED', 'pursui
   'hunt start. The text is followed here in A and B.</p>',
   '<p><small>The witnesses are on any NostBook, in /home/misc/witnesses.',
   'Collated by hand. <a href="pursuit-commentary.geocities.ws">A commentary on the same program</a>.</small></p>',
+  '</div>',
 ], 'ending');
 
 // ---- a commentary on six lines ------------------------------------------------
 const PF = 'pursuit-commentary.geocities.ws';
 const COMMENTARY = P(PF, 'PURSUIT, WITH A COMMENTARY', 'TIRESIAS-pursuit 1.4, with a commentary by V. Botkin', [
   '<!--bg:ending-->',
+  '<div class="ns-prose">',
   '<center><h1>TIRESIAS-pursuit 1.4</h1>',
   '<p>a program in three lines, with a foreword, a commentary and an index<br>',
   'by V. Botkin, formerly of the works</p></center>',
@@ -385,6 +392,7 @@ const COMMENTARY = P(PF, 'PURSUIT, WITH A COMMENTARY', 'TIRESIAS-pursuit 1.4, wi
   'south estate, closed to its own staff; not seen since, 3',
   'twenty-five, not clerical, 1</pre>',
   '<p><small><a href="hypertext-ring.geocities.ws">the hypertext ring</a></small></p>',
+  '</div>',
 ], 'ending');
 
 // ---- a mirror of the encyclopedia -------------------------------------------
@@ -444,6 +452,7 @@ const SCHERIA = P(`${MIRROR}/scheria`, 'SCHERIA', 'Scheria — Wikipedia (mirror
 // ---- Hayao's machine ------------------------------------------------------
 const ZONE = P('hayao-zone.geocities.ws', 'THE ZONE', 'the zone :: a synthesiser for pictures', [
   '<!--bg:codeterm-->',
+  '<div class="ns-prose">',
   '<h1>the zone</h1>',
   '<p><small>a video synthesiser, homebuilt. by hayao.</small></p>',
   '<hr>',
@@ -458,11 +467,13 @@ const ZONE = P('hayao-zone.geocities.ws', 'THE ZONE', 'the zone :: a synthesiser
   'one, and the panel in the corner of that view is this synthesiser, or my',
   'synthesiser is that panel; I built mine first and I cannot prove it.</p>',
   '<p><small><a href="hypertext-ring.geocities.ws">the hypertext ring</a></small></p>',
+  '</div>',
 ], 'codeterm');
 
 // ---- La Jetée ---------------------------------------------------------------
 const JETEE = P('la-jetee.geocities.ws', 'LA JETEE', 'La Jet&eacute;e (Chris Marker, 1962)', [
   '<!--bg:ending-->',
+  '<div class="ns-prose">',
   '<center><h1>La Jet&eacute;e</h1>',
   '<p>Chris Marker, 1962. Twenty-eight minutes, black and white.</p></center>',
   '<hr>',
@@ -485,11 +496,13 @@ const JETEE = P('la-jetee.geocities.ws', 'LA JETEE', 'La Jet&eacute;e (Chris Mar
   'Plage</a>. It is on every one as <code>stills</code>. See also <a href="hayao-zone.geocities.ws">the',
   'zone</a> &middot; <a href="the-french-new-wave.geocities.ws">the French new',
   'wave</a></small></p>',
+  '</div>',
 ], 'ending');
 
 // ---- La Plage, embedded, with a review -----------------------------------------
 const PLAGE = P('photo-roman.geocities.ws', 'LA PLAGE', 'La Plage, un photo-roman', [
   '<!--bg:ending-->',
+  '<div class="ns-prose">',
   '<center><h1>La Plage</h1>',
   '<p>un photo-roman &middot; anonymous &middot; about two minutes &middot; French, English subtitles</p></center>',
   stillsReel({ embed: true }),
@@ -556,6 +569,7 @@ const PLAGE = P('photo-roman.geocities.ws', 'LA PLAGE', 'La Plage, un photo-roma
   '<p align="right">NaN</p>',
   '<hr>',
   '<p><small><a href="la-jetee.geocities.ws">La Jet&eacute;e</a> &middot; <a href="hypertext-ring.geocities.ws">the hypertext ring</a> &middot; <a href="the-french-new-wave.geocities.ws">the French new wave</a></small></p>',
+  '</div>',
 ], 'ending');
 
 // ---- the ring --------------------------------------------------------------
