@@ -89,6 +89,7 @@ import { createNokia, sendNokia, holdRise, holdFall, holdBand, HOLD_COLD, HOLD_W
 import { newSnakeGame, snakeTurn, snakeTurnRelative, snakeTick, drawSnake } from './game/snake.js';
 import { CHOIR_NOTES, CHOIR_DURATION } from './engine/choir-notes.js';
 import { politeness, taleSpin, SCOPE_NOTES } from './game/intertext.js';
+import { stillsReel } from './game/stills.js';
 import { makeDisk, makeFsfCard, newShell, runUnix, hasFile, pathString, edOpen, edRun, writeFile, lookup, resolvePath, isFile, SALVAGE_DISKS, graftSalvage, graftSystemDirs, parseSelection, handlesOwnPaste, isBrowserChord } from './game/unix.js';
 import { PDFS, pdfByName, pdfPath, pdfNames } from './game/pdfs.js';
 import { BOOKS, bookByKey, bookKeys, bookPath, libraryPage } from './game/books.js';
@@ -1307,45 +1308,36 @@ function tickLoveLetters(dt) {
   logSms(player, 'CALYPSO', 'them', letter.join(' '), dayNight.clock);
   kleos('loveLetter', {});
 }
-// STILLS. A sequence of photographs kept on the NostBook, shown one at a time
-// in the browser. The same frames for everybody, in the same order: they were
-// taken before the player arrived, and the last of them is the beach.
-// [file(s), caption, milliseconds on screen]. The holds differ on purpose.
-const STILLS = [
-  ['01.jpg', 'The beach at Ithaca, early, before the machines came down to the water.', 7000],
-  ['02.jpg', 'A face. Afterwards it was the one thing anybody kept from that morning.', 9500],
-  ['03.jpg', 'The towers were already standing.', 4500],
-  ['04.jpg', 'Later there were the machines, and the camps under the towers.', 6000],
-  ['05.jpg', 'They wanted people who could hold one image steady, and send them back along it.', 8500],
-  ['06.jpg', 'Each time back, the dog was there.', 4000],
-  ['07.jpg', 'Each time back, there was a boat.', 5500],
-  [['08a.jpg', '08b.jpg', '08c.jpg'], '', 0],
-];
-const STILLS_DIR = 'assets/media/stills';
-function stillsPage() {
-  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const img = (f) => `<img src="${STILLS_DIR}/${f}" alt="" width="512" height="288">`;
-  return ['<!--bg:stills-->', '<div data-slides="5000">',
-    '<figure class="still-title"><p>Ceci est l&rsquo;histoire de quelqu&rsquo;un<br>marqu&eacute; par une image d&rsquo;Ithaque.</p></figure>',
-    '<figure class="still-title" data-ms="9000"><p>La sc&egrave;ne, dont la signification ne devait appara&icirc;tre que beaucoup plus tard, eut lieu sur une plage d&rsquo;Ithaque, quelques ann&eacute;es avant que POSEIDON ne s&rsquo;&eacute;veille.</p></figure>',
-    ...STILLS.map(([f, cap, ms]) => `<figure${ms ? ` data-ms="${ms}"` : ''}>${Array.isArray(f) ? `<div class="still-live">${f.map(img).join('')}</div>` : img(f)}<figcaption>${esc(cap) || '&nbsp;'}</figcaption></figure>`),
-    '</div>',
-    '<p class="still-credit"><small>Inspired by Chris Marker, <i>La Jet&eacute;e</i> (1962).</small></p>'].join('\n');
-}
-
-// Her organ. At night on her island, rarely, the rack plays one chorale
-// prelude through; leaving the island stops it.
+// Her organ, played through the towers. At night on her island, now and then,
+// every standing obelisk sounds one chorale prelude: loud at the foot of a
+// tower, gone fifteen paces out, silent with the music turned off. It only
+// starts with the player near a tower, and leaving the island stops it.
+const CHORALE_NEAR = 2;     // tiles: full volume inside this
+const CHORALE_FAR = 16;     // tiles: silent beyond this
 let _choraleT = 240 + Math.random() * 360;
 let _choraleOn = 0;
+function nearestLiveObelisk() {
+  let best = Infinity;
+  for (const o of (currentWorld.obeliskObjs || [])) {
+    if (o.destroyed) continue;
+    const d = Math.hypot(o.x + 0.5 - player.x, o.y + 0.5 - player.y);
+    if (d < best) best = d;
+  }
+  return best;
+}
 function tickChorale(dt) {
   if (_choraleOn > 0) {
     _choraleOn -= dt;
-    if (currentWorld.id !== 'calypso') { sfx.stopChorale(); _choraleOn = 0; }
+    if (currentWorld.id !== 'calypso' || sfx.musicOff()) { sfx.stopChorale(); _choraleOn = 0; return; }
+    const d = nearestLiveObelisk();
+    const k = Math.max(0, Math.min(1, 1 - (d - CHORALE_NEAR) / (CHORALE_FAR - CHORALE_NEAR)));
+    sfx.setChoraleVolume(k * k);
     return;
   }
-  if (currentWorld.id !== 'calypso' || player.deathCert || !dayNight.isNight()) return;
+  if (currentWorld.id !== 'calypso' || player.deathCert || !dayNight.isNight() || sfx.musicOff()) return;
   _choraleT -= dt;
   if (_choraleT > 0) return;
+  if (nearestLiveObelisk() > CHORALE_FAR) { _choraleT = 20; return; }   // wait until a tower is in earshot
   _choraleT = 900 + Math.random() * 900;
   _choraleOn = sfx.playChorale();
 }
@@ -7956,9 +7948,15 @@ const nsMsgEl = document.getElementById('ns-msg');
 // torn down when the next page renders, so nothing from one page acts on the
 // one after it.
 let _nsTimers = [];
-function nsPageBehaviours(html, v) {
+let _nsAudio = [];
+function nsStopBehaviours() {
   for (const t of _nsTimers) { clearTimeout(t); clearInterval(t); }
   _nsTimers = [];
+  for (const a of _nsAudio) { try { a.pause(); a.src = ''; } catch (e) { /* gone */ } }
+  _nsAudio = [];
+}
+function nsPageBehaviours(html, v) {
+  nsStopBehaviours();
   if (!web) return;
   if (!web.read) web.read = new Set();
   // What was read is recorded under every name the page answers to: the
@@ -8014,15 +8012,33 @@ function nsPageBehaviours(html, v) {
     const ms = Math.max(1500, Number(el.getAttribute('data-slides')) || 4000);
     const hold = (k) => Math.max(1500, Number(k.getAttribute('data-ms')) || ms);
     kids.forEach((k, j) => { k.classList.add('slide'); k.classList.toggle('on', j === 0); });
+    // A slide may carry a narration (data-audio), started as it fades in, and
+    // a second, quieter track under it (data-under).
+    const voice = (k) => {
+      const play = (src, delay, vol) => _nsTimers.push(setTimeout(() => {
+        try { const a = new Audio(src); a.volume = vol; _nsAudio.push(a); a.play().catch(() => {}); } catch (e) { /* no audio */ }
+      }, delay));
+      if (k.dataset.audio) play(k.dataset.audio, 800, 0.95);
+      if (k.dataset.under) play(k.dataset.under, 2600, 0.55);
+    };
     let i = 0;
     const step = () => {
       if (i >= kids.length - 1) return;
       kids[i + 1].classList.add('on');
       kids[i].classList.remove('on');
       i += 1;
+      voice(kids[i]);
       if (i < kids.length - 1) _nsTimers.push(setTimeout(step, hold(kids[i])));
     };
-    if (kids.length > 1) _nsTimers.push(setTimeout(step, hold(kids[0])));
+    const begin = () => {
+      voice(kids[0]);
+      if (kids.length > 1) _nsTimers.push(setTimeout(step, hold(kids[0])));
+    };
+    // An embedded reel waits on its first frame until it is clicked, the way a
+    // film in a page did; a full-page one starts at once.
+    const box = el.dataset.start === 'click' ? el.parentElement : null;
+    if (box) box.addEventListener('click', () => { if (box.classList.contains('playing')) return; box.classList.add('playing'); begin(); });
+    else begin();
   }
   // data-flash="w|w|w": one word at a time.
   for (const el of nsPageEl.querySelectorAll('[data-flash]')) {
@@ -8534,8 +8550,7 @@ function openNetscape(addr) {
 
 function closeNetscape() {
   nsEl.style.display = 'none';
-  for (const t of _nsTimers) { clearTimeout(t); clearInterval(t); }
-  _nsTimers = [];
+  nsStopBehaviours();
   // The skin comes OFF on the way out, or the NostBook's Netscape would open
   // wearing Explorer's chrome the next time it is asked for.
   if (ieOn) ieSkin(false);
@@ -9676,7 +9691,7 @@ function laptopRebootHook() {
 // stills(1): the photographs on the disk, shown in the browser one at a time.
 function laptopStillsHook() {
   if (!web) web = { view: null, history: [], fwd: [], html: '' };
-  nsSetView({ kind: 'local', title: 'stills', html: stillsPage() }, false);
+  nsSetView({ kind: 'local', title: 'La Plage', html: stillsReel() }, false);
   nsEl.style.display = 'flex';
   nsUrlEl.blur();
   return { ok: true, mode: 'web', text: '' };

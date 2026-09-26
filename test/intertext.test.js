@@ -114,11 +114,14 @@ test('taleSpin says what it knew and what it did', () => {
   assert.equal(I.taleSpin('t1_02', SENSE, null, { powerDown: true }), 'T1_02 WAS SHUT DOWN. T1_02 STOOD THERE.');
 });
 
-test('every still the stills page names is a file that exists', async () => {
+test('every still and narration clip La Plage names is a file that exists', async () => {
   const fs = await import('node:fs');
-  const src = fs.readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
-  const block = src.slice(src.indexOf('const STILLS = ['), src.indexOf('const STILLS_DIR'));
-  const names = [...block.matchAll(/'(\d\d[a-z]?\.jpg)'/g)].map((m) => m[1]);
-  assert.ok(names.length >= 8);
-  for (const n of names) assert.ok(fs.existsSync(new URL(`../assets/media/stills/${n}`, import.meta.url)), n);
+  const { STILLS, STILLS_LAST, STILLS_DIR, STILLS_AUDIO, stillsReel } = await import('../src/game/stills.js');
+  const imgs = STILLS.flatMap(([f]) => (Array.isArray(f) ? f : [f]));
+  const clips = [...STILLS.flatMap(([, , , v, u]) => [v, u]).filter(Boolean), STILLS_LAST[1]];
+  assert.ok(imgs.length >= 12 && clips.length >= 11);
+  for (const n of imgs) assert.ok(fs.existsSync(new URL(`../${STILLS_DIR}/${n}`, import.meta.url)), n);
+  for (const c of clips) assert.ok(fs.existsSync(new URL(`../${STILLS_AUDIO}/${c}.m4a`, import.meta.url)), c);
+  assert.match(stillsReel({ embed: true }), /data-start="click"/);
+  assert.match(stillsReel(), /<!--bg:stills-->/);
 });

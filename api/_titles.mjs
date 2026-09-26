@@ -1354,6 +1354,7 @@ export const TITLES = {
   "philosophy-ring.geocities.ws": "The Philosophy Web-Ring",
   "photo-pioneers-ring.geocities.ws": "The Pioneers Ring",
   "photo-process-ring.geocities.ws": "The Medium &amp; Process Ring",
+  "photo-roman.geocities.ws": "La Plage, un photo-roman",
   "photography-ring.geocities.ws": "Photography Ring",
   "photojournalism-ring.geocities.ws": "The Photojournalism &amp; War Ring",
   "php-tcl-lua.geocities.ws": "TCL, LUA // the small languages you embed",

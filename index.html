@@ -2057,25 +2057,38 @@
   #netscape .ns-page.bg-mediatheory small { color:#b0b0b0; } #netscape .ns-page.bg-mediatheory hr { border-color:#611; }
   #netscape .ns-page.bg-mediatheory pre { background:#000; color:#ff5e50; }
   #netscape .ns-page.bg-stills { background:#000; color:#ddd; font-family:'Courier New',monospace; padding:0 !important; overflow:hidden; position:relative; }
-  #netscape .ns-page.bg-stills [data-slides] { position:absolute; inset:0; }
-  #netscape .ns-page.bg-stills figure { position:absolute; inset:0; float:none; width:auto; max-width:none; margin:0; padding:0; border:0; background:#000; }
-  #netscape .ns-page.bg-stills figure img, #netscape .ns-page.bg-stills .still-live { position:absolute; inset:0; width:100%; height:100%; max-width:none; object-fit:cover; filter:grayscale(1); }
-  #netscape .ns-page.bg-stills .still-live img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
-  #netscape .ns-page.bg-stills figcaption { position:absolute; left:0; right:0; bottom:7%; margin:0 auto; max-width:40em; padding:0 16px; text-align:center; font-size:15px; letter-spacing:.03em; color:#f2f2f2; text-shadow:0 0 6px #000, 0 0 2px #000; }
-  #netscape .ns-page.bg-stills .slide { opacity:0; transition:opacity 2.2s ease-in-out; }
-  #netscape .ns-page.bg-stills .slide.on { opacity:1; }
-  #netscape .ns-page.bg-stills figure.on > img, #netscape .ns-page.bg-stills figure.on > .still-live { animation:still-drift-a 16s ease-out forwards; }
-  #netscape .ns-page.bg-stills figure.on:nth-child(even) > img { animation-name:still-drift-b; }
+  #netscape .ns-page.bg-stills .stills-reel { position:absolute; inset:0; }
+  #netscape .ns-page .stills-embed { position:relative; width:100%; max-width:640px; aspect-ratio:16/9; margin:14px auto; background:#000; border:1px solid #2a2a2a; overflow:hidden; cursor:pointer; }
+  #netscape .ns-page .stills-embed .stills-reel { position:absolute; inset:0; }
+  #netscape .ns-page .stills-embed .stills-play { position:absolute; inset:0; z-index:3; display:flex; align-items:flex-end; justify-content:flex-start; padding:10px 14px; color:#ddd; font:13px 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing:.05em; background:none; border:0; cursor:pointer; }
+  #netscape .ns-page .stills-embed .stills-play b { display:inline-block; margin-right:8px; font-size:18px; }
+  #netscape .ns-page .stills-embed.playing .stills-play { display:none; }
+  #netscape .ns-page .stills-embed .stills-reel figcaption { font-size:13px; }
+  #netscape .ns-page .stills-embed .stills-reel .still-title p { font-size:clamp(13px, 2vw, 20px); }
+  #netscape .ns-page .stills-embed .stills-reel .still-endcredit { font-size:12px; }
+  #netscape .ns-page .stills-reel figure { position:absolute; inset:0; float:none; width:auto; max-width:none; margin:0; padding:0; border:0; background:#000; }
+  #netscape .ns-page .stills-reel figure img, #netscape .ns-page .stills-reel .still-live { position:absolute; inset:0; width:100%; height:100%; max-width:none; object-fit:cover; filter:grayscale(1); }
+  #netscape .ns-page .stills-reel .still-live img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+  #netscape .ns-page .stills-reel figcaption { position:absolute; left:0; right:0; bottom:5%; margin:0 auto; max-width:44em; padding:0 16px; text-align:center; font:17px/1.35 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing:.02em; color:#ececec; text-shadow:0 0 4px #000, 0 0 1px #000; }
+  #netscape .ns-page .stills-reel .still-black { background:#000; }
+  #netscape .ns-page .stills-reel .slide { opacity:0; transition:opacity 2.2s ease-in-out; }
+  #netscape .ns-page .stills-reel .slide.on { opacity:1; }
+  #netscape .ns-page .stills-reel .slide.still-black { transition:opacity 3.5s ease-in; }
+  #netscape .ns-page .stills-reel figure.on > img, #netscape .ns-page .stills-reel figure.on > .still-live { animation:still-drift-a 16s ease-out forwards; }
+  #netscape .ns-page .stills-reel figure.on:nth-child(even) > img { animation-name:still-drift-b; }
   @keyframes still-drift-a { from { transform:scale(1.005) translate(0, 0); } to { transform:scale(1.045) translate(-0.9%, -0.5%); } }
   @keyframes still-drift-b { from { transform:scale(1.04) translate(0.8%, 0.4%); } to { transform:scale(1.008) translate(0, 0); } }
-  #netscape .ns-page.bg-stills .still-live img:nth-child(2) { animation:still-fade 7s ease-in-out infinite; }
-  #netscape .ns-page.bg-stills .still-live img:nth-child(3) { animation:still-fade 7s ease-in-out 3.5s infinite; }
-  #netscape .ns-page.bg-stills .still-title { display:flex; align-items:center; justify-content:center; }
-  #netscape .ns-page.bg-stills .still-title p { margin:0; padding:0 6%; text-align:center; font:bold clamp(18px, 3.4vw, 40px)/1.35 'American Typewriter', 'Courier New', Courier, serif; letter-spacing:.04em; color:#f4f4f4; text-shadow:0 0 3px rgba(255,255,255,.55); }
-  #netscape .ns-page.bg-stills .still-credit { position:absolute; right:10px; bottom:6px; margin:0; color:#888; z-index:2; }
+  #netscape .ns-page .stills-reel .still-live img:nth-child(2) { animation:still-fade 7s ease-in-out infinite; }
+  #netscape .ns-page .stills-reel .still-live img:nth-child(3) { animation:still-fade 7s ease-in-out 3.5s infinite; }
+  #netscape .ns-page .stills-reel .still-title { display:flex; align-items:center; justify-content:center; }
+  #netscape .ns-page .stills-reel .still-title p { margin:0; padding:0 6%; text-align:center; font:bold clamp(18px, 3.4vw, 40px)/1.35 'American Typewriter', 'Courier New', Courier, serif; letter-spacing:.04em; color:#f4f4f4; text-shadow:0 0 3px rgba(255,255,255,.55); }
+  #netscape .ns-page .stills-reel .still-endcredit { position:absolute; left:0; right:0; top:44%; margin:0; text-align:center; font:15px/1.4 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing:.04em; color:#9a9a9a; opacity:0; }
+  #netscape .ns-page .stills-reel .still-black.on .still-endcredit { animation:still-credit-in 3s ease-in 10s forwards; }
+  #netscape .ns-page .stills-reel .still-black.on figcaption { animation:still-caption-out 2s ease-out 9s forwards; }
+  @keyframes still-credit-in { to { opacity:1; } }
+  @keyframes still-caption-out { to { opacity:0; } }
   @keyframes still-fade { 0%, 100% { opacity:0; } 45%, 55% { opacity:1; } }
-  @keyframes still-breathe { 0%, 100% { transform:scale(1); } 50% { transform:scale(1.012); } }
-  @media (prefers-reduced-motion: reduce) { #netscape .ns-page.bg-stills .still-live, #netscape .ns-page.bg-stills img { animation:none !important; } #netscape .ns-page.bg-stills .slide { transition:none; } }
+  @media (prefers-reduced-motion: reduce) { #netscape .ns-page .stills-reel .still-live, #netscape .ns-page .stills-reel img { animation:none !important; } #netscape .ns-page .stills-reel .slide { transition:none; } }
   #netscape .ns-page.bg-jodi { background:#000; color:#00ff00; font-family:'Courier New',monospace; font-size:28px; line-height:1.05; word-break:break-all; }
   #netscape .ns-page.bg-hegira { background:#fbfbf4; color:#1b1b1b; font-family:'Times New Roman',serif; font-size:17px; }
   #netscape .ns-page.bg-hegira a { color:#0000ee; } #netscape .ns-page.bg-hegira td { vertical-align:middle; }

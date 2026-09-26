@@ -554,7 +554,7 @@ const MAN = {
   stills: [
     'stills',
     '  Show the photographs on this machine, one at a time, in the browser.',
-    '  There are eight, after two title cards. They are always in the same\n  order.',
+    '  Twelve, after two title cards. They are always in the same order.',
     '',
     '  Inspired by Chris Marker, La Jetee (1962).',
   ].join('\n'),
@@ -1589,8 +1589,8 @@ export function makeDisk() {
       }),
       // Photographs, as files: ls shows them and the readme names the viewer.
       stills: dir({
-        'readme': file('Eight photographs and two title cards.\nThey play in order: stills'),
-        ...Object.fromEntries(['01', '02', '03', '04', '05', '06', '07', '08'].map((n) => [`${n}.jpg`, file('[ image, JPEG, 1024x576, greyscale ]\nnot a text file. try: stills')])),
+        'readme': file('Twelve photographs and two title cards.\nThey play in order: stills'),
+        ...Object.fromEntries(['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'].map((n) => [`${n}.jpg`, file('[ image, JPEG, 1024x576, greyscale ]\nnot a text file. try: stills')])),
       }),
       demos: dir({
         'life.ml': file(LIFE_ML),

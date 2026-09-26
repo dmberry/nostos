@@ -812,7 +812,9 @@ class Sound {
   }
 
   // BWV 639 on a thin organ: a sine and a quiet octave per note, on the music
-  // bus so the music slider governs it. Returns its length in seconds.
+  // bus so the music slider governs it. It starts silent: the caller sets the
+  // level from how near the player is to a tower (setChoraleVolume). Returns
+  // its length in seconds.
   playChorale() {
     try {
       this.unlock();
@@ -820,9 +822,10 @@ class Sound {
       const ctx = this.ctx;
       const t0 = ctx.currentTime + 0.3;
       const bus = ctx.createGain();
-      bus.gain.value = 0.5;
+      bus.gain.value = 0;
       bus.connect(this.musicBus || this.master);
       this._choraleBus = bus;
+      this._choraleLevel = 0;
       for (const [t, d, m] of CHORALE_NOTES) {
         const freq = 440 * Math.pow(2, (m - 69) / 12);
         const dur = Math.max(0.2, d);
@@ -832,6 +835,16 @@ class Sound {
       return CHORALE_DURATION;
     } catch (e) { return CHORALE_DURATION; }
   }
+  setChoraleVolume(level) {
+    try {
+      if (!this.ctx || !this._choraleBus) return;
+      const target = 0.6 * Math.max(0, Math.min(1, level));
+      if (Math.abs(target - (this._choraleLevel ?? target)) < 0.01) return;
+      this._choraleLevel = target;
+      this._choraleBus.gain.setTargetAtTime(target, this.ctx.currentTime, 0.4);
+    } catch (e) { /* audio is optional */ }
+  }
+  musicOff() { return this._musicMode === 'off'; }
   stopChorale() {
     if (!this._choraleBus || !this.ctx) return;
     const g = this._choraleBus.gain;

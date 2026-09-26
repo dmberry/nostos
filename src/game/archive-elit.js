@@ -22,6 +22,8 @@
 //
 // View Source works on every page here, and on one of them it is the page.
 
+import { stillsReel } from './stills.js';
+
 const P = (domain, name, title, body, bg) => ({ domain, name, title, body, ...(bg ? { bg } : {}) });
 const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -479,10 +481,81 @@ const JETEE = P('la-jetee.geocities.ws', 'LA JETEE', 'La Jet&eacute;e (Chris Mar
   'the San Francisco of <i>Vertigo</i> and calls the synthesised images in it',
   'the Zone, after Tarkovsky.</p>',
   '<hr>',
-  '<p><small>Somebody made a set of these on a NostBook. They are on every',
-  'one: <code>stills</code>. See also <a href="hayao-zone.geocities.ws">the',
+  '<p><small>Somebody made one of these on a NostBook: <a href="photo-roman.geocities.ws">La',
+  'Plage</a>. It is on every one as <code>stills</code>. See also <a href="hayao-zone.geocities.ws">the',
   'zone</a> &middot; <a href="the-french-new-wave.geocities.ws">the French new',
   'wave</a></small></p>',
+], 'ending');
+
+// ---- La Plage, embedded, with a review -----------------------------------------
+const PLAGE = P('photo-roman.geocities.ws', 'LA PLAGE', 'La Plage, un photo-roman', [
+  '<!--bg:ending-->',
+  '<center><h1>La Plage</h1>',
+  '<p>un photo-roman &middot; anonymous &middot; about two minutes &middot; French, English subtitles</p></center>',
+  stillsReel({ embed: true }),
+  '<p><small>Click the frame to play. The same file is on every NostBook: <code>stills</code>.</small></p>',
+  '<hr>',
+  '<h2>The future perfect of the save file</h2>',
+  '<p><i>La Plage</i> runs a little over two minutes: two title cards, twelve',
+  'photographs and a black, a French narration and English subtitles. It does not',
+  'hide its source. The cards rewrite the opening of Marker&rsquo;s',
+  '<a href="la-jetee.geocities.ws"><i>La Jet&eacute;e</i></a> (1962) with Ithaca',
+  'where Orly was and POSEIDON where the third war was, and the form is the one',
+  'Marker&rsquo;s credits named: the <i>photo-roman</i>, stills held, dissolved into',
+  'one another and narrated, with a single image allowed to move. Here the moving',
+  'image is the eighth, and what moves in it is the grain, three exposures of one',
+  'framing cross-fading under the drift.</p>',
+  '<p>Barthes located the force of the photograph in its tense. Whatever else it',
+  'shows, it certifies that the thing was there in front of the lens: <i>&ccedil;a',
+  'a &eacute;t&eacute;</i>, that-has-been. <i>La Plage</i> puts that tense under',
+  'pressure with two frames. The first photograph is the beach at Ithaca, a prow',
+  'with an eye painted on it, sand, no one. The eighth is the same framing to the',
+  'pixel, and now a figure stands on the sand with a dog beside it. For the person',
+  'watching on a NostBook the figure is recognisable, because it is the figure they',
+  'have been walking about as, and the arrival it certifies is one they have not',
+  'yet made. The photograph&rsquo;s tense becomes the future perfect,',
+  'that-will-have-been, which is the tense a save file is written in: a record of',
+  'a position occupied, consulted in order to occupy it again.</p>',
+  '<p>Raymond Bellour described the pensive spectator, the one a stopped image',
+  'hands back to themselves, and Deleuze read the modern cinema as a cinema of the',
+  'time-image, in which the cut no longer serves the action and duration shows',
+  'through. Both accounts assume a camera and a world in front of it. <i>La',
+  'Plage</i> has neither. Its stills were rendered by the engine the game runs on,',
+  'from a world that has only ever existed as a computation, and the silver halide',
+  'is a noise function applied afterwards. Marker&rsquo;s photographs posed as a',
+  'film. These are renders posing as photographs posing as a film, and the',
+  'grain is the only part of them that was added to look accidental.</p>',
+  '<p>The recognition scenes of the <i>Odyssey</i> run on signs that have to be',
+  'read: the scar, the bed, the bow. The dog is the exception. Argos knows his',
+  'master without a sign and dies of it, which in Book 17 takes three lines.',
+  '<i>La Plage</i> places its dog in the sixth photograph, before any',
+  'recognition, as a condition of the return rather than its proof (&ldquo;Each',
+  'time back, the dog was there&rdquo;), so the Homeric order is inverted and the',
+  'dog becomes evidence that the loop is running. Marker&rsquo;s man discovers at',
+  'the end of the jetty that the image he had carried since childhood was his own',
+  'death. The last line here, over the black, gives the discovery to the',
+  'return instead: what was seen on the beach was a homecoming, the',
+  '<i>nostos</i> itself, already accomplished before it was attempted.</p>',
+  '<p>Kermode&rsquo;s argument in <a href="sense-of-an-ending.geocities.ws"><i>The',
+  'Sense of an Ending</i></a> is that an ending reorganises everything before it,',
+  'turning successive time into significant time, <i>chronos</i> into',
+  '<i>kairos</i>. The black does this literally: the final subtitle rewrites the',
+  'first photograph from an empty beach into a place where somebody is about to',
+  'be. The islands of this game are generated from a seed, so the beach in the',
+  'first frame could be derived from a number before anybody stood on it, and the',
+  'stills are identical on every machine and shown to every player whatever they',
+  'have done. The fate the narration describes is also a property of the build',
+  'it was made in.</p>',
+  '<p>The faces at the close are the engine&rsquo;s own face textures, unwrapped',
+  'and flattened for a mesh, lit from one side against black as Marker lit his',
+  'men from the future. None of them was ever on a head. The subtitles in the',
+  'third of them read &ldquo;They had no use for these scraps of another',
+  'time&rdquo; over a woman with a dark mark on her forehead where a sensor',
+  'would sit. The credit to Marker comes last, over the black, after the',
+  'subtitle has faded.</p>',
+  '<p align="right">NaN</p>',
+  '<hr>',
+  '<p><small><a href="la-jetee.geocities.ws">La Jet&eacute;e</a> &middot; <a href="hypertext-ring.geocities.ws">the hypertext ring</a> &middot; <a href="the-french-new-wave.geocities.ws">the French new wave</a></small></p>',
 ], 'ending');
 
 // ---- the ring --------------------------------------------------------------
@@ -505,11 +578,12 @@ const RING = P('hypertext-ring.geocities.ws', 'THE HYPERTEXT RING', 'The Hyperte
   `<li><a href="${PF}">pursuit.ml, with a commentary</a></li>`,
   '<li><a href="hayao-zone.geocities.ws">the zone</a></li>',
   '<li><a href="la-jetee.geocities.ws">la jet&eacute;e</a></li>',
+  '<li><a href="photo-roman.geocities.ws">la plage, un photo-roman</a></li>',
   '</ul>',
   '<p><small>strands: <a href="literature-ring.geocities.ws">Literature Ring</a> &middot; <a href="hack_nostos.geocities.ws">hack_nostos</a></small></p>',
 ], 'ending');
 
 export const ELIT_SITES = [
   RING, WWW, ...HEGIRA_PAGES, ...YESTERDAY_PAGES, MORPH, POETRY, ...TWINE_PAGES,
-  FLASH, WAR, VARIORUM, COMMENTARY, MIRROR_INDEX, SCHERIA, ZONE, JETEE,
+  FLASH, WAR, VARIORUM, COMMENTARY, MIRROR_INDEX, SCHERIA, ZONE, JETEE, PLAGE,
 ];
