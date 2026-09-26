@@ -7964,8 +7964,9 @@ function nsStopBehaviours() {
 // the two cannot drift apart. If the browser is holding sound back until the
 // page has been clicked, the reel says so and waits for the click rather than
 // running silent and out of step. `host` gets the control bar.
-const REEL_VOL_KEY = 'nostos-reel-volume';
-const reelVolume = () => { try { const v = Number(localStorage.getItem(REEL_VOL_KEY)); return Number.isFinite(v) && localStorage.getItem(REEL_VOL_KEY) !== null ? v : 0.9; } catch (e) { return 0.9; } };
+const REEL_VOL_KEY = 'nostos-reel-vol';
+const reelVolume = () => { try { const raw = localStorage.getItem(REEL_VOL_KEY); const v = Number(raw); return raw !== null && Number.isFinite(v) ? v : 0.6; } catch (e) { return 0.6; } };
+const REEL_FADE = 2600;   // ms a still takes to fade out, and a little over
 function startReel(reel, host, opts = {}) {
   const closeReel = opts.onClose || null;
   const kids = [...reel.children];
@@ -7973,59 +7974,117 @@ function startReel(reel, host, opts = {}) {
   const hold = (k) => Math.max(1500, Number(k.getAttribute('data-ms')) || base);
   const starts = [0];
   for (let i = 0; i < kids.length - 1; i++) starts.push(starts[i] + hold(kids[i]));
-  let timers = [], sources = [], stopped = false, gain = null, run = 0;
+  const END = starts[starts.length - 1] + 15000;   // the last line, then the credit over the black
   const ctx = (() => { try { sfx.unlock(); return sfx.ctx || null; } catch (e) { return null; } })();
   let vol = reelVolume();
-  const reset = () => {
+  let timers = [], sources = [], gain = null, stopped = false;
+  let pos = 0, wall0 = 0, playing = false, current = -1;
+  const idx = (p) => { let i = 0; while (i + 1 < starts.length && starts[i + 1] <= p) i++; return i; };
+  const now = () => (playing ? pos + (performance.now() - wall0) : pos);
+  // Show one still. The drift stays on the one going out until it has faded
+  // completely, so it never snaps back to its first frame while visible.
+  const show = (i) => {
+    if (i === current) return;
+    const prev = current;
+    current = i;
+    kids.forEach((k, j) => {
+      k.classList.add('slide');
+      k.classList.toggle('on', j === i);
+      if (j === i) k.classList.add('drift');
+      else if (j !== prev) k.classList.remove('drift');
+    });
+    if (prev >= 0 && prev !== i) {
+      const gone = kids[prev];
+      timers.push(setTimeout(() => { if (current !== prev) gone.classList.remove('drift'); }, REEL_FADE));
+    }
+  };
+  const halt = () => {
     for (const t of timers) clearTimeout(t);
     timers = [];
     for (const s of sources) { try { s.stop(); } catch (e) { /* done */ } }
     sources = [];
     if (gain) { try { gain.disconnect(); } catch (e) { /* gone */ } gain = null; }
-    kids.forEach((k, j) => { k.classList.add('slide'); k.classList.toggle('on', j === 0); });
   };
   const urls = [...new Set(kids.flatMap((k) => [k.dataset.audio, k.dataset.under]).filter(Boolean))];
   const buffers = ctx ? Promise.all(urls.map((u) => fetch(u).then((r) => r.arrayBuffer())
     .then((b) => ctx.decodeAudioData(b)).then((buf) => [u, buf]).catch(() => [u, null]))).then((p) => new Map(p))
     : Promise.resolve(new Map());
-  const play = async () => {
-    const mine = ++run;
-    reset();
-    const bufs = await buffers;
-    if (stopped || mine !== run) return;
-    if (ctx && ctx.state !== 'running') { try { await Promise.race([ctx.resume(), new Promise((r) => setTimeout(r, 400))]); } catch (e) { /* stays suspended */ } }
-    if (stopped || mine !== run) return;
-    if (ctx && ctx.state !== 'running') { prompt(); return; }
-    const lead = 250;
+  let bufs = new Map();
+  // Lay out everything from `from` onwards: picture changes on timers, and
+  // each clip on the audio clock, a clip already under way started partway in.
+  const schedule = (from) => {
+    halt();
+    const lead = 120;
+    wall0 = performance.now() + lead;
     const t0 = ctx ? ctx.currentTime + lead / 1000 : 0;
     if (ctx) { gain = ctx.createGain(); gain.gain.value = vol; gain.connect(ctx.destination); }
+    show(idx(from));
     kids.forEach((k, i) => {
-      if (i > 0) timers.push(setTimeout(() => { kids[i - 1].classList.remove('on'); k.classList.add('on'); }, lead + starts[i]));
+      if (starts[i] > from) timers.push(setTimeout(() => show(i), lead + starts[i] - from));
       const clip = (u, delay, level) => {
         const buf = bufs.get(u);
         if (!ctx || !buf) return;
+        const at = starts[i] + delay;
+        const into = (from - at) / 1000;
+        if (into >= buf.duration) return;
         const src = ctx.createBufferSource();
         src.buffer = buf;
         const g = ctx.createGain();
         g.gain.value = level;
         src.connect(g).connect(gain);
-        src.start(t0 + (starts[i] + delay) / 1000);
+        if (into > 0) src.start(t0, into); else src.start(t0 - into);
         sources.push(src);
       };
       if (k.dataset.audio) clip(k.dataset.audio, 800, 1);
       if (k.dataset.under) clip(k.dataset.under, 2600, 0.55);
     });
+    timers.push(setTimeout(() => { pos = END; playing = false; label(); }, lead + END - from));
   };
-  // The control bar: play again, volume, full screen, and close where the
-  // reel has a window of its own to close.
+  const play = async () => {
+    if (playing || stopped) return;
+    if (pos >= END) pos = 0;
+    bufs = await buffers;
+    if (stopped || playing) return;
+    if (ctx && ctx.state !== 'running') { try { await Promise.race([ctx.resume(), new Promise((r) => setTimeout(r, 400))]); } catch (e) { /* stays suspended */ } }
+    if (stopped || playing) return;
+    if (ctx && ctx.state !== 'running') { prompt(); return; }
+    reel.classList.remove('paused');
+    schedule(pos);
+    playing = true;
+    label();
+  };
+  const pause = () => {
+    if (!playing) return;
+    pos = now();
+    playing = false;
+    halt();
+    reel.classList.add('paused');
+    label();
+  };
+  const seek = (p) => {
+    const was = playing;
+    if (was) { halt(); playing = false; }
+    pos = Math.max(0, Math.min(p, END));
+    if (was) { play(); } else { current = -1; show(idx(pos)); }
+  };
+  // Back one still, or to the top of this one if it is well under way.
+  const rewind = () => {
+    const p = now();
+    const i = idx(p);
+    seek(p - starts[i] > 1500 || i === 0 ? starts[i] : starts[i - 1]);
+  };
   host.classList.add('reel-host');
   const bar = document.createElement('div');
   bar.className = 'reel-ctl';
-  bar.innerHTML = '<button type="button" data-a="again" title="Play again">&#8634; again</button>'
+  bar.innerHTML = '<button type="button" data-a="start" title="Back to the start">|&#9664;&#xFE0E;</button>'
+    + '<button type="button" data-a="back" title="Rewind one still">&#9664;&#xFE0E;&#9664;&#xFE0E;</button>'
+    + '<button type="button" data-a="play" title="Play or pause" class="reel-pp">&#10074;&#10074;</button>'
     + '<label title="Volume">vol <input type="range" min="0" max="1" step="0.05"></label>'
     + '<button type="button" data-a="full" title="Full screen">full screen</button>'
     + (closeReel ? '<button type="button" data-a="close" title="Close (Esc)">close &#10005;</button>' : '');
   host.appendChild(bar);
+  const pp = bar.querySelector('.reel-pp');
+  const label = () => { pp.innerHTML = playing ? '&#10074;&#10074;' : '&#9654;&#xFE0E;'; pp.title = playing ? 'Pause' : 'Play'; };
   const range = bar.querySelector('input');
   range.value = String(vol);
   range.addEventListener('input', () => {
@@ -8037,9 +8096,12 @@ function startReel(reel, host, opts = {}) {
   bar.addEventListener('click', (e) => {
     const a = e.target.closest('button');
     if (!a) return;
-    if (a.dataset.a === 'again') play();
-    if (a.dataset.a === 'close' && closeReel) closeReel();
-    if (a.dataset.a === 'full') {
+    const act = a.dataset.a;
+    if (act === 'play') { if (playing) pause(); else play(); }
+    if (act === 'back') rewind();
+    if (act === 'start') seek(0);
+    if (act === 'close' && closeReel) closeReel();
+    if (act === 'full') {
       try { if (document.fullscreenElement) document.exitFullscreen(); else host.requestFullscreen(); } catch (err) { /* not allowed */ }
     }
   });
@@ -8048,19 +8110,22 @@ function startReel(reel, host, opts = {}) {
     if (asked) return;
     asked = document.createElement('div');
     asked.className = 'reel-prompt';
-    asked.textContent = '\u25B6  play with sound';
+    asked.textContent = '▶  play with sound';
     asked.addEventListener('click', (e) => { e.stopPropagation(); asked.remove(); asked = null; play(); });
     host.appendChild(asked);
   };
+  show(0);
+  label();
   play();
-  const halt = () => {
+  const stop = () => {
     stopped = true;
-    reset();
+    playing = false;
+    halt();
     bar.remove();
     if (asked) asked.remove();
     host.classList.remove('reel-host');
   };
-  return { stop: halt };
+  return { stop, pause, play };
 }
 
 // `stills` on the NostBook: the reel over the whole game window. Esc closes it.

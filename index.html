@@ -2065,7 +2065,7 @@
   :fullscreen.reel-host { background:#000; }
   .reel-host .reel-ctl { position:absolute; left:0; right:0; bottom:0; height:34px; box-sizing:border-box; padding:0 10px; z-index:5; display:flex; gap:8px; align-items:center; background:#000; border-top:1px solid #1d1d1d; font:12px 'Helvetica Neue', Helvetica, Arial, sans-serif; color:#bbb; }
   #netscape .ns-page.bg-stills.reel-host .stills-reel, #netscape .ns-page .stills-embed.reel-host .stills-reel, #reel-overlay.reel-host .stills-reel { bottom:34px; }
-  .reel-host .reel-ctl button { background:rgba(0,0,0,.55); color:#ddd; border:1px solid #555; border-radius:3px; padding:2px 8px; font:12px 'Helvetica Neue', Helvetica, Arial, sans-serif; cursor:pointer; }
+  .reel-host .reel-ctl button { background:rgba(0,0,0,.55); color:#ddd; border:1px solid #555; border-radius:3px; padding:2px 8px; min-width:30px; font:12px 'Helvetica Neue', Helvetica, Arial, sans-serif; cursor:pointer; }
   .reel-host .reel-ctl button:focus-visible, .reel-host .reel-ctl input:focus-visible { outline:2px solid #bbb; outline-offset:1px; }
   .reel-host .reel-ctl label { display:flex; gap:6px; align-items:center; background:rgba(0,0,0,.55); padding:2px 8px; border:1px solid #555; border-radius:3px; }
   .reel-host .reel-ctl input[type=range] { width:90px; accent-color:#ccc; }
@@ -2082,10 +2082,11 @@
   :is(#netscape .ns-page, #reel-overlay) .stills-reel .slide { opacity:0; transition:opacity 2.2s ease-in-out; }
   :is(#netscape .ns-page, #reel-overlay) .stills-reel .slide.on { opacity:1; }
   :is(#netscape .ns-page, #reel-overlay) .stills-reel .slide.still-black { transition:opacity 3.5s ease-in; }
-  :is(#netscape .ns-page, #reel-overlay) .stills-reel figure.on > img, :is(#netscape .ns-page, #reel-overlay) .stills-reel figure.on > .still-live { animation:still-drift-a 16s ease-out forwards; }
-  :is(#netscape .ns-page, #reel-overlay) .stills-reel figure.on:nth-child(even) > img { animation-name:still-drift-b; }
+  :is(#netscape .ns-page, #reel-overlay) .stills-reel figure.drift > img, :is(#netscape .ns-page, #reel-overlay) .stills-reel figure.drift > .still-live { animation:still-drift-a 16s ease-out forwards; }
+  :is(#netscape .ns-page, #reel-overlay) .stills-reel figure.drift:nth-child(even) > img { animation-name:still-drift-b; }
+  :is(#netscape .ns-page, #reel-overlay) .stills-reel.paused figure > img, :is(#netscape .ns-page, #reel-overlay) .stills-reel.paused .still-live, :is(#netscape .ns-page, #reel-overlay) .stills-reel.paused .still-live img, :is(#netscape .ns-page, #reel-overlay) .stills-reel.paused .still-endcredit, :is(#netscape .ns-page, #reel-overlay) .stills-reel.paused figcaption { animation-play-state:paused !important; }
   @keyframes still-drift-a { from { transform:scale(1.005) translate(0, 0); } to { transform:scale(1.045) translate(-0.9%, -0.5%); } }
-  @keyframes still-drift-b { from { transform:scale(1.04) translate(0.8%, 0.4%); } to { transform:scale(1.008) translate(0, 0); } }
+  @keyframes still-drift-b { from { transform:scale(1.005) translate(0, 0); } to { transform:scale(1.045) translate(0.9%, 0.4%); } }
   :is(#netscape .ns-page, #reel-overlay) .stills-reel .still-live img:nth-child(2) { animation:still-fade 7s ease-in-out infinite; }
   :is(#netscape .ns-page, #reel-overlay) .stills-reel .still-live img:nth-child(3) { animation:still-fade 7s ease-in-out 3.5s infinite; }
   :is(#netscape .ns-page, #reel-overlay) .stills-reel .still-title { display:flex; align-items:center; justify-content:center; }
