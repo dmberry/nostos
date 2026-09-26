@@ -5754,6 +5754,24 @@ export class Renderer {
     // The Codescope: a dark base and arm, a brass tube angled over the stage,
     // and one green point on the stage where the sample sits. Drawn, like the
     // rest of this HUD; at 26px the silhouette is what reads.
+    // A hex nut with a pale strip of cloth tied through it, trailing.
+    if (key === 'nut') {
+      ctx.strokeStyle = '#e8e2d2';                     // the strip
+      ctx.lineWidth = 2.2;
+      ctx.beginPath(); ctx.moveTo(1, 1); ctx.quadraticCurveTo(6, 5, 4, 10); ctx.quadraticCurveTo(3, 12, 8, 12); ctx.stroke();
+      ctx.fillStyle = '#8d8a82';                       // the nut
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = Math.PI / 6 + (i * Math.PI) / 3;
+        const px = -2 + Math.cos(a) * 6.5, py = -2 + Math.sin(a) * 6.5;
+        if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py);
+      }
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#1e1e1c';                       // the hole
+      ctx.beginPath(); ctx.arc(-2, -2, 2.4, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      return;
+    }
     if (key === 'codescope') {
       ctx.fillStyle = '#2b2f33';                       // base
       ctx.fillRect(-9, 8, 16, 3);

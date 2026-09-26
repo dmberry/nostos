@@ -253,6 +253,7 @@ import { HOME_G } from './archive-home-g.js';   // the home-computer culture
 import { HOME_H } from './archive-home-h.js';   // the survey & the wars
 import { HOME_I } from './archive-home-i.js';   // BASIC, the star commands, the drives
 import { ESCORT } from './archive-escort.js';   // hack_nostos: brain code that runs
+import { ELIT_SITES } from './archive-elit.js'; // the hypertext ring
 import { HOME_RINGS } from './archive-home-hubs.js'; // the home-computer webrings
 import { PHIL_A } from './archive-phil-a.js';   // the Greeks
 import { PHIL_B } from './archive-phil-b.js';   // Hellenistic & the medieval opening
@@ -482,6 +483,7 @@ export const ARCHIVED_SITES = [
   ...HOME_A, ...HOME_B, ...HOME_C, ...HOME_D,
   ...HOME_E, ...HOME_F, ...HOME_G, ...HOME_H, ...HOME_I,
   ...ESCORT,
+  ...ELIT_SITES,
   ...HOME_RINGS,
   ...PHIL_A, ...PHIL_B, ...PHIL_C, ...PHIL_D,
   ...PHIL_E, ...PHIL_F, ...PHIL_G, ...PHIL_H,

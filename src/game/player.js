@@ -184,7 +184,7 @@ const SWIM_HEALTH_DRAIN = 1.2; // health/sec: swimming a river is exhausting
 
 
 // Item kinds that can occupy the hands slot.
-const HOLDABLE = new Set(['tool', 'gun', 'gadget', 'bomb', 'map', 'spray', 'seed', 'scope']);
+const HOLDABLE = new Set(['tool', 'gun', 'gadget', 'bomb', 'map', 'spray', 'seed', 'scope', 'nut']);
 // …and the per-item way out of it. HOLDABLE is a set of KINDS, so an item that
 // should not be held can only be excused one of two ways: change what it is,
 // which drags WEAPON_ORDER, item-classes and the combat rules along with it, or
@@ -2282,6 +2282,11 @@ export class Player {
       else if (this.onScope) this.onScope();
       return;
     }
+    if (tool.kind === 'nut') {
+      if (facingBox) this.openBox(obj, map);
+      else this.throwNut(tool, map);
+      return;
+    }
 
     if (tool.kind === 'gun' || tool.kind === 'gadget' || tool.kind === 'bomb' || tool.kind === 'spray') {
       if (facingBox) { this.openBox(obj, map); return; }
@@ -2543,6 +2548,44 @@ export class Player {
     this.autoEquipBestWeapon();
     sfx.play('pickup');
     this.say(`You lob the ${tool.name.toLowerCase()} out, ticking. Get clear.`);
+  }
+
+  // Throw a nut ahead, on the same aim as a bomb. It lies where it lands as a
+  // pickup, so a line of them is a path you have tested and can walk back.
+  throwNut(tool, map) {
+    this.swingTimer = 0.3;
+    const RANGE = 6;
+    let dist = RANGE;
+    if (this.aimWorld) dist = Math.max(0.8, Math.min(Math.hypot(this.aimWorld.x - this.x, this.aimWorld.y - this.y), RANGE));
+    let nx = this.x + this.facing.x * dist, ny = this.y + this.facing.y * dist;
+    if (map.isSolid(Math.floor(nx), Math.floor(ny))) {
+      for (let d = dist - 0.5; d > 0.5; d -= 0.5) {
+        const tx = this.x + this.facing.x * d, ty = this.y + this.facing.y * d;
+        if (!map.isSolid(Math.floor(tx), Math.floor(ty))) { nx = tx; ny = ty; break; }
+      }
+    }
+    map.groundItems = map.groundItems || [];
+    map.groundItems.push({ item: 'nut', qty: 1, x: nx, y: ny });
+    // The thrown one leaves the hand; the next one, if any, comes up into it.
+    if (this.hands === 'nut') {
+      this.hands = null;
+      if (this.countItem('nut') > 0 && this.removeItem('nut')) this.hands = 'nut';
+    } else this.removeItem('nut');
+    sfx.play('clang', { pitch: 2.2 });
+    if (this.onNutLand) this.onNutLand(nx, ny);
+  }
+
+  canCraftNuts() {
+    return this.countItem('nut') === 0 && this.hands !== 'nut' && this.countItem('scrap') >= 1;
+  }
+
+  craftNuts() {
+    if (!this.canCraftNuts()) { this.say('Nuts on strips need one piece of scrap.'); return false; }
+    this.removeItem('scrap');
+    if (!this.stow('nut', 6)) { this.say('No room for them.'); return false; }
+    sfx.play('pickup');
+    this.say('You knock six nuts off the scrap and tie a strip of cloth through each.');
+    return true;
   }
 
   // Bring the highest-power weapon you're carrying (pockets, then backpack)

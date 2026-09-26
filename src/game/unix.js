@@ -29,6 +29,9 @@ import { ELIZA_README, DOCTOR_SCRIPT, DOCTOR_TABLES, ELIZA_PROGRAM, ELIZA_LOOP_L
 import { BOOKS, bookFileName, bookStub } from './books.js';
 import { LETTER_FILE, LETTER_OPENER, CATALOGUE_NOTE, WARNING_FILE, FOURTH_SEALED } from './seals.js';
 import { openSigned, fromBase64 } from './digest.js';
+import { S_PURSUIT, WITNESS_A, WITNESS_B, WITNESS_C, WITNESS_README, AGRIPPA_IMG,
+  SLP_C, SYS_README, CENT_SOURCES, parseSfile, sccsPrs, travesty, gorge, cent, centDigits,
+  NIM_START, nimReply, nimBoard, tttGame } from './intertext.js';
 import { SPOOL, MAILBOX, NODENAME, KNOWN_NODES, OWNER_MAIL, jobText, parseJob,
   routeOf, statusReport, deliver, formatMailbox, formatMessage } from './uucp.js';
 
@@ -478,6 +481,83 @@ const MAN = {
   ].join('\n'),
   netscape: 'netscape [host]\n  Browse the web. Opens a window; with no argument it opens the\n  bookmarks whoever owned this machine left behind.\n\n  Click a link, or type an address in the Location bar. Typing\n  "search <words>" there queries AltaVista, which is how you find\n  anything on a network nobody has indexed since. Esc closes it.\n\n  You are READING. An httpd is not a login: nothing you do in here\n  touches the machine behind the page.',
   help: 'help\n  List the commands on this machine.',
+  sccs: [
+    'sccs prs <s.file>',
+    'sccs get [-r<sid>] <s.file>',
+    '  The source code control system. An s-file holds every version of one',
+    '  file, with who changed it and the reason they gave.',
+    '',
+    '  prs prints the deltas, newest first. get prints one version: the',
+    '  newest, or the one -r names.',
+    '',
+    '    sccs prs /usr/src/robots/s.pursuit.ml',
+    '    sccs get -r1.3 /usr/src/robots/s.pursuit.ml > old.ml',
+  ].join('\n'),
+  tr: [
+    'tr <from> <to> | tr -d <chars>',
+    '  Translate characters on a pipe. Each character in <from> becomes the',
+    '  one at the same place in <to>. a-z is a range. -d deletes instead.',
+    '',
+    '    cat notes | tr a-z A-Z',
+    '    cat notes | tr -d aeiou',
+  ].join('\n'),
+  sed: [
+    'sed <script> [file]',
+    '  The stream editor. One command per run:',
+    '',
+    '    s/old/new/     replace the first match on each line (g: every match)',
+    '    /pat/d         drop the lines that match',
+    '    -n /pat/p      print only the lines that match',
+    '',
+    '  Quote a script with spaces in it: sed "s/the machine/it/g" notes',
+  ].join('\n'),
+  rev: 'rev [file]\n  Reverse each line, character by character.',
+  travesty: [
+    'travesty [-n] [file]',
+    '  Write text that follows the source letter by letter. It looks at the',
+    '  last n - 1 characters it wrote, finds every place they occur in the',
+    '  source, and copies the letter that follows one of them. -2 to -9;',
+    '  -4 is the default.',
+    '',
+    '    travesty -5 /home/readme',
+    '',
+    '  After Hugh Kenner and Joseph O\'Rourke, whose program of the same',
+    '  name ran on a Pascal compiler in 1984.',
+  ].join('\n'),
+  nim: [
+    'nim | nim <row> <count> | nim new',
+    '  Four rows of matches: one, three, five, seven. Take any number from',
+    '  one row. Whoever takes the last match loses. You go first.',
+    '',
+    '    nim        show the table, or lay it out',
+    '    nim 4 2    take two from row four',
+    '',
+    'HISTORY',
+    '  Ferranti built a machine that played this game, Nimrod, and showed it',
+    '  at the Festival of Britain in 1951.',
+  ].join('\n'),
+  gorge: 'gorge [n]\n  An island in n stanzas (default four). Different every time.',
+  cent: [
+    'cent [digits]',
+    '  Ten programs of fourteen lines each, cut into strips. Fourteen digits',
+    '  choose which program each line is taken from; with none, cent chooses.',
+    '  Every choice parses.',
+    '',
+    '    cent 03141592653589 > strip.ml',
+    '    post strip.ml t1_02',
+    '',
+    '  The sources are in /usr/games/lib/cent.',
+  ].join('\n'),
+  ttt: 'ttt [n]\n  Noughts and crosses, played against itself, n games (default 24).',
+  gtw: 'gtw\n  Runs ttt first.',
+  adventure: 'adventure\n  The binary is for a PDP-10.',
+  stills: [
+    'stills',
+    '  Show the photographs on this machine, one at a time, in the browser.',
+    '  There are eight, after two title cards. They are always in the same\n  order.',
+    '',
+    '  Inspired by Chris Marker, La Jetee (1962).',
+  ].join('\n'),
 };
 
 const HELLO_ML = [
@@ -1409,7 +1489,19 @@ export function makeDisk() {
             `From ${m.from}\nTo ${m.to}\nSubject ${m.subject}\nDate ${m.date}\n\n${m.body}`).join('\n.\n')),
         }),
       }),
-      games: dir({}),                 // L7: ADVENTURE, Spacewar!
+      // The games shelf. The names are what ls shows; the programs are
+      // built into the shell like every other command here.
+      games: dir({
+        adventure: file('[ binary, PDP-10 ]'),
+        cent: file('[ binary ]'),
+        gorge: file('[ binary ]'),
+        gtw: file('[ binary ]'),
+        nim: file('[ binary ]'),
+        ttt: file('[ binary ]'),
+        lib: dir({
+          cent: dir(Object.fromEntries(CENT_SOURCES.map((lines, i) => [`${i}.ml`, file(lines.join('\n'))]))),
+        }),
+      }),
       lib: dir({}),
       // The source the machine was built from. RON left it on the disk on
       // purpose, which is the whole Torite argument about mendable tools made
@@ -1417,6 +1509,8 @@ export function makeDisk() {
       src: dir({
         'main.c': file(KERNEL_C),
         'README': file('sys source, RON field build.\nIf you can read this you can change it.\nThat was always the difference.'),
+        sys: dir({ 'README': file(SYS_README), 'slp.c': file(SLP_C) }),
+        robots: dir({ 's.pursuit.ml': file(S_PURSUIT) }),
       }),
       ron: dir({ notes: file('field build. do not ship. — shipped anyway') }),
     }),
@@ -1485,6 +1579,18 @@ export function makeDisk() {
           // note above and consistent with everything they thought about it.
           'warning.asc': file(WARNING_FILE),
         }),
+        '1992': dir({ 'disk.img': file(AGRIPPA_IMG) }),
+        witnesses: dir({
+          'readme': file(WITNESS_README),
+          'a.ml': file(WITNESS_A),
+          'b.ml': file(WITNESS_B),
+          'c.ml': file(WITNESS_C),
+        }),
+      }),
+      // Photographs, as files: ls shows them and the readme names the viewer.
+      stills: dir({
+        'readme': file('Eight photographs and two title cards.\nThey play in order: stills'),
+        ...Object.fromEntries(['01', '02', '03', '04', '05', '06', '07', '08'].map((n) => [`${n}.jpg`, file('[ image, JPEG, 1024x576, greyscale ]\nnot a text file. try: stills')])),
       }),
       demos: dir({
         'life.ml': file(LIFE_ML),
@@ -1543,6 +1649,14 @@ export function graftSystemDirs(root) {
     if (name === 'home') continue;               // never touch their files
     if (!root.d[name]) { root.d[name] = node; added.push(name); }
   }
+  // /usr is the system's, so what this build ships under it reaches an old disk
+  // at any depth. Only missing names are added; nothing there is replaced.
+  const addMissing = (mine, theirs, at) => {
+    for (const [k, node] of Object.entries(theirs.d)) {
+      if (!mine.d[k]) { mine.d[k] = node; added.push(`${at}/${k}`); } else if (isDir(mine.d[k]) && isDir(node)) addMissing(mine.d[k], node, `${at}/${k}`);
+    }
+  };
+  if (isDir(root.d.usr) && !added.includes('usr')) addMissing(root.d.usr, fresh.d.usr, 'usr');
   const home = root.d.home;
   if (home && home.d) {
     // Removals FIRST, so the add pass can land a replacement in the same
@@ -2589,11 +2703,138 @@ const COMMANDS = {
       '2 packets transmitted, 2 packets received, 0% packet loss'].join('\n');
   },
 
+  sccs: (args, _in, env) => {
+    const sub = String(args[0] || '');
+    if (sub !== 'prs' && sub !== 'get') throw new UnixError('usage: sccs prs <s.file> | sccs get [-r<sid>] <s.file>');
+    const rest = args.slice(1);
+    const rOpt = rest.find((a) => /^-r/.test(a));
+    const path = rest.find((a) => !/^-r/.test(a));
+    if (!path) throw new UnixError(`sccs ${sub}: name an s-file`);
+    const name = String(path).split('/').pop();
+    if (!/^s\./.test(name)) throw new UnixError(`sccs ${sub}: ${name}: not an SCCS file (the name starts s.)`);
+    const parsed = parseSfile(readFileAt(env, path));
+    if (!parsed || !parsed.deltas.length) throw new UnixError(`sccs ${sub}: ${name}: bad format`);
+    if (sub === 'prs') return sccsPrs(name, parsed);
+    const want = rOpt ? rOpt.slice(2) : parsed.deltas[parsed.deltas.length - 1].sid;
+    const d = parsed.deltas.find((x) => x.sid === want);
+    if (!d) throw new UnixError(`sccs get: ${name}: no delta ${want}`);
+    return d.text.join('\n');
+  },
+
+  tr: (args, stdin, env) => {
+    const expand = (set) => String(set || '').replace(/(.)-(.)/g, (_, a, b) => {
+      let o = '';
+      for (let c = a.charCodeAt(0); c <= b.charCodeAt(0); c++) o += String.fromCharCode(c);
+      return o;
+    });
+    if (args[0] === '-d') {
+      const del = new Set(expand(args[1]));
+      return [...inputOf(args.slice(2), stdin, env)].filter((c) => !del.has(c)).join('');
+    }
+    if (args.length < 2) throw new UnixError('usage: tr <from> <to>, or tr -d <chars>');
+    const from = expand(args[0]), to = expand(args[1]);
+    const map = new Map();
+    for (let i = 0; i < from.length; i++) map.set(from[i], to[Math.min(i, to.length - 1)] ?? '');
+    return [...inputOf(args.slice(2), stdin, env)].map((c) => (map.has(c) ? map.get(c) : c)).join('');
+  },
+
+  sed: (args, stdin, env) => {
+    let quiet = false;
+    const a = args.slice();
+    if (a[0] === '-n') { quiet = true; a.shift(); }
+    const script = String(a.shift() || '');
+    const text = inputOf(a, stdin, env);
+    const lines = text.split('\n');
+    const sub = /^s(.)(.*?)\1(.*?)\1(g?)$/.exec(script);
+    if (sub) {
+      let re;
+      try { re = new RegExp(sub[2], sub[4] ? 'g' : ''); } catch (e) { throw new UnixError(`sed: bad pattern ${sub[2]}`); }
+      return lines.map((l) => l.replace(re, sub[3])).join('\n');
+    }
+    const addr = /^\/(.*)\/([dp])$/.exec(script);
+    if (addr) {
+      let re;
+      try { re = new RegExp(addr[1]); } catch (e) { throw new UnixError(`sed: bad pattern ${addr[1]}`); }
+      if (addr[2] === 'd') return lines.filter((l) => !re.test(l)).join('\n');
+      const hits = lines.filter((l) => re.test(l));
+      return quiet ? hits.join('\n') : lines.flatMap((l) => (re.test(l) ? [l, l] : [l])).join('\n');
+    }
+    throw new UnixError('sed: this sed knows s/a/b/, /pat/d and -n /pat/p');
+  },
+
+  rev: (args, stdin, env) => inputOf(args, stdin, env).split('\n').map((l) => [...l].reverse().join('')).join('\n'),
+
+  travesty: (args, stdin, env) => {
+    const o = args.find((x) => /^-\d$/.test(x));
+    const order = o ? Number(o.slice(1)) : 4;
+    if (order < 2 || order > 9) throw new UnixError('travesty: order is -2 to -9');
+    return travesty(inputOf(args.filter((x) => x !== o), stdin, env), { order });
+  },
+
+  gorge: (args) => gorge(Math.random, Math.max(1, Math.min(12, parseInt(args[0], 10) || 4))),
+
+  cent: (args) => {
+    const d = args[0] ? String(args[0]) : centDigits();
+    const p = cent(d);
+    if (!p) throw new UnixError('cent: fourteen digits, one for each line');
+    return p;
+  },
+
+  // The table lives in /tmp/nim between moves, which is where a V7 game would
+  // have kept it and why a reboot of this machine loses the game in progress.
+  nim: (args, _in, env) => {
+    const at = ['tmp', 'nim'];
+    const read = () => {
+      const n = lookup(env.root, at);
+      if (!n || !isFile(n)) return null;
+      const r = n.f.split(' ').map(Number);
+      return r.length === 4 && r.every((x) => Number.isInteger(x) && x >= 0) ? r : null;
+    };
+    const save = (rows) => writeFile(env, '/tmp/nim', rows.join(' '));
+    const clear = () => { const t = lookup(env.root, ['tmp']); if (isDir(t)) delete t.d.nim; };
+    let rows = read();
+    if (!args.length || args[0] === 'new') {
+      if (!rows || args[0] === 'new') { rows = NIM_START.slice(); save(rows); }
+      return `${nimBoard(rows)}\n\nyour move: nim <row> <count>`;
+    }
+    if (!rows) { rows = NIM_START.slice(); save(rows); }
+    const r = parseInt(args[0], 10) - 1, n = parseInt(args[1], 10);
+    if (!(r >= 0 && r < 4) || !(n >= 1)) throw new UnixError('nim: nim <row> <count>, rows 1 to 4');
+    if (rows[r] < n) throw new UnixError(`nim: row ${r + 1} has ${rows[r]}`);
+    rows[r] -= n;
+    if (rows.every((x) => x === 0)) { clear(); return 'You took the last one.'; }
+    const [mr, mn] = nimReply(rows);
+    rows[mr] -= mn;
+    const said = `nim takes ${mn} from row ${mr + 1}.`;
+    if (rows.every((x) => x === 0)) { clear(); return `${said}\nnim took the last one.`; }
+    save(rows);
+    return `${said}\n\n${nimBoard(rows)}`;
+  },
+
+  ttt: (args) => {
+    const n = Math.max(1, Math.min(200, parseInt(args[0], 10) || 24));
+    const out = [];
+    const tally = { X: 0, O: 0, draw: 0 };
+    for (let i = 0; i < n; i++) {
+      const g = tttGame();
+      tally[g.result]++;
+      out.push(`${String(i + 1).padStart(3)}  ${g.board.slice(0, 3)} ${g.board.slice(3, 6)} ${g.board.slice(6)}  ${g.result === 'draw' ? 'draw' : `${g.result} wins`}`);
+    }
+    out.push('', `${n} played. X ${tally.X}. O ${tally.O}. drawn ${tally.draw}.`);
+    return out.join('\n');
+  },
+
+  gtw: () => ['gtw: running ttt', '', COMMANDS.ttt(['24']), '', 'gtw: exit 0'].join('\n'),
+
+  adventure: () => 'adventure: the binary is for a PDP-10',
+
   help: (_a, _in, env) => [
     'commands on this machine:',
     '  ls  cd  pwd  cat  echo  man  mkdir  rm  cp  mv',
     '  grep  wc  head  tail  sort  uniq  more  sh  uname  who  ps  df  uptime',
     '  strings  crypt  almanac  mail  uucp  uustat  uucico',
+    '  tr  sed  rev  diff  od  sccs  travesty  stills',
+    '  games: nim  gorge  cent  ttt   (ls /usr/games)',
     '  ml  pico  ed  pdf-viewer  book  transcribe  help',
     '  ifconfig  iwlist  iwconfig  wifi  arp  scan  ping  netscape  telnet  post  charge',
     '  watermark  mount  eject',
@@ -2625,7 +2866,7 @@ export const HOOK_COMMANDS = [
   'ml', 'pico', 'ed', 'netscape', 'www', 'pdf-viewer', 'pdf', 'book',
   'transcribe', 'telnet', 'post', 'charge', 'vi', 'vim', 'emacs', 'nano',
   'sleep', 'reboot', 'halt', 'suspend', 'save', 'wifi', 'sniffer', 'more', 'get',
-  'bluebox',
+  'bluebox', 'stills',
 ];
 
 // A selector for any command that acts on a numbered list: `3`, `2-5`, `1,3,7`,
@@ -2731,6 +2972,11 @@ export function runUnix(line, env, hooks = {}) {
       }
       // A book opens in the browser, which is the reader this machine already
       // has for a page. No card needed: the files are on the disk.
+      // stills opens the browser on frames only the hub has kept.
+      if (name === 'stills') {
+        if (!hooks.stills) throw new UnixError('stills: nothing kept');
+        return hooks.stills(args, env);
+      }
       if (name === 'book') {
         if (!hooks.book) throw new UnixError('no browser on this machine');
         return hooks.book(args, env);

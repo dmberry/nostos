@@ -152,7 +152,7 @@ export function createHelios(seed) {
     }
   }
 
-  const robots = spawnRobots(map, IS, obelisks, { x: spawn.x, y: spawn.y, r: 14 });
+  const robots = spawnRobots(map, IS, obelisks, { x: spawn.x, y: spawn.y, r: 14 }, { godot: true });
   // Two tending drones, each garrisoned to a tower — deterministic, so they come
   // back the same on reload and carry a tag/program across a save like the roster.
   robots.push(...spawnGardeners(map, IS, obelisks, 2));

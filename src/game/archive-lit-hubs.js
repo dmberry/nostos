@@ -76,7 +76,8 @@ export const LIT_RINGS = [
       + 'of society down, the Russians, the modernists who broke the sentence, the '
       + 'fantasists, the Americans, and the gothic and romantic wide world.</p>'],
     [...A, ...B, ...C, ...D, ...E, ...F],
-    [R.realism, R.russia, R.modernism, R.fantastic, R.american, R.gothic, R.poetry]),
+    [R.realism, R.russia, R.modernism, R.fantastic, R.american, R.gothic, R.poetry,
+      ['hypertext-ring.geocities.ws', 'The Hypertext Ring']]),
 
   ring(R.realism[0], 'THE REALIST NOVEL RING', 'The Realist Novel Ring', 'lit-realism',
     ['<p>The novel as a mirror carried along a road: the human comedy, the mot juste, the '

@@ -453,11 +453,43 @@ function updateDeer(a, dt, player, map) {
   }
 }
 
+// ARGOS. The island is his: alone, he runs between far points of it and lies
+// down now and then; with the player in sight he comes at a run, then keeps
+// close, looping round at a trot, and lies down at their feet sometimes.
+const ARGOS_RUN = 3.4;
+const ARGOS_TROT = 1.8;
+const ARGOS_ROAM_R = 16;    // tiles from where he waited
+const ARGOS_NOTICE = 12;    // tiles: inside this he comes over
+function updateArgos(a, dt, player, map) {
+  a.argosT = (a.argosT || 0) - dt;
+  const d = distTo(a, player);
+  if (a.argosMode === 'rest') {
+    if (a.argosT > 0 && !(d > 4 && d < ARGOS_NOTICE)) return;
+    a.argosMode = null;
+  }
+  if (d < ARGOS_NOTICE) {
+    if (d > 2.2) { moveToward(a, player.x, player.y, d > 5 ? ARGOS_RUN : ARGOS_TROT, dt, map); return; }
+    if (a.rng() < dt * 0.08) { a.argosMode = 'rest'; a.argosT = 3 + a.rng() * 5; return; }
+    a.argosAng = (a.argosAng || a.rng() * Math.PI * 2) + dt * 1.1;
+    moveToward(a, player.x + Math.cos(a.argosAng) * 1.7, player.y + Math.sin(a.argosAng) * 1.7, ARGOS_TROT, dt, map);
+    return;
+  }
+  const there = a.argosTarget && Math.hypot(a.argosTarget.x - a.x, a.argosTarget.y - a.y) < 0.4;
+  if (!a.argosTarget || a.argosT <= 0 || there) {
+    if (there && a.rng() < 0.35) { a.argosMode = 'rest'; a.argosT = 2 + a.rng() * 6; a.argosTarget = null; return; }
+    const ang = a.rng() * Math.PI * 2, r = 4 + a.rng() * ARGOS_ROAM_R;
+    a.argosTarget = { x: a.homeX + Math.cos(ang) * r, y: a.homeY + Math.sin(ang) * r };
+    a.argosT = 4 + a.rng() * 5;
+  }
+  moveToward(a, a.argosTarget.x, a.argosTarget.y, ARGOS_RUN, dt, map);
+}
+
 function updateDog(a, dt, player, map, hurtPacks, aggroPacks) {
   a.biteTimer = Math.max(0, a.biteTimer - dt);
 
   // A tame dog (Argos) is loyal: it never routs, aggros, or bites — it only
   // mills about near where it waits for you to come home.
+  if (a.argos) { updateArgos(a, dt, player, map); return; }
   if (a.tame) { wander(a, DOG_WANDER_SPEED, dt, map); return; }
 
   // Signature weakness: hurt one dog and the whole pack routs for a while.
@@ -704,17 +736,29 @@ function drawDogSprite(ctx, a, c) {
   const off = animalTintScratch(sprite.naturalWidth, sprite.naturalHeight);
   off.ctx.clearRect(0, 0, off.canvas.width, off.canvas.height);
   off.ctx.drawImage(sprite, 0, 0);
+  // Argos keeps the model's own warm brown, a little faded with age; the
+  // feral packs wear the grey.
   off.ctx.globalCompositeOperation = 'color';
-  off.ctx.fillStyle = 'rgba(150,155,160,0.75)';
+  off.ctx.fillStyle = a.argos ? 'rgba(168,128,84,0.35)' : 'rgba(150,155,160,0.75)';
   off.ctx.fillRect(0, 0, off.canvas.width, off.canvas.height);
   off.ctx.globalCompositeOperation = 'screen';
-  off.ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  off.ctx.fillStyle = a.argos ? 'rgba(255,245,230,0.10)' : 'rgba(255,255,255,0.15)';
   off.ctx.fillRect(0, 0, off.canvas.width, off.canvas.height);
   off.ctx.globalCompositeOperation = 'destination-in';
   off.ctx.drawImage(sprite, 0, 0);
   off.ctx.globalCompositeOperation = 'source-over';
   ctx.drawImage(off.canvas, c.x - dw / 2, c.y - dh + dh * 0.16, dw, dh);
 
+  // His name over him, in the small hand the machines' tags use.
+  if (a.argos) {
+    ctx.font = "9px ui-monospace, 'Courier New', monospace";
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillText('ARGOS', c.x + 1, c.y - dh + dh * 0.16 - 2);
+    ctx.fillStyle = '#f1e6cf';
+    ctx.fillText('ARGOS', c.x, c.y - dh + dh * 0.16 - 3);
+    ctx.textAlign = 'left';
+  }
   if (a.aggro) {
     // Tell: barking, white "!" above the head.
     ctx.font = 'bold 14px system-ui, sans-serif';

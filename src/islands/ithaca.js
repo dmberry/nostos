@@ -54,7 +54,9 @@ function placeArgos(map, ax, ay, seed) {
         const x = ax + dx, y = ay + dy;
         const f = map.floorAt(x, y);
         if ((f === 'grass' || f === 'tallgrass' || f === 'sand') && !map.isSolid(x, y) && !map.objectAt(x, y)) {
-          return spawnTameDog(map, x, y, (seed ^ 0xa2905) >>> 0);
+          const dog = spawnTameDog(map, x, y, (seed ^ 0xa2905) >>> 0);
+          dog.argos = true;
+          return dog;
         }
       }
     }

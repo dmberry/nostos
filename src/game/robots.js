@@ -18,6 +18,7 @@ import { register } from '../engine/systems.js';
 // #149: a T-8 reads the floor it is dancing on. Named on import because
 // `fieldAt` on its own says nothing about which field, in a file this size.
 import { fieldAt as spiralFieldAt } from './spiralism.js';
+import { PATCH_PROGRAM, GODOT_PROGRAM, GODOT_TAGS } from './intertext.js';
 
 // Hunter robots: the machines the towers send after the last humans. Two
 // classes, each with a signature limitation the player can learn. T1s are
@@ -331,6 +332,7 @@ export const W3_PROGRAM = [
 export const W1_PROGRAM = [
   '(* W-1 response. TIRESIAS-vengeance 3.0.            *)',
   '(* The waves are the chassis. This only chooses.    *)',
+  '(* If found, please return this unit to the works.  *)',
   'if charge < 12 then home',
   'else if threat then hunt',
   'else patrol',
@@ -1443,7 +1445,8 @@ function nearestTreeNest(map, ox, oy, maxR, used) {
 }
 
 // One T1 sentry per tower; every second tower also fields a T2 stalker.
-export function spawnRobots(map, seed, obelisks, avoid) {
+// opts.godot seats two T-1s by one tree, running GODOT_PROGRAM.
+export function spawnRobots(map, seed, obelisks, avoid, opts = {}) {
   const rng = makeRng(seed);
   const robots = [];
   const used = new Set();
@@ -1467,8 +1470,38 @@ export function spawnRobots(map, seed, obelisks, avoid) {
         type === 't1' ? T1_HP : type === 't3' ? T3_HP : T2_HP, rng));
     }
   });
-
+  markRoster(map, robots, seed, used, opts);
   return robots;
+}
+
+// The few seeded units that are not like the rest, chosen from the roster
+// after it is built so no other unit's seat or number moves. A separate rng,
+// so adding these did not reshuffle any island.
+function markRoster(map, robots, seed, used, opts) {
+  const rng = makeRng(((seed ^ 0x7e57) >>> 0) || 1);
+  const t1s = robots.filter((r) => r.type === 't1');
+  const t2s = robots.filter((r) => r.type === 't2');
+  const taken = new Set();
+  if (opts.godot && t1s.length >= 3) {
+    // Two T-1s from neighbouring towers, walked out to one tree between them.
+    const a = t1s[1], b = t1s[2];
+    const nest = nearestTreeNest(map, (a.x + b.x) / 2, (a.y + b.y) / 2, 14, used);
+    if (nest) {
+      used.add(`${nest[0]},${nest[1]}`);
+      const other = nearestTreeNest(map, nest[0], nest[1], 3, used) || nest;
+      used.add(`${other[0]},${other[1]}`);
+      [[a, nest], [b, other]].forEach(([r, at], i) => {
+        r.x = at[0] + 0.5; r.y = at[1] + 0.5;
+        r.program = GODOT_PROGRAM;
+        r._netTag = GODOT_TAGS[i];
+        r._special = 'godot';
+        taken.add(r);
+      });
+    }
+  }
+  const free = t1s.filter((r) => !taken.has(r));
+  if (free.length) free[Math.floor(rng() * free.length)].trojan = true;
+  if (t2s.length) { const u = t2s[Math.floor(rng() * t2s.length)]; u.program = PATCH_PROGRAM; u._special = 'patch'; }
 }
 
 // A revenge squad released the instant an obelisk falls: two to four W1s
@@ -1544,6 +1577,14 @@ export function reviveUnit(rec, seed = 1) {
     r.program = STOCK_PROGRAM[type] ? STOCK_PROGRAM[type]() : null;
   }
   return r;
+}
+
+/** Is this the program the chassis ships with? A save written before a unit
+ * was given something else records the stock text, and that record should not
+ * overwrite what the unit now carries. */
+export function isStockProgram(type, text) {
+  const f = STOCK_PROGRAM[type];
+  return !!f && f() === text;
 }
 
 /** The program a chassis ships with, for a unit rebuilt from a save. */
@@ -2636,6 +2677,17 @@ export function updateRobots(dt, robots, player, map, dayNight) {
       continue;
     }
 
+    // A thrown nut: it walks to where the nut fell, looks, and goes back to
+    // its program. Seeing you ends it at once.
+    if (r.lureT > 0 && r.lure) {
+      r.lureT = Math.max(0, r.lureT - dt);
+      if (r.aggro || r.friendly) { r.lureT = 0; } else {
+        if (Math.hypot(r.lure.x - r.x, r.lure.y - r.y) > 0.8) moveToward(r, r.lure.x, r.lure.y, 1.6, dt, map);
+        r.animT += dt;
+        continue;
+      }
+    }
+
     // AI-ML `sing`: the Portal easter egg — lines up facing the player and
     // performs its bit, then simply goes back to work (no longer powers down
     // for good; it drops aggro and resumes its normal patrol/hunt).
@@ -3257,6 +3309,21 @@ export function botThink(r, d, dt, map, player) {
     return;
   }
   r.intent = res.intent;
+  // A unit whose loader adds something of its own (spawnRobots marks one per
+  // island). The first program posted to it takes, and a while later the unit
+  // goes loopy: it serves the program it was given and does something else,
+  // picked afresh every few thinks, lamp jumping. Posting a program again
+  // clears it (postProgram in main.js).
+  if (r.loopy) {
+    if (r.loopyIn > 0) r.loopyIn -= ML_TICK;
+    else {
+      const pool = chassis.can.filter((k) => k !== 'hunt' && k !== 'route' && k !== 'defend' && k !== 'usher'
+        && !(r.constitution && r.constitution[k]));
+      if (pool.length && (!r._loopyPick || (r._thinks % 6) === 0)) r._loopyPick = pool[Math.floor(r.rng() * pool.length)];
+      if (r._loopyPick) { r.intent = r._loopyPick; r.lastDecision.intent = r._loopyPick; }
+      if (!r.eyeFix) { r.lamp = LAMP_COLOURS[Math.floor(r.rng() * LAMP_COLOURS.length)]; r.lampFlash = 3; }
+    }
+  }
   // What the weapon should do this tick, for the update function to read: null
   // means "no opinion, use the reflex". Only a fire-capable chassis ever sees
   // a non-null value here, because the branch above faulted otherwise.

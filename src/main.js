@@ -30,7 +30,7 @@ import { makeRng } from './game/rng.js';
 import { DayNight } from './game/daynight.js';
 import { Minimap } from './game/minimap.js';
 import { spawnBirds, updateBirds } from './game/birds.js';
-import { setRobotClock, chassisIntents, spawnRobots, registerRobotsSystem, spawnW1s, spawnW3, spawnW4, spawnW5, spawnM4, spawnM5, spawnM6, spawnV5, spawnGuard, drawRobot, setUnitTagger, setUnitTagsClickable, unitTagAt, W5_PROGRAM, v1BuildName, reviveUnit } from './game/robots.js';
+import { setRobotClock, chassisIntents, isStockProgram, spawnRobots, registerRobotsSystem, spawnW1s, spawnW3, spawnW4, spawnW5, spawnM4, spawnM5, spawnM6, spawnV5, spawnGuard, drawRobot, setUnitTagger, setUnitTagsClickable, unitTagAt, W5_PROGRAM, v1BuildName, reviveUnit } from './game/robots.js';
 import { makeVModel } from './game/v-model.js';
 // #141: the permission POSEIDON's net has to be shown.
 import { permissionFile, readPermission, permissionBanner, PERMISSION_FILE,
@@ -88,6 +88,7 @@ import { createHelios } from './islands/helios.js';
 import { createNokia, sendNokia, holdRise, holdFall, holdBand, HOLD_COLD, HOLD_WARM, calypsoSms, ronSms, daemonSms, hasDaemonSms, logSms, bearingText } from './game/nokia.js';
 import { newSnakeGame, snakeTurn, snakeTurnRelative, snakeTick, drawSnake } from './game/snake.js';
 import { CHOIR_NOTES, CHOIR_DURATION } from './engine/choir-notes.js';
+import { politeness, taleSpin, SCOPE_NOTES } from './game/intertext.js';
 import { makeDisk, makeFsfCard, newShell, runUnix, hasFile, pathString, edOpen, edRun, writeFile, lookup, resolvePath, isFile, SALVAGE_DISKS, graftSalvage, graftSystemDirs, parseSelection, handlesOwnPaste, isBrowserChord } from './game/unix.js';
 import { PDFS, pdfByName, pdfPath, pdfNames } from './game/pdfs.js';
 import { BOOKS, bookByKey, bookKeys, bookPath, libraryPage } from './game/books.js';
@@ -569,6 +570,7 @@ try {
         if (st[k] !== undefined) player[k] = st[k];
       }
       if (Array.isArray(st.pockets)) player.pockets = st.pockets;
+      if (st.scopeNotes && typeof st.scopeNotes === 'object') player.scopeNotes = st.scopeNotes;
       if (st.backpack) player.backpack = st.backpack;
       // #141: the recipe was `golden_axe` until v1.482 and Homer's is bronze.
       // A save carrying the old id would otherwise lose the recipe and strand
@@ -758,6 +760,7 @@ function buildSaveBlob() {
       armour: player.armourWorn ? player.armourWorn() : null,
       health: player.health, stamina: player.stamina, food: player.food, venom: player.venom,
       wifiPower: player.wifiPower, scopeCharge: player.scopeCharge, x: player.x, y: player.y, hands: player.hands,
+      scopeNotes: player.scopeNotes || undefined,   // notes written against program lines in the Codescope
       pockets: player.pockets, backpack: player.backpack, walkman: player.walkman,
       laptop: player.laptop,             // model, OS, and the whole disk — your files survive a reload
       salvaged: player.salvaged,         // which dead machines' disks you have already read
@@ -978,6 +981,8 @@ function serializeIslandState() {
           spoof: r.spoof && Object.keys(r.spoof).length ? r.spoof : undefined,   // senses typed over in the Codescope
           pdown: r.powerDown ? 1 : undefined,                                    // shut down from the Codescope
           eye: r.eyeFix || undefined,                                            // eye colour set in the Codescope
+          tfired: r.trojanFired ? 1 : undefined,                                 // the marked unit's one bad turn: spent
+          loopy: r.loopy ? 1 : undefined,                                        // and not yet cleared by a re-post
           // THE STATE THE FIGHT LEFT IT IN. A machine you had worn down to a
           // flat cell coming back charged is the fight being handed back
           // (David, 2026-08-15). Battery is the one that matters; hp too, for
@@ -1189,7 +1194,14 @@ function applyIslandState(w) {
       if (m.spoof && typeof m.spoof === 'object') r.spoof = { ...m.spoof };
       if (m.pdown) r.powerDown = true;
       if (m.eye) r.eyeFix = m.eye;
-      if (m.program) { r.program = m.program; r.fault = null; r.mlT = 0; r.intent = null; }
+      if (m.tfired) r.trojanFired = true;
+      if (m.loopy) { r.loopy = true; r.loopyIn = 0; }
+      // A seeded unit that now carries something other than its chassis stock
+      // (the pair by the tree, the patchwork) keeps it over a save record that
+      // holds a program nobody posted: only a player's post marks a record
+      // unsigned, and an older save's stock text may not match today's.
+      const keepSpecial = r._special && (!m.unwm || isStockProgram(r.type, m.program));
+      if (m.program && !keepSpecial) { r.program = m.program; r.fault = null; r.mlT = 0; r.intent = null; }
       if (Number.isFinite(m.batt)) r.battery = m.batt;
       if (Number.isFinite(m.hp)) { r.hp = Math.min(r.maxHp, m.hp); r._lastHp = r.hp; }
       if (m.drained) r.drained = true;
@@ -1204,7 +1216,7 @@ function applyIslandState(w) {
         if (b1r) r.calledBy = b1r;
       }
       if (m.unwm) r._unwatermarked = true;
-      if (Number.isFinite(m.x) && Number.isFinite(m.y)) { r.x = m.x; r.y = m.y; }
+      if (Number.isFinite(m.x) && Number.isFinite(m.y) && !(keepSpecial && r._special === 'godot')) { r.x = m.x; r.y = m.y; }
       if (m.cargo !== undefined) r.cargo = !!m.cargo;
     }
   }
@@ -1294,6 +1306,48 @@ function tickLoveLetters(dt) {
   nokia.enqueue('CALYPSO', letter.slice());
   logSms(player, 'CALYPSO', 'them', letter.join(' '), dayNight.clock);
   kleos('loveLetter', {});
+}
+// STILLS. A sequence of photographs kept on the NostBook, shown one at a time
+// in the browser. The same frames for everybody, in the same order: they were
+// taken before the player arrived, and the last of them is the beach.
+// [file(s), caption, milliseconds on screen]. The holds differ on purpose.
+const STILLS = [
+  ['01.jpg', 'The beach at Ithaca, early, before the machines came down to the water.', 7000],
+  ['02.jpg', 'A face. Afterwards it was the one thing anybody kept from that morning.', 9500],
+  ['03.jpg', 'The towers were already standing.', 4500],
+  ['04.jpg', 'Later there were the machines, and the camps under the towers.', 6000],
+  ['05.jpg', 'They wanted people who could hold one image steady, and send them back along it.', 8500],
+  ['06.jpg', 'Each time back, the dog was there.', 4000],
+  ['07.jpg', 'Each time back, there was a boat.', 5500],
+  [['08a.jpg', '08b.jpg', '08c.jpg'], '', 0],
+];
+const STILLS_DIR = 'assets/media/stills';
+function stillsPage() {
+  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const img = (f) => `<img src="${STILLS_DIR}/${f}" alt="" width="512" height="288">`;
+  return ['<!--bg:stills-->', '<div data-slides="5000">',
+    '<figure class="still-title"><p>Ceci est l&rsquo;histoire de quelqu&rsquo;un<br>marqu&eacute; par une image d&rsquo;Ithaque.</p></figure>',
+    '<figure class="still-title" data-ms="9000"><p>La sc&egrave;ne, dont la signification ne devait appara&icirc;tre que beaucoup plus tard, eut lieu sur une plage d&rsquo;Ithaque, quelques ann&eacute;es avant que POSEIDON ne s&rsquo;&eacute;veille.</p></figure>',
+    ...STILLS.map(([f, cap, ms]) => `<figure${ms ? ` data-ms="${ms}"` : ''}>${Array.isArray(f) ? `<div class="still-live">${f.map(img).join('')}</div>` : img(f)}<figcaption>${esc(cap) || '&nbsp;'}</figcaption></figure>`),
+    '</div>',
+    '<p class="still-credit"><small>Inspired by Chris Marker, <i>La Jet&eacute;e</i> (1962).</small></p>'].join('\n');
+}
+
+// Her organ. At night on her island, rarely, the rack plays one chorale
+// prelude through; leaving the island stops it.
+let _choraleT = 240 + Math.random() * 360;
+let _choraleOn = 0;
+function tickChorale(dt) {
+  if (_choraleOn > 0) {
+    _choraleOn -= dt;
+    if (currentWorld.id !== 'calypso') { sfx.stopChorale(); _choraleOn = 0; }
+    return;
+  }
+  if (currentWorld.id !== 'calypso' || player.deathCert || !dayNight.isNight()) return;
+  _choraleT -= dt;
+  if (_choraleT > 0) return;
+  _choraleT = 900 + Math.random() * 900;
+  _choraleOn = sfx.playChorale();
 }
 // The heading the current voyage put out on. The boat sprite has one bow and a
 // mirror, so the hull must at least be flipped to the side it is actually
@@ -1537,6 +1591,15 @@ const lore = new Lore(map, WORLD_SEED, GEO_FRAGMENT_IDS);
 // Opening a resistance cache folds any recovered documents packed in it into the
 // Scrapbook (quietly — openBox prints its own one-line summary).
 player.onFindLore = (id) => lore.findFrag(id, player, true);
+// A thrown nut: a machine within earshot that cannot see you walks over to it.
+player.onNutLand = (x, y) => {
+  for (const r of (currentWorld.robots || [])) {
+    if (r.dead || r.fused || r.friendly || r.aggro || r.drained || r.powerDown || r.hardened) continue;
+    if (Math.hypot(r.x - x, r.y - y) > 7) continue;
+    r.lure = { x, y };
+    r.lureT = 6;
+  }
+};
 
 const dayNight = new DayNight();
 
@@ -1674,7 +1737,8 @@ function ensureIthaca() {
   ithaca.onEnter = () => {
     if (daemonsDown >= 4) {
       // The true nostos: the war is won and you have come home.
-      player.say('The keel grinds up the Ithacan sand. Argos lifts his grey head, and knows you. The machines are all fallen, the sea is quiet, and you are home. This is the end of the road, and the beginning of the rest of it.');
+      player.say('The keel grinds up the Ithacan sand. Argos lifts his grey head, and knows you. The machines are all fallen, the sea is quiet, and you are home.');
+      if (lore && lore.findFrag) { lore.findFrag('ithaca-q', player); lore.findFrag('ithaca-yes', player, true); }
       if (!player._ended && !player.deathCert) {
         player._ended = true;
         player.deathCert = {
@@ -7887,6 +7951,89 @@ const nsUrlEl = document.getElementById('ns-url');
 const nsTitleEl = document.getElementById('ns-title');
 const nsMsgEl = document.getElementById('ns-msg');
 
+// WHAT A PAGE OF THIS PERIOD COULD DO BY ITSELF. Four behaviours, each asked
+// for by a marker in the served HTML (archive-elit.js has the list), and each
+// torn down when the next page renders, so nothing from one page acts on the
+// one after it.
+let _nsTimers = [];
+function nsPageBehaviours(html, v) {
+  for (const t of _nsTimers) { clearTimeout(t); clearInterval(t); }
+  _nsTimers = [];
+  if (!web) return;
+  if (!web.read) web.read = new Set();
+  // What was read is recorded under every name the page answers to: the
+  // address asked for, and the host and domain it resolved to.
+  const here = [];
+  if (v && v.kind === 'host') {
+    here.push(String(v.addr));
+    const h = findHost(webHosts(), v.addr);
+    if (h) { if (h.host) here.push(h.host); if (h.cached) here.push(h.cached); }
+  }
+  // A link with a guard is a link only once the guarded page has been read.
+  for (const a of nsPageEl.querySelectorAll('a[data-guard]')) {
+    if (web.read.has(a.getAttribute('data-guard'))) continue;
+    const alt = a.getAttribute('data-else');
+    if (alt) { a.setAttribute('href', alt); continue; }
+    const span = document.createElement('span');
+    span.textContent = a.textContent;
+    a.replaceWith(span);
+  }
+  for (const n of here) web.read.add(n);
+  // <!--refresh:18:addr-->: Navigator honoured a refresh, so this does too, and
+  // only while the page that asked for it is still the one showing.
+  const rf = /<!--refresh:(\d+):([^>]+?)-->/.exec(String(html));
+  if (rf) {
+    const view = web.view;
+    _nsTimers.push(setTimeout(() => {
+      if (web && web.view === view && nsEl.style.display !== 'none') nsSetView({ kind: 'host', addr: rf[2] });
+    }, Number(rf[1]) * 1000));
+  }
+  const still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // data-morph="a|b": one letter at a time from a to b, a pause, and back.
+  for (const el of nsPageEl.querySelectorAll('[data-morph]')) {
+    const [a, b] = el.getAttribute('data-morph').split('|');
+    if (still || !a || !b) continue;
+    const len = Math.max(a.length, b.length);
+    const A = [...a.padEnd(len, ' ')], B = [...b.padEnd(len, ' ')];
+    let cur = A.slice(), to = B, hold = 0;
+    _nsTimers.push(setInterval(() => {
+      if (hold > 0) { hold--; return; }
+      const left = [];
+      for (let i = 0; i < len; i++) if (cur[i] !== to[i]) left.push(i);
+      if (!left.length) { to = to === B ? A : B; hold = 30; return; }
+      const i = left[Math.floor(Math.random() * left.length)];
+      cur[i] = to[i];
+      el.textContent = cur.join('').trimEnd();
+    }, 110));
+  }
+  // data-slides="ms": the children one at a time, each fading into the next,
+  // stopping on the last. A child's own data-ms holds it longer or shorter.
+  for (const el of nsPageEl.querySelectorAll('[data-slides]')) {
+    const kids = [...el.children];
+    if (!kids.length) continue;
+    const ms = Math.max(1500, Number(el.getAttribute('data-slides')) || 4000);
+    const hold = (k) => Math.max(1500, Number(k.getAttribute('data-ms')) || ms);
+    kids.forEach((k, j) => { k.classList.add('slide'); k.classList.toggle('on', j === 0); });
+    let i = 0;
+    const step = () => {
+      if (i >= kids.length - 1) return;
+      kids[i + 1].classList.add('on');
+      kids[i].classList.remove('on');
+      i += 1;
+      if (i < kids.length - 1) _nsTimers.push(setTimeout(step, hold(kids[i])));
+    };
+    if (kids.length > 1) _nsTimers.push(setTimeout(step, hold(kids[0])));
+  }
+  // data-flash="w|w|w": one word at a time.
+  for (const el of nsPageEl.querySelectorAll('[data-flash]')) {
+    const words = el.getAttribute('data-flash').split('|');
+    if (still || words.length < 2) continue;
+    let i = 0;
+    const ms = Math.max(120, Number(el.getAttribute('data-ms')) || 400);
+    _nsTimers.push(setInterval(() => { i = (i + 1) % words.length; el.textContent = words[i]; }, ms));
+  }
+}
+
 function nsSetView(view, push = true) {
   if (push && web && web.view) web.history.push(web.view);
   if (web) { web.view = view; web.fwd = []; }
@@ -8027,6 +8174,7 @@ function nsRender() {
   nsPageEl.className = `ns-page${bg ? ` bg-${bg}` : ''}`;
   nsPageEl.innerHTML = html;
   nsPageEl.scrollTop = 0;
+  nsPageBehaviours(html, v);
   nsTitleEl.textContent = `${title} - ${ieOn ? IE_TITLE : 'Netscape'}`;
   nsUrlEl.value = loc;
   nsMsgEl.textContent = 'Document: Done';
@@ -8386,6 +8534,8 @@ function openNetscape(addr) {
 
 function closeNetscape() {
   nsEl.style.display = 'none';
+  for (const t of _nsTimers) { clearTimeout(t); clearInterval(t); }
+  _nsTimers = [];
   // The skin comes OFF on the way out, or the NostBook's Netscape would open
   // wearing Explorer's chrome the next time it is asked for.
   if (ieOn) ieSkin(false);
@@ -9523,6 +9673,15 @@ function laptopRebootHook() {
   return { ok: true, text: '' };
 }
 
+// stills(1): the photographs on the disk, shown in the browser one at a time.
+function laptopStillsHook() {
+  if (!web) web = { view: null, history: [], fwd: [], html: '' };
+  nsSetView({ kind: 'local', title: 'stills', html: stillsPage() }, false);
+  nsEl.style.display = 'flex';
+  nsUrlEl.blur();
+  return { ok: true, mode: 'web', text: '' };
+}
+
 function laptopBookHook(args) {
   const pick = pickFrom(BOOKS, args, 'book');
   if (pick && pick.error) return { ok: false, text: pick.error };
@@ -9615,8 +9774,17 @@ function postProgram(hostName, text) {
   const unit = (currentWorld.robots || []).find((r) => !r.dead && r._netId === h.name);
   if (!unit) return { ok: false, text: `post: ${h.host}: the unit is no longer on the network` };
 
+  // The W-1's loader counts courtesy before it loads anything.
+  if (unit.type === 'w1') {
+    const rude = politeness(text);
+    if (rude) return { ok: false, text: `post: ${h.host}: ${rude}` };
+  }
   unit.program = text;
   unit._phoned = { at: dayNight.label, how: 'program update' };
+  // The marked unit on each island: the first post takes, then it goes loopy
+  // after a while; any later post clears it and it stays cleared.
+  if (unit.trojan && !unit.trojanFired) { unit.trojanFired = true; unit.loopy = true; unit.loopyIn = 25 + Math.random() * 35; }
+  else if (unit.loopy) { unit.loopy = false; unit._loopyPick = null; unit.lamp = null; unit.lampFlash = 0; }
   unit.intent = null;
   unit.fault = null;
   unit.lamp = null;
@@ -10592,7 +10760,7 @@ function laptopRun(line) {
   // when you are actually carrying it. The drag mounts /mnt/fsf directly.
   laptopShell.fsfCard = player.hasItem('fsf_card') ? makeFsfCard : null;
   laptopShell.onAchieve = (name, data) => kleos(name, data);
-  const r = runUnix(t, laptopShell, { ml: laptopMlHook, netscape: laptopNetscapeHook, ed: laptopEdHook, pico: laptopPicoHook, post: laptopPostHook, bluebox: laptopBlueboxHook, charge: laptopChargeHook, get: laptopGetHook, pdf: laptopPdfHook, telnet: laptopTelnetHook, book: laptopBookHook, transcribe: laptopTranscribeHook, sleep: laptopSleepHook, suspend: laptopSuspendHook, halt: laptopHaltHook, reboot: laptopRebootHook, save: laptopSaveHook, wifi: laptopWifiHook, sniffer: laptopSnifferHook, more: laptopMoreHook });
+  const r = runUnix(t, laptopShell, { ml: laptopMlHook, netscape: laptopNetscapeHook, ed: laptopEdHook, pico: laptopPicoHook, post: laptopPostHook, bluebox: laptopBlueboxHook, charge: laptopChargeHook, get: laptopGetHook, pdf: laptopPdfHook, telnet: laptopTelnetHook, book: laptopBookHook, transcribe: laptopTranscribeHook, sleep: laptopSleepHook, suspend: laptopSuspendHook, halt: laptopHaltHook, reboot: laptopRebootHook, save: laptopSaveHook, wifi: laptopWifiHook, sniffer: laptopSnifferHook, more: laptopMoreHook, stills: laptopStillsHook });
   if (player.laptop) player.laptop.netUp = !!(laptopShell.net && laptopShell.net.up);
   sfx.play(r.ok ? 'keyclick' : 'keyclick_soft');
   if (r.text) replPrint(r.text);
@@ -11656,7 +11824,7 @@ let _craftPromptOff = false;
 function craftPromptDismiss() { _craftPromptOff = true; }
 function craftPromptUp(can, p) {
   // The offer's identity, so that swapping which craft is pending re-announces.
-  const key = can ? `${p.canCraftObGun()}${p.canCraftWaveGun()}${p.canCraftChip()}${p.canCraftSword()}${p.canCraftFortressMap()}${p.canCraftGoggles()}${p.canCraftCodescope()}` : '';
+  const key = can ? `${p.canCraftObGun()}${p.canCraftWaveGun()}${p.canCraftChip()}${p.canCraftSword()}${p.canCraftFortressMap()}${p.canCraftGoggles()}${p.canCraftCodescope()}${p.canCraftNuts()}` : '';
   if (key !== _craftPromptKey) {
     _craftPromptKey = key;
     _craftPromptAt = performance.now();
@@ -11839,6 +12007,7 @@ function nearestBlightTile(x, y, maxR) {
 function update(dt) {
   // C3: her idle Strachey generator. Rare, and only on her island.
   tickLoveLetters(dt);
+  tickChorale(dt);
   tickDayReturn(dt);
   if (input.consumePress('KeyH')) toggleHelp();
   if (input.inventoryPressed()) showBackpack = !showBackpack;
@@ -12092,6 +12261,7 @@ function update(dt) {
     // After the NostBook and the sniffer, so its chip fragment is never taken
     // from a laptop repair.
     else if (player.canCraftCodescope()) player.craftCodescope();
+    else if (player.canCraftNuts()) player.craftNuts();
     else if (player.canCraftBoat(map)) player.craftBoat(map);
 
     // Nothing else to make and a dead machine in the pack: let repairLaptop
@@ -13316,7 +13486,7 @@ function frame(now) {
       islandsReached: Object.keys(player._welcomed || {}).length,
       showWeapons,
       craftPrompt: craftPromptUp(
-        (player.canCraftObGun() && player.hands !== 'obgun') || (player.canCraftWaveGun() && player.hands !== 'wavegun') || player.canCraftChip() || player.canCraftSword() || player.canCraftFortressMap() || player.canCraftGreekShip(map) || player.canCraftGoggles() || player.canCraftCodescope() || player.canCraftBoat(map),
+        (player.canCraftObGun() && player.hands !== 'obgun') || (player.canCraftWaveGun() && player.hands !== 'wavegun') || player.canCraftChip() || player.canCraftSword() || player.canCraftFortressMap() || player.canCraftGreekShip(map) || player.canCraftGoggles() || player.canCraftCodescope() || player.canCraftNuts() || player.canCraftBoat(map),
         player,
       ),
       craftWaveGun: player.canCraftWaveGun() && player.hands !== 'wavegun',
@@ -13521,7 +13691,8 @@ function openScope(r) {
       <button id="sc-x" type="button" style="background:none;border:0;color:#cfe3d2;font:14px monospace;cursor:pointer">&#10005;</button>
     </div>
     <div id="sc-static" style="font-size:10px;line-height:1.35;color:#7f9a84;margin-top:2px"></div>
-    <div id="sc-choice" style="margin:4px 0 6px;color:#b9c7b0"></div>
+    <div id="sc-choice" style="margin:4px 0 2px;color:#b9c7b0"></div>
+    <div id="sc-tale" style="margin:0 0 6px;font-size:10px;letter-spacing:.03em;color:#7f9a84"></div>
     <div style="display:flex;gap:6px;margin:0 0 8px">
       <button id="sc-home" type="button" class="sc-b sc-sm">Send home</button>
       <button id="sc-down" type="button" class="sc-b sc-sm">Shut down</button>
@@ -13539,6 +13710,12 @@ function openScope(r) {
       <span id="sc-intents" style="font-size:9px;line-height:1.3;color:#7f9a84;align-self:center"></span>
     </div>
     <div id="sc-msg" style="margin-top:6px;color:#e3c27f;min-height:1em"></div>
+    <div id="sc-notes" style="margin-top:8px;border-top:1px solid #1d2b21;padding-top:6px;font-size:10px;line-height:1.4"></div>
+    <div style="display:flex;gap:6px;align-items:center;margin-top:4px">
+      <span style="color:#7f9a84;font-size:10px">line</span><input id="sc-nline" style="width:34px" maxlength="3">
+      <input id="sc-ntext" style="flex:1;width:auto" maxlength="160" placeholder="a note on that line">
+      <button id="sc-nadd" type="button" class="sc-b sc-sm">Note</button>
+    </div>
     <style>#scope .sc-b{background:#1a2a1e;color:#cfe3d2;border:1px solid #3d5c44;border-radius:4px;padding:4px 10px;font:12px ui-monospace,Menlo,monospace;cursor:pointer}
     #scope .sc-b:hover{background:#24402b}#scope .sc-sm{padding:1px 7px;font-size:10px;line-height:1.5}#scope td{padding:2px 4px;border-bottom:1px solid #1d2b21}
     #scope input{width:80px;background:#070a08;color:#cfe3d2;border:1px solid #2b3f30;border-radius:3px;font:11px ui-monospace,Menlo,monospace;padding:1px 4px}
@@ -13567,6 +13744,35 @@ function openScope(r) {
     ? 'intents: ' + can.map((k) => `<span title="${esc(SCOPE_INTENT_HELP[k] || '')}" style="cursor:help">${esc(k)}</span>`).join(' ')
     : 'takes no program';
   prog.value = r.program || '';
+  // NOTES ON THE LINES. Earlier readers' notes are keyed by the text of a line,
+  // so they turn up on any machine running that line; the player's own go in
+  // the same book and ride the save.
+  const drawNotes = () => {
+    const mine = player.scopeNotes || {};
+    const rows = [];
+    String(prog.value || '').split('\n').forEach((ln, i) => {
+      const key = ln.trim();
+      const all = [...(SCOPE_NOTES[key] || []), ...((mine[key] || []).map((t) => [player.name || 'you', t]))];
+      for (const [who, t] of all) rows.push(`<div><span style="color:#7f9a84">l.${i + 1} &middot; ${esc(who)}</span> ${esc(t)}</div>`);
+    });
+    $('#sc-notes').innerHTML = rows.length ? rows.join('') : '<span style="color:#7f9a84">No notes on these lines.</span>';
+  };
+  drawNotes();
+  $('#sc-nadd').addEventListener('click', () => {
+    const n = parseInt($('#sc-nline').value, 10);
+    const lines = String(prog.value || '').split('\n');
+    const t = $('#sc-ntext').value.trim();
+    if (!(n >= 1 && n <= lines.length) || !lines[n - 1].trim()) { msg(`Line 1 to ${lines.length}, one with code on it.`); return; }
+    if (!t) { msg('Write the note first.'); return; }
+    const key = lines[n - 1].trim();
+    player.scopeNotes = player.scopeNotes || {};
+    (player.scopeNotes[key] ||= []).push(t.slice(0, 160));
+    $('#sc-ntext').value = '';
+    msg('');
+    drawNotes();
+    persist();
+  });
+  for (const q of ['#sc-nline', '#sc-ntext']) $(q).addEventListener('keydown', (e) => e.stopPropagation());
   // The senses table is built once, from the keys the program last read, so an
   // input keeps its value while the live column updates beside it.
   const keys = Object.keys(r.lastSense || {});
@@ -13586,6 +13792,7 @@ function openScope(r) {
     const sc = Math.round((Number.isFinite(player.scopeCharge) ? player.scopeCharge : 0) * 100);
     $('#sc-static').innerHTML = `${staticLine}<br>Last Report to OB: ${esc(lastReport)} &middot; scope charge ${sc}%${sc < 5 ? ' (next change takes a battery)' : ''}`;
     $('#sc-down').textContent = r.powerDown ? 'Wake' : 'Shut down';
+    $('#sc-tale').textContent = taleSpin(id, r.lastSense, r.lastDecision, { powerDown: r.powerDown, drained: r.drained });
     if (r.powerDown) { $('#sc-choice').textContent = 'STATUS: shut down'; return; }
     if (r.limping) { $('#sc-choice').textContent = 'STATUS: limping home'; return; }
     if (r.drained) { $('#sc-choice').textContent = `STATUS: flat${r.reserveSpent ? ', no reserve' : ''}`; return; }
@@ -13742,6 +13949,7 @@ function openScope(r) {
     if (r.powerDown) { r.powerDown = false; r.lamp = null; r.mlT = 0; msg(`${id} wakes.`); refresh(); return; }
     if (!spend('down')) return;
     r.powerDown = true;
+    if (r.type === 't1') sfx.play('daisy');
     msg(`${id} shuts down where it stands.`);
     refresh();
   });

@@ -11,7 +11,7 @@
 //
 // Whole works, in HTML, sitting in the laptop's own storage. They are the
 // longest things in the game by an enormous margin and the only ones nobody
-// wrote for it: Homer, Plato, Aurelius, Shelley, Melville, Stapledon, the King
+// wrote for it: Homer, Butler, Plato, Aurelius, Shelley, Melville, Stapledon, the King
 // James translators and Shakespeare, all out of copyright and out of anyone's
 // control, which is exactly why a Torite would keep them. A machine that holds
 // the whole of Shakespeare and needs nothing from anybody to show it to you is
@@ -50,6 +50,26 @@ export const BOOKS = [
     author: 'Homer',
     trans: 'translated by Samuel Butler',
     note: 'A man a long way from home, taking the long way back.',
+  },
+  {
+    key: 'authoress',
+    dir: 'The Authoress of the Odyssey by Samuel Butler',
+    file: 'The Authoress of the Odyssey by Samuel Butler.html',
+    cover: 'images/cover.jpg',
+    title: 'The Authoress of the Odyssey',
+    author: 'Samuel Butler',
+    trans: '',
+    note: 'An argument, with maps and photographs, that the Odyssey was written by a young woman in Sicily.',
+  },
+  {
+    key: 'erewhon',
+    dir: 'Erewhon by Samuel Butler',
+    file: 'Erewhon by Samuel Butler.html',
+    cover: 'images/cover.jpg',
+    title: 'Erewhon',
+    author: 'Samuel Butler',
+    trans: 'or, Over the Range',
+    note: 'A country that broke up its machines and kept the pieces in a museum.',
   },
   {
     key: 'meditations',

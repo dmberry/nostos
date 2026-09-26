@@ -21,6 +21,7 @@
 // M-key toggle — see "ambient music" below.
 
 import { CHOIR_NOTES, CHOIR_DURATION } from './choir-notes.js';
+import { CHORALE_NOTES, CHORALE_DURATION } from './chorale-notes.js';
 
 // The background music is just the synth bed, or off — the M key toggles
 // between those two. Found-tape music no longer lives here: tapes are played
@@ -214,6 +215,22 @@ class Sound {
           this._tone({ when: t, dur: 0.55, type: 'sawtooth', freq: 260 * v, end: 70, gain: 0.18, attack: 0.05, filterFreq: 800 });
           this._noiseBurst({ when: t + 0.4, dur: 0.55, gain: 0.4, attack: 0.03, freq: 900 * v, end: 300 });
           break;
+        case 'daisy': { // a T-1 shut down: Dacre's "Daisy Bell" (1892), two lines, running down
+          // [midi, beats]. Each note a little slower and a little flatter than
+          // the one before, so the second line drags and sags.
+          const TUNE = [[72, 3], [69, 3], [65, 3], [60, 3], [62, 1], [64, 1], [65, 1], [62, 2], [65, 1], [60, 6],
+            [67, 3], [72, 3], [69, 3], [65, 3], [62, 1], [64, 1], [65, 1], [67, 2], [69, 1], [67, 6]];
+          let at = t, beat = 0.2, sag = 1;
+          for (const [m, b] of TUNE) {
+            const f = 440 * Math.pow(2, (m - 69) / 12) * sag;
+            const dur = b * beat;
+            this._tone({ when: at, dur: dur * 0.92, type: 'square', freq: f, end: f * (sag < 0.9 ? 0.97 : 1), gain: 0.05, attack: 0.01, filterFreq: 1800 });
+            at += dur;
+            beat *= 1.045;
+            sag *= 0.988;
+          }
+          break;
+        }
         case 'pickup': // short bright blip
           this._tone({ when: t, dur: 0.09, type: 'triangle', freq: 880 * v, end: 1420 * v, gain: 0.22, attack: 0.002 });
           break;
@@ -792,6 +809,35 @@ class Sound {
       }
       return CHOIR_DURATION;
     } catch (e) { return CHOIR_DURATION; }
+  }
+
+  // BWV 639 on a thin organ: a sine and a quiet octave per note, on the music
+  // bus so the music slider governs it. Returns its length in seconds.
+  playChorale() {
+    try {
+      this.unlock();
+      if (!this.ctx) return CHORALE_DURATION;
+      const ctx = this.ctx;
+      const t0 = ctx.currentTime + 0.3;
+      const bus = ctx.createGain();
+      bus.gain.value = 0.5;
+      bus.connect(this.musicBus || this.master);
+      this._choraleBus = bus;
+      for (const [t, d, m] of CHORALE_NOTES) {
+        const freq = 440 * Math.pow(2, (m - 69) / 12);
+        const dur = Math.max(0.2, d);
+        this._tone({ when: t0 + t, dur, type: 'sine', freq, gain: 0.05, attack: 0.04, bus });
+        this._tone({ when: t0 + t, dur, type: 'sine', freq: freq * 2, gain: 0.012, attack: 0.05, bus });
+      }
+      return CHORALE_DURATION;
+    } catch (e) { return CHORALE_DURATION; }
+  }
+  stopChorale() {
+    if (!this._choraleBus || !this.ctx) return;
+    const g = this._choraleBus.gain;
+    g.cancelScheduledValues(this.ctx.currentTime);
+    g.setTargetAtTime(0, this.ctx.currentTime, 0.6);
+    this._choraleBus = null;
   }
 
   // Seconds since the choir began (for flash sync), or -1 if it isn't singing.

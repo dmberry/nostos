@@ -435,6 +435,15 @@ export const ITEMS = {
     tier: 2,
     color: '#b9c7d4',
   },
+  // A nut on a strip of cloth, for throwing ahead. It lands, the strip marks
+  // the spot, and a machine near it that cannot see you goes to look.
+  nut: {
+    name: 'Nut on a strip of cloth',
+    use: 'Hold it and click to throw. The strip marks where it lands, and a machine nearby that cannot see you goes to look. Pick it up again. Made (C) from one scrap.',
+    kind: 'nut',
+    stack: 12,
+    color: '#b8b0a0',
+  },
   compass: {
     name: 'Electro-compass',
     use: 'Click it to arm. Chevrons at the edge of the screen then point at whatever is notable nearby.',
@@ -1046,6 +1055,8 @@ export const DELETED_BOOKS = [
   ['', 'The King James Bible', '', 'The 1611 translation: the one that set the rhythm of the language for four centuries.'],
   ['', 'The Complete Works', 'William Shakespeare', 'All of it, in one brick — the histories, the comedies, the tragedies, and the sonnets at the back.'],
   ['', 'Last and First Men', 'Olaf Stapledon', 'Two billion years of us, told by one of the last of us — eighteen species of humanity, rising and going out.'],
+  ['', 'Erewhon', 'Samuel Butler', 'Butler on a country over the mountains that punishes illness as a crime and broke up its machines before they could evolve.'],
+  ['', 'The Authoress of the Odyssey', 'Samuel Butler', 'Butler argues the Odyssey was written by a young woman at Trapani in Sicily, and goes there to show where.'],
 ];
 // A REAL PAGE FOR EACH, keyed by title so the tuple table above stays a tuple
 // table. Filed to the Library when you read the book, and it is what the Library
@@ -1235,6 +1246,18 @@ Between the chase there is everything else: how a whale is cut up, what the oil 
 The last thirty pages are as fast as the middle three hundred are slow, and that is deliberate.
 
 A doorstop paperback, cover long gone, held with a rubber band.`,
+  'Erewhon': `Butler's satire of 1872 on a country over a mountain range where illness is punished as a crime and crime is treated as an illness.
+
+Three chapters in the middle, "The Book of the Machines", give an Erewhonian professor's argument that machines are evolving faster than animals did and will become conscious unless they are stopped. The Erewhonians were persuaded. They destroyed every invention of the preceding 271 years and put what was left in a museum.
+
+Butler wrote the first version as a letter to a Christchurch newspaper in 1863, four years after Darwin, and signed it Cellarius.
+
+A library copy. The date stamps run out after the fourth sheet of them.`,
+  'The Authoress of the Odyssey': `Butler, 1897, argues that the Odyssey was written by a young woman living at Trapani in Sicily, who put herself into it as Nausicaa.
+
+He had translated the poem and then walked the coast with it, and the book is full of his own maps and photographs of the places he matched to it. His case rests on what the poem knows and what it gets wrong: in his reading, a writer at home in a house and uncertain on a ship.
+
+Foxed, the maps folded back the wrong way, and a railway ticket to Trapani for a bookmark.`,
   'Last and First Men': `A history of the future, written in 1930 by a philosopher who had driven an ambulance through the last war.
 
 There is no hero in it and barely a scene. Eighteen kinds of people rise, do the one thing they are extraordinary at, are ruined by it, and are succeeded, and the narrator is one of the last of them looking back across two billion years. He called it an essay in myth creation rather than a novel, which is fair warning.
@@ -1262,6 +1285,7 @@ export const PBOOK_FULL = {
   'Frankenstein': 'frankenstein', 'Moby-Dick': 'mobydick',
   'The King James Bible': 'kjv', 'The Complete Works': 'shakespeare',
   'Last and First Men': 'lastfirstmen',
+  'Erewhon': 'erewhon', 'The Authoress of the Odyssey': 'authoress',
 };
 
 export const DELETED_RECORDS = [
