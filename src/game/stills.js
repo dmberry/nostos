@@ -36,16 +36,18 @@ export const STILLS_LAST = ['Then he understood that what he had seen on the bea
 
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-// The reel itself: a div of slides. `embed` sets it in a player box on a page
-// that starts on a click; otherwise it fills the browser page and starts at once.
-export function stillsReel({ embed = false } = {}) {
+// The reel itself: a div of slides. `embed` sets it in a player box on a page;
+// `bare` is the reel alone, for a window of its own; otherwise it fills the
+// browser page. The browser starts it (startReel in main.js).
+export function stillsReel({ embed = false, bare = false } = {}) {
   const img = (f) => `<img src="${STILLS_DIR}/${f}" alt="" width="512" height="288">`;
-  const reel = [`<div class="stills-reel" data-slides="5000"${embed ? ' data-start="click"' : ''}>`,
+  const reel = ['<div class="stills-reel" data-slides="5000">',
     '<figure class="still-title"><p>Ceci est l&rsquo;histoire de quelqu&rsquo;un<br>marqu&eacute; par une image d&rsquo;Ithaque.</p></figure>',
     '<figure class="still-title" data-ms="9000"><p>La sc&egrave;ne, dont la signification ne devait appara&icirc;tre que beaucoup plus tard, eut lieu sur une plage d&rsquo;Ithaque, quelques ann&eacute;es avant que POSEIDON ne s&rsquo;&eacute;veille.</p></figure>',
     ...STILLS.map(([f, cap, ms, voice, under]) => `<figure${ms ? ` data-ms="${ms}"` : ''}${voice ? ` data-audio="${STILLS_AUDIO}/${voice}.m4a"` : ''}${under ? ` data-under="${STILLS_AUDIO}/${under}.m4a"` : ''}>${Array.isArray(f) ? `<div class="still-live">${f.map(img).join('')}</div>` : img(f)}<figcaption>${esc(cap) || '&nbsp;'}</figcaption></figure>`),
     `<figure class="still-black" data-audio="${STILLS_AUDIO}/${STILLS_LAST[1]}.m4a"><p class="still-endcredit">Inspired by Chris Marker, <i>La Jet&eacute;e</i> (1962).</p><figcaption>${esc(STILLS_LAST[0])}</figcaption></figure>`,
     '</div>'].join('\n');
+  if (bare) return reel;
   if (!embed) return ['<!--bg:stills-->', reel].join('\n');
-  return `<div class="stills-embed">${reel}<button class="stills-play" type="button"><b>&#9654;</b> LA PLAGE &middot; 2 min &middot; fran&ccedil;ais, English subtitles</button></div>`;
+  return `<div class="stills-embed">${reel}</div>`;
 }

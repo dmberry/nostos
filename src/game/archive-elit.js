@@ -493,7 +493,7 @@ const PLAGE = P('photo-roman.geocities.ws', 'LA PLAGE', 'La Plage, un photo-roma
   '<center><h1>La Plage</h1>',
   '<p>un photo-roman &middot; anonymous &middot; about two minutes &middot; French, English subtitles</p></center>',
   stillsReel({ embed: true }),
-  '<p><small>Click the frame to play. The same file is on every NostBook: <code>stills</code>.</small></p>',
+  '<p><small>The same film is on every NostBook: <code>stills</code>.</small></p>',
   '<hr>',
   '<h2>The future perfect of the save file</h2>',
   '<p><i>La Plage</i> runs a little over two minutes: two title cards, twelve',

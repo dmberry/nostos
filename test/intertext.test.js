@@ -122,6 +122,7 @@ test('every still and narration clip La Plage names is a file that exists', asyn
   assert.ok(imgs.length >= 12 && clips.length >= 11);
   for (const n of imgs) assert.ok(fs.existsSync(new URL(`../${STILLS_DIR}/${n}`, import.meta.url)), n);
   for (const c of clips) assert.ok(fs.existsSync(new URL(`../${STILLS_AUDIO}/${c}.m4a`, import.meta.url)), c);
-  assert.match(stillsReel({ embed: true }), /data-start="click"/);
+  assert.match(stillsReel({ embed: true }), /class="stills-embed"/);
+  assert.doesNotMatch(stillsReel({ bare: true }), /bg:stills/);
   assert.match(stillsReel(), /<!--bg:stills-->/);
 });

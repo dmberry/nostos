@@ -7948,12 +7948,143 @@ const nsMsgEl = document.getElementById('ns-msg');
 // torn down when the next page renders, so nothing from one page acts on the
 // one after it.
 let _nsTimers = [];
-let _nsAudio = [];
+let _reels = [];
 function nsStopBehaviours() {
   for (const t of _nsTimers) { clearTimeout(t); clearInterval(t); }
   _nsTimers = [];
-  for (const a of _nsAudio) { try { a.pause(); a.src = ''; } catch (e) { /* gone */ } }
-  _nsAudio = [];
+  for (const r of _reels) r.stop();
+  _reels = [];
+}
+
+// THE REEL. Stills that fade one into the next, each holding for its own time
+// (data-ms), with a narration under a still (data-audio) and a quieter track
+// under that (data-under). Sound and pictures run off one clock: every clip is
+// fetched and decoded first, then scheduled on the audio context at its
+// still's offset, and the pictures are switched against the same start, so
+// the two cannot drift apart. If the browser is holding sound back until the
+// page has been clicked, the reel says so and waits for the click rather than
+// running silent and out of step. `host` gets the control bar.
+const REEL_VOL_KEY = 'nostos-reel-volume';
+const reelVolume = () => { try { const v = Number(localStorage.getItem(REEL_VOL_KEY)); return Number.isFinite(v) && localStorage.getItem(REEL_VOL_KEY) !== null ? v : 0.9; } catch (e) { return 0.9; } };
+function startReel(reel, host, opts = {}) {
+  const closeReel = opts.onClose || null;
+  const kids = [...reel.children];
+  const base = Math.max(1500, Number(reel.getAttribute('data-slides')) || 4000);
+  const hold = (k) => Math.max(1500, Number(k.getAttribute('data-ms')) || base);
+  const starts = [0];
+  for (let i = 0; i < kids.length - 1; i++) starts.push(starts[i] + hold(kids[i]));
+  let timers = [], sources = [], stopped = false, gain = null, run = 0;
+  const ctx = (() => { try { sfx.unlock(); return sfx.ctx || null; } catch (e) { return null; } })();
+  let vol = reelVolume();
+  const reset = () => {
+    for (const t of timers) clearTimeout(t);
+    timers = [];
+    for (const s of sources) { try { s.stop(); } catch (e) { /* done */ } }
+    sources = [];
+    if (gain) { try { gain.disconnect(); } catch (e) { /* gone */ } gain = null; }
+    kids.forEach((k, j) => { k.classList.add('slide'); k.classList.toggle('on', j === 0); });
+  };
+  const urls = [...new Set(kids.flatMap((k) => [k.dataset.audio, k.dataset.under]).filter(Boolean))];
+  const buffers = ctx ? Promise.all(urls.map((u) => fetch(u).then((r) => r.arrayBuffer())
+    .then((b) => ctx.decodeAudioData(b)).then((buf) => [u, buf]).catch(() => [u, null]))).then((p) => new Map(p))
+    : Promise.resolve(new Map());
+  const play = async () => {
+    const mine = ++run;
+    reset();
+    const bufs = await buffers;
+    if (stopped || mine !== run) return;
+    if (ctx && ctx.state !== 'running') { try { await Promise.race([ctx.resume(), new Promise((r) => setTimeout(r, 400))]); } catch (e) { /* stays suspended */ } }
+    if (stopped || mine !== run) return;
+    if (ctx && ctx.state !== 'running') { prompt(); return; }
+    const lead = 250;
+    const t0 = ctx ? ctx.currentTime + lead / 1000 : 0;
+    if (ctx) { gain = ctx.createGain(); gain.gain.value = vol; gain.connect(ctx.destination); }
+    kids.forEach((k, i) => {
+      if (i > 0) timers.push(setTimeout(() => { kids[i - 1].classList.remove('on'); k.classList.add('on'); }, lead + starts[i]));
+      const clip = (u, delay, level) => {
+        const buf = bufs.get(u);
+        if (!ctx || !buf) return;
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        const g = ctx.createGain();
+        g.gain.value = level;
+        src.connect(g).connect(gain);
+        src.start(t0 + (starts[i] + delay) / 1000);
+        sources.push(src);
+      };
+      if (k.dataset.audio) clip(k.dataset.audio, 800, 1);
+      if (k.dataset.under) clip(k.dataset.under, 2600, 0.55);
+    });
+  };
+  // The control bar: play again, volume, full screen, and close where the
+  // reel has a window of its own to close.
+  host.classList.add('reel-host');
+  const bar = document.createElement('div');
+  bar.className = 'reel-ctl';
+  bar.innerHTML = '<button type="button" data-a="again" title="Play again">&#8634; again</button>'
+    + '<label title="Volume">vol <input type="range" min="0" max="1" step="0.05"></label>'
+    + '<button type="button" data-a="full" title="Full screen">full screen</button>'
+    + (closeReel ? '<button type="button" data-a="close" title="Close (Esc)">close &#10005;</button>' : '');
+  host.appendChild(bar);
+  const range = bar.querySelector('input');
+  range.value = String(vol);
+  range.addEventListener('input', () => {
+    vol = Number(range.value);
+    try { localStorage.setItem(REEL_VOL_KEY, String(vol)); } catch (e) { /* not kept */ }
+    if (gain && ctx) gain.gain.setTargetAtTime(vol, ctx.currentTime, 0.05);
+  });
+  for (const ev of ['keydown', 'mousedown', 'click', 'wheel']) bar.addEventListener(ev, (e) => e.stopPropagation());
+  bar.addEventListener('click', (e) => {
+    const a = e.target.closest('button');
+    if (!a) return;
+    if (a.dataset.a === 'again') play();
+    if (a.dataset.a === 'close' && closeReel) closeReel();
+    if (a.dataset.a === 'full') {
+      try { if (document.fullscreenElement) document.exitFullscreen(); else host.requestFullscreen(); } catch (err) { /* not allowed */ }
+    }
+  });
+  let asked = null;
+  const prompt = () => {
+    if (asked) return;
+    asked = document.createElement('div');
+    asked.className = 'reel-prompt';
+    asked.textContent = '\u25B6  play with sound';
+    asked.addEventListener('click', (e) => { e.stopPropagation(); asked.remove(); asked = null; play(); });
+    host.appendChild(asked);
+  };
+  play();
+  const halt = () => {
+    stopped = true;
+    reset();
+    bar.remove();
+    if (asked) asked.remove();
+    host.classList.remove('reel-host');
+  };
+  return { stop: halt };
+}
+
+// `stills` on the NostBook: the reel over the whole game window. Esc closes it.
+let _reelOverlay = null;
+function closeReelOverlay() {
+  if (!_reelOverlay) return;
+  _reelOverlay.player.stop();
+  window.removeEventListener('keydown', _reelOverlay.onKey, true);
+  if (document.fullscreenElement === _reelOverlay.el) { try { document.exitFullscreen(); } catch (e) { /* ok */ } }
+  _reelOverlay.el.remove();
+  _reelOverlay = null;
+}
+function openReelOverlay() {
+  closeReelOverlay();
+  const el = document.createElement('div');
+  el.id = 'reel-overlay';
+  el.innerHTML = stillsReel({ bare: true });
+  document.body.appendChild(el);
+  const onKey = (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); closeReelOverlay(); }
+    e.stopPropagation();
+  };
+  window.addEventListener('keydown', onKey, true);
+  _reelOverlay = { el, onKey, player: startReel(el.querySelector('.stills-reel'), el, { onClose: closeReelOverlay }) };
 }
 function nsPageBehaviours(html, v) {
   nsStopBehaviours();
@@ -8004,41 +8135,9 @@ function nsPageBehaviours(html, v) {
       el.textContent = cur.join('').trimEnd();
     }, 110));
   }
-  // data-slides="ms": the children one at a time, each fading into the next,
-  // stopping on the last. A child's own data-ms holds it longer or shorter.
+  // data-slides: a reel of stills, played by startReel below.
   for (const el of nsPageEl.querySelectorAll('[data-slides]')) {
-    const kids = [...el.children];
-    if (!kids.length) continue;
-    const ms = Math.max(1500, Number(el.getAttribute('data-slides')) || 4000);
-    const hold = (k) => Math.max(1500, Number(k.getAttribute('data-ms')) || ms);
-    kids.forEach((k, j) => { k.classList.add('slide'); k.classList.toggle('on', j === 0); });
-    // A slide may carry a narration (data-audio), started as it fades in, and
-    // a second, quieter track under it (data-under).
-    const voice = (k) => {
-      const play = (src, delay, vol) => _nsTimers.push(setTimeout(() => {
-        try { const a = new Audio(src); a.volume = vol; _nsAudio.push(a); a.play().catch(() => {}); } catch (e) { /* no audio */ }
-      }, delay));
-      if (k.dataset.audio) play(k.dataset.audio, 800, 0.95);
-      if (k.dataset.under) play(k.dataset.under, 2600, 0.55);
-    };
-    let i = 0;
-    const step = () => {
-      if (i >= kids.length - 1) return;
-      kids[i + 1].classList.add('on');
-      kids[i].classList.remove('on');
-      i += 1;
-      voice(kids[i]);
-      if (i < kids.length - 1) _nsTimers.push(setTimeout(step, hold(kids[i])));
-    };
-    const begin = () => {
-      voice(kids[0]);
-      if (kids.length > 1) _nsTimers.push(setTimeout(step, hold(kids[0])));
-    };
-    // An embedded reel waits on its first frame until it is clicked, the way a
-    // film in a page did; a full-page one starts at once.
-    const box = el.dataset.start === 'click' ? el.parentElement : null;
-    if (box) box.addEventListener('click', () => { if (box.classList.contains('playing')) return; box.classList.add('playing'); begin(); });
-    else begin();
+    _reels.push(startReel(el, el.closest('.stills-embed') || nsPageEl));
   }
   // data-flash="w|w|w": one word at a time.
   for (const el of nsPageEl.querySelectorAll('[data-flash]')) {
@@ -9690,11 +9789,8 @@ function laptopRebootHook() {
 
 // stills(1): the photographs on the disk, shown in the browser one at a time.
 function laptopStillsHook() {
-  if (!web) web = { view: null, history: [], fwd: [], html: '' };
-  nsSetView({ kind: 'local', title: 'La Plage', html: stillsReel() }, false);
-  nsEl.style.display = 'flex';
-  nsUrlEl.blur();
-  return { ok: true, mode: 'web', text: '' };
+  openReelOverlay();
+  return { ok: true, text: '' };
 }
 
 function laptopBookHook(args) {
