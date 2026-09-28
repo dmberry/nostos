@@ -43,6 +43,7 @@ export const PROFILE_KEYS = [
   'nostos-zoom',
   'nostos_phone_muted',
   'nostos-hudmenu',
+  'nostos-reel-vol',      // the film player's volume
 ];
 export const ALL_KEYS = [...RUN_KEYS, ...PROFILE_KEYS];
 

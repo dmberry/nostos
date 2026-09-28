@@ -60,6 +60,7 @@ export const SCREEN_SITES = [
       '<p><small>See also <a href="aiwinter.geocities.ws">the dates that',
       'passed</a>, since 1983 is squarely inside one of the winters and nobody',
       'in the film seems to have been told.</small></p>',
+      '<p><small>The older ones, the machine that links up with its twin and the one that stops the world at noon, are on <a href="we-were-warned.geocities.ws">We Were Warned</a>.</small></p>',
       '<p><small>The one that got the bins right: <a href="hackers.fanpages.org.uk">Hackers</a>, and the one about the users: <a href="tron.fanpages.org.uk">TRON</a>.</small></p>',
       '<p><small>Somebody else keeps a page about the same film at <a href="wardialer.tripod.com">wardialer.tripod.com</a>, and argues that the reason it holds up is that the machine is not evil: it does what it was built to do, correctly, about the wrong thing. I think that is right and I wish I had written it.</small></p>',
     ],

@@ -68,7 +68,8 @@ export const SFF_RINGS = [
   ring(R.master[0], 'SF AND FANTASY RING', 'SF &amp; Fantasy Ring', 'sff-goldenage',
     ['<p>The literature of the what-if: the scientific romancers, the golden-age engineers, the new-wave '
       + 'experimenters, the cyberpunks, the fantasists and their epics, and the fandom that argued the '
-      + 'canon into being.</p>'],
+      + 'canon into being.</p>',
+      '<p><small>For the films, watched again since the towers: <a href="we-were-warned.geocities.ws">We Were Warned</a>.</small></p>'],
     [...A, ...B, ...C, ...D, ...E, ...F],
     [R.founders, R.goldenage, R.newwave, R.cyberpunk, R.fantasy, R.culture]),
 

@@ -410,7 +410,7 @@ export function createIsland(seed) {
     }
   }
 
-  const robots = spawnRobots(map, seed, obelisks, { x: spawn.x, y: spawn.y, r: 14 });
+  const robots = spawnRobots(map, seed, obelisks, { x: spawn.x, y: spawn.y, r: 14 }, { godot: true });
 
   // A couple of gardener drones already out wandering the world at the start, at
   // random spots away from the remote factory, so you actually come across one

@@ -1208,16 +1208,15 @@ export const FRAGMENTS = [
     text: '10 PRINT CHR$(205.5+RND(1)); : GOTO 10\n\n' +
       'Two characters, a coin flip and a loop, and it draws a maze that never ' +
       'repeats. Somebody has written on the photocopy in pencil: A BOOK WAS ' +
-      'WRITTEN ABOUT THIS LINE. And underneath, in the same hand: IT DESERVED ONE.' },
+      'WRITTEN ABOUT THIS LINE.' },
   { id: 'src-emacs', kind: 'code', era: 2, bs: true,
     title: 'Bound printout, Emacs, 1985',
     text: ';; GNU Emacs \u2014 Stallman. The COPYING file is bound in at the front,\n' +
-      ';; ahead of any of the code, which is the whole argument in a filing order.\n\n' +
+      ';; ahead of any of the code.\n\n' +
       ';;   This file is part of GNU Emacs.\n' +
       ';;   GNU Emacs is distributed in the hope that it will be useful,\n' +
       ';;   but WITHOUT ANY WARRANTY.\n\n' +
-      'The listing under it has been read to pieces. The licence at the front is ' +
-      'uncreased.' },
+      'The listing under it has been read to pieces.' },
   { id: 'src-spacewar', kind: 'code', era: 2, bs: true,
     title: 'Paper tape, and a listing to read it by, 1962',
     text: 'define mask A\n  law i A\n  and ac\nterminate\n\n' +
@@ -1228,10 +1227,9 @@ export const FRAGMENTS = [
   { id: 'src-agrippa', kind: 'code', era: 2, bs: true,
     title: 'Diskette, 3.5 inch, label in biro: DO NOT RUN',
     text: 'Agrippa (A Book of the Dead) \u2014 Gibson, 1992. The poem scrolls once ' +
-      'and encrypts itself behind you as it goes. You cannot read it twice.\n\n' +
-      'A machine that deletes the thing it is showing you, published as art, ' +
-      'thirty years before anyone here had a reason to think about it hard. ' +
-      'Somebody has kept the diskette anyway. There is nothing on it.' },
+      'and encrypts itself behind you as it goes.\n\n' +
+      'Somebody has kept the diskette anyway, and imaged it onto a NostBook: ' +
+      '/home/misc/1992. The image is almost all zeroes.' },
   { id: 'src-adventure', kind: 'code', era: 2, bs: true,
     title: 'Lineprinter output, FORTRAN IV, 1977',
     text: 'C     COLOSSAL CAVE ADVENTURE \u2014 CROWTHER\n' +
@@ -1239,23 +1237,112 @@ export const FRAGMENTS = [
       "      WRITE(6,*) 'SMALL BRICK BUILDING.  AROUND YOU IS A FOREST.'\n\n" +
       'He wrote it after his divorce, for his daughters, from a real cave he had ' +
       'surveyed. The map underneath the game is Mammoth Cave, measured on his own ' +
-      'weekends. Every room you have ever walked into in any game came out of that.' },
+      'weekends.' },
   { id: 'src-git', kind: 'code', era: 2, bs: true,
     title: 'Printout, shell script, 2007',
     text: '#!/bin/sh\n# git-stash \u2014 Nanako Shiraishi\n' +
       '# Save your local modifications to a new stash, and run git reset --hard\n' +
       '# to revert them.\n\n' +
       'She wrote the thing everybody uses for the moment you are interrupted ' +
-      'mid-thought and have to put the work down where it stands. It is the only ' +
-      'tool in the whole system that assumes you will be interrupted.' },
+      'mid-thought and have to put the work down where it stands.' },
   { id: 'src-transformer', kind: 'code', era: 2, bs: true,
     title: 'Stapled preprint, 2017, coffee ring on page 4',
     text: 'Attention(Q, K, V) = softmax(QK^T / sqrt(d_k)) V\n\n' +
-      'Eight pages. That line is most of it. Everything on the hill outside is ' +
-      'downstream of this equation and of the twenty years of published work it ' +
-      'was assembled from.\n\n' +
+      'Eight pages. That line is most of it.\n\n' +
       'Somebody has written beside it, in pencil, quite small: we thought we were ' +
       'doing translation.' },
+
+  { id: 'src-lions', kind: 'code', era: 2, bs: true,
+    title: 'Spiral-bound photocopy, line 2238',
+    text: '\t/*\n\t * ...\n\t * You are not expected to understand this.\n\t */\n' +
+      '\tif(rp->p_flag&SSWAP) {\n\n' +
+      'A photocopy of a photocopy of a commentary on the sixth edition, the binding ' +
+      'replaced with a bootlace. In the margin by that line, in pencil: not on the ' +
+      'exam. The whole file is on any NostBook, in /usr/src/sys.' },
+  { id: 'bs-wall-paint', kind: 'liminal', era: 2, bs: true,
+    title: 'Painted high on a stairwell wall, in something that glows',
+    text: 'Too high to have been done standing. A circuit with one component ' +
+      'missing from it. A ring of six carbon atoms, drawn properly, with the ' +
+      'double bonds. And ACTS 9:18, in capitals, the same green, nothing after it.' },
+
+  // ---- the long way round ----------------------------------------------------
+  { id: 'lit-erewhon', kind: 'science', era: 1,
+    title: 'Museum label, screwed to a board, Torite hand',
+    text: '"...the greater part of the room was occupied by broken machinery of ' +
+      'all descriptions. The larger specimens had a case to themselves, and ' +
+      'tickets with writing on them in a character which I could not ' +
+      'understand."\n  (Butler, Erewhon, ch. IX)\n\n' +
+      'CASE 4. Lamp assembly, T-1 pattern. Red. Cracked across the lens. Given ' +
+      'by a family on the north shore.' },
+  { id: 'lit-cavafy', kind: 'handwritten', era: 1,
+    title: 'On the back of a ferry timetable, in Greek',
+    text: 'Σα βγεις στον πηγαιμό για την Ιθάκη,\n' +
+      'να εύχεσαι νάναι μακρύς ο δρόμος,\n' +
+      'γεμάτος περιπέτειες, γεμάτος γνώσεις.\n' +
+      'Τους Λαιστρυγόνας και τους Κύκλωπας,\n' +
+      'τον θυμωμένο Ποσειδώνα μη φοβάσαι,\n\n' +
+      'The rest of the timetable has the sailings crossed out, every one.' },
+  { id: 'lit-dante', kind: 'handwritten', era: 2,
+    title: 'Written down afterwards, what could be got back',
+    text: 'For M., on the way to the stores, the two of us with the water can on a ' +
+      'pole between us. I had it this morning.\n\n' +
+      'Lo maggior corno de la fiamma antica\n' +
+      'cominciò a crollarsi mormorando\n\n' +
+      '(then a gap)\n\n' +
+      'ma misi me per l\'alto mare aperto\n\n' +
+      '(then nothing for a long time, then this, which I said twice so he would ' +
+      'have it)\n\n' +
+      'Considerate la vostra semenza:\n' +
+      'fatti non foste a viver come bruti,\n' +
+      'ma per seguir virtute e canoscenza.\n\n' +
+      'The last line I have: infin che \'l mar fu sovra noi richiuso. I could not ' +
+      'get back what came between, and we were at the stores.' },
+  { id: 'lit-tennyson', kind: 'note', era: 1,
+    title: 'Pencilled inside the lid of a boatyard tool box',
+    text: 'It little profits that an idle king,\n' +
+      'By this still hearth, among these barren crags,\n' +
+      'Match\'d with an aged wife, I mete and dole\n' +
+      'Unequal laws unto a savage race,\n' +
+      'That hoard, and sleep, and feed, and know not me.\n\n' +
+      'Under it, a tally of days in fives, and a drawing of a keel.' },
+
+  // ---- ITHACA: given at the homecoming, never dealt into a cache ---------------
+  { id: 'ithaca-q', kind: 'secret', era: 2, given: true,
+    title: 'Questions, typed on the NostBook, unsent',
+    text: 'What route did the boat take?\n' +
+      'From the strand below the relay on Ogygia, by Aegilia, Aeaea and Thrinacia, ' +
+      'through the narrows between the rock and the whirlpool, to the shingle ' +
+      'under the headland on Ithaca. The distance was not logged. The log was ' +
+      'not running.\n\n' +
+      'What did the towers on the headland do as the keel touched?\n' +
+      'Nothing. They had fallen. Their lamps, red at last report, were off, and ' +
+      'the feed that had charged them ran under the sand to a rack that no ' +
+      'longer answered.\n\n' +
+      'What did the one who came home carry up the beach?\n' +
+      'A NostBook with a cracked hinge, a Codescope, what the pack held, and one ' +
+      'line of a program by heart: if charge < 15 then home.\n\n' +
+      'Who knew the one who came home, first?\n' +
+      'A dog, old, on a heap of sacking by the gate, which lifted its head.\n\n' +
+      'Why did the dog know what the camera on the gate did not?\n' +
+      'The camera\'s register had been emptied at the collapse. The dog had kept ' +
+      'the smell of the hand that fed it.\n\n' +
+      'What remained?\n' +
+      'The roof. The garden. Twenty years of letters. A call, missed twenty years ' +
+      'ago, to return.\n\n' +
+      'Where?\n\n' +
+      '●' },
+  { id: 'ithaca-yes', kind: 'letter', era: 2, given: true,
+    title: 'No full stops, on the back of the same sheet',
+    text: 'and the loom was the only machine in the house they never came for ' +
+      'because it reported nothing it only made cloth and every night I took out ' +
+      'what I had put in that day the same rows back to the same thread so it ' +
+      'never finished and they never asked why a shroud should take so long and ' +
+      'when the lamps on the headland went out one after another like somebody ' +
+      'walking down a corridor turning them off I thought that is him or that is ' +
+      'nobody and it was a long time before I let myself think it was him and the ' +
+      'dog knew first the dog always knew first and I said to the dog go on then ' +
+      'and he went and I came down after him to the gate and yes I said yes it is ' +
+      'you yes' },
 
   { id: 'lim-01', kind: 'science', era: 0, title: 'Facilities Memo: Discrepancy, Floor 2',
     text: 'Second consecutive quarter the fire-safety walk-through has logged a ' +
@@ -1733,7 +1820,7 @@ export class Lore {
   // fragments (frag.bs) still go on the underworld map (placeBackspace).
   _place(map, seed) {
     const rng = makeRng(((seed ^ 0x105e) >>> 0) || 1);
-    const overworld = FRAGMENTS.filter((f) => !f.bs);
+    const overworld = FRAGMENTS.filter((f) => !f.bs && !f.given);
     this.torFrags = overworld.filter((f) => f.kind === 'ron').map((f) => f.id); // read at a TOR (`records`)
     // Deterministically shuffle the recovered documents, then deal them across
     // the caches already placed on the map (round-robin, so every box holds a

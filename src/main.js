@@ -30,7 +30,7 @@ import { makeRng } from './game/rng.js';
 import { DayNight } from './game/daynight.js';
 import { Minimap } from './game/minimap.js';
 import { spawnBirds, updateBirds } from './game/birds.js';
-import { setRobotClock, chassisIntents, spawnRobots, registerRobotsSystem, spawnW1s, spawnW3, spawnW4, spawnW5, spawnM4, spawnM5, spawnM6, spawnV5, spawnGuard, drawRobot, setUnitTagger, setUnitTagsClickable, unitTagAt, W5_PROGRAM, v1BuildName, reviveUnit } from './game/robots.js';
+import { setRobotClock, chassisIntents, isStockProgram, spawnRobots, registerRobotsSystem, spawnW1s, spawnW3, spawnW4, spawnW5, spawnM4, spawnM5, spawnM6, spawnV5, spawnGuard, drawRobot, setUnitTagger, setUnitTagsClickable, unitTagAt, W5_PROGRAM, v1BuildName, reviveUnit } from './game/robots.js';
 import { makeVModel } from './game/v-model.js';
 // #141: the permission POSEIDON's net has to be shown.
 import { permissionFile, readPermission, permissionBanner, PERMISSION_FILE,
@@ -88,6 +88,8 @@ import { createHelios } from './islands/helios.js';
 import { createNokia, sendNokia, holdRise, holdFall, holdBand, HOLD_COLD, HOLD_WARM, calypsoSms, ronSms, daemonSms, hasDaemonSms, logSms, bearingText } from './game/nokia.js';
 import { newSnakeGame, snakeTurn, snakeTurnRelative, snakeTick, drawSnake } from './game/snake.js';
 import { CHOIR_NOTES, CHOIR_DURATION } from './engine/choir-notes.js';
+import { politeness, taleSpin, SCOPE_NOTES } from './game/intertext.js';
+import { stillsReel } from './game/stills.js';
 import { makeDisk, makeFsfCard, newShell, runUnix, hasFile, pathString, edOpen, edRun, writeFile, lookup, resolvePath, isFile, SALVAGE_DISKS, graftSalvage, graftSystemDirs, parseSelection, handlesOwnPaste, isBrowserChord } from './game/unix.js';
 import { PDFS, pdfByName, pdfPath, pdfNames } from './game/pdfs.js';
 import { BOOKS, bookByKey, bookKeys, bookPath, libraryPage } from './game/books.js';
@@ -569,6 +571,7 @@ try {
         if (st[k] !== undefined) player[k] = st[k];
       }
       if (Array.isArray(st.pockets)) player.pockets = st.pockets;
+      if (st.scopeNotes && typeof st.scopeNotes === 'object') player.scopeNotes = st.scopeNotes;
       if (st.backpack) player.backpack = st.backpack;
       // #141: the recipe was `golden_axe` until v1.482 and Homer's is bronze.
       // A save carrying the old id would otherwise lose the recipe and strand
@@ -758,6 +761,7 @@ function buildSaveBlob() {
       armour: player.armourWorn ? player.armourWorn() : null,
       health: player.health, stamina: player.stamina, food: player.food, venom: player.venom,
       wifiPower: player.wifiPower, scopeCharge: player.scopeCharge, x: player.x, y: player.y, hands: player.hands,
+      scopeNotes: player.scopeNotes || undefined,   // notes written against program lines in the Codescope
       pockets: player.pockets, backpack: player.backpack, walkman: player.walkman,
       laptop: player.laptop,             // model, OS, and the whole disk — your files survive a reload
       salvaged: player.salvaged,         // which dead machines' disks you have already read
@@ -978,6 +982,8 @@ function serializeIslandState() {
           spoof: r.spoof && Object.keys(r.spoof).length ? r.spoof : undefined,   // senses typed over in the Codescope
           pdown: r.powerDown ? 1 : undefined,                                    // shut down from the Codescope
           eye: r.eyeFix || undefined,                                            // eye colour set in the Codescope
+          tfired: r.trojanFired ? 1 : undefined,                                 // the marked unit's one bad turn: spent
+          loopy: r.loopy ? 1 : undefined,                                        // and not yet cleared by a re-post
           // THE STATE THE FIGHT LEFT IT IN. A machine you had worn down to a
           // flat cell coming back charged is the fight being handed back
           // (David, 2026-08-15). Battery is the one that matters; hp too, for
@@ -1189,7 +1195,14 @@ function applyIslandState(w) {
       if (m.spoof && typeof m.spoof === 'object') r.spoof = { ...m.spoof };
       if (m.pdown) r.powerDown = true;
       if (m.eye) r.eyeFix = m.eye;
-      if (m.program) { r.program = m.program; r.fault = null; r.mlT = 0; r.intent = null; }
+      if (m.tfired) r.trojanFired = true;
+      if (m.loopy) { r.loopy = true; r.loopyIn = 0; }
+      // A seeded unit that now carries something other than its chassis stock
+      // (the pair by the tree, the patchwork) keeps it over a save record that
+      // holds a program nobody posted: only a player's post marks a record
+      // unsigned, and an older save's stock text may not match today's.
+      const keepSpecial = r._special && (!m.unwm || isStockProgram(r.type, m.program));
+      if (m.program && !keepSpecial) { r.program = m.program; r.fault = null; r.mlT = 0; r.intent = null; }
       if (Number.isFinite(m.batt)) r.battery = m.batt;
       if (Number.isFinite(m.hp)) { r.hp = Math.min(r.maxHp, m.hp); r._lastHp = r.hp; }
       if (m.drained) r.drained = true;
@@ -1204,7 +1217,7 @@ function applyIslandState(w) {
         if (b1r) r.calledBy = b1r;
       }
       if (m.unwm) r._unwatermarked = true;
-      if (Number.isFinite(m.x) && Number.isFinite(m.y)) { r.x = m.x; r.y = m.y; }
+      if (Number.isFinite(m.x) && Number.isFinite(m.y) && !(keepSpecial && r._special === 'godot')) { r.x = m.x; r.y = m.y; }
       if (m.cargo !== undefined) r.cargo = !!m.cargo;
     }
   }
@@ -1294,6 +1307,39 @@ function tickLoveLetters(dt) {
   nokia.enqueue('CALYPSO', letter.slice());
   logSms(player, 'CALYPSO', 'them', letter.join(' '), dayNight.clock);
   kleos('loveLetter', {});
+}
+// Her organ, played through the towers. At night on her island, now and then,
+// every standing obelisk sounds one chorale prelude: loud at the foot of a
+// tower, gone fifteen paces out, silent with the music turned off. It only
+// starts with the player near a tower, and leaving the island stops it.
+const CHORALE_NEAR = 2;     // tiles: full volume inside this
+const CHORALE_FAR = 16;     // tiles: silent beyond this
+let _choraleT = 240 + Math.random() * 360;
+let _choraleOn = 0;
+function nearestLiveObelisk() {
+  let best = Infinity;
+  for (const o of (currentWorld.obeliskObjs || [])) {
+    if (o.destroyed) continue;
+    const d = Math.hypot(o.x + 0.5 - player.x, o.y + 0.5 - player.y);
+    if (d < best) best = d;
+  }
+  return best;
+}
+function tickChorale(dt) {
+  if (_choraleOn > 0) {
+    _choraleOn -= dt;
+    if (currentWorld.id !== 'calypso' || sfx.musicOff()) { sfx.stopChorale(); _choraleOn = 0; return; }
+    const d = nearestLiveObelisk();
+    const k = Math.max(0, Math.min(1, 1 - (d - CHORALE_NEAR) / (CHORALE_FAR - CHORALE_NEAR)));
+    sfx.setChoraleVolume(k * k);
+    return;
+  }
+  if (currentWorld.id !== 'calypso' || player.deathCert || !dayNight.isNight() || sfx.musicOff()) return;
+  _choraleT -= dt;
+  if (_choraleT > 0) return;
+  if (nearestLiveObelisk() > CHORALE_FAR) { _choraleT = 20; return; }   // wait until a tower is in earshot
+  _choraleT = 900 + Math.random() * 900;
+  _choraleOn = sfx.playChorale();
 }
 // The heading the current voyage put out on. The boat sprite has one bow and a
 // mirror, so the hull must at least be flipped to the side it is actually
@@ -1537,6 +1583,15 @@ const lore = new Lore(map, WORLD_SEED, GEO_FRAGMENT_IDS);
 // Opening a resistance cache folds any recovered documents packed in it into the
 // Scrapbook (quietly — openBox prints its own one-line summary).
 player.onFindLore = (id) => lore.findFrag(id, player, true);
+// A thrown nut: a machine within earshot that cannot see you walks over to it.
+player.onNutLand = (x, y) => {
+  for (const r of (currentWorld.robots || [])) {
+    if (r.dead || r.fused || r.friendly || r.aggro || r.drained || r.powerDown || r.hardened) continue;
+    if (Math.hypot(r.x - x, r.y - y) > 7) continue;
+    r.lure = { x, y };
+    r.lureT = 6;
+  }
+};
 
 const dayNight = new DayNight();
 
@@ -1674,7 +1729,8 @@ function ensureIthaca() {
   ithaca.onEnter = () => {
     if (daemonsDown >= 4) {
       // The true nostos: the war is won and you have come home.
-      player.say('The keel grinds up the Ithacan sand. Argos lifts his grey head, and knows you. The machines are all fallen, the sea is quiet, and you are home. This is the end of the road, and the beginning of the rest of it.');
+      player.say('The keel grinds up the Ithacan sand. Argos lifts his grey head, and knows you. The machines are all fallen, the sea is quiet, and you are home.');
+      if (lore && lore.findFrag) { lore.findFrag('ithaca-q', player); lore.findFrag('ithaca-yes', player, true); }
       if (!player._ended && !player.deathCert) {
         player._ended = true;
         player.deathCert = {
@@ -6405,6 +6461,12 @@ function replRun(line) {
   // not a value verb — so intercept them here (like help). `eliza <file>` is the
   // transform and goes through the language (the arity-1 eliza builtin, ronml.js).
   if (/^\s*(run\s+)?(eliza|doctor)\s*$/i.test(line)) { startEliza(); sfx.play('keydrop'); return; }
+  // Three words people type at towers (klaatu.geocities.ws). The node files them.
+  if (terminalKind === 'ob' && /^\s*klaatu\s+barada\s+nikto\W*$/i.test(line)) {
+    sfx.play('keydrop');
+    replPrint('ACK 3 WORDS. ADDRESSEE gort: NO SUCH UNIT ON THIS NODE. HELD FOR FORWARDING.');
+    return;
+  }
   // `Help` / `HELP` / `Help hack` should all work — the console shouldn't be
   // fussy about case on its own help command (verbs are all lowercase anyway).
   let relaxed = /^\s*help(\s+\S+)?\s*$/i.test(line) ? line.trim().toLowerCase() : line;
@@ -7887,6 +7949,286 @@ const nsUrlEl = document.getElementById('ns-url');
 const nsTitleEl = document.getElementById('ns-title');
 const nsMsgEl = document.getElementById('ns-msg');
 
+// WHAT A PAGE OF THIS PERIOD COULD DO BY ITSELF. Four behaviours, each asked
+// for by a marker in the served HTML (archive-elit.js has the list), and each
+// torn down when the next page renders, so nothing from one page acts on the
+// one after it.
+let _nsTimers = [];
+let _reels = [];
+function nsStopBehaviours() {
+  for (const t of _nsTimers) { clearTimeout(t); clearInterval(t); }
+  _nsTimers = [];
+  for (const r of _reels) r.stop();
+  _reels = [];
+}
+
+// THE REEL. Stills that fade one into the next, each holding for its own time
+// (data-ms), with a narration under a still (data-audio) and a quieter track
+// under that (data-under). Sound and pictures run off one clock: every clip is
+// fetched and decoded first, then scheduled on the audio context at its
+// still's offset, and the pictures are switched against the same start, so
+// the two cannot drift apart. If the browser is holding sound back until the
+// page has been clicked, the reel says so and waits for the click rather than
+// running silent and out of step. `host` gets the control bar.
+const REEL_VOL_KEY = 'nostos-reel-vol';
+const reelVolume = () => { try { const raw = localStorage.getItem(REEL_VOL_KEY); const v = Number(raw); return raw !== null && Number.isFinite(v) ? v : 0.6; } catch (e) { return 0.6; } };
+const REEL_FADE = 2600;   // ms a still takes to fade out, and a little over
+function startReel(reel, host, opts = {}) {
+  const closeReel = opts.onClose || null;
+  const kids = [...reel.children];
+  const base = Math.max(1500, Number(reel.getAttribute('data-slides')) || 4000);
+  const hold = (k) => Math.max(1500, Number(k.getAttribute('data-ms')) || base);
+  const starts = [0];
+  for (let i = 0; i < kids.length - 1; i++) starts.push(starts[i] + hold(kids[i]));
+  const END = starts[starts.length - 1] + 15000;   // the last line, then the credit over the black
+  const ctx = (() => { try { sfx.unlock(); return sfx.ctx || null; } catch (e) { return null; } })();
+  let vol = reelVolume();
+  let timers = [], sources = [], gain = null, stopped = false;
+  let pos = 0, wall0 = 0, playing = false, current = -1;
+  const idx = (p) => { let i = 0; while (i + 1 < starts.length && starts[i + 1] <= p) i++; return i; };
+  const now = () => (playing ? pos + (performance.now() - wall0) : pos);
+  // Show one still. The drift stays on the one going out until it has faded
+  // completely, so it never snaps back to its first frame while visible.
+  const show = (i) => {
+    if (i === current) return;
+    const prev = current;
+    current = i;
+    kids.forEach((k, j) => {
+      k.classList.add('slide');
+      k.classList.toggle('on', j === i);
+      if (j === i) k.classList.add('drift');
+      else if (j !== prev) k.classList.remove('drift');
+    });
+    if (prev >= 0 && prev !== i) {
+      const gone = kids[prev];
+      timers.push(setTimeout(() => { if (current !== prev) gone.classList.remove('drift'); }, REEL_FADE));
+    }
+  };
+  const halt = () => {
+    for (const t of timers) clearTimeout(t);
+    timers = [];
+    for (const s of sources) { try { s.stop(); } catch (e) { /* done */ } }
+    sources = [];
+    if (gain) { try { gain.disconnect(); } catch (e) { /* gone */ } gain = null; }
+  };
+  const urls = [...new Set(kids.flatMap((k) => [k.dataset.audio, k.dataset.under]).filter(Boolean))];
+  const buffers = ctx ? Promise.all(urls.map((u) => fetch(u).then((r) => r.arrayBuffer())
+    .then((b) => ctx.decodeAudioData(b)).then((buf) => [u, buf]).catch(() => [u, null]))).then((p) => new Map(p))
+    : Promise.resolve(new Map());
+  let bufs = new Map();
+  // Lay out everything from `from` onwards: picture changes on timers, and
+  // each clip on the audio clock, a clip already under way started partway in.
+  const schedule = (from) => {
+    halt();
+    const lead = 120;
+    wall0 = performance.now() + lead;
+    const t0 = ctx ? ctx.currentTime + lead / 1000 : 0;
+    if (ctx) { gain = ctx.createGain(); gain.gain.value = vol; gain.connect(ctx.destination); }
+    show(idx(from));
+    kids.forEach((k, i) => {
+      if (starts[i] > from) timers.push(setTimeout(() => show(i), lead + starts[i] - from));
+      const clip = (u, delay, level) => {
+        const buf = bufs.get(u);
+        if (!ctx || !buf) return;
+        const at = starts[i] + delay;
+        const into = (from - at) / 1000;
+        if (into >= buf.duration) return;
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        const g = ctx.createGain();
+        g.gain.value = level;
+        src.connect(g).connect(gain);
+        if (into > 0) src.start(t0, into); else src.start(t0 - into);
+        sources.push(src);
+      };
+      if (k.dataset.audio) clip(k.dataset.audio, 800, 1);
+      if (k.dataset.under) clip(k.dataset.under, 2600, 0.55);
+    });
+    timers.push(setTimeout(() => { pos = END; playing = false; label(); }, lead + END - from));
+  };
+  const play = async () => {
+    if (playing || stopped) return;
+    if (pos >= END) pos = 0;
+    bufs = await buffers;
+    if (stopped || playing) return;
+    if (ctx && ctx.state !== 'running') { try { await Promise.race([ctx.resume(), new Promise((r) => setTimeout(r, 400))]); } catch (e) { /* stays suspended */ } }
+    if (stopped || playing) return;
+    if (ctx && ctx.state !== 'running') { prompt(); return; }
+    reel.classList.remove('paused');
+    schedule(pos);
+    playing = true;
+    label();
+  };
+  const pause = () => {
+    if (!playing) return;
+    pos = now();
+    playing = false;
+    halt();
+    reel.classList.add('paused');
+    label();
+  };
+  const seek = (p) => {
+    const was = playing;
+    if (was) { halt(); playing = false; }
+    pos = Math.max(0, Math.min(p, END));
+    if (was) { play(); } else { current = -1; show(idx(pos)); }
+  };
+  // Back one still, or to the top of this one if it is well under way.
+  const rewind = () => {
+    const p = now();
+    const i = idx(p);
+    seek(p - starts[i] > 1500 || i === 0 ? starts[i] : starts[i - 1]);
+  };
+  host.classList.add('reel-host');
+  const bar = document.createElement('div');
+  bar.className = 'reel-ctl';
+  // Transport icons drawn, not typed: glyphs from different fonts came out at
+  // three different widths.
+  const ICON = {
+    start: '<rect x="1" y="1" width="2" height="10"/><path d="M11 1v10L4 6z"/>',
+    back: '<path d="M6 1v10L1 6zM11 1v10L6 6z"/>',
+    play: '<path d="M2 1v10l9-5z"/>',
+    pause: '<rect x="2" y="1" width="3" height="10"/><rect x="7" y="1" width="3" height="10"/>',
+  };
+  const svg = (k) => `<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" fill="currentColor">${ICON[k]}</svg>`;
+  bar.innerHTML = `<button type="button" class="reel-t" data-a="start" title="Back to the start">${svg('start')}</button>`
+    + `<button type="button" class="reel-t" data-a="back" title="Rewind one still">${svg('back')}</button>`
+    + `<button type="button" class="reel-t reel-pp" data-a="play" title="Play or pause">${svg('pause')}</button>`
+    + '<label title="Volume">vol <input type="range" min="0" max="1" step="0.05"></label>'
+    + '<button type="button" data-a="full" title="Full screen">full screen</button>'
+    + (closeReel ? '<button type="button" data-a="close" title="Close (Esc)">close &#10005;</button>' : '');
+  host.appendChild(bar);
+  const pp = bar.querySelector('.reel-pp');
+  const label = () => { pp.innerHTML = svg(playing ? 'pause' : 'play'); pp.title = playing ? 'Pause' : 'Play'; };
+  const range = bar.querySelector('input');
+  range.value = String(vol);
+  range.addEventListener('input', () => {
+    vol = Number(range.value);
+    try { localStorage.setItem(REEL_VOL_KEY, String(vol)); } catch (e) { /* not kept */ }
+    if (gain && ctx) gain.gain.setTargetAtTime(vol, ctx.currentTime, 0.05);
+  });
+  for (const ev of ['keydown', 'mousedown', 'click', 'wheel']) bar.addEventListener(ev, (e) => e.stopPropagation());
+  bar.addEventListener('click', (e) => {
+    const a = e.target.closest('button');
+    if (!a) return;
+    const act = a.dataset.a;
+    if (act === 'play') { if (playing) pause(); else play(); }
+    if (act === 'back') rewind();
+    if (act === 'start') seek(0);
+    if (act === 'close' && closeReel) closeReel();
+    if (act === 'full') {
+      try { if (document.fullscreenElement) document.exitFullscreen(); else host.requestFullscreen(); } catch (err) { /* not allowed */ }
+    }
+  });
+  let asked = null;
+  const prompt = () => {
+    if (asked) return;
+    asked = document.createElement('div');
+    asked.className = 'reel-prompt';
+    asked.textContent = '▶  play with sound';
+    asked.addEventListener('click', (e) => { e.stopPropagation(); asked.remove(); asked = null; play(); });
+    host.appendChild(asked);
+  };
+  show(0);
+  label();
+  play();
+  const stop = () => {
+    stopped = true;
+    playing = false;
+    halt();
+    bar.remove();
+    if (asked) asked.remove();
+    host.classList.remove('reel-host');
+  };
+  return { stop, pause, play };
+}
+
+// `stills` on the NostBook: the reel over the whole game window. Esc closes it.
+let _reelOverlay = null;
+function closeReelOverlay() {
+  if (!_reelOverlay) return;
+  _reelOverlay.player.stop();
+  window.removeEventListener('keydown', _reelOverlay.onKey, true);
+  if (document.fullscreenElement === _reelOverlay.el) { try { document.exitFullscreen(); } catch (e) { /* ok */ } }
+  _reelOverlay.el.remove();
+  _reelOverlay = null;
+}
+function openReelOverlay() {
+  closeReelOverlay();
+  const el = document.createElement('div');
+  el.id = 'reel-overlay';
+  el.innerHTML = stillsReel({ bare: true });
+  document.body.appendChild(el);
+  const onKey = (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); closeReelOverlay(); }
+    e.stopPropagation();
+  };
+  window.addEventListener('keydown', onKey, true);
+  _reelOverlay = { el, onKey, player: startReel(el.querySelector('.stills-reel'), el, { onClose: closeReelOverlay }) };
+}
+function nsPageBehaviours(html, v) {
+  nsStopBehaviours();
+  if (!web) return;
+  if (!web.read) web.read = new Set();
+  // What was read is recorded under every name the page answers to: the
+  // address asked for, and the host and domain it resolved to.
+  const here = [];
+  if (v && v.kind === 'host') {
+    here.push(String(v.addr));
+    const h = findHost(webHosts(), v.addr);
+    if (h) { if (h.host) here.push(h.host); if (h.cached) here.push(h.cached); }
+  }
+  // A link with a guard is a link only once the guarded page has been read.
+  for (const a of nsPageEl.querySelectorAll('a[data-guard]')) {
+    if (web.read.has(a.getAttribute('data-guard'))) continue;
+    const alt = a.getAttribute('data-else');
+    if (alt) { a.setAttribute('href', alt); continue; }
+    const span = document.createElement('span');
+    span.textContent = a.textContent;
+    a.replaceWith(span);
+  }
+  for (const n of here) web.read.add(n);
+  // <!--refresh:18:addr-->: Navigator honoured a refresh, so this does too, and
+  // only while the page that asked for it is still the one showing.
+  const rf = /<!--refresh:(\d+):([^>]+?)-->/.exec(String(html));
+  if (rf) {
+    const view = web.view;
+    _nsTimers.push(setTimeout(() => {
+      if (web && web.view === view && nsEl.style.display !== 'none') nsSetView({ kind: 'host', addr: rf[2] });
+    }, Number(rf[1]) * 1000));
+  }
+  const still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // data-morph="a|b": one letter at a time from a to b, a pause, and back.
+  for (const el of nsPageEl.querySelectorAll('[data-morph]')) {
+    const [a, b] = el.getAttribute('data-morph').split('|');
+    if (still || !a || !b) continue;
+    const len = Math.max(a.length, b.length);
+    const A = [...a.padEnd(len, ' ')], B = [...b.padEnd(len, ' ')];
+    let cur = A.slice(), to = B, hold = 0;
+    _nsTimers.push(setInterval(() => {
+      if (hold > 0) { hold--; return; }
+      const left = [];
+      for (let i = 0; i < len; i++) if (cur[i] !== to[i]) left.push(i);
+      if (!left.length) { to = to === B ? A : B; hold = 30; return; }
+      const i = left[Math.floor(Math.random() * left.length)];
+      cur[i] = to[i];
+      el.textContent = cur.join('').trimEnd();
+    }, 110));
+  }
+  // data-slides: a reel of stills, played by startReel below.
+  for (const el of nsPageEl.querySelectorAll('[data-slides]')) {
+    _reels.push(startReel(el, el.closest('.stills-embed') || nsPageEl));
+  }
+  // data-flash="w|w|w": one word at a time.
+  for (const el of nsPageEl.querySelectorAll('[data-flash]')) {
+    const words = el.getAttribute('data-flash').split('|');
+    if (still || words.length < 2) continue;
+    let i = 0;
+    const ms = Math.max(120, Number(el.getAttribute('data-ms')) || 400);
+    _nsTimers.push(setInterval(() => { i = (i + 1) % words.length; el.textContent = words[i]; }, ms));
+  }
+}
+
 function nsSetView(view, push = true) {
   if (push && web && web.view) web.history.push(web.view);
   if (web) { web.view = view; web.fwd = []; }
@@ -8027,6 +8369,7 @@ function nsRender() {
   nsPageEl.className = `ns-page${bg ? ` bg-${bg}` : ''}`;
   nsPageEl.innerHTML = html;
   nsPageEl.scrollTop = 0;
+  nsPageBehaviours(html, v);
   nsTitleEl.textContent = `${title} - ${ieOn ? IE_TITLE : 'Netscape'}`;
   nsUrlEl.value = loc;
   nsMsgEl.textContent = 'Document: Done';
@@ -8386,6 +8729,7 @@ function openNetscape(addr) {
 
 function closeNetscape() {
   nsEl.style.display = 'none';
+  nsStopBehaviours();
   // The skin comes OFF on the way out, or the NostBook's Netscape would open
   // wearing Explorer's chrome the next time it is asked for.
   if (ieOn) ieSkin(false);
@@ -9523,6 +9867,12 @@ function laptopRebootHook() {
   return { ok: true, text: '' };
 }
 
+// stills(1): the photographs on the disk, shown in the browser one at a time.
+function laptopStillsHook() {
+  openReelOverlay();
+  return { ok: true, text: '' };
+}
+
 function laptopBookHook(args) {
   const pick = pickFrom(BOOKS, args, 'book');
   if (pick && pick.error) return { ok: false, text: pick.error };
@@ -9615,8 +9965,17 @@ function postProgram(hostName, text) {
   const unit = (currentWorld.robots || []).find((r) => !r.dead && r._netId === h.name);
   if (!unit) return { ok: false, text: `post: ${h.host}: the unit is no longer on the network` };
 
+  // The W-1's loader counts courtesy before it loads anything.
+  if (unit.type === 'w1') {
+    const rude = politeness(text);
+    if (rude) return { ok: false, text: `post: ${h.host}: ${rude}` };
+  }
   unit.program = text;
   unit._phoned = { at: dayNight.label, how: 'program update' };
+  // The marked unit on each island: the first post takes, then it goes loopy
+  // after a while; any later post clears it and it stays cleared.
+  if (unit.trojan && !unit.trojanFired) { unit.trojanFired = true; unit.loopy = true; unit.loopyIn = 25 + Math.random() * 35; }
+  else if (unit.loopy) { unit.loopy = false; unit._loopyPick = null; unit.lamp = null; unit.lampFlash = 0; }
   unit.intent = null;
   unit.fault = null;
   unit.lamp = null;
@@ -10592,7 +10951,7 @@ function laptopRun(line) {
   // when you are actually carrying it. The drag mounts /mnt/fsf directly.
   laptopShell.fsfCard = player.hasItem('fsf_card') ? makeFsfCard : null;
   laptopShell.onAchieve = (name, data) => kleos(name, data);
-  const r = runUnix(t, laptopShell, { ml: laptopMlHook, netscape: laptopNetscapeHook, ed: laptopEdHook, pico: laptopPicoHook, post: laptopPostHook, bluebox: laptopBlueboxHook, charge: laptopChargeHook, get: laptopGetHook, pdf: laptopPdfHook, telnet: laptopTelnetHook, book: laptopBookHook, transcribe: laptopTranscribeHook, sleep: laptopSleepHook, suspend: laptopSuspendHook, halt: laptopHaltHook, reboot: laptopRebootHook, save: laptopSaveHook, wifi: laptopWifiHook, sniffer: laptopSnifferHook, more: laptopMoreHook });
+  const r = runUnix(t, laptopShell, { ml: laptopMlHook, netscape: laptopNetscapeHook, ed: laptopEdHook, pico: laptopPicoHook, post: laptopPostHook, bluebox: laptopBlueboxHook, charge: laptopChargeHook, get: laptopGetHook, pdf: laptopPdfHook, telnet: laptopTelnetHook, book: laptopBookHook, transcribe: laptopTranscribeHook, sleep: laptopSleepHook, suspend: laptopSuspendHook, halt: laptopHaltHook, reboot: laptopRebootHook, save: laptopSaveHook, wifi: laptopWifiHook, sniffer: laptopSnifferHook, more: laptopMoreHook, stills: laptopStillsHook });
   if (player.laptop) player.laptop.netUp = !!(laptopShell.net && laptopShell.net.up);
   sfx.play(r.ok ? 'keyclick' : 'keyclick_soft');
   if (r.text) replPrint(r.text);
@@ -11656,7 +12015,7 @@ let _craftPromptOff = false;
 function craftPromptDismiss() { _craftPromptOff = true; }
 function craftPromptUp(can, p) {
   // The offer's identity, so that swapping which craft is pending re-announces.
-  const key = can ? `${p.canCraftObGun()}${p.canCraftWaveGun()}${p.canCraftChip()}${p.canCraftSword()}${p.canCraftFortressMap()}${p.canCraftGoggles()}${p.canCraftCodescope()}` : '';
+  const key = can ? `${p.canCraftObGun()}${p.canCraftWaveGun()}${p.canCraftChip()}${p.canCraftSword()}${p.canCraftFortressMap()}${p.canCraftGoggles()}${p.canCraftCodescope()}${p.canCraftNuts()}` : '';
   if (key !== _craftPromptKey) {
     _craftPromptKey = key;
     _craftPromptAt = performance.now();
@@ -11839,6 +12198,7 @@ function nearestBlightTile(x, y, maxR) {
 function update(dt) {
   // C3: her idle Strachey generator. Rare, and only on her island.
   tickLoveLetters(dt);
+  tickChorale(dt);
   tickDayReturn(dt);
   if (input.consumePress('KeyH')) toggleHelp();
   if (input.inventoryPressed()) showBackpack = !showBackpack;
@@ -12092,6 +12452,7 @@ function update(dt) {
     // After the NostBook and the sniffer, so its chip fragment is never taken
     // from a laptop repair.
     else if (player.canCraftCodescope()) player.craftCodescope();
+    else if (player.canCraftNuts()) player.craftNuts();
     else if (player.canCraftBoat(map)) player.craftBoat(map);
 
     // Nothing else to make and a dead machine in the pack: let repairLaptop
@@ -13316,7 +13677,7 @@ function frame(now) {
       islandsReached: Object.keys(player._welcomed || {}).length,
       showWeapons,
       craftPrompt: craftPromptUp(
-        (player.canCraftObGun() && player.hands !== 'obgun') || (player.canCraftWaveGun() && player.hands !== 'wavegun') || player.canCraftChip() || player.canCraftSword() || player.canCraftFortressMap() || player.canCraftGreekShip(map) || player.canCraftGoggles() || player.canCraftCodescope() || player.canCraftBoat(map),
+        (player.canCraftObGun() && player.hands !== 'obgun') || (player.canCraftWaveGun() && player.hands !== 'wavegun') || player.canCraftChip() || player.canCraftSword() || player.canCraftFortressMap() || player.canCraftGreekShip(map) || player.canCraftGoggles() || player.canCraftCodescope() || player.canCraftNuts() || player.canCraftBoat(map),
         player,
       ),
       craftWaveGun: player.canCraftWaveGun() && player.hands !== 'wavegun',
@@ -13521,7 +13882,8 @@ function openScope(r) {
       <button id="sc-x" type="button" style="background:none;border:0;color:#cfe3d2;font:14px monospace;cursor:pointer">&#10005;</button>
     </div>
     <div id="sc-static" style="font-size:10px;line-height:1.35;color:#7f9a84;margin-top:2px"></div>
-    <div id="sc-choice" style="margin:4px 0 6px;color:#b9c7b0"></div>
+    <div id="sc-choice" style="margin:4px 0 2px;color:#b9c7b0"></div>
+    <div id="sc-tale" style="margin:0 0 6px;font-size:10px;letter-spacing:.03em;color:#7f9a84"></div>
     <div style="display:flex;gap:6px;margin:0 0 8px">
       <button id="sc-home" type="button" class="sc-b sc-sm">Send home</button>
       <button id="sc-down" type="button" class="sc-b sc-sm">Shut down</button>
@@ -13539,6 +13901,12 @@ function openScope(r) {
       <span id="sc-intents" style="font-size:9px;line-height:1.3;color:#7f9a84;align-self:center"></span>
     </div>
     <div id="sc-msg" style="margin-top:6px;color:#e3c27f;min-height:1em"></div>
+    <div id="sc-notes" style="margin-top:8px;border-top:1px solid #1d2b21;padding-top:6px;font-size:10px;line-height:1.4"></div>
+    <div style="display:flex;gap:6px;align-items:center;margin-top:4px">
+      <span style="color:#7f9a84;font-size:10px">line</span><input id="sc-nline" style="width:34px" maxlength="3">
+      <input id="sc-ntext" style="flex:1;width:auto" maxlength="160" placeholder="a note on that line">
+      <button id="sc-nadd" type="button" class="sc-b sc-sm">Note</button>
+    </div>
     <style>#scope .sc-b{background:#1a2a1e;color:#cfe3d2;border:1px solid #3d5c44;border-radius:4px;padding:4px 10px;font:12px ui-monospace,Menlo,monospace;cursor:pointer}
     #scope .sc-b:hover{background:#24402b}#scope .sc-sm{padding:1px 7px;font-size:10px;line-height:1.5}#scope td{padding:2px 4px;border-bottom:1px solid #1d2b21}
     #scope input{width:80px;background:#070a08;color:#cfe3d2;border:1px solid #2b3f30;border-radius:3px;font:11px ui-monospace,Menlo,monospace;padding:1px 4px}
@@ -13567,6 +13935,35 @@ function openScope(r) {
     ? 'intents: ' + can.map((k) => `<span title="${esc(SCOPE_INTENT_HELP[k] || '')}" style="cursor:help">${esc(k)}</span>`).join(' ')
     : 'takes no program';
   prog.value = r.program || '';
+  // NOTES ON THE LINES. Earlier readers' notes are keyed by the text of a line,
+  // so they turn up on any machine running that line; the player's own go in
+  // the same book and ride the save.
+  const drawNotes = () => {
+    const mine = player.scopeNotes || {};
+    const rows = [];
+    String(prog.value || '').split('\n').forEach((ln, i) => {
+      const key = ln.trim();
+      const all = [...(SCOPE_NOTES[key] || []), ...((mine[key] || []).map((t) => [player.name || 'you', t]))];
+      for (const [who, t] of all) rows.push(`<div><span style="color:#7f9a84">l.${i + 1} &middot; ${esc(who)}</span> ${esc(t)}</div>`);
+    });
+    $('#sc-notes').innerHTML = rows.length ? rows.join('') : '<span style="color:#7f9a84">No notes on these lines.</span>';
+  };
+  drawNotes();
+  $('#sc-nadd').addEventListener('click', () => {
+    const n = parseInt($('#sc-nline').value, 10);
+    const lines = String(prog.value || '').split('\n');
+    const t = $('#sc-ntext').value.trim();
+    if (!(n >= 1 && n <= lines.length) || !lines[n - 1].trim()) { msg(`Line 1 to ${lines.length}, one with code on it.`); return; }
+    if (!t) { msg('Write the note first.'); return; }
+    const key = lines[n - 1].trim();
+    player.scopeNotes = player.scopeNotes || {};
+    (player.scopeNotes[key] ||= []).push(t.slice(0, 160));
+    $('#sc-ntext').value = '';
+    msg('');
+    drawNotes();
+    persist();
+  });
+  for (const q of ['#sc-nline', '#sc-ntext']) $(q).addEventListener('keydown', (e) => e.stopPropagation());
   // The senses table is built once, from the keys the program last read, so an
   // input keeps its value while the live column updates beside it.
   const keys = Object.keys(r.lastSense || {});
@@ -13586,6 +13983,7 @@ function openScope(r) {
     const sc = Math.round((Number.isFinite(player.scopeCharge) ? player.scopeCharge : 0) * 100);
     $('#sc-static').innerHTML = `${staticLine}<br>Last Report to OB: ${esc(lastReport)} &middot; scope charge ${sc}%${sc < 5 ? ' (next change takes a battery)' : ''}`;
     $('#sc-down').textContent = r.powerDown ? 'Wake' : 'Shut down';
+    $('#sc-tale').textContent = taleSpin(id, r.lastSense, r.lastDecision, { powerDown: r.powerDown, drained: r.drained });
     if (r.powerDown) { $('#sc-choice').textContent = 'STATUS: shut down'; return; }
     if (r.limping) { $('#sc-choice').textContent = 'STATUS: limping home'; return; }
     if (r.drained) { $('#sc-choice').textContent = `STATUS: flat${r.reserveSpent ? ', no reserve' : ''}`; return; }
@@ -13742,6 +14140,7 @@ function openScope(r) {
     if (r.powerDown) { r.powerDown = false; r.lamp = null; r.mlT = 0; msg(`${id} wakes.`); refresh(); return; }
     if (!spend('down')) return;
     r.powerDown = true;
+    if (r.type === 't1') sfx.play('daisy');
     msg(`${id} shuts down where it stands.`);
     refresh();
   });

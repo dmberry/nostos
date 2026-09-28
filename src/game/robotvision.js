@@ -19,6 +19,7 @@
 
 const RAMP = ' .,:;irsXA253hMHGS#9B&@'; // dark -> bright glyph ramp
 let sampCanvas = null, sampCtx = null;
+let _frame = 0;
 
 // info: { srcCanvas, w, h, t, robot, unitLabel, relay, dist, maxRange, heading,
 //   gait, integrity, battery, entities:[{x,y,label,kind}], project, selfDestructT }
@@ -123,6 +124,19 @@ export function drawRobotVision(ctx, info) {
   // scanlines + a small centre reticle in the feed
   ctx.fillStyle = 'rgba(0,0,0,0.18)';
   for (let y = fy; y < fy + fh; y += 3) ctx.fillRect(fx, y, fw, 1);
+  // Operational image: a frame count and the corner marks a sensor puts on
+  // what it keeps. ZONE is what the synthesiser calls its own output.
+  _frame++;
+  ctx.font = "8px ui-monospace, 'Courier New', monospace";
+  ctx.fillStyle = 'rgba(255,178,58,0.75)';
+  ctx.fillText('ZONE', fx + 4, fy + 10);
+  ctx.textAlign = 'right';
+  ctx.fillText(`F ${String(_frame % 1000000).padStart(6, '0')}`, fx + fw - 4, fy + 10);
+  ctx.textAlign = 'left';
+  ctx.strokeStyle = 'rgba(255,178,58,0.5)';
+  for (const [cx0, cy0, sx0, sy0] of [[fx + 3, fy + 14, 1, 1], [fx + fw - 3, fy + 14, -1, 1], [fx + 3, fy + fh - 3, 1, -1], [fx + fw - 3, fy + fh - 3, -1, -1]]) {
+    ctx.beginPath(); ctx.moveTo(cx0, cy0 + sy0 * 6); ctx.lineTo(cx0, cy0); ctx.lineTo(cx0 + sx0 * 6, cy0); ctx.stroke();
+  }
   const rcx = fx + fw / 2, rcy = fy + fh / 2;
   ctx.strokeStyle = green; ctx.lineWidth = 1; ctx.globalAlpha = 0.8;
   ctx.beginPath(); ctx.moveTo(rcx - 7, rcy); ctx.lineTo(rcx + 7, rcy); ctx.stroke();

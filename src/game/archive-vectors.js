@@ -61,7 +61,7 @@ export const VECTOR_SITES = [
       '<hr>',
       '<p><small>Corrections welcome, especially from anybody who has to teach',
       'this after me. — J. Hollis, head of maths.</small></p>',
-      '<p><small>Further: <a href="linearalgebra.geocities.ws">eigenvectors</a> and <a href="projection.geocities.ws">what a projection costs</a>.</small></p>',
+      '<p><small>Further: <a href="linearalgebra.geocities.ws">eigenvectors</a> and <a href="projection.geocities.ws">what a projection costs</a>. The machines built to do this in bulk: <a href="vector-machines-ring.geocities.ws">the Vector Machines Ring</a>.</small></p>',
     ],
   },
   {

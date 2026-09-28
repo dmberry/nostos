@@ -129,6 +129,9 @@ const HACK = P('hack_nostos.geocities.ws', 'HACK_NOSTOS',
     'says so afterwards. Everything the machines wrote is signed.</p>',
     '<p><small>more on the language in the',
     '<a href="stunlaw.blogspot.com/development-guide">development guide</a>.',
+    'the works history of the T-1 program is on any NostBook: sccs prs',
+    '/usr/src/robots/s.pursuit.ml. programs as poems, fights between them and',
+    'the rest are on <a href="hypertext-ring.geocities.ws">the hypertext ring</a>.',
     '-- Ronnie</small></p>',
   ]);
 
