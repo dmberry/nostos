@@ -9,7 +9,7 @@
 
 // THE THURSDAY GROUP. A reading group's page that keeps the first part of The
 // German Ideology twice, in English under vault and in German under crypt, in
-// full view; and two pages written up by members for the leaves the manuscript
+// full view; and two pages written up by members for the passages the manuscript
 // is missing at those points.
 
 import { IDEOLOGY_EN, IDEOLOGY_DE, GENERAL_INTELLECT } from './ideology-sealed.js';
@@ -32,7 +32,7 @@ const EPOCH = P(MAIN, 'THE ILLUSION OF THE EPOCH', 'The Illusion of the Epoch ::
   '<p>We read it a section a night. We keep it sealed.',
   'The English is ours, done from the German by three of us over one winter.',
   'The German was typed in on a terminal with no umlauts, and locked the old way.</p>',
-  '<p>Two leaves of the manuscript are missing where the text breaks off. Members',
+  '<p>Two passages are missing where the text breaks off. Members',
   'wrote them up: <a href="' + FISH + '">the essence of the fish</a> &middot;',
   '<a href="' + PRE + '">liberation is an historical act</a>.</p>',
   '<!--',
@@ -62,17 +62,13 @@ const EPOCH = P(MAIN, 'THE ILLUSION OF THE EPOCH', 'The Illusion of the Epoch ::
   '<p><small>counter: 00845 &middot; Thursdays, back room, bring the phrase</small></p>',
 ]);
 
-const FISH_PAGE = P(FISH, 'THE ESSENCE OF THE FISH', 'The essence of the fish :: a missing leaf', [
+const FISH_PAGE = P(FISH, 'THE ESSENCE OF THE FISH', 'The essence of the fish :: a missing passage', [
   '<!--bg:soc-marxian-->',
   '<h1>The essence of the fish</h1>',
   '<p><small>written up for the Thursday group, for the gap in Part I where the',
   'manuscript breaks off in the middle of a sentence about proletarians</small></p>',
   '<hr>',
-  '<p>At that point on <a href="' + MAIN + '">our page</a> the text stops at',
-  '"if their being does not" and a note says the manuscript has a gap. The',
-  'editions print the text that belongs there somewhere else, at the back of the',
-  'volume. It is short. This is what it says, in our words.</p>',
-  '<h2>What the leaf says</h2>',
+  '<h2>What the passage says</h2>',
   '<p>Feuerbach, in the <i>Philosophy of the Future</i>, had argued that the being',
   'of a thing is its essence: whatever conditions an animal lives in are the',
   'conditions in which its nature is satisfied. Marx and Engels take him at his',
@@ -86,7 +82,7 @@ const FISH_PAGE = P(FISH, 'THE ESSENCE OF THE FISH', 'The essence of the fish ::
   'correspond to their essence. Feuerbach calls that an unavoidable misfortune.',
   'Stirner tells the discontented that the contradiction is their own and they',
   'should keep their disgust to themselves. Bauer says they are stuck in the',
-  'muck of substance. The leaf\'s reply to all three is that industry altered the',
+  'muck of substance. The passage\'s reply to all three is that industry altered the',
   'river, and that people acting in practice can alter the conditions again.</p>',
   // soc/father-thames-01.jpg: Punch, July 1858, Father Thames introducing his offspring, public domain, Wikimedia Commons
   '<img class="indie-pic" src="assets/media/web/soc/father-thames-01.jpg" alt=""><span class="indie-cap">Punch, 1858, the summer of the Great Stink. the fish did not get a vote</span>',
@@ -98,7 +94,7 @@ const FISH_PAGE = P(FISH, 'THE ESSENCE OF THE FISH', 'The essence of the fish ::
   'conditions that production can use up. John Bellamy Foster\'s <i>Marx\'s Ecology</i> (2000) and Kohei Saito\'s',
   '<i>Karl Marx\'s Ecosocialism</i> (2017) built a whole reading of Marx on the',
   'later notebooks, on soil chemistry and the "metabolic rift" between town and',
-  'country. The fish leaf is where that reading can say it started, twenty years',
+  'country. The fish passage is where that reading can say it started, twenty years',
   'before <i>Capital</i>.</p>',
   '<p>It also changes what the word essence can mean. If the essence of the fish',
   'can be poured out of the river with the dye works\' waste, then an essence is a',
@@ -106,23 +102,19 @@ const FISH_PAGE = P(FISH, 'THE ESSENCE OF THE FISH', 'The essence of the fish ::
   '<p>It is one of the few places in Part I where the subject is the medium: the water,',
   'and what happens to anything that lives in a medium someone else can alter.</p>',
   '<hr>',
-  '<p><small>the other missing leaf: <a href="' + PRE + '">liberation is an historical',
+  '<p><small>the other missing passage: <a href="' + PRE + '">liberation is an historical',
   'act</a> &middot; back to <a href="' + MAIN + '">the illusion of the epoch</a></small></p>',
 ]);
 
-const PRE_PAGE = P(PRE, 'LIBERATION IS AN HISTORICAL ACT', 'Liberation is an historical act :: a missing leaf', [
+const PRE_PAGE = P(PRE, 'LIBERATION IS AN HISTORICAL ACT', 'Liberation is an historical act :: a missing passage', [
   '<!--bg:soc-marxian-->',
   '<h1>Liberation is an historical act</h1>',
-  '<p><small>written up for the Thursday group, for the other gap: the leaf the',
+  '<p><small>written up for the Thursday group, for the other gap: the passage the',
   'editions call "Preconditions of the Real Liberation of Man"</small></p>',
   '<hr>',
-  '<p>This one survives only in part. It opens mid-argument and it breaks off',
-  'again after a few sentences, with the manuscript\'s own gap marked in the middle.',
-  'What there is, in our words:</p>',
-  '<h2>What the leaf says</h2>',
   '<p>The young Hegelians thought they would free people by freeing them from',
   'ideas: reduce philosophy, theology and "substance" to self-consciousness, and',
-  'man is liberated from phrases that, the leaf says drily, never held him in the',
+  'man is liberated from phrases that, the passage says drily, never held him in the',
   'first place. Against this it sets a list. Slavery cannot be abolished without',
   'the steam engine and the mule-jenny. Serfdom cannot be abolished without better',
   'agriculture. People cannot be liberated at all while they cannot get food and',
@@ -137,7 +129,7 @@ const PRE_PAGE = P(PRE, 'LIBERATION IS AN HISTORICAL ACT', 'Liberation is an his
   '<img class="indie-pic" src="assets/media/web/soc/mule-jenny-01.png" alt=""><span class="indie-cap">the mule-jenny, from Baines, 1835</span>',
   '<h2>A digression</h2>',
   '<p>It is often read as technological determinism: first the machine, then the',
-  'freedom. The leaf claims less than that: the machine is a condition that has',
+  'freedom. The passage claims less than that: the machine is a condition that has',
   'to be met, and it does none of the liberating. Without the spinning mule there is no',
   'end to slavery, and with it there is still no guarantee of anything. The',
   'tradition after it splits over which half of that sentence to stress.</p>',
@@ -150,13 +142,13 @@ const PRE_PAGE = P(PRE, 'LIBERATION IS AN HISTORICAL ACT', 'Liberation is an his
   'tendency Marx described has in fact arrived, knowledge running production, and',
   'arrived with none of the consequences Marx expected: free time turns up as',
   'unemployment. Saito\'s later work goes further and asks whether the',
-  'productive forces the leaf counts on are themselves the damage.</p>',
+  'productive forces the passage counts on are themselves the damage.</p>',
   '<p>Food, drink, housing, clothing. On the islands, since the towers went up,',
-  'circumstance has read the leaf out to everybody. The machines are there, far',
+  'circumstance has read it out to everybody. The machines are there, far',
   'past anything with a mule or a steam engine in it, and the list is still',
   'unmet.</p>',
   '<hr>',
-  '<p><small>the other missing leaf: <a href="' + FISH + '">the essence of the',
+  '<p><small>the other missing passage: <a href="' + FISH + '">the essence of the',
   'fish</a> &middot; back to <a href="' + MAIN + '">the illusion of the epoch</a></small></p>',
 ]);
 
