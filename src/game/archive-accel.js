@@ -153,7 +153,7 @@ const SYSTOLIC = P('systolic.geocities.ws', 'SYSTOLIC ARRAYS', 'Systolic arrays'
   '<img class="indie-pic" src="assets/media/web/vec/systolic-01.png" alt=""><span class="indie-cap">weights held still in the cells, the inputs pumped through</span>',
   '<p>Nothing goes back to memory until the end. Each number is read once and used',
   'as many times as there are cells in its path. On a chip, where the wires cost',
-  'more than the arithmetic, that is the whole design argument, and Kung made it',
+  'more than the arithmetic, this is the design argument, which Kung made',
   'again in 1982 in "Why Systolic Architectures?".</p>',
   '<p>Carnegie Mellon built the Warp machine on it in the 1980s, with General',
   'Electric, and later iWarp with Intel. Then for about thirty years it was a',
@@ -255,8 +255,8 @@ const FORMATS = P('number-formats.geocities.ws', 'NUMBER FORMATS', 'How few bits
   '4x4 matrices of 16-bit numbers and add the result into 32 bits, in one step. The',
   'chips after it put more of the die into tensor cores and fewer bits into each',
   'number, down to four.</p>',
-  '<p>A trained model is a file of these numbers, billions of them. Choosing how',
-  'many bits to store each one in is choosing how much of the model survives.</p>',
+  '<p>A trained model is a file of these numbers, billions of them, and each bit',
+  'taken off every number takes some of the model with it.</p>',
   ...strip('number-formats.geocities.ws'),
 ]);
 
@@ -314,7 +314,7 @@ const WAFER = P('wafer-scale.geocities.ws', 'WHOLE WAFERS', 'Whole wafers, and t
   // vec/synapse-01.jpg: DARPA SyNAPSE, public domain, Wikimedia Commons
   '<img class="indie-pic" src="assets/media/web/vec/synapse-01.jpg" alt=""><span class="indie-cap">sixteen TrueNorth chips on one board</span>',
   '<h2>Neuromorphic</h2>',
-  '<p>The road not taken, or not yet. IBM\'s TrueNorth (2014) had a million',
+  '<p>IBM\'s TrueNorth (2014) had a million',
   'artificial neurons that fire spikes, as nerves do, and drew about 70 milliwatts.',
   'Intel\'s Loihi (2017) could learn on the chip. They compute only when a spike',
   'arrives, and they are very good at almost nothing the matrix machines are good',
@@ -342,8 +342,8 @@ const LOTTERY = P('hardware-lottery.geocities.ws', 'THE HARDWARE LOTTERY', 'The 
   'on all of it, and nobody finds out whether it would have been better.</p>',
   '<p>Rich Sutton\'s "The Bitter Lesson" (2019) says that general methods which',
   'use more computation beat methods built on human knowledge, every time the',
-  'computation grows. Read the two essays together. Sutton is describing which',
-  'methods won. Hooker is describing who built the machines they won on.</p>',
+  'computation grows. Hooker\'s essay can be read as a reply: the methods',
+  'that won were the ones the available chips favoured.</p>',
   '<p><small>see also: <a href="scaling-laws.geocities.ws">scaling laws and the bitter',
   'lesson</a> &middot; <a href="perceptron-rosenblatt.geocities.ws">Rosenblatt\'s',
   'Perceptron</a>, which was built as hardware, with motors turning the',
@@ -366,7 +366,7 @@ const TOWER = P('inside-a-tower.geocities.ws', 'WHAT IS INSIDE ONE', 'What is in
     + '  top       the lamp</pre>',
   // vec/h100-01.jpg: Geekerwan, CC BY 3.0, Wikimedia Commons
   '<img class="indie-pic" src="assets/media/web/vec/h100-01.jpg" alt=""><span class="indie-cap">not from the tower. One like them, from a trade review, so you can see the size</span>',
-  '<p>The cards are the thing. Each has one large chip in the middle with four',
+  '<p>Each card has one large chip in the middle with four',
   'small square towers of memory right up against it, stacked, under the same lid.',
   'I have seen that layout in the trade press. It is the layout on the',
   '<a href="memory-wall.geocities.ws">memory wall</a> page. Every card is wired to',

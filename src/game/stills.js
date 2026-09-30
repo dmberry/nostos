@@ -9,7 +9,7 @@
 
 // LA PLAGE. A sequence of photographs, two title cards and a black, with a
 // French narration and English subtitles. The same frames and the same takes
-// for everybody: `stills` plays it full page on the NostBook, and a page on the
+// for everybody: `laplage` plays it full page on the NostBook, and a page on the
 // cached web embeds it. The browser plays it (data-slides in main.js).
 
 export const STILLS_DIR = 'assets/media/stills';
@@ -33,6 +33,37 @@ export const STILLS = [
 ];
 // Over the black at the end.
 export const STILLS_LAST = ['Then he understood that what he had seen on the beach that morning was his own return.', '13'];
+
+// The narration, in the language it was spoken in, sealed the way `unseal`
+// reads a block. The text is not in this file.
+export const PLAGE_SEALED =
+  'RqjluFU3kwttQGUvQWG7qmKNYtmLfpu/Zum+km/OnGKIa7KIPkqWA7Dk+4vQFcPf\n' +
+  'TajiriZt/4IX3J6hrVygXlEqLnqzKmfL4d+3oLcF3y6vfg1zVs12iutZ9uST74xL\n' +
+  'SfUvcpy3VC86uhZzIYwrOjNnfvw/wOji/XzSRY+nyjl+NCJhu8j/7rwrCl+LyZaw\n' +
+  'ZcYqkAk0AkCOKgRrYfJZgUqlodxsGRsUinJaeI5cuXHnUNipW1f0EFh6gHt9VS+C\n' +
+  'c5bgGQAgYkOjt9hZYekkh3E4RgTZyQdqDbW1TM3IsBFbloTyd44LXsdcuqAWWVbM\n' +
+  'Ha/DIFVSKpxxrFpLYYNZ+KBbtYX0hknOl48QxOeDk9nHIv3piHokGvIOYYVK9+D/\n' +
+  'EzvxI2Bk4V+iPbININUfiaadL62HndWyx+kOq7q4CLsy5DOovAIXzL+Mx+Hab8ma\n' +
+  'ookYG8Exz8Loq2VEmJZaoC7liZ92AecHJe/QqNTMsUu6c1TeAQs8T8TwJekq+bnC\n' +
+  'eeaIjTgwqeP5HXW9Ppa7wWX9UP1JocDRTAvk0i5pICZS7iSoF35Pi1VSmN7wn+Xa\n' +
+  '2wj9rpx6WciD3E7yKnVvdQe6kHZsloOi7f9XeEi+bMf8dMbVC9N1vKWoP7i7elL/\n' +
+  'lhLfGXnxEEJyHHWV1vVkPxxJGVeBZ625PyvAjuhZaK14K+ZnWDSmUpp1npfB1vtt\n' +
+  'diKGzjBhFSPn/ooCCygXCDwB5rumOVan7cSIPfPvyUrUrW1iDreE4ArEsYj7wAnH\n' +
+  '0obtW//xu7Nb0/5v/r2Bu9tGupC28gCCTDJBYOGjOjXuG/uINqfrRIzf5bUwV6aC\n' +
+  'r6TWknKGE5KRUlBX4gC2sAubJuG01O2eO0m/mbfrkHTTE4Vr/sOUFHQ9pvRNlV9s\n' +
+  'We4nT71HNn1GRy8zMEUj3aVayVBixKYniKlnaB64uthMobK0rTt4s5MxraAoBzsE\n' +
+  'jc51DfFaCfT2VxQHl7MC7Z9ezMXxF5mvzC7nhiESNRch9bXKfNqBc5NaUM6utc2P\n' +
+  'XkOHdSO4sVR/H3au8N7VBy43mzcbf+evHMRfzyXJLXzBdb3IgNO+GVHhMUIiNP3c\n' +
+  'w6w+uUtqGG3MaYuz+OONcPV5U4RBCDSODR1uUY9cXs2xpTrhB+6TEHWPT1eGfA9i\n' +
+  'j9f0/dqwekTh/hfFBmKWU+vZRTVdfVLHaZLZOQftmjwvEhr9NQ6ymhXh5PNhfHdi\n' +
+  'RgMRtLH+I0Aw/n1F1Cz5TNLrT6+HkOZXRuUsxrDgcYb1ttO5Z+gjXL1cWN3dxEbY\n' +
+  'culwNnruZKXg6XueHgQQ2gYpJ1Rs3wYb2gH/ivqFXRYQBQC8aSKIPL0etu8DoRjP\n' +
+  'oZNF4qEfP/MDEqDZc/DLhLeAdfmISI0SekYWVxIojWKFcmRufs/mu1rySu/yuekn\n' +
+  'ktatZJ1OvKQyyVrmUnX53fJX6S/dlodWre+nCjgAS4BiWSacp3nbv92Iwa0SvqBS\n' +
+  'vWRDlE3obiaqS8blQmXzEeZsUZBn9kN2cNqV+59BxKcG0tWWH0iJFjitaXFeqUmA\n' +
+  'oD0+yt1VPE6SyoCbq7PvB1WOCgybiZclqeoaVV4j/Cq4iH+yz3LyRqLKJCCWmAMb\n' +
+  'Crel3ODCbZ+IBmp2V/nr4oKKv503hW18IjMg4muNelQ5uGW1aAKqB29fTnHZnbRS\n' +
+  'K+5SnxRNFJWEaD9AQeRTZo9GIBfsQeiEoRyeeCjfpXfz7e8=\n';
 
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 

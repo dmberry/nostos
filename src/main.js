@@ -8143,7 +8143,7 @@ function startReel(reel, host, opts = {}) {
   return { stop, pause, play };
 }
 
-// `stills` on the NostBook: the reel over the whole game window. Esc closes it.
+// `laplage` on the NostBook: the reel over the whole game window. Esc closes it.
 let _reelOverlay = null;
 function closeReelOverlay() {
   if (!_reelOverlay) return;
@@ -9867,7 +9867,7 @@ function laptopRebootHook() {
   return { ok: true, text: '' };
 }
 
-// stills(1): the photographs on the disk, shown in the browser one at a time.
+// laplage(1): the photographs on the disk, shown in the browser one at a time.
 function laptopStillsHook() {
   openReelOverlay();
   return { ok: true, text: '' };
@@ -10951,7 +10951,7 @@ function laptopRun(line) {
   // when you are actually carrying it. The drag mounts /mnt/fsf directly.
   laptopShell.fsfCard = player.hasItem('fsf_card') ? makeFsfCard : null;
   laptopShell.onAchieve = (name, data) => kleos(name, data);
-  const r = runUnix(t, laptopShell, { ml: laptopMlHook, netscape: laptopNetscapeHook, ed: laptopEdHook, pico: laptopPicoHook, post: laptopPostHook, bluebox: laptopBlueboxHook, charge: laptopChargeHook, get: laptopGetHook, pdf: laptopPdfHook, telnet: laptopTelnetHook, book: laptopBookHook, transcribe: laptopTranscribeHook, sleep: laptopSleepHook, suspend: laptopSuspendHook, halt: laptopHaltHook, reboot: laptopRebootHook, save: laptopSaveHook, wifi: laptopWifiHook, sniffer: laptopSnifferHook, more: laptopMoreHook, stills: laptopStillsHook });
+  const r = runUnix(t, laptopShell, { ml: laptopMlHook, netscape: laptopNetscapeHook, ed: laptopEdHook, pico: laptopPicoHook, post: laptopPostHook, bluebox: laptopBlueboxHook, charge: laptopChargeHook, get: laptopGetHook, pdf: laptopPdfHook, telnet: laptopTelnetHook, book: laptopBookHook, transcribe: laptopTranscribeHook, sleep: laptopSleepHook, suspend: laptopSuspendHook, halt: laptopHaltHook, reboot: laptopRebootHook, save: laptopSaveHook, wifi: laptopWifiHook, sniffer: laptopSnifferHook, more: laptopMoreHook, laplage: laptopStillsHook });
   if (player.laptop) player.laptop.netUp = !!(laptopShell.net && laptopShell.net.up);
   sfx.play(r.ok ? 'keyclick' : 'keyclick_soft');
   if (r.text) replPrint(r.text);

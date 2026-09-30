@@ -126,3 +126,62 @@ test('every still and narration clip La Plage names is a file that exists', asyn
   assert.doesNotMatch(stillsReel({ bare: true }), /bg:stills/);
   assert.match(stillsReel(), /<!--bg:stills-->/);
 });
+
+test('an old disk loses the untouched stills folder and gains laplage', () => {
+  const root = makeDisk();
+  const home = root.d.home;
+  delete home.d.laplage;
+  home.d.stills = dir({ readme: { f: 'Twelve photographs and two title cards.\nThey play in order: stills' }, '01.jpg': { f: 'x' } });
+  graftSystemDirs(root);
+  assert.ok(home.d.laplage);
+  assert.equal(home.d.stills, undefined);
+  const kept = makeDisk();
+  delete kept.d.home.d.laplage;
+  kept.d.home.d.stills = dir({ readme: { f: 'They play in order: stills' }, 'mine.txt': { f: 'kept' } });
+  graftSystemDirs(kept);
+  assert.equal(kept.d.home.d.stills.d['mine.txt'].f, 'kept');
+});
+
+test('the page keeps a sealed block that nothing but the phrase opens', async () => {
+  const { archivedSite } = await import('../src/game/archive.js');
+  const { openSigned, fromBase64 } = await import('../src/game/digest.js');
+  const { PLAGE_SEALED } = await import('../src/game/stills.js');
+  const html = [].concat(archivedSite('photo-roman.geocities.ws').body).join('\n');
+  assert.match(html, /<!-------BEGIN LA PLAGE-----[\s\S]+-----END LA PLAGE------->/);
+  assert.ok(fromBase64(PLAGE_SEALED).length > 400);
+  assert.equal(openSigned('la plage', fromBase64(PLAGE_SEALED)), null);
+  const env = { root: makeDisk(), cwd: ['home'] };
+  env.root.d.home.d['p.asc'] = { f: html.slice(html.indexOf('<!-------BEGIN LA PLAGE')) };
+  assert.match(runUnix('unseal p.asc la jetee', env, {}).text, /does not open/);
+});
+
+test('vault seals a file under a phrase and only that phrase opens it', () => {
+  const env = { root: makeDisk(), cwd: ['home'] };
+  env.root.d.home.d.note = { f: 'the dog was there' };
+  assert.match(runUnix('vault -seal note "Once More"', env, {}).text, /sealed/);
+  assert.match(env.root.d.home.d.note.f, /^-----BEGIN SEALED-----\n[\s\S]+\n-----END SEALED-----$/);
+  assert.equal(runUnix('vault note once more -unseal', env, {}).text, 'the dog was there');
+  assert.equal(runUnix('unseal note once more', env, {}).text, 'the dog was there');
+  assert.match(runUnix('vault -u note once', env, {}).text, /does not open/);
+  assert.match(runUnix('vault -s note again', env, {}).text, /already sealed/);
+  assert.match(runUnix('vault note x /unseal', env, {}).text, /not a DOS machine/);
+});
+
+test('the Thursday group page: English under vault, German under crypt, Virno under a line of the Marx', async () => {
+  const { archivedSite } = await import('../src/game/archive.js');
+  const { renderPage } = await import('../src/game/net.js');
+  const html = [].concat(archivedSite('illusion-of-the-epoch.geocities.ws').body).join('\n');
+  const key1 = html.match(/if \(p == "([^"]+)"\)/)[1];
+  const env = { root: makeDisk(), cwd: ['home'] };
+  const shown = renderPage(html).text;
+  const en = shown.slice(shown.indexOf('-----BEGIN SEALED-----'), shown.indexOf('-----END SEALED-----') + 20);
+  env.root.d.home.d['en.asc'] = { f: en };
+  const english = runUnix(`vault -unseal en.asc ${key1}`, env, {}).text;
+  assert.match(english, /^Karl Marx\nThe German Ideology/);
+  const de = html.match(/<pre>([^<]*)<\/pre>/g).find((p) => !/BEGIN SEALED/.test(p));
+  env.root.d.home.d['de.txt'] = { f: de.slice(5, -6).replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&') };
+  assert.match(runUnix('crypt wigand de.txt', env, {}).text, /^Karl Marx\nDie deutsche Ideologie/);
+  const phrase = english.match(/circumstances make men just as much as men make circumstances/)[0];
+  env.root.d.home.d['v.asc'] = { f: html.slice(html.indexOf('<!-------BEGIN SEALED')) };
+  assert.match(runUnix(`unseal v.asc ${phrase}`, env, {}).text, /Paolo Virno, "General Intellect"/);
+});

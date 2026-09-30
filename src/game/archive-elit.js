@@ -22,7 +22,7 @@
 //
 // View Source works on every page here, and on one of them it is the page.
 
-import { stillsReel } from './stills.js';
+import { stillsReel, PLAGE_SEALED } from './stills.js';
 
 const P = (domain, name, title, body, bg) => ({ domain, name, title, body, ...(bg ? { bg } : {}) });
 const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -493,7 +493,7 @@ const JETEE = P('la-jetee.geocities.ws', 'LA JETEE', 'La Jet&eacute;e (Chris Mar
   'the Zone, after Tarkovsky.</p>',
   '<hr>',
   '<p><small>Somebody made one of these on a NostBook: <a href="photo-roman.geocities.ws">La',
-  'Plage</a>. It is on every one as <code>stills</code>. See also <a href="hayao-zone.geocities.ws">the',
+  'Plage</a>. It is on every one as <code>laplage</code>. See also <a href="hayao-zone.geocities.ws">the',
   'zone</a> &middot; <a href="the-french-new-wave.geocities.ws">the French new',
   'wave</a></small></p>',
   '</div>',
@@ -506,7 +506,10 @@ const PLAGE = P('photo-roman.geocities.ws', 'LA PLAGE', 'La Plage, un photo-roma
   '<center><h1>La Plage</h1>',
   '<p>un photo-roman &middot; anonymous &middot; about two minutes &middot; French, English subtitles</p></center>',
   stillsReel({ embed: true }),
-  '<p><small>The same film is on every NostBook: <code>stills</code>.</small></p>',
+  '<p><small>The same film is on every NostBook: <code>laplage</code>.</small></p>',
+  '<!-- ce qu\'il dit d\'abord ouvre le reste -->',
+  '<!-------BEGIN LA PLAGE-----\n' + PLAGE_SEALED.trim().split('\n').map((l) => '  ' + l).join('\n')
+    + '\n  -----END LA PLAGE------->',
   '<hr>',
   '<h2>The future perfect of the save file</h2>',
   '<p><i>La Plage</i> runs a little over two minutes: two title cards, twelve',

@@ -256,6 +256,9 @@ import { ESCORT } from './archive-escort.js';   // hack_nostos: brain code that 
 import { ELIT_SITES } from './archive-elit.js'; // the hypertext ring
 import { WARNED_SITES } from './archive-warned.js'; // the films, watched again
 import { ACCEL_SITES } from './archive-accel.js'; // the vector machines ring
+import { IDEOLOGY_SITES } from './archive-ideology.js'; // the Thursday group
+import { ABYME_SITES } from './archive-abyme.js'; // mise en abyme, at length
+import { REACTION_SITES } from './archive-reaction.js'; // four faces
 import { HOME_RINGS } from './archive-home-hubs.js'; // the home-computer webrings
 import { PHIL_A } from './archive-phil-a.js';   // the Greeks
 import { PHIL_B } from './archive-phil-b.js';   // Hellenistic & the medieval opening
@@ -488,6 +491,9 @@ export const ARCHIVED_SITES = [
   ...ELIT_SITES,
   ...WARNED_SITES,
   ...ACCEL_SITES,
+  ...IDEOLOGY_SITES,
+  ...ABYME_SITES,
+  ...REACTION_SITES,
   ...HOME_RINGS,
   ...PHIL_A, ...PHIL_B, ...PHIL_C, ...PHIL_D,
   ...PHIL_E, ...PHIL_F, ...PHIL_G, ...PHIL_H,
