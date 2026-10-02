@@ -4,6 +4,120 @@
 
 An isometric 2D survival game set in a world wrecked by an AI takeover. The machines are still here: black obelisk towers pulse across the landscape and T-class hunter robots patrol them, hunting the humans that remain. Survivors scavenge the ruins while avoiding both the machines and wild animals that have gained strange powers. A resistance called **RON** — Reality or Nothing — hid weapons in caches through the broken towns; whether it still exists is never settled. How it all happened is never stated — you piece it together from newspapers, diaries, floppy disks, VHS tapes, and dead computers.
 
+## Screenshots
+
+### The world
+
+![NostOS title screen](docs/screenshots/01-title.jpg)
+*The title screen, with the logo, the dancing machines, and a Walkman that plays the soundtrack while you decide.*
+<sub>NostOS v2.02</sub>
+
+![Washed ashore on Ogygia](docs/screenshots/03-washed-ashore.jpg)
+*You wake washed ashore on Ogygia, Calypso's island. Her first message reaches the Nokia before you have taken a step.*
+<sub>NostOS v2.02</sub>
+
+![The Armoury](docs/screenshots/06-armoury.jpg)
+*The Armoury rates every weapon against machines and animals. You begin with one of eighteen and find the rest in the ruins.*
+<sub>NostOS v2.02</sub>
+
+![The Nokia 3310](docs/screenshots/07-nokia.jpg)
+*The Nokia 3310. Calypso, RON and Snake each keep a thread, and away from Ogygia the handset finds whichever AI rules the ground you stand on.*
+<sub>NostOS v2.02</sub>
+
+### Getting started
+
+![The boot sequence](docs/screenshots/02-boot.jpg)
+*Every run opens with the RON-OS boot sequence on a HERMES relay.*
+<sub>NostOS v2.02</sub>
+
+![The in-game manual](docs/screenshots/04-manual.jpg)
+*The manual (press H) sets out the world and the goal: fell four daemons, leave Calypso rather than kill her, and sail home to Ithaca.*
+<sub>NostOS v2.02</sub>
+
+![Controls](docs/screenshots/05-controls.jpg)
+*Controls, grouped by what they do, with character selection at the top.*
+<sub>NostOS v2.02</sub>
+
+### The NostBook: a UNIX you carry
+
+![The NostBook shell](docs/screenshots/08-nostbook-shell.jpg)
+*The NostBook runs a small UNIX V7, with a real path filesystem, ls -l, cat, pipes, and redirect.*
+<sub>NostOS v2.02</sub>
+
+![man pages on the disk](docs/screenshots/09-nostbook-man.jpg)
+*The man pages are files on the disk, read with the same tools as everything else.*
+<sub>NostOS v2.02</sub>
+
+### The language: AI-ML
+
+![The AI-ML reference](docs/screenshots/10-aiml-reference.jpg)
+*AI-ML is the language the machines' consoles run and the NostBook practises. It descends from Standard ML, and the manual carries its own reference.*
+<sub>NostOS v2.02</sub>
+
+![AI-ML at the ml prompt](docs/screenshots/11-aiml-repl.jpg)
+*AI-ML at the ml prompt. Recursion, lists, and higher-order functions, with types inferred and reported on every binding.*
+<sub>NostOS v2.02</sub>
+
+![Datatypes and pattern matching](docs/screenshots/12-aiml-datatypes.jpg)
+*Datatypes and pattern matching: a polymorphic binary tree, and a size defined clause by clause.*
+<sub>NostOS v2.02</sub>
+
+![Modules and type reporting](docs/screenshots/13-aiml-modules-types.jpg)
+*Signatures and structures, and a type mismatch reported rather than refused. On the machines the language is advisory, so it says what it worked out and leaves the decision to you.*
+<sub>NostOS v2.02</sub>
+
+### The web: what is left of the internet
+
+![Netscape bookmarks](docs/screenshots/14-netscape-bookmarks.jpg)
+*Netscape Navigator opens on the bookmarks its owner left: AltaVista, the front pages, GeoCities.*
+<sub>NostOS v2.02</sub>
+
+![A daemon's own page](docs/screenshots/15-netscape-calypso.jpg)
+*Every machine serves a page. Calypso sits at the top of her domain, still writing in the vocabulary of the care home she used to run.*
+<sub>NostOS v2.02</sub>
+
+![A GeoCities homepage](docs/screenshots/16-netscape-geocities.jpg)
+*A GeoCities homepage from before the towers, kept alive by a proxy nobody switched off.*
+<sub>NostOS v2.02</sub>
+
+![AltaVista](docs/screenshots/17-netscape-altavista.jpg)
+*AltaVista still indexes the pages the machines serve each other.*
+<sub>NostOS v2.02</sub>
+
+### The machines
+
+![An obelisk console](docs/screenshots/18-obelisk-console.jpg)
+*An obelisk's console is the machines' own operating system. With an access chip you jack into its green screen, and while you are in it the tower cannot see you.*
+<sub>NostOS v2.02</sub>
+
+![Reading the ground from the console](docs/screenshots/19-obelisk-scan.jpg)
+*The console reads the ground on command. `scan` lists the towers, and `scan |> nearest` pipes that list to the closest one.*
+<sub>NostOS v2.02</sub>
+
+### Walkthrough: editing a T-1's braincode in pico
+
+A T-1 does not have its behaviour written in JavaScript. It carries `program.ml`, a few lines of AI-ML it reads four times a second to choose between `home`, `hunt` and `patrol`. You can pull that file off the unit's own web page, edit it, and send it back. Here is the whole loop, with `pico` on the NostBook.
+
+![The unit's program.ml page](docs/screenshots/bc1-unit-page.jpg)
+*1. Open the unit's page in Netscape. Its braincode is served as plain text, with the verbs it answers to listed below: `eye`, `flash`, `beep`, and the rest.*
+<sub>NostOS v2.02</sub>
+
+![Fetching the braincode to the NostBook](docs/screenshots/bc2-fetch.jpg)
+*2. Pull it onto the NostBook and read it: `get t1_01.calypso.com > program.ml`, then `cat`. The service aids ship commented out.*
+<sub>NostOS v2.02</sub>
+
+![Opening program.ml in pico](docs/screenshots/bc3-pico.jpg)
+*3. Open it in the editor: `pico program.ml`. The marked line is still commented, so the unit says nothing about itself.*
+<sub>NostOS v2.02</sub>
+
+![Uncommenting the service line in pico](docs/screenshots/bc4-edit.jpg)
+*4. Uncomment the marked line, `eye "blue" ; flash 2 ; beep ;`, so this one unit lights up and you can pick it out of a garrison. WriteOut with ^O, Exit with ^X.*
+<sub>NostOS v2.02</sub>
+
+![Posting the program back to the unit](docs/screenshots/bc5-post.jpg)
+*5. Send it back: `post program.ml t1_01`. The unit accepts the file over HTTP and tells you what it decides on its next tick.*
+<sub>NostOS v2.02</sub>
+
 ## Credits and sources
 
 **The books on the laptop come from [Project Gutenberg](https://www.gutenberg.org).**
