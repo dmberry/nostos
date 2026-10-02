@@ -84,6 +84,42 @@ An isometric 2D survival game set in a world wrecked by an AI takeover. The mach
 *AltaVista still indexes the pages the machines serve each other.*
 <sub>NostOS v2.02</sub>
 
+#### Across the web archive
+
+The cache is a caching proxy nobody ever decommissioned, bolted inside the mainframes, and it still holds the pre-collapse web. The archive runs to hundreds of pages. A few from across it:
+
+![The Frankfurt School webring](docs/screenshots/wa1-frankfurt-ring.jpg)
+*The archive is organised the way the old web was, by people linking to each other. Critical theory has a webring of its own.*
+<sub>NostOS v2.02</sub>
+
+![A history of AI](docs/screenshots/wa3-history-of-ai.jpg)
+*One student's survey of where the idea of thinking machines came from, handed in late, corrections welcome.*
+<sub>NostOS v2.02</sub>
+
+![Algorithms of Oppression](docs/screenshots/wa4-algorithms-of-oppression.jpg)
+*Criticism of search and ranking, filed under the same roof as everything else.*
+<sub>NostOS v2.02</sub>
+
+![A.L.I.C.E. and AIML](docs/screenshots/wa5-alice.jpg)
+*The chatbot lineage that runs back through A.L.I.C.E. to ELIZA, on a green-screen fan page.*
+<sub>NostOS v2.02</sub>
+
+![The Altair 8800](docs/screenshots/wa2-altair.jpg)
+*A fan page on the Altair 8800, written by someone who owns one and flips the switches on a Sunday to watch the lights answer.*
+<sub>NostOS v2.02</sub>
+
+![Tarkovsky's Andrei Rublev](docs/screenshots/wa6-tarkovsky.jpg)
+*Cinema, read closely: Tarkovsky's Andrei Rublev, down to the casting of the bell.*
+<sub>NostOS v2.02</sub>
+
+![Acid house](docs/screenshots/wa7-acid-house.jpg)
+*Music and subculture: acid house, and the Roland that made the sound.*
+<sub>NostOS v2.02</sub>
+
+![Slashdot, still posting](docs/screenshots/wa8-slashdot.jpg)
+*A period news site, still posting to an audience that has gone. The headlines read differently now.*
+<sub>NostOS v2.02</sub>
+
 ### The machines
 
 ![An obelisk console](docs/screenshots/18-obelisk-console.jpg)
