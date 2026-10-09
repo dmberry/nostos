@@ -663,9 +663,15 @@ class Sound {
       el.addEventListener('ended', () => {
         if (!this._tapePlaying || this._tapeList.length <= 1) return;
         this._tapeIdx = (this._tapeIdx + 1) % this._tapeList.length;
+        this._tapeWind(true);
         el.src = encodeURI(this._tapeList[this._tapeIdx]);
         el.play().catch(() => {});
       });
+      // The track is a file of several megabytes, and nothing sounds until
+      // enough of it has arrived. The deck winds while it does (_tapeWind), and
+      // once a track is playing the next one is fetched behind it.
+      el.addEventListener('playing', () => { this._tapeWind(false); this._tapePrefetch(); });
+      el.addEventListener('error', () => this._tapeWind(false));
       const src = this.ctx.createMediaElementSource(el);
       const gain = this.ctx.createGain();
       gain.gain.value = 0;
@@ -685,6 +691,7 @@ class Sound {
     this._tapeIdx = 0;
     this._tapePlaying = true;
     this._tapeEl.loop = urls.length === 1; // single track loops itself; a multi-track side loops via `ended`
+    this._tapeWind(true);
     try {
       this._tapeEl.src = encodeURI(urls[0]);
       this._tapeEl.currentTime = 0;
@@ -700,6 +707,7 @@ class Sound {
     if (!this._tapePlaying || !this._tapeEl || this._tapeList.length <= 1) return false;
     const n = this._tapeList.length;
     this._tapeIdx = (this._tapeIdx + (dir < 0 ? -1 : 1) + n) % n;
+    this._tapeWind(true);
     try {
       this._tapeEl.src = encodeURI(this._tapeList[this._tapeIdx]);
       this._tapeEl.currentTime = 0;
@@ -713,7 +721,65 @@ class Sound {
     return this._tapePlaying && this._tapeList.length ? this._tapeList[this._tapeIdx] || null : null;
   }
 
+  // THE DECK WINDS. A tape that has been asked for a new track makes the sound
+  // a cassette makes going there: filtered noise with a flutter in it, until
+  // the element reports it is playing (or eight seconds, if it never does).
+  _tapeWind(on) {
+    if (!this.ctx) return;
+    clearTimeout(this._windTimer);
+    if (!on) {
+      if (this._wind) {
+        const w = this._wind; this._wind = null;
+        const t = this.ctx.currentTime;
+        w.gain.gain.cancelScheduledValues(t);
+        w.gain.gain.setTargetAtTime(0, t, 0.05);
+        setTimeout(() => { try { w.src.stop(); w.lfo.stop(); } catch (e) { /* already stopped */ } }, 400);
+      }
+      return;
+    }
+    if (this._wind) { this._windTimer = setTimeout(() => this._tapeWind(false), 8000); return; }
+    try {
+      const ctx = this.ctx;
+      if (!this._windBuf) {
+        const n = ctx.sampleRate;
+        this._windBuf = ctx.createBuffer(1, n, ctx.sampleRate);
+        const d = this._windBuf.getChannelData(0);
+        for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+      }
+      const src = ctx.createBufferSource();
+      src.buffer = this._windBuf; src.loop = true;
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass'; bp.frequency.value = 2400; bp.Q.value = 1.4;
+      const gain = ctx.createGain();
+      gain.gain.value = 0;
+      gain.gain.setTargetAtTime(0.06, ctx.currentTime, 0.03);
+      const lfo = ctx.createOscillator();                 // the capstan's flutter
+      const lfoGain = ctx.createGain();
+      lfo.frequency.value = 11; lfoGain.gain.value = 600;
+      lfo.connect(lfoGain); lfoGain.connect(bp.frequency);
+      src.connect(bp); bp.connect(gain); gain.connect(this.fx || this.master);
+      src.start(); lfo.start();
+      this._wind = { src, lfo, gain };
+      this._windTimer = setTimeout(() => this._tapeWind(false), 8000);
+    } catch (e) { /* the winding is a nicety; never let it stop the tape */ }
+  }
+
+  // Fetch the next track on the side ahead of time, so a skip forward or the
+  // end of this track finds it already in the browser's cache.
+  _tapePrefetch() {
+    if (typeof Audio === 'undefined' || this._tapeList.length <= 1) return;
+    const next = this._tapeList[(this._tapeIdx + 1) % this._tapeList.length];
+    if (this._prefetched === next) return;
+    this._prefetched = next;
+    try {
+      if (!this._prefetchEl) { this._prefetchEl = new Audio(); this._prefetchEl.preload = 'auto'; this._prefetchEl.muted = true; }
+      this._prefetchEl.src = encodeURI(next);
+      this._prefetchEl.load();
+    } catch (e) { /* only ever a head start */ }
+  }
+
   stopTape() {
+    this._tapeWind(false);
     this._tapePlaying = false;
     if (this._tapeEl) { try { this._tapeEl.pause(); } catch (e) { /* ignore */ } }
     this._applyMusicGain(0.8); // the synth bed fades back up if it's the current mode

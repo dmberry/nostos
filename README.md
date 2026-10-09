@@ -4,6 +4,158 @@
 
 An isometric 2D survival game set in a world wrecked by an AI takeover. The machines are still here: black obelisk towers pulse across the landscape and T-class hunter robots patrol them, hunting the humans that remain. Survivors scavenge the ruins while avoiding both the machines and wild animals that have gained strange powers. A resistance called **RON** — Reality or Nothing — hid weapons in caches through the broken towns; whether it still exists is never settled. How it all happened is never stated — you piece it together from newspapers, diaries, floppy disks, VHS tapes, and dead computers.
 
+Nostos is also about curation, and self-curation. Even this repository's history has been curated, though not necessarily by the people whose names are on it.
+
+## Screenshots
+
+### The world
+
+![NostOS title screen](docs/screenshots/01-title.jpg)
+*The title screen, with the logo, the dancing machines, and a Walkman that plays the soundtrack while you decide.*
+<sub>NostOS v2.02</sub>
+
+![Washed ashore on Ogygia](docs/screenshots/03-washed-ashore.jpg)
+*You wake washed ashore on Ogygia, Calypso's island. Her first message reaches the Nokia before you have taken a step.*
+<sub>NostOS v2.02</sub>
+
+![The Armoury](docs/screenshots/06-armoury.jpg)
+*The Armoury rates every weapon against machines and animals. You begin with one of eighteen and find the rest in the ruins.*
+<sub>NostOS v2.02</sub>
+
+![The Nokia 3310](docs/screenshots/07-nokia.jpg)
+*The Nokia 3310. Calypso, RON and Snake each keep a thread, and away from Ogygia the handset finds whichever AI rules the ground you stand on.*
+<sub>NostOS v2.02</sub>
+
+### Getting started
+
+![The boot sequence](docs/screenshots/02-boot.jpg)
+*Every run opens with the RON-OS boot sequence on a HERMES relay.*
+<sub>NostOS v2.02</sub>
+
+![The in-game manual](docs/screenshots/04-manual.jpg)
+*The manual (press H) sets out the world and the goal: fell four daemons, leave Calypso rather than kill her, and sail home to Ithaca.*
+<sub>NostOS v2.02</sub>
+
+![Controls](docs/screenshots/05-controls.jpg)
+*Controls, grouped by what they do, with character selection at the top.*
+<sub>NostOS v2.02</sub>
+
+### The NostBook: a UNIX you carry
+
+![The NostBook shell](docs/screenshots/08-nostbook-shell.jpg)
+*The NostBook runs a small UNIX V7, with a real path filesystem, ls -l, cat, pipes, and redirect.*
+<sub>NostOS v2.02</sub>
+
+![man pages on the disk](docs/screenshots/09-nostbook-man.jpg)
+*The man pages are files on the disk, read with the same tools as everything else.*
+<sub>NostOS v2.02</sub>
+
+### The language: AI-ML
+
+![The AI-ML reference](docs/screenshots/10-aiml-reference.jpg)
+*AI-ML is the language the machines' consoles run and the NostBook practises. It descends from Standard ML, and the manual carries its own reference.*
+<sub>NostOS v2.02</sub>
+
+![AI-ML at the ml prompt](docs/screenshots/11-aiml-repl.jpg)
+*AI-ML at the ml prompt. Recursion, lists, and higher-order functions, with types inferred and reported on every binding.*
+<sub>NostOS v2.02</sub>
+
+![Datatypes and pattern matching](docs/screenshots/12-aiml-datatypes.jpg)
+*Datatypes and pattern matching: a polymorphic binary tree, and a size defined clause by clause.*
+<sub>NostOS v2.02</sub>
+
+![Modules and type reporting](docs/screenshots/13-aiml-modules-types.jpg)
+*Signatures and structures, and a type mismatch reported rather than refused. On the machines the language is advisory, so it says what it worked out and leaves the decision to you.*
+<sub>NostOS v2.02</sub>
+
+### The web: what is left of the internet
+
+![Netscape bookmarks](docs/screenshots/14-netscape-bookmarks.jpg)
+*Netscape Navigator opens on the bookmarks its owner left: AltaVista, the front pages, GeoCities.*
+<sub>NostOS v2.02</sub>
+
+![A daemon's own page](docs/screenshots/15-netscape-calypso.jpg)
+*Every machine serves a page. Calypso sits at the top of her domain, still writing in the vocabulary of the care home she used to run.*
+<sub>NostOS v2.02</sub>
+
+![A GeoCities homepage](docs/screenshots/16-netscape-geocities.jpg)
+*A GeoCities homepage from before the towers, kept alive by a proxy nobody switched off.*
+<sub>NostOS v2.02</sub>
+
+![AltaVista](docs/screenshots/17-netscape-altavista.jpg)
+*AltaVista still indexes the pages the machines serve each other.*
+<sub>NostOS v2.02</sub>
+
+#### Across the web archive
+
+The cache is a caching proxy nobody ever decommissioned, bolted inside the mainframes, and it still holds the pre-collapse web. The archive runs to hundreds of pages. A few from across it:
+
+![The Frankfurt School webring](docs/screenshots/wa1-frankfurt-ring.jpg)
+*The archive is organised the way the old web was, by people linking to each other. Critical theory has a webring of its own.*
+<sub>NostOS v2.02</sub>
+
+![A history of AI](docs/screenshots/wa3-history-of-ai.jpg)
+*One student's survey of where the idea of thinking machines came from, handed in late, corrections welcome.*
+<sub>NostOS v2.02</sub>
+
+![Algorithms of Oppression](docs/screenshots/wa4-algorithms-of-oppression.jpg)
+*Criticism of search and ranking, filed under the same roof as everything else.*
+<sub>NostOS v2.02</sub>
+
+![A.L.I.C.E. and AIML](docs/screenshots/wa5-alice.jpg)
+*The chatbot lineage that runs back through A.L.I.C.E. to ELIZA, on a green-screen fan page.*
+<sub>NostOS v2.02</sub>
+
+![The Altair 8800](docs/screenshots/wa2-altair.jpg)
+*A fan page on the Altair 8800, written by someone who owns one and flips the switches on a Sunday to watch the lights answer.*
+<sub>NostOS v2.02</sub>
+
+![Tarkovsky's Andrei Rublev](docs/screenshots/wa6-tarkovsky.jpg)
+*Cinema, read closely: Tarkovsky's Andrei Rublev, down to the casting of the bell.*
+<sub>NostOS v2.02</sub>
+
+![Acid house](docs/screenshots/wa7-acid-house.jpg)
+*Music and subculture: acid house, and the Roland that made the sound.*
+<sub>NostOS v2.02</sub>
+
+![Slashdot, still posting](docs/screenshots/wa8-slashdot.jpg)
+*A period news site, still posting to an audience that has gone. The headlines read differently now.*
+<sub>NostOS v2.02</sub>
+
+### The machines
+
+![An obelisk console](docs/screenshots/18-obelisk-console.jpg)
+*An obelisk's console is the machines' own operating system. With an access chip you jack into its green screen, and while you are in it the tower cannot see you.*
+<sub>NostOS v2.02</sub>
+
+![Reading the ground from the console](docs/screenshots/19-obelisk-scan.jpg)
+*The console reads the ground on command. `scan` lists the towers, and `scan |> nearest` pipes that list to the closest one.*
+<sub>NostOS v2.02</sub>
+
+### Walkthrough: editing a T-1's braincode in pico
+
+A T-1 does not have its behaviour written in JavaScript. It carries `program.ml`, a few lines of AI-ML it reads four times a second to choose between `home`, `hunt` and `patrol`. You can pull that file off the unit's own web page, edit it, and send it back. Here is the whole loop, with `pico` on the NostBook.
+
+![The unit's program.ml page](docs/screenshots/bc1-unit-page.jpg)
+*1. Open the unit's page in Netscape. Its braincode is served as plain text, with the verbs it answers to listed below: `eye`, `flash`, `beep`, and the rest.*
+<sub>NostOS v2.02</sub>
+
+![Fetching the braincode to the NostBook](docs/screenshots/bc2-fetch.jpg)
+*2. Pull it onto the NostBook and read it: `get t1_01.calypso.com > program.ml`, then `cat`. The service aids ship commented out.*
+<sub>NostOS v2.02</sub>
+
+![Opening program.ml in pico](docs/screenshots/bc3-pico.jpg)
+*3. Open it in the editor: `pico program.ml`. The marked line is still commented, so the unit says nothing about itself.*
+<sub>NostOS v2.02</sub>
+
+![Uncommenting the service line in pico](docs/screenshots/bc4-edit.jpg)
+*4. Uncomment the marked line, `eye "blue" ; flash 2 ; beep ;`, so this one unit lights up and you can pick it out of a garrison. WriteOut with ^O, Exit with ^X.*
+<sub>NostOS v2.02</sub>
+
+![Posting the program back to the unit](docs/screenshots/bc5-post.jpg)
+*5. Send it back: `post program.ml t1_01`. The unit accepts the file over HTTP and tells you what it decides on its next tick.*
+<sub>NostOS v2.02</sub>
+
 ## Credits and sources
 
 **The books on the laptop come from [Project Gutenberg](https://www.gutenberg.org).**
@@ -60,7 +212,7 @@ applies to `src/engine/chorale-notes.js`. *Daisy Bell* is Harry Dacre's, 1892.
 `/usr/src/sys/slp.c` on the laptop is from the sixth edition of Unix, distributed
 under the Caldera licence for ancient UNIX.
 
-The `stills` sequence is inspired by Chris Marker, *La Jetée* (1962).
+The *La Plage* sequence is inspired by Chris Marker, *La Jetée* (1962).
 
 ## Current build
 
@@ -76,7 +228,7 @@ The `stills` sequence is inspired by Chris Marker, *La Jetée* (1962).
 
 **The laptop.** Every other console in the game is bolted down: obelisks stand where the towers stand, HERMES relays sit on hilltops. The **NostBook** (**L**) is the first computer that is *yours*, carried in its own slot beside the phone and the walkman. It runs a small **UNIX V7** — a real path filesystem, `ls -l`, `cat`, `man` pages that are simply files on the disk, **pipes** (`cat readme | grep machine | wc`) and `>` redirect — and through it, **`ml` opens AI-ML with the network cut away**. That is the point of it: the whole language (`let`/`val`/`fun`, `fn`, `if`, arithmetic, lists, **`datatype` and `case`**, clausal definitions, tuples, records, **structures and signatures**, **exceptions**, and **Hindley-Milner type inference that reports rather than refuses**) and none of the tower verbs, so it is somewhere to get a program wrong in safety, save it (`echo "…" > ~/sq.ml`), and carry it to an obelisk when it works. Type a tower verb and the machine tells you what it is for. You do not find it working: you find a **broken** one and solder circuit boards into it (**C**) to bring it back, and clicking a dead one in your pocket tells you what its board still needs.
 
-The disk under it is a real V7 tree: `/dev /etc /lib /mnt /tmp /usr/src` with the kernel at the root as a file called `unix`, and deliberately no `/var`, `/opt`, `/proc` or `/sbin`, all of which came later. `/readme.txt` explains the build in its authors' own words. **`pico`** is the editor, because `ed` is a trap, and it works on a phone: real buttons for `^O` and `^X`, a close box, Yes/No on the save prompt. **`telnet`** speaks to the daemons directly, so `GET /` returns real headers, `POST` comes back **501 Not Implemented**, and `PUT` to a machine replaces its program. **`uucp` and `mail`** are store-and-forward and the only system on the machine that cares where you are standing: compose anywhere, but the queue only leaves next to a relay, and the relays are on the summits, so a hilltop becomes a post office. **The card holds one network at a time**: `iwlist wifi0 scan` shows what is on the air, and `iwconfig wifi0 essid ron-relay` (or `wifi`, which is the same thing with a window and a mouse) joins RON's own box at a HERMES relay, a link-local server with about thirty metres of range that nothing on the daemon's wire has ever heard. Its page is the relay's real state (cells, queue, key vault, the mesh of other relays) and its disk serves tools you install by fetching them — **`sniffer`**, a scope drawing every machine within radio range as a blip you can click through to its page, and `sniffer.ml`, the same ear written in AI-ML so you can read and change it. **`more`** pages a long file (SPACE, RETURN, `q`), **`strings`**, **`crypt`** (V7's, its own inverse), **`almanac`** (sun, moon and tide off the machine's own clock) and **`transcribe`** (how paper gets into a machine with no scanner) round out the toolkit. **`tr`**, **`sed`** and **`rev`** cut text up, **`travesty`** writes new text that follows a file letter by letter, **`sccs`** reads the works' own history of a program delta by delta, and **`stills`** shows the photographs on the disk. `/usr/games` has **`nim`**, **`gorge`**, **`cent`** and **`ttt`**.
+The disk under it is a real V7 tree: `/dev /etc /lib /mnt /tmp /usr/src` with the kernel at the root as a file called `unix`, and deliberately no `/var`, `/opt`, `/proc` or `/sbin`, all of which came later. `/readme.txt` explains the build in its authors' own words. **`pico`** is the editor, because `ed` is a trap, and it works on a phone: real buttons for `^O` and `^X`, a close box, Yes/No on the save prompt. **`telnet`** speaks to the daemons directly, so `GET /` returns real headers, `POST` comes back **501 Not Implemented**, and `PUT` to a machine replaces its program. **`uucp` and `mail`** are store-and-forward and the only system on the machine that cares where you are standing: compose anywhere, but the queue only leaves next to a relay, and the relays are on the summits, so a hilltop becomes a post office. **The card holds one network at a time**: `iwlist wifi0 scan` shows what is on the air, and `iwconfig wifi0 essid ron-relay` (or `wifi`, which is the same thing with a window and a mouse) joins RON's own box at a HERMES relay, a link-local server with about thirty metres of range that nothing on the daemon's wire has ever heard. Its page is the relay's real state (cells, queue, key vault, the mesh of other relays) and its disk serves tools you install by fetching them — **`sniffer`**, a scope drawing every machine within radio range as a blip you can click through to its page, and `sniffer.ml`, the same ear written in AI-ML so you can read and change it. **`more`** pages a long file (SPACE, RETURN, `q`), **`strings`**, **`crypt`** (V7's, its own inverse), **`vault`** (`-seal` and `-unseal`, a passphrase stretched into a key; `unseal` is the same as `vault -unseal`), **`almanac`** (sun, moon and tide off the machine's own clock) and **`transcribe`** (how paper gets into a machine with no scanner) round out the toolkit. **`tr`**, **`sed`** and **`rev`** cut text up, **`travesty`** writes new text that follows a file letter by letter, **`sccs`** reads the works' own history of a program delta by delta, and **`laplage`** shows the photographs on the disk. `/usr/games` has **`nim`**, **`gorge`**, **`cent`** and **`ttt`**.
 
 **Netscape** runs on it, browsing the pages the machines still serve each other and a caching proxy's copy of the pre-collapse web: newspapers, an encyclopedia, universities, fan pages and webrings (one of them on the films people went back to once the towers went up, another on the machines built to do vector arithmetic in bulk), and a **Library** of nine whole books on the laptop's own disk that needs no card at all. It is also where you read a **T-1's `program.ml`**, save it, edit it in `pico`, and `post` it back. Still ahead: a **CTSS** machine that runs ELIZA and little else, and a PDP-10 for ADVENTURE.
 

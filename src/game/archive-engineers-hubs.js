@@ -124,6 +124,7 @@ export const ENGINEER_RINGS = [
      ['mccarthy-lisp.geocities.ws', 'McCarthy / LISP'],
      ['dijkstra.geocities.ws', 'Dijkstra'],
      ['ritchie-thompson-unix.geocities.ws', 'Ritchie &amp; Thompson / UNIX &amp; C'],
+     ['trusting-trust.geocities.ws', 'Thompson / Reflections on Trusting Trust'],
      ['knuth-taocp.geocities.ws', 'Knuth'],
      ['margaret-hamilton-apollo.geocities.ws', 'Margaret Hamilton / Apollo'],
      ['ibm-701-360.geocities.ws', 'OS/360 / the Mythical Man-Month']]),

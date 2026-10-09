@@ -80,6 +80,7 @@ const HOME_BASIC = P('the-home-computer-basic.geocities.ws', 'HOME BASIC',
     '"just get something on the screen" spirit ended up, look at the browser and',
     'Brendan Eich over at <a href="javascript-eich.geocities.ws">javascript-eich</a>,',
     'another language written in a hurry that a generation met without meaning to.</p>',
+    '<p><small>a reader sent in a poem: <a href="huws-beeb-page.geocities.ws">HOMEWARD</a></small></p>',
     '<hr>',
     '<p><small>counter: 08192 · best viewed at 640x480 on a machine with a real',
     'RESET switch · under construction, still keying in the last of the tape',
@@ -87,6 +88,54 @@ const HOME_BASIC = P('the-home-computer-basic.geocities.ws', 'HOME BASIC',
     '<p><small>',
     '[ <a href="programming-languages-ring.geocities.ws">Programming Languages Ring</a> ]<br>',
     'a proud member. « prev · random · next »',
+    '</small></p>',
+  ]);
+
+// ---- a sea poem in BBC BASIC, from the poem swap ---------------------------
+
+const HOMEWARD_LINES = [
+  '10 REM HOMEWARD',
+  '20 REM FOR GRANDAD, WHO TOLD IT BETTER',
+  '30 READ H$',
+  '40 PRINT "OUT OF ";H$;" ON THE EVENING TIDE"',
+  '50 READ P$',
+  '60 IF P$="*" THEN 130',
+  '70 FOR W=1 TO 3',
+  '80 PRINT TAB(INT(RND(1)*24));"~ ~ ~"',
+  '90 NEXT W',
+  '100 PRINT P$',
+  '110 GOTO 50',
+  '130 RESTORE',
+  '140 FOR W=1 TO 20',
+  '150 PRINT TAB(INT(RND(1)*24));"~ ~ ~"',
+  '160 NEXT W',
+  '170 READ H$',
+  '180 PRINT "IN TO ";H$;" ON THE MORNING ONE"',
+  '190 PRINT "THE DOG KNEW ME FIRST"',
+  '200 END',
+  '300 DATA SWANSEA,BISCAY,LISBON,GIBRALTAR,MALTA',
+  '310 DATA PORT SAID,SUEZ,ADEN,BOMBAY,*',
+];
+
+const HUWS_BEEB = P('huws-beeb-page.geocities.ws', 'HUW’S BEEB PAGE',
+  'huw’s beeb page // HOMEWARD', [
+    '<!--bg:scripting-->',
+    '<h1>HUW’S BEEB PAGE</h1>',
+    '<p><small>huw’s page, Swansea. still got the BBC Micro my mam bought in 1983,',
+    'and it still works. -- huw</small></p>',
+    '<hr>',
+    '<p>The swap gave me the sea. My grandad sailed out of Swansea in the merchant',
+    'navy for thirty years, and this is the run he talked about most.</p>',
+    '<h2>HOMEWARD</h2>',
+    '<pre>' + HOMEWARD_LINES.join('\n') + '</pre>',
+    '<p>BBC BASIC, in MODE 1 so the tildes come out. <code>RESTORE</code> sends the',
+    'next <code>READ</code> back to the first <code>DATA</code> item. The waves come',
+    'from <code>RND</code>, so they fall differently every run.</p>',
+    '<hr>',
+    '<p><small>counter: 01983 · best viewed at 640x480 · last updated 5 Jan</small></p>',
+    '<p><small>',
+    '[ <a href="programming-languages-ring.geocities.ws">Programming Languages Ring</a> ]<br>',
+    'back to <a href="the-home-computer-basic.geocities.ws">the-home-computer-basic</a> · next in the swap: <a href="marians-leaf-table.geocities.ws">marian’s leaf table</a> »',
     '</small></p>',
   ]);
 
@@ -309,4 +358,4 @@ const JARGON_FILE = P('the-jargon-file.geocities.ws', 'JARGON FILE',
     '</small></p>',
   ]);
 
-export const LANG_H = [HOME_BASIC, DIJKSTRA_GOTO, WORSE_IS_BETTER, JARGON_FILE];
+export const LANG_H = [HOME_BASIC, HUWS_BEEB, DIJKSTRA_GOTO, WORSE_IS_BETTER, JARGON_FILE];

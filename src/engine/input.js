@@ -97,6 +97,7 @@ export class Input {
     mouseTarget.addEventListener('mousemove', (e) => {
       this.mouseX = e.clientX;
       this.mouseY = e.clientY;
+      this.lastTouch = false;   // a real pointer is moving: hover tips are back
     });
     mouseTarget.addEventListener('mousedown', (e) => {
       if (e.button !== 0) return;
@@ -128,6 +129,7 @@ export class Input {
     this._runTouchId = null;     // identifier of the finger holding the RUN button
     this._touchRun = false;      // RUN button held (multitouch: alongside the move finger)
     this._touchJump = false;     // JUMP button tapped — one-shot, consumed by jumpPressed
+    this._touchMore = false;     // MORE button tapped — one-shot, opens the touch action sheet
     this.touchButtonHit = null;  // set by main.js: (x, y) -> 'run' | 'jump' | null
     const touchXY = (e) => { const t = e.changedTouches[0]; return { x: t.clientX, y: t.clientY }; };
     const setFromTouch = (p) => {
@@ -144,11 +146,13 @@ export class Input {
     // button, tap JUMP, or tap HUD slots at the same time. Each changed touch
     // is routed by what it landed on, tracked by identifier.
     mouseTarget.addEventListener('touchstart', (e) => {
+      this.lastTouch = true;      // a finger has no hover; main.js hides the tips
       for (const t of e.changedTouches) {
         const p = { x: t.clientX, y: t.clientY };
         const btn = this.touchButtonHit ? this.touchButtonHit(p.x, p.y) : null;
         if (btn === 'run') { this._runTouchId = t.identifier; this._touchRun = true; continue; }
         if (btn === 'jump') { this._touchJump = true; continue; } // one-shot
+        if (btn === 'more') { this._touchMore = true; continue; } // one-shot
         if (this.uiHitTest && this.uiHitTest(p.x, p.y)) {
           // HUD touch: selects or DRAGS, never walks. The press fires now
           // (main.js starts the drag from the slot immediately, exactly like
@@ -216,6 +220,17 @@ export class Input {
   }
 
   // True once per physical keypress, then cleared.
+  // A key pressed on the player's behalf, by the touch action sheet. It lands in
+  // the same set a keydown does, so every action keeps exactly one code path.
+  inject(code) {
+    this.pressed.add(code);
+  }
+
+  morePressed() {
+    if (this._touchMore) { this._touchMore = false; return true; }
+    return false;
+  }
+
   consumePress(code) {
     if (this.pressed.has(code)) {
       this.pressed.delete(code);

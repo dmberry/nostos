@@ -1198,6 +1198,7 @@ export class Renderer {
     // without this the touch buttons, the toasts and the occlusion ghost paint
     // straight over whatever you are trying to read. (The lore archive draws
     // in runDrawScreen just below, so it counts as a panel too.)
+    this.touchUI = !!hud.touchControls;   // the panels word their close hints by this
     if (hud.showBackpack) this.drawBackpackPanel(player);
     runDrawScreen(ctx, { w: this.w, h: this.h, map, player });
     if (hud.craftPrompt) {
@@ -1214,21 +1215,45 @@ export class Renderer {
                 : hud.craftBoat
                   ? 'You have the wood and a cutting tool — press C to build a boat'
                   : 'You hold a stun-gun, electro-gun and Wi-Fi block — press C to build an OB_gun';
+      // On touch the prompt is the button: it says tap, it wraps to the width of
+      // the phone instead of running off both sides, and it sits above the taller
+      // phone dashboard. main.js reads _craftPromptRect to make the tap craft.
+      const touch = !!hud.touchControls;
+      const text = touch ? msg.replace(/press C/, 'tap here') : msg;
       ctx.font = 'bold 13px system-ui, sans-serif';
-      const w = ctx.measureText(msg).width + 24;
-      const x = (this.w - w) / 2, y = this.h - DASH_H - 40;
+      // On touch the right-hand column is MORE, JUMP and RUN; the prompt stays left of it.
+      const maxW = this.w - 24 - (touch ? 76 : 0);
+      const lines = [];
+      for (const word of text.split(' ')) {
+        const cur = lines.length ? lines[lines.length - 1] : null;
+        if (cur != null && ctx.measureText(cur + ' ' + word).width <= maxW - 24) lines[lines.length - 1] = cur + ' ' + word;
+        else lines.push(word);
+      }
+      const w = Math.min(maxW, Math.max(...lines.map((l) => ctx.measureText(l).width)) + 24);
+      const lh = 17, bh = 9 + lines.length * lh;
+      const floor = this.hudTop != null ? this.hudTop : this.h - DASH_H;
+      // On a phone the task line stands just above the dashboard; clear it too.
+      const x = touch ? 12 : (this.w - w) / 2, y = floor - 40 - (lines.length - 1) * lh - (this.w < 480 ? 26 : 0);
+      this._craftPromptRect = { x, y, w, h: bh };
       ctx.fillStyle = hud.craftWaveGun ? 'rgba(64,224,208,0.92)' : hud.craftChip ? 'rgba(106,208,160,0.92)' : hud.craftSword ? 'rgba(184,192,200,0.92)' : hud.craftGreekShip ? 'rgba(154,112,56,0.94)' : hud.craftGoggles ? 'rgba(79,208,106,0.92)' : hud.craftBoat ? 'rgba(138,100,55,0.92)' : 'rgba(224,100,47,0.9)';
-      ctx.fillRect(x, y, w, 26);
+      ctx.fillRect(x, y, w, bh);
       ctx.fillStyle = '#fff';
       ctx.textAlign = 'center';
-      ctx.fillText(msg, this.w / 2, y + 17);
+      lines.forEach((l, i) => ctx.fillText(l, x + w / 2, y + 17 + i * lh));
       ctx.textAlign = 'left';
-    }
+    } else this._craftPromptRect = null;
     if (hud.showSkills) this.drawSkillModal(player, hud);
     if (hud.showWeapons) this.drawWeaponChart(player);
     if (hud.showKleos && hud.kleos) {
       this.drawKleosModal(hud.kleos);
       if (hud.mouse) this.drawKleosTip(hud.mouse.x, hud.mouse.y);
+    }
+    // No I, K, V or 9 on a phone: each panel gets a close button of its own.
+    if (hud.touchControls) {
+      const open = hud.showWeapons ? this._weaponsRect : hud.showSkills ? this._skillsRect
+        : (hud.showKleos && hud.kleos) ? this._kleosRect : hud.showBackpack ? this._backpackRect
+        : (hud.lore && hud.lore.archiveOpen) ? hud.lore._archiveRect : null;
+      if (open) this.drawPanelCloseX(open);
     }
     // GHOST PASS: a wall, column, tower, or the factory standing just
     // south/east of the player paints clean over the sprite — the character
@@ -1261,14 +1286,16 @@ export class Renderer {
         ctx.restore();
       }
     }
+    if (hud.toast && !modalOpen) this.drawToast(hud.toast);
+    if (hud.nokiaToast && !modalOpen) this.drawNokiaToast(hud.nokiaToast, hud.nokiaSignal, !!hud.touchControls);
+    else if (modalOpen) this._nokiaToastRect = null;   // nor tappable-to-dismiss behind a panel
+    // After the toasts: a message must not hide a button, and input tests the
+    // buttons before anything under them, so a hidden one would still take taps.
     if (hud.touchControls && !modalOpen) this.drawTouchControls(hud);
     // Not drawn means not TAPPABLE: the hit list is rebuilt each frame from the
     // draw, so leaving a stale one would let a tap on the panel — where JUMP
     // happens to sit — still jump.
     else if (modalOpen) this.touchButtons = [];
-    if (hud.toast && !modalOpen) this.drawToast(hud.toast);
-    if (hud.nokiaToast && !modalOpen) this.drawNokiaToast(hud.nokiaToast, hud.nokiaSignal, !!hud.touchControls);
-    else if (modalOpen) this._nokiaToastRect = null;   // nor tappable-to-dismiss behind a panel
     if (hud.detail && !modalOpen) this.drawDetail(hud.detail);
     if (hud.drag) this.drawDragGhost(hud.drag, player);
     // The soft sight. Torpor is seconds, G1's grip is 0..1 and is where you are

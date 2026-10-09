@@ -162,8 +162,8 @@ was wrong. Standard ML's own top level infers and prints a type for every
 declaration entered, which is how the manuals display everything. There was no
 barrier; there was no implementation.
 
-For how the language scores against Harper's teaching corpus, see
-[`docs/isml-conformance.md`](isml-conformance.md).
+For how the language scores against Harper's teaching corpus, run
+`node tools/isml-conformance.mjs`; its header says what it measures.
 
 ## 6. Status
 

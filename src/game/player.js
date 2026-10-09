@@ -1254,7 +1254,14 @@ export class Player {
   walkmanSkip(dir) {
     if (!this.walkman || !ITEMS[this.walkman.item]) { this.say('The walkman is empty. A cassette would fit.'); return; }
     if (!this.walkmanSide) { this.walkmanPlayStop(); return; }
-    if (sfx.skipTape(dir)) return;
+    if (sfx.skipTape(dir)) {
+      // Say which track, since skipping on a phone shows no hover and the deck
+      // takes a moment to wind on.
+      const url = sfx.tapeTrack && sfx.tapeTrack();
+      const name = url ? decodeURIComponent(url.split('/').pop()).replace(/\.[a-z0-9]+$/i, '').replace(/^[\d\s._-]+/, '').replace(/_/g, ' ') : '';
+      if (name) this.say(`${dir < 0 ? '\u25c0\u25c0' : '\u25b6\u25b6'} ${name}`);
+      return;
+    }
     // One track a side: skipping turns the tape over.
     const def = ITEMS[this.walkman.item];
     this.walkmanSide = this.walkmanSide === 'A' ? 'B' : 'A';

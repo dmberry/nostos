@@ -200,6 +200,28 @@ export function openSigned(phrase, blob) {
   return new TextDecoder().decode(aesCtr(kEnc, iv, ct));
 }
 
+// The other direction, for the vault command: a fresh sixteen-byte head each
+// time, so the same text sealed twice under one phrase looks nothing alike.
+export function sealSigned(phrase, text) {
+  const iv = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(iv);
+  const dk = pbkdf2(B(String(phrase)), iv, ITERS, 32);
+  const ct = aesCtr(hmac(dk, B('enc')), iv, B(String(text)));
+  const m = new Uint8Array(16 + ct.length);
+  m.set(iv); m.set(ct, 16);
+  const tag = hmac(hmac(dk, B('mac')), m).subarray(0, 16);
+  const blob = new Uint8Array(32 + ct.length);
+  blob.set(iv); blob.set(tag, 16); blob.set(ct, 32);
+  return blob;
+}
+
+export function toBase64(bytes) {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  const b = typeof globalThis.btoa === 'function' ? globalThis.btoa(bin) : Buffer.from(bin, 'binary').toString('base64');
+  return b.match(/.{1,64}/g).join('\n');
+}
+
 export function fromBase64(s) {
   const clean = String(s || '').replace(/[^A-Za-z0-9+/=]/g, '');
   if (typeof atob === 'function') {

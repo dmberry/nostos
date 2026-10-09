@@ -347,7 +347,7 @@ export const uiMethods = {
     ctx.font = '11px system-ui, sans-serif';
     ctx.fillStyle = 'rgba(207,216,195,0.55)';
     const found = WEAPON_ORDER.filter((k) => player.weaponsFound && player.weaponsFound.has(k)).length;
-    ctx.fillText(`${found} of ${n} found \u00b7 V to close`, px + 20, py + 48);
+    ctx.fillText(`${found} of ${n} found${this.touchUI ? '' : ' \u00b7 V to close'}`, px + 20, py + 48);
     // A column head, so the number at the end of each row does not have to
     // carry its own label eighteen times over.
     ctx.font = 'bold 9px system-ui, sans-serif';
@@ -449,7 +449,7 @@ export const uiMethods = {
     ctx.fillText('Skills & Knowledge', px + pad, py + Math.round(30 * k));
     ctx.font = fs(11);
     ctx.fillStyle = 'rgba(207,216,195,0.55)';
-    ctx.fillText('K to close · all of it survives death', px + pad, py + Math.round(48 * k));
+    ctx.fillText(this.touchUI ? 'all of it survives death' : 'K to close · all of it survives death', px + pad, py + Math.round(48 * k));
 
     // THE RECORD — score, the rank it has earned, and the run's tallies. This
     // lives here rather than on the HUD: the dashboard should carry only what
@@ -2034,7 +2034,12 @@ export const uiMethods = {
     const R = 30;
     const bx = this.w - R - 14;
     const baseY = (this.hudTop != null ? this.hudTop : this.h - 120) - R - 12;
+    // MORE stands above JUMP, unless that puts it under the minimap (a phone on
+    // its side); then it stands beside JUMP instead.
+    const tall = baseY - 2 * (R * 2 + 14) - R > 150;
     const buttons = [
+      tall ? { id: 'more', x: bx, y: baseY - 2 * (R * 2 + 14), label: '\u22ef', held: false }
+        : { id: 'more', x: bx - (R * 2 + 14), y: baseY - (R * 2 + 14), label: '\u22ef', held: false },
       { id: 'jump', x: bx, y: baseY - (R * 2 + 14), label: '\u25b2', held: false },
       { id: 'run', x: bx, y: baseY, label: '\u00bb', held: !!hud.touchRunHeld },
     ];
@@ -2061,6 +2066,13 @@ export const uiMethods = {
       ctx.fillText(b.label, b.x, b.y - 6);
       ctx.font = 'bold 9px system-ui, sans-serif';
       ctx.fillText(b.id.toUpperCase(), b.x, b.y + 13);
+      // Something can be made: a dot on MORE, where the craft button is.
+      if (b.id === 'more' && hud.craftReady) {
+        ctx.beginPath();
+        ctx.arc(b.x + R * 0.68, b.y - R * 0.68, 5, 0, Math.PI * 2);
+        ctx.fillStyle = '#f0c040';
+        ctx.fill();
+      }
       ctx.shadowBlur = 0;
       ctx.shadowColor = 'transparent';
       ctx.textBaseline = 'alphabetic';
@@ -2115,7 +2127,7 @@ export const uiMethods = {
     ctx.font = '10px system-ui, sans-serif';
     ctx.fillStyle = 'rgba(207,216,195,0.6)';
     ctx.textAlign = 'right';
-    ctx.fillText('I to close', px + panelW - 20, py + 26);
+    if (!this.touchUI) ctx.fillText('I to close', px + panelW - 20, py + 26);
     ctx.textAlign = 'left';
 
     // WORN, drawn first and drawn whether or not you have a bag: armour is on
@@ -2257,9 +2269,12 @@ export const uiMethods = {
     const mx = mouse ? mouse.x : -1, my = mouse ? mouse.y : -1;
     // Folded, the handle is all there is, so it grows a little to be findable —
     // downward only, so its top edge does not move between the two states.
-    const S = 17, gap = 2, HH = open ? 9 : 14;
+    // A finger is not a cursor: on a touch screen the buttons are three times the
+    // area, which still leaves the column shorter than the world is tall.
+    const touch = !!(hud && hud.touchControls);
+    const S = touch ? 30 : 17, gap = touch ? 4 : 2, HH = open ? (touch ? 14 : 9) : (touch ? 22 : 14);
     const GLOW = this.HUD_BTN_GLOW;
-    const x = this.w - S - 8;
+    let x = this.w - S - 8;
     const dashTop = this.hudTop != null ? this.hudTop : this.h;
     // Centred down the world's height (the dashboard is not the world), with
     // the handle hung off the bottom of where the column WOULD be — computed
@@ -2268,7 +2283,17 @@ export const uiMethods = {
     // pressed it.
     const n = this.HUD_BTNS.length;
     const colH = n * (S + gap) - gap;
-    const colTop = Math.round(dashTop / 2 - colH / 2);
+    // On touch the MORE, JUMP and RUN circles stand on the same edge below it
+    // (drawTouchControls: 74 apart, radius 30, from 42 above the dashboard), so
+    // the column is lifted until its handle clears the top one.
+    const clear = touch ? dashTop - 42 - 2 * 74 - 36 - 12 - colH - 4 - HH : Infinity;
+    let colTop = Math.round(Math.min(dashTop / 2 - colH / 2, clear));
+    // A phone on its side has no room above the circles, so the column crosses
+    // to the left edge, under the wordmark, where nothing else stands.
+    if (touch && clear < 56) {
+      x = 8;
+      colTop = Math.round(Math.max(48, dashTop - 8 - HH - 4 - colH));
+    }
     const hy = colTop + colH + 4;
 
     this.uiButtons = [];
@@ -2410,6 +2435,29 @@ export const uiMethods = {
     ctx.restore();
   },
 
+  // The way out of a panel on a touch screen, where there is no I, K, V or 9.
+  // A square in the panel's top-right corner, big enough for a thumb, and in
+  // uiButtons so the same dispatch that runs the rail runs this.
+  drawPanelCloseX(r) {
+    if (!r) return;
+    const ctx = this.ctx;
+    const B = 36, x = r.x + r.w - B - 6, y = r.y + 6;
+    ctx.save();
+    ctx.fillStyle = 'rgba(12,15,10,0.85)';
+    this.roundRect(x, y, B, B, 6); ctx.fill();
+    ctx.strokeStyle = 'rgba(207,216,195,0.55)';
+    ctx.lineWidth = 1;
+    this.roundRect(x + 0.5, y + 0.5, B - 1, B - 1, 6); ctx.stroke();
+    ctx.strokeStyle = '#e8e0d0';
+    ctx.lineWidth = 2.2; ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(x + 12, y + 12); ctx.lineTo(x + B - 12, y + B - 12);
+    ctx.moveTo(x + B - 12, y + 12); ctx.lineTo(x + 12, y + B - 12);
+    ctx.stroke();
+    ctx.restore();
+    (this.uiButtons = this.uiButtons || []).push({ action: 'closePanel', x, y, w: B, h: B, name: 'Close' });
+  },
+
   /** Which panel button (if any) is under a screen point. */
   hudButtonAt(mx, my) {
     for (const b of this.uiButtons || []) {
@@ -2421,8 +2469,10 @@ export const uiMethods = {
   // Which dashboard/backpack slot (if any) is under a screen point. Later
   // entries (the backpack panel, drawn on top) win over earlier ones.
   slotAt(mx, my) {
-    for (let k = this.uiSlots.length - 1; k >= 0; k--) {
-      const s = this.uiSlots[k];
+    // A finger can land before the first frame has laid the slots out.
+    const slots = this.uiSlots || [];
+    for (let k = slots.length - 1; k >= 0; k--) {
+      const s = slots[k];
       if (mx >= s.x && mx <= s.x + s.w && my >= s.y && my <= s.y + s.h) return s;
     }
     return null;
@@ -2452,7 +2502,11 @@ export const uiMethods = {
       else if (act === 'next') { tri(cx + t * 0.2, 1); tri(cx - t * 1.6 + t * 0.2, 1); }
       else if (playing) ctx.fillRect(cx - t, cy - t, t * 2, t * 2);
       else tri(cx + t * 0.3, 1);
-      this.uiSlots.push({ x: bx, y, w: bw, h, kind: 'wmctl', act });
+      // The buttons are drawn small; what takes the click is a third of the deck's
+      // width each and taller than the glyph, because an 8-pixel target is missed
+      // more often than hit.
+      const third = w / 3, i = act === 'prev' ? 0 : act === 'play' ? 1 : 2;
+      this.uiSlots.push({ x: x + i * third, y, w: third, h: h + 8, kind: 'wmctl', act });
     });
   },
 
@@ -2544,7 +2598,19 @@ export const uiMethods = {
     //
     // Here rather than beside ISLAND / AI because that block is anchored to the
     // right edge and this line is long enough to run under the score.
-    if (hud && hud.task) {
+    if (hud && hud.task && W < 480) {
+      // A phone held upright has no room for it between the bars and the status
+      // card, so it stands just above the dashboard on its own line, left of the
+      // touch buttons.
+      const doneAll = hud.task.done >= hud.task.total;
+      const line = `TASK ${hud.task.done}/${hud.task.total}  ${hud.task.text}`;
+      ctx.font = 'bold 10px system-ui, sans-serif';
+      const tw = Math.min(W - 96, ctx.measureText(line).width + 12);
+      ctx.fillStyle = 'rgba(12,15,10,0.78)';
+      ctx.fillRect(6, top - 22, tw, 17);
+      ctx.fillStyle = doneAll ? '#7fd88a' : 'rgba(232,226,205,0.92)';
+      ctx.fillText(line, 12, top - 10, tw - 12);
+    } else if (hud && hud.task) {
       const doneAll = hud.task.done >= hud.task.total;
       ctx.font = 'bold 9px system-ui, sans-serif';
       ctx.fillStyle = doneAll ? 'rgba(127,216,138,0.8)' : 'rgba(207,216,195,0.5)';
@@ -2563,7 +2629,13 @@ export const uiMethods = {
 
     // --- Bottom row: the slot strip, full width — hands, pockets, backpack,
     // walkman, all visible and reachable. ---
-    const S = 40, P = 34, gap = 6;
+    // The row is hands, pockets, pack, walkman, phone and laptop, and at full size
+    // it is wider than a phone held upright. Scale the whole row to the width
+    // there is rather than let the laptop fall off the right edge.
+    const nP = player.pockets.length + (player.backpack ? 1 : 0);
+    const want = bx + 46 + nP * 40 + 12 + 44 + 44 + 34 + 10;
+    const k = Math.min(1, W / want);
+    const S = Math.round(40 * k), P = Math.round(34 * k), gap = Math.max(3, Math.round(6 * k));
     const sy = top + MDH - 46;
     let sx = bx;
     this.drawLabel('HANDS', sx, sy - 5);
@@ -2585,7 +2657,7 @@ export const uiMethods = {
     // The walkman is a deck, not another pocket — give it breathing room from
     // the pack badge, and draw the REAL cassette (reels turning during play)
     // rather than a frozen item icon.
-    sx += 12;
+    sx += Math.round(12 * k);
     this.drawLabel('WALK', sx, sy - 5);
     this.drawSlot(sx, sy, P, null, 0, player.walkmanSide != null);
     if (player.walkman) {
@@ -2605,14 +2677,14 @@ export const uiMethods = {
     if (player.walkman) this.drawWalkmanControls(sx, sy + P + 2, P, 9, player.walkmanSide != null);
     // The PHONE box, beside the deck (compact strip). Signal bars live next to
     // the label, clear of the handset sprite.
-    sx += P + 10;
-    this.drawLabel('PHONE', sx, sy - 5);
-    this.drawSignalBars(sx + 34, sy - 5, hud && hud.nokiaSignal || 0);
+    sx += P + Math.round(10 * k);
+    this.drawLabel(k < 0.95 ? 'TEL' : 'PHONE', sx, sy - 5);
+    this.drawSignalBars(sx + (k < 0.95 ? 20 : 34), sy - 5, hud && hud.nokiaSignal || 0);
     this.drawPhoneBox(sx, sy, P, player);
     // The LAPTOP box, next along: the machine you carry (docs/PLAN.md).
     // Empty until you find one. Click it to open the shell (slot kind 'laptop').
-    sx += P + 10;
-    this.drawLabel('LAPTOP', sx, sy - 5);
+    sx += P + Math.round(10 * k);
+    this.drawLabel(k < 0.95 ? 'LAP' : 'LAPTOP', sx, sy - 5);
     this.drawLaptopBox(sx, sy, P, player);
   },
 
@@ -4860,7 +4932,7 @@ export const uiMethods = {
     ctx.fillText('KLEOS', px + pad, py + Math.round(30 * k));
     ctx.font = fs(11);
     ctx.fillStyle = 'rgba(207,216,195,0.55)';
-    ctx.fillText('9 or Esc to close', px + pad + Math.round(62 * k), py + Math.round(30 * k));
+    if (!this.touchUI) ctx.fillText('9 or Esc to close', px + pad + Math.round(62 * k), py + Math.round(30 * k));
     const hrs = Math.floor((model.playSeconds || 0) / 3600);
     ctx.textAlign = 'right';
     ctx.fillText(`day ${model.day || 0}${hrs ? ` · ${hrs}h played` : ''}`, px + pw - pad, py + Math.round(30 * k));

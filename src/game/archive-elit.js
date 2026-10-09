@@ -22,7 +22,7 @@
 //
 // View Source works on every page here, and on one of them it is the page.
 
-import { stillsReel } from './stills.js';
+import { stillsReel, PLAGE_SEALED } from './stills.js';
 
 const P = (domain, name, title, body, bg) => ({ domain, name, title, body, ...(bg ? { bg } : {}) });
 const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -197,8 +197,49 @@ const POETRY = P('ml-poetry.geocities.ws', 'ML POETRY', 'ml poetry :: programs t
   'no <code>then</code> and no <code>else</code>, so there is no',
   '<code>if</code> worth writing, and no <code>eye</code> and no',
   '<code>let</code>. What is left is one aid and one intent. It runs.</p>',
+  '<p><small>someone sent one in from a poem swap: <a href="ayas-hanami.geocities.ws">hanami.py</a></small></p>',
   '<p><small>more combinations: <code>cent</code> in /usr/games on any NostBook.',
   '<a href="hypertext-ring.geocities.ws">the hypertext ring</a></small></p>',
+  '</div>',
+], 'codeterm');
+
+// ---- spring in Python, from the poem swap ----------------------------------
+
+const HANAMI_LINES = [
+  '# hanami.py',
+  '# for the avenue in the park, April',
+  '',
+  'def cherry():',
+  "    yield 'one, by the gate'",
+  "    yield 'then the whole avenue'",
+  "    yield 'then the pond, pink'",
+  '',
+  'spring = cherry()',
+  'for look in spring:',
+  '    print(look)',
+  '',
+  'for look in spring:',
+  '    print(look)',
+  '',
+  'spring = cherry()',
+];
+const HANAMI = P('ayas-hanami.geocities.ws', 'AYA’S HANAMI', 'aya’s hanami // hanami.py', [
+  '<!--bg:codeterm-->',
+  '<div class="ns-prose">',
+  '<h1>aya’s hanami</h1>',
+  '<p><small>aya’s page. i write test scripts for a phone company in Reading and',
+  'walk round the park at lunch. -- aya</small></p>',
+  '<hr>',
+  '<p>The swap gave me spring. Hanami is going out to look at the cherry',
+  'blossom, and I wanted it short, the way haiku are.</p>',
+  '<h2>hanami.py</h2>',
+  `<pre>${HANAMI_LINES.map(esc).join('\n')}</pre>`,
+  '<p>A function with <code>yield</code> in it hands back a generator, which',
+  'gives out each of its values once. Runs in Python 2.3 and later.</p>',
+  '<hr>',
+  '<p><small>counter: 00415 · best viewed at 800x600 · last updated 9 Apr</small></p>',
+  '<p><small>back to <a href="ml-poetry.geocities.ws">ml poetry</a> · next in the',
+  'swap: <a href="ruths-small-hours.geocities.ws">ruth’s small hours</a> »</small></p>',
   '</div>',
 ], 'codeterm');
 
@@ -493,7 +534,7 @@ const JETEE = P('la-jetee.geocities.ws', 'LA JETEE', 'La Jet&eacute;e (Chris Mar
   'the Zone, after Tarkovsky.</p>',
   '<hr>',
   '<p><small>Somebody made one of these on a NostBook: <a href="photo-roman.geocities.ws">La',
-  'Plage</a>. It is on every one as <code>stills</code>. See also <a href="hayao-zone.geocities.ws">the',
+  'Plage</a>. It is on every one as <code>laplage</code>. See also <a href="hayao-zone.geocities.ws">the',
   'zone</a> &middot; <a href="the-french-new-wave.geocities.ws">the French new',
   'wave</a></small></p>',
   '</div>',
@@ -506,7 +547,10 @@ const PLAGE = P('photo-roman.geocities.ws', 'LA PLAGE', 'La Plage, un photo-roma
   '<center><h1>La Plage</h1>',
   '<p>un photo-roman &middot; anonymous &middot; about two minutes &middot; French, English subtitles</p></center>',
   stillsReel({ embed: true }),
-  '<p><small>The same film is on every NostBook: <code>stills</code>.</small></p>',
+  '<p><small>The same film is on every NostBook: <code>laplage</code>.</small></p>',
+  '<!-- ce qu\'il dit d\'abord ouvre le reste -->',
+  '<!-------BEGIN LA PLAGE-----\n' + PLAGE_SEALED.trim().split('\n').map((l) => '  ' + l).join('\n')
+    + '\n  -----END LA PLAGE------->',
   '<hr>',
   '<h2>The future perfect of the save file</h2>',
   '<p><i>La Plage</i> runs a little over two minutes: two title cards, twelve',
@@ -598,6 +642,6 @@ const RING = P('hypertext-ring.geocities.ws', 'THE HYPERTEXT RING', 'The Hyperte
 ], 'ending');
 
 export const ELIT_SITES = [
-  RING, WWW, ...HEGIRA_PAGES, ...YESTERDAY_PAGES, MORPH, POETRY, ...TWINE_PAGES,
+  RING, WWW, ...HEGIRA_PAGES, ...YESTERDAY_PAGES, MORPH, POETRY, HANAMI, ...TWINE_PAGES,
   FLASH, WAR, VARIORUM, COMMENTARY, MIRROR_INDEX, SCHERIA, ZONE, JETEE, PLAGE,
 ];

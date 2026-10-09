@@ -70,6 +70,7 @@ const FORTH = P('forth-moore.geocities.ws', 'FORTH',
     'APL come at smallness from opposite ends and meet in the middle. And for the',
     'language Forth lived alongside on the bare metal, the portable systems tongue',
     'nearly everything runs on, see <a href="c-ritchie.geocities.ws">c-ritchie</a>.</p>',
+    '<p><small>a reader sent in a poem: <a href="back-step-astronomy.geocities.ws">nocturne.fs</a></small></p>',
     '<hr>',
     '<p><small>counter: 00512 · best viewed at 640x480 · this page hand-coded, no',
     'generator · under construction (a few more words to define) · last updated',
@@ -77,6 +78,53 @@ const FORTH = P('forth-moore.geocities.ws', 'FORTH',
     '<p><small>',
     '[ <a href="programming-languages-ring.geocities.ws">Programming Languages Ring</a> ]<br>',
     'a proud member. « prev · random · next »',
+    '</small></p>',
+  ]);
+
+// ---- a nocturne in Forth, from the poem swap -------------------------------
+
+const NOCTURNE_LINES = [
+  '\\ nocturne.fs',
+  '\\ for a clear night in October, from the back step',
+  '',
+  ': jupiter   ." jupiter" ;',
+  ': vega      ." vega" ;',
+  ': capella   ." capella" ;',
+  ': deneb     ." deneb" ;',
+  ': the-rest  ." the ones too faint to name" ;',
+  '',
+  ': dusk  ( -- sky )',
+  '   [\'] jupiter [\'] vega [\'] capella [\'] deneb [\'] the-rest ;',
+  '',
+  ': how-deep  ( sky -- sky )',
+  '   CR ." the night is " DEPTH . ." stars deep" ;',
+  '',
+  ': dawn  ( sky -- )',
+  '   BEGIN DEPTH WHILE CR EXECUTE REPEAT',
+  '   CR ." and then the ordinary blue" CR ;',
+  '',
+  'dusk how-deep dawn',
+];
+
+const BACK_STEP = P('back-step-astronomy.geocities.ws', 'BACK STEP ASTRONOMY',
+  'back step astronomy // nocturne.fs', [
+    '<!--bg:systems-->',
+    '<h1>BACK STEP ASTRONOMY</h1>',
+    '<p><small>observing notes from a back garden in Hexham, with a six-inch',
+    'reflector and a flask. i wrote the mount control in Forth. -- alan</small></p>',
+    '<hr>',
+    '<p>My poem for the swap. The form was the nocturne.</p>',
+    '<h2>nocturne.fs</h2>',
+    '<pre>' + NOCTURNE_LINES.join('\n') + '</pre>',
+    '<p>Inside a definition <code>[\']</code> puts the address of the named word',
+    'on the stack instead of running it, and <code>EXECUTE</code> runs whatever',
+    'address is on top. <code>DEPTH</code> counts what is on the stack. Any ANS',
+    'Forth should take it.</p>',
+    '<hr>',
+    '<p><small>counter: 00733 · best viewed at 640x480 with red-light mode on · last updated 19 Oct</small></p>',
+    '<p><small>',
+    '[ <a href="programming-languages-ring.geocities.ws">Programming Languages Ring</a> ]<br>',
+    'back to <a href="forth-moore.geocities.ws">forth-moore</a> · next in the swap: <a href="huws-beeb-page.geocities.ws">huw’s beeb page</a> »',
     '</small></p>',
   ]);
 
@@ -329,4 +377,4 @@ const FIRSTCOMPILER = P('the-first-compiler.geocities.ws', 'FIRST COMPILER',
     '</small></p>',
   ]);
 
-export const LANG_G = [FORTH, ERLANG, PHPTCLLUA, SELF, FIRSTCOMPILER];
+export const LANG_G = [FORTH, BACK_STEP, ERLANG, PHPTCLLUA, SELF, FIRSTCOMPILER];

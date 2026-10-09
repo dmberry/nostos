@@ -54,7 +54,8 @@ const C = [['james-joyce.geocities.ws', 'James Joyce'], ['virginia-woolf.geociti
   ['william-faulkner.geocities.ws', 'William Faulkner'], ['thomas-mann.geocities.ws', 'Thomas Mann']];
 const D = [['jorge-luis-borges.geocities.ws', 'Jorge Luis Borges'], ['italo-calvino.geocities.ws', 'Italo Calvino'],
   ['vladimir-nabokov.geocities.ws', 'Vladimir Nabokov'], ['garcia-marquez.geocities.ws', 'Gabriel Garcia Marquez'],
-  ['samuel-beckett.geocities.ws', 'Samuel Beckett'], ['edgar-allan-poe.geocities.ws', 'Edgar Allan Poe']];
+  ['samuel-beckett.geocities.ws', 'Samuel Beckett'], ['edgar-allan-poe.geocities.ws', 'Edgar Allan Poe'],
+  ['w-g-sebald.geocities.ws', 'W. G. Sebald']];
 const E = [['call-me-ishmael.geocities.ws', 'Herman Melville'], ['raft-on-the-river.geocities.ws', 'Mark Twain'],
   ['scarlet-letter-a.geocities.ws', 'Nathaniel Hawthorne'], ['figure-in-the-carpet.geocities.ws', 'Henry James'],
   ['the-iceberg-theory.geocities.ws', 'Ernest Hemingway'], ['rememory-beloved.geocities.ws', 'Toni Morrison']];

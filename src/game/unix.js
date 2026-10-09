@@ -28,7 +28,7 @@ import { PDFS, pdfStub } from './pdfs.js';
 import { ELIZA_README, DOCTOR_SCRIPT, DOCTOR_TABLES, ELIZA_PROGRAM, ELIZA_LOOP_LEGACY } from './eliza-src.js';
 import { BOOKS, bookFileName, bookStub } from './books.js';
 import { LETTER_FILE, LETTER_OPENER, CATALOGUE_NOTE, WARNING_FILE, FOURTH_SEALED } from './seals.js';
-import { openSigned, fromBase64 } from './digest.js';
+import { openSigned, sealSigned, fromBase64, toBase64 } from './digest.js';
 import { S_PURSUIT, WITNESS_A, WITNESS_B, WITNESS_C, WITNESS_README, AGRIPPA_IMG,
   SLP_C, SYS_README, CENT_SOURCES, parseSfile, sccsPrs, travesty, gorge, cent, centDigits,
   NIM_START, nimReply, nimBoard, tttGame } from './intertext.js';
@@ -237,7 +237,25 @@ const MAN = {
   ifconfig: 'ifconfig [iface] [up|down]\n  Configure a network interface.\n\n  With no arguments, report every interface and its state. The wireless\n  card is built into this machine, and it comes up DOWN — nothing is on\n  the air until you say so:\n\n    ifconfig wifi0 up\n\n  The card forges its address and hardware id on every association,\n  so the network answers it and nothing can follow the answer home. It\n  reaches the WEB only. There is no route to the control wire from here.',
   ping: 'ping <host>\n  Ask a host whether it is there. Takes an address (10.1.1.2) or a name.',
   arp: 'arp -a\n  What is on the wire within radio range, nearest first.\n\n  The card hears every machine near enough to associate and keeps what it\n  heard in a table. Each line is one machine: the name it answers to, its\n  address, and where it was when it last spoke — bearing and range from\n  where you are standing.\n\n  This is how you find out WHICH machine you are looking at. Four T-1s on a\n  hillside are four identical machines until you sweep them, and posting a\n  program to the wrong one is the sort of mistake that walks over and finds\n  you. Range is about 24 metres; walk closer and more of them answer.',
-  unseal: 'unseal <file> <word> <word> ...\n  Read a signed block back.\n\n  The words after the filename are the key. There is no list of them on\n  this machine and nothing here will guess them for you.\n\n    unseal fourth.asc one two three four five six\n\n  It checks the signature before it turns a single byte, so a phrase that\n  is nearly right gets exactly what a phrase that is nothing like it\n  gets: nothing. There is no warmer or colder. It takes about a second\n  either way, on purpose, because a check that is cheap is a check that\n  can be run a hundred million times by somebody who is not you.\n\n  Files that answer to it are base-64 with a sixteen-byte head. The old\n  sealed things on this disk are not that shape and will refuse.',
+  vault: [
+    'vault -seal <file> <phrase>      seal a file under a phrase',
+    'vault -unseal <file> <phrase>    open it again (also: unseal <file> <phrase>)',
+    '',
+    '  -s and -u will do. The phrase is every word after the filename,',
+    '  or one "quoted string". Case does not matter.',
+    '',
+    '  -seal replaces the file with a block between BEGIN SEALED and',
+    '  END SEALED fences. Nothing on this machine keeps the phrase.',
+    '',
+    '  -unseal reads a block from a file, fences and all, including one',
+    '  copied off a page. It checks the signature before it turns a single',
+    '  byte, so a phrase that is nearly right gets exactly what a phrase',
+    '  that is nothing like it gets. About a second either way, on purpose.',
+    '',
+    '    vault -seal notes "the dog was there"',
+    '    vault -unseal notes the dog was there',
+  ].join('\n'),
+  unseal: 'unseal <file> <word> <word> ...\n  Read a signed block back. The same as vault -unseal.\n\n  The words after the filename are the key. There is no list of them on\n  this machine and nothing here will guess them for you.\n\n    unseal fourth.asc one two three four five six\n\n  It checks the signature before it turns a single byte, so a phrase that\n  is nearly right gets exactly what a phrase that is nothing like it\n  gets: nothing. There is no warmer or colder. It takes about a second\n  either way, on purpose, because a check that is cheap is a check that\n  can be run a hundred million times by somebody who is not you.\n\n  Files that answer to it are base-64 with a sixteen-byte head. The old\n  sealed things on this disk are not that shape and will refuse.',
 
   watermark: 'watermark <file>\n  Say whether a file was written by the machines or by a person.\n\n  Everything the estate pressed carries RON content credentials; nothing\n  you write does. So in this world the detector detects HUMANS, and the\n  reading is the other way round from the one it was built for:\n\n    VALID   machine-generated, byte-for-byte what the foundry pressed\n    NONE    human-made, or edited since — filed: suspiciously human\n\n  Useful on salvage: in a pile of recovered files the unmarked ones are\n  the ones somebody actually wrote, and those are the ones worth reading.\n  A program you post to a unit fails the check, and the unit\'s own page\n  says so on its provenance line. It has never stopped anybody.',
   scan: 'scan\n  The obelisks on the network you are associated with: each tower\'s code\n  and address, and any operator tag hung on it.\n\n  Where arp hears the machines within radio range, scan reads the whole\n  subnet off the wire, the same list Netscape shows — so you can find a\n  tower\'s code to telnet or ping without opening the browser. A tower that\n  has been felled or jammed shows [down].\n\n    scan\n    telnet ob_5d33',
@@ -551,8 +569,8 @@ const MAN = {
   ttt: 'ttt [n]\n  Noughts and crosses, played against itself, n games (default 24).',
   gtw: 'gtw\n  Runs ttt first.',
   adventure: 'adventure\n  The binary is for a PDP-10.',
-  stills: [
-    'stills',
+  laplage: [
+    'laplage',
     '  Show the photographs on this machine, one at a time, in the browser.',
     '  Twelve, after two title cards. They are always in the same order.',
     '',
@@ -1579,6 +1597,10 @@ export function makeDisk() {
           // note above and consistent with everything they thought about it.
           'warning.asc': file(WARNING_FILE),
         }),
+        // Bratley and Millo's year. One line, and `ml copy.ml` should give back
+        // exactly what `cat copy.ml` does; if it ever does not, the language has
+        // changed underneath it.
+        '1972': dir({ 'copy.ml': file('(fn s => echo (s ^ str (chr 34) ^ s ^ str (chr 34))) "(fn s => echo (s ^ str (chr 34) ^ s ^ str (chr 34))) "') }),
         '1992': dir({ 'disk.img': file(AGRIPPA_IMG) }),
         witnesses: dir({
           'readme': file(WITNESS_README),
@@ -1588,9 +1610,9 @@ export function makeDisk() {
         }),
       }),
       // Photographs, as files: ls shows them and the readme names the viewer.
-      stills: dir({
-        'readme': file('Twelve photographs and two title cards.\nThey play in order: stills'),
-        ...Object.fromEntries(['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'].map((n) => [`${n}.jpg`, file('[ image, JPEG, 1024x576, greyscale ]\nnot a text file. try: stills')])),
+      laplage: dir({
+        'readme': file('Twelve photographs and two title cards.\nThey play in order: laplage'),
+        ...Object.fromEntries(['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'].map((n) => [`${n}.jpg`, file('[ image, JPEG, 1024x576, greyscale ]\nnot a text file. try: laplage')])),
       }),
       demos: dir({
         'life.ml': file(LIFE_ML),
@@ -1674,6 +1696,14 @@ export function graftSystemDirs(root) {
         delete home.d[dir].d[f];
         added.push(`-home/${dir}/${f} (superseded)`);
       }
+    }
+    // /home/stills became /home/laplage. The old folder goes only while it is
+    // exactly what shipped; anything the player put in it keeps it.
+    const old = home.d.stills;
+    if (old && old.d && old.d.readme && /They play in order: stills$/.test(old.d.readme.f)
+        && Object.keys(old.d).every((k) => k === 'readme' || /^\d\d\.jpg$/.test(k))) {
+      delete home.d.stills;
+      added.push('-home/stills (renamed laplage)');
     }
     for (const [name, node] of Object.entries(fresh.d.home.d)) {
       if (!home.d[name]) { home.d[name] = node; added.push(`home/${name}`); continue; }
@@ -2632,29 +2662,33 @@ const COMMANDS = {
     return [`obelisks on ${net.essid || 'the wire'}:`, ...rows].join('\n');
   },
 
-  // `unseal <file> <word> ...` — read a signed block back.
+  // `vault -seal <file> <phrase>` and `vault -unseal <file> <phrase>`.
   //
-  // The words are the key and there is no list of them on this machine. It
+  // The phrase is the key and there is no list of phrases on this machine. It
   // checks the signature before it turns a single byte, so a phrase that is
   // nearly right gets exactly what a phrase that is nothing like it gets. It
   // takes a second either way; that is the stretch, and it is deliberate.
+  // Switches in the manner of find(1): one dash, a whole word.
+  vault: (args, _in, env) => {
+    const all = args.map(String).filter(Boolean);
+    if (all.some((w) => /^\/(seal|unseal|s|u)$/i.test(w))) {
+      throw new UnixError('vault: this is not a DOS machine. vault -seal <file> <phrase>');
+    }
+    const sw = all.find((w) => /^-(seal|unseal|s|u)$/.test(w));
+    const rest = all.filter((w) => w !== sw);
+    if (!sw || rest.length < 1) throw new UnixError('vault -seal <file> <phrase>  |  vault -unseal <file> <phrase>');
+    const [name, ...phrase] = rest;
+    if (!phrase.length) throw new UnixError('vault: no phrase given');
+    return /^-(seal|s)$/.test(sw) ? sealVault(name, phrase, env) : openVault('vault', name, phrase, env);
+  },
+
+  // `unseal <file> <phrase>` is `vault -unseal`, kept under its old name.
   unseal: (args, _in, env) => {
     const name = args[0] && String(args[0]);
     if (!name) throw new UnixError('unseal <file> <word> <word> ...');
     const words = args.slice(1).map(String).filter(Boolean);
     if (!words.length) throw new UnixError('unseal: no phrase given');
-    const parts = resolvePath(name, env.cwd);
-    const n = lookup(env.root, parts);
-    if (!n) throw new UnixError(`unseal: ${name}: no such file`);
-    if (!isFile(n)) throw new UnixError(`unseal: ${name}: is a directory`);
-    const text = openSigned(words.join(' ').toLowerCase(), fromBase64(n.f));
-    if (text == null) {
-      return [`unseal: ${name}: the phrase does not open this file.`,
-              'Nothing was turned back. A near miss and a wild guess look the',
-              'same from here, which is the point of the signature.'].join('\n');
-    }
-    if (env.onAchieve) env.onAchieve('sealOpened', { file: parts.join('/') });
-    return text;
+    return openVault('unseal', name, words, env);
   },
 
   // `watermark <file>` — is this file machine-made or human-made?
@@ -2832,8 +2866,8 @@ const COMMANDS = {
     'commands on this machine:',
     '  ls  cd  pwd  cat  echo  man  mkdir  rm  cp  mv',
     '  grep  wc  head  tail  sort  uniq  more  sh  uname  who  ps  df  uptime',
-    '  strings  crypt  almanac  mail  uucp  uustat  uucico',
-    '  tr  sed  rev  diff  od  sccs  travesty  stills',
+    '  strings  crypt  vault  almanac  mail  uucp  uustat  uucico',
+    '  tr  sed  rev  diff  od  sccs  travesty  laplage',
     '  games: nim  gorge  cent  ttt   (ls /usr/games)',
     '  ml  pico  ed  pdf-viewer  book  transcribe  help',
     '  ifconfig  iwlist  iwconfig  wifi  arp  scan  ping  netscape  telnet  post  charge',
@@ -2866,7 +2900,7 @@ export const HOOK_COMMANDS = [
   'ml', 'pico', 'ed', 'netscape', 'www', 'pdf-viewer', 'pdf', 'book',
   'transcribe', 'telnet', 'post', 'charge', 'vi', 'vim', 'emacs', 'nano',
   'sleep', 'reboot', 'halt', 'suspend', 'save', 'wifi', 'sniffer', 'more', 'get',
-  'bluebox', 'stills',
+  'bluebox', 'laplage',
 ];
 
 // A selector for any command that acts on a numbered list: `3`, `2-5`, `1,3,7`,
@@ -2898,6 +2932,41 @@ export const COMMAND_NAMES = [...new Set([...Object.keys(COMMANDS), ...HOOK_COMM
 
 
 // Write (or overwrite) a file, making no directories on the way.
+// A block copied off a page arrives with its fence lines. Their letters are
+// base-64 letters too, so they come off before anything is decoded, and when
+// both fences are there only what lies between them is the block.
+function openVault(cmd, name, words, env) {
+  const parts = resolvePath(name, env.cwd);
+  const n = lookup(env.root, parts);
+  if (!n) throw new UnixError(`${cmd}: ${name}: no such file`);
+  if (!isFile(n)) throw new UnixError(`${cmd}: ${name}: is a directory`);
+  const lines = String(n.f).split('\n');
+  const a = lines.findIndex((l) => /-----BEGIN/.test(l));
+  const z = lines.findIndex((l, i) => i > a && /-----END/.test(l));
+  const body = (a >= 0 && z > a ? lines.slice(a + 1, z) : lines)
+    .filter((l) => !/-----/.test(l)).join('\n');
+  let text = null;
+  try { text = openSigned(words.join(' ').toLowerCase(), fromBase64(body)); } catch { text = null; }
+  if (text == null) {
+    return [`${cmd}: ${name}: the phrase does not open this file.`,
+            'Nothing was turned back. A near miss and a wild guess look the',
+            'same from here, which is the point of the signature.'].join('\n');
+  }
+  if (env.onAchieve) env.onAchieve('sealOpened', { file: parts.join('/') });
+  return text;
+}
+
+function sealVault(name, words, env) {
+  const parts = resolvePath(name, env.cwd);
+  const n = lookup(env.root, parts);
+  if (!n) throw new UnixError(`vault: ${name}: no such file`);
+  if (!isFile(n)) throw new UnixError(`vault: ${name}: is a directory`);
+  if (/-----BEGIN SEALED-----/.test(String(n.f))) throw new UnixError(`vault: ${name}: already sealed`);
+  const b64 = toBase64(sealSigned(words.join(' ').toLowerCase(), String(n.f)));
+  writeFile(env, name, `-----BEGIN SEALED-----\n${b64}\n-----END SEALED-----`);
+  return `vault: ${name} sealed. This machine does not keep the phrase.`;
+}
+
 export function writeFile(env, path, text) {
   const parts = resolvePath(path, env.cwd);
   const at = parentOf(env.root, parts);
@@ -2972,10 +3041,10 @@ export function runUnix(line, env, hooks = {}) {
       }
       // A book opens in the browser, which is the reader this machine already
       // has for a page. No card needed: the files are on the disk.
-      // stills opens the browser on frames only the hub has kept.
-      if (name === 'stills') {
-        if (!hooks.stills) throw new UnixError('stills: nothing kept');
-        return hooks.stills(args, env);
+      // laplage opens the browser on frames only the hub has kept.
+      if (name === 'laplage') {
+        if (!hooks.laplage) throw new UnixError('laplage: nothing kept');
+        return hooks.laplage(args, env);
       }
       if (name === 'book') {
         if (!hooks.book) throw new UnixError('no browser on this machine');

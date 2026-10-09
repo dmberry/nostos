@@ -54,13 +54,16 @@ const C = [['rsa.geocities.ws', 'RSA'], ['diffie-hellman.geocities.ws', 'Diffie-
   ['the-key-exchange.geocities.ws', 'The Key Exchange'], ['the-digital-signature.geocities.ws', 'The Digital Signature']];
 const D = [['the-hash-function.geocities.ws', 'The Hash Function'], ['the-checksum.geocities.ws', 'The Checksum'],
   ['md5-and-sha.geocities.ws', 'MD5 &amp; SHA'], ['the-message-authentication-code.geocities.ws', 'The MAC'],
-  ['the-collision.geocities.ws', 'The Collision'], ['the-fingerprint.geocities.ws', 'The Fingerprint']];
+  ['the-collision.geocities.ws', 'The Collision'], ['the-fingerprint.geocities.ws', 'The Fingerprint'],
+  ['green-list.geocities.ws', 'The Green List']];
 const E = [['pgp-and-phil-zimmermann.geocities.ws', 'PGP &amp; Phil Zimmermann'], ['the-clipper-chip.geocities.ws', 'The Clipper Chip'],
   ['export-grade-crypto.geocities.ws', 'Export-Grade Crypto'], ['the-key-length-debate.geocities.ws', 'The Key-Length Debate'],
-  ['the-cypherpunks.geocities.ws', 'The Cypherpunks'], ['key-escrow.geocities.ws', 'Key Escrow']];
+  ['the-cypherpunks.geocities.ws', 'The Cypherpunks'], ['key-escrow.geocities.ws', 'Key Escrow'],
+  ['who-holds-the-key.geocities.ws', 'Who Holds the Key']];
 const F = [['the-four-seals.geocities.ws', 'The Four Seals'], ['the-letter-rc4.geocities.ws', 'The Letter (RC4)'],
   ['the-warning-rsa.geocities.ws', 'The Warning (RSA)'], ['the-session-vigenere.geocities.ws', 'The Session (Vigenère)'],
-  ['the-note-xor.geocities.ws', 'The Note (XOR)'], ['steganography.geocities.ws', 'Steganography']];
+  ['the-note-xor.geocities.ws', 'The Note (XOR)'], ['steganography.geocities.ws', 'Steganography'],
+  ['watermarks.geocities.ws', 'Watermarks']];
 const G = [['agrippa-a-book-of-the-dead.geocities.ws', 'Agrippa (A Book of the Dead)'], ['ron-rivest.geocities.ws', 'Ron Rivest'],
   ['shamir-and-adleman.geocities.ws', 'Shamir &amp; Adleman'], ['blaise-de-vigenere.geocities.ws', 'Blaise de Vigenère'],
   ['diffie-and-hellman.geocities.ws', 'Diffie &amp; Hellman'], ['the-manchester-love-letters.geocities.ws', 'The Manchester Love Letters']];

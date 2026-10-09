@@ -414,4 +414,97 @@ const FINGERPRINT = P('the-fingerprint.geocities.ws', 'FINGERPRINT',
     '<p><small>[ <a href="cryptography-ring.geocities.ws">Cryptography Ring</a> ]</small></p>',
   ]);
 
-export const CRYP_D = [HASH_FUNCTION, CHECKSUM, MD5_AND_SHA, MAC, COLLISION, FINGERPRINT];
+// ---- the green list: a watermark tester -----------------------------------------
+// The page draws the form; main.js wires it to wmScore below, which is the whole
+// detector. Words, not tokens: a model's tokens are not available here, and a
+// word list keeps the arithmetic the same.
+
+export const WM_KEY = 15485863;   // the millionth prime, the default key in the 2023 code
+export const WM_GAMMA = 0.25;
+const fnv = (s) => {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h >>> 0;
+};
+const wmGreen = (prev, w) => (fnv(`${WM_KEY}:${prev}:${w}`) % 1000) < WM_GAMMA * 1000;
+export function wmScore(text) {
+  const words = String(text).toLowerCase().match(/[a-z']+/g) || [];
+  const marks = words.map((w, i) => (i ? wmGreen(words[i - 1], w) : null));
+  const T = Math.max(0, words.length - 1);
+  const G = marks.filter((m) => m === true).length;
+  const z = T ? (G - WM_GAMMA * T) / Math.sqrt(T * WM_GAMMA * (1 - WM_GAMMA)) : 0;
+  return { words, marks, T, G, z };
+}
+// Three passages for the buttons. The first came out of the generator with the
+// key above; the second is the same notice put in a person's own words.
+export const WM_EXAMPLES = {
+  notice: 'The harbour office will open after seven each morning. Boats must wait '
+    + 'outside the breakwater until the signal goes white. Fish will be weighed near '
+    + 'the steps and carried in. Nobody should stay aboard after dark. Queries go to '
+    + 'the desk by hand.',
+  para: 'The office down at the harbour opens at seven. Wait outside the wall till '
+    + 'the light changes, weigh your catch at the steps, and don\'t sleep on the boat. '
+    + 'If you need anything, ask at the desk.',
+  human: 'The gatepost was painted white the fourth year and nobody said anything '
+    + 'about it. My father reversed into it every August for four years and on the '
+    + 'fourth year it was white.',
+};
+
+const GREEN_LIST = P('green-list.geocities.ws', 'GREEN LIST',
+  'GREEN LIST // a watermark tester', [
+    '<!--bg:cryp-integrity-->',
+    '<h1>GREEN LIST</h1>',
+    '<p><small>a watermark detector, written for a reading group on the 2023',
+    'paper and left running. paste text in, press the button. it works on',
+    'words, not tokens, and it only finds its own mark.</small></p>',
+    '<hr>',
+    '<h2>How the mark goes in</h2>',
+    '<p>Before a language model writes each word, a hash of the word before it',
+    'and a secret key splits the vocabulary in two: a green list, here a',
+    'quarter of all words, and a red list, the rest. The model is nudged to',
+    'prefer green words. Where many words would do, it picks a green one.',
+    'Where only one word will do, it uses that word whatever its colour, so',
+    'the text reads the same as it would have. The reader sees nothing.</p>',
+    '<h2>How it comes out</h2>',
+    '<p>To test a text you need the key and nothing else: no model, no access',
+    'to the company. For each word, recompute the split from the word before',
+    'and count how many words land on the green side. Ordinary writing hits',
+    'green about a quarter of the time. Watermarked writing hits it far more',
+    'often. The z-score says how far above a quarter the count is, in standard',
+    'deviations. Above 4 the chance of an unmarked text scoring that high is',
+    'about one in thirty thousand.</p>',
+    '<p>The method is from John Kirchenbauer, Jonas Geiping, Yuxin Wen,',
+    'Jonathan Katz, Ian Miers and Tom Goldstein, "A Watermark for Large',
+    'Language Models" (2023). The key below, 15485863, is the default in their',
+    'published code, and it is the millionth prime.</p>',
+    '<div class="tp-card">',
+    '<p><small>key 15485863 &middot; green fraction 0.25 &middot; threshold z = 4</small></p>',
+    '<p><textarea id="wm-input" rows="8" cols="52" spellcheck="false" '
+      + 'placeholder="Paste text here. Fifty words or more is best."></textarea></p>',
+    '<p><small>examples:</small> ',
+    '<button class="tp-ex" id="wm-ex-notice" type="button">harbour notice</button>',
+    '<button class="tp-ex" id="wm-ex-para" type="button">the same, retyped</button>',
+    '<button class="tp-ex" id="wm-ex-human" type="button">a gatepost</button>',
+    ' <button class="tp-cta" id="wm-go" type="button">Test</button></p>',
+    '<div id="wm-out"></div>',
+    '</div>',
+    '<h2>What it cannot do</h2>',
+    '<p>It finds this key\'s mark and no other. A text from a model that was',
+    'not watermarked, or was watermarked with a different key, scores like a',
+    'person. Short texts cannot be tested at all. Paraphrase takes the mark',
+    'out, as the second example shows: the facts survive, the word pairs do',
+    'not. And since the key on this page is public, anyone can use it to',
+    'scrub a text, or to write a text that tests as marked when no model was',
+    'involved. The paper\'s answer is to keep the key secret, which means',
+    'trusting whoever holds it (see <a href="who-holds-the-key.geocities.ws">',
+    'who holds the key</a>).</p>',
+    '<hr>',
+    '<p><small>more on marks: <a href="watermarks.geocities.ws">watermarks, paper',
+    'to tokens</a> &middot; the hash it runs on: <a href="the-hash-function.geocities.ws">',
+    'the-hash-function</a></small></p>',
+    '<p><small>counter: 00419 · runs in your browser, sends nothing anywhere ·',
+    'last updated 1 Jun</small></p>',
+    '<p><small>[ <a href="cryptography-ring.geocities.ws">Cryptography Ring</a> ]</small></p>',
+  ]);
+
+export const CRYP_D = [HASH_FUNCTION, CHECKSUM, MD5_AND_SHA, MAC, COLLISION, FINGERPRINT, GREEN_LIST];

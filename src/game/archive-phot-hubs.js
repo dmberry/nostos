@@ -56,10 +56,12 @@ const D = [['henri-cartier-bresson.geocities.ws', 'Henri Cartier-Bresson'], ['ro
   ['gerda-taro.geocities.ws', 'Gerda Taro'], ['don-mccullin.geocities.ws', 'Don McCullin']];
 const E = [['diane-arbus.geocities.ws', 'Diane Arbus'], ['richard-avedon.geocities.ws', 'Richard Avedon'],
   ['irving-penn.geocities.ws', 'Irving Penn'], ['vivian-maier.geocities.ws', 'Vivian Maier'],
-  ['august-sander.geocities.ws', 'August Sander'], ['helen-levitt.geocities.ws', 'Helen Levitt']];
+  ['august-sander.geocities.ws', 'August Sander'], ['helen-levitt.geocities.ws', 'Helen Levitt'],
+  ['camera-lucida.geocities.ws', 'Barthes / Camera Lucida']];
 const F = [['the-camera-obscura.geocities.ws', 'The Camera Obscura'], ['the-negative.geocities.ws', 'The Negative'],
   ['the-darkroom.geocities.ws', 'The Darkroom'], ['the-leica.geocities.ws', 'The Leica'],
-  ['colour-photography.geocities.ws', 'Colour Photography'], ['the-photobook.geocities.ws', 'The Photobook']];
+  ['colour-photography.geocities.ws', 'Colour Photography'], ['the-photobook.geocities.ws', 'The Photobook'],
+  ['sebald-photographs.geocities.ws', 'The photographs in Sebald']];
 
 export const PHOT_RINGS = [
   ring(R.master[0], 'PHOTOGRAPHY RING', 'Photography Ring', 'photo-art',

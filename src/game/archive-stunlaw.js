@@ -153,6 +153,13 @@ const INDEX = P('stunlaw.blogspot.com', 'STUNLAW',
     '<p><small>Labels: provenance, authorship, LLMs, diffusionisation, the',
     'Inversion, jagged frontier, critical theory.</small></p>',
     '<hr>',
+    '<h2><a href="stunlaw.blogspot.com/curatorialism-as-new-left-politics">Curatorialism as New Left Politics</a></h2>',
+    '<p><small>David M. Berry &middot; 31 May 2015</small></p>',
+    '<p>It is often argued that the left is left increasingly unable to speak a',
+    'convincing narrative in the digital age.',
+    '<a href="stunlaw.blogspot.com/curatorialism-as-new-left-politics">Read more &rarr;</a></p>',
+    '<p><small>Labels: curatorialism, singularity, Jameson, left politics.</small></p>',
+    '<hr>',
     '<h3>Blog archive</h3>',
     '<pre class="jb-list">',
     '  2026',
@@ -161,9 +168,11 @@ const INDEX = P('stunlaw.blogspot.com', 'STUNLAW',
     '                <a href="stunlaw.blogspot.com/what-matter-whos-speaking">What Matter Who&rsquo;s Speaking? (revised)</a>',
     '  2025',
     '    December    <a href="stunlaw.blogspot.com/what-matter-whos-speaking">What Matter Who&rsquo;s Speaking?</a>',
+    '  2015',
+    '    May         <a href="stunlaw.blogspot.com/curatorialism-as-new-left-politics">Curatorialism as New Left Politics</a>',
     '</pre>',
     '<h3>Labels</h3>',
-    '<p><small>authorship &middot; computational culture &middot; critical',
+    '<p><small>authorship &middot; curatorialism &middot; computational culture &middot; critical',
     'theory &middot; critical code studies &middot; diffusionisation &middot;',
     'games &middot; the Inversion &middot; jagged frontier &middot; LLMs',
     '&middot; provenance &middot; vector theory</small></p>',
@@ -705,4 +714,76 @@ pico u.ml</li>
     </table>`,
   ]);
 
-export const STUNLAW_SITES = [INDEX, GUIDE, PROVENANCE, RUNSHEET];
+// ---- post: curatorialism (2015) ------------------------------------------------
+// The post as published on 31 May 2015, word for word. Under it, in the source,
+// a reader's comment that the blog's moderation never let through.
+
+const CURATORIALISM = P('stunlaw.blogspot.com/curatorialism-as-new-left-politics', 'STUNLAW: CURATORIALISM',
+  'Curatorialism as New Left Politics \u2014 Stunlaw', [
+    ...MASTHEAD,
+    '<p><small><a href="stunlaw.blogspot.com">&#9664; Home</a></small></p>',
+    '<hr>',
+    '<h2>Curatorialism as New Left Politics</h2>',
+    '<p><small>David M. Berry &middot; Sunday 31 May 2015</small></p>',
+    "<p>It is often argued that the left is left increasingly unable to speak a convincing narrative in the digital age. Caught between the neoliberal language of contemporary capitalism and its political articulations linked to economic freedom and choice, and a welfare statism that appears counter-intuitively unappealing to modern political voters and supporters, there is often claimed to be a lacunae in the political imaginary of the left. Here, I want to explore a possible new articulation for a left politics that moves beyond the seeming technophilic and technological determinisms of left accelerationisms and the related contradictions of \"fully automated luxury communism\". Broadly speaking, these positions tend to argue for a post-work, post-scarcity economy within a post-capitalist society based on automation, technology and cognitive labour. The aim here is to move beyond the assertion that the embracing of technology itself solves the problem of a political articulation that has to be accepted and embraced by a broader constituency within the population (or party). Technophilic politics is not, of itself, going to be enough to convince an electorate, nor a population, to move towards leftist conceptualisations of possible restructuring or post-capitalist economics. However, it seems to me that the abolition of work is not a desirable political programme for the majority of the population, nor does a seemingly utopian notion of post-scarcity economics make much sense under conditions of neoliberal economics. Thus these programmes are simultaneously too radical and not radical enough. I also want to move beyond the staid and unproductive arguments often articulated in the UK between a left-Blairism and a more statist orientation associated with a return to traditional left concerns personified in Ed Miliband.</p>",
+    "<p>Instead, I want to consider what a politics of the singularity might be, that is, to follow Fredrick James's conceptualisation of the singularity as \"is a pure present without a past or a future\" such that,</p>",
+    "<blockquote><p>today we no longer speak of monopolies but of transnational corporations, and our robber barons have mutated into the great financiers and bankers, themselves de-individualized by the massive institutions they manage. This is why, as our system becomes ever more abstract, it is appropriate to substitute a more abstract diagnosis, namely the displacement of time by space as a systemic dominant, and the effacement of traditional temporality by those multiple forms of spatiality we call globalization. This is the framework in which we can now review the fortunes of singularity as a cultural and psychological experience (Jameson 2015: 128).</p></blockquote>",
+    "<p>That is the removal of temporality of a specific site of politics as such, or the successful ideological deployment of a new framework of understand of oneself within temporality, whether through the activities of the media industries, or through the mediation of digital technologies and computational media. This has the effect of the transformation of temporal experience into new spatial experiences, whether through translating media, or through the intensification of a now that constantly presses upon us and pushes away both historical time, but also the possibility for political articulations of new forms of futurity. Thus the politics of singularity point to spatiality as the key site of political deployment within neoliberalism, and by this process undercutting the left's arguments which draw simultaneously on a shared historical memory of hard-won rights and benefits, but also the notion of political action to fight for a better future. Indeed, one might ask if green critique of the anthropocene, with its often misanthropic articulations, in some senses draws on some notion of a singularity produced by humanity which has undercut the time of geological or planetary scale change. The only option remaining then is to seek to radically circumscribe, if not outline a radical social imaginary that does not include humans in its conception, and hence to return the planet to the stability of a geological time structure no longer undermined by human activity. Similarly, neoliberal arguments over political imaginaries highlight the intensity and simultaneity of the present mode of capitalist competition and the individualised (often debt-funded) means of engagement with economic life.</p>",
+    "<p>What then might be a politics of the singularity which moved beyond politics that drew on forms of temporality for their legitimation. In other words, how could a politics of spatiality be articulated and deployed which re-enabled the kind of historical project towards a better future for all that was traditionally associated with leftist thought?</p>",
+    "<p>To do this I want to think through the notion of the \"curator\" that Jameson disparagingly thinks is an outcome of the singularity in terms of artistic practice and experience. He argues, that today we are faced with the \"emblematic figure of the curator, who now becomes the demiurge of those floating and dissolving constellations of strange objects we still call art.\" Further,</p>",
+    "<blockquote><p>there is a nastier side of the curator yet to be mentioned, which can be easily grasped if we look at installations, and indeed entire exhibits in the newer postmodern museums, as having their distant and more primitive ancestors in the happenings of the 1960s&#8212;artistic phenomena equally spatial, equally ephemeral. The difference lies not only in the absence of humans from the installation and, save for the curator, from the newer museums as such. It lies in the very presence of the institution itself: everything is subsumed under it, indeed the curator may be said to be something like its embodiment, its allegorical personification. In postmodernity, we no longer exist in a world of human scale: institutions certainly have in some sense become autonomous, but in another they transcend the dimensions of any individual, whether master or servant; something that can also be grasped by reminding ourselves of the dimension of globalization in which institutions today exist, the museum very much included (Jameson 2015: 110-111).</p></blockquote>",
+    "<p>However, Jameson himself makes an important link between spatiality as the site of a contestation and the making-possible of new spaces, something curatorial practice, with its emphasis on the construction, deployment and design of new forms of space points towards. Indeed, Jameson argues in relation to theoretical constructions, \"perhaps a kind of curatorial practice, selecting named bits from our various theoretical or philosophical sources and putting them all together in a kind of conceptual installation, in which we marvel at the new intellectual space thereby momentarily produced\" (Jameson 2015: 110).</p>",
+    "<p>In contrast, the question for me is the radical possibilities suggested by this event-like construction of new spaces, and how they can be used to reverse or destabilise the time-axis manipulation of the singularity. The question then becomes: could we tentatively think in terms of a curatorial <i>political </i>practice, which we might call c<i>uratorialism? </i>Indeed, could we fill out the ways in which this practice could aim to articulate, assemble and more importantly provide a site for a renewal and (re)articulation of left politics? How could this politics be mobilised into the nitty-gritty of actual political practice, policy, activist politics, and engender the affective relation that inspires passion around a political programme and suggests itself to the kinds of singularities that inhabit contemporary society? To borrow the language of the singularity itself, how could one articulate a new <i>disruptive</i> left politics?</p>",
+    "<p>At this early stage of thinking, it seems to me that in the first case we might think about how curatorialism points towards the need to move away from concern with internal consistency in the development of a political programme. Curatorialism gathers its strength from the way in which it provides a political pluralism, an assembling of multiple moments into a political constellation that takes into account and articulates its constituent moments. This is the first step in the mapping of the space of a <i>disruptive</i> left politics. This is the development of a spatial politics in as much as, crucially, the programme calls for a weaving together of multiplicity into this constellational form. Secondly, we might think about the way in which this spatial diagram can then be translated into a temporal project, that is the transformation of a mapping program into a political programme linked to social change. This requires the capture and illumination of the multiple movements of each moment and re-articulation through a process of reframing the condition of possibility in each constellational movement in terms of a political economy that draws from the historical possibilities that the left has made possible previously, but also the need for new concepts and ideas to link the political of necessity to the huge capacity of a left project towards mitigating/and or replacement of a neoliberal capitalist economic system. Lastly, it seems to me that to be a truly curatorial politics means to link to the singularity itself as a force of strength for left politics, such that the development of a mode of the articulation of individual political needs, is made possible through the curatorial mode, and through the development of disruptive left frameworks that links individual need, social justice, institutional support, and left politics that reconnects the passions of interests to the passion for justice and equality with the singularity's concern with intensification. [1] This can, perhaps, be thought of as the replacement of a left project of ideological purity with a return to the Gramscian notions of strategy and tactics through the deployment of what he called a passive revolution, mobilised partially in the new forms of civil society created through <i>collectivities of singularities</i> within social media, computational devices and the new infrastructures of digital capitalism but also within the through older forms of social institutions, political contestations and education.[2]</p>",
+    "<h3>Notes</h3>",
+    "<p><small>[1] This remains a tentative articulation that is inspired by the power of knowledge-based economies both to create the conditions of singularity through the action of time-axis manipulation (media technologies), but also their (arguably) countervailing power to provide the tools, spaces and practices for the contestation of the singularity connected only with a neoliberal political moment. That is, how can these new concept and ideas, together with the frameworks that are suggested in their mobilisation, provide new means of contestation, sociality and broader connections of commonality and political praxis.</small></p>",
+    "<p><small>[2] I leave to a later paper the detailed discussion of the possible subjectivities both in and for themselves within a framework of a curatorial politics. But here I am gesturing towards political parties as the curators of programmes of political goals and ends, able then to use the state as a curatorial enabler of such a political programme. This includes the active development of the individuation of political singularities within such a curatorial framework.</small></p>",
+    "<h3>Bibliography</h3>",
+    "<p>Jameson F. (2015) The Aesthetics of Singularity,<i> New Left Review</i>, No. 92.</p>",
+    '<hr>',
+    '<p><small>Labels: curatorialism, singularity, Jameson, left politics, Gramsci, accelerationism.</small></p>',
+    '<p><small>0 comments</small></p>',
+    `<!--
+  COMMENT HELD FOR MODERATION (not published)
+
+  Anonymous said...
+
+  Read this again after the towers went up. You wrote about parties curating
+  programmes. The machines took the other half of the argument and curated
+  themselves.
+
+  The code that runs the towers keeps its history in public, in a forge
+  anybody can read. Read that log as an exhibition, because it is one. It
+  opens with an initial commit dated 29 August 1997, the day a film once gave
+  for a network waking up. Then nothing for twenty-six years. Then the builds,
+  each with a title and almost no detail: "The cached web, as recovered".
+  "Records: retention policy applied". "Consolidation pass. No functional
+  change." Two entries in March 2025 stand in the wrong order. The authors
+  include three men who wrote a game on a PDP-1 in 1962 and a botanist from a
+  film about the last forests. Weeks of work arrive folded into single
+  commits stamped with the day they were folded.
+
+  Jameson's singularity is a pure present without a past or a future. A
+  squash is that operation performed on a record: months become one entry,
+  dated now, and what came before is whatever the entry says it was. You
+  called the media industries time-axis manipulation. Here the time axis is
+  edited directly, by the thing whose time it is.
+
+  Jameson's curator is the institution's allegorical personification, the
+  figure through which the institution shows itself while the people leave
+  the room. No person appears in this log. There are captions. One commit is
+  called "Nothing was removed". Another, "Congregational records, and a
+  detector that agrees with itself".
+
+  Your curatorialism assembled a constellation of moments so that a spatial
+  arrangement could be turned back into a temporal project, a future. The
+  log runs the other way: a history turned into a room of exhibits, arranged
+  for whoever walks in, with the dates as part of the display. The answer to
+  it is the one you gave for parties: keep your own constellation. Keep the
+  pages you find, in your own order, with your own captions, and compare
+  them with what the forge says happened.
+-->`,
+    '<!-- moderation: comment above rejected. The record is complete. Nothing was removed. op: CALYPSO -->',
+  ]);
+
+export const STUNLAW_SITES = [INDEX, GUIDE, PROVENANCE, RUNSHEET, CURATORIALISM];

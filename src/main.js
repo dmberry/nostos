@@ -63,6 +63,7 @@ import { Lore, FRAGMENTS } from './game/lore.js';
 // #139 — the fragment ids that now live on the GeoCities ring; Lore keeps them
 // off the physical caches so the scrapbook thins to occasional paper finds.
 import { GEO_FRAGMENT_IDS } from './game/archive-geocities.js';
+import { wmScore, WM_EXAMPLES } from './game/archive-cryp-d.js';
 import { ITEMS, TAPES } from './game/items.js';
 import { sfx } from './engine/sound.js';
 import { worldToScreen, ELEV } from './engine/iso.js';
@@ -4420,7 +4421,12 @@ function resize() {
   // sized to innerHeight pushes the HUD's slot row off-screen behind the bar.
   // visualViewport gives the genuinely-visible area, so the dashboard sits just
   // above the toolbar. We drive the canvas's CSS size explicitly to match.
-  const vv = window.visualViewport;
+  // A ZOOMED page is the exception. If iOS has zoomed in (a double tap, or an
+  // input focused at under 16px), the visual viewport is a small window onto a
+  // scrolled page, and fitting the canvas to it puts the game off the edge of
+  // the screen with no way back. Then the layout size is the right one.
+  const vv0 = window.visualViewport;
+  const vv = vv0 && vv0.scale > 1.01 ? null : vv0;
   const w = Math.round(vv ? vv.width : window.innerWidth);
   const h = Math.round(vv ? vv.height : window.innerHeight);
   const cv = renderer.canvas;
@@ -4571,6 +4577,9 @@ const obTermTitlebar = document.getElementById('obterminal-titlebar');
 const obTermTitle = document.getElementById('obterminal-title');
 const obTermCloseBtn = document.getElementById('obterminal-close');
 if (obTermCloseBtn) obTermCloseBtn.addEventListener('click', (e) => { e.stopPropagation(); closeObTerminal(); });
+// The title bar it lives in is hidden; on a touch screen, where it is the only
+// way out, it moves up to the overlay itself and shows whenever the console does.
+if (obTermCloseBtn && window.matchMedia && window.matchMedia('(pointer: coarse)').matches) obTermEl.appendChild(obTermCloseBtn);
 
 // Retired at #145 V1b with the rest of her DOM panel. This dragged the console
 // around the desktop by its title bar and only ever ran in `on-desktop` mode,
@@ -8143,7 +8152,7 @@ function startReel(reel, host, opts = {}) {
   return { stop, pause, play };
 }
 
-// `stills` on the NostBook: the reel over the whole game window. Esc closes it.
+// `laplage` on the NostBook: the reel over the whole game window. Esc closes it.
 let _reelOverlay = null;
 function closeReelOverlay() {
   if (!_reelOverlay) return;
@@ -8440,6 +8449,32 @@ function nsRender() {
     for (const [id, txt] of Object.entries(TP_EX)) {
       const b = nsPageEl.querySelector(id);
       if (b) b.addEventListener('click', (e) => { e.preventDefault(); tpInput.value = txt; tpInput.focus(); });
+    }
+  }
+  // THE GREEN LIST. Unlike the detector above, this one is arithmetic: it
+  // recounts the green words for the key printed on the page and reports the
+  // same number every time. The words are coloured so the count can be checked.
+  const wmInput = nsPageEl.querySelector('#wm-input');
+  const wmOut = nsPageEl.querySelector('#wm-out');
+  if (wmInput && wmOut) {
+    const run = () => {
+      const r = wmScore(wmInput.value);
+      if (r.T < 2) { wmOut.innerHTML = '<p><small>nothing to test.</small></p>'; return; }
+      const verdict = r.T < 25 ? 'too short to call'
+        : r.z > 4 ? 'WATERMARKED (this key)' : 'no mark found for this key';
+      const shown = r.words.map((w, i) => (r.marks[i] === null ? escapeHtml(w)
+        : `<span class="${r.marks[i] ? 'wm-g' : 'wm-r'}">${escapeHtml(w)}</span>`)).join(' ');
+      wmOut.innerHTML = `<p class="kv">words scored .. ${r.T}<br>green ......... ${r.G} `
+        + `(expected ${(r.T * 0.25).toFixed(1)})<br>z ............. ${r.z.toFixed(2)}<br>`
+        + `verdict ....... <b>${verdict}</b></p><p class="wm-words">${shown}</p>`;
+      sfx.play('keyclick');
+    };
+    const go = nsPageEl.querySelector('#wm-go');
+    if (go) go.addEventListener('click', (e) => { e.preventDefault(); run(); });
+    wmInput.addEventListener('keydown', (e) => { e.stopPropagation(); });
+    for (const k of Object.keys(WM_EXAMPLES)) {
+      const b = nsPageEl.querySelector(`#wm-ex-${k}`);
+      if (b) b.addEventListener('click', (e) => { e.preventDefault(); wmInput.value = WM_EXAMPLES[k]; run(); });
     }
   }
   // On the result page: analyse the same text again and get a different answer.
@@ -9867,7 +9902,7 @@ function laptopRebootHook() {
   return { ok: true, text: '' };
 }
 
-// stills(1): the photographs on the disk, shown in the browser one at a time.
+// laplage(1): the photographs on the disk, shown in the browser one at a time.
 function laptopStillsHook() {
   openReelOverlay();
   return { ok: true, text: '' };
@@ -10460,6 +10495,8 @@ function nsLocalPage(title, html, extra = {}) {
   nsSetView({ kind: 'local', title, html, ...extra });
 }
 // View Source of a source view shows nothing new, so it stays where it is.
+//
+//   (function f(){console.log('('+f+')()')})()
 function nsViewSource() {
   if (!web || (web.view && web.view.source)) return;
   nsLocalPage('Source of: ' + (web.title || ''),
@@ -10951,7 +10988,7 @@ function laptopRun(line) {
   // when you are actually carrying it. The drag mounts /mnt/fsf directly.
   laptopShell.fsfCard = player.hasItem('fsf_card') ? makeFsfCard : null;
   laptopShell.onAchieve = (name, data) => kleos(name, data);
-  const r = runUnix(t, laptopShell, { ml: laptopMlHook, netscape: laptopNetscapeHook, ed: laptopEdHook, pico: laptopPicoHook, post: laptopPostHook, bluebox: laptopBlueboxHook, charge: laptopChargeHook, get: laptopGetHook, pdf: laptopPdfHook, telnet: laptopTelnetHook, book: laptopBookHook, transcribe: laptopTranscribeHook, sleep: laptopSleepHook, suspend: laptopSuspendHook, halt: laptopHaltHook, reboot: laptopRebootHook, save: laptopSaveHook, wifi: laptopWifiHook, sniffer: laptopSnifferHook, more: laptopMoreHook, stills: laptopStillsHook });
+  const r = runUnix(t, laptopShell, { ml: laptopMlHook, netscape: laptopNetscapeHook, ed: laptopEdHook, pico: laptopPicoHook, post: laptopPostHook, bluebox: laptopBlueboxHook, charge: laptopChargeHook, get: laptopGetHook, pdf: laptopPdfHook, telnet: laptopTelnetHook, book: laptopBookHook, transcribe: laptopTranscribeHook, sleep: laptopSleepHook, suspend: laptopSuspendHook, halt: laptopHaltHook, reboot: laptopRebootHook, save: laptopSaveHook, wifi: laptopWifiHook, sniffer: laptopSnifferHook, more: laptopMoreHook, laplage: laptopStillsHook });
   if (player.laptop) player.laptop.netUp = !!(laptopShell.net && laptopShell.net.up);
   sfx.play(r.ok ? 'keyclick' : 'keyclick_soft');
   if (r.text) replPrint(r.text);
@@ -11567,7 +11604,10 @@ function hoverSlotTip() {
   // No pointer, no hover. A tap on a touch screen leaves the last coordinates
   // behind, so the tooltip for whatever was tapped stayed on screen — over the
   // panel that tap had just opened.
-  if (drag || touchLike) return null;
+  // Hover tips go when a FINGER was last used, not whenever the screen looks
+  // like a phone's: a short laptop window passes the size test and lost every
+  // tip on the dashboard, the deck's track names included.
+  if (drag || input.lastTouch) return null;
   // The panel buttons first: they sit in the dashboard like the slots do, and
   // a glyph ("]", "\u21e7N") is no use unless hovering says what it opens.
   const hb = renderer.hudButtonAt && renderer.hudButtonAt(input.mouseX, input.mouseY);
@@ -12025,6 +12065,137 @@ function craftPromptUp(can, p) {
   return performance.now() - _craftPromptAt < CRAFT_PROMPT_SECS * 1000;
 }
 
+// WHAT C WOULD MAKE, by name: the same chain, in the same order, as the C
+// handler below, so the touch sheet's Craft button promises exactly what the
+// key would do. Null when C would do nothing.
+function craftNext() {
+  const p = player;
+  if (p.canCraftWaveGun()) return 'wave gun';
+  if (p.canCraftObGun()) return 'OB gun';
+  if (p.canCraftChip()) return 'access chip';
+  if (p.canCraftSword()) return 'robot sword';
+  if (p.canCraftFortressMap()) return 'fortress map';
+  if (p.canCraftGreekShip(map)) return 'ship';
+  if (p.canCraftGoggles()) return 'night-vision goggles';
+  if (p.canCraftBluebox()) return 'blue box';
+  if (p.canRepairLaptop()) return 'NostBook repair';
+  if (p.canCraftSniffer()) return 'sniffer';
+  if (p.canCraftCodescope()) return 'codescope';
+  if (p.canCraftNuts()) return 'nuts';
+  if (p.canCraftBoat(map)) return 'boat';
+  return null;
+}
+
+// THE TOUCH ACTION SHEET. A phone has none of the letter keys this game is
+// played with, so MORE opens a sheet of them as buttons. Each one presses its
+// key (input.inject), which keeps every action on the one code path it already
+// has; nothing here knows what eating or sleeping does.
+const actionSheetEl = document.createElement('div');
+actionSheetEl.id = 'touch-actions';
+document.body.appendChild(actionSheetEl);
+const SHEET = [
+  { code: 'KeyC', label: () => (craftNext() ? `Craft ${craftNext()}` : 'Craft'), off: () => !craftNext() },
+  { code: 'Digit6', label: () => 'Light a fire' },
+  { code: 'KeyQ', label: () => 'Eat' },
+  { code: 'KeyR', label: () => 'Read' },
+  { code: 'KeyG', label: () => 'Swap hands' },
+  { code: 'Backspace', label: () => 'Drop' },
+  { code: 'KeyB', label: () => 'Sleep' },
+  { code: 'KeyI', label: () => 'Backpack' },
+  { code: 'KeyK', label: () => 'Skills' },
+  { code: 'KeyV', label: () => 'Armoury' },
+  { code: 'Digit9', label: () => 'Record' },
+  { code: 'KeyJ', label: () => 'Scrapbook' },
+  { code: 'KeyZ', label: () => 'Zoom' },
+  { code: 'KeyT', label: () => 'Forcefield' },
+  { code: 'KeyM', label: () => 'Music' },
+  { code: 'KeyP', label: () => 'Pause' },
+  { code: 'KeyH', label: () => 'Help' },
+];
+function closeActionSheet() { actionSheetEl.style.display = 'none'; }
+// A sheet opens under the finger that opened it, and the browser follows the
+// touch with a click at the same spot: on whichever of its buttons is now there.
+// For a moment after opening, the sheet takes no taps.
+let _sheetAt = 0;
+const sheetFresh = () => performance.now() - _sheetAt < 450;
+function toggleActionSheet() {
+  if (actionSheetEl.style.display === 'block') { closeActionSheet(); return; }
+  actionSheetEl.innerHTML = '';
+  const head = document.createElement('div');
+  head.className = 'ta-head';
+  head.innerHTML = '<span>Actions</span>';
+  const x = document.createElement('button');
+  x.className = 'ta-close'; x.textContent = '\u00d7'; x.setAttribute('aria-label', 'Close');
+  x.addEventListener('click', () => { if (!sheetFresh()) closeActionSheet(); });
+  head.appendChild(x);
+  actionSheetEl.appendChild(head);
+  const grid = document.createElement('div');
+  grid.className = 'ta-grid';
+  for (const a of SHEET) {
+    const b = document.createElement('button');
+    b.textContent = a.label();
+    if (a.code === 'KeyC') b.className = 'ta-craft';
+    if (a.off && a.off()) b.disabled = true;
+    b.addEventListener('click', () => {
+      if (sheetFresh()) return;
+      closeActionSheet();
+      if (a.code === 'KeyC') craftPromptDismiss();
+      input.inject(a.code);
+      sfx.play('keydrop');
+    });
+    grid.appendChild(b);
+  }
+  actionSheetEl.appendChild(grid);
+  if (actionSheetEl.style.display !== 'block') _sheetAt = performance.now();
+  actionSheetEl.style.display = 'block';
+}
+
+// THE DECK, FOR A THUMB. The three buttons under the walkman are drawn for a
+// cursor and are a few pixels across; on a touch screen a tap on the walkman
+// opens them here at full size, with what is playing written out (there is no
+// hover on a phone) and the eject the slot click used to do.
+function deckTrackName() {
+  const url = sfx.tapeTrack && sfx.tapeTrack();
+  return url ? decodeURIComponent(url.split('/').pop()).replace(/\.[a-z0-9]+$/i, '').replace(/^[\d\s._-]+/, '').replace(/_/g, ' ') : '';
+}
+function openDeckSheet() {
+  const def = player.walkman && ITEMS[player.walkman.item];
+  if (!def) return;
+  actionSheetEl.innerHTML = '';
+  const head = document.createElement('div');
+  head.className = 'ta-head';
+  const side = player.walkmanSide ? (player.walkmanSide === 'A' ? def.sideA : def.sideB) : null;
+  const t = document.createElement('span');
+  t.textContent = side ? `${def.artist || '?'} \u2014 ${deckTrackName() || side.label} (side ${player.walkmanSide})` : `${def.artist || '?'} \u2014 stopped`;
+  head.appendChild(t);
+  const x = document.createElement('button');
+  x.className = 'ta-close'; x.textContent = '\u00d7'; x.setAttribute('aria-label', 'Close');
+  x.addEventListener('click', () => { if (!sheetFresh()) closeActionSheet(); });
+  head.appendChild(x);
+  actionSheetEl.appendChild(head);
+  const grid = document.createElement('div');
+  grid.className = 'ta-grid';
+  const btn = (label, fn, keep = true) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.addEventListener('click', () => {
+      if (sheetFresh()) return;
+      fn();
+      sfx.play('keydrop');
+      if (keep) setTimeout(() => { if (actionSheetEl.style.display === 'block') openDeckSheet(); }, 250);
+      else closeActionSheet();
+    });
+    grid.appendChild(b);
+  };
+  btn('\u25c0\u25c0 Back', () => player.walkmanSkip(-1));
+  btn(player.walkmanSide ? '\u25a0 Stop' : '\u25b6 Play', () => player.walkmanPlayStop());
+  btn('Forward \u25b6\u25b6', () => player.walkmanSkip(1));
+  btn('Eject', () => player.equipSlot({ kind: 'walkman' }), false);
+  actionSheetEl.appendChild(grid);
+  if (actionSheetEl.style.display !== 'block') _sheetAt = performance.now();
+  actionSheetEl.style.display = 'block';
+}
+
 /** The next thing to do, for the dashboard. Null when there is nothing left. */
 function hudTask() {
   const list = objectivesNow();
@@ -12201,6 +12372,7 @@ function update(dt) {
   tickChorale(dt);
   tickDayReturn(dt);
   if (input.consumePress('KeyH')) toggleHelp();
+  if (input.morePressed()) toggleActionSheet();
   if (input.inventoryPressed()) showBackpack = !showBackpack;
   if (input.skillsPressed()) showSkills = !showSkills;
   if (input.kleosPressed()) { showKleos = !showKleos; if (showKleos) kleosScope = 'run'; }
@@ -12699,7 +12871,9 @@ function update(dt) {
   if (lore.archiveOpen) {
     const r = lore._archiveRect;
     const bc = input.clickPos();
-    if (bc) {
+    const xb = bc && renderer.hudButtonAt && renderer.hudButtonAt(bc.x, bc.y);
+    if (xb && xb.action === 'closePanel') { input.consumeClick(); lore.archiveOpen = false; }
+    else if (bc) {
       const tab = lore.archiveTabAt(bc.x, bc.y);
       const outside = !r || bc.x < r.x || bc.x > r.x + r.w || bc.y < r.y || bc.y > r.y + r.h;
       if (tab >= 0) {
@@ -12719,6 +12893,14 @@ function update(dt) {
   // same-slot release, a click-equip); release drops onto the target slot.
   // Claimed here so a slot press never also swings the held tool.
   const press = input.clickPos();
+  // On touch the craft prompt is a button: a tap on it is a press of C.
+  if (press && touchLike && renderer._craftPromptRect) {
+    const r = renderer._craftPromptRect;
+    if (press.x >= r.x && press.x <= r.x + r.w && press.y >= r.y && press.y <= r.y + r.h) {
+      input.consumeClick();
+      input.inject('KeyC');
+    }
+  }
   // Tap the SMS handset to hurry it along. Checked BEFORE the slots and the
   // world so a dismissing tap never also swings the held tool — the toast sits
   // over open ground, and reading it should not cost you a swing.
@@ -12749,7 +12931,8 @@ function update(dt) {
     if (b) {
       input.consumeClick();
       sfx.play('keydrop');
-      if (b.action === 'menu') toggleHudMenu();
+      if (b.action === 'closePanel') { showBackpack = showSkills = showWeapons = showKleos = false; }
+      else if (b.action === 'menu') toggleHudMenu();
       else if (b.action === 'help') toggleHelp();
       else if (b.action === 'notes') openNotebook();
       else if (b.action === 'library') openBookshelf();
@@ -12767,6 +12950,7 @@ function update(dt) {
     if (slot) {
       input.consumeClick();
       if (slot.kind === 'wmctl') { if (slot.act === 'play') player.walkmanPlayStop(); else player.walkmanSkip(slot.act === 'prev' ? -1 : 1); }
+      else if (slot.kind === 'walkman' && touchLike && player.walkman) openDeckSheet(); // a deck a thumb can work
       else if (slot.kind === 'packbadge') showBackpack = !showBackpack; // tap the badge to open — and again to close (mobile has no I key)
       else if (slot.kind === 'phone') openPhone(); // the Nokia 3310: the screen opens, SMS both ways
       else if (slot.kind === 'laptop') openLaptop(); // the machine you carry: the shell opens (same as L)
@@ -13655,6 +13839,7 @@ function frame(now) {
       seaFog: seaFogState(), // Poseidon's fog on the failed crossing (null otherwise)
       touchControls: touchLike,
       touchRunHeld: input._touchRun,
+      craftReady: touchLike && !!craftNext(),
       drag: drag ? { ...drag, mx: input.mouseX, my: input.mouseY } : null,
       // The certificate carries the run's KLEOS (#134). Attached here rather
       // than at each of the places a cert is built, so it is whatever the song

@@ -135,12 +135,61 @@ const PERL = P('perl-wall.geocities.ws', 'PERL',
     'have been ribbing each other ever since. And for the little embeddable scripts',
     'that share Perl’s glue-language job, see',
     '<a href="php-tcl-lua.geocities.ws">php-tcl-lua</a>.</p>',
+    '<p><small>a reader sent in a poem: <a href="dougs-perl-shed.geocities.ws">ways.pl</a></small></p>',
     '<hr>',
     '<p><small>counter: 00926 · best viewed at 640x480 in a fixed-width font ·',
     'this page hand-cut, no HTML editor · last updated 2 Feb</small></p>',
     '<p><small>',
     '[ <a href="programming-languages-ring.geocities.ws">Programming Languages Ring</a> ]<br>',
     'ring member. « prev · random · next »',
+    '</small></p>',
+  ]);
+
+// ---- a love poem in Perl, from the poem swap -------------------------------
+
+const WAYS_LINES = [
+  '#!/usr/bin/perl -w',
+  '# ways.pl',
+  '# for J., who asked me how',
+  'use strict;',
+  '',
+  'my @ways = (',
+  '    \'when you sing the wrong words\',',
+  '    \'on the top deck of the 38\',',
+  '    \'with your cold feet on my shins\',',
+  '    \'in the queue at the post office\',',
+  '    \'asleep\',',
+  '    \'awake\',',
+  ');',
+  '',
+  'sub how { return wantarray ? @ways : scalar @ways }',
+  '',
+  'print "I love you $_\\n" foreach how();',
+  'push @ways, \'now, writing this out\';',
+  'print scalar(how()), " ways, and counting\\n";',
+];
+
+const DOUGS_PERL_SHED = P('dougs-perl-shed.geocities.ws', 'DOUG’S PERL SHED',
+  'doug’s perl shed // ways.pl', [
+    '<!--bg:scripting-->',
+    '<h1>DOUG’S PERL SHED</h1>',
+    '<p><small>doug’s page. i look after the mail servers at a building society and',
+    'write Perl for most of the day. -- doug</small></p>',
+    '<hr>',
+    '<p>Perl has its own poetry. Larry Wall posted “Black Perl” to Usenet in',
+    '1990, a poem that was also a program for the Perl of the day, and there have',
+    'been Perl poetry contests since. This one is for the swap, and for J.</p>',
+    '<h2>ways.pl</h2>',
+    '<pre>' + WAYS_LINES.join('\n') + '</pre>',
+    '<p><code>wantarray</code> tells a subroutine whether it was called for a list',
+    'or for a single value, so <code>how()</code> hands back either all the ways or',
+    'the number of them. Runs clean under <code>-w</code> and <code>use',
+    'strict</code>.</p>',
+    '<hr>',
+    '<p><small>counter: 00238 · best viewed at 800x600 · last updated 14 Feb</small></p>',
+    '<p><small>',
+    '[ <a href="programming-languages-ring.geocities.ws">Programming Languages Ring</a> ]<br>',
+    'back to <a href="perl-wall.geocities.ws">perl-wall</a> · next in the swap: <a href="eileens-allotment.geocities.ws">eileen’s allotment</a> »',
     '</small></p>',
   ]);
 
@@ -337,4 +386,4 @@ const JAVASCRIPT = P('javascript-eich.geocities.ws', 'JAVASCRIPT',
     '</small></p>',
   ]);
 
-export const LANG_D = [SIMULA, PERL, PYTHON, RUBY, JAVASCRIPT];
+export const LANG_D = [SIMULA, PERL, DOUGS_PERL_SHED, PYTHON, RUBY, JAVASCRIPT];

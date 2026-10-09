@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <title>NostOS · A postAI Odyssey</title>
 <meta name="description" content="An isometric survival game set in a world run by machines. Salvage, hack the towers, and slip through the tears into the Backspace.">
 <!-- Link-preview / share card (Open Graph + Twitter). Rendered by iMessage,
@@ -25,6 +25,43 @@
 <style>
   html, body { margin: 0; padding: 0; height: 100%; background: #0b0e0a; overflow: hidden; }
   #game { display: block; width: 100vw; height: 100vh; }
+  /* A phone must not zoom the page. A double tap on a panel zooms it, and iOS
+     zooms in on any text field under 16px the moment it takes focus and never
+     zooms back out; either way the game ends up off the edge of the screen. */
+  html, body { touch-action: manipulation; }
+  #game { touch-action: none; }
+  @media (pointer: coarse) {
+    input[type=text], input:not([type]), textarea { font-size: 16px !important; }
+  }
+  /* The touch action sheet (main.js): the letter keys as buttons. */
+  #touch-actions { display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+    background: rgba(10,12,8,0.97); border-top: 1px solid rgba(207,216,195,0.35);
+    padding: 10px 12px calc(14px + env(safe-area-inset-bottom)); max-height: 70vh; overflow-y: auto;
+    font-family: system-ui, sans-serif; }
+  #touch-actions .ta-head { display: flex; align-items: center; justify-content: space-between;
+    color: #e8e0d0; font-weight: 700; font-size: 15px; margin-bottom: 8px; }
+  #touch-actions .ta-close { width: 44px; height: 44px; font-size: 26px; line-height: 1; color: #e8e0d0;
+    background: rgba(207,216,195,0.08); border: 1px solid rgba(207,216,195,0.35); border-radius: 8px; }
+  #touch-actions .ta-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  #touch-actions .ta-grid button { min-height: 48px; padding: 6px 4px; font-size: 14px; color: #e8e0d0;
+    background: rgba(207,216,195,0.08); border: 1px solid rgba(207,216,195,0.3); border-radius: 8px; }
+  #touch-actions .ta-grid button.ta-craft { grid-column: 1 / -1; background: rgba(240,192,64,0.18);
+    border-color: rgba(240,192,64,0.6); font-weight: 700; }
+  #touch-actions .ta-grid button:disabled { opacity: 0.4; }
+  /* Every panel's way out, sized for a thumb. The visible buttons keep their
+     look; an invisible margin round each one takes the tap. The laptop's own X
+     is hidden on a desktop, where Esc and the backdrop close it; a phone has
+     neither, so there it is pinned to the corner. */
+  @media (pointer: coarse) {
+    #ph-close, #ns-close, #pdf-close, #pico-close, #rd-close, #wf-close, #dev-close { position: relative; }
+    #help-x::after, #ph-close::after, #ns-close::after, #pdf-close::after, #bookshelf-close::after,
+    #ronnotebook-close::after, #pico-close::after, #rd-close::after, #wf-close::after, #dev-close::after {
+      content: ''; position: absolute; inset: -14px; }
+    #obterminal #obterminal-close { display: block; position: fixed; z-index: 40;
+      top: calc(8px + env(safe-area-inset-top)); right: calc(8px + env(safe-area-inset-right));
+      width: 44px; height: 44px; font-size: 22px; line-height: 1; color: #e8e0d0;
+      background: rgba(10,12,8,0.88); border: 1px solid rgba(207,216,195,0.45); border-radius: 8px; }
+  }
   #hint {
     position: fixed; right: 12px; bottom: 88px;
     color: #cfd8c3; font: 13px/1.4 system-ui, sans-serif;
@@ -37,6 +74,7 @@
      the hint clear of it across the whole compact range, not just the phone width.
      (Below 810px the score block collided with "Press H for help".) */
   @media (max-width: 809px) { #hint { bottom: 128px; } }
+  @media (max-width: 479px) { #hint { bottom: 150px; } }   /* clear of the task line above the phone dashboard */
   @media (max-width: 560px) { #hint { font-size: 11px; } }
   #helpBtn {
     position: fixed; top: 10px; left: 92px;
@@ -752,7 +790,7 @@
     <p>"Vector theory" and the Magnifica Humanitas fragments draw on David's own writing (stunlaw).</p>
     <p>The shape of it — a long way home across a hostile world to someone still waiting — after Homer's <b>Odyssey</b> and Joyce's <b>Ulysses</b>. The one-eyed machines, the trick of being <b>no one</b>, the song of the towers, the dog that waited: quiet echoes, never spelled out.</p>
     <p>Character and animal art: Kenney (kenney.nl), CC0.</p>
-    <p>Bach, <b>BWV 639</b>, from the Mutopia Project edition typeset by G&eacute;rard Gr&eacute;co, CC BY-SA 3.0. The <b>stills</b> sequence is inspired by Chris Marker, <b>La Jet&eacute;e</b> (1962). The sixth edition's <code>slp.c</code> under the Caldera licence for ancient UNIX.</p>
+    <p>Bach, <b>BWV 639</b>, from the Mutopia Project edition typeset by G&eacute;rard Gr&eacute;co, CC BY-SA 3.0. The <b>La Plage</b> sequence is inspired by Chris Marker, <b>La Jet&eacute;e</b> (1962). The sixth edition's <code>slp.c</code> under the Caldera licence for ancient UNIX.</p>
 
     <h2>The books on the laptop</h2>
     <p>The NostBook's library holds nine complete works, and they are the only
@@ -1305,11 +1343,11 @@
 
     <h2>The Torite toolkit</h2>
     <p>Four programs a resistance living out of range would actually want. <b><code>uucp</code></b> and <b><code>mail</code></b> are store-and-forward, and they are the only thing on this machine that cares <i>where you are standing</i>. Write a letter in <code>pico</code>, hand it to <code>mail tor!mentor</code>, and it goes into a queue on the disk. <code>uustat</code> shows the queue and tells you nothing is in range. <code>uucico</code> hands it over, and it will only do that beside a <b>relay</b> — and the relays are up on the summits. Carry the laptop uphill and a hilltop stops being a place with a terminal on it and becomes a post office. Anything addressed to Ithaca is <b>held</b> rather than lost, because Ithaca has never answered.</p>
-    <p><b><code>strings</code></b> reads what a thing has written inside itself, which is the way into anything that will not talk to you. <b><code>crypt</code></b> is V7's and is its own inverse, so one command goes both ways. <b><code>almanac</code></b> works out sun, moon and tide from the machine's own clock, asking nobody: a crossing is shortest either side of low water, and the dark is not cover, because their sensors do not need the light and yours do. <b><code>transcribe</code></b> is how paper gets into a machine with no scanner. You type it in. A scrap you have typed up stops being paper: <code>grep</code> can search it, <code>crypt</code> can lock it, and <code>mail</code> can carry it to a relay.</p>
+    <p><b><code>strings</code></b> reads what a thing has written inside itself, which is the way into anything that will not talk to you. <b><code>crypt</code></b> is V7's and is its own inverse, so one command goes both ways. <b><code>vault</code></b> is the strong one: <code>vault -seal &lt;file&gt; &lt;phrase&gt;</code> locks a file under a phrase and <code>vault -unseal</code> (or <code>unseal</code>) opens a sealed block, including one copied off a page. <b><code>almanac</code></b> works out sun, moon and tide from the machine's own clock, asking nobody: a crossing is shortest either side of low water, and the dark is not cover, because their sensors do not need the light and yours do. <b><code>transcribe</code></b> is how paper gets into a machine with no scanner. You type it in. A scrap you have typed up stops being paper: <code>grep</code> can search it, <code>crypt</code> can lock it, and <code>mail</code> can carry it to a relay.</p>
 
     <h2>Machines you can read</h2>
     <p>A <b>T-1</b> hunter does not have its behaviour welded in. It carries a <code>program.ml</code>, six lines of AI-ML that it reads about four times a second to decide what it wants; the engine then goes and does it. Open the unit's own page in Netscape and the program is right there. <b>Save</b> it to the NostBook, open it in <code>pico</code>, <code>diff</code> it against the original, and <code>post</code> it back. Give a machine a program that faults and its eye goes <b>amber and flashes</b>, and its page says so.</p>
-    <p>For cutting text up: <code>tr</code>, <code>sed</code> (<code>s/a/b/</code>, <code>/pat/d</code>, <code>-n /pat/p</code>) and <code>rev</code>. <code>travesty</code> writes new text that follows any file letter by letter. <code>sccs prs</code> reads the works' own history of a program, delta by delta, and <code>sccs get -r</code> fetches an old version. <code>stills</code> shows the photographs on the disk. <code>ls /usr/games</code> for the games shelf.</p>
+    <p>For cutting text up: <code>tr</code>, <code>sed</code> (<code>s/a/b/</code>, <code>/pat/d</code>, <code>-n /pat/p</code>) and <code>rev</code>. <code>travesty</code> writes new text that follows any file letter by letter. <code>sccs prs</code> reads the works' own history of a program, delta by delta, and <code>sccs get -r</code> fetches an old version. <code>laplage</code> shows the photographs on the disk. <code>ls /usr/games</code> for the games shelf.</p>
     <p><code>more</code> reads a long file a screenful at a time: <b>SPACE</b> for the next page, <b>RETURN</b> for one more line, <b>q</b> to stop, and a percentage so you know how far in you are. It takes a pipe too (<code>ls -l /usr/src | more</code>). <code>cat</code> does not page and never did.</p>
     <p>Two folders of programs on the disk, and the split matters. <code>demos/</code> run at the prompt (<code>ml life.ml</code>). <code>robots_code/</code> are for the <b>machines</b> and will not run there: they read senses a laptop has no hardware for, and a machine program is <b>one expression</b> read whole four times a second, where the prompt is a session that takes a line at a time. <code>cat robots_code/readme.txt</code> says what a T-1 can sense (<code>charge integrity range home_range threat hurt linked</code>) and what it can be told to do (<code>patrol hunt home flee wait</code>). Three worked ones are in there: an escort, a picket on a leash, and one that retreats when hurt.</p>
     <p>A machine whose cell is flat is not a dead one. It drops to <b>low power</b>: it cannot move, see or fight, but the board that answers maintenance stays up on a trickle, which is why a flat machine is recoverable at all. Its page still takes a program, and it carries a <b>FORCE HOME</b> control: every one of these has a small <b>reserve cell</b> whose only job is to walk the machine back to its tower to charge. It goes slowly, it goes blind, and it is <b>one charge</b> that does not come back.</p>
@@ -2366,6 +2404,9 @@
   #netscape .ns-page .tp-badge { background:#fff; border:1px solid #ddd8d2; border-radius:11px; padding:3px 9px; margin-right:5px; font-size:11px; color:#3d4650; white-space:nowrap; }
   /* the card the paste box sits in */
   #netscape .ns-page .tp-card { background:#fff; border:1px solid #ddd8d2; border-radius:8px; padding:12px 14px; margin:10px 0; }
+  #netscape .ns-page .wm-g { background:#cfe8c4; color:#1d3a14; }
+  #netscape .ns-page .wm-r { background:#f3d6d0; color:#4a1c14; }
+  #netscape .ns-page .wm-words { line-height:1.9; font-size:12px; }
   #netscape .ns-page .tp-tabs { border-bottom:1px solid #e0dbd4; margin:-4px 0 10px; padding-bottom:6px; font-size:12px; color:#5c6672; }
   #netscape .ns-page .tp-tab-on { background:#fff; border:1px solid #ddd8d2; border-radius:6px; padding:4px 10px; color:#101720; font-weight:bold; }
   #netscape .ns-page .tp-cta { background:#0f5c3f; color:#fff; border:1px solid #0b4430; border-radius:6px; padding:6px 16px; font-weight:bold; font-family:Georgia,serif; cursor:pointer; }
