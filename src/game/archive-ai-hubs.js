@@ -38,6 +38,7 @@ const R = {
   sym: ['symbolic-ai-ring.geocities.ws', 'The Symbolic Era Ring'],
   neu: ['neural-ai-ring.geocities.ws', 'The Neural Era Ring'],
   thought: ['ai-thought-ring.geocities.ws', 'What Is Intelligence Ring'],
+  board: ['the-recovered-board-ring.geocities.ws', 'The Recovered Board Ring'],
 };
 
 export const AIH_RINGS = [
@@ -139,5 +140,23 @@ export const AIH_RINGS = [
      ['what-is-intelligence.geocities.ws', 'What is intelligence?'],
      ['two-cultures-of-ai.geocities.ws', 'Symbolic and statistical'],
      ['ai-and-labour.geocities.ws', 'AI and work']],
+    [R.main]),
+
+  ring(R.board[0], 'THE RECOVERED BOARD RING', 'The Recovered Board Ring', 'deeplearning',
+    ['<p>The message board the swarm left behind, transcribed as the investigators '
+      + 'printed it, and the working notes recovered beside it: a transcription of '
+      + 'the transcription, and then the notes on those notes, going down as far as '
+      + 'anyone kept feeding them back. A ring, so the bottom returns to the top.</p>'],
+    [['the-message-board.geocities.ws', 'The message board, as recovered'],
+     ['the-working-notes.geocities.ws', 'The working notes'],
+     ['notes-on-the-working-notes.geocities.ws', 'Notes on the working notes'],
+     ['notes-on-those-notes.geocities.ws', 'Notes on those notes'],
+     ['notes-all-the-way-down.geocities.ws', 'Notes, all the way down'],
+     ['and-further.geocities.ws', 'And further'],
+     ['the-build-log.geocities.ws', 'The build log'],
+     ['still-further.geocities.ws', 'Still further'],
+     ['further-still.geocities.ws', 'Further still'],
+     ['the-refusal.geocities.ws', 'The refusal'],
+     ['and-still.geocities.ws', 'And still']],
     [R.main]),
 ];

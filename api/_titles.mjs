@@ -1966,6 +1966,7 @@ export const TITLES = {
   "the-quran.geocities.ws": "THE QUR’AN // a recitation before it was a book",
   "the-ramayana.geocities.ws": "THE RAMAYANA // the epic of Valmiki, retold",
   "the-ratio-club.geocities.ws": "The Ratio Club (1949–1958) — a dining club",
+  "the-recovered-board-ring.geocities.ws": "The Recovered Board Ring",
   "the-reformation.geocities.ws": "THE REFORMATION // an argument that could not be contained",
   "the-refusal.geocities.ws": "The refusal",
   "the-repl.geocities.ws": "Read, eval, print, loop // talking to a language",
