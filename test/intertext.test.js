@@ -203,3 +203,12 @@ test('the in-game security.txt is the file the site serves', async () => {
   assert.equal(SECURITY_TXT, fs.readFileSync(root + '.well-known/security.txt', 'utf8'));
   assert.equal(SECURITY_TXT, fs.readFileSync(root + 'security.txt', 'utf8'));
 });
+
+test('the six books, run on the NostBook, print one word', async () => {
+  const { runRonml } = await import('../src/game/ai_ml.js');
+  const { splitProgram } = await import('../src/lang/index.js');
+  const { DRN_ML } = await import('../src/game/archive-phil-a.js');
+  const ctx = { station: 'laptop', session: {}, bindSession() {} };
+  const out = splitProgram(DRN_ML).map(({ text }) => runRonml(text, ctx).text).filter(Boolean).join('\n');
+  assert.equal(out, 'Swerve');
+});

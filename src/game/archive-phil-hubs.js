@@ -112,7 +112,7 @@ export const PHIL_RINGS = [
     ['<p>The century that broke the system. The single one against the crowd, the death '
       + 'of God, pragmatism in America, duration in Paris, and Frege quietly inventing the '
       + 'logic the next century would argue in.</p>'],
-    [['kierkegaard.geocities.ws', 'Kierkegaard'],
+    [['kierkegaard.geocities.ws', 'Kierkegaard'], ['victor-eremita.geocities.ws', 'Kierkegaard: Either/Or'],
      ['nietzsche.geocities.ws', 'Nietzsche'],
      ['peirce.geocities.ws', 'C. S. Peirce'],
      ['william-james.geocities.ws', 'William James'],

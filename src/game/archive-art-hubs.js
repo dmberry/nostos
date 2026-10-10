@@ -53,7 +53,8 @@ const C = [['vigee-le-brun.geocities.ws', 'Elisabeth Vigee Le Brun'], ['paula-mo
   ['remedios-varo.geocities.ws', 'Remedios Varo'], ['alice-neel.geocities.ws', 'Alice Neel']];
 const D = [['pablo-picasso.geocities.ws', 'Pablo Picasso'], ['wassily-kandinsky.geocities.ws', 'Wassily Kandinsky'],
   ['piet-mondrian.geocities.ws', 'Piet Mondrian'], ['henri-matisse.geocities.ws', 'Henri Matisse'],
-  ['kazimir-malevich.geocities.ws', 'Kazimir Malevich'], ['paul-klee.geocities.ws', 'Paul Klee']];
+  ['kazimir-malevich.geocities.ws', 'Kazimir Malevich'], ['paul-klee.geocities.ws', 'Paul Klee'],
+  ['department-of-eagles.geocities.ws', 'Broodthaers / Dept of Eagles'], ['archival-impulse.geocities.ws', 'Foster / An Archival Impulse']];
 const E = [['jackson-pollock.geocities.ws', 'Jackson Pollock'], ['mark-rothko.geocities.ws', 'Mark Rothko'],
   ['norman-lewis.geocities.ws', 'Norman Lewis'], ['alma-thomas.geocities.ws', 'Alma Thomas'],
   ['edward-hopper.geocities.ws', 'Edward Hopper'], ['charles-burchfield.geocities.ws', 'Charles Burchfield']];

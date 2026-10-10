@@ -47,13 +47,16 @@ const A = [['eadweard-muybridge.geocities.ws', 'Eadweard Muybridge'], ['daguerre
   ['nadar.geocities.ws', 'Nadar'], ['the-daguerreotype.geocities.ws', 'The Daguerreotype']];
 const B = [['dorothea-lange.geocities.ws', 'Dorothea Lange'], ['jacob-riis.geocities.ws', 'Jacob Riis'],
   ['lewis-hine.geocities.ws', 'Lewis Hine'], ['walker-evans.geocities.ws', 'Walker Evans'],
-  ['the-fsa.geocities.ws', 'The FSA'], ['w-eugene-smith.geocities.ws', 'W. Eugene Smith']];
+  ['the-fsa.geocities.ws', 'The FSA'], ['w-eugene-smith.geocities.ws', 'W. Eugene Smith'],
+  ['ameisenhaufen-fauna.geocities.ws', 'Fontcuberta / Fauna']];
 const C = [['alfred-stieglitz.geocities.ws', 'Alfred Stieglitz'], ['ansel-adams.geocities.ws', 'Ansel Adams'],
   ['edward-weston.geocities.ws', 'Edward Weston'], ['man-ray.geocities.ws', 'Man Ray'],
-  ['the-f64-group.geocities.ws', 'The f/64 Group'], ['imogen-cunningham.geocities.ws', 'Imogen Cunningham']];
+  ['the-f64-group.geocities.ws', 'The f/64 Group'], ['imogen-cunningham.geocities.ws', 'Imogen Cunningham'],
+  ['fae-richards-archive.geocities.ws', 'The Fae Richards Photo Archive']];
 const D = [['henri-cartier-bresson.geocities.ws', 'Henri Cartier-Bresson'], ['robert-capa.geocities.ws', 'Robert Capa'],
   ['the-decisive-moment.geocities.ws', 'The Decisive Moment'], ['magnum-photos.geocities.ws', 'Magnum Photos'],
-  ['gerda-taro.geocities.ws', 'Gerda Taro'], ['don-mccullin.geocities.ws', 'Don McCullin']];
+  ['gerda-taro.geocities.ws', 'Gerda Taro'], ['don-mccullin.geocities.ws', 'Don McCullin'],
+  ['the-atlas-group.geocities.ws', 'The Atlas Group']];
 const E = [['diane-arbus.geocities.ws', 'Diane Arbus'], ['richard-avedon.geocities.ws', 'Richard Avedon'],
   ['irving-penn.geocities.ws', 'Irving Penn'], ['vivian-maier.geocities.ws', 'Vivian Maier'],
   ['august-sander.geocities.ws', 'August Sander'], ['helen-levitt.geocities.ws', 'Helen Levitt'],
@@ -61,7 +64,8 @@ const E = [['diane-arbus.geocities.ws', 'Diane Arbus'], ['richard-avedon.geociti
 const F = [['the-camera-obscura.geocities.ws', 'The Camera Obscura'], ['the-negative.geocities.ws', 'The Negative'],
   ['the-darkroom.geocities.ws', 'The Darkroom'], ['the-leica.geocities.ws', 'The Leica'],
   ['colour-photography.geocities.ws', 'Colour Photography'], ['the-photobook.geocities.ws', 'The Photobook'],
-  ['sebald-photographs.geocities.ws', 'The photographs in Sebald']];
+  ['sebald-photographs.geocities.ws', 'The photographs in Sebald'],
+  ['archive-fever-icp.geocities.ws', 'Archive Fever (ICP, 2008)']];
 
 export const PHOT_RINGS = [
   ring(R.master[0], 'PHOTOGRAPHY RING', 'Photography Ring', 'photo-art',

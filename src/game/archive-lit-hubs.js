@@ -55,13 +55,17 @@ const C = [['james-joyce.geocities.ws', 'James Joyce'], ['virginia-woolf.geociti
 const D = [['jorge-luis-borges.geocities.ws', 'Jorge Luis Borges'], ['italo-calvino.geocities.ws', 'Italo Calvino'],
   ['vladimir-nabokov.geocities.ws', 'Vladimir Nabokov'], ['garcia-marquez.geocities.ws', 'Gabriel Garcia Marquez'],
   ['samuel-beckett.geocities.ws', 'Samuel Beckett'], ['edgar-allan-poe.geocities.ws', 'Edgar Allan Poe'],
-  ['w-g-sebald.geocities.ws', 'W. G. Sebald']];
+  ['w-g-sebald.geocities.ws', 'W. G. Sebald'],
+  ['cide-hamete-benengeli.geocities.ws', 'Cervantes: Cide Hamete Benengeli'], ['notes-to-pale-fire.geocities.ws', 'Nabokov: Pale Fire'],
+  ['orbis-tertius.geocities.ws', 'Borges: Tlön, Uqbar, Orbis Tertius'], ['naturally-a-manuscript.geocities.ws', 'Umberto Eco: The Name of the Rose']];
 const E = [['call-me-ishmael.geocities.ws', 'Herman Melville'], ['raft-on-the-river.geocities.ws', 'Mark Twain'],
   ['scarlet-letter-a.geocities.ws', 'Nathaniel Hawthorne'], ['figure-in-the-carpet.geocities.ws', 'Henry James'],
   ['the-iceberg-theory.geocities.ws', 'Ernest Hemingway'], ['rememory-beloved.geocities.ws', 'Toni Morrison']];
 const F = [['mary-shelley.geocities.ws', 'Mary Shelley'], ['the-brontes.geocities.ws', 'The Brontes'],
   ['victor-hugo.geocities.ws', 'Victor Hugo'], ['emile-zola.geocities.ws', 'Emile Zola'],
-  ['thomas-hardy.geocities.ws', 'Thomas Hardy'], ['oscar-wilde.geocities.ws', 'Oscar Wilde']];
+  ['thomas-hardy.geocities.ws', 'Thomas Hardy'], ['oscar-wilde.geocities.ws', 'Oscar Wilde'],
+  ['ossian-macpherson.geocities.ws', 'Ossian (Macpherson)'], ['rowley-and-chatterton.geocities.ws', 'Thomas Chatterton'],
+  ['onuphrio-muralto.geocities.ws', 'Horace Walpole: The Castle of Otranto']];
 
 const G = [['homer-in-english.geocities.ws', 'Homer in English'],
   ['the-romantics.geocities.ws', 'The Romantics'],
@@ -69,7 +73,8 @@ const G = [['homer-in-english.geocities.ws', 'Homer in English'],
   ['modernist-poetry.geocities.ws', 'Modernist poetry'],
   ['futurism-and-the-machine.geocities.ws', 'Futurism and the machine'],
   ['poems-made-with-rules.geocities.ws', 'Poems made with rules'],
-  ['poetry-by-machine.geocities.ws', 'Poetry by machine']];
+  ['poetry-by-machine.geocities.ws', 'Poetry by machine'],
+  ['pessoa-heteronyms.geocities.ws', 'Fernando Pessoa']];
 
 export const LIT_RINGS = [
   ring(R.master[0], 'LITERATURE RING', 'Literature Ring', 'lit-realism',

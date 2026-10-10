@@ -8636,6 +8636,29 @@ function nsRender() {
       });
       continue;
     }
+    // A FILE PRINTED ON THE PAGE ITSELF. `pagefile:<name>` saves the text of
+    // the page's own <pre data-file="<name>"> to /home/download, where a relay
+    // file lands too, so `ml download/<name>` runs what the page shows.
+    if (addr.startsWith('pagefile:')) {
+      const name = addr.slice(9);
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        const pre = [...nsPageEl.querySelectorAll('pre[data-file]')].find((el) => el.getAttribute('data-file') === name);
+        if (!pre) { nsMsgEl.textContent = `404 Not Found: ${name}`; return; }
+        const body = pre.textContent;
+        try {
+          if (!player.laptop.fs) player.laptop.fs = makeDisk();
+          if (!laptopShell) laptopShell = newShell(player.laptop.fs);
+          const home = laptopShell.root.d.home;
+          if (!home.d.download) home.d.download = { d: {} };
+          writeFile({ root: laptopShell.root, cwd: ['home', 'download'] }, name, body);
+          nsMsgEl.textContent = `Saved /home/download/${name} (${body.length} bytes)`;
+          sfx.play('keyclick');
+          nsAlert('Download complete', `${name} saved to /home/download (${body.length} bytes). Run it on the NostBook: ${/\.ml$/.test(name) ? `ml download/${name}` : name}`, '💾');
+        } catch (err) { nsMsgEl.textContent = `Cannot save: ${err.message}`; }
+      });
+      continue;
+    }
     // A file RON's relay serves. Same landing as a saved program.ml: the disk
     // you are already carrying, where pico and ml can both reach it.
     if (addr.startsWith('ronfile:')) {
