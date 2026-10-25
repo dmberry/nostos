@@ -6,6 +6,12 @@ An isometric 2D survival game set in a world wrecked by an AI takeover. The mach
 
 Nostos is also about curation, and self-curation. Even this repository's history has been curated, though not necessarily by the people whose names are on it.
 
+The work is a mise en abyme, and close to fractal. The same self-reference repeats at different scales: the repository curates its own history, pages and programs describe themselves, and a chain of recovered notes transcribes the reasoning that built each page before it.
+
+![Ogygia](docs/screenshots/20-ogygia-stone-circle.jpg)
+*Ogygia: the stone circle, the terraced hill, and an obelisk tower on the rise.*
+<sub>NostOS v2.07</sub>
+
 ## Screenshots
 
 ### The world
