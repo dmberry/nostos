@@ -258,6 +258,7 @@ import { WARNED_SITES } from './archive-warned.js'; // the films, watched again
 import { ACCEL_SITES } from './archive-accel.js'; // the vector machines ring
 import { IDEOLOGY_SITES } from './archive-ideology.js'; // the Thursday group
 import { ABYME_SITES } from './archive-abyme.js'; // mise en abyme, at length
+import { SNAIL_SITES } from './archive-snails.js'; // knight v. snail, the margins
 import { REACTION_SITES } from './archive-reaction.js'; // four faces
 import { HOME_RINGS } from './archive-home-hubs.js'; // the home-computer webrings
 import { PHIL_A } from './archive-phil-a.js';   // the Greeks
@@ -493,6 +494,7 @@ export const ARCHIVED_SITES = [
   ...ACCEL_SITES,
   ...IDEOLOGY_SITES,
   ...ABYME_SITES,
+  ...SNAIL_SITES,
   ...REACTION_SITES,
   ...HOME_RINGS,
   ...PHIL_A, ...PHIL_B, ...PHIL_C, ...PHIL_D,
@@ -600,6 +602,7 @@ export const CATEGORIES = [
 ];
 
 const CATEGORY_OF = {
+  'knight-v-snail.geocities.ws': 'Arts & Entertainment',
   'youtube.com': 'Arts & Entertainment',
   'mp3.com': 'Arts & Entertainment',
   'napster.com': 'Arts & Entertainment',

@@ -49,6 +49,8 @@ const ABYME = P('en-abyme.geocities.ws', 'EN ABYME', 'Mise en abyme :: a long es
   'about the book.</p>',
   // abyme/escutcheon-01.png: Balmung0731, "Inescutcheon demo.svg", CC BY-SA 3.0, Wikimedia Commons
   pic('escutcheon-01.png', 'an escutcheon borne en abyme, at the fess point. It is not a copy of the shield around it'),
+  // abyme/royal-arms-01.png: Sodacan, "Royal Arms of United Kingdom (1816-1837).svg" (2010), Wikimedia Commons, CC BY-SA 3.0 / GFDL. Hanover escutcheon en abyme.
+  pic('royal-arms-01.png', 'the royal arms of 1816. the small crowned shield at the centre is Hanover, a different coat placed en abyme, not a repeat of the three kingdoms quartered around it'),
   '<h2>2. Before the word</h2>',
   '<p>The device is far older than the name. Around 1320 Giotto and his workshop',
   'painted an altarpiece for Cardinal Jacopo Stefaneschi, now in the Vatican. On',

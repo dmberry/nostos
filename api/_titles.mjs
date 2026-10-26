@@ -1008,6 +1008,7 @@ export const TITLES = {
   "klaatu.geocities.ws": "Klaatu barada nikto",
   "klemens-von-metternich.geocities.ws": "Reading notes: a life of Metternich",
   "kleos.geocities.ws": "Kleos — glory, and what it costs",
+  "knight-v-snail.geocities.ws": "Knight v. Snail :: a marginal puzzle",
   "knuth-taocp.geocities.ws": "Donald Knuth — the man who stopped to fix the type",
   "konrad-adenauer.geocities.ws": "Konrad Adenauer &amp; the Federal Republic (coursework)",
   "konrad-zuse.geocities.ws": "The Z3 Pages — Konrad Zuse and the machine nobody watched",
