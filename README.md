@@ -406,3 +406,11 @@ Copyright © 2026 David M. Berry.
 
 `src/lang/` is BML, which is the same code under the same licence and is
 released separately at [critical-code-studies/BML](https://github.com/critical-code-studies/BML).
+
+## Citation
+
+If NostOS is useful for your work, please cite the archived release:
+
+> Berry, D. M. (2026). *NostOS: a postAI Odyssey* (Version 2.08) [Software]. Zenodo. https://doi.org/10.5281/zenodo.23763147
+
+[![DOI](https://zenodo.org/badge/1289480610.svg)](https://zenodo.org/badge/latestdoi/1289480610)
