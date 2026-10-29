@@ -1252,6 +1252,7 @@ export const TITLES = {
   "myspace.com": "MySpace — a place for friends",
   "myst-cyan.geocities.ws": "MYST // still on the island (the Miller brothers)",
   "myst.geocities.ws": "MYST // the island, the books, and the quiet",
+  "mystery-of-the-black-box.geocities.ws": "Evald Ilyenkov // The Mystery of the Black Box",
   "mythology-ring.geocities.ws": "Mythology Ring",
   "nadar.geocities.ws": "NADAR // portraits, and the view from a balloon",
   "nadia-comaneci.geocities.ws": "THE PERFECT 10 — Nadia Comăneci, Montreal 1976",

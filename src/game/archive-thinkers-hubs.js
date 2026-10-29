@@ -97,6 +97,7 @@ export const THINKER_RINGS = [
      ['agential-realism.geocities.ws', 'Karen Barad'],
      ['societies-of-control.geocities.ws', 'Deleuze'],
      ['human-use.geocities.ws', 'Norbert Wiener'],
+     ['mystery-of-the-black-box.geocities.ws', 'Evald Ilyenkov'],
      ['ada-lovelace.geocities.ws', 'Ada Lovelace']]),
 
   // The big one. A directory ring rather than a tight themed loop: lots of
